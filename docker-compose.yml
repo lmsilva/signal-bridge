@@ -1,0 +1,21 @@
+services:
+  alexa-broadcast:
+    build: .
+    image: alexa-broadcast-bridge:latest
+    container_name: alexa-broadcast-bridge
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      TZ: ${TZ:-UTC}
+      AMAZON_PAGE: ${AMAZON_PAGE:-amazon.com}
+      ACCEPT_LANGUAGE: ${ACCEPT_LANGUAGE:-en-US}
+      DEBUG: ${DEBUG:-0}
+    volumes:
+      - ./data:/app/data
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

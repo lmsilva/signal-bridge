@@ -1,0 +1,68 @@
+const { loadConfig } = require('./config');
+const { createLogger } = require('./logger');
+const { createListener } = require('./listener');
+
+function registerShutdown(log) {
+  const shutdown = (signal) => {
+    log.info(`Received ${signal}, shutting down`);
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  process.on('uncaughtException', (error) => {
+    log.error('Uncaught exception', error?.stack || error?.message || error);
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    log.error('Unhandled rejection', reason?.stack || reason?.message || reason);
+  });
+}
+
+function isAuthError(error) {
+  const message = String(error?.message || error);
+  return (
+    message.includes('Please open http://')
+    || message.includes('Login unsuccessfull')
+    || message.includes('no csrf found')
+    || message.includes('Authentication')
+    || message.includes('authentication invalid')
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function main() {
+  const config = loadConfig();
+  const log = createLogger(config);
+  const listener = createListener({ config, log });
+
+  registerShutdown(log);
+
+  log.info('Alexa Broadcast Bridge starting');
+  log.info('Running in foreground debug mode');
+
+  try {
+    await listener.start();
+  } catch (error) {
+    if (isAuthError(error)) {
+      log.error('Amazon session expired or invalid');
+      log.error('Stop the listener and re-authenticate:');
+      log.error('  docker compose down');
+      log.error('  PROXY_OWN_IP=YOUR_NAS_IP docker compose -f docker-compose.auth.yml up');
+      log.error('  Open http://YOUR_NAS_IP:3456/ in your browser, log in, then Ctrl+C');
+      log.error('  docker compose up -d');
+      log.error('Waiting 1 hour before exit to avoid restart loop...');
+      await sleep(60 * 60 * 1000);
+    } else {
+      log.error('Failed to start listener', error.message || error);
+    }
+    process.exit(1);
+  }
+}
+
+main();

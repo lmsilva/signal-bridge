@@ -1,0 +1,22 @@
+{
+  "amazonPage": "amazon.com",
+  "acceptLanguage": "en-US",
+  "amazonPageProxyLanguage": "en_US",
+  "proxyPort": 3456,
+  "broadcastLogFile": "broadcast.txt",
+  "sessionFile": "data/alexa-session.json",
+  "debug": false,
+  "udpBroadcast": {
+    "enabled": true,
+    "port": 47832,
+    "defaultDisplaySeconds": 30,
+    "targets": []
+  },
+  "sessionKeepAlive": {
+    "enabled": true,
+    "pingIntervalMs": 1800000,
+    "refreshIntervalMs": 21600000,
+    "reconnectPush": true,
+    "cookieRefreshIntervalMs": 43200000
+  }
+}

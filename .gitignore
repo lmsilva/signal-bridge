@@ -1,0 +1,28 @@
+node_modules/
+.env
+*.log
+
+# Local config (use config.example.json as template)
+config.json
+
+# Bridge runtime data (sessions, logs, local config)
+data/alexa-session.json
+data/bridge-state.json
+data/broadcast.txt
+data/formerDataStore.json
+data/config.json
+broadcast.txt
+
+# Windows broadcast client
+alexa broadcast client/.venv/
+alexa broadcast client/dist/
+alexa broadcast client/build/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

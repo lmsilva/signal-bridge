@@ -1,0 +1,20 @@
+# One-off auth: exposes the Amazon login proxy.
+# Usage (replace with your QNAP LAN IP):
+#   PROXY_OWN_IP=192.168.1.50 docker compose -f docker-compose.auth.yml up
+services:
+  alexa-broadcast-auth:
+    build: .
+    image: alexa-broadcast-bridge:latest
+    container_name: alexa-broadcast-auth
+    ports:
+      - "${PROXY_PORT:-3456}:3456"
+    environment:
+      TZ: ${TZ:-UTC}
+      AMAZON_PAGE: ${AMAZON_PAGE:-amazon.com}
+      ACCEPT_LANGUAGE: ${ACCEPT_LANGUAGE:-en-US}
+      PROXY_OWN_IP: ${PROXY_OWN_IP:?Set PROXY_OWN_IP to your QNAP LAN IP}
+      PROXY_PORT: ${PROXY_PORT:-3456}
+      DEBUG: ${DEBUG:-0}
+    volumes:
+      - ./data:/app/data
+    command: ["npm", "run", "auth"]
