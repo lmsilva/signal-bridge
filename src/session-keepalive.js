@@ -3,9 +3,16 @@ const DEFAULTS = {
   pingIntervalMs: 30 * 60 * 1000,
   refreshIntervalMs: 6 * 60 * 60 * 1000,
   reconnectPush: true,
+  failureThreshold: 2,
 };
 
-function createSessionKeepAlive({ alexa, config, log }) {
+function createSessionKeepAlive({
+  alexa,
+  config,
+  log,
+  onReauthRequired,
+  onSessionHealthy,
+}) {
   const settings = {
     ...DEFAULTS,
     ...(config.sessionKeepAlive || {}),
@@ -19,6 +26,7 @@ function createSessionKeepAlive({ alexa, config, log }) {
   let lastPingOk = null;
   let lastRefreshAt = null;
   let lastRefreshError = null;
+  let consecutiveFailures = 0;
 
   function getStatus() {
     return {
@@ -27,6 +35,7 @@ function createSessionKeepAlive({ alexa, config, log }) {
       lastPingOk,
       lastRefreshAt: lastRefreshAt ? new Date(lastRefreshAt).toISOString() : null,
       lastRefreshError,
+      consecutiveFailures,
     };
   }
 
@@ -38,6 +47,29 @@ function createSessionKeepAlive({ alexa, config, log }) {
     if (refreshTimer) {
       clearInterval(refreshTimer);
       refreshTimer = null;
+    }
+  }
+
+  function markFailure(reason, message) {
+    consecutiveFailures += 1;
+    lastRefreshError = message;
+
+    if (consecutiveFailures >= settings.failureThreshold && onReauthRequired) {
+      onReauthRequired({ reason, message, consecutiveFailures });
+      log.error('Amazon session expired — re-authentication required', {
+        reason,
+        message,
+        consecutiveFailures,
+      });
+      log.error('Stop listener and run: PROXY_OWN_IP=YOUR_NAS_IP docker compose -f docker-compose.auth.yml up');
+    }
+  }
+
+  function markHealthy() {
+    consecutiveFailures = 0;
+    lastRefreshError = null;
+    if (onSessionHealthy) {
+      onSessionHealthy();
     }
   }
 
@@ -53,15 +85,15 @@ function createSessionKeepAlive({ alexa, config, log }) {
       refreshInFlight = false;
 
       if (err || !res) {
-        lastRefreshError = err?.message || String(err || 'empty refresh response');
-        log.warn(`Session refresh failed (${reason})`, lastRefreshError);
-        log.warn('Re-authentication may be required: npm run auth');
+        const message = err?.message || String(err || 'empty refresh response');
+        log.warn(`Session refresh failed (${reason})`, message);
+        markFailure(reason, message);
         return;
       }
 
       alexa.setCookie(res);
       lastRefreshAt = Date.now();
-      lastRefreshError = null;
+      markHealthy();
       log.info(`Session tokens refreshed (${reason})`);
     });
   }
@@ -79,17 +111,21 @@ function createSessionKeepAlive({ alexa, config, log }) {
       lastPingOk = authenticated === true;
 
       if (err && authenticated === null) {
-        log.warn(`Session keep-alive ping error (${reason})`, err.message || err);
+        const message = err.message || String(err);
+        log.warn(`Session keep-alive ping error (${reason})`, message);
+        markFailure(reason, message);
         refreshSession('ping-error');
         return;
       }
 
       if (!authenticated) {
         log.warn(`Session keep-alive auth invalid (${reason}), refreshing tokens`);
+        markFailure(reason, 'authentication invalid');
         refreshSession('auth-invalid');
         return;
       }
 
+      markHealthy();
       log.debug(`Session keep-alive ping OK (${reason})`);
 
       if (settings.reconnectPush && typeof alexa.isPushConnected === 'function' && !alexa.isPushConnected()) {

@@ -46,7 +46,7 @@ function buildNetworkPayload(record, config) {
   const details = parseMessageDetails(record);
   const displaySeconds = Number(record?.displaySeconds)
     || Number(config.udpBroadcast?.defaultDisplaySeconds)
-    || 30;
+    || 120;
 
   return {
     version: 1,

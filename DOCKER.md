@@ -104,22 +104,48 @@ View logs in Container Station → your container → **Logs**.
 
 ## 4. Auth on the NAS (only if needed)
 
-Use this if you did **not** copy a session from your PC, or refresh fails.
+Use this if the session expired or refresh fails.
 
-1. Find your QNAP LAN IP (e.g. `192.168.1.50`)
-2. SSH to the NAS:
+**Your NAS IP:** `192.168.1.10` (use this as `PROXY_OWN_IP`)
+
+1. Stop the listener and free port 3456:
 
 ```bash
 cd /share/Container/alexa-broadcast-bridge
-PROXY_OWN_IP=192.168.1.50 docker compose -f docker-compose.auth.yml up
+docker compose stop alexa-broadcast-bridge
+docker rm -f alexa-broadcast-auth
 ```
 
-3. On your PC/phone browser, open: `http://192.168.1.50:3456/`
-4. Log in to Amazon; wait for **Authentication complete**
-5. Stop the auth container (Ctrl+C)
-6. Start the listener: `docker compose up -d`
+2. Make sure `docker-compose.auth.yml` uses **`network_mode: host`** and has **no `ports:` section**.  
+   (Old compose files map `3456:3456` and fail with "address already in use" on QNAP.)
 
-**Important:** `PROXY_OWN_IP` must be the IP you use in the browser, not `127.0.0.1`, when logging in from another device.
+3. Run auth (easiest):
+
+```bash
+PROXY_OWN_IP=192.168.1.10 ./reauth.sh
+```
+
+Or manually:
+
+```bash
+PROXY_OWN_IP=192.168.1.10 docker compose -p alexa-auth -f docker-compose.auth.yml up
+```
+
+4. Browser: **http://192.168.1.10:3456/** → Amazon login → wait for **Authentication complete** → **Ctrl+C**
+
+5. Start listener:
+
+```bash
+docker compose up -d --force-recreate
+docker compose logs -f
+```
+
+If port 3456 is still busy, use another port:
+
+```bash
+PROXY_PORT=3457 PROXY_OWN_IP=192.168.1.10 ./reauth.sh
+# then open http://192.168.1.10:3457/
+```
 
 ---
 
@@ -180,7 +206,8 @@ touch data/broadcast.txt
 docker compose up -d
 docker compose logs -f
 ```
-| Listener exits / auth errors | Run auth again; copy fresh session from PC |
+| Listener exits / auth errors | Run `./reauth.sh` or auth compose; copy fresh session from PC |
+| `bind: address already in use` on port 3456 | Stop listener + `docker rm -f alexa-broadcast-auth`; use updated `docker-compose.auth.yml` with `network_mode: host` (no `ports:`) |
 | No broadcasts captured | Check logs; test announce on Echo; confirm push connected |
 | Re-auth on QNAP | Stop listener, run `docker-compose.auth.yml`, then `docker compose up -d` |
 | Windows client not receiving | Add PC IP to `udpBroadcast.targets`; check Windows firewall on port 47832 |

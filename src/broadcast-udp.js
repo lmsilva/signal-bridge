@@ -5,7 +5,7 @@ function createUdpBroadcaster(config, log) {
     enabled: config.udpBroadcast?.enabled !== false,
     port: Number(config.udpBroadcast?.port || 47832),
     targets: Array.isArray(config.udpBroadcast?.targets) ? config.udpBroadcast.targets : [],
-    defaultDisplaySeconds: Number(config.udpBroadcast?.defaultDisplaySeconds || 30),
+    defaultDisplaySeconds: Number(config.udpBroadcast?.defaultDisplaySeconds || 120),
   };
 
   let socket = null;

@@ -10,6 +10,7 @@ data/alexa-session.json
 data/bridge-state.json
 data/broadcast.txt
 data/formerDataStore.json
+data/auth-status.json
 data/config.json
 broadcast.txt
 

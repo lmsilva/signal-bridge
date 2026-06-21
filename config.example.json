@@ -9,7 +9,7 @@
   "udpBroadcast": {
     "enabled": true,
     "port": 47832,
-    "defaultDisplaySeconds": 30,
+    "defaultDisplaySeconds": 120,
     "targets": []
   },
   "sessionKeepAlive": {

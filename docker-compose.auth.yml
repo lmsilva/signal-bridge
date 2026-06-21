@@ -1,18 +1,23 @@
-# One-off auth: exposes the Amazon login proxy.
-# Usage (replace with your QNAP LAN IP):
-#   PROXY_OWN_IP=192.168.1.50 docker compose -f docker-compose.auth.yml up
+# One-off auth: exposes the Amazon login proxy on the NAS itself.
+# Uses host networking (no Docker port mapping — avoids QNAP bind conflicts).
+#
+# Usage:
+#   PROXY_OWN_IP=192.168.1.10 ./reauth.sh
+#
+# Or manually:
+#   docker compose stop alexa-broadcast-bridge
+#   docker rm -f alexa-broadcast-auth
+#   PROXY_OWN_IP=192.168.1.10 docker compose -p alexa-auth -f docker-compose.auth.yml up
 services:
   alexa-broadcast-auth:
-    build: .
     image: alexa-broadcast-bridge:latest
     container_name: alexa-broadcast-auth
-    ports:
-      - "${PROXY_PORT:-3456}:3456"
+    network_mode: host
     environment:
       TZ: ${TZ:-UTC}
       AMAZON_PAGE: ${AMAZON_PAGE:-amazon.com}
       ACCEPT_LANGUAGE: ${ACCEPT_LANGUAGE:-en-US}
-      PROXY_OWN_IP: ${PROXY_OWN_IP:?Set PROXY_OWN_IP to your QNAP LAN IP}
+      PROXY_OWN_IP: ${PROXY_OWN_IP:?Set PROXY_OWN_IP to your NAS LAN IP}
       PROXY_PORT: ${PROXY_PORT:-3456}
       DEBUG: ${DEBUG:-0}
     volumes:

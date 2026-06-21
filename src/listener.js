@@ -1,4 +1,5 @@
 const Alexa = require('alexa-remote2');
+const path = require('path');
 const { createBroadcastLog } = require('./broadcast-log');
 const { BroadcastParser } = require('./parser');
 const { buildAlexaInitOptions, persistFromAlexa, loadSession } = require('./session');
@@ -7,6 +8,7 @@ const { getActivityId } = require('./parser');
 const { buildNetworkPayload } = require('./message-details');
 const { createUdpBroadcaster } = require('./broadcast-udp');
 const { createSessionKeepAlive } = require('./session-keepalive');
+const { markReauthRequired, clearAuthStatus, readAuthStatus } = require('./auth-status');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
@@ -126,6 +128,7 @@ function createListener({ config, log }) {
 
   function logHealth() {
     const pushConnected = alexa.isPushConnected?.() ?? false;
+    const authStatus = readAuthStatus(config);
     log.info('Health check', {
       pushConnected,
       lastPollAt: lastPollAt ? new Date(lastPollAt).toISOString() : null,
@@ -134,14 +137,21 @@ function createListener({ config, log }) {
       lastCaptureAt: lastCaptureAt ? new Date(lastCaptureAt).toISOString() : null,
       sessionPath: config.sessionPath,
       sessionKeepAlive: sessionKeepAlive?.getStatus?.() || null,
+      authStatus: authStatus?.status || 'ok',
     });
+
+    if (authStatus?.status === 'reauth_required') {
+      log.error('Amazon session requires re-authentication');
+      log.error('Run on the NAS: PROXY_OWN_IP=YOUR_NAS_IP docker compose -f docker-compose.auth.yml up');
+      log.error(`Details written to ${path.join(path.dirname(config.sessionPath), 'auth-status.json')}`);
+    }
 
     if (!pushConnected) {
       log.warn('Push channel disconnected — relying on history polling only');
     }
 
     if (lastPollError) {
-      log.warn('History API errors detected — you may need to re-authenticate (npm run auth)');
+      log.warn('History API errors detected — you may need to re-authenticate (./reauth.sh)');
     }
   }
 
@@ -154,6 +164,7 @@ function createListener({ config, log }) {
     alexa.on('cookie', () => {
       const existingSession = loadSession(config.sessionPath) || {};
       persistFromAlexa(config, alexa, existingSession);
+      clearAuthStatus(config);
       log.info('Session refreshed and saved');
     });
 
@@ -236,7 +247,13 @@ function createListener({ config, log }) {
         healthTimer = setInterval(logHealth, HEALTH_LOG_MS);
         logHealth();
 
-        sessionKeepAlive = createSessionKeepAlive({ alexa, config, log });
+        sessionKeepAlive = createSessionKeepAlive({
+          alexa,
+          config,
+          log,
+          onReauthRequired: (details) => markReauthRequired(config, details),
+          onSessionHealthy: () => clearAuthStatus(config),
+        });
         sessionKeepAlive.start();
 
         resolve(alexa);
