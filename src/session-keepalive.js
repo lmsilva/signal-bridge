@@ -1,9 +1,10 @@
 const DEFAULTS = {
   enabled: true,
-  pingIntervalMs: 30 * 60 * 1000,
-  refreshIntervalMs: 6 * 60 * 60 * 1000,
+  pingIntervalMs: 15 * 60 * 1000,
+  refreshIntervalMs: 4 * 60 * 60 * 1000,
+  startupRefreshDelayMs: 5 * 60 * 1000,
   reconnectPush: true,
-  failureThreshold: 2,
+  failureThreshold: 5,
 };
 
 function createSessionKeepAlive({
@@ -12,6 +13,7 @@ function createSessionKeepAlive({
   log,
   onReauthRequired,
   onSessionHealthy,
+  onSessionRefreshed,
 }) {
   const settings = {
     ...DEFAULTS,
@@ -61,7 +63,7 @@ function createSessionKeepAlive({
         message,
         consecutiveFailures,
       });
-      log.error('Stop listener and run: PROXY_OWN_IP=YOUR_NAS_IP docker compose -f docker-compose.auth.yml up');
+      log.error('Stop listener and run: PROXY_OWN_IP=YOUR_NAS_IP ./reauth.sh');
     }
   }
 
@@ -73,13 +75,24 @@ function createSessionKeepAlive({
     }
   }
 
-  function refreshSession(reason) {
+  function persistRefreshedSession(res, reason) {
+    if (onSessionRefreshed) {
+      onSessionRefreshed(res, reason);
+    }
+  }
+
+  function refreshSession(reason, { onComplete } = {}) {
     if (refreshInFlight) {
       return;
     }
 
     refreshInFlight = true;
     log.debug(`Session keep-alive refresh (${reason})`);
+
+    if (alexa.cookieData) {
+      alexa._options = alexa._options || {};
+      alexa._options.formerRegistrationData = alexa.cookieData;
+    }
 
     alexa.refreshCookie((err, res) => {
       refreshInFlight = false;
@@ -88,13 +101,16 @@ function createSessionKeepAlive({
         const message = err?.message || String(err || 'empty refresh response');
         log.warn(`Session refresh failed (${reason})`, message);
         markFailure(reason, message);
+        onComplete?.(false, message);
         return;
       }
 
       alexa.setCookie(res);
       lastRefreshAt = Date.now();
       markHealthy();
+      persistRefreshedSession(res, reason);
       log.info(`Session tokens refreshed (${reason})`);
+      onComplete?.(true);
     });
   }
 
@@ -113,15 +129,25 @@ function createSessionKeepAlive({
       if (err && authenticated === null) {
         const message = err.message || String(err);
         log.warn(`Session keep-alive ping error (${reason})`, message);
-        markFailure(reason, message);
-        refreshSession('ping-error');
+        refreshSession('ping-error', {
+          onComplete: (ok, refreshMessage) => {
+            if (!ok) {
+              markFailure(reason, refreshMessage || message);
+            }
+          },
+        });
         return;
       }
 
       if (!authenticated) {
         log.warn(`Session keep-alive auth invalid (${reason}), refreshing tokens`);
-        markFailure(reason, 'authentication invalid');
-        refreshSession('auth-invalid');
+        refreshSession('auth-invalid', {
+          onComplete: (ok) => {
+            if (!ok) {
+              markFailure(reason, 'authentication invalid after refresh');
+            }
+          },
+        });
         return;
       }
 
@@ -146,12 +172,14 @@ function createSessionKeepAlive({
     log.info('Session keep-alive enabled', {
       pingEveryMinutes: Math.round(settings.pingIntervalMs / 60000),
       refreshEveryHours: Math.round(settings.refreshIntervalMs / 3600000),
+      failureThreshold: settings.failureThreshold,
     });
 
     pingTimer = setInterval(() => pingSession('scheduled'), settings.pingIntervalMs);
     refreshTimer = setInterval(() => refreshSession('scheduled'), settings.refreshIntervalMs);
 
     setTimeout(() => pingSession('startup'), 60 * 1000);
+    setTimeout(() => refreshSession('startup'), settings.startupRefreshDelayMs);
   }
 
   return {

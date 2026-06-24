@@ -253,6 +253,11 @@ function createListener({ config, log }) {
           log,
           onReauthRequired: (details) => markReauthRequired(config, details),
           onSessionHealthy: () => clearAuthStatus(config),
+          onSessionRefreshed: () => {
+            const existingSession = loadSession(config.sessionPath) || {};
+            persistFromAlexa(config, alexa, existingSession);
+            log.debug('Session tokens persisted to disk after keep-alive refresh');
+          },
         });
         sessionKeepAlive.start();
 

@@ -13,6 +13,7 @@ services:
       DEBUG: ${DEBUG:-0}
     volumes:
       - ./data:/app/data
+      - ./src:/app/src:ro
     network_mode: host
     logging:
       driver: json-file

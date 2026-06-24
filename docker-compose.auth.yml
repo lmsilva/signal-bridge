@@ -22,4 +22,5 @@ services:
       DEBUG: ${DEBUG:-0}
     volumes:
       - ./data:/app/data
+      - ./src:/app/src:ro
     command: ["npm", "run", "auth"]

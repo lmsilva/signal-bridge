@@ -6,5 +6,5 @@ set -e
 if [[ "$1" == "--build" ]]; then
   docker compose up -d --build --force-recreate
 else
-  docker compose up -d --force-recreate
+  docker compose up -d --no-build --force-recreate
 fi

@@ -1,7 +1,13 @@
+const { installAuthProxyPatch } = require('./auth-proxy-patch');
+
+// Must run before alexa-remote2 / alexa-cookie2 load the stock proxy.
+installAuthProxyPatch();
+
 const Alexa = require('alexa-remote2');
 const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { loadSession, persistFromAlexa, buildAlexaInitOptions } = require('./session');
+const { ensurePortAvailable, isProxyPortError } = require('./port-utils');
 
 function isProxyLoginPrompt(error) {
   const message = String(error?.message || error || '');
@@ -14,7 +20,7 @@ function extractProxyUrl(error, config) {
   return match?.[0] || `http://${config.proxyOwnIp}:${config.proxyPort}/`;
 }
 
-function runAuth({ exitOnComplete = true } = {}) {
+async function runAuth({ exitOnComplete = true } = {}) {
   const config = loadConfig();
   const log = createLogger(config);
   const existingSession = loadSession(config.sessionPath) || {};
@@ -22,6 +28,15 @@ function runAuth({ exitOnComplete = true } = {}) {
   let finished = false;
 
   log.info('Starting Alexa authentication');
+  log.info('Using patched Amazon login proxy');
+
+  const portReady = await ensurePortAvailable(config.proxyPort, log);
+  if (!portReady) {
+    if (exitOnComplete) {
+      process.exitCode = 1;
+    }
+    throw new Error(`Port ${config.proxyPort} is in use`);
+  }
   log.info('Locale settings', {
     amazonPage: existingSession.amazonPage || config.amazonPage,
     acceptLanguage: existingSession.acceptLanguage || config.acceptLanguage,
@@ -72,7 +87,14 @@ function runAuth({ exitOnComplete = true } = {}) {
           return;
         }
 
-        log.error('Authentication failed', err.message || err);
+        if (isProxyPortError(err)) {
+          log.error('Authentication failed — login proxy could not bind to the port');
+          log.error(`Port ${config.proxyPort} is likely still in use by another process`);
+          log.error('On the NAS: ss -tlnp | grep :3456  then  kill -9 <pid>');
+          log.error('Or re-run: ./reauth.sh');
+        } else {
+          log.error('Authentication failed', err.message || err);
+        }
         if (exitOnComplete) {
           process.exitCode = 1;
         }

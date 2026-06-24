@@ -14,9 +14,11 @@
   },
   "sessionKeepAlive": {
     "enabled": true,
-    "pingIntervalMs": 1800000,
-    "refreshIntervalMs": 21600000,
+    "pingIntervalMs": 900000,
+    "refreshIntervalMs": 14400000,
+    "startupRefreshDelayMs": 300000,
     "reconnectPush": true,
-    "cookieRefreshIntervalMs": 43200000
+    "failureThreshold": 5,
+    "cookieRefreshIntervalMs": 21600000
   }
 }

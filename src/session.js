@@ -46,7 +46,7 @@ function buildAlexaInitOptions(config, session = {}, { mode = 'listener' } = {})
 
   const refreshMs = config.sessionKeepAlive?.cookieRefreshIntervalMs
     ?? config.cookieRefreshIntervalMs
-    ?? 12 * 60 * 60 * 1000;
+    ?? 6 * 60 * 60 * 1000;
   options.cookieRefreshInterval = refreshMs;
 
   if (session.cookieData) {
