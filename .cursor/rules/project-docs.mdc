@@ -1,0 +1,25 @@
+---
+description: Read and maintain src PROJECT.md orientation docs for bridge and Windows client
+alwaysApply: true
+---
+
+# Project documentation (agent orientation)
+
+At the **start** of tasks in this workspace, read the relevant map:
+
+- **NAS bridge / container (Node):** `src/PROJECT.md`
+- **Windows display client (Python):** `alexa broadcast client/src/PROJECT.md`
+
+These files summarize architecture, data flow, config, and deployment. Use them instead of re-scanning the whole repo when possible.
+
+## Keep docs fresh
+
+When you change **architecture, modules, config keys, Docker/auth workflows, UDP protocol, or packaging**:
+
+1. Update the matching `PROJECT.md` in the **same change** (both if the change spans bridge + client).
+2. Bump the **Last updated** date at the top.
+3. Add a one-line bullet under **Recent changes** (newest first).
+
+Do not duplicate `README.md` or `DOCKER.md` — those are user guides; `PROJECT.md` is the agent quick-reference.
+
+If unsure whether a change warrants an update, update anyway when behavior or file roles changed.
