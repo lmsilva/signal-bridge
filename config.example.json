@@ -15,10 +15,12 @@
   "sessionKeepAlive": {
     "enabled": true,
     "pingIntervalMs": 900000,
-    "refreshIntervalMs": 14400000,
-    "startupRefreshDelayMs": 300000,
+    "refreshIntervalMs": 10800000,
+    "startupRefreshDelayMs": 180000,
+    "proactiveRefreshAfterMs": 43200000,
     "reconnectPush": true,
     "failureThreshold": 5,
-    "cookieRefreshIntervalMs": 21600000
+    "livenessProbe": true,
+    "cookieRefreshIntervalMs": 14400000
   }
 }

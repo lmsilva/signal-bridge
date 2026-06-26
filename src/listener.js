@@ -7,8 +7,10 @@ const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-stat
 const { getActivityId } = require('./parser');
 const { buildNetworkPayload } = require('./message-details');
 const { createUdpBroadcaster } = require('./broadcast-udp');
-const { createSessionKeepAlive } = require('./session-keepalive');
+const { createSessionKeepAlive, isAuthRelatedMessage } = require('./session-keepalive');
 const { markReauthRequired, clearAuthStatus, readAuthStatus } = require('./auth-status');
+const { createSessionAuthJournal } = require('./session-auth-journal');
+const { getSessionMeta } = require('./session-meta');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
@@ -34,6 +36,8 @@ function createListener({ config, log }) {
   let periodicPollTimer = null;
   let healthTimer = null;
   let sessionKeepAlive = null;
+  let authJournal = null;
+  let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;
   let lastPollError = null;
@@ -105,6 +109,9 @@ function createListener({ config, log }) {
         if (err) {
           lastPollError = err.message || String(err);
           log.warn(`History poll failed (${reason})`, lastPollError);
+          if (isAuthRelatedMessage(lastPollError)) {
+            sessionKeepAlive?.handleExternalAuthFailure('history_poll', lastPollError, { reason });
+          }
           return;
         }
 
@@ -129,6 +136,7 @@ function createListener({ config, log }) {
   function logHealth() {
     const pushConnected = alexa.isPushConnected?.() ?? false;
     const authStatus = readAuthStatus(config);
+    const journalSummary = authJournal?.getSummary?.() || null;
     log.info('Health check', {
       pushConnected,
       lastPollAt: lastPollAt ? new Date(lastPollAt).toISOString() : null,
@@ -136,14 +144,22 @@ function createListener({ config, log }) {
       lastPollError,
       lastCaptureAt: lastCaptureAt ? new Date(lastCaptureAt).toISOString() : null,
       sessionPath: config.sessionPath,
+      sessionMeta: getSessionMeta(config, activeSession, alexa),
       sessionKeepAlive: sessionKeepAlive?.getStatus?.() || null,
+      authJournal: journalSummary,
       authStatus: authStatus?.status || 'ok',
     });
 
     if (authStatus?.status === 'reauth_required') {
       log.error('Amazon session requires re-authentication');
-      log.error('Run on the NAS: PROXY_OWN_IP=YOUR_NAS_IP docker compose -f docker-compose.auth.yml up');
+      log.error('Run on the NAS: PROXY_OWN_IP=YOUR_NAS_IP ./reauth.sh');
       log.error(`Details written to ${path.join(path.dirname(config.sessionPath), 'auth-status.json')}`);
+      if (authStatus.likelyCause) {
+        log.error(`Likely cause: ${authStatus.likelyCause}`);
+      }
+      if (journalSummary?.path) {
+        log.error(`Auth journal: ${journalSummary.path}`);
+      }
     }
 
     if (!pushConnected) {
@@ -163,8 +179,14 @@ function createListener({ config, log }) {
   function wireEvents() {
     alexa.on('cookie', () => {
       const existingSession = loadSession(config.sessionPath) || {};
-      persistFromAlexa(config, alexa, existingSession);
+      activeSession = persistFromAlexa(config, alexa, existingSession);
       clearAuthStatus(config);
+      authJournal?.recordSuccess({
+        type: 'session_persisted',
+        source: 'listener',
+        message: 'Session cookie saved after refresh or init',
+        sessionMeta: getSessionMeta(config, activeSession, alexa),
+      });
       log.info('Session refreshed and saved');
     });
 
@@ -175,6 +197,15 @@ function createListener({ config, log }) {
 
     alexa.on('ws-disconnect', (retries, message) => {
       log.warn('Disconnected from Alexa push channel', { retries, message });
+      authJournal?.recordFailure({
+        type: 'push_disconnected',
+        source: 'listener',
+        reason: 'ws-disconnect',
+        message: String(message || 'push disconnected'),
+        context: { retries },
+        sessionMeta: getSessionMeta(config, activeSession, alexa),
+        level: 'warn',
+      });
     });
 
     alexa.on('ws-error', (error) => {
@@ -197,6 +228,7 @@ function createListener({ config, log }) {
 
   function start() {
     const session = loadSession(config.sessionPath);
+    activeSession = session;
     if (!session) {
       return Promise.reject(new Error(`No session found at ${config.sessionPath}. Run: npm run auth`));
     }
@@ -207,6 +239,7 @@ function createListener({ config, log }) {
     }
 
     initOptions.logger = config.debug ? log.debug.bind(log) : undefined;
+    authJournal = createSessionAuthJournal({ config, log });
     wireEvents();
 
     return new Promise((resolve, reject) => {
@@ -251,11 +284,16 @@ function createListener({ config, log }) {
           alexa,
           config,
           log,
-          onReauthRequired: (details) => markReauthRequired(config, details),
+          journal: authJournal,
+          session: activeSession,
+          onReauthRequired: (details) => markReauthRequired(config, {
+            ...details,
+            recentJournal: authJournal.readRecent(5),
+          }),
           onSessionHealthy: () => clearAuthStatus(config),
           onSessionRefreshed: () => {
             const existingSession = loadSession(config.sessionPath) || {};
-            persistFromAlexa(config, alexa, existingSession);
+            activeSession = persistFromAlexa(config, alexa, existingSession);
             log.debug('Session tokens persisted to disk after keep-alive refresh');
           },
         });

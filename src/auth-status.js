@@ -11,12 +11,15 @@ function markReauthRequired(config, details = {}) {
     updatedAt: new Date().toISOString(),
     message: details.message || 'Amazon session expired or invalid',
     reason: details.reason || 'unknown',
+    category: details.category || null,
+    likelyCause: details.likelyCause || null,
+    sessionMeta: details.sessionMeta || null,
+    journalPath: details.journalPath || null,
+    recentJournal: details.recentJournal || null,
     instructions: [
-      'docker compose stop alexa-broadcast-bridge',
-      'PROXY_OWN_IP=YOUR_NAS_IP docker compose -f docker-compose.auth.yml up',
+      'PROXY_OWN_IP=YOUR_NAS_IP ./reauth.sh',
       'Open http://YOUR_NAS_IP:3456/ in your browser and log in',
       'Press Ctrl+C when you see Authentication complete',
-      'docker compose up -d',
     ],
     ...details,
   };

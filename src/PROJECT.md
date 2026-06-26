@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-25
 
 ---
 
@@ -42,7 +42,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/listener.js` | Core orchestrator: Alexa init, events, history polls, health, keep-alive |
 | `src/parser.js` | Detects announce/broadcast utterances; two-step prompt pairing; dedup |
 | `src/session.js` | Load/save `alexa-session.json`; `buildAlexaInitOptions` for listener vs auth |
-| `src/session-keepalive.js` | Ping + `refreshCookie`; persist tokens; `reauth_required` after failures |
+| `src/session-keepalive.js` | Auth ping, token refresh, liveness probe, proactive refresh |
+| `src/session-auth-journal.js` | Append-only JSONL auth event log with failure classification |
+| `src/session-meta.js` | Token age / session metadata helpers |
 | `src/auth.js` | One-off Amazon login via local proxy (`npm run auth`) |
 | `src/auth-proxy-patch.js` | Replaces stock `alexa-cookie2` proxy with vendored version |
 | `src/vendor/alexa-cookie-proxy.js` | Patched login proxy (font fixes, static assets, UI CSS injection) |
@@ -59,7 +61,27 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `docker-compose.auth.yml` | One-shot auth container (host network, port 3456) |
 | `reauth.sh` | Stop listener, free port, run auth, restart listener |
 | `recreate.sh` | `docker compose up -d --no-build` (use `--build` only if image rebuild works) |
-| `data/` | **Runtime only** (gitignored): session, config, logs, bridge state |
+| `data/` | **Runtime only** (gitignored): session, config, logs, bridge state, auth journal |
+
+---
+
+## Session keep-alive & auth diagnostics
+
+Every **15 minutes** the bridge:
+
+1. `checkAuthentication()` — hits `/api/customer-status` (lightweight auth check)
+2. `getDevices({ cached: true })` — lightweight liveness probe (proves API works)
+3. Reconnects push if disconnected
+
+Every **3 hours**: proactive `refreshCookie()` + persist to `alexa-session.json`.
+
+When token age exceeds **12 hours**: extra refresh on ping (before Amazon’s ~14-day expiry).
+
+**Auth journal:** `data/session-auth-journal.jsonl` — one JSON object per line with `type`, `category`, `likelyCause`, `sessionMeta` (token age, etc.). Written on ping failures, refresh failures, history auth errors, push disconnects, and `reauth_required`.
+
+**Re-auth signal:** `data/auth-status.json` includes `likelyCause` + last journal entries when threshold hit (5 consecutive failures).
+
+**Debug after auth loss:** `docker compose logs -f` + `tail data/session-auth-journal.jsonl` + `cat data/auth-status.json`
 
 ---
 
@@ -73,7 +95,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
    - **History fallback:** volume-change / connect / periodic poll → `getCustomerHistoryRecords()`
 5. **On match:** log line → append `broadcast.txt` → UDP JSON via `buildNetworkPayload()`
 6. **Dedup:** `BroadcastParser` + `bridge-state.json` (fingerprints, timestamps)
-7. **Session keep-alive:** ping every 15m, refresh every 4h, persist to disk; marks `reauth_required` after 5 failures
+7. **Session keep-alive:** 15m auth ping + liveness probe, 3h token refresh, auth journal; marks `reauth_required` after 5 failures
 
 ---
 
@@ -98,7 +120,8 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `sessionFile` | Default `data/alexa-session.json` |
 | `broadcastLogFile` | Tab-separated capture log |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP to Windows client |
-| `sessionKeepAlive.*` | Ping/refresh intervals, `failureThreshold` |
+| `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
+| `sessionAuthJournalFile` | Default `data/session-auth-journal.jsonl` |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
@@ -156,5 +179,6 @@ Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliab
 
 ## Recent changes
 
+- 2026-06-26: Fix liveness probe parsing (`getDevices` returns `{ devices: [] }`); stop false session_degraded/recovered churn.
 - 2026-06-24: Added this PROJECT.md; documented vendored auth proxy, session keep-alive, QNAP Docker patterns, UDP protocol.
 - 2026-06-24: Reauth port cleanup, `src` volume mount, `--no-build` workflows, `port-utils.js`.

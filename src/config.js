@@ -66,6 +66,10 @@ function loadConfig() {
   config.bridgeStatePath = path.resolve(ROOT, config.bridgeStateFile || 'data/bridge-state.json');
   config.broadcastLogPath = path.resolve(ROOT, config.broadcastLogFile);
   config.sessionPath = path.resolve(ROOT, config.sessionFile);
+  config.sessionAuthJournalPath = path.resolve(
+    ROOT,
+    config.sessionAuthJournalFile || 'data/session-auth-journal.jsonl',
+  );
 
   return config;
 }
