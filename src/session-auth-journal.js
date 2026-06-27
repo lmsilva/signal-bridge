@@ -2,13 +2,14 @@ const fs = require('fs');
 const path = require('path');
 
 const AUTH_ERROR_PATTERNS = [
+  { category: 'refresh_noop', pattern: /no tokens in register response/i },
   { category: 'http_unauthorized', pattern: /\b401\b|unauthorized|not authenticated/i },
   { category: 'http_forbidden', pattern: /\b403\b|forbidden/i },
   { category: 'csrf_missing', pattern: /no csrf|csrf/i },
   { category: 'refresh_token_rejected', pattern: /no new access token|refresh token|refresh.*fail|former registration/i },
+  { category: 'network_error', pattern: /aggregateerror|enotfound|etimedout|econnreset|econnrefused|network|timeout|socket hang up/i },
   { category: 'session_expired', pattern: /expired|invalid.*session|authentication invalid|login unsuccess/i },
   { category: 'rate_limited', pattern: /rate limit|too many requests|429/i },
-  { category: 'network_error', pattern: /ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|network|timeout|socket hang up/i },
   { category: 'amazon_api_change', pattern: /no body|unexpected|parse|html/i },
 ];
 
@@ -42,6 +43,8 @@ function describeLikelyCause(category, context = {}) {
     case 'session_expired':
     case 'auth_check_failed':
       return 'Session cookie or refresh token is no longer valid; full re-auth via ./reauth.sh may be required.';
+    case 'refresh_noop':
+      return 'Amazon Register returned no new tokens — existing session is usually still valid.';
     case 'refresh_token_rejected':
       return 'Automatic token refresh failed — refresh token revoked, password change, or Amazon security action.';
     case 'csrf_missing':

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-06-27
 
 ---
 
@@ -42,9 +42,10 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/listener.js` | Core orchestrator: Alexa init, events, history polls, health, keep-alive |
 | `src/parser.js` | Detects announce/broadcast utterances; two-step prompt pairing; dedup |
 | `src/session.js` | Load/save `alexa-session.json`; `buildAlexaInitOptions` for listener vs auth |
-| `src/session-keepalive.js` | Auth ping, token refresh, liveness probe, proactive refresh |
+| `src/session-keepalive.js` | Auth ping, token refresh (via ping cycle), liveness probe, proactive refresh |
 | `src/session-auth-journal.js` | Append-only JSONL auth event log with failure classification |
 | `src/session-meta.js` | Token age / session metadata helpers |
+| `src/error-format.js` | Unwrap AggregateError and nested causes for clearer logs |
 | `src/auth.js` | One-off Amazon login via local proxy (`npm run auth`) |
 | `src/auth-proxy-patch.js` | Replaces stock `alexa-cookie2` proxy with vendored version |
 | `src/vendor/alexa-cookie-proxy.js` | Patched login proxy (font fixes, static assets, UI CSS injection) |
@@ -67,17 +68,16 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 
 ## Session keep-alive & auth diagnostics
 
-Every **15 minutes** the bridge:
+Every **15 minutes** the bridge runs a single **ping cycle** (no separate refresh timer):
 
-1. `checkAuthentication()` — hits `/api/customer-status` (lightweight auth check)
-2. `getDevices({ cached: true })` — lightweight liveness probe (proves API works)
-3. Reconnects push if disconnected
+1. `checkAuthentication()` — lightweight auth check
+2. **Optional** `refreshCookie()` — only when token age ≥ **12h** and last attempt was ≥ **3h** ago (or when auth is invalid / proactive threshold hit)
+3. `getDevices()` — liveness probe (proves API works)
+4. Reconnects push if disconnected
 
-Every **3 hours**: proactive `refreshCookie()` + persist to `alexa-session.json`.
+**Refresh failure handling:** `No tokens in Register response` is logged as `token_refresh_noop` (benign). Other refresh failures verify auth + liveness before marking `session_degraded` — a failed refresh alone no longer triggers false alarms.
 
-When token age exceeds **12 hours**: extra refresh on ping (before Amazon’s ~14-day expiry).
-
-**Auth journal:** `data/session-auth-journal.jsonl` — one JSON object per line with `type`, `category`, `likelyCause`, `sessionMeta` (token age, etc.). Written on ping failures, refresh failures, history auth errors, push disconnects, and `reauth_required`.
+**Auth journal:** `data/session-auth-journal.jsonl` — one JSON object per line with `type`, `category`, `likelyCause`, `sessionMeta`. Includes `token_refresh_noop`, `token_refresh_failed_but_live`, ping failures, history auth errors, push disconnects, and `reauth_required`.
 
 **Re-auth signal:** `data/auth-status.json` includes `likelyCause` + last journal entries when threshold hit (5 consecutive failures).
 
@@ -95,7 +95,8 @@ When token age exceeds **12 hours**: extra refresh on ping (before Amazon’s ~1
    - **History fallback:** volume-change / connect / periodic poll → `getCustomerHistoryRecords()`
 5. **On match:** log line → append `broadcast.txt` → UDP JSON via `buildNetworkPayload()`
 6. **Dedup:** `BroadcastParser` + `bridge-state.json` (fingerprints, timestamps)
-7. **Session keep-alive:** 15m auth ping + liveness probe, 3h token refresh, auth journal; marks `reauth_required` after 5 failures
+7. **Session keep-alive:** 15m ping cycle (auth + optional refresh + liveness); auth journal; marks `reauth_required` after 5 real failures
+8. **History poll errors:** transient failures logged at debug; reauth warning only for auth-related errors or 3+ consecutive failures
 
 ---
 
@@ -179,6 +180,7 @@ Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliab
 
 ## Recent changes
 
+- 2026-06-27: Smarter refresh handling — noop classification, verify-before-degrade, refresh folded into ping cycle, richer history poll errors.
 - 2026-06-26: Fix liveness probe parsing (`getDevices` returns `{ devices: [] }`); stop false session_degraded/recovered churn.
 - 2026-06-24: Added this PROJECT.md; documented vendored auth proxy, session keep-alive, QNAP Docker patterns, UDP protocol.
 - 2026-06-24: Reauth port cleanup, `src` volume mount, `--no-build` workflows, `port-utils.js`.

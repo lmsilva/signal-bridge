@@ -18,6 +18,7 @@
     "refreshIntervalMs": 10800000,
     "startupRefreshDelayMs": 180000,
     "proactiveRefreshAfterMs": 43200000,
+    "minTokenAgeForRefreshMs": 43200000,
     "reconnectPush": true,
     "failureThreshold": 5,
     "livenessProbe": true,

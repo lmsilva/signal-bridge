@@ -11,12 +11,14 @@ const { createSessionKeepAlive, isAuthRelatedMessage } = require('./session-keep
 const { markReauthRequired, clearAuthStatus, readAuthStatus } = require('./auth-status');
 const { createSessionAuthJournal } = require('./session-auth-journal');
 const { getSessionMeta } = require('./session-meta');
+const { formatError } = require('./error-format');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
 const PERIODIC_LOOKBACK_MS = 15 * 60 * 1000;
 const PERIODIC_POLL_MS = 60 * 1000;
 const HEALTH_LOG_MS = 5 * 60 * 1000;
+const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
 function createListener({ config, log }) {
   const alexa = new Alexa();
@@ -41,6 +43,7 @@ function createListener({ config, log }) {
   let lastPollAt = null;
   let lastPollCount = 0;
   let lastPollError = null;
+  let consecutiveHistoryPollFailures = 0;
   let lastCaptureAt = bridgeState.lastRecordedTimestamp || null;
 
   function recordBroadcast(record) {
@@ -107,15 +110,18 @@ function createListener({ config, log }) {
         lastPollAt = Date.now();
 
         if (err) {
-          lastPollError = err.message || String(err);
-          log.warn(`History poll failed (${reason})`, lastPollError);
-          if (isAuthRelatedMessage(lastPollError)) {
-            sessionKeepAlive?.handleExternalAuthFailure('history_poll', lastPollError, { reason });
+          const formatted = formatError(err);
+          lastPollError = formatted;
+          consecutiveHistoryPollFailures += 1;
+          log.warn(`History poll failed (${reason})`, formatted);
+          if (isAuthRelatedMessage(formatted)) {
+            sessionKeepAlive?.handleExternalAuthFailure('history_poll', formatted, { reason });
           }
           return;
         }
 
         lastPollError = null;
+        consecutiveHistoryPollFailures = 0;
         lastPollCount = records?.length || 0;
 
         if (lastPollCount === 0) {
@@ -142,6 +148,7 @@ function createListener({ config, log }) {
       lastPollAt: lastPollAt ? new Date(lastPollAt).toISOString() : null,
       lastPollCount,
       lastPollError,
+      consecutiveHistoryPollFailures,
       lastCaptureAt: lastCaptureAt ? new Date(lastCaptureAt).toISOString() : null,
       sessionPath: config.sessionPath,
       sessionMeta: getSessionMeta(config, activeSession, alexa),
@@ -167,7 +174,25 @@ function createListener({ config, log }) {
     }
 
     if (lastPollError) {
-      log.warn('History API errors detected — you may need to re-authenticate (./reauth.sh)');
+      const authRelated = isAuthRelatedMessage(lastPollError);
+      const persistent = consecutiveHistoryPollFailures >= HISTORY_POLL_FAILURE_THRESHOLD;
+
+      if (authRelated) {
+        log.warn('History API auth errors — you may need to re-authenticate (./reauth.sh)', {
+          lastPollError,
+          consecutiveHistoryPollFailures,
+        });
+      } else if (persistent) {
+        log.warn('History API failing repeatedly — check network or session health', {
+          lastPollError,
+          consecutiveHistoryPollFailures,
+        });
+      } else {
+        log.debug('History poll error (transient)', {
+          lastPollError,
+          consecutiveHistoryPollFailures,
+        });
+      }
     }
   }
 

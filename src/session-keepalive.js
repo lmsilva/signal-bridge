@@ -6,6 +6,7 @@ const DEFAULTS = {
   refreshIntervalMs: 3 * 60 * 60 * 1000,
   startupRefreshDelayMs: 3 * 60 * 1000,
   proactiveRefreshAfterMs: 12 * 60 * 60 * 1000,
+  minTokenAgeForRefreshMs: 12 * 60 * 60 * 1000,
   reconnectPush: true,
   failureThreshold: 5,
   livenessProbe: true,
@@ -13,7 +14,14 @@ const DEFAULTS = {
 
 function isAuthRelatedMessage(message) {
   const text = String(message || '').toLowerCase();
-  return /401|403|unauth|authentication|csrf|cookie|session|login|expired|invalid token|refresh|forbidden/.test(text);
+  if (/no tokens in register response/i.test(text)) {
+    return false;
+  }
+  return /401|403|unauth|authentication|csrf|cookie|session|login|expired|invalid token|forbidden/.test(text);
+}
+
+function isRefreshNoopFailure(message) {
+  return /no tokens in register response/i.test(String(message || ''));
 }
 
 function countDevices(result, alexa) {
@@ -45,7 +53,6 @@ function createSessionKeepAlive({
   };
 
   let pingTimer = null;
-  let refreshTimer = null;
   let pingInFlight = false;
   let refreshInFlight = false;
   let lastPingAt = null;
@@ -53,6 +60,7 @@ function createSessionKeepAlive({
   let lastLivenessAt = null;
   let lastLivenessOk = null;
   let lastRefreshAt = null;
+  let lastRefreshAttemptAt = null;
   let lastRefreshError = null;
   let consecutiveFailures = 0;
   let lastHealthyAt = null;
@@ -69,6 +77,7 @@ function createSessionKeepAlive({
       lastLivenessAt: lastLivenessAt ? new Date(lastLivenessAt).toISOString() : null,
       lastLivenessOk,
       lastRefreshAt: lastRefreshAt ? new Date(lastRefreshAt).toISOString() : null,
+      lastRefreshAttemptAt: lastRefreshAttemptAt ? new Date(lastRefreshAttemptAt).toISOString() : null,
       lastRefreshError,
       lastHealthyAt: lastHealthyAt ? new Date(lastHealthyAt).toISOString() : null,
       consecutiveFailures,
@@ -81,10 +90,6 @@ function createSessionKeepAlive({
     if (pingTimer) {
       clearInterval(pingTimer);
       pingTimer = null;
-    }
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
     }
   }
 
@@ -167,12 +172,110 @@ function createSessionKeepAlive({
     if (meta.tokenAgeHours == null) {
       return false;
     }
+    const sinceLastAttempt = lastRefreshAttemptAt ? Date.now() - lastRefreshAttemptAt : Infinity;
+    if (sinceLastAttempt < settings.refreshIntervalMs) {
+      return false;
+    }
     const thresholdHours = Math.round(settings.proactiveRefreshAfterMs / 3600000);
     return meta.tokenAgeHours >= thresholdHours;
   }
 
-  function refreshSession(reason, { onComplete, source = 'keepalive' } = {}) {
+  function shouldAttemptRefresh({ force = false } = {}) {
+    if (force) {
+      return true;
+    }
+
+    const meta = sessionMeta();
+    if (!meta.hasRefreshToken) {
+      return false;
+    }
+
+    const now = Date.now();
+    const sinceLastAttempt = lastRefreshAttemptAt ? now - lastRefreshAttemptAt : Infinity;
+    if (sinceLastAttempt < settings.refreshIntervalMs) {
+      return false;
+    }
+
+    if (meta.tokenAgeHours == null) {
+      return sinceLastAttempt >= settings.refreshIntervalMs;
+    }
+
+    const minAgeHours = Math.round(settings.minTokenAgeForRefreshMs / 3600000);
+    return meta.tokenAgeHours >= minAgeHours;
+  }
+
+  function verifySessionLive(onComplete) {
+    alexa.checkAuthentication((authenticated, err) => {
+      if (err && authenticated === null) {
+        onComplete?.(false);
+        return;
+      }
+      if (!authenticated) {
+        onComplete?.(false);
+        return;
+      }
+
+      runLivenessProbe('refresh-verify', (ok) => {
+        onComplete?.(ok);
+      });
+    });
+  }
+
+  function handleRefreshFailure(reason, message, { source = 'keepalive', onComplete } = {}) {
+    lastRefreshAttemptAt = Date.now();
+    lastRefreshError = message;
+
+    if (isRefreshNoopFailure(message)) {
+      log.debug(`Session refresh noop (${reason}) — Amazon returned no new tokens; existing session unchanged`);
+      journal?.recordSuccess({
+        type: 'token_refresh_noop',
+        source,
+        message: `Register returned no new tokens (${reason})`,
+        context: { trigger: reason },
+        sessionMeta: sessionMeta(),
+      });
+      onComplete?.(true);
+      return;
+    }
+
+    log.warn(`Session refresh failed (${reason})`, message);
+
+    verifySessionLive((live) => {
+      if (live) {
+        log.info(`Session refresh failed (${reason}) but auth checks still pass — not degrading session`);
+        journal?.recordSuccess({
+          type: 'token_refresh_failed_but_live',
+          source,
+          message: `Refresh failed but session still valid: ${message}`,
+          context: { trigger: reason },
+          sessionMeta: sessionMeta(),
+        });
+        onComplete?.(true);
+        return;
+      }
+
+      journal?.recordFailure({
+        type: 'token_refresh_failed',
+        source,
+        reason,
+        message,
+        context: { trigger: reason, sessionDead: true },
+        sessionMeta: sessionMeta(),
+      });
+      markFailure(reason, message, { source, context: { phase: 'refresh' } });
+      onComplete?.(false, message);
+    });
+  }
+
+  function refreshSession(reason, { onComplete, source = 'keepalive', force = false } = {}) {
     if (refreshInFlight) {
+      onComplete?.(false, 'refresh already in flight');
+      return;
+    }
+
+    if (!force && !shouldAttemptRefresh({ force: false }) && reason === 'scheduled') {
+      log.debug(`Skipping scheduled refresh (${reason}) — token too young or refresh attempted recently`);
+      onComplete?.(true);
       return;
     }
 
@@ -186,25 +289,17 @@ function createSessionKeepAlive({
 
     alexa.refreshCookie((err, res) => {
       refreshInFlight = false;
+      lastRefreshAttemptAt = Date.now();
 
       if (err || !res) {
         const message = err?.message || String(err || 'empty refresh response');
-        log.warn(`Session refresh failed (${reason})`, message);
-        journal?.recordFailure({
-          type: 'token_refresh_failed',
-          source,
-          reason,
-          message,
-          context: { trigger: reason },
-          sessionMeta: sessionMeta(),
-        });
-        markFailure(reason, message, { source, context: { phase: 'refresh' } });
-        onComplete?.(false, message);
+        handleRefreshFailure(reason, message, { source, onComplete });
         return;
       }
 
       alexa.setCookie(res);
       lastRefreshAt = Date.now();
+      lastRefreshError = null;
       markHealthy(source);
       persistRefreshedSession(res, reason);
       journal?.recordSuccess({
@@ -246,6 +341,7 @@ function createSessionKeepAlive({
         if (isAuthRelatedMessage(message)) {
           refreshSession('liveness-auth', {
             source: 'liveness_probe',
+            force: true,
             onComplete: (ok, refreshMessage) => {
               if (!ok) {
                 markFailure(reason, refreshMessage || message, {
@@ -259,7 +355,6 @@ function createSessionKeepAlive({
           return;
         }
 
-        // Auth ping already passed — API glitch, not session loss.
         onComplete?.(true);
         return;
       }
@@ -289,8 +384,33 @@ function createSessionKeepAlive({
     });
   }
 
+  function finishPingCycle(reason, meta) {
+    runLivenessProbe(reason, (ok) => {
+      pingInFlight = false;
+      if (!ok) {
+        return;
+      }
+
+      markHealthy('keepalive');
+      log.debug(`Session keep-alive ping OK (${reason})`, meta);
+
+      if (settings.reconnectPush && typeof alexa.isPushConnected === 'function' && !alexa.isPushConnected()) {
+        log.warn('Push channel disconnected — reconnecting during keep-alive');
+        journal?.recordFailure({
+          type: 'push_disconnected',
+          source: 'keepalive',
+          reason,
+          message: 'Push channel down during scheduled ping',
+          sessionMeta: meta,
+          level: 'warn',
+        });
+        alexa.initPushConnection();
+      }
+    });
+  }
+
   function pingSession(reason = 'scheduled') {
-    if (pingInFlight) {
+    if (pingInFlight || refreshInFlight) {
       return;
     }
 
@@ -315,7 +435,6 @@ function createSessionKeepAlive({
 
     alexa.checkAuthentication((authenticated, err) => {
       if (err && authenticated === null) {
-        pingInFlight = false;
         lastPingOk = false;
         const message = err.message || String(err);
         log.warn(`Session keep-alive ping error (${reason})`, message);
@@ -328,20 +447,13 @@ function createSessionKeepAlive({
           sessionMeta: meta,
         });
         refreshSession('ping-error', {
-          onComplete: (ok, refreshMessage) => {
-            pingInFlight = false;
-            if (!ok) {
-              markFailure(reason, refreshMessage || message, { source: 'keepalive', context: { phase: 'ping' } });
-            } else {
-              runLivenessProbe(reason);
-            }
-          },
+          force: true,
+          onComplete: () => finishPingCycle(reason, meta),
         });
         return;
       }
 
       if (!authenticated) {
-        pingInFlight = false;
         lastPingOk = false;
         log.warn(`Session keep-alive auth invalid (${reason}), refreshing tokens`);
         journal?.recordFailure({
@@ -353,17 +465,8 @@ function createSessionKeepAlive({
           sessionMeta: meta,
         });
         refreshSession('auth-invalid', {
-          onComplete: (ok) => {
-            pingInFlight = false;
-            if (!ok) {
-              markFailure(reason, 'authentication invalid after refresh', {
-                source: 'keepalive',
-                context: { phase: 'ping' },
-              });
-            } else {
-              runLivenessProbe(reason);
-            }
-          },
+          force: true,
+          onComplete: () => finishPingCycle(reason, meta),
         });
         return;
       }
@@ -377,46 +480,26 @@ function createSessionKeepAlive({
         sessionMeta: meta,
       });
 
-      if (shouldProactiveRefresh()) {
-        journal?.recordSuccess({
-          type: 'proactive_refresh_triggered',
-          source: 'keepalive',
-          message: `Token age ${meta.tokenAgeHours}h — refreshing before expiry`,
-          sessionMeta: meta,
-        });
-        refreshSession('proactive-age', {
-          onComplete: (ok) => {
-            pingInFlight = false;
-            if (ok) {
-              runLivenessProbe(reason);
-            }
-          },
+      const refreshReason = shouldProactiveRefresh()
+        ? 'proactive-age'
+        : (shouldAttemptRefresh() ? 'scheduled' : null);
+
+      if (refreshReason) {
+        if (refreshReason === 'proactive-age') {
+          journal?.recordSuccess({
+            type: 'proactive_refresh_triggered',
+            source: 'keepalive',
+            message: `Token age ${meta.tokenAgeHours}h — refreshing before expiry`,
+            sessionMeta: meta,
+          });
+        }
+        refreshSession(refreshReason, {
+          onComplete: () => finishPingCycle(reason, meta),
         });
         return;
       }
 
-      runLivenessProbe(reason, (ok) => {
-        pingInFlight = false;
-        if (!ok) {
-          return;
-        }
-
-        markHealthy('keepalive');
-        log.debug(`Session keep-alive ping OK (${reason})`, meta);
-
-        if (settings.reconnectPush && typeof alexa.isPushConnected === 'function' && !alexa.isPushConnected()) {
-          log.warn('Push channel disconnected — reconnecting during keep-alive');
-          journal?.recordFailure({
-            type: 'push_disconnected',
-            source: 'keepalive',
-            reason,
-            message: 'Push channel down during scheduled ping',
-            sessionMeta: meta,
-            level: 'warn',
-          });
-          alexa.initPushConnection();
-        }
-      });
+      finishPingCycle(reason, meta);
     });
   }
 
@@ -437,6 +520,7 @@ function createSessionKeepAlive({
     log.warn(`Auth-related failure from ${source}`, message);
     refreshSession(`external-${source}`, {
       source,
+      force: true,
       onComplete: (ok, refreshMessage) => {
         if (!ok) {
           markFailure(source, refreshMessage || message, { source, context });
@@ -460,8 +544,10 @@ function createSessionKeepAlive({
       context: {
         pingEveryMinutes: Math.round(settings.pingIntervalMs / 60000),
         refreshEveryHours: Math.round(settings.refreshIntervalMs / 3600000),
+        minTokenAgeForRefreshHours: Math.round(settings.minTokenAgeForRefreshMs / 3600000),
         proactiveRefreshAfterHours: Math.round(settings.proactiveRefreshAfterMs / 3600000),
         livenessProbe: settings.livenessProbe,
+        refreshViaPing: true,
       },
       sessionMeta: sessionMeta(),
     });
@@ -469,17 +555,16 @@ function createSessionKeepAlive({
     log.info('Session keep-alive enabled', {
       pingEveryMinutes: Math.round(settings.pingIntervalMs / 60000),
       refreshEveryHours: Math.round(settings.refreshIntervalMs / 3600000),
+      minTokenAgeForRefreshHours: Math.round(settings.minTokenAgeForRefreshMs / 3600000),
       proactiveRefreshAfterHours: Math.round(settings.proactiveRefreshAfterMs / 3600000),
       livenessProbe: settings.livenessProbe,
       failureThreshold: settings.failureThreshold,
+      refreshViaPing: true,
       journalPath: journal?.path,
     });
 
     pingTimer = setInterval(() => pingSession('scheduled'), settings.pingIntervalMs);
-    refreshTimer = setInterval(() => refreshSession('scheduled'), settings.refreshIntervalMs);
-
     setTimeout(() => pingSession('startup'), 30 * 1000);
-    setTimeout(() => refreshSession('startup'), settings.startupRefreshDelayMs);
   }
 
   return {
@@ -496,4 +581,5 @@ module.exports = {
   createSessionKeepAlive,
   DEFAULTS,
   isAuthRelatedMessage,
+  isRefreshNoopFailure,
 };
