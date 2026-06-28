@@ -143,7 +143,7 @@ From repo root (bridge + client):
 
 - **Portrait vs landscape:** chosen from screen dimensions in `overlay.py`
 - **Queue:** rapid announcements stack; user dismiss skips to next (timer snapshots bypass queue)
-- **Timers:** show immediately when set; list updates in-place when another timer arrives during display
+- **Timers:** show immediately when set; list updates in-place when another timer arrives or one is cancelled; empty list shows "No active timers"
 - **Fired timer:** focused alert with timer name, device, duration; uses full dismiss timeout unless replaced by new active timer list
 - **Weather dismiss:** "Dismisses in X" shown as bottom label (always visible above content)
 - **Tray:** app stays resident; no main window until a message arrives
@@ -163,6 +163,7 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-06-23: Timer cancel updates display (empty or remaining list); removed Active Timers counter from headline.
 - 2026-06-23: Timer in-place updates, local fire handler, timer names on set/fire, weather client fetch + location from spoken response, dismiss countdown label, portable build venv fix, `test_main.py`, `run_tests.bat`, full-suite workflow.
 - 2026-06-28: `OverlayShell` font refs from `OverlayWindow` (fixes startup crash).
 - 2026-06-27: UDP v2 display modes — time clock, weather dashboard, timer list; typed payload routing in overlay.

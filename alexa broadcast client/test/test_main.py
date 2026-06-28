@@ -38,6 +38,14 @@ class MainTimerDisplayTests(unittest.TestCase):
         }
         self.assertFalse(BroadcastClientApp._timer_payload_has_content(payload))
 
+    def test_cancelled_empty_snapshot_shown(self):
+        payload = {
+            "type": "timer.snapshot",
+            "event": {"kind": "cancelled"},
+            "timers": [],
+        }
+        self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
+
     def test_fired_uses_full_display_seconds(self):
         config = {"defaultDisplaySeconds": 120, "maxDisplaySeconds": 120}
         payload = {

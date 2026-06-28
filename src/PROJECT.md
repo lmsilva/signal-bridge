@@ -226,6 +226,7 @@ Client: **25** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-06-23: Timer cancel detection — diff against API snapshot (no ghost preserve on removal); emit empty/updated list on cancel; cancel-voice followup polls; broader cancel phrase regex.
 - 2026-06-23: Timer sync emits on new timer set (count increase); fire priority over started; broader timer-set detection; weather location from spoken response; named-location geocoding; `run_all_tests.bat` + 44 bridge / 25 client tests; `--test-force-exit` on npm test.
 - 2026-06-27: Voice events (time/weather queries) + timer sync with UDP v2 typed payloads; `npm test` suite.
 - 2026-06-27: Smarter refresh handling — noop classification, verify-before-degrade, refresh folded into ping cycle.

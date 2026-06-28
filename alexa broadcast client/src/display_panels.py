@@ -881,8 +881,6 @@ class TimerPanel(BasePanel):
                 "resumed": "Timer resumed",
                 "list": "Active timers",
             }.get(event_kind, "Active timers")
-            if len(timers) > 1 and event_kind == "started":
-                headline = f"Active timers ({len(timers)})"
             headline_color = text
             headline_font = self.shell.section_title_font
 

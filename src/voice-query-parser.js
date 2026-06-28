@@ -5,7 +5,7 @@ const WEATHER_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?weather(?:\s+like)
 const SHOW_TIMERS_RE = /\b(?:show|list)\s+(?:all\s+|my\s+)?timers\b|\bwhat are my timers\b|\bhow much time is left on(?: my)? timers?\b/i;
 const TIMER_SET_RE = /\b(?:set|start|create|add)\b(?:(?!\btime\b).)*\b(?:timer|countdown|alarm)\b|\b(?:timer|countdown|alarm)\s+(?:for|to)\s+(?:\d|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+(?:timer|countdown|alarm)\b|\b(?:set|start)\s+(?:a\s+)?(?:timer|countdown|alarm)\s+(?:for\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+/i;
 const TIMER_SET_SPOKEN_RE = /\b(?:(?:starting|counting)\s+(?:now|down)|(?:timer|countdown|alarm)\s+(?:is\s+)?(?:set|started|on)|starting\s+(?:a|your)\s+\d|\d\s+(?:minute|min|hour|hr|second|sec)s?\s+(?:timer|countdown|alarm)\s+(?:starting|set))\b/i;
-const TIMER_CANCEL_RE = /\b(?:cancel|stop|delete|clear|remove)\s+(?:the\s+|my\s+|all\s+)?(?:timers?|countdowns?|alarms?)\b/i;
+const TIMER_CANCEL_RE = /\b(?:cancel|stop|delete|clear|remove)(?:\s+(?:the|my|all|a|an))?(?:\s+\S+){0,3}\s+(?:timers?|countdowns?|alarms?)\b|\bcancel\s+all\b/i;
 
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();

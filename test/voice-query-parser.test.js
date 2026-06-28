@@ -51,6 +51,20 @@ test('voice query parser detects named timer set phrases', () => {
   assert.equal(event.kind, 'timer-hint');
 });
 
+test('voice query parser detects timer cancel hint', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('cancel all timers', 'Okay'));
+  assert.equal(event.kind, 'timer-hint');
+  assert.equal(event.trigger, 'timer-cancel-voice');
+});
+
+test('voice query parser detects named timer cancel hint', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('cancel the pizza timer', 'Okay'));
+  assert.equal(event.kind, 'timer-hint');
+  assert.equal(event.trigger, 'timer-cancel-voice');
+});
+
 test('voice query parser deduplicates processed activity ids', () => {
   const parser = createVoiceQueryParser();
   const item = activity('what time is it');

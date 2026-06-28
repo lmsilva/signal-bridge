@@ -165,6 +165,127 @@ test('applySnapshot emits when active timer count increases', async () => {
   fs.rmSync(mirrorPath, { force: true });
 });
 
+test('applySnapshot emits updated list when a timer is cancelled', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { createTimerSync } = require('../src/timer-sync');
+  const mirrorPath = path.join(os.tmpdir(), `timer-mirror-partial-cancel-${Date.now()}.json`);
+  const fireAt = new Date(Date.now() + 300000).toISOString();
+
+  fs.writeFileSync(mirrorPath, JSON.stringify({
+    timers: {
+      'timer-1': {
+        amazonId: 'timer-1',
+        device: 'Kitchen Echo',
+        remainingSec: 300,
+        fireAt,
+        status: 'ON',
+        updatedAt: new Date().toISOString(),
+      },
+      'timer-2': {
+        amazonId: 'timer-2',
+        device: 'Bedroom Echo',
+        remainingSec: 600,
+        fireAt: new Date(Date.now() + 600000).toISOString(),
+        status: 'ON',
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  }));
+
+  await new Promise((resolve, reject) => {
+    const sync = createTimerSync({
+      alexa: {
+        getNotifications(_all, callback) {
+          callback(null, {
+            notifications: [{
+              type: 'Timer',
+              notificationIndex: 'timer-2',
+              deviceSerialNumber: 'SERIAL456',
+              status: 'ON',
+              remainingTime: 600,
+              originalDurationInMillis: 600000,
+              triggerTime: Date.now() + 600000,
+            }],
+          });
+        },
+      },
+      config: {
+        sessionPath: path.join(os.tmpdir(), 'alexa-session-test.json'),
+        timerMirrorPath: mirrorPath,
+        timerSync: { enabled: true },
+      },
+      log: { info() {}, warn() {}, debug() {} },
+      onSnapshot: (snapshot) => {
+        try {
+          assert.equal(snapshot.event.kind, 'cancelled');
+          assert.equal(snapshot.timers.length, 1);
+          assert.equal(snapshot.timers[0].amazonId, 'timer-2');
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      },
+      getDeviceNameMap: () => ({ SERIAL456: 'Bedroom Echo' }),
+    });
+
+    sync.pollNotifications('timer-cancel-voice');
+  });
+
+  fs.rmSync(mirrorPath, { force: true });
+});
+
+test('applySnapshot emits empty list when all timers cancelled', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { createTimerSync } = require('../src/timer-sync');
+  const mirrorPath = path.join(os.tmpdir(), `timer-mirror-cancel-all-${Date.now()}.json`);
+
+  fs.writeFileSync(mirrorPath, JSON.stringify({
+    timers: {
+      'timer-1': {
+        amazonId: 'timer-1',
+        device: 'Kitchen Echo',
+        remainingSec: 120,
+        fireAt: new Date(Date.now() + 120000).toISOString(),
+        status: 'ON',
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  }));
+
+  await new Promise((resolve, reject) => {
+    const sync = createTimerSync({
+      alexa: {
+        getNotifications(_all, callback) {
+          callback(null, { notifications: [] });
+        },
+      },
+      config: {
+        sessionPath: path.join(os.tmpdir(), 'alexa-session-test.json'),
+        timerMirrorPath: mirrorPath,
+        timerSync: { enabled: true },
+      },
+      log: { info() {}, warn() {}, debug() {} },
+      onSnapshot: (snapshot) => {
+        try {
+          assert.equal(snapshot.event.kind, 'cancelled');
+          assert.equal(snapshot.timers.length, 0);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      },
+    });
+
+    sync.pollNotifications('timer-cancel-voice');
+  });
+
+  fs.rmSync(mirrorPath, { force: true });
+});
+
 test('shouldEmitSnapshot ignores routine remaining-time updates', () => {
   const events = [{
     kind: 'updated',
@@ -182,6 +303,15 @@ test('shouldEmitSnapshot notifies on timer lifecycle events', () => {
     timer: { amazonId: 'timer-1', remainingSec: 300 },
   }];
   assert.equal(shouldEmitSnapshot(events, 'scheduled'), true);
+});
+
+test('pickPrimaryTimerEvent prefers cancelled on cancel-voice trigger', () => {
+  const { pickPrimaryTimerEvent } = require('../src/timer-sync');
+  const events = [
+    { kind: 'cancelled', amazonId: 'timer-1', timer: { amazonId: 'timer-1' } },
+  ];
+  const event = pickPrimaryTimerEvent(events, 'timer-cancel-voice');
+  assert.equal(event.kind, 'cancelled');
 });
 
 test('pickPrimaryTimerEvent prefers fired over started on sync polls', () => {

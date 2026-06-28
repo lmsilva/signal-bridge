@@ -95,7 +95,8 @@ class BroadcastClientApp:
 
     @staticmethod
     def _timer_payload_has_content(payload: dict) -> bool:
-        if BroadcastClientApp._timer_event_kind(payload) == "fired":
+        kind = BroadcastClientApp._timer_event_kind(payload)
+        if kind in ("fired", "cancelled"):
             return True
         return bool(payload.get("timers"))
 

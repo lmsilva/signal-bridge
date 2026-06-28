@@ -179,7 +179,13 @@ function isUserTimerTrigger(trigger) {
     || trigger === 'timer-set-voice'
     || trigger === 'timer-cancel-voice'
     || String(trigger || '').startsWith('show-timers-')
-    || String(trigger || '').startsWith('timer-set-voice-');
+    || String(trigger || '').startsWith('timer-set-voice-')
+    || String(trigger || '').startsWith('timer-cancel-voice-');
+}
+
+function isCancelTrigger(trigger) {
+  return trigger === 'timer-cancel-voice'
+    || String(trigger || '').startsWith('timer-cancel-voice-');
 }
 
 function shouldEmitSnapshot(events, trigger) {
@@ -191,6 +197,12 @@ function shouldEmitSnapshot(events, trigger) {
 
 function pickPrimaryTimerEvent(events, trigger) {
   if (isUserTimerTrigger(trigger)) {
+    if (isCancelTrigger(trigger)) {
+      const cancelled = events.find((entry) => entry.kind === 'cancelled');
+      if (cancelled) {
+        return cancelled;
+      }
+    }
     const started = events.find((entry) => entry.kind === 'started');
     if (started) {
       return started;
@@ -392,10 +404,17 @@ function createTimerSync({
   function applySnapshot(currentMap, trigger, device) {
     const previousTimers = mirror.timers;
     const prevActiveCount = Object.values(previousTimers).filter(isActiveTimer).length;
-    const mergedMap = mergeTimerMaps(previousTimers, currentMap);
-    const events = diffTimerSnapshots(previousTimers, mergedMap, {
+
+    const events = diffTimerSnapshots(previousTimers, currentMap, {
       fireVerifySlackMs: settings.fireVerifySlackMs,
     });
+
+    const hasRemoval = events.some(
+      (entry) => entry.kind === 'cancelled' || entry.kind === 'removed',
+    );
+    const mergedMap = hasRemoval || isCancelTrigger(trigger)
+      ? { ...currentMap }
+      : mergeTimerMaps(previousTimers, currentMap);
 
     mirror.timers = mergedMap;
     persistMirror();
@@ -404,14 +423,17 @@ function createTimerSync({
     const notifyEvents = filterNotifyEvents(events);
     const activeTimers = listActiveTimers();
     const gainedTimers = activeTimers.length > prevActiveCount;
-    const shouldEmit = shouldEmitSnapshot(events, trigger) || gainedTimers;
+    const lostTimers = activeTimers.length < prevActiveCount;
+    const shouldEmit = shouldEmitSnapshot(events, trigger) || gainedTimers || lostTimers;
 
     if (!shouldEmit) {
       return;
     }
 
     const hasFired = notifyEvents.some((entry) => entry.kind === 'fired');
-    if (!activeTimers.length && !hasFired) {
+    const hasCancel = notifyEvents.some((entry) => entry.kind === 'cancelled');
+
+    if (!activeTimers.length && !hasFired && !hasCancel && !lostTimers) {
       return;
     }
 
@@ -473,7 +495,11 @@ function createTimerSync({
 
   function requestImmediatePoll(reason = 'voice-hint', device = null) {
     pollNotifications(reason, device);
-    if (reason === 'timer-set-voice' || reason === 'show-timers') {
+    if (
+      reason === 'timer-set-voice'
+      || reason === 'show-timers'
+      || reason === 'timer-cancel-voice'
+    ) {
       for (const delayMs of [1000, 2000, 4000, 8000, 15000]) {
         setTimeout(() => pollNotifications(`${reason}-followup-${delayMs}ms`, device), delayMs);
       }
