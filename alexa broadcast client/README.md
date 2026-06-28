@@ -22,6 +22,8 @@ cd "alexa broadcast client"
 .\build_portable.bat
 ```
 
+The build uses a local virtual environment at `%LOCALAPPDATA%\alexa-broadcast-client-build-venv` (not the NAS `.venv`) so pip and PyInstaller stay reliable when the project lives on a network share.
+
 This creates a self-contained folder:
 
 ```
