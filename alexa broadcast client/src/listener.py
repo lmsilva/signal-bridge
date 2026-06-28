@@ -4,6 +4,8 @@ import sys
 import threading
 from typing import Callable
 
+from src.payload_utils import is_display_payload
+
 
 class UdpListener:
     def __init__(self, port: int, address: str, on_message: Callable[[dict], None]):
@@ -58,7 +60,7 @@ class UdpListener:
             except (UnicodeDecodeError, json.JSONDecodeError):
                 continue
 
-            if isinstance(payload, dict) and payload.get("message"):
+            if isinstance(payload, dict) and is_display_payload(payload):
                 self.on_message(payload)
 
         sock.close()

@@ -5,13 +5,23 @@ const { BroadcastParser } = require('./parser');
 const { buildAlexaInitOptions, persistFromAlexa, loadSession } = require('./session');
 const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-state');
 const { getActivityId } = require('./parser');
-const { buildNetworkPayload } = require('./message-details');
 const { createUdpBroadcaster } = require('./broadcast-udp');
 const { createSessionKeepAlive, isAuthRelatedMessage } = require('./session-keepalive');
 const { markReauthRequired, clearAuthStatus, readAuthStatus } = require('./auth-status');
 const { createSessionAuthJournal } = require('./session-auth-journal');
 const { getSessionMeta } = require('./session-meta');
 const { formatError } = require('./error-format');
+const { createVoiceQueryParser } = require('./voice-query-parser');
+const { extractWeatherLocation } = require('./weather-location');
+const { fetchWeatherForecast } = require('./weather-fetch');
+const { createEventsLog } = require('./events-log');
+const { createTimerSync } = require('./timer-sync');
+const {
+  buildBroadcastPayload,
+  buildTimeQueryPayload,
+  buildWeatherQueryPayload,
+  buildTimerSnapshotPayload,
+} = require('./udp-payload');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
@@ -29,6 +39,14 @@ function createListener({ config, log }) {
   });
   const broadcastLog = createBroadcastLog(config.broadcastLogPath);
   const udpBroadcaster = createUdpBroadcaster(config, log);
+  const voiceQueryParser = createVoiceQueryParser();
+  const voiceEventsLog = createEventsLog(config.voiceEventsLogPath);
+  const voiceSettings = {
+    enabled: config.voiceEvents?.enabled !== false,
+    timeQueries: config.voiceEvents?.timeQueries !== false,
+    weatherQueries: config.voiceEvents?.weatherQueries !== false,
+    fetchWeather: config.voiceEvents?.fetchWeather !== false,
+  };
 
   function persistBridgeState() {
     saveBridgeState(config.bridgeStatePath, parser.getState());
@@ -39,12 +57,28 @@ function createListener({ config, log }) {
   let healthTimer = null;
   let sessionKeepAlive = null;
   let authJournal = null;
+  let timerSync = null;
   let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;
   let lastPollError = null;
   let consecutiveHistoryPollFailures = 0;
   let lastCaptureAt = bridgeState.lastRecordedTimestamp || null;
+
+  function getDeviceNameMap() {
+    const map = {};
+    for (const device of Object.values(alexa.serialNumbers || {})) {
+      if (!device?.serialNumber) {
+        continue;
+      }
+      map[device.serialNumber] = device.accountName || device._name || device.serialNumber;
+    }
+    return map;
+  }
+
+  function sendUdpPayload(payload) {
+    udpBroadcaster.send(payload);
+  }
 
   function recordBroadcast(record) {
     if (!record?.message) {
@@ -55,10 +89,77 @@ function createListener({ config, log }) {
     broadcastLog.append(record);
     persistBridgeState();
 
-    const networkPayload = buildNetworkPayload(record, config);
-    udpBroadcaster.send(networkPayload);
+    sendUdpPayload(buildBroadcastPayload(record, config));
     lastCaptureAt = Date.now();
     log.info(`Recorded to ${broadcastLog.path} and sent UDP broadcast`);
+  }
+
+  async function recordVoiceEvent(event) {
+    if (!voiceSettings.enabled) {
+      return;
+    }
+
+    if (event.kind === 'time' && !voiceSettings.timeQueries) {
+      return;
+    }
+
+    if (event.kind === 'weather' && !voiceSettings.weatherQueries) {
+      return;
+    }
+
+    let payload;
+    if (event.kind === 'time') {
+      payload = buildTimeQueryPayload(event, config);
+    } else if (event.kind === 'weather') {
+      const location = extractWeatherLocation(
+        event.query,
+        config.voiceEvents?.defaultLocation,
+        event.spokenResponse,
+      );
+      let weather = null;
+      if (voiceSettings.fetchWeather) {
+        try {
+          weather = await fetchWeatherForecast(location);
+          if (!weather) {
+            log.warn('Weather fetch returned no data', {
+              query: event.query,
+              location: location?.query || location?.resolvedName,
+            });
+          }
+        } catch (error) {
+          log.warn('Weather fetch failed', error.message || error);
+        }
+      }
+      payload = buildWeatherQueryPayload(event, config, {
+        location: weather?.location || location,
+        weather,
+      });
+    } else {
+      return;
+    }
+
+    voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
+    sendUdpPayload(payload);
+    lastCaptureAt = Date.now();
+    log.info(`Voice event captured (${payload.type}) from ${event.device}`, {
+      query: event.query,
+    });
+  }
+
+  function handleTimerSnapshot(snapshot) {
+    const payload = buildTimerSnapshotPayload(snapshot, config);
+    voiceEventsLog.append({
+      type: payload.type,
+      trigger: payload.trigger,
+      timerCount: payload.timers.length,
+      event: payload.event,
+    });
+    sendUdpPayload(payload);
+    lastCaptureAt = Date.now();
+    log.info(`Timer snapshot sent (${payload.trigger})`, {
+      activeTimers: payload.timers.length,
+      event: payload.event?.kind,
+    });
   }
 
   function inspectActivity(activity, trigger) {
@@ -77,13 +178,49 @@ function createListener({ config, log }) {
       return;
     }
 
-    if (config.debug) {
-      const summary = activity?.description?.summary;
-      const response = activity?.alexaResponse;
-      if (summary || response) {
-        log.debug('Activity ignored (not an announcement)', { trigger, summary, response });
+    const activityId = getActivityId(activity);
+    if (!voiceQueryParser.shouldProcess(activityId)) {
+      if (config.debug) {
+        const summary = activity?.description?.summary;
+        const response = activity?.alexaResponse;
+        if (summary || response) {
+          log.debug('Activity ignored (duplicate activity id)', { trigger, summary, response });
+        }
       }
+      return;
     }
+
+    const voiceEvent = voiceQueryParser.parse(activity);
+    voiceQueryParser.markProcessed(activityId);
+
+    if (voiceEvent?.kind === 'timer-hint' || voiceEvent?.kind === 'timer-list') {
+      timerSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
+      return;
+    }
+
+    if (!voiceSettings.enabled) {
+      if (config.debug && voiceEvent) {
+        log.debug('Activity ignored (voice events disabled)', {
+          trigger,
+          summary: activity?.description?.summary,
+        });
+      }
+      return;
+    }
+
+    if (!voiceEvent) {
+      if (config.debug) {
+        log.debug('Activity ignored (not a tracked voice query)', {
+          trigger,
+          summary: activity?.description?.summary,
+        });
+      }
+      return;
+    }
+
+    recordVoiceEvent(voiceEvent).catch((error) => {
+      log.error('Failed to record voice event', error.message || error);
+    });
   }
 
   function pollRecentHistory(reason, lookbackMs = HISTORY_LOOKBACK_MS) {
@@ -155,6 +292,8 @@ function createListener({ config, log }) {
       sessionKeepAlive: sessionKeepAlive?.getStatus?.() || null,
       authJournal: journalSummary,
       authStatus: authStatus?.status || 'ok',
+      voiceEventsEnabled: voiceSettings.enabled,
+      activeTimers: timerSync?.listActiveTimers?.().length ?? 0,
     });
 
     if (authStatus?.status === 'reauth_required') {
@@ -282,6 +421,14 @@ function createListener({ config, log }) {
         });
         log.info('Listening for broadcast/announcement activity. Press Ctrl+C to stop.');
         log.info('Captures voice commands like: "Alexa, announce ..." or "Alexa, broadcast ..."');
+        if (voiceSettings.enabled) {
+          log.info('Voice event capture enabled', {
+            timeQueries: voiceSettings.timeQueries,
+            weatherQueries: voiceSettings.weatherQueries,
+            fetchWeather: voiceSettings.fetchWeather,
+            eventsLog: voiceEventsLog.path,
+          });
+        }
         if (bridgeState.lastRecordedTimestamp > 0 || bridgeState.recordedFingerprints?.length) {
           log.info('Loaded dedup state from disk', {
             lastRecorded: bridgeState.lastRecordedTimestamp
@@ -323,6 +470,15 @@ function createListener({ config, log }) {
           },
         });
         sessionKeepAlive.start();
+
+        timerSync = createTimerSync({
+          alexa,
+          config,
+          log,
+          onSnapshot: handleTimerSnapshot,
+          getDeviceNameMap,
+        });
+        timerSync.start();
 
         resolve(alexa);
       });

@@ -15,12 +15,18 @@ DEFAULTS = {
     "overlayBackground": "#0f172a",
     "overlayOpacity": 0.88,
     "accentColor": "#38bdf8",
+    "alertColor": "#f97316",
     "textColor": "#f8fafc",
     "mutedTextColor": "#94a3b8",
     "maxMessageCharacters": 8000,
     "scrollPixelsPerSecond": 28,
     "scrollStartPauseMs": 1800,
     "scrollEndPauseMs": 2500,
+    "defaultLocation": {
+        "name": "Home",
+        "latitude": 40.0,
+        "longitude": -111.0,
+    },
 }
 
 
@@ -28,7 +34,13 @@ def load_config() -> dict:
     config = DEFAULTS.copy()
     if CONFIG_PATH.exists():
         with CONFIG_PATH.open("r", encoding="utf-8") as handle:
-            config.update(json.load(handle))
+            loaded = json.load(handle)
+        config.update(loaded)
+        if isinstance(loaded.get("defaultLocation"), dict):
+            config["defaultLocation"] = {
+                **DEFAULTS.get("defaultLocation", {}),
+                **loaded["defaultLocation"],
+            }
     return config
 
 
@@ -38,5 +50,11 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         requested = int(requested)
     except (TypeError, ValueError):
         requested = config["defaultDisplaySeconds"]
+
+    if payload.get("type") == "timer.snapshot":
+        event_kind = (payload.get("event") or {}).get("kind")
+        if event_kind == "fired":
+            requested = max(requested, 25)
+        return min(max(requested, 1), config["maxDisplaySeconds"])
 
     return min(max(requested, 1), config["maxDisplaySeconds"])

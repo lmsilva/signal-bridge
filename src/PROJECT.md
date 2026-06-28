@@ -53,7 +53,15 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
 | `src/broadcast-log.js` | Append tab-separated lines to broadcast log file |
 | `src/broadcast-udp.js` | Send JSON to `255.255.255.255` + optional `targets[]` |
-| `src/message-details.js` | Parse sender/destination/message; build UDP payload v1 |
+| `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
+| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, timer) |
+| `src/voice-query-parser.js` | Detect time/weather/timer voice queries from history |
+| `src/time-parse.js` | Parse spoken time from Alexa `alexaResponse` text |
+| `src/weather-location.js` | Extract local vs named location from weather questions |
+| `src/weather-fetch.js` | Open-Meteo geocode + forecast fetch (no API key) |
+| `src/timer-sync.js` | Poll Amazon notifications API; mirror active timers; fire verify |
+| `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
+| `test/*.test.js` | Node built-in test suite (`npm test`) |
 | `src/bridge-state.js` | Dedup fingerprints + last timestamp on disk |
 | `src/config.js` | Merge env + `data/config.json` (or `config.example.json`) |
 | `src/logger.js` | Structured console logging |
@@ -91,12 +99,12 @@ Every **15 minutes** the bridge runs a single **ping cycle** (no separate refres
 2. Load `data/alexa-session.json`; `buildAlexaInitOptions(..., { mode: 'listener' })`
 3. `alexa.init()` — uses saved cookies; **no** login proxy in listener mode
 4. **Capture paths:**
-   - **Push:** `ws-device-activity` → `parser.parseActivity()` → `recordBroadcast()`
+   - **Push:** `ws-device-activity` → broadcast parser + voice query parser
    - **History fallback:** volume-change / connect / periodic poll → `getCustomerHistoryRecords()`
-5. **On match:** log line → append `broadcast.txt` → UDP JSON via `buildNetworkPayload()`
-6. **Dedup:** `BroadcastParser` + `bridge-state.json` (fingerprints, timestamps)
-7. **Session keep-alive:** 15m ping cycle (auth + optional refresh + liveness); auth journal; marks `reauth_required` after 5 real failures
-8. **History poll errors:** transient failures logged at debug; reauth warning only for auth-related errors or 3+ consecutive failures
+5. **On broadcast match:** log → `broadcast.txt` → UDP `type: broadcast`
+6. **On voice match:** time/weather → UDP + `data/voice-events.jsonl`; timer voice → immediate timer sync poll
+7. **Timer sync:** periodic `getNotifications()` diff → UDP `type: timer.snapshot` with full active timer list
+8. **Dedup:** `BroadcastParser` + voice query processed-id set + `bridge-state.json`
 
 ---
 
@@ -122,30 +130,61 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `broadcastLogFile` | Tab-separated capture log |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP to Windows client |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
-| `sessionAuthJournalFile` | Default `data/session-auth-journal.jsonl` |
+| `voiceEvents.enabled/timeQueries/weatherQueries/fetchWeather` | Voice capture toggles |
+| `voiceEvents.defaultLocation` | `{ name, latitude, longitude }` for "weather outside" queries |
+| `voiceEvents.eventsLogFile` | Default `data/voice-events.jsonl` |
+| `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
 
 ---
 
-## UDP payload (v1)
+## UDP payload (v2)
 
-Sent by `message-details.js` / `broadcast-udp.js`:
+All payloads include `version: 2` and a `type` field. **Broadcast payloads keep `message`** so existing clients still work until updated.
+
+| `type` | When emitted |
+|--------|----------------|
+| `broadcast` | Announce/broadcast captured (unchanged fields: `message`, `sender`, `destination`, …) |
+| `time.query` | "What time is it" — includes `parsedTime`, `spokenResponse`, `device` |
+| `weather.query` | Weather question — includes `location`, optional `weather` (Open-Meteo), `spokenResponse` |
+| `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` |
+
+Example timer snapshot:
 
 ```json
 {
-  "version": 1,
-  "message": "dinner is ready",
-  "sender": "Kitchen Echo",
-  "destination": "All devices",
-  "timestamp": "2026-06-24T12:00:00.000Z",
-  "displaySeconds": 120,
-  "trigger": "device-activity"
+  "version": 2,
+  "type": "timer.snapshot",
+  "device": "Kitchen Echo",
+  "timers": [
+    {
+      "amazonId": "abc",
+      "device": "Kitchen Echo",
+      "label": "Pizza",
+      "durationSec": 300,
+      "remainingSec": 240,
+      "status": "ON",
+      "fireAt": "2026-06-27T16:04:00.000Z"
+    }
+  ],
+  "event": { "kind": "list" },
+  "displaySeconds": 120
 }
 ```
 
 Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliable from Docker.
+
+---
+
+## Testing
+
+```bash
+npm test
+```
+
+27 unit tests cover broadcast parser, UDP payloads, voice query detection, timer diff logic, weather location parsing, and helpers. Run before deploy after code changes.
 
 ---
 
@@ -180,7 +219,8 @@ Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliab
 
 ## Recent changes
 
-- 2026-06-27: Smarter refresh handling — noop classification, verify-before-degrade, refresh folded into ping cycle, richer history poll errors.
+- 2026-06-27: Voice events (time/weather queries) + timer sync with UDP v2 typed payloads; `npm test` suite (27 tests).
+- 2026-06-27: Smarter refresh handling — noop classification, verify-before-degrade, refresh folded into ping cycle.
 - 2026-06-26: Fix liveness probe parsing (`getDevices` returns `{ devices: [] }`); stop false session_degraded/recovered churn.
 - 2026-06-24: Added this PROJECT.md; documented vendored auth proxy, session keep-alive, QNAP Docker patterns, UDP protocol.
 - 2026-06-24: Reauth port cleanup, `src` volume mount, `--no-build` workflows, `port-utils.js`.

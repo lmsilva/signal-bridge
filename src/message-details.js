@@ -43,20 +43,8 @@ function parseMessageDetails(record) {
 }
 
 function buildNetworkPayload(record, config) {
-  const details = parseMessageDetails(record);
-  const displaySeconds = Number(record?.displaySeconds)
-    || Number(config.udpBroadcast?.defaultDisplaySeconds)
-    || 120;
-
-  return {
-    version: 1,
-    message: details.message,
-    sender: details.sender,
-    destination: details.destination,
-    timestamp: new Date(record.timestamp || Date.now()).toISOString(),
-    displaySeconds,
-    trigger: record.trigger || 'unknown',
-  };
+  const { buildBroadcastPayload } = require('./udp-payload');
+  return buildBroadcastPayload(record, config);
 }
 
 module.exports = {

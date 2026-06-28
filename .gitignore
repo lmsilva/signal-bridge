@@ -12,7 +12,10 @@ data/broadcast.txt
 data/formerDataStore.json
 data/auth-status.json
 data/session-auth-journal.jsonl
+data/voice-events.jsonl
+data/timer-mirror.json
 data/config.json
+data/data/
 broadcast.txt
 
 # Windows broadcast client

@@ -250,6 +250,7 @@ class BroadcastParser {
 module.exports = {
   BroadcastParser,
   getActivityId,
+  getDeviceName,
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
   isBroadcastPrompt,

@@ -3,9 +3,13 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-28
 
 ---
+
+## Recent changes
+
+- **2026-06-28:** `OverlayShell` exposes font refs from `OverlayWindow` so display panels can access `message_font` etc. at init (fixes startup crash).
 
 ## What this is
 
@@ -31,8 +35,10 @@ The client does **not** talk to Amazon. It only receives UDP and renders UI.
 |------|------|
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop + message queue |
 | `src/listener.py` | `UdpListener` — background thread, JSON decode, `on_message` callback |
-| `src/overlay.py` | `OverlayWindow` — fullscreen, fade, portrait/landscape layout, dismiss |
-| `src/message_scroll.py` | Long-message scroll animation inside overlay |
+| `src/overlay.py` | Fullscreen shell: fade, countdown, routes payloads to display panels |
+| `src/display_panels.py` | Broadcast, time, weather, and timer overlay renderers |
+| `src/payload_utils.py` | UDP payload type detection and formatting helpers |
+| `src/message_scroll.py` | Long broadcast message scroll animation |
 | `src/tray_app.py` | pystray icon; exit triggers shutdown |
 | `src/config.py` | Load `config.json` next to exe / project root |
 | `src/paths.py` | Resolve config path for dev vs portable build |
@@ -52,28 +58,44 @@ The client does **not** talk to Amazon. It only receives UDP and renders UI.
 3. Hidden `tk.Tk` root; `OverlayWindow` created but not shown until message
 4. `_poll_messages()` every 100ms — drains queue from UDP thread
 5. `_enqueue_display()` — one overlay at a time; queue additional messages
-6. `overlay.show(payload, seconds)` — fade in, countdown, fade out (capped by `maxDisplaySeconds`)
-7. Click / key dismisses current message or advances queue
+6. `overlay.show(payload, seconds)` — routes by `type` to the correct panel; fade in/out unchanged
+7. Click dismisses current overlay or advances queue
 
 ---
 
-## Expected UDP payload
+## Expected UDP payloads (v2)
 
-From bridge `message-details.js` (version 1):
+All payloads include `version: 2` and `type`. Legacy broadcasts with only `message` still work.
+
+| `type` | Overlay |
+|--------|---------|
+| `broadcast` | FROM / TO / TIME chips + scrolling message (unchanged UX) |
+| `time.query` | Analog clock + digital time + full date |
+| `weather.query` | Current conditions, 24h strip, 7-day cards |
+| `timer.snapshot` | All active timers with device, remaining, duration |
+
+`listener.py` accepts any recognized display payload via `is_display_payload()`.
+
+Example time payload:
 
 ```json
 {
-  "version": 1,
-  "message": "the movie is starting",
-  "sender": "Living Room Echo",
-  "destination": "All devices",
-  "timestamp": "2026-06-24T12:00:00.000Z",
-  "displaySeconds": 120,
-  "trigger": "history-periodic"
+  "version": 2,
+  "type": "time.query",
+  "device": "Kitchen Echo",
+  "parsedTime": { "timeLabel": "3:45 PM", "dateLabel": "Friday, June 27, 2026" },
+  "displaySeconds": 120
 }
 ```
 
-`listener.py` ignores packets without a `message` field.
+Test locally:
+
+```bash
+python test/send_test.py --type broadcast
+python test/send_test.py --type time --seconds 30
+python test/send_test.py --type weather --seconds 45
+python test/send_test.py --type timers --seconds 45
+```
 
 ---
 
@@ -135,4 +157,5 @@ Client must be running; Windows Firewall must allow UDP on the listen port (priv
 
 ## Recent changes
 
+- 2026-06-27: UDP v2 display modes — time clock, weather dashboard, timer list; typed payload routing in overlay.
 - 2026-06-24: Added this PROJECT.md documenting architecture, UDP contract, and bridge pairing.

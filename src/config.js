@@ -70,6 +70,14 @@ function loadConfig() {
     ROOT,
     config.sessionAuthJournalFile || 'data/session-auth-journal.jsonl',
   );
+  config.voiceEventsLogPath = path.resolve(
+    ROOT,
+    config.voiceEvents?.eventsLogFile || 'data/voice-events.jsonl',
+  );
+  config.timerMirrorPath = path.resolve(
+    ROOT,
+    config.timerSync?.mirrorFile || 'data/timer-mirror.json',
+  );
 
   return config;
 }

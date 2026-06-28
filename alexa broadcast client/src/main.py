@@ -8,6 +8,7 @@ from src.config import effective_display_seconds, load_config
 from src.listener import UdpListener
 from src.overlay import OverlayWindow
 from src.tray_app import run_tray
+from src.weather_fetch import enrich_weather_payload
 
 
 class BroadcastClientApp:
@@ -42,7 +43,12 @@ class BroadcastClientApp:
 
         self.root = tk.Tk()
         self.root.withdraw()
-        self.overlay = OverlayWindow(self.root, self.config, on_user_dismiss=self._on_user_dismiss)
+        self.overlay = OverlayWindow(
+            self.root,
+            self.config,
+            on_user_dismiss=self._on_user_dismiss,
+            on_local_timer_fired=self._on_local_timer_fired,
+        )
         self.root.after(100, self._poll_messages)
         self.root.mainloop()
 
@@ -50,6 +56,8 @@ class BroadcastClientApp:
         try:
             while True:
                 payload = self.message_queue.get_nowait()
+                if payload.get("type") == "weather.query":
+                    payload = enrich_weather_payload(payload, self.config)
                 seconds = effective_display_seconds(payload, self.config)
                 self._enqueue_display(payload, seconds)
         except queue.Empty:
@@ -57,9 +65,66 @@ class BroadcastClientApp:
 
         self.root.after(100, self._poll_messages)
 
+    @staticmethod
+    def _is_timer_snapshot(payload: dict) -> bool:
+        return payload.get("type") == "timer.snapshot"
+
+    def _showing_timers(self) -> bool:
+        return (
+            self.display_active
+            and self.overlay.visible
+            and self.overlay.active_display_type == "timer.snapshot"
+        )
+
+    def _drop_pending_timer_snapshots(self):
+        self.pending_displays = deque(
+            item for item in self.pending_displays if not self._is_timer_snapshot(item[0])
+        )
+
+    @staticmethod
+    def _build_fired_timer_payload(base_payload: dict, timer: dict) -> dict:
+        fired_payload = dict(base_payload)
+        fired_timer = {**timer, "remainingSec": 0, "status": "OFF"}
+        fired_payload["event"] = {"kind": "fired", "timer": fired_timer}
+        fired_payload["timers"] = [fired_timer]
+        return fired_payload
+
+    @staticmethod
+    def _timer_event_kind(payload: dict) -> str:
+        return (payload.get("event") or {}).get("kind", "list")
+
+    @staticmethod
+    def _timer_payload_has_content(payload: dict) -> bool:
+        if BroadcastClientApp._timer_event_kind(payload) == "fired":
+            return True
+        return bool(payload.get("timers"))
+
+    def _handle_timer_display(self, payload: dict, seconds: int):
+        if not self._timer_payload_has_content(payload):
+            return
+
+        self._drop_pending_timer_snapshots()
+
+        if self.display_active and self.overlay.visible:
+            self.display_active = True
+            self.overlay.advance(payload, seconds)
+            return
+
+        if self.display_active:
+            self.display_active = True
+            self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
+            return
+
+        self.display_active = True
+        self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
+
     def _enqueue_display(self, payload: dict, seconds: int):
         if self.display_active and not self.overlay.visible and not self.pending_displays:
             self.display_active = False
+
+        if self._is_timer_snapshot(payload):
+            self._handle_timer_display(payload, seconds)
+            return
 
         if self.display_active:
             self.pending_displays.append((payload, seconds))
@@ -67,6 +132,11 @@ class BroadcastClientApp:
 
         self.display_active = True
         self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
+
+    def _on_local_timer_fired(self, timer: dict, base_payload: dict):
+        fired_payload = self._build_fired_timer_payload(base_payload, timer)
+        seconds = effective_display_seconds(fired_payload, self.config)
+        self._handle_timer_display(fired_payload, seconds)
 
     def _on_user_dismiss(self):
         if self.pending_displays:

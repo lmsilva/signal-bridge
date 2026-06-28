@@ -1,12 +1,15 @@
 import argparse
 import json
 import socket
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
-# Alexa does not publish a household-announcement character cap, but playback is
-# limited to roughly 40 seconds of audio. Elsewhere in Alexa, TTS text tops out
-# at 8000 characters — the same limit our overlay client accepts.
 ALEXA_MAX_MESSAGE_CHARACTERS = 8000
+DEFAULT_LOCATION = {
+    "name": "Home",
+    "resolvedName": "Saratoga Springs, Utah, United States",
+    "latitude": 40.0,
+    "longitude": -111.0,
+}
 
 
 def build_max_length_message(length: int = ALEXA_MAX_MESSAGE_CHARACTERS) -> str:
@@ -41,57 +44,239 @@ def build_max_length_message(length: int = ALEXA_MAX_MESSAGE_CHARACTERS) -> str:
     return message[:length]
 
 
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def build_payload(args) -> dict:
-    return {
-        "version": 1,
-        "message": args.message,
-        "sender": args.sender,
-        "destination": args.destination,
-        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "displaySeconds": args.seconds,
-        "trigger": "test",
-    }
+    now = datetime.now(timezone.utc)
+    display_seconds = args.seconds
+
+    if args.type == "broadcast":
+        return {
+            "version": 2,
+            "type": "broadcast",
+            "message": args.message,
+            "sender": args.sender,
+            "destination": args.destination,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+        }
+
+    if args.type == "time":
+        local = now.astimezone()
+        return {
+            "version": 2,
+            "type": "time.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what time is it",
+            "spokenResponse": local.strftime("It's %I:%M %p").replace(" 0", " "),
+            "parsedTime": {
+                "iso": local.isoformat(),
+                "hour": local.hour,
+                "minute": local.minute,
+                "second": local.second,
+                "timeLabel": local.strftime("%I:%M %p").lstrip("0"),
+                "dateLabel": local.strftime("%A, %B %d, %Y"),
+            },
+        }
+
+    if args.type == "weather-spoken":
+        return {
+            "version": 2,
+            "type": "weather.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what is the weather like outside",
+            "spokenResponse": (
+                "Currently 60 degrees and mostly cloudy, with a high of 68 and a low of 52. "
+                "Fire Weather Watch active with winds up to 50 mph and humidity as low as 10 percent."
+            ),
+            "location": {
+                "scope": "local",
+                "query": "local",
+                "resolvedName": None,
+                "latitude": None,
+                "longitude": None,
+            },
+            "weather": None,
+        }
+
+    if args.type == "weather":
+        hourly = []
+        for offset in range(8):
+            slot_time = now + timedelta(hours=offset * 3)
+            hourly.append({
+                "time": slot_time.isoformat().replace("+00:00", "Z"),
+                "temperatureF": 74 - offset,
+                "temperatureC": 23 - offset,
+                "precipitationProbability": 5 + offset * 4,
+                "windSpeedMph": 6 + offset,
+                "condition": "rainy" if offset % 3 == 2 else ("sunny" if offset % 3 == 0 else "cloudy"),
+            })
+
+        daily = []
+        for offset in range(7):
+            day = (now + timedelta(days=offset)).date().isoformat()
+            daily.append({
+                "date": day,
+                "highF": 82 - offset,
+                "lowF": 58 - offset,
+                "highC": 28 - offset,
+                "lowC": 14 - offset,
+                "precipitationProbability": 10 + offset * 4,
+                "windSpeedMph": 8 + offset,
+                "condition": ["sunny", "cloudy", "rainy", "stormy", "snowy", "sunny", "cloudy"][offset % 7],
+            })
+
+        return {
+            "version": 2,
+            "type": "weather.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what is the weather like outside",
+            "spokenResponse": "Currently it's 74 degrees and sunny in Saratoga Springs.",
+            "location": {
+                "scope": "local",
+                "query": DEFAULT_LOCATION["name"],
+                "resolvedName": DEFAULT_LOCATION["resolvedName"],
+                "latitude": DEFAULT_LOCATION["latitude"],
+                "longitude": DEFAULT_LOCATION["longitude"],
+            },
+            "weather": {
+                "location": {"resolvedName": DEFAULT_LOCATION["resolvedName"]},
+                "current": {
+                    "temperatureF": 74,
+                    "temperatureC": 23,
+                    "windSpeedMph": 6,
+                    "condition": "sunny",
+                },
+                "next24Hours": hourly,
+                "next7Days": daily,
+            },
+        }
+
+    if args.type == "timers":
+        return {
+            "version": 2,
+            "type": "timer.snapshot",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "timers": [
+                {
+                    "amazonId": "timer-1",
+                    "device": "Kitchen Echo",
+                    "label": "Pizza",
+                    "durationSec": 900,
+                    "remainingSec": 240,
+                    "status": "ON",
+                    "fireAt": (now + timedelta(minutes=4)).isoformat().replace("+00:00", "Z"),
+                },
+                {
+                    "amazonId": "timer-2",
+                    "device": "Bedroom Echo",
+                    "label": None,
+                    "durationSec": 300,
+                    "remainingSec": 75,
+                    "status": "ON",
+                    "fireAt": (now + timedelta(seconds=75)).isoformat().replace("+00:00", "Z"),
+                },
+            ],
+            "event": {"kind": "list"},
+        }
+
+    if args.type == "timer-fired":
+        return {
+            "version": 2,
+            "type": "timer.snapshot",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "timers": [
+                {
+                    "amazonId": "timer-1",
+                    "device": "Kitchen Echo",
+                    "label": "Pizza",
+                    "durationSec": 300,
+                    "remainingSec": 0,
+                    "status": "OFF",
+                },
+            ],
+            "event": {
+                "kind": "fired",
+                "timer": {
+                    "amazonId": "timer-1",
+                    "device": "Kitchen Echo",
+                    "label": "Pizza",
+                    "durationSec": 300,
+                    "remainingSec": 0,
+                    "status": "OFF",
+                },
+            },
+        }
+
+    raise ValueError(f"Unknown type: {args.type}")
 
 
 def print_payload_summary(payload: dict, host: str, port: int, body: bytes) -> None:
-    message = payload["message"]
-    print(f"Sent test broadcast to {host}:{port}")
-    print(f"Message length: {len(message)} characters")
+    display_type = payload.get("type", "broadcast")
+    print(f"Sent test {display_type} to {host}:{port}")
     print(f"UDP payload size: {len(body)} bytes")
 
-    if len(message) <= 160:
-        print(json.dumps(payload, indent=2))
+    if display_type == "broadcast":
+        message = payload.get("message", "")
+        print(f"Message length: {len(message)} characters")
+        if len(message) <= 160:
+            print(json.dumps(payload, indent=2))
+            return
+        preview = f"{message[:120].rstrip()}…"
+        print(json.dumps({**payload, "message": preview}, indent=2))
         return
 
-    preview = f"{message[:120].rstrip()}…"
-    print(json.dumps({**payload, "message": preview}, indent=2))
+    print(json.dumps(payload, indent=2))
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Send a test Alexa broadcast overlay message")
+    parser = argparse.ArgumentParser(description="Send a test Alexa overlay UDP payload")
     parser.add_argument("--host", default="127.0.0.1", help="Target host (default: loopback)")
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
-    parser.add_argument("--message", default="This is a test broadcast message", help="Message body")
-    parser.add_argument("--sender", default="Test Sender", help="Sender label")
-    parser.add_argument("--destination", default="All devices", help="Destination label")
-    parser.add_argument("--seconds", type=int, default=120, help="Requested display duration")
+    parser.add_argument(
+        "--type",
+        choices=["broadcast", "time", "weather", "weather-spoken", "timers", "timer-fired"],
+        default="broadcast",
+        help="Payload type to send",
+    )
+    parser.add_argument("--message", default="This is a test broadcast message", help="Broadcast message body")
+    parser.add_argument("--sender", default="Kitchen Echo", help="Sender/device label")
+    parser.add_argument("--destination", default="All devices", help="Broadcast destination label")
+    parser.add_argument("--seconds", type=int, default=30, help="Requested display duration")
     parser.add_argument(
         "--long",
         action="store_true",
-        help=(
-            f"Send a maximum-length message ({ALEXA_MAX_MESSAGE_CHARACTERS} characters) "
-            "to test scrolling"
-        ),
+        help=f"Send a maximum-length broadcast message ({ALEXA_MAX_MESSAGE_CHARACTERS} characters)",
     )
     parser.add_argument(
         "--max-chars",
         type=int,
         default=ALEXA_MAX_MESSAGE_CHARACTERS,
-        help="Character count used with --long (default: Alexa/client maximum)",
+        help="Character count used with --long",
     )
     args = parser.parse_args()
 
     if args.long:
+        if args.type != "broadcast":
+            parser.error("--long is only supported for --type broadcast")
         args.message = build_max_length_message(max(1, args.max_chars))
 
     payload = build_payload(args)

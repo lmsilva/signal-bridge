@@ -12,6 +12,26 @@
     "defaultDisplaySeconds": 120,
     "targets": []
   },
+  "voiceEvents": {
+    "enabled": true,
+    "timeQueries": true,
+    "weatherQueries": true,
+    "fetchWeather": true,
+    "eventsLogFile": "data/voice-events.jsonl",
+    "defaultLocation": {
+      "name": "Home",
+      "latitude": 40.0,
+      "longitude": -111.0
+    }
+  },
+  "timerSync": {
+    "enabled": true,
+    "pollIntervalMs": 30000,
+    "nearFirePollIntervalMs": 10000,
+    "nearFireWindowMs": 120000,
+    "fireVerifySlackMs": 30000,
+    "mirrorFile": "data/timer-mirror.json"
+  },
   "sessionKeepAlive": {
     "enabled": true,
     "pingIntervalMs": 900000,
