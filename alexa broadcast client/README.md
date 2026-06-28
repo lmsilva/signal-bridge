@@ -74,7 +74,14 @@ If a broadcast requests 60 seconds but `maxDisplaySeconds` is 30, the overlay sh
 
 ## Test locally
 
-With the client running:
+**Unit tests** (no client running):
+
+```powershell
+cd test
+.\run_tests.bat
+```
+
+**UDP smoke test** (client must be running):
 
 ```powershell
 cd test

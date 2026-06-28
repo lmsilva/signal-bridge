@@ -10,11 +10,11 @@ At the **start** of tasks in this workspace, read the relevant map:
 - **NAS bridge / container (Node):** `src/PROJECT.md`
 - **Windows display client (Python):** `alexa broadcast client/src/PROJECT.md`
 
-These files summarize architecture, data flow, config, and deployment. Use them instead of re-scanning the whole repo when possible.
+These files summarize architecture, data flow, config, UDP protocol v2, tests, and deployment. Use them instead of re-scanning the whole repo when possible.
 
 ## Keep docs fresh
 
-When you change **architecture, modules, config keys, Docker/auth workflows, UDP protocol, or packaging**:
+When you change **architecture, modules, config keys, Docker/auth workflows, UDP protocol, overlay UI, packaging, or tests**:
 
 1. Update the matching `PROJECT.md` in the **same change** (both if the change spans bridge + client).
 2. Bump the **Last updated** date at the top.
@@ -23,3 +23,30 @@ When you change **architecture, modules, config keys, Docker/auth workflows, UDP
 Do not duplicate `README.md` or `DOCKER.md` — those are user guides; `PROJECT.md` is the agent quick-reference.
 
 If unsure whether a change warrants an update, update anyway when behavior or file roles changed.
+
+## Testing (required)
+
+| Suite | Command | Location |
+|-------|---------|----------|
+| **Full (bridge + client)** | `run_all_tests.bat` | Repo root |
+| Bridge only | `npm test` | Repo root — 7 files, Node built-in test runner |
+| Client only | `alexa broadcast client\test\run_tests.bat` | Python `unittest` — `test_*.py` |
+
+Bridge tests: `test/*.test.js` — parser, UDP payloads, voice queries, weather location, timer sync.
+
+Client tests: `alexa broadcast client/test/test_*.py` — payload utils, config, weather fetch, main timer routing.
+
+Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired}`.
+
+Portable build smoke: after `build_portable.bat`, confirm `dist/alexa-broadcast-client/Run Alexa Broadcast Client.bat` exists.
+
+## Commit and push (required workflow)
+
+When the user asks to **commit** and/or **push**:
+
+1. **Run the full test suite first:** `run_all_tests.bat` from repo root (or `npm test` + client `run_tests.bat` sequentially).
+2. **Fix all failures** before staging — do not commit with failing tests.
+3. **Update `PROJECT.md`** (and this rule if workflow changed) when behavior, tests, or packaging changed.
+4. Stage, commit with an accurate message, verify `git status`, then push if requested.
+
+Never skip tests on commit/push requests unless the user explicitly says to.

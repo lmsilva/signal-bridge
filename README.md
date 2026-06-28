@@ -67,6 +67,15 @@ timestamp    message    device    source    trigger
 - Announcements sent only from the Alexa app may not always appear in voice history.
 - If auth breaks after an Amazon change, run `npm run auth` again.
 
+## Testing
+
+```bash
+npm test              # bridge unit tests
+run_all_tests.bat     # bridge + Windows client (from repo root)
+```
+
+See `src/PROJECT.md` for architecture and UDP v2 payload types (broadcast, time, weather, timers).
+
 ## Next step
 
 When you have a Vestaboard, add a second sink that POSTs to the Vestaboard Cloud API instead of only writing `broadcast.txt`.

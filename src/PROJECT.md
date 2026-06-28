@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-06-27
+**Last updated:** 2026-06-23
 
 ---
 
@@ -149,7 +149,9 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `broadcast` | Announce/broadcast captured (unchanged fields: `message`, `sender`, `destination`, …) |
 | `time.query` | "What time is it" — includes `parsedTime`, `spokenResponse`, `device` |
 | `weather.query` | Weather question — includes `location`, optional `weather` (Open-Meteo), `spokenResponse` |
-| `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` |
+| `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` (`started`, `list`, `fired`) |
+
+Timer sync emits when active timer **count increases** (new timer set), on list changes, and on fire verification. Timer voice hints trigger sync even when `voiceEvents.enabled` is false. Location for weather uses query text **and** Alexa spoken response (`weather-location.js`).
 
 Example timer snapshot:
 
@@ -181,10 +183,15 @@ Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliab
 ## Testing
 
 ```bash
-npm test
+npm test                    # bridge only (7 files)
+run_all_tests.bat           # repo root — bridge + Windows client
 ```
 
-27 unit tests cover broadcast parser, UDP payloads, voice query detection, timer diff logic, weather location parsing, and helpers. Run before deploy after code changes.
+Bridge: **44** unit tests in `test/*.test.js` — broadcast parser, UDP payloads, voice query detection, timer sync diff/fire logic, weather location parsing (query + spoken response), and helpers.
+
+Client: **25** unit tests in `alexa broadcast client/test/test_*.py` — payload utils, config, weather fetch, main timer routing.
+
+**Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 
 ---
 
@@ -219,7 +226,8 @@ npm test
 
 ## Recent changes
 
-- 2026-06-27: Voice events (time/weather queries) + timer sync with UDP v2 typed payloads; `npm test` suite (27 tests).
+- 2026-06-23: Timer sync emits on new timer set (count increase); fire priority over started; broader timer-set detection; weather location from spoken response; named-location geocoding; `run_all_tests.bat` + 44 bridge / 25 client tests; `--test-force-exit` on npm test.
+- 2026-06-27: Voice events (time/weather queries) + timer sync with UDP v2 typed payloads; `npm test` suite.
 - 2026-06-27: Smarter refresh handling — noop classification, verify-before-degrade, refresh folded into ping cycle.
 - 2026-06-26: Fix liveness probe parsing (`getDevices` returns `{ devices: [] }`); stop false session_degraded/recovered churn.
 - 2026-06-24: Added this PROJECT.md; documented vendored auth proxy, session keep-alive, QNAP Docker patterns, UDP protocol.
