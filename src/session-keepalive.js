@@ -3,14 +3,33 @@ const { getSessionMeta } = require('./session-meta');
 const DEFAULTS = {
   enabled: true,
   pingIntervalMs: 15 * 60 * 1000,
-  refreshIntervalMs: 3 * 60 * 60 * 1000,
+  refreshIntervalMs: 2 * 60 * 60 * 1000,
   startupRefreshDelayMs: 3 * 60 * 1000,
-  proactiveRefreshAfterMs: 12 * 60 * 60 * 1000,
-  minTokenAgeForRefreshMs: 12 * 60 * 60 * 1000,
+  proactiveRefreshAfterMs: 8 * 60 * 60 * 1000,
+  minTokenAgeForRefreshMs: 2 * 60 * 60 * 1000,
+  staleTokenWatchdogHours: 18,
+  staleNoopRetryMs: 30 * 60 * 1000,
   reconnectPush: true,
   failureThreshold: 5,
   livenessProbe: true,
 };
+
+function needsStaleTokenWatchdog(meta, staleTokenWatchdogHours = DEFAULTS.staleTokenWatchdogHours) {
+  return meta?.tokenAgeHours != null && meta.tokenAgeHours >= staleTokenWatchdogHours;
+}
+
+function pickRefreshReason(meta, settings, { shouldProactive, shouldScheduled } = {}) {
+  if (needsStaleTokenWatchdog(meta, settings.staleTokenWatchdogHours)) {
+    return 'stale-token-watchdog';
+  }
+  if (shouldProactive) {
+    return 'proactive-age';
+  }
+  if (shouldScheduled) {
+    return 'scheduled';
+  }
+  return null;
+}
 
 function isAuthRelatedMessage(message) {
   const text = String(message || '').toLowerCase();
@@ -64,6 +83,7 @@ function createSessionKeepAlive({
   let lastRefreshError = null;
   let consecutiveFailures = 0;
   let lastHealthyAt = null;
+  let staleNoopRetryTimer = null;
 
   function sessionMeta() {
     return getSessionMeta(config, session, alexa);
@@ -91,6 +111,20 @@ function createSessionKeepAlive({
       clearInterval(pingTimer);
       pingTimer = null;
     }
+    if (staleNoopRetryTimer) {
+      clearTimeout(staleNoopRetryTimer);
+      staleNoopRetryTimer = null;
+    }
+  }
+
+  function scheduleStaleNoopRetry(reason) {
+    if (staleNoopRetryTimer) {
+      return;
+    }
+    staleNoopRetryTimer = setTimeout(() => {
+      staleNoopRetryTimer = null;
+      refreshSession(reason, { force: true, source: 'stale_noop_retry' });
+    }, settings.staleNoopRetryMs);
   }
 
   function markFailure(reason, message, { source = 'keepalive', context = {} } = {}) {
@@ -234,6 +268,20 @@ function createSessionKeepAlive({
         context: { trigger: reason },
         sessionMeta: sessionMeta(),
       });
+      const meta = sessionMeta();
+      if (needsStaleTokenWatchdog(meta, settings.staleTokenWatchdogHours)) {
+        log.warn(
+          `Token age ${meta.tokenAgeHours}h — noop refresh; scheduling retry in ${Math.round(settings.staleNoopRetryMs / 60000)} min`,
+        );
+        journal?.recordSuccess({
+          type: 'stale_token_noop_retry_scheduled',
+          source,
+          message: `Noop refresh at token age ${meta.tokenAgeHours}h — aggressive retry scheduled`,
+          context: { trigger: reason, retryInMinutes: Math.round(settings.staleNoopRetryMs / 60000) },
+          sessionMeta: meta,
+        });
+        scheduleStaleNoopRetry('noop-retry-stale');
+      }
       onComplete?.(true);
       return;
     }
@@ -480,9 +528,10 @@ function createSessionKeepAlive({
         sessionMeta: meta,
       });
 
-      const refreshReason = shouldProactiveRefresh()
-        ? 'proactive-age'
-        : (shouldAttemptRefresh() ? 'scheduled' : null);
+      const refreshReason = pickRefreshReason(meta, settings, {
+        shouldProactive: shouldProactiveRefresh(),
+        shouldScheduled: shouldAttemptRefresh(),
+      });
 
       if (refreshReason) {
         if (refreshReason === 'proactive-age') {
@@ -493,7 +542,16 @@ function createSessionKeepAlive({
             sessionMeta: meta,
           });
         }
+        if (refreshReason === 'stale-token-watchdog') {
+          journal?.recordSuccess({
+            type: 'stale_token_watchdog',
+            source: 'keepalive',
+            message: `Token age ${meta.tokenAgeHours}h — forcing refresh before likely expiry`,
+            sessionMeta: meta,
+          });
+        }
         refreshSession(refreshReason, {
+          force: refreshReason === 'stale-token-watchdog',
           onComplete: () => finishPingCycle(reason, meta),
         });
         return;
@@ -565,6 +623,12 @@ function createSessionKeepAlive({
 
     pingTimer = setInterval(() => pingSession('scheduled'), settings.pingIntervalMs);
     setTimeout(() => pingSession('startup'), 30 * 1000);
+    setTimeout(() => {
+      const meta = sessionMeta();
+      if (meta.hasRefreshToken && (meta.tokenAgeHours == null || meta.tokenAgeHours >= 1)) {
+        refreshSession('startup-delayed', { force: true, source: 'startup' });
+      }
+    }, settings.startupRefreshDelayMs);
   }
 
   return {
@@ -582,4 +646,6 @@ module.exports = {
   DEFAULTS,
   isAuthRelatedMessage,
   isRefreshNoopFailure,
+  needsStaleTokenWatchdog,
+  pickRefreshReason,
 };

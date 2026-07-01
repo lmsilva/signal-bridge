@@ -79,17 +79,25 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 Every **15 minutes** the bridge runs a single **ping cycle** (no separate refresh timer):
 
 1. `checkAuthentication()` — lightweight auth check
-2. **Optional** `refreshCookie()` — only when token age ≥ **12h** and last attempt was ≥ **3h** ago (or when auth is invalid / proactive threshold hit)
+2. **Optional** `refreshCookie()` — first attempt after token age ≥ **2h**, then every **2h**; proactive refresh at **8h**; **forced** refresh every ping once token age ≥ **18h** (stale-token watchdog)
 3. `getDevices()` — liveness probe (proves API works)
 4. Reconnects push if disconnected
 
-**Refresh failure handling:** `No tokens in Register response` is logged as `token_refresh_noop` (benign). Other refresh failures verify auth + liveness before marking `session_degraded` — a failed refresh alone no longer triggers false alarms.
+**Refresh failure handling:** `No tokens in Register response` is logged as `token_refresh_noop` (benign). When token age ≥ 18h and refresh noops, an aggressive retry is scheduled every 30 minutes. Other refresh failures verify auth + liveness before marking `session_degraded`.
 
 **Auth journal:** `data/session-auth-journal.jsonl` — one JSON object per line with `type`, `category`, `likelyCause`, `sessionMeta`. Includes `token_refresh_noop`, `token_refresh_failed_but_live`, ping failures, history auth errors, push disconnects, and `reauth_required`.
 
 **Re-auth signal:** `data/auth-status.json` includes `likelyCause` + last journal entries when threshold hit (5 consecutive failures).
 
 **Debug after auth loss:** `docker compose logs -f` + `tail data/session-auth-journal.jsonl` + `cat data/auth-status.json`
+
+**Dump auth diagnostics to a file (run on NAS):**
+
+```bash
+cd /share/Container/alexa-broadcast-bridge
+./scripts/dump-auth-diagnostics.sh
+# or: cat data/diagnostics/auth-dump-*.txt
+```
 
 ---
 
@@ -226,7 +234,8 @@ Client: **25** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
-- 2026-06-23: Timer cancel detection — diff against API snapshot (no ghost preserve on removal); emit empty/updated list on cancel; cancel-voice followup polls; broader cancel phrase regex.
+- 2026-06-23: Aggressive token refresh (2h min age, 8h proactive, 18h stale watchdog + noop retries); `scripts/dump-auth-diagnostics.sh`.
+- 2026-06-23: Timer cancel detection — diff against API snapshot; emit empty/updated list on cancel; cancel-voice followup polls.
 - 2026-06-23: Timer sync emits on new timer set (count increase); fire priority over started; broader timer-set detection; weather location from spoken response; named-location geocoding; `run_all_tests.bat` + 44 bridge / 25 client tests; `--test-force-exit` on npm test.
 - 2026-06-27: Voice events (time/weather queries) + timer sync with UDP v2 typed payloads; `npm test` suite.
 - 2026-06-27: Smarter refresh handling — noop classification, verify-before-degrade, refresh folded into ping cycle.
