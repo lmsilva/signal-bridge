@@ -5,12 +5,16 @@ from src.payload_utils import normalize_condition
 from src.weather_fetch import (
     extract_named_location,
     has_forecast_data,
+    normalize_transcript,
     resolve_location_for_fetch,
     weather_code_to_condition,
 )
 
 
 class WeatherFetchTests(unittest.TestCase):
+    def test_normalize_transcript_handles_curly_apostrophe(self):
+        self.assertEqual(normalize_transcript("what\u2019s the weather"), "what's the weather")
+
     def test_weather_code_to_condition(self):
         self.assertEqual(weather_code_to_condition(0), "sunny")
         self.assertEqual(weather_code_to_condition(3), "cloudy")

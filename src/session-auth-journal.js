@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const AUTH_ERROR_PATTERNS = [
+  { category: 'cookie_renew_failed', pattern: /cookie invalid.*renew unsuccessful/i },
   { category: 'refresh_noop', pattern: /no tokens in register response/i },
   { category: 'http_unauthorized', pattern: /\b401\b|unauthorized|not authenticated/i },
   { category: 'http_forbidden', pattern: /\b403\b|forbidden/i },
@@ -45,6 +46,8 @@ function describeLikelyCause(category, context = {}) {
       return 'Session cookie or refresh token is no longer valid; full re-auth via ./reauth.sh may be required.';
     case 'refresh_noop':
       return 'Amazon Register returned no new tokens — existing session is usually still valid.';
+    case 'cookie_renew_failed':
+      return 'Amazon could not renew the session cookie automatically; plan to re-auth before voice/history APIs stop working.';
     case 'refresh_token_rejected':
       return 'Automatic token refresh failed — refresh token revoked, password change, or Amazon security action.';
     case 'csrf_missing':

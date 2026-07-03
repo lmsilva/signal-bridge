@@ -7,9 +7,10 @@ const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-stat
 const { getActivityId } = require('./parser');
 const { createUdpBroadcaster } = require('./broadcast-udp');
 const { createSessionKeepAlive, isAuthRelatedMessage } = require('./session-keepalive');
-const { markReauthRequired, clearAuthStatus, readAuthStatus } = require('./auth-status');
+const { markReauthRequired, markReauthRecommended, clearAuthStatus, readAuthStatus } = require('./auth-status');
 const { createSessionAuthJournal } = require('./session-auth-journal');
 const { getSessionMeta } = require('./session-meta');
+const { tokenDateAdvanced } = require('./session-token-health');
 const { formatError } = require('./error-format');
 const { createVoiceQueryParser } = require('./voice-query-parser');
 const { extractWeatherLocation } = require('./weather-location');
@@ -306,6 +307,12 @@ function createListener({ config, log }) {
       if (journalSummary?.path) {
         log.error(`Auth journal: ${journalSummary.path}`);
       }
+    } else if (authStatus?.status === 'reauth_recommended') {
+      log.warn('Amazon session token is aging without rotation — re-authenticate soon', {
+        message: authStatus.message,
+        tokenAgeHours: authStatus.sessionMeta?.tokenAgeHours,
+        tokenDate: authStatus.sessionMeta?.tokenDate,
+      });
     }
 
     if (!pushConnected) {
@@ -343,15 +350,54 @@ function createListener({ config, log }) {
   function wireEvents() {
     alexa.on('cookie', () => {
       const existingSession = loadSession(config.sessionPath) || {};
+      const beforeMeta = getSessionMeta(config, existingSession, alexa);
       activeSession = persistFromAlexa(config, alexa, existingSession);
-      clearAuthStatus(config);
+      const afterMeta = getSessionMeta(config, activeSession, alexa);
+
+      if (tokenDateAdvanced(beforeMeta, afterMeta)) {
+        clearAuthStatus(config);
+        authJournal?.recordSuccess({
+          type: 'session_persisted',
+          source: 'listener',
+          message: 'Session cookie saved after token rotation',
+          sessionMeta: afterMeta,
+        });
+        log.info('Session refreshed and saved (token rotated)');
+        return;
+      }
+
       authJournal?.recordSuccess({
         type: 'session_persisted',
         source: 'listener',
-        message: 'Session cookie saved after refresh or init',
-        sessionMeta: getSessionMeta(config, activeSession, alexa),
+        message: 'Session cookie saved without token rotation',
+        sessionMeta: afterMeta,
       });
-      log.info('Session refreshed and saved');
+
+      if (afterMeta.tokenAgeHours != null && afterMeta.tokenAgeHours >= 12) {
+        authJournal?.recordFailure({
+          type: 'token_rotation_stalled',
+          source: 'listener',
+          reason: 'cookie-event',
+          message: `Cookie persisted but tokenDate unchanged at ${afterMeta.tokenAgeHours}h`,
+          sessionMeta: afterMeta,
+          level: 'warn',
+        });
+        log.warn('Session file updated but access token did not rotate', {
+          tokenAgeHours: afterMeta.tokenAgeHours,
+          tokenDate: afterMeta.tokenDate,
+        });
+        if (afterMeta.tokenAgeHours >= 16) {
+          markReauthRecommended(config, {
+            reason: 'token_rotation_stalled',
+            message: `Access token is ${afterMeta.tokenAgeHours}h old without rotation`,
+            sessionMeta: afterMeta,
+            journalPath: authJournal?.path,
+          });
+        }
+      } else {
+        clearAuthStatus(config);
+        log.info('Session refreshed and saved');
+      }
     });
 
     alexa.on('ws-connect', () => {
@@ -459,6 +505,10 @@ function createListener({ config, log }) {
           journal: authJournal,
           session: activeSession,
           onReauthRequired: (details) => markReauthRequired(config, {
+            ...details,
+            recentJournal: authJournal.readRecent(5),
+          }),
+          onReauthRecommended: (details) => markReauthRecommended(config, {
             ...details,
             recentJournal: authJournal.readRecent(5),
           }),

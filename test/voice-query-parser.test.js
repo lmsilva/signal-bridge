@@ -25,6 +25,19 @@ test('voice query parser detects weather questions', () => {
   assert.equal(event.kind, 'weather');
 });
 
+test('voice query parser detects weather with curly apostrophe', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('what\u2019s the weather', 'It is sunny in Saratoga Springs'));
+  assert.equal(event?.kind, 'weather');
+  assert.equal(event?.trigger, 'weather-query');
+});
+
+test('voice query parser detects tell me the weather', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('tell me the weather', 'It is sunny'));
+  assert.equal(event?.kind, 'weather');
+});
+
 test('voice query parser detects show timers command', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('show my timers', 'You have 2 timers'));

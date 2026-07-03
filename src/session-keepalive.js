@@ -1,4 +1,10 @@
 const { getSessionMeta } = require('./session-meta');
+const {
+  isRefreshDeferralMessage,
+  isCookieRenewFailure,
+  tokenDateAdvanced,
+  tokenDateMs,
+} = require('./session-token-health');
 
 const DEFAULTS = {
   enabled: true,
@@ -9,6 +15,9 @@ const DEFAULTS = {
   minTokenAgeForRefreshMs: 2 * 60 * 60 * 1000,
   staleTokenWatchdogHours: 18,
   staleNoopRetryMs: 30 * 60 * 1000,
+  recommendReauthAfterHours: 16,
+  forceReauthAfterHours: 22,
+  externalRefreshCooldownMs: 60 * 1000,
   reconnectPush: true,
   failureThreshold: 5,
   livenessProbe: true,
@@ -35,6 +44,9 @@ function isAuthRelatedMessage(message) {
   const text = String(message || '').toLowerCase();
   if (/no tokens in register response/i.test(text)) {
     return false;
+  }
+  if (isCookieRenewFailure(message)) {
+    return true;
   }
   return /401|403|unauth|authentication|csrf|cookie|session|login|expired|invalid token|forbidden/.test(text);
 }
@@ -63,6 +75,7 @@ function createSessionKeepAlive({
   journal,
   session,
   onReauthRequired,
+  onReauthRecommended,
   onSessionHealthy,
   onSessionRefreshed,
 }) {
@@ -84,6 +97,10 @@ function createSessionKeepAlive({
   let consecutiveFailures = 0;
   let lastHealthyAt = null;
   let staleNoopRetryTimer = null;
+  let noopWithoutRotationCount = 0;
+  let reauthRecommendedEmitted = false;
+  let lastExternalRefreshRequestAt = 0;
+  let trackedTokenDateMs = null;
 
   function sessionMeta() {
     return getSessionMeta(config, session, alexa);
@@ -117,6 +134,107 @@ function createSessionKeepAlive({
     }
   }
 
+  function noteSuccessfulTokenRotation(source, reason) {
+    const meta = sessionMeta();
+    noopWithoutRotationCount = 0;
+    reauthRecommendedEmitted = false;
+    trackedTokenDateMs = tokenDateMs(meta);
+    lastRefreshAt = Date.now();
+    lastRefreshError = null;
+    journal?.recordSuccess({
+      type: 'token_rotation_ok',
+      source,
+      message: `Access token rotated (${reason})`,
+      context: { trigger: reason },
+      sessionMeta: meta,
+    });
+  }
+
+  function checkTokenRotationHealth(source, reason) {
+    const meta = sessionMeta();
+    const tokenMs = tokenDateMs(meta);
+    if (tokenMs != null) {
+      if (trackedTokenDateMs == null) {
+        trackedTokenDateMs = tokenMs;
+      } else if (tokenMs > trackedTokenDateMs + 60_000) {
+        noteSuccessfulTokenRotation(source, reason);
+        return;
+      }
+    }
+
+    if (meta.tokenAgeHours == null || meta.tokenAgeHours < settings.recommendReauthAfterHours) {
+      return;
+    }
+
+    if (
+      !reauthRecommendedEmitted
+      && meta.tokenAgeHours >= settings.recommendReauthAfterHours
+      && onReauthRecommended
+    ) {
+      reauthRecommendedEmitted = true;
+      onReauthRecommended({
+        reason: 'token_rotation_stalled',
+        message: `Access token is ${meta.tokenAgeHours}h old without rotation`,
+        sessionMeta: meta,
+        noopWithoutRotationCount,
+        journalPath: journal?.path,
+      });
+      journal?.recordFailure({
+        type: 'reauth_recommended',
+        source,
+        reason,
+        message: `Token age ${meta.tokenAgeHours}h without successful rotation`,
+        context: { noopWithoutRotationCount },
+        sessionMeta: meta,
+        level: 'warn',
+      });
+      log.warn('Amazon session token is stale — re-authenticate soon to avoid outage', {
+        tokenAgeHours: meta.tokenAgeHours,
+        tokenDate: meta.tokenDate,
+      });
+    }
+
+    if (
+      meta.tokenAgeHours >= settings.forceReauthAfterHours
+      && noopWithoutRotationCount >= 2
+      && onReauthRequired
+      && consecutiveFailures < settings.failureThreshold
+    ) {
+      markFailure(reason, `Token age ${meta.tokenAgeHours}h without rotation`, {
+        source,
+        context: { phase: 'token_rotation_stalled', noopWithoutRotationCount },
+      });
+    }
+  }
+
+  function noteRefreshNoop(source, reason) {
+    noopWithoutRotationCount += 1;
+    const meta = sessionMeta();
+    journal?.recordSuccess({
+      type: 'token_refresh_noop',
+      source,
+      message: `Register returned no new tokens (${reason})`,
+      context: { trigger: reason, noopWithoutRotationCount },
+      sessionMeta: meta,
+    });
+
+    if (needsStaleTokenWatchdog(meta, settings.staleTokenWatchdogHours)) {
+      log.warn(
+        `Token age ${meta.tokenAgeHours}h — noop refresh; scheduling retry in ${Math.round(settings.staleNoopRetryMs / 60000)} min`,
+      );
+      journal?.recordSuccess({
+        type: 'stale_token_noop_retry_scheduled',
+        source,
+        message: `Noop refresh at token age ${meta.tokenAgeHours}h — aggressive retry scheduled`,
+        context: { trigger: reason, retryInMinutes: Math.round(settings.staleNoopRetryMs / 60000) },
+        sessionMeta: meta,
+      });
+      scheduleStaleNoopRetry('noop-retry-stale');
+    }
+
+    checkTokenRotationHealth(source, reason);
+  }
+
   function scheduleStaleNoopRetry(reason) {
     if (staleNoopRetryTimer) {
       return;
@@ -128,6 +246,10 @@ function createSessionKeepAlive({
   }
 
   function markFailure(reason, message, { source = 'keepalive', context = {} } = {}) {
+    if (isRefreshDeferralMessage(message)) {
+      return;
+    }
+
     consecutiveFailures += 1;
     lastRefreshError = message;
 
@@ -261,27 +383,7 @@ function createSessionKeepAlive({
 
     if (isRefreshNoopFailure(message)) {
       log.debug(`Session refresh noop (${reason}) — Amazon returned no new tokens; existing session unchanged`);
-      journal?.recordSuccess({
-        type: 'token_refresh_noop',
-        source,
-        message: `Register returned no new tokens (${reason})`,
-        context: { trigger: reason },
-        sessionMeta: sessionMeta(),
-      });
-      const meta = sessionMeta();
-      if (needsStaleTokenWatchdog(meta, settings.staleTokenWatchdogHours)) {
-        log.warn(
-          `Token age ${meta.tokenAgeHours}h — noop refresh; scheduling retry in ${Math.round(settings.staleNoopRetryMs / 60000)} min`,
-        );
-        journal?.recordSuccess({
-          type: 'stale_token_noop_retry_scheduled',
-          source,
-          message: `Noop refresh at token age ${meta.tokenAgeHours}h — aggressive retry scheduled`,
-          context: { trigger: reason, retryInMinutes: Math.round(settings.staleNoopRetryMs / 60000) },
-          sessionMeta: meta,
-        });
-        scheduleStaleNoopRetry('noop-retry-stale');
-      }
+      noteRefreshNoop(source, reason);
       onComplete?.(true);
       return;
     }
@@ -345,19 +447,18 @@ function createSessionKeepAlive({
         return;
       }
 
+      const beforeMeta = sessionMeta();
       alexa.setCookie(res);
-      lastRefreshAt = Date.now();
-      lastRefreshError = null;
-      markHealthy(source);
       persistRefreshedSession(res, reason);
-      journal?.recordSuccess({
-        type: 'token_refresh_ok',
-        source,
-        message: `Tokens refreshed (${reason})`,
-        context: { trigger: reason },
-        sessionMeta: sessionMeta(),
-      });
-      log.info(`Session tokens refreshed (${reason})`, sessionMeta());
+      markHealthy(source);
+      const afterMeta = sessionMeta();
+      if (tokenDateAdvanced(beforeMeta, afterMeta)) {
+        noteSuccessfulTokenRotation(source, reason);
+        log.info(`Session tokens refreshed (${reason})`, afterMeta);
+      } else {
+        log.info(`Session refresh returned cookies without rotating tokenDate (${reason})`, afterMeta);
+        noteRefreshNoop(source, reason);
+      }
       onComplete?.(true);
     });
   }
@@ -440,6 +541,7 @@ function createSessionKeepAlive({
       }
 
       markHealthy('keepalive');
+      checkTokenRotationHealth('keepalive', reason);
       log.debug(`Session keep-alive ping OK (${reason})`, meta);
 
       if (settings.reconnectPush && typeof alexa.isPushConnected === 'function' && !alexa.isPushConnected()) {
@@ -571,16 +673,31 @@ function createSessionKeepAlive({
       sessionMeta: sessionMeta(),
     });
 
-    if (!isAuthRelatedMessage(message)) {
+    if (isCookieRenewFailure(message)) {
+      checkTokenRotationHealth(source, context.reason || source);
+    }
+
+    if (!isAuthRelatedMessage(message) && !isCookieRenewFailure(message)) {
       return;
     }
+
+    if (refreshInFlight) {
+      log.debug(`Deferring external refresh from ${source} — refresh already in flight`);
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastExternalRefreshRequestAt < settings.externalRefreshCooldownMs) {
+      return;
+    }
+    lastExternalRefreshRequestAt = now;
 
     log.warn(`Auth-related failure from ${source}`, message);
     refreshSession(`external-${source}`, {
       source,
       force: true,
       onComplete: (ok, refreshMessage) => {
-        if (!ok) {
+        if (!ok && !isRefreshDeferralMessage(refreshMessage)) {
           markFailure(source, refreshMessage || message, { source, context });
         }
       },

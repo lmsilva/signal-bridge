@@ -74,9 +74,15 @@ def _clean_location_name(value: str) -> str:
     return cleaned.rstrip("?.!, ").strip()
 
 
+def normalize_transcript(value: str | None) -> str:
+    text = str(value or "")
+    text = re.sub(r"[\u2018\u2019\u2032`´]", "'", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def extract_named_location(*texts: str | None) -> str | None:
     for text in texts:
-        normalized = re.sub(r"\s+", " ", (text or "").strip())
+        normalized = normalize_transcript(text)
         if not normalized:
             continue
         for pattern in (*_NAMED_LOCATION_PATTERNS, *_SPOKEN_LOCATION_PATTERNS):
