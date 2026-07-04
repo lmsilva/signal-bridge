@@ -8,10 +8,11 @@ from src.config import effective_display_seconds, load_config
 from src.listener import UdpListener
 from src.overlay import OverlayWindow
 from src.tray_app import run_tray
-from src.weather_fetch import enrich_weather_payload
 
 
 class BroadcastClientApp:
+    IMMEDIATE_DISPLAY_TYPES = frozenset({"broadcast", "time.query", "weather.query"})
+
     def __init__(self):
         self.config = load_config()
         self.message_queue = queue.Queue()
@@ -56,14 +57,15 @@ class BroadcastClientApp:
         try:
             while True:
                 payload = self.message_queue.get_nowait()
-                if payload.get("type") == "weather.query":
-                    payload = enrich_weather_payload(payload, self.config)
                 seconds = effective_display_seconds(payload, self.config)
                 self._enqueue_display(payload, seconds)
         except queue.Empty:
             pass
 
         self.root.after(100, self._poll_messages)
+
+    def _is_immediate_display(self, payload: dict) -> bool:
+        return payload.get("type") in self.IMMEDIATE_DISPLAY_TYPES
 
     @staticmethod
     def _is_timer_snapshot(payload: dict) -> bool:
@@ -126,6 +128,16 @@ class BroadcastClientApp:
         if self._is_timer_snapshot(payload):
             self._handle_timer_display(payload, seconds)
             return
+
+        if self._is_immediate_display(payload):
+            self._drop_pending_timer_snapshots()
+            if self.display_active:
+                self.display_active = True
+                if self.overlay.visible:
+                    self.overlay.advance(payload, seconds)
+                else:
+                    self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
+                return
 
         if self.display_active:
             self.pending_displays.append((payload, seconds))

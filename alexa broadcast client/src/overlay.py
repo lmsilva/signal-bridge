@@ -1,4 +1,5 @@
 import math
+import sys
 import time
 import tkinter as tk
 from dataclasses import dataclass
@@ -297,7 +298,10 @@ class OverlayWindow:
             return
 
         if display_type == "weather.query":
-            payload = enrich_weather_payload(payload, self.config)
+            try:
+                payload = enrich_weather_payload(payload, self.config)
+            except Exception as error:
+                print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
         self._set_title(display_type)

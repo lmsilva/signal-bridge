@@ -1,4 +1,5 @@
 import unittest
+from collections import deque
 
 from src.config import effective_display_seconds
 from src.main import BroadcastClientApp
@@ -55,6 +56,27 @@ class MainTimerDisplayTests(unittest.TestCase):
             "timers": [{"remainingSec": 0, "status": "OFF"}],
         }
         self.assertEqual(effective_display_seconds(payload, config), 120)
+
+    def test_weather_interrupts_active_timer_overlay(self):
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        app.display_active = True
+        app.pending_displays = deque()
+        app.overlay = type("Overlay", (), {"visible": True, "advance": lambda *args: None, "show": lambda *args: None})()
+        app._on_display_closed = lambda: None
+
+        called = {"advance": False}
+
+        def advance(payload, seconds):
+            called["advance"] = True
+            self.assertEqual(payload["type"], "weather.query")
+
+        app.overlay.advance = advance
+        app._showing_timers = lambda: True
+        app._drop_pending_timer_snapshots = lambda: None
+        app._handle_timer_display = lambda payload, seconds: self.fail("timer handler should not run")
+
+        app._enqueue_display({"type": "weather.query", "displaySeconds": 60}, 60)
+        self.assertTrue(called["advance"])
 
 
 if __name__ == "__main__":

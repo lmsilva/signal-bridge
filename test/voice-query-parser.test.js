@@ -38,6 +38,25 @@ test('voice query parser detects tell me the weather', () => {
   assert.equal(event?.kind, 'weather');
 });
 
+test('voice query parser detects what is the temperature', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity("what's the temperature", "It's 72 degrees and sunny"));
+  assert.equal(event?.kind, 'weather');
+  assert.equal(event?.trigger, 'weather-query');
+});
+
+test('voice query parser detects weather from spoken response when summary missing', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Kitchen Echo',
+    description: { summary: '' },
+    alexaResponse: "Currently it's 72 degrees and sunny in Saratoga Springs",
+    data: { recordKey: 'weather-response-only' },
+  });
+  assert.equal(event?.kind, 'weather');
+});
+
 test('voice query parser detects show timers command', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('show my timers', 'You have 2 timers'));
