@@ -125,10 +125,14 @@ function buildAirQualityPayload(event, config, { location, reading } = {}) {
   };
 }
 
-function buildIndoorTemperaturePayload(event, config) {
+function buildIndoorTemperaturePayload(event, config, { location, reading } = {}) {
   const indoorConfig = config.indoorTemperature || {};
-  const location = resolveIndoorQueryLocation(event.query, indoorConfig);
-  const reading = buildIndoorReading(event, indoorConfig);
+  const resolvedLocation = location || resolveIndoorQueryLocation(
+    event.query,
+    event.spokenResponse,
+    indoorConfig,
+  );
+  const resolvedReading = reading || buildIndoorReading(event, indoorConfig);
 
   return {
     version: 2,
@@ -140,8 +144,8 @@ function buildIndoorTemperaturePayload(event, config) {
     query: event.query,
     spokenResponse: event.spokenResponse || null,
     metric: indoorMetric(event.query),
-    location,
-    reading,
+    location: resolvedLocation,
+    reading: resolvedReading,
   };
 }
 

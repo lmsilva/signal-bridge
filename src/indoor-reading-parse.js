@@ -5,6 +5,14 @@ function normalizeText(value) {
     .trim();
 }
 
+function parseTemperatureF(value) {
+  const parsed = Number.parseFloat(String(value));
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+  return Math.round(parsed * 10) / 10;
+}
+
 function comfortBand(temperatureF, { coldBelowF = 68, hotAboveF = 74 } = {}) {
   if (temperatureF == null || Number.isNaN(temperatureF)) {
     return 'unknown';
@@ -18,6 +26,8 @@ function comfortBand(temperatureF, { coldBelowF = 68, hotAboveF = 74 } = {}) {
   return 'comfortable';
 }
 
+const TEMP_SPOKEN_RE = /\b(\d{1,3}(?:\.\d+)?)\s+degrees?\b/i;
+
 function parseIndoorReading(spoken, config = {}) {
   const text = normalizeText(spoken);
   const reading = {
@@ -25,6 +35,7 @@ function parseIndoorReading(spoken, config = {}) {
     humidity: null,
     comfort: 'unknown',
     summary: text || null,
+    locationPhrase: null,
   };
 
   if (!text) {
@@ -41,15 +52,27 @@ function parseIndoorReading(spoken, config = {}) {
     reading.humidity = Number.parseInt(humidityMatch[1], 10);
   }
 
-  const tempMatch = text.match(
-    /\b(?:shows?|reads?|currently|it's|it is)\s+(\d{1,3})\s+degrees?\b/i,
-  )
-    || text.match(/\b(?:it's|it is)\s+(\d{1,3})\s+degrees?\b/i)
-    || text.match(/\b(\d{1,3})\s+degrees?\s+(?:on|in|at)\b/i)
-    || text.match(/\b(\d{1,3})\s+degrees?\b/i);
+  const tempWithLocation = text.match(
+    /\b(\d{1,3}(?:\.\d+)?)\s+degrees?\s+(?:on|in|at)\s+(?:the\s+)?(.+?)(?:[.!]|$)/i,
+  );
+  if (tempWithLocation) {
+    reading.temperatureF = parseTemperatureF(tempWithLocation[1]);
+    reading.locationPhrase = tempWithLocation[2]
+      .replace(/[?.!]+$/, '')
+      .replace(/\s+(?:temperature|temp|humidity)$/i, '')
+      .trim();
+  }
 
-  if (tempMatch) {
-    reading.temperatureF = Number.parseInt(tempMatch[1], 10);
+  if (reading.temperatureF == null) {
+    const tempMatch = text.match(
+      /\b(?:oh\s+)?(?:it's|it is|shows?|reads?|currently)\s+(\d{1,3}(?:\.\d+)?)\s+degrees?\b/i,
+    ) || text.match(TEMP_SPOKEN_RE);
+    if (tempMatch) {
+      reading.temperatureF = parseTemperatureF(tempMatch[1]);
+    }
+  }
+
+  if (reading.temperatureF != null) {
     reading.comfort = comfortBand(reading.temperatureF, config);
   }
 
@@ -61,7 +84,25 @@ function parseIndoorReading(spoken, config = {}) {
   return reading;
 }
 
+function mergeIndoorReadings(spokenReading, sensorReading) {
+  const merged = { ...(spokenReading || {}) };
+  for (const [key, value] of Object.entries(sensorReading || {})) {
+    if (value == null || value === '') {
+      continue;
+    }
+    if (merged[key] == null || merged[key] === '') {
+      merged[key] = value;
+    }
+  }
+  if (merged.temperatureF != null && (!merged.comfort || merged.comfort === 'unknown')) {
+    merged.comfort = comfortBand(merged.temperatureF);
+  }
+  return merged;
+}
+
 module.exports = {
   comfortBand,
+  mergeIndoorReadings,
   parseIndoorReading,
+  parseTemperatureF,
 };

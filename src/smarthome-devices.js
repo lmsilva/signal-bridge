@@ -1,3 +1,5 @@
+const { normalizeStateResponse } = require('./phoenix-state-parse');
+
 function getSmarthomeListFn(alexa) {
   if (typeof alexa?.getSmarthomeDevicesV2 === 'function') {
     return alexa.getSmarthomeDevicesV2.bind(alexa);
@@ -111,7 +113,7 @@ async function queryEndpointState(alexa, endpoint) {
     });
   });
 
-  return response;
+  return response ? normalizeStateResponse(response) : null;
 }
 
 module.exports = {

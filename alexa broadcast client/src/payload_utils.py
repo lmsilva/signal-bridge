@@ -183,7 +183,15 @@ def indoor_comfort_band(
 
 
 _SPOKEN_INDOOR_TEMP_RE = re.compile(
-    r"\b(?:shows?|reads?|currently|it's|it is)\s+(-?\d{1,3})\s+degrees?\b",
+    r"\b(?:oh\s+)?(?:shows?|reads?|currently|it's|it is)\s+(-?\d{1,3}(?:\.\d+)?)\s+degrees?\b",
+    re.IGNORECASE,
+)
+_SPOKEN_INDOOR_TEMP_WITH_LOCATION_RE = re.compile(
+    r"\b(-?\d{1,3}(?:\.\d+)?)\s+degrees?\s+(?:on|in|at)\s+(?:the\s+)?(.+?)(?:[.!]|$)",
+    re.IGNORECASE,
+)
+_SPOKEN_INDOOR_TEMP_FALLBACK_RE = re.compile(
+    r"\b(-?\d{1,3}(?:\.\d+)?)\s+degrees?\b",
     re.IGNORECASE,
 )
 _SPOKEN_INDOOR_HUMIDITY_RE = re.compile(
@@ -198,12 +206,22 @@ def parse_spoken_indoor(spoken: str | None) -> dict:
         return {}
 
     parsed: dict = {"summary": text}
-    temp_match = _SPOKEN_INDOOR_TEMP_RE.search(text) or re.search(r"(-?\d{1,3})\s+degrees?", text, re.IGNORECASE)
-    if temp_match:
+
+    location_match = _SPOKEN_INDOOR_TEMP_WITH_LOCATION_RE.search(text)
+    if location_match:
         try:
-            parsed["temp_f"] = int(temp_match.group(1))
+            parsed["temp_f"] = float(location_match.group(1))
         except ValueError:
             pass
+        parsed["location_phrase"] = location_match.group(2).strip().rstrip(".!?")
+
+    if parsed.get("temp_f") is None:
+        temp_match = _SPOKEN_INDOOR_TEMP_RE.search(text) or _SPOKEN_INDOOR_TEMP_FALLBACK_RE.search(text)
+        if temp_match:
+            try:
+                parsed["temp_f"] = float(temp_match.group(1))
+            except ValueError:
+                pass
 
     humidity_match = _SPOKEN_INDOOR_HUMIDITY_RE.search(text) or re.search(
         r"\bhumidity\s+(?:is\s+)?(\d{1,3})\s*(?:%|percent)?\b",
@@ -223,7 +241,13 @@ def parse_spoken_indoor(spoken: str | None) -> dict:
     return parsed
 
 
-    return parsed
+def format_temperature_f(value: float | int | None) -> str:
+    if value is None:
+        return "—"
+    numeric = float(value)
+    if numeric.is_integer():
+        return f"{int(numeric)}°F"
+    return f"{numeric:.1f}°F"
 
 
 def format_air_quality_location(location: dict | None) -> str:

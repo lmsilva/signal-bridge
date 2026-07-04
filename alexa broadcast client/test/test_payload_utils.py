@@ -69,6 +69,9 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(parsed["temp_f"], 76)
         humidity = parse_spoken_indoor("The humidity of top floor is 16%")
         self.assertEqual(humidity["humidity"], 16)
+        decimal = parse_spoken_indoor("oh it's 72.5 degrees on Room 16's room")
+        self.assertAlmostEqual(decimal["temp_f"], 72.5)
+        self.assertEqual(decimal["location_phrase"], "Room 16's room")
 
     def test_format_duration(self):
         self.assertEqual(format_duration(125), "2:05")

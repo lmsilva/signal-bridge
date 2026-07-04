@@ -2,6 +2,13 @@ const { normalizeText } = require('./indoor-locations');
 const { getAirQualityMonitors } = require('./air-quality-locations');
 const { iaqBand, mergeAirQualityReadings } = require('./air-quality-parse');
 const {
+  collectCapabilityStates,
+  normalizeStateResponse,
+  parseNumericValue,
+  parseTemperatureF,
+  stateField,
+} = require('./phoenix-state-parse');
+const {
   isAirQualityEndpoint,
   listSmarthomeEndpoints,
   queryEndpointState,
@@ -98,45 +105,44 @@ function parsePhoenixState(stateResponse) {
     voc: null,
   };
 
-  const deviceStates = stateResponse?.deviceStates || [];
-  for (const deviceState of deviceStates) {
-    const capabilityStates = deviceState?.capabilityStates || deviceState?.properties || [];
-    for (const state of capabilityStates) {
-      const instance = String(state?.instance ?? state?.property?.instance ?? '');
-      const name = String(state?.name ?? state?.property?.name ?? '');
-      let rawValue = state?.value ?? state?.rangeValue ?? state?.temperature?.value ?? state?.temperature;
-      if (rawValue && typeof rawValue === 'object') {
-        rawValue = rawValue.value ?? rawValue.rangeValue ?? rawValue.temperature;
-      }
-      const numeric = Number.parseFloat(String(rawValue).replace(/[^\d.-]/g, ''));
-      if (Number.isNaN(numeric)) {
-        continue;
-      }
+  for (const state of collectCapabilityStates(stateResponse)) {
+    const instance = String(stateField(state, 'instance') ?? '');
+    const name = String(stateField(state, 'name') ?? '');
+    const namespace = String(stateField(state, 'namespace') ?? '');
 
-      if (name === 'temperature' || state?.namespace === 'Alexa.TemperatureSensor') {
-        reading.temperatureF = numeric;
-        continue;
+    if (name === 'temperature' || namespace.includes('TemperatureSensor')) {
+      const temp = parseTemperatureF(stateField(state, 'value') ?? state?.temperature);
+      if (temp != null) {
+        reading.temperatureF = temp;
       }
+      continue;
+    }
 
-      if (instance === '9') {
-        reading.iaqScore = numeric;
-        continue;
-      }
-      if (instance === '4') {
-        reading.humidity = numeric;
-        continue;
-      }
-      if (instance === '8') {
-        reading.co = numeric;
-        continue;
-      }
-      if (instance === '6') {
-        reading.pm25 = numeric;
-        continue;
-      }
-      if (instance === '5') {
-        reading.voc = numeric;
-      }
+    const numeric = parseNumericValue(
+      stateField(state, 'value') ?? stateField(state, 'rangeValue') ?? state?.temperature,
+    );
+    if (numeric == null) {
+      continue;
+    }
+
+    if (instance === '9' || name === 'airQuality' || namespace.includes('AirQuality')) {
+      reading.iaqScore = numeric;
+      continue;
+    }
+    if (instance === '4') {
+      reading.humidity = numeric;
+      continue;
+    }
+    if (instance === '8') {
+      reading.co = numeric;
+      continue;
+    }
+    if (instance === '6') {
+      reading.pm25 = numeric;
+      continue;
+    }
+    if (instance === '5') {
+      reading.voc = numeric;
     }
   }
 
@@ -161,7 +167,7 @@ function mapDeviceReading(device) {
   };
 
   if (device?.deviceStates || device?.capabilityStates) {
-    Object.assign(reading, parsePhoenixState(device));
+    Object.assign(reading, parsePhoenixState(normalizeStateResponse(device)));
     if (reading.iaqScore != null || reading.temperatureF != null) {
       return reading;
     }
@@ -296,7 +302,13 @@ async function fetchAirQualityReading(alexa, location, config = {}) {
     }
 
     const state = await queryEndpointState(alexa, match);
-    return mapDeviceReading({ ...match.raw, ...(state || {}) });
+    const normalized = normalizeStateResponse(state);
+    const parsed = parsePhoenixState(normalized);
+    if (parsed.iaqScore != null || parsed.temperatureF != null || parsed.humidity != null) {
+      return { ...parsed, source: 'smarthome' };
+    }
+
+    return mapDeviceReading({ ...match.raw, ...(normalized || {}) });
   } catch (error) {
     return null;
   }
@@ -315,4 +327,5 @@ module.exports = {
   fetchAirQualityReading,
   findMatchingDevice,
   mapDeviceReading,
+  parsePhoenixState,
 };

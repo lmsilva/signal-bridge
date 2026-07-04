@@ -26,10 +26,15 @@ const {
   buildTimerSnapshotPayload,
 } = require('./udp-payload');
 const { enrichAirQualityReading } = require('./air-quality-fetch');
+const { enrichIndoorReading } = require('./indoor-temperature-fetch');
 const {
   buildAirQualityReading,
   resolveAirQualityQueryLocation,
 } = require('./air-quality');
+const {
+  buildIndoorReading,
+  resolveIndoorQueryLocation,
+} = require('./indoor-temperature');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
@@ -57,6 +62,7 @@ function createListener({ config, log }) {
     airQualityQueries: config.voiceEvents?.airQualityQueries !== false,
     fetchWeather: config.voiceEvents?.fetchWeather !== false,
     fetchAirQuality: config.voiceEvents?.fetchAirQuality !== false,
+    fetchIndoorSensor: config.voiceEvents?.fetchIndoorSensor !== false,
   };
 
   function persistBridgeState() {
@@ -130,7 +136,17 @@ function createListener({ config, log }) {
     if (event.kind === 'time') {
       payload = buildTimeQueryPayload(event, config);
     } else if (event.kind === 'indoor-temperature') {
-      payload = buildIndoorTemperaturePayload(event, config);
+      const indoorConfig = config.indoorTemperature || {};
+      const location = resolveIndoorQueryLocation(event.query, event.spokenResponse, indoorConfig);
+      let reading = buildIndoorReading(event, indoorConfig);
+      if (voiceSettings.fetchIndoorSensor) {
+        try {
+          reading = await enrichIndoorReading(alexa, location, event.spokenResponse, indoorConfig);
+        } catch (error) {
+          log.warn('Indoor sensor fetch failed', error.message || error);
+        }
+      }
+      payload = buildIndoorTemperaturePayload(event, config, { location, reading });
     } else if (event.kind === 'air-quality') {
       const airQualityConfig = config.airQuality || {};
       const location = resolveAirQualityQueryLocation(event, airQualityConfig);

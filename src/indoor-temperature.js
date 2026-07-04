@@ -5,7 +5,7 @@ const OUTDOOR_MARKERS_RE = /\b(?:outside|outdoors|out\s+there|weather)\b/i;
 const INDOOR_TEMPERATURE_PREP_RE = /\b(?:temperature|temp)\s+(?:on|in|at|of|for)\s+(?:the\s+)?/i;
 const INDOOR_HUMIDITY_PREP_RE = /\bhumidity\s+(?:on|in|at|of|for)\s+(?:the\s+)?/i;
 const INDOOR_LOCATION_PREP_RE = /\b(?:on|in|at)\s+(?:the\s+)?(.+?)(?:\?|[.!]|$)/i;
-const INDOOR_SPOKEN_TEMP_RE = /\b(?:it's|it is|shows?|reads?)\s+\d{1,3}\s+degrees?\b/i;
+const INDOOR_SPOKEN_TEMP_RE = /\b(?:oh\s+)?(?:it's|it is|shows?|reads?)\s+\d{1,3}(?:\.\d+)?\s+degrees?\b/i;
 const INDOOR_SPOKEN_HUMIDITY_RE = /\bhumidity(?:\s+of|\s+on|\s+in|\s+at|\s+for)?\s+[\w\s']+?\s+is\s+\d{1,3}\s*(?:%|percent)?/i;
 
 function extractIndoorLocationPhrase(text) {
@@ -99,8 +99,13 @@ function matchesIndoorQuery(summary, response) {
   return false;
 }
 
-function resolveIndoorQueryLocation(query, config = {}) {
-  const phrase = extractIndoorLocationPhrase(query) || cleanupLocationPhrase(query);
+function resolveIndoorQueryLocation(query, spoken, config = {}) {
+  const spokenReading = parseIndoorReading(spoken, config);
+  const queryPhrase = extractIndoorLocationPhrase(query);
+  const phrase = queryPhrase || spokenReading.locationPhrase;
+  if (!phrase) {
+    return resolveIndoorLocation(cleanupLocationPhrase(query), config);
+  }
   return resolveIndoorLocation(phrase, config);
 }
 

@@ -52,8 +52,30 @@ test('parseIndoorReading extracts temperature and humidity from Alexa responses'
   assert.equal(bedroom.temperatureF, 72);
   assert.equal(bedroom.comfort, 'comfortable');
 
+  const decimal = parseIndoorReading("oh it's 72.5 degrees on Room 16's room");
+  assert.equal(decimal.temperatureF, 72.5);
+  assert.equal(decimal.locationPhrase, "Room 16's room");
+  assert.equal(decimal.comfort, 'comfortable');
+
   const humidity = parseIndoorReading('The humidity of top floor is 16%');
   assert.equal(humidity.humidity, 16);
+});
+
+test('resolveIndoorLocation maps Room 16 room aliases', () => {
+  const Room 16 = resolveIndoorLocation("Room 16's room");
+  assert.equal(Room 16.entity, 'Room 10');
+  assert.equal(Room 16.matched, true);
+
+  const echo = resolveIndoorLocation("Room 16's bedroom echo");
+  assert.equal(echo.entity, 'Room 10');
+});
+
+test('resolveIndoorQueryLocation prefers spoken location phrase', () => {
+  const location = resolveIndoorQueryLocation(
+    "what's the temperature in Room 16's bedroom echo",
+    "oh it's 72.5 degrees on Room 16's room",
+  );
+  assert.equal(location.entity, 'Room 10');
 });
 
 test('comfortBand uses cold below 68 and hot above 74', () => {

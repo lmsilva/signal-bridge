@@ -21,6 +21,7 @@ from src.payload_utils import (
     parse_spoken_air_quality,
     parse_spoken_indoor,
     parse_spoken_weather,
+    format_temperature_f,
     timer_detail_line,
     timer_label_name,
     timer_title,
@@ -67,6 +68,64 @@ class BasePanel:
     def _place_widget(self, widget: tk.Widget, **kwargs):
         widget.place(**kwargs)
         self._widgets.append(widget)
+
+    def _draw_dashboard_tile(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        label: str,
+        value: str,
+        *,
+        chip: str,
+        text: str,
+        muted: str,
+        accent: str,
+        sublabel: str | None = None,
+    ):
+        self._track(
+            self.canvas.create_rectangle(
+                x,
+                y,
+                x + width,
+                y + height,
+                fill=chip,
+                outline=muted,
+                width=1,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                x + 14,
+                y + 12,
+                anchor="nw",
+                text=label,
+                fill=muted,
+                font=self.shell.chip_label_font,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                x + 14,
+                y + height // 2 + 4,
+                anchor="w",
+                text=value,
+                fill=accent,
+                font=self.shell.chip_value_font,
+            )
+        )
+        if sublabel:
+            self._track(
+                self.canvas.create_text(
+                    x + 14,
+                    y + height - 14,
+                    anchor="sw",
+                    text=sublabel,
+                    fill=text,
+                    font=self.shell.forecast_detail_font,
+                )
+            )
 
 
 class BroadcastPanel(BasePanel):
@@ -773,8 +832,10 @@ class IndoorTemperaturePanel(BasePanel):
         x = layout.content_x
         width = layout.content_width
         y = layout.message_area_top
+        bottom = layout.message_area_bottom
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
+        chip = self.config.get("chipBackground", "#141a24")
 
         location = payload.get("location") or {}
         reading = payload.get("reading") or {}
@@ -798,6 +859,7 @@ class IndoorTemperaturePanel(BasePanel):
         )
         accent = self.COMFORT_COLORS.get(comfort, self.COMFORT_COLORS["unknown"])
         location_name = format_indoor_location(location)
+        comfort_label = comfort.replace("_", " ").title()
 
         self._track(
             self.canvas.create_text(
@@ -809,59 +871,109 @@ class IndoorTemperaturePanel(BasePanel):
                 font=self.shell.section_title_font,
             )
         )
-        y += 42
+        y += 44
 
-        icon_x = x + 72
-        icon_y = y + 54
-        self._draw_comfort_icon(icon_x, icon_y, 54, comfort, accent)
+        dashboard_top = y
+        dashboard_height = max(180, bottom - dashboard_top - 8)
+        left_width = min(300, int(width * 0.38))
+        gap = 20
+        right_x = x + left_width + gap
+        right_width = max(180, width - left_width - gap)
+
+        hero_cx = x + left_width // 2
+        hero_cy = dashboard_top + dashboard_height // 2
+        radius = min(78, dashboard_height // 2 - 12, left_width // 2 - 16)
+
+        self._track(
+            self.canvas.create_oval(
+                hero_cx - radius,
+                hero_cy - radius,
+                hero_cx + radius,
+                hero_cy + radius,
+                fill=chip,
+                outline=accent,
+                width=3,
+            )
+        )
+        self._draw_comfort_icon(hero_cx - radius * 0.62, hero_cy, radius * 0.34, comfort, accent)
 
         if metric == "humidity" and humidity is not None:
-            hero_line = f"{humidity}%"
-            sub_line = "Indoor humidity"
-            if temp_f is not None:
-                sub_line = f"{temp_f}°F · {sub_line}"
+            hero_value = f"{humidity}%"
+            hero_sub = "Indoor humidity"
         elif temp_f is not None:
-            hero_line = f"{temp_f}°F"
-            sub_line = comfort.replace("_", " ").title()
-            if humidity is not None:
-                sub_line = f"{sub_line} · Humidity {humidity}%"
+            hero_value = format_temperature_f(temp_f)
+            hero_sub = comfort_label
         else:
-            hero_line = "—"
-            sub_line = spoken_bits.get("summary") or reading.get("summary") or "Reading unavailable"
+            hero_value = "—"
+            hero_sub = spoken_bits.get("summary") or reading.get("summary") or "Reading unavailable"
 
         self._track(
             self.canvas.create_text(
-                x + 130,
-                y + 18,
-                anchor="nw",
-                text=hero_line,
+                hero_cx + radius * 0.08,
+                hero_cy - 8,
+                anchor="center",
+                text=hero_value,
                 fill=accent,
-                font=self.shell.hero_font,
+                font=self.shell.digital_time_font,
             )
         )
         self._track(
             self.canvas.create_text(
-                x + 130,
-                y + 88,
-                anchor="nw",
-                text=sub_line,
-                fill=muted,
+                hero_cx,
+                hero_cy + radius + 18,
+                anchor="n",
+                text=hero_sub,
+                fill=text,
                 font=self.shell.body_font,
-                width=max(240, width - 150),
             )
         )
+
+        tile_gap = 14
+        tile_h = (dashboard_height - tile_gap) // 2
+        tile_w = (right_width - tile_gap) // 2
+
+        tiles = []
+        if temp_f is not None and metric != "humidity":
+            tiles.append(("Temperature", format_temperature_f(temp_f), comfort_label))
+        if humidity is not None:
+            tiles.append(("Humidity", f"{humidity}%", "Relative humidity"))
+        if temp_f is not None:
+            tiles.append(("Comfort", comfort_label, format_temperature_f(temp_f)))
+        elif metric == "humidity":
+            tiles.append(("Comfort", comfort_label, None))
+
+        if not tiles:
+            tiles.append(("Status", "—", hero_sub))
+
+        for index, (label, value, sublabel) in enumerate(tiles[:4]):
+            row = index // 2
+            col = index % 2
+            tile_x = right_x + col * (tile_w + tile_gap)
+            tile_y = dashboard_top + row * (tile_h + tile_gap)
+            self._draw_dashboard_tile(
+                tile_x,
+                tile_y,
+                tile_w,
+                tile_h,
+                label,
+                value,
+                chip=chip,
+                text=text,
+                muted=muted,
+                accent=accent if label != "Humidity" else self.config.get("accentColor", "#38bdf8"),
+                sublabel=sublabel,
+            )
 
         entity = location.get("entity") or location.get("query")
         if entity and str(entity).lower() != str(location_name).lower():
             self._track(
                 self.canvas.create_text(
-                    x + 130,
-                    y + 132,
-                    anchor="nw",
+                    x,
+                    bottom - 8,
+                    anchor="sw",
                     text=str(entity),
                     fill=muted,
                     font=self.shell.chip_label_font,
-                    width=max(240, width - 150),
                 )
             )
 
@@ -967,14 +1079,12 @@ class AirQualityPanel(BasePanel):
         "unknown": "#64748b",
     }
 
-    TABS = ("IAQ", "Temperature", "Humidity", "PM", "CO", "VOC")
-
     METRICS = (
-        ("temperatureF", "Temperature °F", 50, 90, (50, 70, 90)),
-        ("humidity", "Humidity %", 0, 100, (0, 50, 100)),
-        ("pm25", "PM µg/m³", 0, 500, (0, 35, 150, 500)),
-        ("co", "CO ppm", 0, 50, (0, 10, 50)),
-        ("voc", "VOCs Index", 0, 500, (0, 100, 500)),
+        ("temperatureF", "Temperature", "°F", 50, 90, (50, 70, 90)),
+        ("humidity", "Humidity", "%", 0, 100, (0, 50, 100)),
+        ("pm25", "PM 2.5", "µg/m³", 0, 500, (0, 35, 150, 500)),
+        ("co", "Carbon Monoxide", "ppm", 0, 50, (0, 10, 50)),
+        ("voc", "VOCs", "index", 0, 500, (0, 100, 500)),
     )
 
     def _render(self, payload: dict):
@@ -982,6 +1092,7 @@ class AirQualityPanel(BasePanel):
         x = layout.content_x
         width = layout.content_width
         y = layout.message_area_top
+        bottom = layout.message_area_bottom
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
         chip = self.config.get("chipBackground", "#141a24")
@@ -1017,27 +1128,14 @@ class AirQualityPanel(BasePanel):
                 font=self.shell.section_title_font,
             )
         )
-        y += 40
-        y = self._draw_metric_tabs(x, y, width, chip, text, muted, accent)
-        y += 12
+        y += 44
 
-        center_x = x + width // 2
-        y = self._draw_iaq_hero(center_x, y, iaq_score, band, band_color, text, muted, chip)
-        y += 10
-
-        if entity:
-            subtitle = str(entity).title() if str(entity).lower() == str(entity) else str(entity)
-            self._track(
-                self.canvas.create_text(
-                    x,
-                    y,
-                    anchor="nw",
-                    text=subtitle,
-                    fill=text,
-                    font=self.shell.body_font,
-                )
-            )
-            y += self.shell.body_font.metrics("linespace") + 18
+        dashboard_top = y
+        dashboard_height = max(220, bottom - dashboard_top - 24)
+        left_width = min(290, int(width * 0.34))
+        gap = 18
+        right_x = x + left_width + gap
+        right_width = max(220, width - left_width - gap)
 
         values = {
             "temperatureF": reading.get("temperatureF") if reading.get("temperatureF") is not None else spoken_bits.get("temperature_f"),
@@ -1047,24 +1145,62 @@ class AirQualityPanel(BasePanel):
             "voc": reading.get("voc") if reading.get("voc") is not None else spoken_bits.get("voc"),
         }
 
-        row_height = 58
-        for key, label, scale_min, scale_max, ticks in self.METRICS:
+        self._draw_iaq_hero(
+            x + left_width // 2,
+            dashboard_top,
+            dashboard_height,
+            iaq_score,
+            band,
+            band_color,
+            text,
+            muted,
+            chip,
+        )
+
+        tile_gap = 12
+        cols = 2
+        rows = 3
+        tile_w = (right_width - tile_gap) // cols
+        tile_h = (dashboard_height - (rows - 1) * tile_gap) // rows
+
+        for index, (key, label, unit, scale_min, scale_max, ticks) in enumerate(self.METRICS):
+            row = index // cols
+            col = index % cols
+            tile_x = right_x + col * (tile_w + tile_gap)
+            tile_y = dashboard_top + row * (tile_h + tile_gap)
             value = values.get(key)
-            self._draw_metric_row(
-                x,
-                y,
-                width,
+            value_text = self._format_metric_value(value, unit)
+            sublabel = None
+            if value is not None:
+                sublabel = self._metric_scale_hint(value, scale_min, scale_max, ticks)
+            self._draw_dashboard_tile(
+                tile_x,
+                tile_y,
+                tile_w,
+                tile_h,
                 label,
-                value,
-                scale_min,
-                scale_max,
-                ticks,
-                chip,
-                text,
-                muted,
-                band_color if value is not None else accent,
+                value_text,
+                chip=chip,
+                text=text,
+                muted=muted,
+                accent=band_color if value is not None else muted,
+                sublabel=sublabel,
             )
-            y += row_height
+
+        footer_y = bottom - 8
+        if entity:
+            subtitle = str(entity).title() if str(entity).lower() == str(entity) else str(entity)
+            self._track(
+                self.canvas.create_text(
+                    x,
+                    footer_y,
+                    anchor="sw",
+                    text=subtitle,
+                    fill=muted,
+                    font=self.shell.chip_label_font,
+                )
+            )
+            footer_y -= 18
 
         if iaq_score is None:
             summary = spoken_bits.get("summary") or reading.get("summary")
@@ -1072,8 +1208,8 @@ class AirQualityPanel(BasePanel):
                 self._track(
                     self.canvas.create_text(
                         x,
-                        y + 8,
-                        anchor="nw",
+                        footer_y,
+                        anchor="sw",
                         text=summary,
                         fill=muted,
                         font=self.shell.chip_label_font,
@@ -1081,54 +1217,45 @@ class AirQualityPanel(BasePanel):
                     )
                 )
 
-    def _draw_metric_tabs(self, x: float, y: float, width: float, chip: str, text: str, muted: str, accent: str) -> float:
-        gap = 8
-        pill_h = 34
-        cursor_x = x
-        for index, tab in enumerate(self.TABS):
-            label = tab if len(tab) <= 12 else tab[:10]
-            font = self.shell.chip_label_font
-            text_w = font.measure(label) + 24
-            if cursor_x + text_w > x + width and index > 0:
-                break
-            active = index == 0
-            fill = accent if active else chip
-            fg = self.config["overlayBackground"] if active else muted
-            self._track(
-                self.canvas.create_rectangle(
-                    cursor_x,
-                    y,
-                    cursor_x + text_w,
-                    y + pill_h,
-                    fill=fill,
-                    outline="",
-                )
-            )
-            self._track(
-                self.canvas.create_text(
-                    cursor_x + text_w / 2,
-                    y + pill_h / 2,
-                    text=label,
-                    fill=fg if active else text,
-                    font=font,
-                )
-            )
-            cursor_x += text_w + gap
-        return y + pill_h
+    def _format_metric_value(self, value: int | float | None, unit: str) -> str:
+        if value is None:
+            return "—"
+        if unit == "°F":
+            return format_temperature_f(value)
+        if isinstance(value, float) and not float(value).is_integer():
+            return f"{value:g}{unit}"
+        return f"{int(float(value))}{unit}"
+
+    def _metric_scale_hint(
+        self,
+        value: int | float,
+        scale_min: float,
+        scale_max: float,
+        ticks: tuple[int | float, ...],
+    ) -> str:
+        if scale_max <= scale_min:
+            return ""
+        ratio = max(0.0, min(1.0, (float(value) - scale_min) / (scale_max - scale_min)))
+        if ratio <= 0.33:
+            return "Low"
+        if ratio <= 0.66:
+            return "Mid"
+        return "High"
 
     def _draw_iaq_hero(
         self,
         center_x: float,
         y: float,
+        height: float,
         score: int | float | None,
         band: str,
         band_color: str,
         text: str,
         muted: str,
         chip: str,
-    ) -> float:
-        radius = 62
-        cy = y + radius + 8
+    ) -> None:
+        radius = min(58, int(height * 0.28))
+        cy = y + radius + 6
         self._track(
             self.canvas.create_oval(
                 center_x - radius,
@@ -1163,7 +1290,7 @@ class AirQualityPanel(BasePanel):
                 )
             )
 
-        label_y = cy + radius + 16
+        label_y = cy + radius + 14
         self._track(
             self.canvas.create_text(
                 center_x,
@@ -1171,12 +1298,22 @@ class AirQualityPanel(BasePanel):
                 anchor="n",
                 text=air_quality_band_label(band),
                 fill=text,
-                font=self.shell.hero_font,
+                font=self.shell.body_font,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                label_y + self.shell.body_font.metrics("linespace") + 8,
+                anchor="n",
+                text="Indoor Air Quality",
+                fill=muted,
+                font=self.shell.chip_label_font,
             )
         )
 
-        scale_y = label_y + self.shell.hero_font.metrics("linespace") + 18
-        scale_w = min(420, 520)
+        scale_y = label_y + self.shell.body_font.metrics("linespace") + 34
+        scale_w = min(240, radius * 2 + 40)
         scale_x = center_x - scale_w / 2
         self._draw_scale_bar(scale_x, scale_y, scale_w, score, 0, 100, (100, 65, 35, 0), chip, band_color, muted, invert=True)
         tick_y = scale_y + 16
@@ -1192,7 +1329,6 @@ class AirQualityPanel(BasePanel):
                     font=self.shell.forecast_detail_font,
                 )
             )
-        return tick_y + self.shell.forecast_detail_font.metrics("linespace") + 10
 
     def _scale_position(self, value: float, scale_min: float, scale_max: float, width: float, *, invert: bool = False) -> float:
         if scale_max <= scale_min:
