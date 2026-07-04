@@ -21,8 +21,15 @@ const {
   buildBroadcastPayload,
   buildTimeQueryPayload,
   buildWeatherQueryPayload,
+  buildIndoorTemperaturePayload,
+  buildAirQualityPayload,
   buildTimerSnapshotPayload,
 } = require('./udp-payload');
+const { enrichAirQualityReading } = require('./air-quality-fetch');
+const {
+  buildAirQualityReading,
+  resolveAirQualityQueryLocation,
+} = require('./air-quality');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
@@ -46,7 +53,10 @@ function createListener({ config, log }) {
     enabled: config.voiceEvents?.enabled !== false,
     timeQueries: config.voiceEvents?.timeQueries !== false,
     weatherQueries: config.voiceEvents?.weatherQueries !== false,
+    indoorTemperatureQueries: config.voiceEvents?.indoorTemperatureQueries !== false,
+    airQualityQueries: config.voiceEvents?.airQualityQueries !== false,
     fetchWeather: config.voiceEvents?.fetchWeather !== false,
+    fetchAirQuality: config.voiceEvents?.fetchAirQuality !== false,
   };
 
   function persistBridgeState() {
@@ -108,9 +118,31 @@ function createListener({ config, log }) {
       return;
     }
 
+    if (event.kind === 'indoor-temperature' && !voiceSettings.indoorTemperatureQueries) {
+      return;
+    }
+
+    if (event.kind === 'air-quality' && !voiceSettings.airQualityQueries) {
+      return;
+    }
+
     let payload;
     if (event.kind === 'time') {
       payload = buildTimeQueryPayload(event, config);
+    } else if (event.kind === 'indoor-temperature') {
+      payload = buildIndoorTemperaturePayload(event, config);
+    } else if (event.kind === 'air-quality') {
+      const airQualityConfig = config.airQuality || {};
+      const location = resolveAirQualityQueryLocation(event, airQualityConfig);
+      let reading = buildAirQualityReading(event, airQualityConfig);
+      if (voiceSettings.fetchAirQuality) {
+        try {
+          reading = await enrichAirQualityReading(alexa, location, reading, airQualityConfig);
+        } catch (error) {
+          log.warn('Air quality fetch failed', error.message || error);
+        }
+      }
+      payload = buildAirQualityPayload(event, config, { location, reading });
     } else if (event.kind === 'weather') {
       const location = extractWeatherLocation(
         event.query,

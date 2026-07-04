@@ -45,6 +45,20 @@ test('voice query parser detects what is the temperature', () => {
   assert.equal(event?.trigger, 'weather-query');
 });
 
+test('voice query parser detects indoor temperature at a named location', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity("what's the temperature on top floor", "It's 76 degrees on the top floor"));
+  assert.equal(event?.kind, 'indoor-temperature');
+  assert.equal(event?.trigger, 'indoor-temperature-query');
+});
+
+test('voice query parser detects air quality queries', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('what is the air quality', 'Air quality is at 90 out of 100 right now'));
+  assert.equal(event?.kind, 'air-quality');
+  assert.equal(event?.trigger, 'air-quality-query');
+});
+
 test('voice query parser detects weather from spoken response when summary missing', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse({

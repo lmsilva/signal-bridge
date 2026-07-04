@@ -1,4 +1,6 @@
 const { getActivityId, getDeviceName } = require('./parser');
+const { matchesIndoorQuery } = require('./indoor-temperature');
+const { matchesAirQualityQuery } = require('./air-quality');
 
 const TIME_QUERY_RE = /\b(?:what(?:'s|\s+is|\s+was)?\s+(?:the\s+)?time(?:\s+is\s+it)?|tell\s+me\s+(?:the\s+)?time|do\s+you\s+have\s+(?:the\s+)?time|time\s+please)\b/i;
 const WEATHER_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?(?:weather(?:\s+like)?|temperature|temp|forecast)|how(?:'s|\s+is)\s+(?:the\s+)?(?:weather|temperature|temp)|weather\s+(?:in|for|at|outside|today|tomorrow)|(?:is\s+it|will\s+it)\s+(?:rain|snow|sunny|cloudy|cold|hot|warm)|temperature(?:\s+outside|\s+today|\s+now|\s+in|\s+for|\s+at)?|how\s+(?:hot|cold|warm)\s+is\s+it|tell\s+me\s+(?:the\s+)?(?:weather|temperature|temp)|give\s+me\s+(?:the\s+)?(?:weather|temperature|temp)|what\s+is\s+it\s+like\s+outside)\b/i;
@@ -16,6 +18,10 @@ function normalizeText(value) {
 }
 
 function matchesWeatherQuery(summary, response) {
+  if (matchesIndoorQuery(summary, response)) {
+    return false;
+  }
+
   if (WEATHER_QUERY_RE.test(summary || '')) {
     return true;
   }
@@ -53,6 +59,30 @@ function createVoiceQueryParser() {
 
     if (!summary && !response) {
       return null;
+    }
+
+    if (matchesAirQualityQuery(summary, response)) {
+      return {
+        kind: 'air-quality',
+        activityId,
+        device,
+        timestamp,
+        query: summary || 'air quality query',
+        spokenResponse: response || null,
+        trigger: 'air-quality-query',
+      };
+    }
+
+    if (matchesIndoorQuery(summary, response)) {
+      return {
+        kind: 'indoor-temperature',
+        activityId,
+        device,
+        timestamp,
+        query: summary || 'indoor temperature query',
+        spokenResponse: response || null,
+        trigger: 'indoor-temperature-query',
+      };
     }
 
     if (matchesWeatherQuery(summary, response)) {

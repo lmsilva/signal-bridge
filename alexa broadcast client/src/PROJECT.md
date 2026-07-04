@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-06-23
+**Last updated:** 2026-07-03
 
 ---
 
@@ -32,7 +32,7 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop; timer in-place updates + local fire handler |
 | `src/listener.py` | `UdpListener` — background thread, JSON decode, `on_message` callback |
 | `src/overlay.py` | Fullscreen shell: fade, dismiss countdown label (bottom), routes payloads to panels |
-| `src/display_panels.py` | Broadcast, time, weather, timer overlays; timer names; fired headlines |
+| `src/display_panels.py` | Broadcast, time, weather, indoor temperature, timer overlays |
 | `src/payload_utils.py` | Type detection; `timer_label_name`, `timer_title`, `timer_detail_line` |
 | `src/weather_fetch.py` | Client geocode + Open-Meteo fetch; spoken-response location extraction |
 | `src/message_scroll.py` | Long broadcast message scroll animation |
@@ -44,7 +44,7 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 | `build_portable.bat` | PyInstaller → `dist/alexa-broadcast-client/` (uses `%LOCALAPPDATA%` venv on NAS shares) |
 | `alexa-broadcast-client.spec` | PyInstaller spec + hidden imports |
 | `requirements-build.txt` | PyInstaller + runtime deps for portable build |
-| `test/send_test.py` | Manual UDP smoke tests (`--type broadcast|time|weather|timers|timer-fired`) |
+| `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor …`) |
 | `test/run_tests.bat` | Python `unittest` for `test_*.py` |
 | `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing |
 | `README.md` | User-facing setup / portable build guide |
@@ -73,7 +73,9 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 |--------|---------|
 | `broadcast` | FROM / TO / TIME chips + scrolling message |
 | `time.query` | Analog clock + digital time + full date |
-| `weather.query` | Current conditions, 24h strip, 7-day cards; larger weather icons |
+| `weather.query` | Outdoor conditions, 24h strip, 7-day cards; larger weather icons |
+| `indoor-temperature.query` | Indoor thermostat reading — location label, temp/humidity, cold/comfort/hot icon |
+| `air-quality.query` | IAQ score ring + sensor tiles (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Active timers with **names**, device, remaining, duration; fired alert names timer + device |
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -84,6 +86,10 @@ Test locally:
 python test/send_test.py --type broadcast
 python test/send_test.py --type time --seconds 30
 python test/send_test.py --type weather --seconds 45
+python test/send_test.py --type indoor --seconds 45
+python test/send_test.py --type indoor-humidity --seconds 45
+python test/send_test.py --type air-quality --seconds 45
+python test/send_test.py --type air-quality-poor --seconds 45
 python test/send_test.py --type timers --seconds 45
 python test/send_test.py --type timer-fired --seconds 120
 ```
@@ -163,6 +169,8 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-03: Air quality dashboard overlay (`air-quality.query`) — IAQ ring + PM/CO/VOC/temp/humidity tiles.
+- 2026-07-03: Indoor temperature overlay (`indoor-temperature.query`) — cold/comfort/hot graphic; interrupts active overlay like weather.
 - 2026-06-23: Timer cancel updates display (empty or remaining list); removed Active Timers counter from headline.
 - 2026-06-23: Timer in-place updates, local fire handler, timer names on set/fire, weather client fetch + location from spoken response, dismiss countdown label, portable build venv fix, `test_main.py`, `run_tests.bat`, full-suite workflow.
 - 2026-06-28: `OverlayShell` font refs from `OverlayWindow` (fixes startup crash).

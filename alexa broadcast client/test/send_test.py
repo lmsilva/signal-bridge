@@ -164,6 +164,118 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "indoor":
+        return {
+            "version": 2,
+            "type": "indoor-temperature.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what's the temperature on top floor",
+            "spokenResponse": "It's 76 degrees on the top floor",
+            "metric": "temperature",
+            "location": {
+                "query": "top floor",
+                "label": "Top Floor",
+                "entity": "top floor",
+                "scope": "indoor",
+                "matched": True,
+            },
+            "reading": {
+                "temperatureF": 76,
+                "humidity": None,
+                "comfort": "hot",
+                "summary": "It's 76 degrees on the top floor",
+            },
+        }
+
+    if args.type == "indoor-humidity":
+        return {
+            "version": 2,
+            "type": "indoor-temperature.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what is the humidity of top floor",
+            "spokenResponse": "The humidity of top floor is 16%",
+            "metric": "humidity",
+            "location": {
+                "query": "top floor",
+                "label": "Top Floor",
+                "entity": "top floor",
+                "scope": "indoor",
+                "matched": True,
+            },
+            "reading": {
+                "temperatureF": None,
+                "humidity": 16,
+                "comfort": "unknown",
+                "summary": "The humidity of top floor is 16%",
+            },
+        }
+
+    if args.type == "air-quality":
+        return {
+            "version": 2,
+            "type": "air-quality.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what is the air quality",
+            "spokenResponse": "Air quality is at 94 out of 100 right now",
+            "location": {
+                "query": "living room",
+                "label": "Living Room",
+                "entity": "Living Room Air Quality Monitor",
+                "scope": "indoor-air-quality",
+                "matched": True,
+            },
+            "reading": {
+                "iaqScore": 94,
+                "iaqMax": 100,
+                "band": "good",
+                "temperatureF": 70,
+                "humidity": 57,
+                "pm25": 1,
+                "co": 1,
+                "voc": 1,
+                "summary": "Air quality is at 94 out of 100 right now",
+            },
+        }
+
+    if args.type == "air-quality-poor":
+        return {
+            "version": 2,
+            "type": "air-quality.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what is the air quality on main floor",
+            "spokenResponse": "The main floor airquality is 40 out of 100",
+            "location": {
+                "query": "main floor",
+                "label": "Main Floor",
+                "entity": "main floor",
+                "scope": "indoor-air-quality",
+                "matched": True,
+            },
+            "reading": {
+                "iaqScore": 40,
+                "iaqMax": 100,
+                "band": "moderate",
+                "temperatureF": 74,
+                "humidity": 22,
+                "pm25": 18,
+                "co": 2,
+                "voc": 480,
+                "summary": "The main floor airquality is 40 out of 100",
+            },
+        }
+
     if args.type == "timers":
         return {
             "version": 2,
@@ -253,7 +365,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "timers", "timer-fired"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired"],
         default="broadcast",
         help="Payload type to send",
     )

@@ -5,7 +5,7 @@ import tkinter as tk
 from dataclasses import dataclass
 from tkinter import font as tkfont
 
-from src.display_panels import BroadcastPanel, TimePanel, TimerPanel, WeatherPanel
+from src.display_panels import AirQualityPanel, BroadcastPanel, IndoorTemperaturePanel, TimePanel, TimerPanel, WeatherPanel
 from src.payload_utils import resolve_display_type, title_for_display_type
 from src.weather_fetch import enrich_weather_payload
 
@@ -100,6 +100,8 @@ class OverlayWindow:
             "broadcast": BroadcastPanel(self.root, self.shell, self.config),
             "time.query": TimePanel(self.root, self.shell, self.config),
             "weather.query": WeatherPanel(self.root, self.shell, self.config),
+            "indoor-temperature.query": IndoorTemperaturePanel(self.root, self.shell, self.config),
+            "air-quality.query": AirQualityPanel(self.root, self.shell, self.config),
             "timer.snapshot": TimerPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)

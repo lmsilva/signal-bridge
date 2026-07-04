@@ -6,7 +6,7 @@ import re
 
 def resolve_display_type(payload: dict) -> str:
     explicit = payload.get("type")
-    if explicit in ("broadcast", "time.query", "weather.query", "timer.snapshot"):
+    if explicit in ("broadcast", "time.query", "weather.query", "indoor-temperature.query", "air-quality.query", "timer.snapshot"):
         return explicit
 
     if payload.get("message"):
@@ -24,6 +24,8 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "broadcast": ("Alexa Broadcast", "Received"),
         "time.query": ("Alexa", "Time"),
         "weather.query": ("Alexa", "Weather"),
+        "indoor-temperature.query": ("Alexa", "Indoor"),
+        "air-quality.query": ("Alexa", "Air Quality"),
         "timer.snapshot": ("Alexa", "Timers"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
@@ -140,6 +142,205 @@ def format_weather_location(location: dict | None) -> str:
     if query and str(query).lower() != "local":
         return str(query)
     return "Your area"
+
+
+def format_indoor_location(location: dict | None) -> str:
+    if not location:
+        return "Indoor"
+
+    label = location.get("label")
+    if label:
+        return str(label)
+
+    entity = location.get("entity")
+    if entity:
+        return str(entity)
+
+    query = location.get("query")
+    if query:
+        return str(query).title()
+
+    return "Indoor"
+
+
+def indoor_comfort_band(
+    temperature_f: int | float | None,
+    *,
+    cold_below_f: int = 68,
+    hot_above_f: int = 74,
+) -> str:
+    if temperature_f is None:
+        return "unknown"
+    try:
+        value = float(temperature_f)
+    except (TypeError, ValueError):
+        return "unknown"
+    if value < cold_below_f:
+        return "cold"
+    if value > hot_above_f:
+        return "hot"
+    return "comfortable"
+
+
+_SPOKEN_INDOOR_TEMP_RE = re.compile(
+    r"\b(?:shows?|reads?|currently|it's|it is)\s+(-?\d{1,3})\s+degrees?\b",
+    re.IGNORECASE,
+)
+_SPOKEN_INDOOR_HUMIDITY_RE = re.compile(
+    r"\bhumidity(?:\s+of|\s+on|\s+in|\s+at|\s+for)?\s+[\w\s']+?\s+is\s+(\d{1,3})\s*(?:%|percent)?\b",
+    re.IGNORECASE,
+)
+
+
+def parse_spoken_indoor(spoken: str | None) -> dict:
+    text = (spoken or "").strip()
+    if not text:
+        return {}
+
+    parsed: dict = {"summary": text}
+    temp_match = _SPOKEN_INDOOR_TEMP_RE.search(text) or re.search(r"(-?\d{1,3})\s+degrees?", text, re.IGNORECASE)
+    if temp_match:
+        try:
+            parsed["temp_f"] = int(temp_match.group(1))
+        except ValueError:
+            pass
+
+    humidity_match = _SPOKEN_INDOOR_HUMIDITY_RE.search(text) or re.search(
+        r"\bhumidity\s+(?:is\s+)?(\d{1,3})\s*(?:%|percent)?\b",
+        text,
+        re.IGNORECASE,
+    )
+    if humidity_match:
+        try:
+            parsed["humidity"] = int(humidity_match.group(1))
+        except ValueError:
+            pass
+
+    first_sentence = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0].strip()
+    if first_sentence:
+        parsed["summary"] = first_sentence
+
+    return parsed
+
+
+    return parsed
+
+
+def format_air_quality_location(location: dict | None) -> str:
+    if not location:
+        return "Air Quality"
+
+    label = location.get("label")
+    if label:
+        return str(label)
+
+    entity = location.get("entity")
+    if entity:
+        return str(entity).title()
+
+    query = location.get("query")
+    if query:
+        return str(query).title()
+
+    return "Air Quality"
+
+
+def air_quality_band(
+    score: int | float | None,
+    *,
+    good_min: int = 80,
+    fair_min: int = 60,
+    moderate_min: int = 40,
+) -> str:
+    if score is None:
+        return "unknown"
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return "unknown"
+    if value >= good_min:
+        return "good"
+    if value >= fair_min:
+        return "fair"
+    if value >= moderate_min:
+        return "moderate"
+    return "poor"
+
+
+def air_quality_band_label(band: str | None) -> str:
+    labels = {
+        "good": "Good",
+        "fair": "Fair",
+        "moderate": "Moderate",
+        "poor": "Poor",
+        "unknown": "Unknown",
+    }
+    return labels.get(str(band or "unknown"), "Unknown")
+
+
+_SPOKEN_AIR_QUALITY_SCORE_RE = re.compile(
+    r"(\d{1,3})\s*(?:out\s+of\s+100|/\s*100)\b|"
+    r"\bair\s*quality(?:\s+(?:on|in|at|for))?\s+(?:the\s+)?[\w\s']+?\s+(?:is|at)\s+(?:at\s+)?(\d{1,3})\b|"
+    r"\bair\s*quality\s+(?:is\s+)?(?:at\s+)?(\d{1,3})\b",
+    re.IGNORECASE,
+)
+
+
+def parse_spoken_air_quality(spoken: str | None) -> dict:
+    text = (spoken or "").strip()
+    if not text:
+        return {}
+
+    parsed: dict = {"summary": text}
+    score_match = _SPOKEN_AIR_QUALITY_SCORE_RE.search(text)
+    if score_match:
+        for group in score_match.groups():
+            if group:
+                try:
+                    parsed["iaq_score"] = int(group)
+                    parsed["band"] = air_quality_band(parsed["iaq_score"])
+                except ValueError:
+                    pass
+                break
+
+    temp_match = re.search(r"(-?\d{1,3})\s+degrees?", text, re.IGNORECASE)
+    if temp_match:
+        try:
+            parsed["temperature_f"] = int(temp_match.group(1))
+        except ValueError:
+            pass
+
+    humidity_match = re.search(
+        r"\b(\d{1,3})\s*(?:%|percent)\s+humidity\b|\bhumidity\s+(?:is\s+)?(\d{1,3})\s*(?:%|percent)?\b",
+        text,
+        re.IGNORECASE,
+    )
+    if humidity_match:
+        for group in humidity_match.groups():
+            if group:
+                try:
+                    parsed["humidity"] = int(group)
+                except ValueError:
+                    pass
+                break
+
+    pm_match = re.search(r"\bpm\s*2\.?\s*5?(?:\s+is|\s+at|\s+of)?\s+(\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    if pm_match:
+        parsed["pm25"] = pm_match.group(1)
+
+    co_match = re.search(r"\b(?:co|carbon monoxide)\s+(?:is\s+)?(\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    if co_match:
+        parsed["co"] = co_match.group(1)
+
+    voc_match = re.search(r"\bvoc\s+(?:is\s+)?(\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    if voc_match:
+        parsed["voc"] = voc_match.group(1)
+
+    first_sentence = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0].strip()
+    if first_sentence:
+        parsed["summary"] = first_sentence
+
+    return parsed
 
 
 _SPOKEN_TEMP_RE = re.compile(

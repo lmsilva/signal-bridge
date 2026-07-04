@@ -54,8 +54,15 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/broadcast-log.js` | Append tab-separated lines to broadcast log file |
 | `src/broadcast-udp.js` | Send JSON to `255.255.255.255` + optional `targets[]` |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
-| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, timer) |
-| `src/voice-query-parser.js` | Detect time/weather/timer voice queries from history |
+| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer) |
+| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer voice queries from history |
+| `src/indoor-locations.js` | Thermostat/sensor names + alias resolution (bedroom echo → Room 7, etc.) |
+| `src/indoor-reading-parse.js` | Parse spoken indoor temp/humidity; comfort bands (<68 cold, >74 hot) |
+| `src/indoor-temperature.js` | Indoor vs outdoor routing; location phrase extraction |
+| `src/air-quality-locations.js` | Air monitor names + alias resolution |
+| `src/air-quality-parse.js` | Parse spoken IAQ score/location; band thresholds |
+| `src/air-quality-fetch.js` | Smart Home query for PM/CO/VOC/temp/humidity enrich |
+| `src/air-quality.js` | Air quality voice query detection + payload helpers |
 | `src/time-parse.js` | Parse spoken time from Alexa `alexaResponse` text |
 | `src/weather-location.js` | Extract local vs named location from weather questions |
 | `src/weather-fetch.js` | Open-Meteo geocode + forecast fetch (no API key) |
@@ -66,6 +73,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/config.js` | Merge env + `data/config.json` (or `config.example.json`) |
 | `src/logger.js` | Structured console logging |
 | `src/diagnose.js` | `npm run diagnose` — quick auth/API check |
+| `src/diagnose-indoor.js` | `npm run diagnose-indoor` — list Smart Home thermostat entities (optional) |
 | `docker-compose.yml` | Long-running listener container |
 | `docker-compose.auth.yml` | One-shot auth container (host network, port 3456) |
 | `reauth.sh` | Stop listener, free port, run auth, restart listener |
@@ -110,7 +118,7 @@ cd /share/Container/alexa-broadcast-bridge
    - **Push:** `ws-device-activity` → broadcast parser + voice query parser
    - **History fallback:** volume-change / connect / periodic poll → `getCustomerHistoryRecords()`
 5. **On broadcast match:** log → `broadcast.txt` → UDP `type: broadcast`
-6. **On voice match:** time/weather → UDP + `data/voice-events.jsonl`; timer voice → immediate timer sync poll
+6. **On voice match:** time/weather/indoor temperature/air quality → UDP + `data/voice-events.jsonl`; timer voice → immediate timer sync poll
 7. **Timer sync:** periodic `getNotifications()` diff → UDP `type: timer.snapshot` with full active timer list
 8. **Dedup:** `BroadcastParser` + voice query processed-id set + `bridge-state.json`
 
@@ -138,8 +146,12 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `broadcastLogFile` | Tab-separated capture log |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP to Windows client |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
-| `voiceEvents.enabled/timeQueries/weatherQueries/fetchWeather` | Voice capture toggles |
-| `voiceEvents.defaultLocation` | `{ name, latitude, longitude }` for "weather outside" queries |
+| `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/fetchWeather/fetchAirQuality` | Voice capture toggles |
+| `voiceEvents.defaultLocation` | `{ name, latitude, longitude }` for generic/outdoor weather queries |
+| `indoorTemperature.coldBelowF/hotAboveF` | Comfort bands for display (defaults 68 / 74) |
+| `indoorTemperature.locations[]` | Optional override of thermostat names/aliases (empty = built-in list) |
+| `airQuality.defaultMonitor` | Fallback monitor when query/response has no location (e.g. `main floor`) |
+| `airQuality.monitors[]` | Optional override of air monitor names/aliases/entityId |
 | `voiceEvents.eventsLogFile` | Default `data/voice-events.jsonl` |
 | `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
@@ -156,8 +168,12 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 |--------|----------------|
 | `broadcast` | Announce/broadcast captured (unchanged fields: `message`, `sender`, `destination`, …) |
 | `time.query` | "What time is it" — includes `parsedTime`, `spokenResponse`, `device` |
-| `weather.query` | Weather question — includes `location`, optional `weather` (Open-Meteo), `spokenResponse` |
+| `weather.query` | Outdoor weather — generic "what's the temperature" or explicit outside/weather |
+| `indoor-temperature.query` | Indoor thermostat — "temperature on/at/in \<location\>" or "humidity of \<location\>" |
+| `air-quality.query` | Air quality monitor — IAQ score + sensor metrics (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` (`started`, `list`, `fired`) |
+
+**Indoor vs outdoor routing:** Generic "what's the temperature" → outdoor (`weather.query`). Location-specific ("top floor", "bedroom echo", "Room 14") → indoor. Spoken Alexa response supplies the reading (e.g. "It's 76 degrees on the top floor"). Humidity only when explicitly asked for a named location.
 
 Timer sync emits when active timer **count increases** (new timer set), on list changes, and on fire verification. Timer voice hints trigger sync even when `voiceEvents.enabled` is false. Location for weather uses query text **and** Alexa spoken response (`weather-location.js`).
 
@@ -195,9 +211,9 @@ npm test                    # bridge only (7 files)
 run_all_tests.bat           # repo root — bridge + Windows client
 ```
 
-Bridge: **44** unit tests in `test/*.test.js` — broadcast parser, UDP payloads, voice query detection, timer sync diff/fire logic, weather location parsing (query + spoken response), and helpers.
+Bridge: **70** unit tests in `test/*.test.js` — broadcast parser, UDP payloads, voice query detection, indoor temperature routing/aliases, timer sync diff/fire logic, weather location parsing (query + spoken response), and helpers.
 
-Client: **25** unit tests in `alexa broadcast client/test/test_*.py` — payload utils, config, weather fetch, main timer routing.
+Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload utils, config, weather fetch, main timer routing.
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 
@@ -234,6 +250,8 @@ Client: **25** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-07-03: Air quality overlay — intercept "what is the air quality"; parse IAQ score + monitor location from Alexa response; optional Smart Home enrich for PM/CO/VOC/temp/humidity; `air-quality.query` UDP type.
+- 2026-07-03: Indoor temperature overlay — location-specific thermostat queries vs generic outdoor weather; alias map; comfort bands; `indoor-temperature.query` UDP type; `npm run diagnose-indoor`.
 - 2026-07-03: Token rotation tracking — detect stale tokenDate, reauth_recommended at 16h, fix refresh-in-flight false failures; weather parser unicode apostrophe fix.
 - 2026-06-23: Aggressive token refresh (2h min age, 8h proactive, 18h stale watchdog + noop retries); `scripts/dump-auth-diagnostics.sh`.
 - 2026-06-23: Timer cancel detection — diff against API snapshot; emit empty/updated list on cancel; cancel-voice followup polls.

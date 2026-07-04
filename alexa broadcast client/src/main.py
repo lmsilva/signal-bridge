@@ -11,7 +11,7 @@ from src.tray_app import run_tray
 
 
 class BroadcastClientApp:
-    IMMEDIATE_DISPLAY_TYPES = frozenset({"broadcast", "time.query", "weather.query"})
+    IMMEDIATE_DISPLAY_TYPES = frozenset({"broadcast", "time.query", "weather.query", "indoor-temperature.query", "air-quality.query"})
 
     def __init__(self):
         self.config = load_config()

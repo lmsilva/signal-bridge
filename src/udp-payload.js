@@ -1,6 +1,15 @@
 const { parseMessageDetails } = require('./message-details');
 const { parseSpokenTime } = require('./time-parse');
 const { extractWeatherLocation } = require('./weather-location');
+const {
+  buildIndoorReading,
+  indoorMetric,
+  resolveIndoorQueryLocation,
+} = require('./indoor-temperature');
+const {
+  buildAirQualityReading,
+  resolveAirQualityQueryLocation,
+} = require('./air-quality');
 
 function displaySeconds(config, override) {
   const value = Number(override);
@@ -97,6 +106,45 @@ function timerDisplaySeconds(timers, config, event = null) {
   return base;
 }
 
+function buildAirQualityPayload(event, config, { location, reading } = {}) {
+  const airQualityConfig = config.airQuality || {};
+  const resolvedLocation = location || resolveAirQualityQueryLocation(event, airQualityConfig);
+  const resolvedReading = reading || buildAirQualityReading(event, airQualityConfig);
+
+  return {
+    version: 2,
+    type: 'air-quality.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: displaySeconds(config, airQualityConfig.displaySeconds),
+    trigger: event.trigger || 'air-quality-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    location: resolvedLocation,
+    reading: resolvedReading,
+  };
+}
+
+function buildIndoorTemperaturePayload(event, config) {
+  const indoorConfig = config.indoorTemperature || {};
+  const location = resolveIndoorQueryLocation(event.query, indoorConfig);
+  const reading = buildIndoorReading(event, indoorConfig);
+
+  return {
+    version: 2,
+    type: 'indoor-temperature.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: displaySeconds(config, indoorConfig.displaySeconds),
+    trigger: event.trigger || 'indoor-temperature-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    metric: indoorMetric(event.query),
+    location,
+    reading,
+  };
+}
+
 function buildTimerSnapshotPayload({
   timers,
   device,
@@ -120,6 +168,8 @@ module.exports = {
   buildBroadcastPayload,
   buildTimeQueryPayload,
   buildWeatherQueryPayload,
+  buildIndoorTemperaturePayload,
+  buildAirQualityPayload,
   buildTimerSnapshotPayload,
   displaySeconds,
   timerDisplaySeconds,
