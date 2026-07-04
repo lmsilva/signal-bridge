@@ -39,6 +39,14 @@ dist\alexa-broadcast-client\
 
 **Copy the entire `alexa-broadcast-client` folder** to the poster PC (USB, network share, etc.). No Python, pip, or venv required.
 
+Or copy the zip produced by the same build:
+
+```
+dist\alexa-broadcast-client-portable.zip
+```
+
+Extract it on the display PC (you get an `alexa-broadcast-client` folder), then run the launcher bat inside.
+
 1. Double-click `Run Alexa Broadcast Client.bat`
 2. Allow through Windows Firewall when prompted (private network)
 3. Look for the tray icon near the clock

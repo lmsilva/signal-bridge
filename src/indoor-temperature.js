@@ -47,6 +47,23 @@ function extractIndoorLocationPhrase(text) {
   return null;
 }
 
+function isExplicitOutdoorTemperatureQuery(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return false;
+  }
+  if (/\b(?:temperature|temp)\s+(?:outside|outdoors|out\s+there)\b/i.test(normalized)) {
+    return true;
+  }
+  if (/\b(?:outside|outdoors|out\s+there)\b/i.test(normalized) && /\b(?:temperature|temp|weather)\b/i.test(normalized)) {
+    return true;
+  }
+  if (/\bweather\b/i.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
 function isIndoorHumidityQuery(summary) {
   const normalized = normalizeText(summary);
   if (!normalized || !/\bhumidity\b/i.test(normalized)) {
@@ -79,12 +96,49 @@ function matchesIndoorQuery(summary, response) {
   const normalizedSummary = normalizeText(summary);
   const normalizedResponse = normalizeText(response);
 
+  if (isExplicitOutdoorTemperatureQuery(normalizedSummary)) {
+    return false;
+  }
+
   if (isIndoorHumidityQuery(normalizedSummary)) {
     return true;
   }
 
   if (isIndoorTemperatureQuery(normalizedSummary)) {
     return true;
+  }
+
+  const spokenReading = parseIndoorReading(normalizedResponse, {});
+  const responseLocation = extractIndoorLocationPhrase(normalizedResponse)
+    || spokenReading.locationPhrase
+    || extractIndoorLocationPhrase(normalizedSummary);
+
+  if (/\b(?:temperature|temp)\b/i.test(normalizedSummary) && responseLocation) {
+    if (!/^(?:outside|outdoors|out\s+there)$/i.test(responseLocation)) {
+      return true;
+    }
+  }
+
+  if (normalizedResponse) {
+    if (INDOOR_SPOKEN_HUMIDITY_RE.test(normalizedResponse)) {
+      return true;
+    }
+
+    if (
+      spokenReading.temperatureF != null
+      && spokenReading.locationPhrase
+      && !/\b(?:sunny|cloudy|rain|snow|wind|forecast|high of|low of)\b/i.test(normalizedResponse)
+    ) {
+      return true;
+    }
+
+    if (
+      INDOOR_SPOKEN_TEMP_RE.test(normalizedResponse)
+      && spokenReading.locationPhrase
+      && !/\b(?:sunny|cloudy|rain|snow|wind|forecast|high of|low of)\b/i.test(normalizedResponse)
+    ) {
+      return true;
+    }
   }
 
   if (!normalizedSummary && normalizedResponse) {
@@ -119,6 +173,7 @@ function indoorMetric(query) {
 
 module.exports = {
   extractIndoorLocationPhrase,
+  isExplicitOutdoorTemperatureQuery,
   isIndoorHumidityQuery,
   isIndoorTemperatureQuery,
   matchesIndoorQuery,

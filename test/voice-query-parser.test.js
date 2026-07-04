@@ -45,6 +45,13 @@ test('voice query parser detects what is the temperature', () => {
   assert.equal(event?.trigger, 'weather-query');
 });
 
+test('voice query parser routes generic temperature question with indoor spoken response', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity("what's the temperature", "It'Bedroom 4's room"));
+  assert.equal(event?.kind, 'indoor-temperature');
+  assert.equal(event?.trigger, 'indoor-temperature-query');
+});
+
 test('voice query parser detects indoor temperature at a named location', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity("what's the temperature on top floor", "It's 76 degrees on the top floor"));

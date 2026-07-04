@@ -1,4 +1,8 @@
-const { normalizeStateResponse } = require('./phoenix-state-parse');
+const {
+  collectCapabilityStates,
+  normalizeStateResponse,
+  stateResponseQuality,
+} = require('./phoenix-state-parse');
 
 function getSmarthomeListFn(alexa) {
   if (typeof alexa?.getSmarthomeDevicesV2 === 'function') {
@@ -93,30 +97,70 @@ function isClimateEndpoint(endpoint) {
     || (haystack.includes('temperature') && !isAirQualityEndpoint(endpoint));
 }
 
+function buildStateQueries(endpoint) {
+  const queries = [];
+  const seen = new Set();
+
+  const add = (entityId, entityType) => {
+    if (!entityId) {
+      return;
+    }
+    const key = `${entityType}:${entityId}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    queries.push({ entityId, entityType });
+  };
+
+  add(endpoint.applianceId, 'APPLIANCE');
+  add(endpoint.entityId, 'ENTITY');
+  add(endpoint.entityId, 'APPLIANCE');
+  add(endpoint.endpointId, 'ENTITY');
+
+  return queries;
+}
+
 async function queryEndpointState(alexa, endpoint) {
   if (typeof alexa?.querySmarthomeDevices !== 'function') {
     return null;
   }
 
-  const queryId = endpoint.applianceId || endpoint.entityId;
-  if (!queryId) {
+  const queries = buildStateQueries(endpoint);
+  if (!queries.length) {
     return null;
   }
 
-  const response = await new Promise((resolve, reject) => {
-    alexa.querySmarthomeDevices(queryId, (err, result) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(result || null);
-    });
-  });
+  let bestResponse = null;
+  let bestScore = 0;
 
-  return response ? normalizeStateResponse(response) : null;
+  for (const query of queries) {
+    try {
+      const response = await new Promise((resolve, reject) => {
+        alexa.querySmarthomeDevices(query, (err, result) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(result || null);
+        });
+      });
+
+      const score = stateResponseQuality(response);
+      if (score > bestScore) {
+        bestScore = score;
+        bestResponse = response;
+      }
+    } catch {
+      // Try the next identifier.
+    }
+  }
+
+  return bestScore > 0 ? normalizeStateResponse(bestResponse) : null;
 }
 
 module.exports = {
+  buildStateQueries,
   getSmarthomeListFn,
   isAirQualityEndpoint,
   isClimateEndpoint,

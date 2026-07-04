@@ -1,4 +1,6 @@
 @echo off
+rem Usage: build_portable.bat [--no-pause]
+rem   --no-pause  Skip final pause (for agents/CI)
 setlocal EnableExtensions
 pushd "%~dp0"
 
@@ -108,14 +110,26 @@ echo echo.
 echo pause
 ) > "%DIST%\test\run_long_test.bat"
 
+set "ZIP=dist\alexa-broadcast-client-portable.zip"
+echo.
+echo Creating distributable zip...
+powershell -NoProfile -Command "Compress-Archive -Path '%DIST%' -DestinationPath '%ZIP%' -Force"
+if errorlevel 1 (
+  echo Failed to create zip: %ZIP%
+  pause
+  popd
+  exit /b 1
+)
+
 echo.
 echo Build complete.
 echo Portable package: %CD%\%DIST%
+echo Distributable zip:  %CD%\%ZIP%
 echo.
-echo Copy the entire "%DIST%" folder to your movie poster PC.
-echo Run "Run Alexa Broadcast Client.bat" there - no Python or pip required.
+echo Copy the zip to your display PC, extract it, and run:
+echo   Run Alexa Broadcast Client.bat
 echo.
-pause
+if /I not "%~1"=="--no-pause" pause
 popd
 exit /b 0
 

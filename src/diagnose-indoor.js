@@ -13,7 +13,7 @@ const {
   queryEndpointState,
   summarizeEndpoint,
 } = require('./smarthome-devices');
-const { mapDeviceReading } = require('./air-quality-fetch');
+const { mapDeviceReading, parsePhoenixState } = require('./air-quality-fetch');
 
 function writeJson(relativePath, data) {
   const target = path.join(process.cwd(), relativePath);
@@ -76,21 +76,32 @@ async function diagnoseIndoor() {
 
   if (airQualityEndpoints.length && typeof alexa.querySmarthomeDevices === 'function') {
     log.info('Querying live state for air quality monitors...');
+    const liveStates = [];
     for (const [index, endpoint] of airQualityEndpoints.entries()) {
       try {
         const state = await queryEndpointState(alexa, endpoint);
-        const reading = mapDeviceReading({ ...endpoint.raw, ...state });
+        const parsed = parsePhoenixState(state || {});
+        const reading = mapDeviceReading({ ...endpoint.raw, ...(state || {}) });
+        Object.assign(reading, parsed);
+        liveStates.push({
+          friendlyName: endpoint.friendlyName,
+          entityId: endpoint.entityId,
+          applianceId: endpoint.applianceId,
+          reading,
+          rawState: state,
+        });
         log.info(`AQM query ${index + 1}`, {
           friendlyName: endpoint.friendlyName,
           entityId: endpoint.entityId,
           applianceId: endpoint.applianceId,
           reading,
-          stateKeys: state ? Object.keys(state) : [],
+          capabilityStates: state?.deviceStates?.[0]?.capabilityStates?.length || 0,
         });
       } catch (error) {
         log.warn(`AQM query failed for ${endpoint.friendlyName}`, error.message || error);
       }
     }
+    writeJson('data/diagnose-indoor-aqm-live-states.json', liveStates);
   }
 
   log.info('Wrote data/diagnose-indoor-air-quality-summary.json');

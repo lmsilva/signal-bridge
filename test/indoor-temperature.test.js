@@ -127,3 +127,14 @@ test('matchesIndoorQuery rejects outdoor weather phrasing', () => {
   assert.equal(matchesIndoorQuery("what's the weather", 'It is sunny'), false);
   assert.equal(matchesIndoorQuery("what's the temperature outside", 'It is 55 degrees outside'), false);
 });
+
+test('matchesIndoorQuery treats spoken room temperature as indoor when summary is generic', () => {
+  assert.equal(
+    matchesIndoorQuery("what's the temperature", "It'Bedroom 4's room"),
+    true,
+  );
+  assert.equal(
+    matchesIndoorQuery("what's the temperature in Room 16's bedroom echo", "oh it's 72.5 degrees on Room 16's room"),
+    true,
+  );
+});

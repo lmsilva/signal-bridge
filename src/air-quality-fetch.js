@@ -121,6 +121,33 @@ function parsePhoenixState(stateResponse) {
     const numeric = parseNumericValue(
       stateField(state, 'value') ?? stateField(state, 'rangeValue') ?? state?.temperature,
     );
+
+    if (name === 'rangeValue' || namespace.includes('RangeController')) {
+      if (numeric == null) {
+        continue;
+      }
+      if (instance === '9') {
+        reading.iaqScore = numeric;
+        continue;
+      }
+      if (instance === '4') {
+        reading.humidity = numeric;
+        continue;
+      }
+      if (instance === '8') {
+        reading.co = numeric;
+        continue;
+      }
+      if (instance === '6') {
+        reading.pm25 = numeric;
+        continue;
+      }
+      if (instance === '5') {
+        reading.voc = numeric;
+      }
+      continue;
+    }
+
     if (numeric == null) {
       continue;
     }
@@ -304,7 +331,16 @@ async function fetchAirQualityReading(alexa, location, config = {}) {
     const state = await queryEndpointState(alexa, match);
     const normalized = normalizeStateResponse(state);
     const parsed = parsePhoenixState(normalized);
-    if (parsed.iaqScore != null || parsed.temperatureF != null || parsed.humidity != null) {
+    const hasSensorData = [
+      parsed.iaqScore,
+      parsed.temperatureF,
+      parsed.humidity,
+      parsed.pm25,
+      parsed.co,
+      parsed.voc,
+    ].some((value) => value != null);
+
+    if (hasSensorData) {
       return { ...parsed, source: 'smarthome' };
     }
 

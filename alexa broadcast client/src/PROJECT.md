@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-03
+**Last updated:** 2026-07-04
 
 ---
 
@@ -119,7 +119,11 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
   - Run **`Run Alexa Broadcast Client.bat`** inside that folder (same level as `alexa-broadcast-client.exe`)
   - Build venv: `%LOCALAPPDATA%\alexa-broadcast-client-build-venv` (avoids broken pip on NAS `.venv`)
   - Includes weather/timer test batch files in output
+- **Distributable zip:** `build_portable.bat` also writes **`dist/alexa-broadcast-client-portable.zip`**
+  - Contains the `alexa-broadcast-client/` folder; extract on the display PC and run the launcher bat
 - **Auto-start:** shortcut in `shell:startup` on Windows
+
+**Portable build:** run `build_portable.bat --no-pause` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally.
 
 **Requirements:** Python 3.10+, `pystray`, `Pillow` (see `requirements.txt`).
 
@@ -169,6 +173,7 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-04: Portable build is on user request only — agents do not auto-run `build_portable.bat` after display edits.
 - 2026-07-03: Air quality dashboard overlay (`air-quality.query`) — IAQ ring + PM/CO/VOC/temp/humidity tiles.
 - 2026-07-03: Indoor temperature overlay (`indoor-temperature.query`) — cold/comfort/hot graphic; interrupts active overlay like weather.
 - 2026-06-23: Timer cancel updates display (empty or remaining list); removed Active Timers counter from headline.
