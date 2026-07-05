@@ -4,7 +4,7 @@ import ssl
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -99,7 +99,7 @@ def celsius_to_fahrenheit(celsius: float) -> int:
     return round((celsius * 9 / 5) + 32)
 
 
-def weather_code_to_condition(code: int | float | None) -> str:
+def weather_code_to_condition(code: int | float | None, is_day: int | float | None = 1) -> str:
     if code is None:
         label = "unknown"
     else:
@@ -111,7 +111,7 @@ def weather_code_to_condition(code: int | float | None) -> str:
     if "cloud" in label or label in ("overcast", "fog"):
         return "cloudy"
     if "clear" in label:
-        return "sunny"
+        return "clear-night" if is_day is not None and int(is_day) == 0 else "sunny"
     if "thunder" in label:
         return "stormy"
     return "unknown"
@@ -215,22 +215,25 @@ def _coords_differ(left: dict | None, right: dict | None, epsilon: float = 0.5) 
     return abs(float(left_lat) - float(right_lat)) > epsilon or abs(float(left_lon) - float(right_lon)) > epsilon
 
 
-def _parse_api_time(value: str) -> datetime:
+def _parse_api_time(value: str, utc_offset_seconds: int = 0) -> datetime:
+    """Open-Meteo returns times in the LOCATION's local time with no offset
+    suffix; convert to UTC using the response's utc_offset_seconds."""
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
+        return parsed.replace(tzinfo=timezone.utc) - timedelta(seconds=utc_offset_seconds)
     return parsed.astimezone(timezone.utc)
 
 
-def _hourly_start_index(times: list[str]) -> int:
+def _hourly_start_index(times: list[str], utc_offset_seconds: int = 0) -> int:
+    """Index of the in-progress hour (first slot shown as 'Now')."""
     now = datetime.now(timezone.utc)
     for index, value in enumerate(times):
         try:
-            slot_time = _parse_api_time(value)
+            slot_time = _parse_api_time(value, utc_offset_seconds)
         except ValueError:
             continue
-        if slot_time >= now:
-            return index
+        if slot_time > now:
+            return max(0, index - 1)
     return 0
 
 
@@ -252,6 +255,7 @@ def fetch_weather_forecast(location: dict) -> dict | None:
                     "weather_code",
                     "wind_speed_10m",
                     "precipitation",
+                    "is_day",
                 ]
             ),
             "hourly": ",".join(
@@ -260,6 +264,7 @@ def fetch_weather_forecast(location: dict) -> dict | None:
                     "precipitation_probability",
                     "weather_code",
                     "wind_speed_10m",
+                    "is_day",
                 ]
             ),
             "daily": ",".join(
@@ -290,7 +295,8 @@ def fetch_weather_forecast(location: dict) -> dict | None:
     hourly_rain = data.get("hourly", {}).get("precipitation_probability") or []
     hourly_wind = data.get("hourly", {}).get("wind_speed_10m") or []
     hourly_codes = data.get("hourly", {}).get("weather_code") or []
-    start_index = _hourly_start_index(hourly_times)
+    hourly_is_day = data.get("hourly", {}).get("is_day") or []
+    start_index = _hourly_start_index(hourly_times, data.get("utc_offset_seconds") or 0)
     hourly = []
     for offset, time_value in enumerate(hourly_times[start_index : start_index + 24]):
         index = start_index + offset
@@ -302,7 +308,10 @@ def fetch_weather_forecast(location: dict) -> dict | None:
                 "temperatureF": celsius_to_fahrenheit(temp_c) if temp_c is not None else None,
                 "precipitationProbability": hourly_rain[index] if index < len(hourly_rain) else None,
                 "windSpeedMph": hourly_wind[index] if index < len(hourly_wind) else None,
-                "condition": weather_code_to_condition(hourly_codes[index] if index < len(hourly_codes) else None),
+                "condition": weather_code_to_condition(
+                    hourly_codes[index] if index < len(hourly_codes) else None,
+                    hourly_is_day[index] if index < len(hourly_is_day) else 1,
+                ),
             }
         )
 
@@ -349,7 +358,8 @@ def fetch_weather_forecast(location: dict) -> dict | None:
             "humidity": current.get("relative_humidity_2m"),
             "windSpeedMph": current.get("wind_speed_10m"),
             "precipitationIn": current.get("precipitation"),
-            "condition": weather_code_to_condition(current_code),
+            "condition": weather_code_to_condition(current_code, current.get("is_day", 1)),
+            "isDay": current.get("is_day"),
             "weatherCode": current_code,
         },
         "next24Hours": hourly,

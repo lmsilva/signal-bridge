@@ -44,6 +44,11 @@ if errorlevel 1 goto PipFailed
 "%VENV_PY%" -m pip install -r requirements-build.txt
 if errorlevel 1 goto PipFailed
 
+rem A client running from dist\ locks files there and breaks rebuild/zip.
+echo Closing any running display client...
+taskkill /f /im alexa-broadcast-client.exe >nul 2>&1
+taskkill /f /im send-test.exe >nul 2>&1
+
 echo.
 echo Building portable Alexa Broadcast Client...
 "%VENV_PY%" -m PyInstaller --noconfirm alexa-broadcast-client.spec
@@ -113,13 +118,10 @@ echo pause
 set "ZIP=dist\alexa-broadcast-client-portable.zip"
 echo.
 echo Creating distributable zip...
-powershell -NoProfile -Command "Compress-Archive -Path '%DIST%' -DestinationPath '%ZIP%' -Force"
-if errorlevel 1 (
-  echo Failed to create zip: %ZIP%
-  pause
-  popd
-  exit /b 1
-)
+if exist "%ZIP%" del /f /q "%ZIP%"
+tar -a -c -f "%ZIP%" -C dist alexa-broadcast-client
+if errorlevel 1 goto ZipFailed
+if not exist "%ZIP%" goto ZipFailed
 
 echo.
 echo Build complete.
@@ -132,6 +134,14 @@ echo.
 if /I not "%~1"=="--no-pause" pause
 popd
 exit /b 0
+
+:ZipFailed
+echo Failed to create zip: %ZIP%
+echo Close any program using files in dist\ (display client, Explorer preview)
+echo and run this script again.
+pause
+popd
+exit /b 1
 
 :PipFailed
 echo Failed to install dependencies.

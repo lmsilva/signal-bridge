@@ -28,7 +28,7 @@ const WEATHER_CODE_LABELS = {
   99: 'thunderstorm',
 };
 
-function weatherCodeToCondition(code) {
+function weatherCodeToCondition(code, isDay = 1) {
   const label = WEATHER_CODE_LABELS[Number(code)] || 'unknown';
   if (label.includes('snow')) {
     return 'snowy';
@@ -40,7 +40,7 @@ function weatherCodeToCondition(code) {
     return 'cloudy';
   }
   if (label.includes('clear')) {
-    return 'sunny';
+    return Number(isDay) === 0 ? 'clear-night' : 'sunny';
   }
   if (label.includes('thunder')) {
     return 'stormy';
@@ -130,12 +130,14 @@ async function fetchWeatherForecast(location) {
       'weather_code',
       'wind_speed_10m',
       'precipitation',
+      'is_day',
     ].join(','),
     hourly: [
       'temperature_2m',
       'precipitation_probability',
       'weather_code',
       'wind_speed_10m',
+      'is_day',
     ].join(','),
     daily: [
       'weather_code',
@@ -156,25 +158,32 @@ async function fetchWeatherForecast(location) {
   const currentC = current.temperature_2m;
   const currentCode = current.weather_code;
 
+  // Open-Meteo returns hourly times in the LOCATION's local time (no offset
+  // suffix). Convert using utc_offset_seconds so the 24h window starts at the
+  // current hour regardless of the server's timezone (Docker runs in UTC).
   const hourlyTimes = data?.hourly?.time || [];
+  const utcOffsetMs = (data?.utc_offset_seconds || 0) * 1000;
   const nowMs = Date.now();
-  let startIndex = hourlyTimes.findIndex((timeValue) => Date.parse(timeValue) >= nowMs);
-  if (startIndex < 0) {
-    startIndex = 0;
-  }
+  const firstFuture = hourlyTimes.findIndex(
+    (timeValue) => Date.parse(`${timeValue}Z`) - utcOffsetMs > nowMs,
+  );
+  const startIndex = firstFuture > 0 ? firstFuture - 1 : 0;
 
   const hourly = hourlyTimes.slice(startIndex, startIndex + 24).map((time, offset) => {
     const index = startIndex + offset;
     return {
-    time,
-    temperatureC: data.hourly.temperature_2m?.[index] ?? null,
-    temperatureF: data.hourly.temperature_2m?.[index] != null
-      ? celsiusToFahrenheit(data.hourly.temperature_2m[index])
-      : null,
-    precipitationProbability: data.hourly.precipitation_probability?.[index] ?? null,
-    windSpeedMph: data.hourly.wind_speed_10m?.[index] ?? null,
-    condition: weatherCodeToCondition(data.hourly.weather_code?.[index]),
-  };
+      time,
+      temperatureC: data.hourly.temperature_2m?.[index] ?? null,
+      temperatureF: data.hourly.temperature_2m?.[index] != null
+        ? celsiusToFahrenheit(data.hourly.temperature_2m[index])
+        : null,
+      precipitationProbability: data.hourly.precipitation_probability?.[index] ?? null,
+      windSpeedMph: data.hourly.wind_speed_10m?.[index] ?? null,
+      condition: weatherCodeToCondition(
+        data.hourly.weather_code?.[index],
+        data.hourly.is_day?.[index] ?? 1,
+      ),
+    };
   });
 
   const daily = (data?.daily?.time || []).map((date, index) => ({
@@ -210,7 +219,8 @@ async function fetchWeatherForecast(location) {
       humidity: current.relative_humidity_2m ?? null,
       windSpeedMph: current.wind_speed_10m ?? null,
       precipitationIn: current.precipitation ?? null,
-      condition: weatherCodeToCondition(currentCode),
+      condition: weatherCodeToCondition(currentCode, current.is_day ?? 1),
+      isDay: current.is_day ?? null,
       weatherCode: currentCode ?? null,
     },
     next24Hours: hourly,

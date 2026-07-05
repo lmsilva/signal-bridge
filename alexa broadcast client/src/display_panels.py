@@ -406,12 +406,24 @@ class TimePanel(BasePanel):
 class WeatherPanel(BasePanel):
     CONDITION_COLORS = {
         "sunny": "#fbbf24",
+        "clear-night": "#c7d2fe",
         "cloudy": "#94a3b8",
         "rainy": "#38bdf8",
         "snowy": "#e2e8f0",
         "stormy": "#a78bfa",
         "windy": "#cbd5e1",
         "unknown": "#64748b",
+    }
+
+    CONDITION_LABELS = {
+        "sunny": "Sunny",
+        "clear-night": "Clear",
+        "cloudy": "Cloudy",
+        "rainy": "Rainy",
+        "snowy": "Snowy",
+        "stormy": "Stormy",
+        "windy": "Windy",
+        "unknown": "",
     }
 
     def _fit_forecast_heights(self, layout, y_before_hourly: int, has_hourly: bool, has_daily: bool) -> tuple[int, int]:
@@ -469,13 +481,17 @@ class WeatherPanel(BasePanel):
         )
         y += 42
 
-        temp_f = current.get("temperatureF")
-        temp_c = current.get("temperatureC")
-        condition = normalize_condition(current.get("condition") or spoken_bits.get("condition"))
+        # Alexa's spoken current temperature is what the user just heard — it
+        # wins over the Open-Meteo model value for the hero number. Spoken
+        # numbers that may be forecast highs/lows are only a last resort.
+        temp_f = spoken_bits.get("temp_f") if spoken_bits.get("temp_is_current") else None
+        if temp_f is None:
+            temp_f = current.get("temperatureF")
+        if temp_f is None:
+            temp_f = spoken_bits.get("temp_f")
+        temp_c = round((temp_f - 32) * 5 / 9) if temp_f is not None else None
 
-        if temp_f is None and spoken_bits.get("temp_f") is not None:
-            temp_f = spoken_bits["temp_f"]
-            temp_c = round((temp_f - 32) * 5 / 9)
+        condition = normalize_condition(current.get("condition") or spoken_bits.get("condition"))
         if condition == "unknown" and spoken_bits.get("condition"):
             condition = normalize_condition(spoken_bits.get("condition"))
 
@@ -483,9 +499,10 @@ class WeatherPanel(BasePanel):
         icon_y = y + 54
         self._draw_condition_icon(icon_x, icon_y, 54, condition)
 
-        if temp_f is not None and temp_c is not None:
-            temp_line = f"{temp_f}°F"
-            sub_line = f"{temp_c}°C · {condition.replace('_', ' ').title()}"
+        if temp_f is not None:
+            temp_line = f"{round(temp_f)}°F"
+            condition_label = self.CONDITION_LABELS.get(condition, condition.title())
+            sub_line = f"{temp_c}°C · {condition_label}" if condition_label else f"{temp_c}°C"
         else:
             temp_line = "—"
             sub_line = spoken_bits.get("summary") or "Forecast unavailable"
@@ -515,7 +532,10 @@ class WeatherPanel(BasePanel):
         wind = current.get("windSpeedMph")
         rain = hourly[0].get("precipitationProbability") if hourly else None
         humidity = current.get("humidity")
+        feels_like = current.get("feelsLikeF")
         detail_parts = []
+        if feels_like is not None and temp_f is not None and abs(feels_like - temp_f) >= 3:
+            detail_parts.append(f"Feels like {round(feels_like)}°")
         if wind is not None:
             detail_parts.append(f"Wind {round(wind)} mph")
         if rain is not None:
@@ -538,7 +558,6 @@ class WeatherPanel(BasePanel):
         else:
             y += 148
 
-        daily = weather.get("next7Days") or []
         slot_height, day_height = self._fit_forecast_heights(layout, y, bool(hourly), bool(daily))
 
         self._track(
@@ -561,10 +580,17 @@ class WeatherPanel(BasePanel):
                 slot_x = x + index * slot_width
                 inner_w = slot_width - 10
                 center_x = slot_x + inner_w // 2
-                label = "—"
-                if slot.get("time"):
+                is_now = index == 0
+                label = "Now" if is_now else "—"
+                if not is_now and slot.get("time"):
                     try:
-                        label = datetime.fromisoformat(slot["time"].replace("Z", "+00:00")).astimezone().strftime("%I%p").lstrip("0")
+                        # Times are already in the forecast location's local
+                        # time — format directly, no timezone shifting.
+                        label = (
+                            datetime.fromisoformat(slot["time"].replace("Z", "+00:00"))
+                            .strftime("%I%p")
+                            .lstrip("0")
+                        )
                     except ValueError:
                         label = slot["time"][-5:]
                 temp = slot.get("temperatureF")
@@ -576,7 +602,8 @@ class WeatherPanel(BasePanel):
                         slot_x + inner_w,
                         y + slot_height,
                         fill=self.config.get("chipBackground", "#141a24"),
-                        outline="",
+                        outline=accent if is_now else "",
+                        width=2 if is_now else 0,
                     )
                 )
                 self._track(
@@ -585,7 +612,7 @@ class WeatherPanel(BasePanel):
                         y + 4,
                         anchor="n",
                         text=label,
-                        fill=muted,
+                        fill=accent if is_now else muted,
                         font=self.shell.forecast_label_font,
                     )
                 )
@@ -643,8 +670,9 @@ class WeatherPanel(BasePanel):
                 day_x = x + index * day_width
                 inner_w = day_width - 10
                 center_x = day_x + inner_w // 2
-                label = day.get("date", "")[-5:]
-                if day.get("date"):
+                is_today = index == 0
+                label = "Today" if is_today else day.get("date", "")[-5:]
+                if not is_today and day.get("date"):
                     try:
                         label = datetime.fromisoformat(day["date"]).strftime("%a")
                     except ValueError:
@@ -659,7 +687,8 @@ class WeatherPanel(BasePanel):
                         day_x + inner_w,
                         y + day_height,
                         fill=self.config.get("chipBackground", "#141a24"),
-                        outline="",
+                        outline=accent if is_today else "",
+                        width=2 if is_today else 0,
                     )
                 )
                 self._track(
@@ -668,7 +697,7 @@ class WeatherPanel(BasePanel):
                         y + 4,
                         anchor="n",
                         text=label,
-                        fill=muted,
+                        fill=accent if is_today else muted,
                         font=self.shell.forecast_label_font,
                     )
                 )
@@ -743,6 +772,32 @@ class WeatherPanel(BasePanel):
                         width=2 if size <= 24 else 2,
                     )
                 )
+            return
+
+        if condition == "clear-night":
+            # Crescent moon: full disc with an offset bite of background color
+            radius = size * 0.34
+            self._track(
+                self.canvas.create_oval(
+                    cx - radius,
+                    cy - radius,
+                    cx + radius,
+                    cy + radius,
+                    fill=color,
+                    outline="",
+                )
+            )
+            bite = radius * 0.92
+            self._track(
+                self.canvas.create_oval(
+                    cx - bite + radius * 0.55,
+                    cy - bite - radius * 0.25,
+                    cx + bite + radius * 0.55,
+                    cy + bite - radius * 0.25,
+                    fill=self.config.get("overlayBackground", "#0f172a"),
+                    outline="",
+                )
+            )
             return
 
         if condition == "windy":

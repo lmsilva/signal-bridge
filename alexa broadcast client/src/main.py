@@ -109,13 +109,7 @@ class BroadcastClientApp:
         self._drop_pending_timer_snapshots()
 
         if self.display_active and self.overlay.visible:
-            self.display_active = True
             self.overlay.advance(payload, seconds)
-            return
-
-        if self.display_active:
-            self.display_active = True
-            self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
             return
 
         self.display_active = True
@@ -132,7 +126,6 @@ class BroadcastClientApp:
         if self._is_immediate_display(payload):
             self._drop_pending_timer_snapshots()
             if self.display_active:
-                self.display_active = True
                 if self.overlay.visible:
                     self.overlay.advance(payload, seconds)
                 else:

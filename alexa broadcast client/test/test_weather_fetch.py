@@ -22,6 +22,14 @@ class WeatherFetchTests(unittest.TestCase):
         self.assertEqual(weather_code_to_condition(71), "snowy")
         self.assertEqual(weather_code_to_condition(95), "stormy")
 
+    def test_weather_code_to_condition_night(self):
+        self.assertEqual(weather_code_to_condition(0, is_day=0), "clear-night")
+        self.assertEqual(weather_code_to_condition(1, is_day=0), "clear-night")
+        self.assertEqual(weather_code_to_condition(0, is_day=1), "sunny")
+        self.assertEqual(weather_code_to_condition(63, is_day=0), "rainy")
+        self.assertEqual(normalize_condition("clear-night"), "clear-night")
+        self.assertEqual(normalize_condition("clear"), "sunny")
+
     def test_has_forecast_data(self):
         self.assertFalse(has_forecast_data(None))
         self.assertFalse(has_forecast_data({"current": {"temperatureF": 60}}))
@@ -58,7 +66,7 @@ class WeatherFetchTests(unittest.TestCase):
         self.assertIn("New York", resolved.get("resolvedName", ""))
         self.assertNotAlmostEqual(resolved["latitude"], 40.0, places=1)
 
-    def test_hourly_start_index_handles_timezoneless_api_times(self):
+    def test_hourly_start_index_returns_in_progress_hour(self):
         from datetime import timedelta
         from src.weather_fetch import _hourly_start_index
 
@@ -68,8 +76,24 @@ class WeatherFetchTests(unittest.TestCase):
             (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:00"),
             (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:00"),
         ]
-        self.assertEqual(_hourly_start_index(times), 2)
+        # First future slot is index 2, so the in-progress slot (index 1)
+        # leads the strip as "Now".
+        self.assertEqual(_hourly_start_index(times), 1)
         self.assertEqual(normalize_condition("windy"), "windy")
+
+    def test_hourly_start_index_applies_utc_offset(self):
+        from datetime import timedelta
+        from src.weather_fetch import _hourly_start_index
+
+        # Times reported in UTC-6 local time; offset converts them correctly.
+        offset = -6 * 3600
+        local_now = datetime.now(timezone.utc) + timedelta(seconds=offset)
+        times = [
+            (local_now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:00"),
+            (local_now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:00"),
+            (local_now + timedelta(hours=2)).strftime("%Y-%m-%dT%H:00"),
+        ]
+        self.assertEqual(_hourly_start_index(times, offset), 0)
 
 
 if __name__ == "__main__":

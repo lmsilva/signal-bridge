@@ -56,6 +56,5 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         event_kind = (payload.get("event") or {}).get("kind")
         if event_kind == "fired":
             requested = max(requested, 25)
-        return min(max(requested, 1), config["maxDisplaySeconds"])
 
     return min(max(requested, 1), config["maxDisplaySeconds"])

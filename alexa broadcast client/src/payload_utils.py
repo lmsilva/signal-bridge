@@ -114,6 +114,8 @@ def normalize_condition(condition: str | None) -> str:
         return "unknown"
 
     value = str(condition).lower().replace(" ", "_")
+    if "night" in value:
+        return "clear-night"
     if "snow" in value:
         return "snowy"
     if "rain" in value or "shower" in value or "drizzle" in value:
@@ -126,8 +128,6 @@ def normalize_condition(condition: str | None) -> str:
         return "cloudy"
     if "clear" in value or "sunny" in value:
         return "sunny"
-    if value in {"sunny", "cloudy", "rainy", "snowy", "stormy", "windy", "unknown"}:
-        return value
     return "unknown"
 
 
@@ -384,7 +384,12 @@ def parse_spoken_weather(spoken: str | None) -> dict:
         return {}
 
     parsed: dict = {"summary": text}
-    temp_match = _SPOKEN_TEMP_RE.search(text) or re.search(r"(-?\d{1,3})\s+degrees?", text, re.IGNORECASE)
+    temp_match = _SPOKEN_TEMP_RE.search(text)
+    if temp_match:
+        # Alexa explicitly stated the current temperature ("right now it's...")
+        parsed["temp_is_current"] = True
+    else:
+        temp_match = re.search(r"(-?\d{1,3})\s+degrees?", text, re.IGNORECASE)
     if temp_match:
         try:
             parsed["temp_f"] = int(temp_match.group(1))

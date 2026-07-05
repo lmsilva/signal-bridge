@@ -24,6 +24,13 @@ test('weatherCodeToCondition maps snow and rain codes', () => {
   assert.equal(weatherCodeToCondition(0), 'sunny');
 });
 
+test('weatherCodeToCondition shows clear-night for clear skies after dark', () => {
+  assert.equal(weatherCodeToCondition(0, 0), 'clear-night');
+  assert.equal(weatherCodeToCondition(1, 0), 'clear-night');
+  assert.equal(weatherCodeToCondition(0, 1), 'sunny');
+  assert.equal(weatherCodeToCondition(63, 0), 'rainy');
+});
+
 test('celsiusToFahrenheit converts correctly', () => {
   assert.equal(celsiusToFahrenheit(0), 32);
   assert.equal(celsiusToFahrenheit(100), 212);

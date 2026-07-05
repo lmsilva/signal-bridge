@@ -92,8 +92,19 @@ class PayloadUtilsTests(unittest.TestCase):
             "Currently 60 degrees and mostly cloudy, with a high of 68 and a low of 52."
         )
         self.assertEqual(parsed["temp_f"], 60)
+        self.assertTrue(parsed.get("temp_is_current"))
         self.assertEqual(parsed["condition"], "mostly_cloudy")
         self.assertIn("60 degrees", parsed["summary"])
+
+    def test_parse_spoken_weather_forecast_numbers_not_marked_current(self):
+        parsed = parse_spoken_weather("Tonight you can expect a low of 62 degrees.")
+        self.assertEqual(parsed["temp_f"], 62)
+        self.assertFalse(parsed.get("temp_is_current", False))
+
+    def test_normalize_condition_clear_night(self):
+        self.assertEqual(normalize_condition("clear-night"), "clear-night")
+        self.assertEqual(normalize_condition("clear_night"), "clear-night")
+        self.assertEqual(normalize_condition("clear"), "sunny")
 
     def test_format_timer_labels(self):
         self.assertEqual(format_timer_set_label(300), "5 min timer")

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-05
 
 ---
 
@@ -173,6 +173,8 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-05: `build_portable.bat` kills any running `alexa-broadcast-client.exe`/`send-test.exe` before building, zips with `tar` (Compress-Archive choked on locked files), and fails loudly if the zip can't be written.
+- 2026-07-04: Weather fixes — Alexa's spoken current temperature wins the hero number; `clear-night` condition + crescent moon icon after dark (`is_day` from Open-Meteo); hourly "Now"/daily "Today" highlighted cards; hourly labels shown in the forecast location's local time; "Feels like" detail. Removed leftover files (`Run Portable.bat`, `run_long_test.bat`, `run_weather_timer_test.bat` — use `run_test.bat` with args).
 - 2026-07-04: Portable build is on user request only — agents do not auto-run `build_portable.bat` after display edits.
 - 2026-07-03: Air quality dashboard overlay (`air-quality.query`) — IAQ ring + PM/CO/VOC/temp/humidity tiles.
 - 2026-07-03: Indoor temperature overlay (`indoor-temperature.query`) — cold/comfort/hot graphic; interrupts active overlay like weather.

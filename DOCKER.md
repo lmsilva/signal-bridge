@@ -151,18 +151,24 @@ PROXY_PORT=3457 PROXY_OWN_IP=192.168.1.10 ./reauth.sh
 
 ## 5. Updates
 
+The NAS has no git. The shared folder **is** the working copy — code edited on the
+PC (and pushed to GitHub from there) is already on the NAS. To pick up code changes,
+just rebuild and restart the container:
+
 ```bash
 cd /share/Container/alexa-broadcast-bridge
-git pull   # if using git
-docker compose build
-docker compose up -d
+./recreate.sh --build
 ```
+
+If the QNAP build fails (common Container Station/ZFS issue), restart on the
+existing image with `./recreate.sh` — but note that code changes only take effect
+after a successful image rebuild.
 
 Session and `broadcast.txt` are on mounted volumes and are preserved.
 
 ---
 
-## 7. UDP broadcast to Windows display client
+## 6. UDP broadcast to Windows display client
 
 When an Alexa announcement is captured, the bridge also sends a JSON packet over UDP to the **Alexa Broadcast Client** on your Windows PC.
 
@@ -184,7 +190,7 @@ See `alexa broadcast client/README.md` for the Windows side.
 
 ---
 
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
