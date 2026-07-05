@@ -43,6 +43,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/parser.js` | Detects announce/broadcast utterances; two-step prompt pairing; dedup |
 | `src/session.js` | Load/save `alexa-session.json`; `buildAlexaInitOptions` for listener vs auth |
 | `src/session-keepalive.js` | Auth ping, token refresh (via ping cycle), liveness probe, proactive refresh |
+| `src/auth-refresh-patch.js` | Replaces broken `alexa-cookie2` refresh with vendored skip-register version |
+| `src/vendor/alexa-cookie-refresh.js` | Patched cookie refresh: no `/auth/register` during refresh (fixes 24h auth loss) |
 | `src/session-auth-journal.js` | Append-only JSONL auth event log with failure classification |
 | `src/session-meta.js` | Token age / session metadata helpers |
 | `src/error-format.js` | Unwrap AggregateError and nested causes for clearer logs |
@@ -83,6 +85,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 ---
 
 ## Session keep-alive & auth diagnostics
+
+**Refresh patch (critical):** stock `alexa-cookie2@5.0.3` re-registers the app via `POST /auth/register` on every refresh; Amazon now rejects that (`InvalidToken / Auth time of the token is expired`), so every refresh ended in `No tokens in Register response`, tokenDate never rotated, and the session died after ~24–36h. `src/auth-refresh-patch.js` (installed at startup in `index.js` and `diagnose.js`) swaps in `src/vendor/alexa-cookie-refresh.js`, which follows upstream PR Apollon77/alexa-cookie#191: exchange refresh token at `/auth/token`, **skip `/auth/register`**, re-register capabilities with the new access token, refresh marketplace cookies + CSRF, advance `tokenDate`. Keeps `refreshToken`/`deviceSerial`/`macDms` untouched.
 
 Every **15 minutes** the bridge runs a single **ping cycle** (no separate refresh timer):
 
@@ -252,6 +256,7 @@ Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-07-04: **Token keep-alive fix** — vendored patched cookie refresh that skips `/auth/register` (Amazon rejects it during refresh); tokenDate now rotates instead of dying at ~24h. New `src/auth-refresh-patch.js` + `src/vendor/alexa-cookie-refresh.js` + tests.
 - 2026-07-04: Voice routing — generic “what’s the temperature” + spoken “degrees in [room]” routes to indoor, not weather; outdoor only when explicitly outside/weather.
 - 2026-07-03: Air quality overlay — intercept "what is the air quality"; parse IAQ score + monitor location from Alexa response; optional Smart Home enrich for PM/CO/VOC/temp/humidity; `air-quality.query` UDP type.
 - 2026-07-03: Indoor temperature overlay — location-specific thermostat queries vs generic outdoor weather; alias map; comfort bands; `indoor-temperature.query` UDP type; `npm run diagnose-indoor`.

@@ -2,6 +2,9 @@ const Alexa = require('alexa-remote2');
 const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { buildAlexaInitOptions, loadSession } = require('./session');
+const { installRefreshPatch } = require('./auth-refresh-patch');
+
+installRefreshPatch();
 
 async function diagnose() {
   const config = loadConfig();

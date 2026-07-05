@@ -1,6 +1,7 @@
 const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { createListener } = require('./listener');
+const { installRefreshPatch } = require('./auth-refresh-patch');
 
 function registerShutdown(log) {
   const shutdown = (signal) => {
@@ -39,6 +40,7 @@ function sleep(ms) {
 async function main() {
   const config = loadConfig();
   const log = createLogger(config);
+  installRefreshPatch({ log });
   const listener = createListener({ config, log });
 
   registerShutdown(log);
