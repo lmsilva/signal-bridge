@@ -106,22 +106,25 @@ function timerDisplaySeconds(timers, config, event = null) {
   return base;
 }
 
-function buildAirQualityPayload(event, config, { location, reading } = {}) {
+function buildAirQualityPayload(event, config, { location, reading, monitors } = {}) {
   const airQualityConfig = config.airQuality || {};
   const resolvedLocation = location || resolveAirQualityQueryLocation(event, airQualityConfig);
   const resolvedReading = reading || buildAirQualityReading(event, airQualityConfig);
+  const monitorList = Array.isArray(monitors) ? monitors : (resolvedReading.monitors || []);
+  const extraSeconds = Math.max(0, monitorList.length - 1) * 10;
 
   return {
     version: 2,
     type: 'air-quality.query',
     device: event.device,
     timestamp: new Date(event.timestamp || Date.now()).toISOString(),
-    displaySeconds: displaySeconds(config, airQualityConfig.displaySeconds),
+    displaySeconds: Math.max(displaySeconds(config, airQualityConfig.displaySeconds), 30 + extraSeconds),
     trigger: event.trigger || 'air-quality-query',
     query: event.query,
     spokenResponse: event.spokenResponse || null,
     location: resolvedLocation,
     reading: resolvedReading,
+    monitors: monitorList,
   };
 }
 

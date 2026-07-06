@@ -41,12 +41,19 @@ const { buildNotificationsReading, hasNotificationContent } = require('./alexa-n
 const { fetchNowPlaying } = require('./music-info');
 const { resolveDeviceType } = require('./smart-home-command');
 const { listSmarthomeEndpoints } = require('./smarthome-devices');
-const { enrichAirQualityReading } = require('./air-quality-fetch');
+const { enrichAirQualityReading, enrichAllMonitors } = require('./air-quality-fetch');
 const { enrichIndoorReading } = require('./indoor-temperature-fetch');
 const {
   buildAirQualityReading,
   resolveAirQualityQueryLocation,
 } = require('./air-quality');
+const {
+  mergeAirQualityReadings,
+  mergeMonitorLists,
+  parseMonitorSummaries,
+  parseQualitativeBand,
+  summarizeMonitorReadings,
+} = require('./air-quality-parse');
 const {
   buildIndoorReading,
   resolveIndoorQueryLocation,
@@ -371,14 +378,30 @@ function createListener({ config, log }) {
       const airQualityConfig = config.airQuality || {};
       const location = resolveAirQualityQueryLocation(event, airQualityConfig);
       let reading = buildAirQualityReading(event, airQualityConfig);
+      let monitors = reading.monitors || parseMonitorSummaries(event.spokenResponse, airQualityConfig);
+
       if (voiceSettings.fetchAirQuality) {
         try {
-          reading = await enrichAirQualityReading(alexa, location, reading, airQualityConfig);
+          if (location?.multiMonitor || monitors.length > 1) {
+            const fetchedMonitors = await enrichAllMonitors(alexa, airQualityConfig);
+            monitors = mergeMonitorLists(fetchedMonitors, monitors);
+            reading = mergeAirQualityReadings(reading, summarizeMonitorReadings(monitors, airQualityConfig));
+          } else {
+            reading = await enrichAirQualityReading(alexa, location, reading, airQualityConfig);
+          }
         } catch (error) {
           log.warn('Air quality fetch failed', error.message || error);
         }
       }
-      payload = buildAirQualityPayload(event, config, { location, reading });
+
+      if ((!reading.band || reading.band === 'unknown') && reading.iaqScore == null) {
+        const qualitative = parseQualitativeBand(event.spokenResponse, airQualityConfig);
+        if (qualitative) {
+          reading.band = qualitative;
+        }
+      }
+
+      payload = buildAirQualityPayload(event, config, { location, reading, monitors });
     } else if (event.kind === 'weather') {
       const location = extractWeatherLocation(
         event.query,

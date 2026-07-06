@@ -342,6 +342,9 @@ def format_air_quality_location(location: dict | None) -> str:
     if not location:
         return "Air Quality"
 
+    if location.get("multiMonitor"):
+        return "Indoor Air Quality"
+
     label = location.get("label")
     if label:
         return str(label)
@@ -414,6 +417,32 @@ _SPOKEN_AIR_QUALITY_SCORE_RE = re.compile(
 )
 
 
+_QUALITATIVE_BAND_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\b(?:very|pretty|really)\s+(?:good|great)\b|\bexcellent\b", re.IGNORECASE), "good"),
+    (re.compile(r"\bair\s*quality(?:'s| is)\s+(?:pretty\s+)?good\b", re.IGNORECASE), "good"),
+    (re.compile(r"\b(?:is|are|looks|sounds)\s+(?:pretty\s+)?good\b|\bfine\b|\bhealthy\b", re.IGNORECASE), "good"),
+    (re.compile(r"\bfair\b|\bacceptable\b", re.IGNORECASE), "fair"),
+    (re.compile(r"\bmoderate\b", re.IGNORECASE), "moderate"),
+    (re.compile(r"\bpoor\b|\bbad\b|\bunhealthy\b", re.IGNORECASE), "poor"),
+)
+
+
+def parse_qualitative_air_quality_band(text: str | None) -> str | None:
+    normalized = (text or "").strip()
+    if not normalized:
+        return None
+    for pattern, band in _QUALITATIVE_BAND_PATTERNS:
+        if pattern.search(normalized):
+            return band
+    if re.search(r"\bgood\b", normalized, re.IGNORECASE) and not re.search(
+        r"\b(?:not|isn't|aren't)\s+good\b",
+        normalized,
+        re.IGNORECASE,
+    ):
+        return "good"
+    return None
+
+
 def parse_spoken_air_quality(spoken: str | None) -> dict:
     text = (spoken or "").strip()
     if not text:
@@ -430,6 +459,10 @@ def parse_spoken_air_quality(spoken: str | None) -> dict:
                 except ValueError:
                     pass
                 break
+
+    qualitative = parse_qualitative_air_quality_band(text)
+    if qualitative and parsed.get("band") in (None, "unknown"):
+        parsed["band"] = qualitative
 
     temp_match = re.search(r"(-?\d{1,3})\s+degrees?", text, re.IGNORECASE)
     if temp_match:

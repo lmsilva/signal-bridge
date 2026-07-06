@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolveAirQualityLocation } = require('../src/air-quality-locations');
-const { iaqBand, parseSpokenAirQuality, resolveAirQualityLocationFromTexts } = require('../src/air-quality-parse');
+const { iaqBand, parseSpokenAirQuality, parseMonitorSummaries, resolveAirQualityLocationFromTexts } = require('../src/air-quality-parse');
 const { mapDeviceReading } = require('../src/air-quality-fetch');
 const { matchesAirQualityQuery } = require('../src/air-quality');
 const { buildAirQualityPayload } = require('../src/udp-payload');
@@ -26,6 +26,37 @@ test('parseSpokenAirQuality extracts score and location', () => {
   assert.equal(named.iaqScore, 40);
   assert.equal(named.band, 'moderate');
   assert.equal(named.locationPhrase, 'main floor');
+});
+
+test('parseSpokenAirQuality handles qualitative overall response', () => {
+  const parsed = parseSpokenAirQuality("Well, the air quality's pretty good across your home.");
+  assert.equal(parsed.iaqScore, null);
+  assert.equal(parsed.band, 'good');
+  assert.equal(parsed.locationPhrase, null);
+});
+
+test('parseMonitorSummaries extracts multiple monitors from spoken response', () => {
+  const spoken = [
+    "Well, the air quality's pretty good.",
+    'On the main floor, air quality is 88 out of 100.',
+    'The dome is fair at 62 out of 100.',
+    'The machine room air quality is good.',
+  ].join(' ');
+
+  const monitors = parseMonitorSummaries(spoken, {});
+  assert.ok(monitors.length >= 2);
+  assert.equal(monitors.find((entry) => entry.id === 'main-floor')?.iaqScore, 88);
+  assert.equal(monitors.find((entry) => entry.id === 'dome')?.band, 'fair');
+});
+
+test('resolveAirQualityLocationFromTexts uses indoor label for show indoor air quality', () => {
+  const location = resolveAirQualityLocationFromTexts(
+    'show indoor air quality',
+    "Well, the air quality's pretty good. On the main floor, air quality is 88 out of 100.",
+    {},
+  );
+  assert.equal(location.label, 'Indoor Air Quality');
+  assert.equal(location.multiMonitor, true);
 });
 
 test('resolveAirQualityLocation maps main floor monitor', () => {
@@ -110,4 +141,14 @@ test('matchesAirQualityQuery accepts named and generic air quality questions', (
     matchesAirQualityQuery('what is the air quality on main floor', 'The main floor airquality is 40 out of 100'),
     true,
   );
+  assert.equal(matchesAirQualityQuery('show indoor air quality', "Well, the air quality's pretty good."), true);
+});
+
+test('voice query parser routes show indoor air quality', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    'show indoor air quality',
+    "Well, the air quality's pretty good. On the main floor, air quality is 88 out of 100.",
+  ));
+  assert.equal(event?.kind, 'air-quality');
 });

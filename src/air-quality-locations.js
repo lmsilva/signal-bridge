@@ -55,9 +55,26 @@ function cleanupAirQualityPhrase(value) {
     .trim();
 }
 
+const INVALID_LOCATION_RE = /^(?:well(?:,\s*the)?|okay|so|sure|alright|oh|um|hmm|yes|no|the|it(?:'s| is)|this|that|indoor|inside|pretty|good|bad|fair|moderate|poor)$/i;
+
+function isValidLocationPhrase(phrase) {
+  const cleaned = cleanupAirQualityPhrase(phrase);
+  if (!cleaned || cleaned.length < 2) {
+    return false;
+  }
+  if (INVALID_LOCATION_RE.test(cleaned)) {
+    return false;
+  }
+  if (/^well,?\s/i.test(cleaned)) {
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
   DEFAULT_AIR_QUALITY_MONITORS,
   cleanupAirQualityPhrase,
   getAirQualityMonitors,
+  isValidLocationPhrase,
   resolveAirQualityLocation,
 };

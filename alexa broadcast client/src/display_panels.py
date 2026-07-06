@@ -31,6 +31,7 @@ from src.payload_utils import (
     indoor_comfort_band,
     normalize_condition,
     parse_iso_timestamp,
+    parse_qualitative_air_quality_band,
     parse_spoken_air_quality,
     parse_spoken_battery_percent,
     parse_spoken_indoor,
@@ -1214,6 +1215,7 @@ class AirQualityPanel(BasePanel):
         location = payload.get("location") or {}
         reading = payload.get("reading") or {}
         spoken = payload.get("spokenResponse") or ""
+        monitors = list(payload.get("monitors") or reading.get("monitors") or [])
         spoken_bits = parse_spoken_air_quality(spoken)
         air_config = self.config.get("airQuality") or {}
 
@@ -1227,6 +1229,10 @@ class AirQualityPanel(BasePanel):
             fair_min=air_config.get("fairMin", 60),
             moderate_min=air_config.get("moderateMin", 40),
         )
+        if band == "unknown":
+            qualitative = parse_qualitative_air_quality_band(spoken)
+            if qualitative:
+                band = qualitative
         band_color = self.BAND_COLORS.get(band, self.BAND_COLORS["unknown"])
         location_name = format_air_quality_location(location)
 
@@ -1258,7 +1264,9 @@ class AirQualityPanel(BasePanel):
             if values.get(key) is not None
         ]
         block_height = 220 + (stat_gap + stat_row_h if available_metrics else 0)
-        block_top = area_top + max(0, (bottom - area_top - block_height) // 2)
+        if monitors:
+            block_height = min(block_height, 180)
+        block_top = area_top + max(0, (bottom - area_top - block_height - len(monitors) * 64) // 2)
 
         hero_bottom = self._draw_iaq_hero(
             center_x,
@@ -1271,7 +1279,18 @@ class AirQualityPanel(BasePanel):
             chip,
         )
 
-        if available_metrics:
+        if monitors:
+            self._draw_monitor_rows(
+                x,
+                width,
+                hero_bottom + 18,
+                bottom - 48,
+                monitors,
+                chip=chip,
+                text=text,
+                muted=muted,
+            )
+        elif available_metrics:
             stat_y = hero_bottom + stat_gap
             col_count = len(available_metrics)
             col_gap = 10
@@ -1302,7 +1321,7 @@ class AirQualityPanel(BasePanel):
 
         if iaq_score is None:
             summary = spoken_bits.get("summary") or reading.get("summary")
-            if summary:
+            if summary and not monitors:
                 self._track(
                     self.canvas.create_text(
                         center_x,
@@ -1315,6 +1334,96 @@ class AirQualityPanel(BasePanel):
                         justify="center",
                     )
                 )
+            elif summary and monitors:
+                self._track(
+                    self.canvas.create_text(
+                        center_x,
+                        bottom - 8,
+                        anchor="s",
+                        text=summary if len(summary) <= 120 else f"{summary[:117].rstrip()}…",
+                        fill=muted,
+                        font=self.shell.chip_label_font,
+                        width=max(280, width - 80),
+                        justify="center",
+                    )
+                )
+
+    def _draw_monitor_rows(
+        self,
+        x: float,
+        width: float,
+        y: float,
+        bottom: float,
+        monitors: list[dict],
+        *,
+        chip: str,
+        text: str,
+        muted: str,
+    ) -> float:
+        cursor = y
+        row_h = 54
+        gap = 10
+        card_x = x + 4
+        card_w = width - 8
+
+        for monitor in monitors[:4]:
+            if cursor + row_h > bottom:
+                break
+
+            label = str(monitor.get("label") or "Monitor")
+            score = monitor.get("iaqScore")
+            if score is None and isinstance(monitor.get("reading"), dict):
+                score = monitor["reading"].get("iaqScore")
+            band = str(monitor.get("band") or "unknown")
+            band_color = self.BAND_COLORS.get(band, self.BAND_COLORS["unknown"])
+            status = air_quality_band_label(band)
+            if score is not None:
+                status = f"{status} · {int(float(score))}"
+
+            self._track(
+                self.canvas.create_rectangle(
+                    card_x,
+                    cursor,
+                    card_x + card_w,
+                    cursor + row_h,
+                    fill=chip,
+                    outline=band_color,
+                    width=2,
+                )
+            )
+            self._track(
+                self.canvas.create_rectangle(
+                    card_x,
+                    cursor,
+                    card_x + 6,
+                    cursor + row_h,
+                    fill=band_color,
+                    outline="",
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    card_x + 18,
+                    cursor + row_h / 2,
+                    anchor="w",
+                    text=label,
+                    fill=text,
+                    font=self.shell.section_label_font,
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    card_x + card_w - 16,
+                    cursor + row_h / 2,
+                    anchor="e",
+                    text=status,
+                    fill=band_color,
+                    font=self.shell.body_font,
+                )
+            )
+            cursor += row_h + gap
+
+        return cursor
 
     def _draw_air_quality_stat(
         self,

@@ -1,5 +1,5 @@
 const { normalizeText } = require('./indoor-locations');
-const { getAirQualityMonitors } = require('./air-quality-locations');
+const { getAirQualityMonitors, resolveAirQualityLocation } = require('./air-quality-locations');
 const { iaqBand, mergeAirQualityReadings } = require('./air-quality-parse');
 const {
   collectCapabilityStates,
@@ -350,6 +350,50 @@ async function fetchAirQualityReading(alexa, location, config = {}) {
   }
 }
 
+async function enrichAllMonitors(alexa, config = {}) {
+  const monitors = getAirQualityMonitors(config);
+  const endpoints = await listCachedEndpoints(alexa);
+  const results = [];
+
+  for (const monitor of monitors) {
+    const location = resolveAirQualityLocation(monitor.label, config);
+    const match = findMatchingDevice(endpoints, location);
+    if (!match) {
+      continue;
+    }
+
+    try {
+      const state = await queryEndpointState(alexa, match);
+      const normalized = normalizeStateResponse(state);
+      const parsed = parsePhoenixState(normalized);
+      const hasSensorData = [
+        parsed.iaqScore,
+        parsed.temperatureF,
+        parsed.humidity,
+        parsed.pm25,
+        parsed.co,
+        parsed.voc,
+      ].some((value) => value != null);
+
+      const reading = hasSensorData
+        ? { ...parsed, source: 'smarthome' }
+        : mapDeviceReading({ ...match.raw, ...(normalized || {}) });
+
+      results.push({
+        id: monitor.id,
+        label: monitor.label,
+        iaqScore: reading.iaqScore ?? null,
+        band: reading.band || 'unknown',
+        reading,
+      });
+    } catch (error) {
+      // skip failed monitor fetch
+    }
+  }
+
+  return results;
+}
+
 async function enrichAirQualityReading(alexa, location, spokenReading, config = {}) {
   const sensorReading = await fetchAirQualityReading(alexa, location, config);
   if (!sensorReading) {
@@ -360,6 +404,7 @@ async function enrichAirQualityReading(alexa, location, spokenReading, config = 
 
 module.exports = {
   enrichAirQualityReading,
+  enrichAllMonitors,
   fetchAirQualityReading,
   findMatchingDevice,
   mapDeviceReading,
