@@ -19,6 +19,13 @@ def bundled_resource(name: str) -> Path:
     return app_root() / name
 
 
+def asset_path(name: str) -> Path:
+    external = app_root() / "assets" / name
+    if external.exists():
+        return external
+    return bundled_resource(Path("assets") / name)
+
+
 def ensure_config_file() -> Path:
     config_path = app_root() / "config.json"
     if config_path.exists():

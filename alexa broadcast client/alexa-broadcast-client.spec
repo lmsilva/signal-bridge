@@ -6,7 +6,7 @@ a = Analysis(
     ['src/main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('config.json', '.')],
+    datas=[('config.json', '.'), ('assets', 'assets')],
     hiddenimports=[
         'pystray',
         'pystray._win32',
@@ -66,7 +66,7 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='alexa-broadcast-client',
+    name='alexa broadcast client',
 )
 
 test_a = Analysis(

@@ -5,7 +5,18 @@ import tkinter as tk
 from dataclasses import dataclass
 from tkinter import font as tkfont
 
-from src.display_panels import AirQualityPanel, BroadcastPanel, IndoorTemperaturePanel, TimePanel, TimerPanel, WeatherPanel
+from src.display_panels import (
+    AirQualityPanel,
+    BroadcastPanel,
+    IndoorTemperaturePanel,
+    MusicPanel,
+    ShoppingListPanel,
+    SmartHomePanel,
+    TeslaBatteryPanel,
+    TimePanel,
+    TimerPanel,
+    WeatherPanel,
+)
 from src.payload_utils import resolve_display_type, title_for_display_type
 from src.weather_fetch import enrich_weather_payload
 
@@ -103,6 +114,10 @@ class OverlayWindow:
             "indoor-temperature.query": IndoorTemperaturePanel(self.root, self.shell, self.config),
             "air-quality.query": AirQualityPanel(self.root, self.shell, self.config),
             "timer.snapshot": TimerPanel(self.root, self.shell, self.config),
+            "shopping-list.snapshot": ShoppingListPanel(self.root, self.shell, self.config),
+            "music.playing": MusicPanel(self.root, self.shell, self.config),
+            "smart-home.command": SmartHomePanel(self.root, self.shell, self.config),
+            "tesla-battery.query": TeslaBatteryPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 

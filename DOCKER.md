@@ -152,17 +152,18 @@ PROXY_PORT=3457 PROXY_OWN_IP=192.168.1.10 ./reauth.sh
 ## 5. Updates
 
 The NAS has no git. The shared folder **is** the working copy — code edited on the
-PC (and pushed to GitHub from there) is already on the NAS. To pick up code changes,
-just rebuild and restart the container:
+PC is already on the NAS. **`./src` is bind-mounted** into the container, so JavaScript
+changes apply on restart **without** rebuilding the image:
 
 ```bash
 cd /share/Container/alexa-broadcast-bridge
-./recreate.sh --build
+./recreate.sh
 ```
 
-If the QNAP build fails (common Container Station/ZFS issue), restart on the
-existing image with `./recreate.sh` — but note that code changes only take effect
-after a successful image rebuild.
+Only use `./recreate.sh --build` when you changed `Dockerfile` or `package.json`
+(and only if Container Station build works). If build fails with a ZFS/graph error,
+`recreate.sh` falls back to restart with the existing image — your `src/` changes
+still load.
 
 Session and `broadcast.txt` are on mounted volumes and are preserved.
 
@@ -214,6 +215,7 @@ docker compose logs -f
 ```
 | Listener exits / auth errors | Run `./reauth.sh` or auth compose; copy fresh session from PC |
 | `bind: address already in use` on port 3456 | Stop listener + `docker rm -f alexa-broadcast-auth`; use updated `docker-compose.auth.yml` with `network_mode: host` (no `ports:`) |
+| `failed to read dockerfile` / `error creating zfs mount` on build | QNAP Container Station Docker graph bug — **ignore for code updates**. Run `./recreate.sh` (no `--build`); `src/` is bind-mounted. To fix builds: restart Container Station in QNAP, or `docker system prune`, or build image on a PC and `docker load` |
 | No broadcasts captured | Check logs; test announce on Echo; confirm push connected |
 | Re-auth on QNAP | Stop listener, run `docker-compose.auth.yml`, then `docker compose up -d` |
 | Windows client not receiving | Add PC IP to `udpBroadcast.targets`; check Windows firewall on port 47832 |

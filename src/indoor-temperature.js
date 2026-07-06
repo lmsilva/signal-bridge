@@ -2,11 +2,10 @@ const { cleanupLocationPhrase, normalizeText, resolveIndoorLocation } = require(
 const { parseIndoorReading } = require('./indoor-reading-parse');
 
 const OUTDOOR_MARKERS_RE = /\b(?:outside|outdoors|out\s+there|weather)\b/i;
+const INDOOR_MARKERS_RE = /\b(?:inside|indoors|in\s+here|in\s+the\s+house)\b/i;
 const INDOOR_TEMPERATURE_PREP_RE = /\b(?:temperature|temp)\s+(?:on|in|at|of|for)\s+(?:the\s+)?/i;
 const INDOOR_HUMIDITY_PREP_RE = /\bhumidity\s+(?:on|in|at|of|for)\s+(?:the\s+)?/i;
 const INDOOR_LOCATION_PREP_RE = /\b(?:on|in|at)\s+(?:the\s+)?(.+?)(?:\?|[.!]|$)/i;
-const INDOOR_SPOKEN_TEMP_RE = /\b(?:oh\s+)?(?:it's|it is|shows?|reads?)\s+\d{1,3}(?:\.\d+)?\s+degrees?\b/i;
-const INDOOR_SPOKEN_HUMIDITY_RE = /\bhumidity(?:\s+of|\s+on|\s+in|\s+at|\s+for)?\s+[\w\s']+?\s+is\s+\d{1,3}\s*(?:%|percent)?/i;
 
 function extractIndoorLocationPhrase(text) {
   const normalized = normalizeText(text);
@@ -89,12 +88,19 @@ function isIndoorTemperatureQuery(summary) {
   if (OUTDOOR_MARKERS_RE.test(normalized) && !INDOOR_TEMPERATURE_PREP_RE.test(normalized)) {
     return false;
   }
+  if (INDOOR_MARKERS_RE.test(normalized)) {
+    return true;
+  }
   return Boolean(extractIndoorLocationPhrase(normalized));
 }
 
+// Routing contract: a generic "what's the temperature" ALWAYS means outdoor.
+// Indoor only when the user says "inside"/"indoors" or names a location
+// ("temperature in Room 16's bedroom"). The spoken response is only consulted
+// when there is no query summary at all (push activity without transcript).
 function matchesIndoorQuery(summary, response) {
   const normalizedSummary = normalizeText(summary);
-  const normalizedResponse = normalizeText(response);
+  void response;
 
   if (isExplicitOutdoorTemperatureQuery(normalizedSummary)) {
     return false;
@@ -106,48 +112,6 @@ function matchesIndoorQuery(summary, response) {
 
   if (isIndoorTemperatureQuery(normalizedSummary)) {
     return true;
-  }
-
-  const spokenReading = parseIndoorReading(normalizedResponse, {});
-  const responseLocation = extractIndoorLocationPhrase(normalizedResponse)
-    || spokenReading.locationPhrase
-    || extractIndoorLocationPhrase(normalizedSummary);
-
-  if (/\b(?:temperature|temp)\b/i.test(normalizedSummary) && responseLocation) {
-    if (!/^(?:outside|outdoors|out\s+there)$/i.test(responseLocation)) {
-      return true;
-    }
-  }
-
-  if (normalizedResponse) {
-    if (INDOOR_SPOKEN_HUMIDITY_RE.test(normalizedResponse)) {
-      return true;
-    }
-
-    if (
-      spokenReading.temperatureF != null
-      && spokenReading.locationPhrase
-      && !/\b(?:sunny|cloudy|rain|snow|wind|forecast|high of|low of)\b/i.test(normalizedResponse)
-    ) {
-      return true;
-    }
-
-    if (
-      INDOOR_SPOKEN_TEMP_RE.test(normalizedResponse)
-      && spokenReading.locationPhrase
-      && !/\b(?:sunny|cloudy|rain|snow|wind|forecast|high of|low of)\b/i.test(normalizedResponse)
-    ) {
-      return true;
-    }
-  }
-
-  if (!normalizedSummary && normalizedResponse) {
-    if (INDOOR_SPOKEN_HUMIDITY_RE.test(normalizedResponse)) {
-      return true;
-    }
-    if (INDOOR_SPOKEN_TEMP_RE.test(normalizedResponse) && !/\b(?:sunny|cloudy|rain|snow|wind|forecast)\b/i.test(normalizedResponse)) {
-      return true;
-    }
   }
 
   return false;

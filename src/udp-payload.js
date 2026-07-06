@@ -149,6 +149,75 @@ function buildIndoorTemperaturePayload(event, config, { location, reading } = {}
   };
 }
 
+function buildShoppingListPayload(event, config, { list } = {}) {
+  const items = list?.items || [];
+  // Client pages roughly 8 items per screen and rotates pages every 15s.
+  const pages = Math.max(1, Math.ceil(items.length / 8));
+
+  return {
+    version: 2,
+    type: 'shopping-list.snapshot',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: Math.max(displaySeconds(config), pages * 15 + 5),
+    trigger: event.trigger || 'shopping-list-show',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    listName: list?.name || 'Shopping List',
+    items,
+    addedItem: event.addedItem || null,
+  };
+}
+
+function buildMusicPayload(event, config, { nowPlaying } = {}) {
+  return {
+    version: 2,
+    type: 'music.playing',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: displaySeconds(config),
+    trigger: event.trigger || 'music-play',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    music: nowPlaying || null,
+  };
+}
+
+function buildTeslaBatteryPayload(event, config, { battery } = {}) {
+  return {
+    version: 2,
+    type: 'tesla-battery.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: displaySeconds(config),
+    trigger: event.trigger || 'tesla-battery-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    battery: battery || null,
+  };
+}
+
+function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
+  const spokenTarget = event.command?.target || null;
+  return {
+    version: 2,
+    type: 'smart-home.command',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: Math.min(15, displaySeconds(config)),
+    trigger: event.trigger || 'smart-home-command',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    command: {
+      action: event.command?.action || null,
+      target: spokenTarget || matchedName || null,
+      spokenTarget,
+      matchedName: matchedName || null,
+      deviceType: deviceType || 'device',
+    },
+  };
+}
+
 function buildTimerSnapshotPayload({
   timers,
   device,
@@ -174,6 +243,10 @@ module.exports = {
   buildWeatherQueryPayload,
   buildIndoorTemperaturePayload,
   buildAirQualityPayload,
+  buildShoppingListPayload,
+  buildMusicPayload,
+  buildTeslaBatteryPayload,
+  buildSmartHomePayload,
   buildTimerSnapshotPayload,
   displaySeconds,
   timerDisplaySeconds,

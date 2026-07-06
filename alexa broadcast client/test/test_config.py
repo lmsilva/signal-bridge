@@ -25,14 +25,14 @@ class ConfigTests(unittest.TestCase):
         }
         self.assertEqual(effective_display_seconds(payload, config), 120)
 
-    def test_ignores_empty_timer_snapshot(self):
+    def test_empty_list_snapshot_shown(self):
         payload = {
             "type": "timer.snapshot",
             "displaySeconds": 120,
             "event": {"kind": "list"},
             "timers": [],
         }
-        self.assertFalse(BroadcastClientApp._timer_payload_has_content(payload))
+        self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
 
     def test_accepts_started_timer_snapshot(self):
         payload = {

@@ -7,6 +7,8 @@ from src.payload_utils import (
     air_quality_band,
     air_quality_band_label,
     format_air_quality_location,
+    battery_level_color,
+    format_battery_percent,
     format_duration,
     format_indoor_location,
     format_timer_clock,
@@ -16,12 +18,15 @@ from src.payload_utils import (
     is_display_payload,
     normalize_condition,
     parse_spoken_air_quality,
+    parse_spoken_battery_percent,
     parse_spoken_indoor,
     parse_spoken_weather,
     resolve_display_type,
+    sample_hourly_indices,
     timer_detail_line,
     timer_title,
     title_for_display_type,
+    voc_band_label,
 )
 
 
@@ -36,6 +41,14 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "indoor-temperature.query"}), "indoor-temperature.query")
         self.assertEqual(resolve_display_type({"type": "air-quality.query"}), "air-quality.query")
         self.assertEqual(resolve_display_type({"type": "timer.snapshot", "timers": []}), "timer.snapshot")
+        self.assertEqual(resolve_display_type({"type": "tesla-battery.query"}), "tesla-battery.query")
+
+    def test_battery_helpers(self):
+        self.assertEqual(format_battery_percent(78), "78%")
+        self.assertEqual(parse_spoken_battery_percent("your battery is 80 percent"), 80)
+        self.assertEqual(battery_level_color(0), "#ef4444")
+        self.assertEqual(battery_level_color(100), "#22c55e")
+        self.assertEqual(title_for_display_type("tesla-battery.query"), ("Alexa", "Tesla Battery"))
 
     def test_is_display_payload(self):
         self.assertTrue(is_display_payload({"type": "time.query", "device": "Kitchen"}))
@@ -105,6 +118,15 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(normalize_condition("clear-night"), "clear-night")
         self.assertEqual(normalize_condition("clear_night"), "clear-night")
         self.assertEqual(normalize_condition("clear"), "sunny")
+
+    def test_voc_band_label(self):
+        self.assertEqual(voc_band_label(1), "Low")
+        self.assertEqual(voc_band_label(50), "Elevated")
+        self.assertEqual(voc_band_label(90), "High")
+
+    def test_sample_hourly_indices_spans_full_window(self):
+        self.assertEqual(sample_hourly_indices(24, 6), [0, 5, 9, 14, 18, 23])
+        self.assertEqual(sample_hourly_indices(24, 1), [0])
 
     def test_format_timer_labels(self):
         self.assertEqual(format_timer_set_label(300), "5 min timer")

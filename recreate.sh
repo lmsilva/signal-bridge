@@ -1,14 +1,33 @@
 #!/bin/bash
 set -e
+cd "$(dirname "$0")"
 
-# The NAS has no git; stop buildx from trying to capture commit info
-# ("current commit information was not captured by the build" warning).
+# NAS has no git; stop buildx provenance warning.
 export BUILDX_GIT_INFO=false
 
-# Restart using the existing image (works on QNAP when Docker build is broken).
-# Use ./recreate.sh --build only when you changed Dockerfile/deps and build works.
-if [[ "$1" == "--build" ]]; then
-  docker compose up -d --build --force-recreate
-else
+# ./src is bind-mounted into the container (docker-compose.yml). Code edits on the
+# share apply on restart — you do NOT need a successful docker build for JS changes.
+restart_container() {
   docker compose up -d --no-build --force-recreate
+}
+
+if [[ "$1" == "--build" ]]; then
+  echo "Attempting image rebuild (optional — src/ is bind-mounted)..."
+  if docker compose build; then
+    echo "Build OK."
+    docker compose up -d --force-recreate
+  else
+    echo ""
+    echo "WARN: docker build failed (QNAP Container Station ZFS errors are common)."
+    echo "      Your ./src folder is mounted into the container — restarting with"
+    echo "      the existing image still picks up code changes."
+    echo ""
+    restart_container
+  fi
+else
+  echo "Restarting listener (./src mounted — code changes apply without rebuild)..."
+  restart_container
 fi
+
+echo ""
+echo "Done. Logs: docker compose logs -f"

@@ -338,6 +338,24 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "tesla-battery":
+        percent = max(0, min(100, int(getattr(args, "percent", 78))))
+        return {
+            "version": 2,
+            "type": "tesla-battery.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "show my tesla battery",
+            "spokenResponse": f"Your battery is at {percent} percent",
+            "battery": {
+                "percent": percent,
+                "model": "Model Y",
+                "label": "Battery",
+            },
+        }
+
     raise ValueError(f"Unknown type: {args.type}")
 
 
@@ -365,10 +383,11 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "tesla-battery"],
         default="broadcast",
         help="Payload type to send",
     )
+    parser.add_argument("--percent", type=int, default=78, help="Battery percent for --type tesla-battery")
     parser.add_argument("--message", default="This is a test broadcast message", help="Broadcast message body")
     parser.add_argument("--sender", default="Kitchen Echo", help="Sender/device label")
     parser.add_argument("--destination", default="All devices", help="Broadcast destination label")

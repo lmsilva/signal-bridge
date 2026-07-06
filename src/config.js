@@ -78,6 +78,10 @@ function loadConfig() {
     ROOT,
     config.timerSync?.mirrorFile || 'data/timer-mirror.json',
   );
+  config.shoppingListCachePath = path.resolve(
+    ROOT,
+    config.shoppingListCacheFile || 'data/shopping-list-cache.json',
+  );
 
   return config;
 }

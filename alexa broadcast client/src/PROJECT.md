@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-05
+**Last updated:** 2026-07-06
 
 ---
 
@@ -41,7 +41,7 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 | `src/paths.py` | Resolve config path for dev vs portable build |
 | `config.json` | User settings (port, fade, display caps, colors) |
 | `run.bat` | Dev: venv + `python src/main.py` |
-| `build_portable.bat` | PyInstaller → `dist/alexa-broadcast-client/` (uses `%LOCALAPPDATA%` venv on NAS shares) |
+| `build_portable.bat` | PyInstaller → `dist/alexa broadcast client/` (uses `%LOCALAPPDATA%` venv on NAS shares) |
 | `alexa-broadcast-client.spec` | PyInstaller spec + hidden imports |
 | `requirements-build.txt` | PyInstaller + runtime deps for portable build |
 | `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor …`) |
@@ -77,6 +77,11 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `indoor-temperature.query` | Indoor thermostat reading — location label, temp/humidity, cold/comfort/hot icon |
 | `air-quality.query` | IAQ score ring + sensor tiles (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Active timers with **names**, device, remaining, duration; fired alert names timer + device |
+| `shopping-list.snapshot` | Shopping list items with paging |
+| `music.playing` | Large centered album art + track info |
+| `smart-home.command` | Device on/off panel |
+| `tesla-battery.query` | Model Y image + battery % bar from custom routine |
+
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
 
@@ -84,7 +89,7 @@ Test locally:
 
 ```bash
 python test/send_test.py --type broadcast
-python test/send_test.py --type time --seconds 30
+python test/send_test.py --type tesla-battery --percent 78 --seconds 30
 python test/send_test.py --type weather --seconds 45
 python test/send_test.py --type indoor --seconds 45
 python test/send_test.py --type indoor-humidity --seconds 45
@@ -115,12 +120,12 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Packaging
 
 - **Dev:** `run.bat` → `.venv`, `pip install -r requirements.txt`, `python src/main.py`
-- **Portable:** `build_portable.bat` → output folder **`dist/alexa-broadcast-client/`** (not `dist/` root)
+- **Portable:** `build_portable.bat` → output folder **`dist/alexa broadcast client/`** (not `dist/` root)
   - Run **`Run Alexa Broadcast Client.bat`** inside that folder (same level as `alexa-broadcast-client.exe`)
   - Build venv: `%LOCALAPPDATA%\alexa-broadcast-client-build-venv` (avoids broken pip on NAS `.venv`)
   - Includes weather/timer test batch files in output
-- **Distributable zip:** `build_portable.bat` also writes **`dist/alexa-broadcast-client-portable.zip`**
-  - Contains the `alexa-broadcast-client/` folder; extract on the display PC and run the launcher bat
+- **Distributable zip:** `build_portable.bat` also writes **`dist/alexa broadcast client.zip`**
+  - Contains the `alexa broadcast client/` folder; extract on the display PC and run the launcher bat
 - **Auto-start:** shortcut in `shell:startup` on Windows
 
 **Portable build:** run `build_portable.bat --no-pause` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally.
@@ -173,6 +178,10 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-06: Shopping list rows are compact, left-aligned, body font (20px landscape), thin accent stripe (no bullets).
+- 2026-07-06: Tesla battery bar lowered below car image; repeat voice commands show again after dedup fix on bridge.
+- 2026-07-06: Tesla battery panel shows colorized 0–100% bar (red→green) with centered percent; portable build prefers `assets/` next to exe over bundled copy.
+- 2026-07-05: No display queue — new UDP payloads replace the active overlay. VOC tile shows human band (Low/Elevated/High). Weather hourly strip samples across full 24h. Shopping list, now playing, and smart-home panels (paginated list with dot indicator, 15s/page).
 - 2026-07-05: `build_portable.bat` kills any running `alexa-broadcast-client.exe`/`send-test.exe` before building, zips with `tar` (Compress-Archive choked on locked files), and fails loudly if the zip can't be written.
 - 2026-07-04: Weather fixes — Alexa's spoken current temperature wins the hero number; `clear-night` condition + crescent moon icon after dark (`is_day` from Open-Meteo); hourly "Now"/daily "Today" highlighted cards; hourly labels shown in the forecast location's local time; "Feels like" detail. Removed leftover files (`Run Portable.bat`, `run_long_test.bat`, `run_weather_timer_test.bat` — use `run_test.bat` with args).
 - 2026-07-04: Portable build is on user request only — agents do not auto-run `build_portable.bat` after display edits.

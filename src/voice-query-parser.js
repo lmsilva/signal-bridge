@@ -1,11 +1,16 @@
 const { getActivityId, getDeviceName } = require('./parser');
+const { extractSpokenResponse } = require('./activity-response');
 const { matchesIndoorQuery } = require('./indoor-temperature');
 const { matchesAirQualityQuery } = require('./air-quality');
+const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
+const { matchesMusicQuery } = require('./music-info');
+const { matchesTeslaBatteryQuery } = require('./tesla-battery');
+const { parseSmartHomeCommand } = require('./smart-home-command');
 
 const TIME_QUERY_RE = /\b(?:what(?:'s|\s+is|\s+was)?\s+(?:the\s+)?time(?:\s+is\s+it)?|tell\s+me\s+(?:the\s+)?time|do\s+you\s+have\s+(?:the\s+)?time|time\s+please)\b/i;
 const WEATHER_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?(?:weather(?:\s+like)?|temperature|temp|forecast)|how(?:'s|\s+is)\s+(?:the\s+)?(?:weather|temperature|temp)|weather\s+(?:in|for|at|outside|today|tomorrow)|(?:is\s+it|will\s+it)\s+(?:rain|snow|sunny|cloudy|cold|hot|warm)|temperature(?:\s+outside|\s+today|\s+now|\s+in|\s+for|\s+at)?|how\s+(?:hot|cold|warm)\s+is\s+it|tell\s+me\s+(?:the\s+)?(?:weather|temperature|temp)|give\s+me\s+(?:the\s+)?(?:weather|temperature|temp)|what\s+is\s+it\s+like\s+outside)\b/i;
 const WEATHER_ANSWER_RE = /\b(?:(?:it's|it is|currently|right now|today|tonight).*(?:\d{1,3}\s+degrees|sunny|cloudy|rain|snow|wind|humidity|fahrenheit|celsius)|(?:\d{1,3}\s+degrees)\s+and\s+(?:sunny|cloudy|rainy|snowy|windy))\b/i;
-const SHOW_TIMERS_RE = /\b(?:show|list)\s+(?:all\s+|my\s+)?timers\b|\bwhat are my timers\b|\bhow much time is left on(?: my)? timers?\b/i;
+const SHOW_TIMERS_RE = /\b(?:show|list)\s+(?:me\s+)?(?:all\s+|my\s+)*timers?\b|\bwhat (?:are my timers|timers do i have)\b|\bhow much time is left on(?: my)? timers?\b/i;
 const TIMER_SET_RE = /\b(?:set|start|create|add)\b(?:(?!\btime\b).)*\b(?:timer|countdown|alarm)\b|\b(?:timer|countdown|alarm)\s+(?:for|to)\s+(?:\d|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+(?:timer|countdown|alarm)\b|\b(?:set|start)\s+(?:a\s+)?(?:timer|countdown|alarm)\s+(?:for\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+/i;
 const TIMER_SET_SPOKEN_RE = /\b(?:(?:starting|counting)\s+(?:now|down)|(?:timer|countdown|alarm)\s+(?:is\s+)?(?:set|started|on)|starting\s+(?:a|your)\s+\d|\d\s+(?:minute|min|hour|hr|second|sec)s?\s+(?:timer|countdown|alarm)\s+(?:starting|set))\b/i;
 const TIMER_CANCEL_RE = /\b(?:cancel|stop|delete|clear|remove)(?:\s+(?:the|my|all|a|an))?(?:\s+\S+){0,3}\s+(?:timers?|countdowns?|alarms?)\b|\bcancel\s+all\b/i;
@@ -52,13 +57,68 @@ function createVoiceQueryParser() {
 
   function parse(activity) {
     const summary = normalizeText(activity?.description?.summary);
-    const response = normalizeText(activity?.alexaResponse);
+    const response = extractSpokenResponse(activity);
     const device = getDeviceName(activity);
+    const deviceSerial = activity?.deviceSerialNumber || activity?.serialNumber || null;
     const activityId = getActivityId(activity);
     const timestamp = activity?.creationTimestamp || Date.now();
 
     if (!summary && !response) {
       return null;
+    }
+
+    if (matchesShoppingListQuery(summary, response)) {
+      return {
+        kind: 'shopping-list',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: shoppingListTrigger(summary, response),
+      };
+    }
+
+    if (matchesTeslaBatteryQuery(summary, response)) {
+      return {
+        kind: 'tesla-battery',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'tesla-battery-query',
+      };
+    }
+
+    const smartHomeCommand = parseSmartHomeCommand(summary);
+    if (smartHomeCommand) {
+      return {
+        kind: 'smart-home',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'smart-home-command',
+        command: smartHomeCommand,
+      };
+    }
+
+    if (matchesMusicQuery(summary, response)) {
+      return {
+        kind: 'music',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'music-play',
+      };
     }
 
     if (matchesAirQualityQuery(summary, response)) {

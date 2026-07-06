@@ -4,9 +4,23 @@ from datetime import datetime, timezone
 import re
 
 
+DISPLAY_TYPES = (
+    "broadcast",
+    "time.query",
+    "weather.query",
+    "indoor-temperature.query",
+    "air-quality.query",
+    "timer.snapshot",
+    "shopping-list.snapshot",
+    "music.playing",
+    "smart-home.command",
+    "tesla-battery.query",
+)
+
+
 def resolve_display_type(payload: dict) -> str:
     explicit = payload.get("type")
-    if explicit in ("broadcast", "time.query", "weather.query", "indoor-temperature.query", "air-quality.query", "timer.snapshot"):
+    if explicit in DISPLAY_TYPES:
         return explicit
 
     if payload.get("message"):
@@ -27,6 +41,10 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "indoor-temperature.query": ("Alexa", "Indoor"),
         "air-quality.query": ("Alexa", "Air Quality"),
         "timer.snapshot": ("Alexa", "Timers"),
+        "shopping-list.snapshot": ("Alexa", "Shopping List"),
+        "music.playing": ("Alexa", "Now Playing"),
+        "smart-home.command": ("Alexa", "Smart Home"),
+        "tesla-battery.query": ("Alexa", "Tesla Battery"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 
@@ -107,6 +125,23 @@ def timer_detail_line(timer: dict | None, device: str, *, finished: bool = False
     if finished:
         return f"{line} — finished"
     return line
+
+
+def sample_hourly_indices(total: int, slots: int) -> list[int]:
+    """Pick indices spanning a full hourly forecast: always index 0 ("Now"),
+    then evenly spaced so the last pick is the final available hour."""
+    if total <= 0 or slots <= 0:
+        return []
+    if total <= slots:
+        return list(range(total))
+    if slots == 1:
+        return [0]
+    picks: list[int] = []
+    for i in range(slots):
+        index = round(i * (total - 1) / (slots - 1))
+        if index not in picks:
+            picks.append(index)
+    return picks
 
 
 def normalize_condition(condition: str | None) -> str:
@@ -241,6 +276,55 @@ def parse_spoken_indoor(spoken: str | None) -> dict:
     return parsed
 
 
+def battery_level_color(percent: int | float | None) -> str:
+    """Interpolate red (0%) -> green (100%)."""
+    if percent is None:
+        return "#64748b"
+    try:
+        value = max(0.0, min(100.0, float(percent)))
+    except (TypeError, ValueError):
+        return "#64748b"
+    red = (0xEF, 0x44, 0x44)
+    green = (0x22, 0xC5, 0x5E)
+    ratio = value / 100.0
+    parts = [int(red[i] + (green[i] - red[i]) * ratio) for i in range(3)]
+    return f"#{parts[0]:02x}{parts[1]:02x}{parts[2]:02x}"
+
+
+def format_battery_percent(value: int | float | None) -> str:
+    if value is None:
+        return "—"
+    try:
+        numeric = int(round(float(value)))
+    except (TypeError, ValueError):
+        return "—"
+    return f"{max(0, min(100, numeric))}%"
+
+
+_BATTERY_PERCENT_RE = re.compile(
+    r"\b(?:your|the)\s+battery\s+is\s+(?:at\s+)?(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])|"
+    r"\bbattery(?:\s+level)?\s+(?:is\s+)?(?:at\s+)?(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])|"
+    r"\b(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])",
+    re.IGNORECASE,
+)
+
+
+def parse_spoken_battery_percent(spoken: str | None) -> int | None:
+    text = (spoken or "").strip()
+    if not text:
+        return None
+    match = _BATTERY_PERCENT_RE.search(text)
+    if not match:
+        return None
+    for group in match.groups():
+        if group:
+            try:
+                return max(0, min(100, int(group)))
+            except ValueError:
+                return None
+    return None
+
+
 def format_temperature_f(value: float | int | None) -> str:
     if value is None:
         return "—"
@@ -289,6 +373,22 @@ def air_quality_band(
     if value >= moderate_min:
         return "moderate"
     return "poor"
+
+
+def voc_band_label(value: int | float | None) -> str:
+    """Amazon air quality monitors report VOC as a 0-100 index (lower is
+    cleaner air). Translate to a human word."""
+    if value is None:
+        return ""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if numeric <= 33:
+        return "Low"
+    if numeric <= 66:
+        return "Elevated"
+    return "High"
 
 
 def air_quality_band_label(band: str | None) -> str:

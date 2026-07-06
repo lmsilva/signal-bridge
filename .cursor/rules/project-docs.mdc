@@ -38,7 +38,7 @@ Client tests: `alexa broadcast client/test/test_*.py` — payload utils, config,
 
 Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired}`.
 
-Portable build smoke: after `build_portable.bat`, confirm `dist/alexa-broadcast-client/Run Alexa Broadcast Client.bat` exists and `dist/alexa-broadcast-client-portable.zip` was created.
+Portable build smoke: after `build_portable.bat`, confirm `dist/alexa broadcast client/Run Alexa Broadcast Client.bat` exists and `dist/alexa broadcast client.zip` was created.
 
 ## Display client packaging (on request only)
 
@@ -49,8 +49,8 @@ When the user **does** ask for a portable build:
 1. Run **`alexa broadcast client\build_portable.bat --no-pause`** from a Windows machine with Python 3.10+ (use `subst Z:` if UNC `\\nas\...` breaks `cmd`).
 2. **Do not run** `alexa-broadcast-client.exe` or `Run Alexa Broadcast Client.bat` unless the user explicitly asks you to test locally.
 3. Confirm outputs exist:
-   - `alexa broadcast client/dist/alexa-broadcast-client/Run Alexa Broadcast Client.bat`
-   - `alexa broadcast client/dist/alexa-broadcast-client-portable.zip`
+   - `alexa broadcast client/dist/alexa broadcast client/Run Alexa Broadcast Client.bat`
+   - `alexa broadcast client/dist/alexa broadcast client.zip`
 4. Tell the user the zip path so they can copy it to the poster PC.
 
 ## Commit and push (required workflow)

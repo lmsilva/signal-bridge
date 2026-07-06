@@ -59,7 +59,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set "DIST=dist\alexa-broadcast-client"
+set "DIST=dist\alexa broadcast client"
 if not exist "%DIST%\alexa-broadcast-client.exe" (
   echo Expected output not found: %DIST%\alexa-broadcast-client.exe
   pause
@@ -115,11 +115,11 @@ echo echo.
 echo pause
 ) > "%DIST%\test\run_long_test.bat"
 
-set "ZIP=dist\alexa-broadcast-client-portable.zip"
+set "ZIP=dist\alexa broadcast client.zip"
 echo.
 echo Creating distributable zip...
 if exist "%ZIP%" del /f /q "%ZIP%"
-tar -a -c -f "%ZIP%" -C dist alexa-broadcast-client
+tar -a -c -f "%ZIP%" -C dist "alexa broadcast client"
 if errorlevel 1 goto ZipFailed
 if not exist "%ZIP%" goto ZipFailed
 

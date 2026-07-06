@@ -27,7 +27,7 @@ The build uses a local virtual environment at `%LOCALAPPDATA%\alexa-broadcast-cl
 This creates a self-contained folder:
 
 ```
-dist\alexa-broadcast-client\
+dist\alexa broadcast client\
   Run Alexa Broadcast Client.bat   ← double-click this on the poster PC
   alexa-broadcast-client.exe
   config.json                      ← edit settings here
@@ -37,15 +37,15 @@ dist\alexa-broadcast-client\
     run_test.bat
 ```
 
-**Copy the entire `alexa-broadcast-client` folder** to the poster PC (USB, network share, etc.). No Python, pip, or venv required.
+**Copy the entire `alexa broadcast client` folder** to the poster PC (USB, network share, etc.). No Python, pip, or venv required.
 
 Or copy the zip produced by the same build:
 
 ```
-dist\alexa-broadcast-client-portable.zip
+dist\alexa broadcast client.zip
 ```
 
-Extract it on the display PC (you get an `alexa-broadcast-client` folder), then run the launcher bat inside.
+Extract it on the display PC (you get an `alexa broadcast client` folder), then run the launcher bat inside.
 
 1. Double-click `Run Alexa Broadcast Client.bat`
 2. Allow through Windows Firewall when prompted (private network)

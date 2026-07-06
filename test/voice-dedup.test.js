@@ -8,8 +8,8 @@ test('marking processed after null parse prevents duplicate voice handling', () 
 
   assert.equal(parser.shouldProcess(activityId), true);
   assert.equal(parser.parse({
-    description: { summary: 'turn on the lights' },
-    alexaResponse: 'OK',
+    description: { summary: 'what is two plus two' },
+    alexaResponse: 'Four',
     name: 'Kitchen Echo',
   }), null);
 

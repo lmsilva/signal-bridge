@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-06
 
 ---
 
@@ -206,7 +206,7 @@ Example timer snapshot:
 
 Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliable from Docker.
 
-**Display PC deploy:** user runs `alexa broadcast client\build_portable.bat` when ready; output is **`alexa broadcast client/dist/alexa-broadcast-client-portable.zip`** (see client `src/PROJECT.md`). Agents build only when explicitly asked.
+**Display PC deploy:** user runs `alexa broadcast client\build_portable.bat` when ready; output is **`alexa broadcast client/dist/alexa broadcast client.zip`** (see client `src/PROJECT.md`). Agents build only when explicitly asked.
 
 ---
 
@@ -256,6 +256,11 @@ Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-07-06: Shopping list show uses API as source of truth; filters Alexa narration ("first 3", "all of them") from speech/cache merge.
+- 2026-07-06: **Fix Tesla battery + shopping list show** — defer `markProcessed` until emit (push events without Alexa response no longer block history retry); `voice-event-gate.js` waits for spoken response on shopping show too; broader speech parse for item lists.
+- 2026-07-06: Tesla/music events wait for Alexa spoken response before display; dedup allows upgrade when response arrives after empty push event.
+- 2026-07-05: Custom routine **"show my tesla battery"** → `tesla-battery.query` UDP payload with parsed battery % from Alexa's spoken answer. Config toggle: `teslaBatteryQueries`.
+- 2026-07-05: Shopping list finds Amazon `SHOPLIST` type (was missing items); persistent `data/shopping-list-cache.json` merges adds across commands; speech fallback on show when API empty.
 - 2026-07-04: DOCKER.md update flow — NAS has no git; the share is the working copy, so updates are just `./recreate.sh --build` (git push/pull happens on the PC only).
 - 2026-07-04: **Weather accuracy fix** — Open-Meteo `is_day` requested; clear skies at night map to `clear-night` (not sunny); hourly window converts location-local API times via `utc_offset_seconds` (Docker/UTC-safe) and starts at the in-progress hour. Removed stale `readme.txt` (DOCKER.md covers ops).
 - 2026-07-04: **Token keep-alive fix** — vendored patched cookie refresh that skips `/auth/register` (Amazon rejects it during refresh); tokenDate now rotates instead of dying at ~24h. New `src/auth-refresh-patch.js` + `src/vendor/alexa-cookie-refresh.js` + tests.

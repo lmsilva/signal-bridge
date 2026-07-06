@@ -10,8 +10,8 @@ if exist "%~dp0alexa-broadcast-client.exe" (
   set "PORTABLE_EXE=%~dp0alexa-broadcast-client.exe"
   goto LaunchPortable
 )
-if exist "%~dp0dist\alexa-broadcast-client\alexa-broadcast-client.exe" (
-  set "PORTABLE_EXE=%~dp0dist\alexa-broadcast-client\alexa-broadcast-client.exe"
+if exist "%~dp0dist\alexa broadcast client\alexa-broadcast-client.exe" (
+  set "PORTABLE_EXE=%~dp0dist\alexa broadcast client\alexa-broadcast-client.exe"
   goto LaunchPortable
 )
 
@@ -32,7 +32,7 @@ if not exist "%VENV_PY%" (
     echo Python is not installed on this PC.
     echo.
     echo For the movie poster PC, copy the portable build instead:
-    echo   dist\alexa-broadcast-client\
+    echo   dist\alexa broadcast client\
     echo and run "Run Alexa Broadcast Client.bat" there.
     echo.
     echo No Python or pip is required for the portable build.

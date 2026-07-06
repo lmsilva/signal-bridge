@@ -433,7 +433,11 @@ function createTimerSync({
     const hasFired = notifyEvents.some((entry) => entry.kind === 'fired');
     const hasCancel = notifyEvents.some((entry) => entry.kind === 'cancelled');
 
-    if (!activeTimers.length && !hasFired && !hasCancel && !lostTimers) {
+    // "Show my timers" should always answer, even with an empty list (the
+    // display renders "No active timers"). Followup polls stay silent when
+    // empty to avoid repeated flashes.
+    const isExplicitShow = trigger === 'show-timers';
+    if (!activeTimers.length && !hasFired && !hasCancel && !lostTimers && !isExplicitShow) {
       return;
     }
 

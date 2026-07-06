@@ -45,11 +45,11 @@ test('voice query parser detects what is the temperature', () => {
   assert.equal(event?.trigger, 'weather-query');
 });
 
-test('voice query parser routes generic temperature question with indoor spoken response', () => {
+test('voice query parser routes generic temperature to weather even when Alexa mentions a room', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity("what's the temperature", "It'Bedroom 4's room"));
-  assert.equal(event?.kind, 'indoor-temperature');
-  assert.equal(event?.trigger, 'indoor-temperature-query');
+  assert.equal(event?.kind, 'weather');
+  assert.equal(event?.trigger, 'weather-query');
 });
 
 test('voice query parser detects indoor temperature at a named location', () => {
@@ -116,6 +116,53 @@ test('voice query parser detects named timer cancel hint', () => {
   const event = parser.parse(activity('cancel the pizza timer', 'Okay'));
   assert.equal(event.kind, 'timer-hint');
   assert.equal(event.trigger, 'timer-cancel-voice');
+});
+
+test('voice query parser routes temperature inside to indoor panel', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity("what's the temperature inside", "It's 72 degrees inside"));
+  assert.equal(event?.kind, 'indoor-temperature');
+});
+
+test('voice query parser detects tesla battery routine', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('show my tesla battery', 'Your battery is at 78 percent'));
+  assert.equal(event?.kind, 'tesla-battery');
+  assert.equal(event?.trigger, 'tesla-battery-query');
+});
+
+test('voice query parser detects shopping list show command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('show my shopping list', 'You have 3 items'));
+  assert.equal(event?.kind, 'shopping-list');
+  assert.equal(event?.trigger, 'shopping-list-show');
+});
+
+test('voice query parser detects shopping list add command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('add milk to shopping list', 'I added milk'));
+  assert.equal(event?.kind, 'shopping-list');
+  assert.equal(event?.trigger, 'shopping-list-add');
+});
+
+test('voice query parser detects short add milk command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('add milk', "Okay, I've added milk to your shopping list"));
+  assert.equal(event?.kind, 'shopping-list');
+  assert.equal(event?.trigger, 'shopping-list-add');
+});
+
+test('voice query parser detects music play command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('play bohemian rhapsody', 'Playing Bohemian Rhapsody'));
+  assert.equal(event?.kind, 'music');
+});
+
+test('voice query parser detects smart home command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('alexa lights on', 'Okay'));
+  assert.equal(event?.kind, 'smart-home');
+  assert.equal(event.command.action, 'on');
 });
 
 test('voice query parser deduplicates processed activity ids', () => {

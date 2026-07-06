@@ -1,11 +1,23 @@
+import io
 import math
+import threading
 import time
 import tkinter as tk
+import urllib.request
 from datetime import datetime, timezone
 from tkinter import font as tkfont
 
+try:
+    from PIL import Image, ImageTk
+except ImportError:  # Pillow ships with the client, but degrade gracefully.
+    Image = None
+    ImageTk = None
+
 from src.message_scroll import MessageScrollController
+from src.paths import asset_path
 from src.payload_utils import (
+    battery_level_color,
+    format_battery_percent,
     format_chip_timestamp,
     format_duration,
     format_indoor_location,
@@ -19,12 +31,15 @@ from src.payload_utils import (
     normalize_condition,
     parse_iso_timestamp,
     parse_spoken_air_quality,
+    parse_spoken_battery_percent,
     parse_spoken_indoor,
     parse_spoken_weather,
     format_temperature_f,
+    sample_hourly_indices,
     timer_detail_line,
     timer_label_name,
     timer_title,
+    voc_band_label,
 )
 
 
@@ -431,7 +446,7 @@ class WeatherPanel(BasePanel):
         min_day, max_day = 72, 122
         hourly_gap = 22
         hourly_header = self.shell.section_label_font.metrics("linespace") + 16
-        day_header = 28
+        day_header = hourly_header
 
         available = layout.message_area_bottom - y_before_hourly - hourly_header
         if has_daily:
@@ -575,12 +590,17 @@ class WeatherPanel(BasePanel):
         icon_box = 22
         if hourly:
             slot_count = min(8, max(4, width // 90))
-            slot_width = width // slot_count
-            for index, slot in enumerate(hourly[:slot_count]):
+            # Sample the FULL 24h window: first tile is "Now", the rest are
+            # spread evenly so the last tile lands ~24h out (not just the
+            # next few hours).
+            picks = sample_hourly_indices(len(hourly), slot_count)
+            slot_width = width // len(picks)
+            for index, hour_index in enumerate(picks):
+                slot = hourly[hour_index]
                 slot_x = x + index * slot_width
                 inner_w = slot_width - 10
                 center_x = slot_x + inner_w // 2
-                is_now = index == 0
+                is_now = hour_index == 0
                 label = "Now" if is_now else "—"
                 if not is_now and slot.get("time"):
                     try:
@@ -661,7 +681,8 @@ class WeatherPanel(BasePanel):
                 font=self.shell.section_label_font,
             )
         )
-        y += 28
+        # Same header-to-tile spacing as the "Next 24 hours" section.
+        y += self.shell.section_label_font.metrics("linespace") + 16
 
         if daily:
             day_count = min(7, max(5, width // 100))
@@ -1175,7 +1196,7 @@ class AirQualityPanel(BasePanel):
         ("humidity", "Humidity", "%"),
         ("pm25", "PM 2.5", "µg/m³"),
         ("co", "CO", "ppm"),
-        ("voc", "VOCs", "index"),
+        ("voc", "VOCs", ""),
     )
 
     def _render(self, payload: dict):
@@ -1260,7 +1281,11 @@ class AirQualityPanel(BasePanel):
             for index, (key, label, unit) in enumerate(available_metrics):
                 tile_x = stat_x + index * (col_w + col_gap)
                 value = values.get(key)
-                value_text = self._format_metric_value(value, unit)
+                if key == "voc":
+                    band_word = voc_band_label(value)
+                    value_text = band_word or "—"
+                else:
+                    value_text = self._format_metric_value(value, unit)
                 self._draw_air_quality_stat(
                     tile_x,
                     stat_y,
@@ -1826,3 +1851,727 @@ class TimerPanel(BasePanel):
         if len(device) >= 12 and device.isalnum() and device.upper() == device:
             return "Echo device"
         return device
+
+
+class ShoppingListPanel(BasePanel):
+    PAGE_SECONDS = 15
+    ROW_GAP = 6
+    CARD_INSET = 0
+    ACCENT_WIDTH = 4
+    TEXT_PAD_X = 18
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._tick_job = None
+        self._items: list[dict] = []
+        self._page = 0
+        self._page_size = 8
+        self._added_item = None
+
+    def show(self, payload: dict):
+        self.hide()
+        self.visible = True
+        self._items = list(payload.get("items") or [])
+        self._added_item = (payload.get("addedItem") or "").strip().lower() or None
+        self._page = 0
+        self._page_size = self._compute_page_size()
+        self._render_page()
+        if self._page_count() > 1:
+            self._tick_job = self.root.after(self.PAGE_SECONDS * 1000, self._next_page)
+
+    def hide(self):
+        super().hide()
+        self._items = []
+        self._page = 0
+
+    def _item_font(self):
+        return self.shell.body_font
+
+    def _compute_page_size(self) -> int:
+        layout = self.shell.layout
+        header = self.shell.section_title_font.metrics("linespace") + 28
+        dots_reserve = 40
+        row_block = self._row_height() + self.ROW_GAP
+        available = layout.message_area_bottom - layout.message_area_top - header - dots_reserve
+        return max(3, available // row_block)
+
+    def _row_height(self) -> int:
+        return self._item_font().metrics("linespace") + 14
+
+    def _page_count(self) -> int:
+        if not self._items:
+            return 1
+        return max(1, math.ceil(len(self._items) / self._page_size))
+
+    def _next_page(self):
+        self._tick_job = None
+        if not self.visible:
+            return
+        self._page = (self._page + 1) % self._page_count()
+        for item_id in self._item_ids:
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+        self._render_page()
+        if self._page_count() > 1:
+            self._tick_job = self.root.after(self.PAGE_SECONDS * 1000, self._next_page)
+
+    def _render(self, payload: dict):  # pragma: no cover - show() drives rendering
+        self._render_page()
+
+    def _render_page(self):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        chip = self.config.get("chipBackground", "#141a24")
+
+        count = len(self._items)
+        header = f"{count} item{'s' if count != 1 else ''}" if count else "List is empty"
+        self._track(
+            self.canvas.create_text(
+                x + width // 2,
+                y,
+                anchor="n",
+                text=header,
+                fill=muted if count else text,
+                font=self.shell.section_title_font,
+            )
+        )
+        y += self.shell.section_title_font.metrics("linespace") + 28
+
+        if not self._items:
+            self._track(
+                self.canvas.create_text(
+                    x + width // 2,
+                    y + 40,
+                    anchor="n",
+                    text="Nothing on the shopping list",
+                    fill=muted,
+                    font=self.shell.body_font,
+                )
+            )
+            return
+
+        item_font = self._item_font()
+        row_height = self._row_height()
+        card_x0 = x + self.CARD_INSET
+        card_x1 = x + width - self.CARD_INSET
+        text_x = card_x0 + self.ACCENT_WIDTH + self.TEXT_PAD_X
+        start = self._page * self._page_size
+        page_items = self._items[start : start + self._page_size]
+
+        for index, item in enumerate(page_items):
+            row_y = y + index * (row_height + self.ROW_GAP)
+            value = str(item.get("value") or "")
+            is_new = self._added_item is not None and value.strip().lower() == self._added_item
+            row_color = accent if is_new else text
+            card_outline = accent if is_new else muted
+
+            self._track(
+                self.canvas.create_rectangle(
+                    card_x0,
+                    row_y,
+                    card_x1,
+                    row_y + row_height,
+                    fill=chip,
+                    outline=card_outline,
+                    width=2 if is_new else 1,
+                )
+            )
+            self._track(
+                self.canvas.create_rectangle(
+                    card_x0,
+                    row_y,
+                    card_x0 + self.ACCENT_WIDTH,
+                    row_y + row_height,
+                    fill=accent if is_new else card_outline,
+                    outline="",
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    text_x,
+                    row_y + row_height // 2,
+                    anchor="w",
+                    text=value,
+                    fill=row_color,
+                    font=item_font,
+                )
+            )
+            if is_new:
+                self._track(
+                    self.canvas.create_text(
+                        card_x1 - 16,
+                        row_y + row_height // 2,
+                        anchor="e",
+                        text="New",
+                        fill=accent,
+                        font=self.shell.chip_label_font,
+                    )
+                )
+
+        pages = self._page_count()
+        if pages > 1:
+            dot_gap = 22
+            dots_width = (pages - 1) * dot_gap
+            dot_y = bottom - 16
+            start_x = x + width // 2 - dots_width // 2
+            for page_index in range(pages):
+                dot_x = start_x + page_index * dot_gap
+                radius = 7 if page_index == self._page else 4
+                self._track(
+                    self.canvas.create_oval(
+                        dot_x - radius,
+                        dot_y - radius,
+                        dot_x + radius,
+                        dot_y + radius,
+                        fill=accent if page_index == self._page else muted,
+                        outline="",
+                    )
+                )
+
+
+class MusicPanel(BasePanel):
+    ART_SIZE = 510
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._art_image = None  # keep a reference or Tk garbage-collects it
+        self._art_request = 0
+
+    def _render(self, payload: dict):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        chip = self.config.get("chipBackground", "#141a24")
+        center_x = x + width // 2
+
+        music = payload.get("music") or {}
+        song = music.get("song") or "Unknown track"
+        artist = music.get("artist")
+        album = music.get("album")
+        provider = music.get("provider")
+        device = music.get("device") or payload.get("device")
+
+        text_block = self.shell.section_title_font.metrics("linespace")
+        if artist:
+            text_block += self.shell.body_font.metrics("linespace") + 8
+        if album:
+            text_block += self.shell.body_font.metrics("linespace") + 8
+        text_block += self.shell.chip_value_font.metrics("linespace") + 24
+
+        available = bottom - y - text_block
+        art_size = min(self.ART_SIZE, max(330, min(width - 80, available - 20)))
+        art_y = y + art_size // 2 + 8
+
+        self._track(
+            self.canvas.create_rectangle(
+                center_x - art_size // 2,
+                art_y - art_size // 2,
+                center_x + art_size // 2,
+                art_y + art_size // 2,
+                fill=chip,
+                outline=accent,
+                width=2,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                art_y,
+                anchor="center",
+                text="♪",
+                fill=accent,
+                font=self.shell.hero_font,
+            )
+        )
+
+        art_url = music.get("artUrl")
+        if art_url and Image is not None:
+            self._load_art_async(art_url, center_x, art_y, art_size)
+
+        cursor = art_y + art_size // 2 + 28
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=song,
+                fill=text,
+                font=self.shell.section_title_font,
+                width=width - 40,
+            )
+        )
+        cursor += self.shell.section_title_font.metrics("linespace") + 10
+        if artist:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=artist,
+                    fill=accent,
+                    font=self.shell.body_font,
+                    width=width - 40,
+                )
+            )
+            cursor += self.shell.body_font.metrics("linespace") + 8
+        if album:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=album,
+                    fill=muted,
+                    font=self.shell.body_font,
+                    width=width - 40,
+                )
+            )
+            cursor += self.shell.body_font.metrics("linespace") + 12
+
+        detail_parts = []
+        if provider:
+            detail_parts.append(provider)
+        if device:
+            detail_parts.append(f"on {device}")
+        if detail_parts:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=" · ".join(detail_parts),
+                    fill=muted,
+                    font=self.shell.chip_value_font,
+                    width=width - 40,
+                )
+            )
+
+    def _load_art_async(self, url: str, cx: float, cy: float, size: int):
+        self._art_request += 1
+        request_id = self._art_request
+
+        def fetch():
+            try:
+                request = urllib.request.Request(url, headers={"User-Agent": "alexa-broadcast-client/1.0"})
+                with urllib.request.urlopen(request, timeout=6) as response:
+                    raw = response.read()
+                image = Image.open(io.BytesIO(raw)).convert("RGB")
+                image = image.resize((size, size), Image.LANCZOS)
+            except Exception:
+                return
+            self.root.after(0, lambda: self._apply_art(request_id, image, cx, cy))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _apply_art(self, request_id: int, image, cx: float, cy: float):
+        if not self.visible or request_id != self._art_request:
+            return
+        self._art_image = ImageTk.PhotoImage(image)
+        self._track(self.canvas.create_image(cx, cy, image=self._art_image))
+
+
+class TeslaBatteryPanel(BasePanel):
+    IMAGE_NAME = "tesla-model-y.png"
+    IMAGE_MAX_WIDTH = 760
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._photo = None
+
+    def _render(self, payload: dict):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        chip = self.config.get("chipBackground", "#141a24")
+        center_x = x + width // 2
+
+        battery = payload.get("battery") or {}
+        percent = battery.get("percent")
+        if percent is None:
+            percent = parse_spoken_battery_percent(payload.get("spokenResponse"))
+        model = battery.get("model") or "Model Y"
+
+        percent_text = format_battery_percent(percent)
+        percent_value = None if percent is None else max(0, min(100, int(round(float(percent)))))
+        bar_color = battery_level_color(percent_value)
+
+        footer_block = (
+            self.shell.section_title_font.metrics("linespace")
+            + self.shell.body_font.metrics("linespace")
+            + 96
+        )
+        available_height = bottom - y - footer_block
+        image_width = min(self.IMAGE_MAX_WIDTH, width - 60, max(320, int(width * 0.82)))
+        image_height = max(180, min(int(available_height * 0.72), int(image_width * 0.56)))
+
+        image_path = asset_path(self.IMAGE_NAME)
+        image_top = y + 8
+        if image_path.exists() and Image is not None and ImageTk is not None:
+            try:
+                image = Image.open(image_path).convert("RGBA")
+                image.thumbnail((image_width, image_height), Image.LANCZOS)
+                self._photo = ImageTk.PhotoImage(image)
+                image_center_y = image_top + image.height // 2
+                self._track(
+                    self.canvas.create_image(
+                        center_x,
+                        image_center_y,
+                        image=self._photo,
+                    )
+                )
+                cursor = image_top + image.height + 52
+            except OSError:
+                cursor = y + 40
+                self._draw_fallback_car(center_x, cursor, image_width, accent, chip)
+                cursor += int(image_height * 0.55) + 52
+        else:
+            cursor = y + 40
+            self._draw_fallback_car(center_x, cursor, image_width, accent, chip)
+            cursor += int(image_height * 0.55) + 52
+
+        bar_width = min(width - 100, 560)
+        bar_height = 42
+        bar_x0 = center_x - bar_width // 2
+        bar_y0 = cursor
+        bar_x1 = bar_x0 + bar_width
+        bar_y1 = bar_y0 + bar_height
+
+        self._track(
+            self.canvas.create_text(
+                bar_x0,
+                bar_y0 - 8,
+                anchor="sw",
+                text="0%",
+                fill=muted,
+                font=self.shell.forecast_label_font,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                bar_x1,
+                bar_y0 - 8,
+                anchor="se",
+                text="100%",
+                fill=muted,
+                font=self.shell.forecast_label_font,
+            )
+        )
+        self._track(
+            self.canvas.create_rectangle(
+                bar_x0,
+                bar_y0,
+                bar_x1,
+                bar_y1,
+                fill=chip,
+                outline=muted,
+                width=2,
+            )
+        )
+
+        if percent_value is not None and bar_width > 0:
+            fill_width = max(4, int((bar_width - 4) * (percent_value / 100)))
+            self._track(
+                self.canvas.create_rectangle(
+                    bar_x0 + 2,
+                    bar_y0 + 2,
+                    bar_x0 + 2 + fill_width,
+                    bar_y1 - 2,
+                    fill=bar_color,
+                    outline="",
+                )
+            )
+
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                bar_y0 + bar_height // 2,
+                anchor="center",
+                text=percent_text,
+                fill="#ffffff" if percent_value is not None else text,
+                font=self.shell.section_title_font,
+            )
+        )
+
+        cursor = bar_y1 + 28
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=model,
+                fill=text,
+                font=self.shell.section_title_font,
+            )
+        )
+        cursor += self.shell.section_title_font.metrics("linespace") + 8
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text="Tesla Battery",
+                fill=muted,
+                font=self.shell.body_font,
+            )
+        )
+
+    def _draw_fallback_car(self, center_x: float, top_y: float, width: float, accent: str, chip: str):
+        half_w = width * 0.42
+        body_h = width * 0.16
+        wheel_r = width * 0.055
+        body_y = top_y + body_h
+        self._track(
+            self.canvas.create_rectangle(
+                center_x - half_w,
+                body_y - body_h,
+                center_x + half_w,
+                body_y,
+                fill=chip,
+                outline=accent,
+                width=2,
+            )
+        )
+        self._track(
+            self.canvas.create_polygon(
+                center_x - half_w * 0.55,
+                body_y - body_h,
+                center_x - half_w * 0.15,
+                body_y - body_h * 1.8,
+                center_x + half_w * 0.35,
+                body_y - body_h * 1.8,
+                center_x + half_w * 0.55,
+                body_y - body_h,
+                fill=accent,
+                outline="",
+            )
+        )
+        for offset in (-half_w * 0.62, half_w * 0.62):
+            self._track(
+                self.canvas.create_oval(
+                    center_x + offset - wheel_r,
+                    body_y - wheel_r * 0.2,
+                    center_x + offset + wheel_r,
+                    body_y + wheel_r * 1.8,
+                    fill=accent,
+                    outline="",
+                )
+            )
+
+
+class SmartHomePanel(BasePanel):
+    TYPE_LABELS = {
+        "light": "Light",
+        "plug": "Smart Plug",
+        "switch": "Switch",
+        "fan": "Fan",
+        "tv": "TV",
+        "pc": "Computer",
+        "lock": "Lock",
+        "scene": "Scene",
+        "thermostat": "Thermostat",
+        "device": "Device",
+    }
+
+    def _render(self, payload: dict):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        alert = self.config.get("alertColor", "#f97316")
+
+        command = payload.get("command") or {}
+        action = str(command.get("action") or "").lower()
+        spoken_target = command.get("spokenTarget") or command.get("target") or "Device"
+        display_name = str(spoken_target).title()
+        device_type = str(command.get("deviceType") or "device")
+        origin = payload.get("device")
+
+        is_on = action == "on"
+        action_color = "#4ade80" if is_on else muted
+        center_x = x + width // 2
+        icon_size = 120
+        icon_y = y + (bottom - y) // 2 - 90
+
+        self._draw_device_icon(center_x, icon_y, icon_size, device_type, action_color if is_on else muted)
+
+        cursor = icon_y + icon_size // 2 + 34
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=f"{'ON' if is_on else 'OFF'}",
+                fill=action_color if is_on else alert,
+                font=self.shell.hero_font,
+            )
+        )
+        cursor += self.shell.hero_font.metrics("linespace") + 10
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=display_name,
+                fill=text,
+                font=self.shell.section_title_font,
+                width=width - 40,
+            )
+        )
+        cursor += self.shell.section_title_font.metrics("linespace") + 12
+        type_label = self.TYPE_LABELS.get(device_type, "Device")
+        detail = type_label
+        if origin:
+            detail = f"{type_label} · asked on {origin}"
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=detail,
+                fill=muted,
+                font=self.shell.body_font,
+            )
+        )
+
+    def _draw_device_icon(self, cx: float, cy: float, size: float, device_type: str, color: str):
+        half = size / 2
+        chip = self.config.get("chipBackground", "#141a24")
+
+        if device_type == "light":
+            radius = size * 0.30
+            self._track(
+                self.canvas.create_oval(
+                    cx - radius, cy - radius - size * 0.08,
+                    cx + radius, cy + radius - size * 0.08,
+                    fill=color, outline="",
+                )
+            )
+            # Bulb base
+            self._track(
+                self.canvas.create_rectangle(
+                    cx - size * 0.10, cy + radius - size * 0.10,
+                    cx + size * 0.10, cy + radius + size * 0.10,
+                    fill=color, outline="",
+                )
+            )
+            # Rays
+            for angle in range(0, 360, 45):
+                rad = math.radians(angle)
+                inner = radius + size * 0.06
+                outer = radius + size * 0.18
+                self._track(
+                    self.canvas.create_line(
+                        cx + inner * math.cos(rad), cy - size * 0.08 + inner * math.sin(rad),
+                        cx + outer * math.cos(rad), cy - size * 0.08 + outer * math.sin(rad),
+                        fill=color, width=3,
+                    )
+                )
+            return
+
+        if device_type == "plug":
+            self._track(
+                self.canvas.create_oval(
+                    cx - half * 0.8, cy - half * 0.8,
+                    cx + half * 0.8, cy + half * 0.8,
+                    fill=chip, outline=color, width=4,
+                )
+            )
+            for offset in (-size * 0.12, size * 0.12):
+                self._track(
+                    self.canvas.create_rectangle(
+                        cx + offset - size * 0.04, cy - size * 0.18,
+                        cx + offset + size * 0.04, cy + size * 0.06,
+                        fill=color, outline="",
+                    )
+                )
+            self._track(
+                self.canvas.create_oval(
+                    cx - size * 0.05, cy + size * 0.14,
+                    cx + size * 0.05, cy + size * 0.24,
+                    fill=color, outline="",
+                )
+            )
+            return
+
+        if device_type in ("tv", "pc"):
+            self._track(
+                self.canvas.create_rectangle(
+                    cx - half * 0.9, cy - half * 0.6,
+                    cx + half * 0.9, cy + half * 0.35,
+                    fill=chip, outline=color, width=4,
+                )
+            )
+            self._track(
+                self.canvas.create_rectangle(
+                    cx - size * 0.16, cy + half * 0.35,
+                    cx + size * 0.16, cy + half * 0.5,
+                    fill=color, outline="",
+                )
+            )
+            self._track(
+                self.canvas.create_line(
+                    cx - half * 0.5, cy + half * 0.55,
+                    cx + half * 0.5, cy + half * 0.55,
+                    fill=color, width=4,
+                )
+            )
+            return
+
+        if device_type == "fan":
+            hub = size * 0.08
+            for angle in range(0, 360, 120):
+                rad = math.radians(angle)
+                blade_x = cx + size * 0.26 * math.cos(rad)
+                blade_y = cy + size * 0.26 * math.sin(rad)
+                self._track(
+                    self.canvas.create_oval(
+                        blade_x - size * 0.16, blade_y - size * 0.16,
+                        blade_x + size * 0.16, blade_y + size * 0.16,
+                        fill=color, outline="",
+                    )
+                )
+            self._track(
+                self.canvas.create_oval(
+                    cx - hub, cy - hub, cx + hub, cy + hub,
+                    fill=chip, outline=color, width=3,
+                )
+            )
+            return
+
+        # Generic power symbol (switch, lock, scene, thermostat, device).
+        radius = half * 0.7
+        self._track(
+            self.canvas.create_arc(
+                cx - radius, cy - radius,
+                cx + radius, cy + radius,
+                start=115, extent=310,
+                style=tk.ARC, outline=color, width=6,
+            )
+        )
+        self._track(
+            self.canvas.create_line(
+                cx, cy - radius - size * 0.06,
+                cx, cy - radius * 0.2,
+                fill=color, width=6, capstyle=tk.ROUND,
+            )
+        )

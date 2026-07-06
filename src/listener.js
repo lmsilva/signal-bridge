@@ -4,7 +4,9 @@ const { createBroadcastLog } = require('./broadcast-log');
 const { BroadcastParser } = require('./parser');
 const { buildAlexaInitOptions, persistFromAlexa, loadSession } = require('./session');
 const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-state');
-const { getActivityId } = require('./parser');
+const { getActivityId, getDeviceName } = require('./parser');
+const { extractSpokenResponse } = require('./activity-response');
+const { createPendingVoiceResponses } = require('./pending-voice-responses');
 const { createUdpBroadcaster } = require('./broadcast-udp');
 const { createSessionKeepAlive, isAuthRelatedMessage } = require('./session-keepalive');
 const { markReauthRequired, markReauthRecommended, clearAuthStatus, readAuthStatus } = require('./auth-status');
@@ -12,6 +14,8 @@ const { createSessionAuthJournal } = require('./session-auth-journal');
 const { getSessionMeta } = require('./session-meta');
 const { tokenDateAdvanced } = require('./session-token-health');
 const { formatError } = require('./error-format');
+const { createVoiceEventDedup } = require('./voice-event-dedup');
+const { shouldMarkActivityProcessed } = require('./voice-event-gate');
 const { createVoiceQueryParser } = require('./voice-query-parser');
 const { extractWeatherLocation } = require('./weather-location');
 const { fetchWeatherForecast } = require('./weather-fetch');
@@ -23,8 +27,17 @@ const {
   buildWeatherQueryPayload,
   buildIndoorTemperaturePayload,
   buildAirQualityPayload,
+  buildShoppingListPayload,
+  buildMusicPayload,
+  buildTeslaBatteryPayload,
+  buildSmartHomePayload,
   buildTimerSnapshotPayload,
 } = require('./udp-payload');
+const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
+const { buildTeslaBatteryReading, parseBatteryPercentFromSpeech } = require('./tesla-battery');
+const { fetchNowPlaying } = require('./music-info');
+const { resolveDeviceType } = require('./smart-home-command');
+const { listSmarthomeEndpoints } = require('./smarthome-devices');
 const { enrichAirQualityReading } = require('./air-quality-fetch');
 const { enrichIndoorReading } = require('./indoor-temperature-fetch');
 const {
@@ -53,6 +66,8 @@ function createListener({ config, log }) {
   const broadcastLog = createBroadcastLog(config.broadcastLogPath);
   const udpBroadcaster = createUdpBroadcaster(config, log);
   const voiceQueryParser = createVoiceQueryParser();
+  const voiceEventDedup = createVoiceEventDedup();
+  const pendingVoiceResponses = createPendingVoiceResponses();
   const voiceEventsLog = createEventsLog(config.voiceEventsLogPath);
   const voiceSettings = {
     enabled: config.voiceEvents?.enabled !== false,
@@ -63,6 +78,10 @@ function createListener({ config, log }) {
     fetchWeather: config.voiceEvents?.fetchWeather !== false,
     fetchAirQuality: config.voiceEvents?.fetchAirQuality !== false,
     fetchIndoorSensor: config.voiceEvents?.fetchIndoorSensor !== false,
+    shoppingListQueries: config.voiceEvents?.shoppingListQueries !== false,
+    musicEvents: config.voiceEvents?.musicEvents !== false,
+    smartHomeEvents: config.voiceEvents?.smartHomeEvents !== false,
+    teslaBatteryQueries: config.voiceEvents?.teslaBatteryQueries !== false,
   };
 
   function persistBridgeState() {
@@ -111,6 +130,69 @@ function createListener({ config, log }) {
     log.info(`Recorded to ${broadcastLog.path} and sent UDP broadcast`);
   }
 
+  function scheduleResponseFollowup(reason) {
+    setTimeout(() => pollRecentHistory(`${reason}-followup-2s`), 2000);
+    setTimeout(() => pollRecentHistory(`${reason}-followup-5s`), 5000);
+  }
+
+  function handleVoiceEvent(voiceEvent, activityId, trigger) {
+    if (voiceEvent?.kind === 'timer-hint' || voiceEvent?.kind === 'timer-list') {
+      voiceQueryParser.markProcessed(activityId);
+      log.info('Timer voice command detected', {
+        trigger: voiceEvent.trigger,
+        query: voiceEvent.query,
+        device: voiceEvent.device,
+      });
+      timerSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
+      return;
+    }
+
+    if (!voiceSettings.enabled) {
+      voiceQueryParser.markProcessed(activityId);
+      if (config.debug && voiceEvent) {
+        log.debug('Activity ignored (voice events disabled)', {
+          trigger,
+          summary: voiceEvent.query,
+        });
+      }
+      return;
+    }
+
+    if (!voiceEvent) {
+      voiceQueryParser.markProcessed(activityId);
+      return;
+    }
+
+    if (!voiceEventDedup.shouldEmit(voiceEvent)) {
+      if (shouldMarkActivityProcessed(voiceEvent)) {
+        voiceQueryParser.markProcessed(activityId);
+      }
+      if (config.debug) {
+        log.debug('Voice event deduped (recent duplicate)', {
+          trigger,
+          kind: voiceEvent.kind,
+          query: voiceEvent.query,
+          activityId,
+        });
+      }
+      return;
+    }
+
+    if (shouldMarkActivityProcessed(voiceEvent)) {
+      voiceQueryParser.markProcessed(activityId);
+    } else {
+      log.info('Voice event captured (awaiting Alexa response upgrade)', {
+        trigger,
+        kind: voiceEvent.kind,
+        query: voiceEvent.query,
+      });
+    }
+
+    recordVoiceEvent(voiceEvent).catch((error) => {
+      log.error('Failed to record voice event', error.message || error);
+    });
+  }
+
   async function recordVoiceEvent(event) {
     if (!voiceSettings.enabled) {
       return;
@@ -132,9 +214,96 @@ function createListener({ config, log }) {
       return;
     }
 
+    if (event.kind === 'shopping-list' && !voiceSettings.shoppingListQueries) {
+      return;
+    }
+
+    if (event.kind === 'music' && !voiceSettings.musicEvents) {
+      return;
+    }
+
+    if (event.kind === 'smart-home' && !voiceSettings.smartHomeEvents) {
+      return;
+    }
+
+    if (event.kind === 'tesla-battery' && !voiceSettings.teslaBatteryQueries) {
+      return;
+    }
+
     let payload;
     if (event.kind === 'time') {
       payload = buildTimeQueryPayload(event, config);
+    } else if (event.kind === 'shopping-list') {
+      const addedItem = extractAddedItem(event.query, event.spokenResponse);
+      const cachedItems = loadShoppingListCache(config.shoppingListCachePath);
+      let fetched = null;
+      try {
+        fetched = await fetchShoppingList(alexa);
+      } catch (error) {
+        log.warn('Shopping list fetch failed', error.message || error);
+      }
+      const list = resolveShoppingList(
+        fetched,
+        event.spokenResponse,
+        cachedItems,
+        addedItem,
+        event.trigger,
+        event.query,
+      );
+      saveShoppingListCache(config.shoppingListCachePath, list.items);
+      if (event.trigger === 'shopping-list-show') {
+        if (list.items.length === 0) {
+          pendingVoiceResponses.remember(event);
+          scheduleResponseFollowup('shopping-list-show');
+          if (String(event.spokenResponse || '').trim()) {
+            log.warn('Shopping list empty after fetch, cache, and speech parse', {
+              query: event.query,
+              spoken: String(event.spokenResponse).slice(0, 160),
+            });
+          }
+        } else {
+          pendingVoiceResponses.forget(event.device, 'shopping-list-show');
+        }
+      }
+      payload = buildShoppingListPayload(
+        { ...event, addedItem },
+        config,
+        { list },
+      );
+    } else if (event.kind === 'music') {
+      let nowPlaying = null;
+      try {
+        nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device);
+      } catch (error) {
+        log.warn('Player info fetch failed', error.message || error);
+      }
+      if (!nowPlaying) {
+        return;
+      }
+      payload = buildMusicPayload(event, config, { nowPlaying });
+    } else if (event.kind === 'smart-home') {
+      let typeInfo = {};
+      try {
+        const endpoints = await listSmarthomeEndpoints(alexa);
+        typeInfo = resolveDeviceType(endpoints, event.command?.target);
+      } catch (error) {
+        log.warn('Smart home device lookup failed', error.message || error);
+        typeInfo = resolveDeviceType([], event.command?.target);
+      }
+      payload = buildSmartHomePayload(event, config, typeInfo);
+    } else if (event.kind === 'tesla-battery') {
+      const battery = buildTeslaBatteryReading(event.spokenResponse);
+      if (battery.percent == null) {
+        log.info('Tesla battery event without parsed percent', {
+          query: event.query,
+          spoken: String(event.spokenResponse || '').slice(0, 160) || null,
+        });
+        pendingVoiceResponses.remember(event);
+        scheduleResponseFollowup('tesla-battery');
+      } else {
+        pendingVoiceResponses.forget(event.device, 'tesla-battery');
+      }
+      payload = buildTeslaBatteryPayload(event, config, { battery });
     } else if (event.kind === 'indoor-temperature') {
       const indoorConfig = config.indoorTemperature || {};
       const location = resolveIndoorQueryLocation(event.query, event.spokenResponse, indoorConfig);
@@ -190,9 +359,12 @@ function createListener({ config, log }) {
     voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
     sendUdpPayload(payload);
     lastCaptureAt = Date.now();
-    log.info(`Voice event captured (${payload.type}) from ${event.device}`, {
-      query: event.query,
-    });
+    const logMeta = { query: event.query };
+    if (event.kind === 'tesla-battery') {
+      logMeta.percent = payload?.battery?.percent ?? parseBatteryPercentFromSpeech(event.spokenResponse);
+      logMeta.spoken = String(event.spokenResponse || '').slice(0, 120) || null;
+    }
+    log.info(`Voice event captured (${payload.type}) from ${event.device}`, logMeta);
   }
 
   function handleTimerSnapshot(snapshot) {
@@ -212,10 +384,11 @@ function createListener({ config, log }) {
   }
 
   function inspectActivity(activity, trigger) {
+    const spoken = extractSpokenResponse(activity);
     log.debug('Activity received', {
       trigger,
       summary: activity?.description?.summary,
-      response: activity?.alexaResponse,
+      response: spoken,
       device: activity?.name || activity?.deviceSerialNumber,
     });
 
@@ -228,36 +401,29 @@ function createListener({ config, log }) {
     }
 
     const activityId = getActivityId(activity);
+    const completed = pendingVoiceResponses.tryComplete(activity, spoken, {
+      getDeviceName,
+      getActivityId,
+      matchesShoppingListSpeech,
+    });
+    if (completed) {
+      handleVoiceEvent(completed, activityId, trigger);
+      return;
+    }
+
     if (!voiceQueryParser.shouldProcess(activityId)) {
       if (config.debug) {
         const summary = activity?.description?.summary;
-        const response = activity?.alexaResponse;
-        if (summary || response) {
-          log.debug('Activity ignored (duplicate activity id)', { trigger, summary, response });
+        if (summary || spoken) {
+          log.debug('Activity ignored (duplicate activity id)', { trigger, summary, response: spoken });
         }
       }
       return;
     }
 
     const voiceEvent = voiceQueryParser.parse(activity);
-    voiceQueryParser.markProcessed(activityId);
-
-    if (voiceEvent?.kind === 'timer-hint' || voiceEvent?.kind === 'timer-list') {
-      timerSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
-      return;
-    }
-
-    if (!voiceSettings.enabled) {
-      if (config.debug && voiceEvent) {
-        log.debug('Activity ignored (voice events disabled)', {
-          trigger,
-          summary: activity?.description?.summary,
-        });
-      }
-      return;
-    }
-
     if (!voiceEvent) {
+      voiceQueryParser.markProcessed(activityId);
       if (config.debug) {
         log.debug('Activity ignored (not a tracked voice query)', {
           trigger,
@@ -267,9 +433,7 @@ function createListener({ config, log }) {
       return;
     }
 
-    recordVoiceEvent(voiceEvent).catch((error) => {
-      log.error('Failed to record voice event', error.message || error);
-    });
+    handleVoiceEvent(voiceEvent, activityId, trigger);
   }
 
   function pollRecentHistory(reason, lookbackMs = HISTORY_LOOKBACK_MS) {

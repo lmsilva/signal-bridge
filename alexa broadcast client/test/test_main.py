@@ -1,11 +1,9 @@
 import unittest
-from collections import deque
 
-from src.config import effective_display_seconds
 from src.main import BroadcastClientApp
 
 
-class MainTimerDisplayTests(unittest.TestCase):
+class MainDisplayRoutingTests(unittest.TestCase):
     def test_timer_snapshot_detected(self):
         self.assertTrue(BroadcastClientApp._is_timer_snapshot({"type": "timer.snapshot"}))
         self.assertFalse(BroadcastClientApp._is_timer_snapshot({"type": "broadcast"}))
@@ -31,13 +29,13 @@ class MainTimerDisplayTests(unittest.TestCase):
         }
         self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
 
-    def test_empty_list_snapshot_ignored(self):
+    def test_empty_list_snapshot_shown(self):
         payload = {
             "type": "timer.snapshot",
             "event": {"kind": "list"},
             "timers": [],
         }
-        self.assertFalse(BroadcastClientApp._timer_payload_has_content(payload))
+        self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
 
     def test_cancelled_empty_snapshot_shown(self):
         payload = {
@@ -47,21 +45,14 @@ class MainTimerDisplayTests(unittest.TestCase):
         }
         self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
 
-    def test_fired_uses_full_display_seconds(self):
-        config = {"defaultDisplaySeconds": 120, "maxDisplaySeconds": 120}
-        payload = {
-            "type": "timer.snapshot",
-            "displaySeconds": 120,
-            "event": {"kind": "fired"},
-            "timers": [{"remainingSec": 0, "status": "OFF"}],
-        }
-        self.assertEqual(effective_display_seconds(payload, config), 120)
-
-    def test_weather_interrupts_active_timer_overlay(self):
+    def test_new_payload_replaces_active_display(self):
         app = BroadcastClientApp.__new__(BroadcastClientApp)
         app.display_active = True
-        app.pending_displays = deque()
-        app.overlay = type("Overlay", (), {"visible": True, "advance": lambda *args: None, "show": lambda *args: None})()
+        app.overlay = type(
+            "Overlay",
+            (),
+            {"visible": True, "advance": lambda *args: None, "show": lambda *args: None},
+        )()
         app._on_display_closed = lambda: None
 
         called = {"advance": False}
@@ -69,13 +60,10 @@ class MainTimerDisplayTests(unittest.TestCase):
         def advance(payload, seconds):
             called["advance"] = True
             self.assertEqual(payload["type"], "weather.query")
+            self.assertEqual(seconds, 60)
 
         app.overlay.advance = advance
-        app._showing_timers = lambda: True
-        app._drop_pending_timer_snapshots = lambda: None
-        app._handle_timer_display = lambda payload, seconds: self.fail("timer handler should not run")
-
-        app._enqueue_display({"type": "weather.query", "displaySeconds": 60}, 60)
+        app._show_payload({"type": "weather.query", "displaySeconds": 60}, 60)
         self.assertTrue(called["advance"])
 
 
