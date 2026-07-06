@@ -1,6 +1,5 @@
 const Alexa = require('alexa-remote2');
 const path = require('path');
-const { createBroadcastLog } = require('./broadcast-log');
 const { BroadcastParser } = require('./parser');
 const { buildAlexaInitOptions, persistFromAlexa, loadSession } = require('./session');
 const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-state');
@@ -62,12 +61,17 @@ const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
 function createListener({ config, log }) {
   const alexa = new Alexa();
-  const bridgeState = loadBridgeState(config.bridgeStatePath, config.broadcastLogPath);
+  const legacyBroadcastLogPaths = [
+    path.join(config.ROOT, 'broadcast.txt'),
+    path.join(config.ROOT, 'data', 'broadcast.txt'),
+  ];
+  const bridgeState = loadBridgeState(config.bridgeStatePath, config.voiceEventsLogPath, {
+    legacyBroadcastLogPaths,
+  });
   const parser = new BroadcastParser({
     ...bridgeState,
     fingerprintFn: fingerprint,
   });
-  const broadcastLog = createBroadcastLog(config.broadcastLogPath);
   const udpBroadcaster = createUdpBroadcaster(config, log);
   const voiceQueryParser = createVoiceQueryParser();
   const voiceEventDedup = createVoiceEventDedup();
@@ -128,12 +132,18 @@ function createListener({ config, log }) {
     }
 
     log.broadcast(record);
-    broadcastLog.append(record);
+    voiceEventsLog.append({
+      type: 'broadcast',
+      device: record.device,
+      message: record.message,
+      source: record.source,
+      trigger: record.trigger,
+    });
     persistBridgeState();
 
     sendUdpPayload(buildBroadcastPayload(record, config));
     lastCaptureAt = Date.now();
-    log.info(`Recorded to ${broadcastLog.path} and sent UDP broadcast`);
+    log.info(`Recorded broadcast to ${voiceEventsLog.path} and sent UDP`);
   }
 
   function scheduleResponseFollowup(reason) {
@@ -721,7 +731,7 @@ function createListener({ config, log }) {
         const deviceCount = Object.keys(alexa.serialNumbers || {}).length;
         log.info('Alexa bridge ready', {
           devices: deviceCount,
-          logFile: broadcastLog.path,
+          eventsLog: voiceEventsLog.path,
           amazonPage: initOptions.amazonPage,
         });
         log.info('Listening for broadcast/announcement activity. Press Ctrl+C to stop.');

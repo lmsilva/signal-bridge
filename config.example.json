@@ -3,7 +3,6 @@
   "acceptLanguage": "en-US",
   "amazonPageProxyLanguage": "en_US",
   "proxyPort": 3456,
-  "broadcastLogFile": "broadcast.txt",
   "sessionFile": "data/alexa-session.json",
   "debug": false,
   "udpBroadcast": {

@@ -22,7 +22,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
                                               │
                     ┌─────────────────────────┼─────────────────────────┐
                     ▼                         ▼                         ▼
-            data/broadcast.txt        data/alexa-session.json    UDP :47832
+            data/voice-events.jsonl     data/alexa-session.json    UDP :47832
             data/bridge-state.json                              (JSON payload)
                                                                         │
                                                                         ▼
@@ -53,7 +53,6 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/vendor/alexa-cookie-proxy.js` | Patched login proxy (font fixes, static assets, UI CSS injection) |
 | `src/port-utils.js` | Pre-check port 3456 before auth proxy bind |
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
-| `src/broadcast-log.js` | Append tab-separated lines to broadcast log file |
 | `src/broadcast-udp.js` | Send JSON to `255.255.255.255` + optional `targets[]` |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer) |
@@ -121,7 +120,7 @@ cd /share/Container/alexa-broadcast-bridge
 4. **Capture paths:**
    - **Push:** `ws-device-activity` → broadcast parser + voice query parser
    - **History fallback:** volume-change / connect / periodic poll → `getCustomerHistoryRecords()`
-5. **On broadcast match:** log → `broadcast.txt` → UDP `type: broadcast`
+5. **On broadcast match:** log → `data/voice-events.jsonl` → UDP `type: broadcast`
 6. **On voice match:** time/weather/indoor temperature/air quality → UDP + `data/voice-events.jsonl`; timer voice → immediate timer sync poll
 7. **Timer sync:** periodic `getNotifications()` diff → UDP `type: timer.snapshot` with full active timer list
 8. **Dedup:** `BroadcastParser` + voice query processed-id set + `bridge-state.json`
@@ -147,7 +146,6 @@ Priority: env vars → `data/config.json` → `config.example.json`
 |-----|---------|
 | `amazonPage` / `acceptLanguage` | Region (e.g. `amazon.com`, `en-US`) |
 | `sessionFile` | Default `data/alexa-session.json` |
-| `broadcastLogFile` | Tab-separated capture log |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP to Windows client |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
 | `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/fetchWeather/fetchAirQuality` | Voice capture toggles |
@@ -156,7 +154,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `indoorTemperature.locations[]` | Optional override of thermostat names/aliases (empty = built-in list) |
 | `airQuality.defaultMonitor` | Fallback monitor when query/response has no location (e.g. `main floor`) |
 | `airQuality.monitors[]` | Optional override of air monitor names/aliases/entityId |
-| `voiceEvents.eventsLogFile` | Default `data/voice-events.jsonl` |
+| `voiceEvents.eventsLogFile` | Default `data/voice-events.jsonl` — all captured events (broadcasts + voice + timers) |
 | `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
@@ -256,6 +254,7 @@ Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-07-06: **Unified event log** — broadcasts/announcements now append to `data/voice-events.jsonl` (same JSONL as voice queries and timers). Legacy `broadcast.txt` is read on startup for dedup migration only; no longer written.
 - 2026-07-06: **Vivint alarm + Alexa notifications** — `"ask Vivint to arm"` / disarm → `vivint-alarm.query` with parsed stay/away status; `"show my notifications"` → `alexa-notifications.query` with parsed notification items. Config toggles: `vivintAlarmQueries`, `notificationQueries`. Pending response correlation when command/response split across activities.
 - 2026-07-06: Empty notifications fix — phrases like "you have no new notifications at the moment" show **0 notifications** instead of treating the sentence as one notification.
 - 2026-07-06: Shopping list show uses API as source of truth; filters Alexa narration ("first 3", "all of them") from speech/cache merge.

@@ -21,10 +21,10 @@ data/formerDataStore.json
 config.json
 ```
 
-Create an empty log file (avoids Docker creating a folder by mistake):
+Create an empty events log file (avoids Docker creating a folder by mistake):
 
 ```bash
-touch broadcast.txt
+touch data/voice-events.jsonl
 ```
 
 ---
@@ -48,7 +48,7 @@ Copy the whole project there (or `git clone`), including:
   - `alexa-session.json`
   - `formerDataStore.json`
   - `config.json`
-  - `broadcast.txt` (empty file)
+  - `voice-events.jsonl` (empty file, optional — created automatically on first capture)
 
 ---
 
@@ -83,7 +83,7 @@ Connected to Alexa push channel
 Listening for broadcast/announcement activity
 ```
 
-Broadcasts append to `broadcast.txt` on the host (same folder as compose file).
+Captured events append to `data/voice-events.jsonl` on the host (JSON lines: broadcasts, voice queries, timers).
 
 ---
 
@@ -165,7 +165,7 @@ Only use `./recreate.sh --build` when you changed `Dockerfile` or `package.json`
 `recreate.sh` falls back to restart with the existing image — your `src/` changes
 still load.
 
-Session and `broadcast.txt` are on mounted volumes and are preserved.
+Session and `data/voice-events.jsonl` are on mounted volumes and are preserved.
 
 ---
 
@@ -197,7 +197,7 @@ See `alexa broadcast client/README.md` for the Windows side.
 |---------|-----|
 | `No session found` | Copy `data/alexa-session.json` or run auth compose file |
 | `EISDIR` / `config.json is a directory` | Docker created a folder because the file was missing. See fix below |
-| `broadcast.txt` is a folder | Remove it, `touch data/broadcast.txt`, recreate container |
+| `voice-events.jsonl` is a folder | Remove it, `touch data/voice-events.jsonl`, recreate container |
 
 ### Fix `EISDIR: illegal operation on a directory`
 

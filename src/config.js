@@ -39,7 +39,6 @@ const DEFAULTS = {
   acceptLanguage: process.env.ACCEPT_LANGUAGE || 'en-US',
   proxyPort: Number(process.env.PROXY_PORT || 3456),
   proxyOwnIp: process.env.PROXY_OWN_IP || '127.0.0.1',
-  broadcastLogFile: process.env.BROADCAST_LOG_FILE || 'broadcast.txt',
   sessionFile: process.env.SESSION_FILE || 'data/alexa-session.json',
   debug: process.env.DEBUG === '1' || process.env.DEBUG === 'true',
 };
@@ -58,13 +57,12 @@ function loadConfig() {
     fileConfig = readJsonFile(EXAMPLE_CONFIG_PATH);
   }
 
-  const config = { ...DEFAULTS, ...fileConfig };
+  const config = { ...DEFAULTS, ...fileConfig, ROOT };
 
   config.amazonPageProxyLanguage = config.amazonPageProxyLanguage
     || deriveProxyLanguage(config.acceptLanguage);
   config.formerDataStorePath = path.resolve(ROOT, config.formerDataStorePath || 'data/formerDataStore.json');
   config.bridgeStatePath = path.resolve(ROOT, config.bridgeStateFile || 'data/bridge-state.json');
-  config.broadcastLogPath = path.resolve(ROOT, config.broadcastLogFile);
   config.sessionPath = path.resolve(ROOT, config.sessionFile);
   config.sessionAuthJournalPath = path.resolve(
     ROOT,

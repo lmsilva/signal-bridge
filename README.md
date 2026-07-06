@@ -8,22 +8,22 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 
 ## What it captures
 
-| Category | Example voice commands | UDP `type` | Logged to |
-|----------|------------------------|------------|-----------|
-| **Broadcasts / announcements** | "Alexa, announce dinner is ready" | `broadcast` | `broadcast.txt` |
-| **Time** | "Alexa, what time is it?" | `time.query` | `data/voice-events.jsonl` |
-| **Outdoor weather** | "Alexa, what's the weather?" / "what's the temperature?" | `weather.query` | `data/voice-events.jsonl` |
-| **Indoor temperature** | "Alexa, what's the temperature on the top floor?" | `indoor-temperature.query` | `data/voice-events.jsonl` |
-| **Air quality** | "Alexa, what is the air quality?" | `air-quality.query` | `data/voice-events.jsonl` |
-| **Timers** | Set, cancel, "show my timers", timer fired | `timer.snapshot` | `data/voice-events.jsonl` |
-| **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` | `data/voice-events.jsonl` |
-| **Music** | "Alexa, play …" (now playing from device) | `music.playing` | `data/voice-events.jsonl` |
-| **Smart home** | "Alexa, turn the kitchen lights on" | `smart-home.command` | `data/voice-events.jsonl` |
-| **Tesla battery** | Custom routine: "Alexa, show my Tesla battery" | `tesla-battery.query` | `data/voice-events.jsonl` |
-| **Vivint alarm** | "Alexa, ask Vivint to arm" | `vivint-alarm.query` | `data/voice-events.jsonl` |
-| **Notifications** | "Alexa, show my notifications" | `alexa-notifications.query` | `data/voice-events.jsonl` |
+| Category | Example voice commands | UDP `type` |
+|----------|------------------------|------------|
+| **Broadcasts / announcements** | "Alexa, announce dinner is ready" | `broadcast` |
+| **Time** | "Alexa, what time is it?" | `time.query` |
+| **Outdoor weather** | "Alexa, what's the weather?" / "what's the temperature?" | `weather.query` |
+| **Indoor temperature** | "Alexa, what's the temperature on the top floor?" | `indoor-temperature.query` |
+| **Air quality** | "Alexa, what is the air quality?" | `air-quality.query` |
+| **Timers** | Set, cancel, "show my timers", timer fired | `timer.snapshot` |
+| **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` |
+| **Music** | "Alexa, play …" (now playing from device) | `music.playing` |
+| **Smart home** | "Alexa, turn the kitchen lights on" | `smart-home.command` |
+| **Tesla battery** | Custom routine: "Alexa, show my Tesla battery" | `tesla-battery.query` |
+| **Vivint alarm** | "Alexa, ask Vivint to arm" | `vivint-alarm.query` |
+| **Notifications** | "Alexa, show my notifications" | `alexa-notifications.query` |
 
-Each category can be toggled in `config.json` under `voiceEvents` (see [Configuration](#configuration)). Timer sync runs independently and still emits `timer.snapshot` even when other voice events are disabled.
+All captured events are logged to **`data/voice-events.jsonl`** and sent over UDP. Voice categories can be toggled in `config.json` under `voiceEvents` (see [Configuration](#configuration)). Timer sync runs independently and still emits `timer.snapshot` even when other voice events are disabled.
 
 ---
 
@@ -32,22 +32,21 @@ Each category can be toggled in `config.json` under `voiceEvents` (see [Configur
 ```
 Echo / Alexa app  →  Amazon cloud  →  Bridge (NAS or PC)
                                           │
-              ┌───────────────────────────┼───────────────────────────┐
-              ▼                           ▼                           ▼
-      broadcast.txt              data/voice-events.jsonl         UDP :47832
-   (announcements only)         (voice + timer events)              │
-                                                                     ▼
-                                                        Windows display client
-                                                        (fullscreen overlays)
+                    ┌─────────────────────┼─────────────────────┐
+                    ▼                     ▼                     ▼
+         data/voice-events.jsonl   data/bridge-state.json   UDP :47832
+              (all events)              (dedup state)              │
+                                                                   ▼
+                                                      Windows display client
+                                                      (fullscreen overlays)
 ```
 
 1. **Push path:** Amazon sends device-activity WebSocket events → bridge parses them immediately.
 2. **History fallback:** Volume changes, reconnects, and periodic polls call `getCustomerHistoryRecords()` for anything missed.
-3. **Broadcasts:** Matched announce/broadcast utterances are appended to **`broadcast.txt`** and sent as UDP `type: broadcast`.
-4. **Voice queries:** Time, weather, shopping list, etc. are **not** written to `broadcast.txt`. They are sent over UDP and summarized in **`data/voice-events.jsonl`** (one JSON object per line: type, device, query).
-5. **Timers:** Amazon's notifications API is polled; active timer lists and fire events emit `timer.snapshot` UDP payloads.
+3. **On match:** Build typed UDP payload → append one JSON line to **`data/voice-events.jsonl`** → send UDP to the display client.
+4. **Timers:** Amazon's notifications API is polled; active timer lists and fire events emit `timer.snapshot` UDP payloads.
 
-**Important:** `broadcast.txt` captures **only** broadcast/announcement messages — not weather, timers, shopping list, or other voice overlays. Use `data/voice-events.jsonl` to audit those.
+On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-events.jsonl`**. Legacy **`broadcast.txt`** files (if present from older installs) are still read once for dedup migration but are no longer written.
 
 ---
 
@@ -126,13 +125,12 @@ Copy `config.example.json` to `data/config.json` (Docker) or `config.json` (loca
 
 | Key | Purpose |
 |-----|---------|
-| `broadcastLogFile` | Tab-separated log for **broadcasts only** (default `broadcast.txt`) |
 | `udpBroadcast.port` | UDP port (default **47832**) |
 | `udpBroadcast.targets` | Optional unicast IPs if LAN broadcast is unreliable |
 | `voiceEvents.enabled` | Master switch for voice query capture |
 | `voiceEvents.*Queries` | Per-feature toggles (`timeQueries`, `weatherQueries`, `shoppingListQueries`, `teslaBatteryQueries`, `vivintAlarmQueries`, `notificationQueries`, …) |
 | `voiceEvents.defaultLocation` | Lat/lon for generic outdoor weather |
-| `voiceEvents.eventsLogFile` | JSONL audit log for voice/timer UDP events (default `data/voice-events.jsonl`) |
+| `voiceEvents.eventsLogFile` | JSONL audit log for all captured events (default `data/voice-events.jsonl`) |
 | `timerSync.enabled` | Poll Amazon for active timers |
 | `sessionKeepAlive.*` | Token refresh and session health |
 
@@ -142,24 +140,17 @@ Secrets and runtime data live under `data/` and are not committed.
 
 ## Log files
 
-### `broadcast.txt` (announcements only)
-
-Tab-separated fields:
-
-```
-timestamp    message    device    source    trigger
-```
-
-Example: a broadcast from the Kitchen Echo appears here. A weather question does **not**.
-
 ### `data/voice-events.jsonl`
 
-Append-only JSON lines for voice queries and timer snapshots:
+Append-only JSON lines for **all** captured events — broadcasts, voice queries, and timer snapshots. Each line includes a `ts` timestamp plus event fields:
 
 ```json
-{"type":"weather.query","device":"Kitchen Echo","query":"what's the weather"}
-{"type":"timer.snapshot","trigger":"sync-poll","timerCount":2,"event":{"kind":"list"}}
+{"ts":"2026-07-06T18:00:00.000Z","type":"broadcast","device":"Kitchen Echo","message":"Dinner is ready","source":"voice-history","trigger":"history-poll"}
+{"ts":"2026-07-06T18:01:00.000Z","type":"weather.query","device":"Kitchen Echo","query":"what's the weather"}
+{"ts":"2026-07-06T18:02:00.000Z","type":"timer.snapshot","trigger":"sync-poll","timerCount":2,"event":{"kind":"list"}}
 ```
+
+Path is configurable via `voiceEvents.eventsLogFile`.
 
 ### Other runtime files
 
@@ -171,6 +162,8 @@ Append-only JSON lines for voice queries and timer snapshots:
 | `data/shopping-list-cache.json` | Shopping list cache across add/show commands |
 | `data/session-auth-journal.jsonl` | Auth refresh and session health events |
 | `data/auth-status.json` | Re-auth recommended/required signal |
+
+**Legacy:** Older installs may still have `broadcast.txt` (tab-separated announcements). The bridge no longer writes this file; dedup state is migrated from it automatically on first startup after upgrade.
 
 ---
 
