@@ -201,18 +201,19 @@ See `alexa broadcast client/README.md` for the Windows side.
 
 ### Fix `EISDIR: illegal operation on a directory`
 
-This happens when Docker mounts `./config.json` or `./broadcast.txt` but those **files did not exist** on the NAS. Docker creates empty **directories** instead.
+This happens when Docker mounts `./config.json` but that **file did not exist** on the NAS. Docker creates an empty **directory** instead.
 
 ```bash
 cd /share/Container/alexa-broadcast-bridge
 docker compose down
-rm -rf config.json broadcast.txt
+rm -rf config.json
 mkdir -p data
 cp /path/to/your/config.json data/config.json   # or create manually
-touch data/broadcast.txt
+touch data/voice-events.jsonl
 docker compose up -d
 docker compose logs -f
 ```
+
 | Listener exits / auth errors | Run `./reauth.sh` or auth compose; copy fresh session from PC |
 | `bind: address already in use` on port 3456 | Stop listener + `docker rm -f alexa-broadcast-auth`; use updated `docker-compose.auth.yml` with `network_mode: host` (no `ports:`) |
 | `failed to read dockerfile` / `error creating zfs mount` on build | QNAP Container Station Docker graph bug — **ignore for code updates**. Run `./recreate.sh` (no `--build`); `src/` is bind-mounted. To fix builds: restart Container Station in QNAP, or `docker system prune`, or build image on a PC and `docker load` |
