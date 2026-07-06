@@ -15,6 +15,8 @@ DISPLAY_TYPES = (
     "music.playing",
     "smart-home.command",
     "tesla-battery.query",
+    "vivint-alarm.query",
+    "alexa-notifications.query",
 )
 
 
@@ -45,6 +47,8 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "music.playing": ("Alexa", "Now Playing"),
         "smart-home.command": ("Alexa", "Smart Home"),
         "tesla-battery.query": ("Alexa", "Tesla Battery"),
+        "vivint-alarm.query": ("Alexa", "Security"),
+        "alexa-notifications.query": ("Alexa", "Notifications"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 

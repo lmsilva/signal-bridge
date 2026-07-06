@@ -26,3 +26,27 @@ test('tryComplete attaches orphan battery response to pending tesla query', () =
   assert.equal(completed?.spokenResponse, 'Your battery is 80 percent');
   assert.equal(completed?.trigger, 'tesla-battery-response');
 });
+
+test('tryComplete attaches orphan Vivint arm response to pending query', () => {
+  const pending = createPendingVoiceResponses();
+  pending.remember({
+    kind: 'vivint-alarm',
+    device: 'Kitchen Echo',
+    query: 'ask Vivint to arm',
+    spokenResponse: null,
+    trigger: 'vivint-alarm-query',
+  });
+
+  const completed = pending.tryComplete(
+    { creationTimestamp: Date.now() },
+    'your system has been armed stay',
+    {
+      getDeviceName: () => 'Kitchen Echo',
+      getActivityId: () => 'response-vivint',
+      matchesShoppingListSpeech: () => false,
+    },
+  );
+
+  assert.equal(completed?.spokenResponse, 'your system has been armed stay');
+  assert.equal(completed?.trigger, 'vivint-alarm-response');
+});

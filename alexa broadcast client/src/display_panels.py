@@ -2575,3 +2575,309 @@ class SmartHomePanel(BasePanel):
                 fill=color, width=6, capstyle=tk.ROUND,
             )
         )
+
+
+class VivintAlarmPanel(BasePanel):
+    SECURE_COLOR = "#4ade80"
+    DISARMED_COLOR = "#94a3b8"
+
+    def _render(self, payload: dict):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        chip = self.config.get("chipBackground", "#141a24")
+
+        alarm = payload.get("alarm") or {}
+        status = str(alarm.get("status") or "unknown").lower()
+        mode_label = alarm.get("modeLabel")
+        headline = alarm.get("label") or "Security System Update"
+        provider = alarm.get("provider") or "Vivint"
+        center_x = x + width // 2
+
+        if status == "armed":
+            accent = self.SECURE_COLOR
+            secure_text = "House Secured"
+        elif status == "disarmed":
+            accent = self.DISARMED_COLOR
+            secure_text = "System Disarmed"
+        else:
+            accent = self.config.get("accentColor", "#38bdf8")
+            secure_text = "Security Update"
+
+        icon_size = 140
+        icon_y = y + (bottom - y) // 2 - 110
+        self._draw_lock_icon(center_x, icon_y, icon_size, accent, chip, locked=status == "armed")
+
+        cursor = icon_y + icon_size // 2 + 36
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=headline,
+                fill=accent,
+                font=self.shell.hero_font,
+                width=width - 40,
+            )
+        )
+        cursor += self.shell.hero_font.metrics("linespace") + 8
+
+        if mode_label:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=mode_label,
+                    fill=text,
+                    font=self.shell.section_title_font,
+                )
+            )
+            cursor += self.shell.section_title_font.metrics("linespace") + 10
+
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=secure_text,
+                fill=text,
+                font=self.shell.body_font,
+            )
+        )
+        cursor += self.shell.body_font.metrics("linespace") + 14
+
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=provider,
+                fill=muted,
+                font=self.shell.forecast_label_font,
+            )
+        )
+
+    def _draw_lock_icon(self, cx: float, cy: float, size: float, color: str, chip: str, locked: bool):
+        half = size / 2
+        body_w = size * 0.52
+        body_h = size * 0.42
+        body_top = cy + size * 0.08
+        body_bottom = body_top + body_h
+
+        shackle_w = size * 0.34
+        shackle_h = size * 0.34
+        shackle_top = cy - half * 0.55
+        if locked:
+            self._track(
+                self.canvas.create_arc(
+                    cx - shackle_w,
+                    shackle_top,
+                    cx + shackle_w,
+                    shackle_top + shackle_h * 2,
+                    start=0,
+                    extent=180,
+                    style=tk.ARC,
+                    outline=color,
+                    width=8,
+                )
+            )
+        else:
+            self._track(
+                self.canvas.create_arc(
+                    cx - shackle_w * 0.2,
+                    shackle_top,
+                    cx + shackle_w * 1.4,
+                    shackle_top + shackle_h * 2,
+                    start=90,
+                    extent=180,
+                    style=tk.ARC,
+                    outline=color,
+                    width=8,
+                )
+            )
+
+        self._track(
+            self.canvas.create_rectangle(
+                cx - body_w / 2,
+                body_top,
+                cx + body_w / 2,
+                body_bottom,
+                fill=chip,
+                outline=color,
+                width=4,
+            )
+        )
+        self._track(
+            self.canvas.create_oval(
+                cx - size * 0.06,
+                body_top + body_h * 0.35,
+                cx + size * 0.06,
+                body_top + body_h * 0.55,
+                fill=color,
+                outline="",
+            )
+        )
+
+
+class NotificationsPanel(BasePanel):
+    NOTIFICATION_ACCENT = "#FF9900"
+    NOTIFICATION_GLOW = "#F59E0B"
+
+    def _render(self, payload: dict):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        chip = self.config.get("chipBackground", "#141a24")
+        accent = payload.get("themeAccent") or self.NOTIFICATION_ACCENT
+
+        notifications = payload.get("notifications") or {}
+        items = list(notifications.get("items") or [])
+        empty = bool(notifications.get("empty"))
+        summary = notifications.get("summary")
+        spoken = payload.get("spokenResponse") or notifications.get("body") or ""
+
+        if not items and spoken.strip() and not empty:
+            items = [spoken.strip()]
+
+        banner_h = 44
+        self._track(
+            self.canvas.create_rectangle(
+                x,
+                y,
+                x + width,
+                y + banner_h,
+                fill=accent,
+                outline="",
+            )
+        )
+        self._draw_bell_icon(x + 28, y + banner_h // 2, 22, self.config.get("overlayBackground", "#0b0f14"))
+
+        banner_text = summary or ("No Notifications" if empty else "Notification")
+        self._track(
+            self.canvas.create_text(
+                x + 56,
+                y + banner_h // 2,
+                anchor="w",
+                text=banner_text,
+                fill=self.config.get("overlayBackground", "#0b0f14"),
+                font=self.shell.section_label_font,
+            )
+        )
+
+        cursor = y + banner_h + 24
+        card_width = width - 8
+        card_x = x + 4
+
+        if empty:
+            self._track(
+                self.canvas.create_text(
+                    x + width // 2,
+                    cursor + 40,
+                    anchor="n",
+                    text="You're all caught up",
+                    fill=muted,
+                    font=self.shell.section_title_font,
+                )
+            )
+            return
+
+        for index, item in enumerate(items[:6]):
+            card_text = str(item).strip()
+            if not card_text:
+                continue
+
+            lines = max(1, min(4, len(card_text) // 42 + 1))
+            card_h = 28 + lines * self.shell.body_font.metrics("linespace")
+            if cursor + card_h > bottom - 12:
+                remaining = len(items) - index
+                if remaining > 0:
+                    self._track(
+                        self.canvas.create_text(
+                            x + width // 2,
+                            bottom - 24,
+                            anchor="s",
+                            text=f"+ {remaining} more",
+                            fill=accent,
+                            font=self.shell.forecast_label_font,
+                        )
+                    )
+                break
+
+            self._track(
+                self.canvas.create_rectangle(
+                    card_x,
+                    cursor,
+                    card_x + card_width,
+                    cursor + card_h,
+                    fill=chip,
+                    outline=accent,
+                    width=1,
+                )
+            )
+            self._track(
+                self.canvas.create_rectangle(
+                    card_x,
+                    cursor,
+                    card_x + 6,
+                    cursor + card_h,
+                    fill=accent,
+                    outline="",
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    card_x + 18,
+                    cursor + 14,
+                    anchor="nw",
+                    text=card_text,
+                    fill=text,
+                    font=self.shell.body_font,
+                    width=card_width - 28,
+                )
+            )
+            cursor += card_h + 12
+
+    def _draw_bell_icon(self, cx: float, cy: float, size: float, color: str):
+        half = size / 2
+        self._track(
+            self.canvas.create_arc(
+                cx - half * 0.85,
+                cy - half,
+                cx + half * 0.85,
+                cy + half * 0.35,
+                start=0,
+                extent=180,
+                style=tk.CHORD,
+                fill=color,
+                outline="",
+            )
+        )
+        self._track(
+            self.canvas.create_rectangle(
+                cx - half * 0.95,
+                cy + half * 0.05,
+                cx + half * 0.95,
+                cy + half * 0.55,
+                fill=color,
+                outline="",
+            )
+        )
+        self._track(
+            self.canvas.create_oval(
+                cx - half * 0.22,
+                cy + half * 0.48,
+                cx + half * 0.22,
+                cy + half * 0.78,
+                fill=color,
+                outline="",
+            )
+        )

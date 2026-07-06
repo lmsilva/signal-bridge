@@ -81,6 +81,8 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `music.playing` | Large centered album art + track info |
 | `smart-home.command` | Device on/off panel |
 | `tesla-battery.query` | Model Y image + battery % bar from custom routine |
+| `vivint-alarm.query` | Lock icon + armed/disarmed status (Vivint stay/away) |
+| `alexa-notifications.query` | Amber notification banner + parsed notification cards |
 
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -90,6 +92,8 @@ Test locally:
 ```bash
 python test/send_test.py --type broadcast
 python test/send_test.py --type tesla-battery --percent 78 --seconds 30
+python test/send_test.py --type vivint-alarm --seconds 30
+python test/send_test.py --type notifications --seconds 45
 python test/send_test.py --type weather --seconds 45
 python test/send_test.py --type indoor --seconds 45
 python test/send_test.py --type indoor-humidity --seconds 45
@@ -178,6 +182,7 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-06: **Vivint alarm + notifications panels** — `vivint-alarm.query` shows lock icon + armed stay/away headline (green secure theme); `alexa-notifications.query` uses amber banner/cards (Echo notification LED color) with parsed notification text.
 - 2026-07-06: Shopping list rows are compact, left-aligned, body font (20px landscape), thin accent stripe (no bullets).
 - 2026-07-06: Tesla battery bar lowered below car image; repeat voice commands show again after dedup fix on bridge.
 - 2026-07-06: Tesla battery panel shows colorized 0–100% bar (red→green) with centered percent; portable build prefers `assets/` next to exe over bundled copy.

@@ -1,4 +1,6 @@
 const { parseBatteryPercentFromSpeech } = require('./tesla-battery');
+const { hasAlarmStatusInSpeech } = require('./vivint-alarm');
+const { hasNotificationContent } = require('./alexa-notifications');
 
 const DEFAULT_TTL_MS = 90000;
 
@@ -33,6 +35,24 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
 
     if (event.kind === 'shopping-list' && event.trigger === 'shopping-list-show') {
       pending.set(pendingKey(event.device, 'shopping-list-show'), { event, at: now });
+      prune(now);
+      return;
+    }
+
+    if (event.kind === 'vivint-alarm') {
+      if (hasAlarmStatusInSpeech(event.spokenResponse)) {
+        return;
+      }
+      pending.set(pendingKey(event.device, 'vivint-alarm'), { event, at: now });
+      prune(now);
+      return;
+    }
+
+    if (event.kind === 'alexa-notifications') {
+      if (hasNotificationContent(event.spokenResponse)) {
+        return;
+      }
+      pending.set(pendingKey(event.device, 'alexa-notifications'), { event, at: now });
       prune(now);
     }
   }
@@ -75,6 +95,34 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
           spokenResponse: response,
           timestamp: activity?.creationTimestamp || now,
           trigger: 'shopping-list-show',
+        };
+      }
+    }
+
+    const vivintPending = pending.get(pendingKey(device, 'vivint-alarm'));
+    if (vivintPending && now - vivintPending.at <= ttlMs) {
+      if (hasAlarmStatusInSpeech(response)) {
+        pending.delete(pendingKey(device, 'vivint-alarm'));
+        return {
+          ...vivintPending.event,
+          activityId: helpers.getActivityId(activity),
+          spokenResponse: response,
+          timestamp: activity?.creationTimestamp || now,
+          trigger: 'vivint-alarm-response',
+        };
+      }
+    }
+
+    const notificationsPending = pending.get(pendingKey(device, 'alexa-notifications'));
+    if (notificationsPending && now - notificationsPending.at <= ttlMs) {
+      if (hasNotificationContent(response)) {
+        pending.delete(pendingKey(device, 'alexa-notifications'));
+        return {
+          ...notificationsPending.event,
+          activityId: helpers.getActivityId(activity),
+          spokenResponse: response,
+          timestamp: activity?.creationTimestamp || now,
+          trigger: 'alexa-notifications-response',
         };
       }
     }

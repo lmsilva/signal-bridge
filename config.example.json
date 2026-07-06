@@ -25,6 +25,8 @@
     "musicEvents": true,
     "smartHomeEvents": true,
     "teslaBatteryQueries": true,
+    "vivintAlarmQueries": true,
+    "notificationQueries": true,
     "eventsLogFile": "data/voice-events.jsonl",
     "defaultLocation": {
       "name": "Home",

@@ -30,11 +30,15 @@ const {
   buildShoppingListPayload,
   buildMusicPayload,
   buildTeslaBatteryPayload,
+  buildVivintAlarmPayload,
+  buildNotificationsPayload,
   buildSmartHomePayload,
   buildTimerSnapshotPayload,
 } = require('./udp-payload');
 const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
 const { buildTeslaBatteryReading, parseBatteryPercentFromSpeech } = require('./tesla-battery');
+const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
+const { buildNotificationsReading, hasNotificationContent } = require('./alexa-notifications');
 const { fetchNowPlaying } = require('./music-info');
 const { resolveDeviceType } = require('./smart-home-command');
 const { listSmarthomeEndpoints } = require('./smarthome-devices');
@@ -82,6 +86,8 @@ function createListener({ config, log }) {
     musicEvents: config.voiceEvents?.musicEvents !== false,
     smartHomeEvents: config.voiceEvents?.smartHomeEvents !== false,
     teslaBatteryQueries: config.voiceEvents?.teslaBatteryQueries !== false,
+    vivintAlarmQueries: config.voiceEvents?.vivintAlarmQueries !== false,
+    notificationQueries: config.voiceEvents?.notificationQueries !== false,
   };
 
   function persistBridgeState() {
@@ -230,6 +236,14 @@ function createListener({ config, log }) {
       return;
     }
 
+    if (event.kind === 'vivint-alarm' && !voiceSettings.vivintAlarmQueries) {
+      return;
+    }
+
+    if (event.kind === 'alexa-notifications' && !voiceSettings.notificationQueries) {
+      return;
+    }
+
     let payload;
     if (event.kind === 'time') {
       payload = buildTimeQueryPayload(event, config);
@@ -304,6 +318,32 @@ function createListener({ config, log }) {
         pendingVoiceResponses.forget(event.device, 'tesla-battery');
       }
       payload = buildTeslaBatteryPayload(event, config, { battery });
+    } else if (event.kind === 'vivint-alarm') {
+      const alarm = buildVivintAlarmReading(event.spokenResponse, event.query);
+      if (!hasAlarmStatusInSpeech(event.spokenResponse)) {
+        log.info('Vivint alarm event without parsed status', {
+          query: event.query,
+          spoken: String(event.spokenResponse || '').slice(0, 160) || null,
+        });
+        pendingVoiceResponses.remember(event);
+        scheduleResponseFollowup('vivint-alarm');
+      } else {
+        pendingVoiceResponses.forget(event.device, 'vivint-alarm');
+      }
+      payload = buildVivintAlarmPayload(event, config, { alarm });
+    } else if (event.kind === 'alexa-notifications') {
+      const notifications = buildNotificationsReading(event.spokenResponse);
+      if (!hasNotificationContent(event.spokenResponse)) {
+        log.info('Notifications query without readable content yet', {
+          query: event.query,
+          spoken: String(event.spokenResponse || '').slice(0, 160) || null,
+        });
+        pendingVoiceResponses.remember(event);
+        scheduleResponseFollowup('alexa-notifications');
+      } else {
+        pendingVoiceResponses.forget(event.device, 'alexa-notifications');
+      }
+      payload = buildNotificationsPayload(event, config, { notifications });
     } else if (event.kind === 'indoor-temperature') {
       const indoorConfig = config.indoorTemperature || {};
       const location = resolveIndoorQueryLocation(event.query, event.spokenResponse, indoorConfig);
@@ -363,6 +403,13 @@ function createListener({ config, log }) {
     if (event.kind === 'tesla-battery') {
       logMeta.percent = payload?.battery?.percent ?? parseBatteryPercentFromSpeech(event.spokenResponse);
       logMeta.spoken = String(event.spokenResponse || '').slice(0, 120) || null;
+    }
+    if (event.kind === 'vivint-alarm') {
+      logMeta.status = payload?.alarm?.status ?? null;
+      logMeta.mode = payload?.alarm?.mode ?? null;
+    }
+    if (event.kind === 'alexa-notifications') {
+      logMeta.count = payload?.notifications?.items?.length ?? 0;
     }
     log.info(`Voice event captured (${payload.type}) from ${event.device}`, logMeta);
   }

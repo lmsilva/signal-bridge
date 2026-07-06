@@ -356,6 +356,51 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "vivint-alarm":
+        mode = getattr(args, "alarm_mode", "stay")
+        spoken = f"your system has been armed {mode}"
+        return {
+            "version": 2,
+            "type": "vivint-alarm.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "ask Vivint to arm",
+            "spokenResponse": spoken,
+            "alarm": {
+                "status": "armed",
+                "mode": mode,
+                "provider": "Vivint",
+                "label": f"Alarm System Armed — {mode.title()}",
+                "modeLabel": f"{mode.title()} Mode",
+            },
+        }
+
+    if args.type == "notifications":
+        return {
+            "version": 2,
+            "type": "alexa-notifications.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "show my notifications",
+            "spokenResponse": (
+                "You have 2 notifications. First, your package was delivered. "
+                "Second, your reminder for tomorrow."
+            ),
+            "notifications": {
+                "items": [
+                    "Your package was delivered.",
+                    "Your reminder for tomorrow.",
+                ],
+                "empty": False,
+                "summary": "2 notifications",
+            },
+            "themeAccent": "#FF9900",
+        }
+
     raise ValueError(f"Unknown type: {args.type}")
 
 
@@ -383,7 +428,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "tesla-battery"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "tesla-battery", "vivint-alarm", "notifications"],
         default="broadcast",
         help="Payload type to send",
     )

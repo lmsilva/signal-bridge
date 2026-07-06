@@ -6,13 +6,21 @@ const {
   hasSpokenResponse,
 } = require('../src/voice-event-gate');
 
-test('needsSpokenResponseUpgrade for tesla, music, and shopping show without speech', () => {
+test('needsSpokenResponseUpgrade for tesla, music, vivint, notifications, and shopping show without speech', () => {
   assert.equal(
     needsSpokenResponseUpgrade({ kind: 'tesla-battery', spokenResponse: null }),
     true,
   );
   assert.equal(
     needsSpokenResponseUpgrade({ kind: 'music', spokenResponse: '' }),
+    true,
+  );
+  assert.equal(
+    needsSpokenResponseUpgrade({ kind: 'vivint-alarm', spokenResponse: null }),
+    true,
+  );
+  assert.equal(
+    needsSpokenResponseUpgrade({ kind: 'alexa-notifications', spokenResponse: null }),
     true,
   );
   assert.equal(

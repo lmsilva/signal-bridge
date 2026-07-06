@@ -197,6 +197,38 @@ function buildTeslaBatteryPayload(event, config, { battery } = {}) {
   };
 }
 
+function buildVivintAlarmPayload(event, config, { alarm } = {}) {
+  return {
+    version: 2,
+    type: 'vivint-alarm.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: displaySeconds(config),
+    trigger: event.trigger || 'vivint-alarm-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    alarm: alarm || null,
+  };
+}
+
+function buildNotificationsPayload(event, config, { notifications } = {}) {
+  const items = notifications?.items || [];
+  const extraSeconds = Math.max(0, items.length - 1) * 8;
+
+  return {
+    version: 2,
+    type: 'alexa-notifications.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: Math.max(displaySeconds(config), 20 + extraSeconds),
+    trigger: event.trigger || 'alexa-notifications-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    notifications: notifications || null,
+    themeAccent: '#FF9900',
+  };
+}
+
 function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
   const spokenTarget = event.command?.target || null;
   return {
@@ -246,6 +278,8 @@ module.exports = {
   buildShoppingListPayload,
   buildMusicPayload,
   buildTeslaBatteryPayload,
+  buildVivintAlarmPayload,
+  buildNotificationsPayload,
   buildSmartHomePayload,
   buildTimerSnapshotPayload,
   displaySeconds,

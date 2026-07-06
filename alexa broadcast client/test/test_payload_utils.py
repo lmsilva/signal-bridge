@@ -42,6 +42,8 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "air-quality.query"}), "air-quality.query")
         self.assertEqual(resolve_display_type({"type": "timer.snapshot", "timers": []}), "timer.snapshot")
         self.assertEqual(resolve_display_type({"type": "tesla-battery.query"}), "tesla-battery.query")
+        self.assertEqual(resolve_display_type({"type": "vivint-alarm.query"}), "vivint-alarm.query")
+        self.assertEqual(resolve_display_type({"type": "alexa-notifications.query"}), "alexa-notifications.query")
 
     def test_battery_helpers(self):
         self.assertEqual(format_battery_percent(78), "78%")
@@ -49,6 +51,8 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(battery_level_color(0), "#ef4444")
         self.assertEqual(battery_level_color(100), "#22c55e")
         self.assertEqual(title_for_display_type("tesla-battery.query"), ("Alexa", "Tesla Battery"))
+        self.assertEqual(title_for_display_type("vivint-alarm.query"), ("Alexa", "Security"))
+        self.assertEqual(title_for_display_type("alexa-notifications.query"), ("Alexa", "Notifications"))
 
     def test_is_display_payload(self):
         self.assertTrue(is_display_payload({"type": "time.query", "device": "Kitchen"}))

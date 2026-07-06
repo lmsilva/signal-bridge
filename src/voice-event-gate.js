@@ -11,6 +11,10 @@ function needsSpokenResponseUpgrade(event) {
     return true;
   }
 
+  if (event.kind === 'vivint-alarm' || event.kind === 'alexa-notifications') {
+    return true;
+  }
+
   if (event.kind === 'shopping-list' && event.trigger === 'shopping-list-show') {
     return true;
   }

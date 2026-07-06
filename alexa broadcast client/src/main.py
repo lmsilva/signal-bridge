@@ -22,6 +22,8 @@ class BroadcastClientApp:
             "music.playing",
             "smart-home.command",
             "tesla-battery.query",
+            "vivint-alarm.query",
+            "alexa-notifications.query",
         }
     )
 

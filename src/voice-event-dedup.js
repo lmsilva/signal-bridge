@@ -1,5 +1,6 @@
 const { parseBatteryPercentFromSpeech } = require('./tesla-battery');
-
+const { parseAlarmStatusFromSpeech } = require('./vivint-alarm');
+const { parseNotificationsFromSpeech } = require('./alexa-notifications');
 const { parseShoppingListFromSpeech } = require('./shopping-list');
 
 const DEFAULT_DEDUP_MS = 120000;
@@ -38,6 +39,16 @@ function contentSignature(event) {
   if (event?.kind === 'shopping-list') {
     const parsed = parseShoppingListFromSpeech(event?.spokenResponse, { query: event?.query });
     return String(parsed?.items?.length ?? '');
+  }
+
+  if (event?.kind === 'vivint-alarm') {
+    const parsed = parseAlarmStatusFromSpeech(event?.spokenResponse, event?.query);
+    return [parsed?.status || '', parsed?.mode || ''].join('|');
+  }
+
+  if (event?.kind === 'alexa-notifications') {
+    const parsed = parseNotificationsFromSpeech(event?.spokenResponse);
+    return String(parsed?.items?.length ?? '') + '|' + String(parsed?.empty ?? '');
   }
 
   return '';

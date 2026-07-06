@@ -11,10 +11,12 @@ from src.display_panels import (
     IndoorTemperaturePanel,
     MusicPanel,
     ShoppingListPanel,
+    NotificationsPanel,
     SmartHomePanel,
     TeslaBatteryPanel,
     TimePanel,
     TimerPanel,
+    VivintAlarmPanel,
     WeatherPanel,
 )
 from src.payload_utils import resolve_display_type, title_for_display_type
@@ -118,6 +120,8 @@ class OverlayWindow:
             "music.playing": MusicPanel(self.root, self.shell, self.config),
             "smart-home.command": SmartHomePanel(self.root, self.shell, self.config),
             "tesla-battery.query": TeslaBatteryPanel(self.root, self.shell, self.config),
+            "vivint-alarm.query": VivintAlarmPanel(self.root, self.shell, self.config),
+            "alexa-notifications.query": NotificationsPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
@@ -208,7 +212,8 @@ class OverlayWindow:
         title_center_x = layout.content_x + layout.content_width // 2
         top_y = int(self.screen_h * (0.12 if self.portrait else 0.14))
         title_color = self.config.get("titleColor", self.config["textColor"])
-        title_accent_color = self.config.get("titleAccentColor", self.config["accentColor"])
+        self._default_title_accent_color = self.config.get("titleAccentColor", self.config["accentColor"])
+        title_accent_color = self._default_title_accent_color
 
         self.title_primary_id = self.canvas.create_text(
             title_center_x,
@@ -287,10 +292,24 @@ class OverlayWindow:
         if callback:
             callback()
 
-    def _set_title(self, display_type: str):
+    def _set_title(self, display_type: str, payload: dict | None = None):
         primary, accent = title_for_display_type(display_type)
+        accent_color = self._default_title_accent_color
+        if payload:
+            theme = payload.get("themeAccent")
+            if theme:
+                accent_color = theme
+            elif display_type == "alexa-notifications.query":
+                accent_color = "#FF9900"
+            elif display_type == "vivint-alarm.query":
+                alarm = payload.get("alarm") or {}
+                status = str(alarm.get("status") or "").lower()
+                if status == "armed":
+                    accent_color = "#4ade80"
+                elif status == "disarmed":
+                    accent_color = self.config.get("mutedTextColor", "#94a3b8")
         self.canvas.itemconfigure(self.title_primary_id, text=primary)
-        self.canvas.itemconfigure(self.title_accent_id, text=accent)
+        self.canvas.itemconfigure(self.title_accent_id, text=accent, fill=accent_color)
         self.canvas.tag_raise("overlay_chrome")
 
     def _stop_active_panel(self):
@@ -321,7 +340,7 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
-        self._set_title(display_type)
+        self._set_title(display_type, payload)
 
         panel = self.panels[display_type]
         self._active_panel = panel

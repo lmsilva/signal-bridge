@@ -5,6 +5,8 @@ const { matchesAirQualityQuery } = require('./air-quality');
 const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
 const { matchesMusicQuery } = require('./music-info');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
+const { matchesVivintAlarmQuery } = require('./vivint-alarm');
+const { matchesNotificationsQuery } = require('./alexa-notifications');
 const { parseSmartHomeCommand } = require('./smart-home-command');
 
 const TIME_QUERY_RE = /\b(?:what(?:'s|\s+is|\s+was)?\s+(?:the\s+)?time(?:\s+is\s+it)?|tell\s+me\s+(?:the\s+)?time|do\s+you\s+have\s+(?:the\s+)?time|time\s+please)\b/i;
@@ -90,6 +92,32 @@ function createVoiceQueryParser() {
         query: summary,
         spokenResponse: response || null,
         trigger: 'tesla-battery-query',
+      };
+    }
+
+    if (matchesVivintAlarmQuery(summary, response)) {
+      return {
+        kind: 'vivint-alarm',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'vivint-alarm-query',
+      };
+    }
+
+    if (matchesNotificationsQuery(summary, response)) {
+      return {
+        kind: 'alexa-notifications',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'alexa-notifications-query',
       };
     }
 
