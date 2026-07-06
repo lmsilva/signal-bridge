@@ -17,7 +17,15 @@ test('parseNotificationsFromSpeech handles empty notifications', () => {
   const parsed = parseNotificationsFromSpeech('You have no notifications');
   assert.equal(parsed.empty, true);
   assert.deepEqual(parsed.items, []);
-  assert.equal(parsed.summary, 'No notifications');
+  assert.equal(parsed.summary, '0 notifications');
+});
+
+test('parseNotificationsFromSpeech handles no new notifications phrasing', () => {
+  const spoken = 'You have no new notifications at the moment.';
+  const parsed = parseNotificationsFromSpeech(spoken);
+  assert.equal(parsed.empty, true);
+  assert.deepEqual(parsed.items, []);
+  assert.equal(parsed.summary, '0 notifications');
 });
 
 test('parseNotificationsFromSpeech splits numbered notifications', () => {

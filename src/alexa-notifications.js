@@ -1,7 +1,7 @@
 const SHOW_NOTIFICATIONS_RE =
   /\b(?:show|read|list|hear|what(?:'s|\s+are))\s+(?:me\s+)?(?:my\s+)?notifications?\b|\bnotifications?\s+please\b/i;
 const NO_NOTIFICATIONS_RE =
-  /\b(?:no|don't have any|zero|you have no)\s+notifications?\b|\bnotifications?\s+(?:are\s+)?(?:clear|empty)\b/i;
+  /\b(?:no|zero)\s+(?:new\s+)?notifications?\b|\b(?:don't|do not)\s+have\s+any\s+(?:new\s+)?notifications?\b|\bnotifications?\s+(?:are\s+)?(?:clear|empty)\b|\byou have no\b(?:\s+\w+){0,6}\s+notifications?\b|\bthere(?:'s| is| are)\s+no\b(?:\s+\w+){0,6}\s+notifications?\b|\ball caught up\b/i;
 const NOTIFICATION_INTRO_RE =
   /\b(?:you have|there(?:'s| is| are))\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+notifications?\b/i;
 
@@ -27,7 +27,28 @@ function cleanNotificationText(text) {
     .trim();
 }
 
+function isEmptyNotificationPhrase(text) {
+  const spoken = normalizeText(text);
+  if (!spoken) {
+    return false;
+  }
+  return NO_NOTIFICATIONS_RE.test(spoken);
+}
+
+function emptyNotificationsResult(spoken) {
+  return {
+    items: [],
+    empty: true,
+    summary: '0 notifications',
+    body: spoken,
+  };
+}
+
 function splitNotificationItems(spoken) {
+  if (isEmptyNotificationPhrase(spoken)) {
+    return [];
+  }
+
   let body = spoken
     .replace(/^(?:you have|there(?:'s| is| are))\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+notifications?[.:\s-]*/i, '')
     .replace(/^(?:here(?:'s| is| are)|okay|sure)[^.]*notifications?[.:\s-]*/i, '')
@@ -53,6 +74,9 @@ function splitNotificationItems(spoken) {
   }
 
   const cleaned = cleanNotificationText(body);
+  if (cleaned && isEmptyNotificationPhrase(cleaned)) {
+    return [];
+  }
   return cleaned ? [cleaned] : [];
 }
 
@@ -62,12 +86,16 @@ function parseNotificationsFromSpeech(response) {
     return { items: [], empty: false, summary: null, body: null };
   }
 
-  if (NO_NOTIFICATIONS_RE.test(spoken)) {
-    return { items: [], empty: true, summary: 'No notifications', body: spoken };
+  if (isEmptyNotificationPhrase(spoken)) {
+    return emptyNotificationsResult(spoken);
   }
 
-  const items = splitNotificationItems(spoken);
+  const items = splitNotificationItems(spoken).filter((item) => !isEmptyNotificationPhrase(item));
   const count = items.length;
+  if (count === 0 && /\bnotifications?\b/i.test(spoken) && /\b(?:no|zero|none|empty|clear|caught up)\b/i.test(spoken)) {
+    return emptyNotificationsResult(spoken);
+  }
+
   const summary = count
     ? `${count} notification${count === 1 ? '' : 's'}`
     : NOTIFICATION_INTRO_RE.test(spoken)
@@ -76,7 +104,7 @@ function parseNotificationsFromSpeech(response) {
 
   return {
     items,
-    empty: count === 0 && NO_NOTIFICATIONS_RE.test(spoken),
+    empty: false,
     summary,
     body: spoken,
   };
@@ -87,7 +115,7 @@ function hasNotificationContent(spokenResponse) {
   if (!spoken) {
     return false;
   }
-  if (NO_NOTIFICATIONS_RE.test(spoken)) {
+  if (isEmptyNotificationPhrase(spoken)) {
     return true;
   }
   if (NOTIFICATION_INTRO_RE.test(spoken)) {

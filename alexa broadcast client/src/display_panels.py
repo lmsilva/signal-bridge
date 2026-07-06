@@ -1,5 +1,6 @@
 import io
 import math
+import re
 import threading
 import time
 import tkinter as tk
@@ -2740,12 +2741,19 @@ class NotificationsPanel(BasePanel):
         accent = payload.get("themeAccent") or self.NOTIFICATION_ACCENT
 
         notifications = payload.get("notifications") or {}
-        items = list(notifications.get("items") or [])
+        items = [
+            item for item in (notifications.get("items") or [])
+            if not self._looks_like_empty_notification_message(item)
+        ]
         empty = bool(notifications.get("empty"))
         summary = notifications.get("summary")
         spoken = payload.get("spokenResponse") or notifications.get("body") or ""
 
-        if not items and spoken.strip() and not empty:
+        if self._looks_like_empty_notification_message(spoken):
+            empty = True
+            summary = "0 notifications"
+            items = []
+        elif not items and spoken.strip() and not empty:
             items = [spoken.strip()]
 
         banner_h = 44
@@ -2761,7 +2769,7 @@ class NotificationsPanel(BasePanel):
         )
         self._draw_bell_icon(x + 28, y + banner_h // 2, 22, self.config.get("overlayBackground", "#0b0f14"))
 
-        banner_text = summary or ("No Notifications" if empty else "Notification")
+        banner_text = summary or ("0 notifications" if empty else "Notification")
         self._track(
             self.canvas.create_text(
                 x + 56,
@@ -2845,6 +2853,21 @@ class NotificationsPanel(BasePanel):
                 )
             )
             cursor += card_h + 12
+
+    @staticmethod
+    def _looks_like_empty_notification_message(text: str) -> bool:
+        normalized = " ".join(str(text or "").split()).lower()
+        if not normalized:
+            return False
+        patterns = (
+            r"\bno(?:\s+\w+){0,6}\s+notifications?\b",
+            r"\bzero notifications?\b",
+            r"\bnotifications?\s+(?:are\s+)?(?:clear|empty)\b",
+            r"\byou have no\b(?:\s+\w+){0,6}\s+notifications?\b",
+            r"\bthere(?:'s| is| are) no\b(?:\s+\w+){0,6}\s+notifications?\b",
+            r"\ball caught up\b",
+        )
+        return any(re.search(pattern, normalized) for pattern in patterns)
 
     def _draw_bell_icon(self, cx: float, cy: float, size: float, color: str):
         half = size / 2

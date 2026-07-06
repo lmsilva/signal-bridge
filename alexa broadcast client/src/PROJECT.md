@@ -183,6 +183,7 @@ From repo root (bridge + client):
 ## Recent changes
 
 - 2026-07-06: **Vivint alarm + notifications panels** — `vivint-alarm.query` shows lock icon + armed stay/away headline (green secure theme); `alexa-notifications.query` uses amber banner/cards (Echo notification LED color) with parsed notification text.
+- 2026-07-06: Empty notifications show **0 notifications** and "You're all caught up" when Alexa says there are none (including "no new notifications at the moment").
 - 2026-07-06: Shopping list rows are compact, left-aligned, body font (20px landscape), thin accent stripe (no bullets).
 - 2026-07-06: Tesla battery bar lowered below car image; repeat voice commands show again after dedup fix on bridge.
 - 2026-07-06: Tesla battery panel shows colorized 0–100% bar (red→green) with centered percent; portable build prefers `assets/` next to exe over bundled copy.
