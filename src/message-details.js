@@ -7,6 +7,18 @@ function normalizeText(value) {
 function parseMessageDetails(record) {
   const rawMessage = normalizeText(record?.message);
   const sender = normalizeText(record?.device) || 'Unknown';
+
+  if (record?.destination) {
+    const destination = /^all devices$/i.test(record.destination)
+      ? DEFAULT_DESTINATION
+      : record.destination;
+    return {
+      sender,
+      destination,
+      message: rawMessage,
+    };
+  }
+
   let destination = DEFAULT_DESTINATION;
   let message = rawMessage;
 

@@ -2,22 +2,15 @@
 const BROADCAST_VERB_RE = /\b(?:announce(?:ment)?|broadcast(?:ing)?|make an announcement|send an announcement)\b/i;
 
 // Alexa follow-up prompts (two-step: "Alexa, broadcast" → "what's the message?")
-const BROADCAST_PROMPT_RE = /(?:what(?:'s| is|'d)? (?:the |your )?(?:announcement|broadcast|message)|what would you like to (?:announce|broadcast)|say your (?:announcement|broadcast|message))/i;
+const BROADCAST_PROMPT_RE = /(?:what(?:'s| is|'d)? (?:the |your )?(?:announcement|broadcast|message)|what would you like to (?:announce|broadcast|say)|say your (?:announcement|broadcast|message))/i;
 
 const WAKE_WORD_ONLY_RE = /^(alexa|echo|computer|amazon|ziggy)$/i;
 
-// Inline message after the command verb
-const INLINE_MESSAGE_PATTERNS = [
-  /\b(?:announce(?:ment)?|broadcast(?:ing)?)\s+(?:that\s+)?(.+)$/i,
-  /\bmake an announcement(?: that)?\s+(.+)$/i,
-  /\bsend an announcement(?: that)?\s+(.+)$/i,
-];
-
-// Command only — waits for a follow-up utterance
-const COMMAND_ONLY_PATTERNS = [
-  /^(?:announce(?:ment)?|broadcast(?:ing)?)(?:\s+to(?:\s+[\w\s]+)?)?$/i,
-  /^(?:make|send) an announcement$/i,
-];
+const {
+  parseBroadcastUtterance,
+  extractInlineBroadcastMessage,
+  isBroadcastCommandOnly,
+} = require('./broadcast-parse');
 
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -35,32 +28,13 @@ function getDeviceName(activity) {
   return activity?.name || activity?.deviceSerialNumber || 'unknown-device';
 }
 
-function extractInlineBroadcastMessage(summary) {
-  for (const pattern of INLINE_MESSAGE_PATTERNS) {
-    const match = summary.match(pattern);
-    if (!match) {
-      continue;
-    }
-
-    const message = normalizeText(match[1]);
-    if (message) {
-      return message;
-    }
-  }
-
-  return null;
-}
-
-function isBroadcastCommandOnly(summary) {
-  return COMMAND_ONLY_PATTERNS.some((pattern) => pattern.test(summary));
-}
-
 function isBroadcastPrompt(response) {
   return BROADCAST_PROMPT_RE.test(response);
 }
 
 function createBroadcastRecord({
   message,
+  destination,
   device,
   source,
   trigger,
@@ -70,6 +44,7 @@ function createBroadcastRecord({
 }) {
   return {
     message: normalizeText(message),
+    destination: destination ? normalizeText(destination) : null,
     device,
     source,
     trigger,
@@ -87,6 +62,7 @@ class BroadcastParser {
     fingerprintFn = null,
   } = {}) {
     this.pendingAnnounceDevice = null;
+    this.pendingAnnounceDestination = null;
     this.pendingAnnounceStartedAt = 0;
     this.seenActivityIds = new Set(seenActivityIds);
     this.seenOrder = [...seenActivityIds];
@@ -140,10 +116,27 @@ class BroadcastParser {
 
   clearPendingAnnounce() {
     this.pendingAnnounceDevice = null;
+    this.pendingAnnounceDestination = null;
     this.pendingAnnounceStartedAt = 0;
   }
 
-  recordIfNew({ message, device, source, trigger, timestamp, rawSummary, rawResponse, activityId }) {
+  setPendingAnnounce(device, timestamp, destination = null) {
+    this.pendingAnnounceDevice = device;
+    this.pendingAnnounceDestination = destination || null;
+    this.pendingAnnounceStartedAt = timestamp;
+  }
+
+  recordIfNew({
+    message,
+    destination,
+    device,
+    source,
+    trigger,
+    timestamp,
+    rawSummary,
+    rawResponse,
+    activityId,
+  }) {
     if (this.isDuplicateContent(message, device)) {
       this.rememberActivity(activityId);
       return null;
@@ -152,6 +145,7 @@ class BroadcastParser {
     this.clearPendingAnnounce();
     return createBroadcastRecord({
       message,
+      destination,
       device,
       source,
       trigger,
@@ -188,10 +182,11 @@ class BroadcastParser {
     }
 
     if (BROADCAST_VERB_RE.test(summary)) {
-      const inlineMessage = extractInlineBroadcastMessage(summary);
-      if (inlineMessage) {
+      const parsed = parseBroadcastUtterance(summary);
+      if (parsed?.kind === 'inline' && parsed.message) {
         return this.recordIfNew({
-          message: inlineMessage,
+          message: parsed.message,
+          destination: parsed.destination,
           device,
           source: 'voice',
           trigger: 'broadcast-inline',
@@ -202,21 +197,17 @@ class BroadcastParser {
         });
       }
 
-      if (isBroadcastCommandOnly(summary)) {
-        this.pendingAnnounceDevice = device;
-        this.pendingAnnounceStartedAt = timestamp;
+      if (parsed?.kind === 'command-only') {
+        this.setPendingAnnounce(device, timestamp, parsed.destination);
         return null;
       }
 
-      // Verb present but message shape unknown — still wait for follow-up
-      this.pendingAnnounceDevice = device;
-      this.pendingAnnounceStartedAt = timestamp;
+      this.setPendingAnnounce(device, timestamp);
       return null;
     }
 
     if (isBroadcastPrompt(response)) {
-      this.pendingAnnounceDevice = device;
-      this.pendingAnnounceStartedAt = timestamp;
+      this.setPendingAnnounce(device, timestamp);
       return null;
     }
 
@@ -224,11 +215,13 @@ class BroadcastParser {
       this.pendingAnnounceDevice
       && device === this.pendingAnnounceDevice
       && summary
+      && messageLooksLikeFollowUp(summary)
       && timestamp >= this.pendingAnnounceStartedAt - 5000
       && Date.now() - this.pendingAnnounceStartedAt < 120000
     ) {
       return this.recordIfNew({
         message: summary,
+        destination: this.pendingAnnounceDestination,
         device,
         source: 'voice',
         trigger: 'broadcast-followup',
@@ -247,6 +240,20 @@ class BroadcastParser {
   }
 }
 
+function messageLooksLikeFollowUp(summary) {
+  const text = normalizeText(summary);
+  if (!text) {
+    return false;
+  }
+  if (BROADCAST_VERB_RE.test(text)) {
+    return false;
+  }
+  if (WAKE_WORD_ONLY_RE.test(text)) {
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
   BroadcastParser,
   getActivityId,
@@ -254,4 +261,5 @@ module.exports = {
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
   isBroadcastPrompt,
+  parseBroadcastUtterance,
 };

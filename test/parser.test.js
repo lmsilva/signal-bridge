@@ -1,11 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  BroadcastParser,
+  parseBroadcastUtterance,
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
+} = require('../src/broadcast-parse');
+const {
+  BroadcastParser,
   isBroadcastPrompt,
 } = require('../src/parser');
+const { parseMessageDetails } = require('../src/message-details');
+const { buildBroadcastPayload } = require('../src/udp-payload');
 
 function activity(summary, response = '', overrides = {}) {
   return {
@@ -17,6 +22,20 @@ function activity(summary, response = '', overrides = {}) {
     ...overrides,
   };
 }
+
+test('parseBroadcastUtterance splits device target and inline message', () => {
+  const parsed = parseBroadcastUtterance('broadcast to office echo this is a test');
+  assert.equal(parsed.kind, 'inline');
+  assert.equal(parsed.destination, 'office echo');
+  assert.equal(parsed.message, 'this is a test');
+});
+
+test('parseBroadcastUtterance treats announce to device as command-only', () => {
+  const parsed = parseBroadcastUtterance('announce to office echo');
+  assert.equal(parsed.kind, 'command-only');
+  assert.equal(parsed.destination, 'office echo');
+  assert.equal(parsed.message, null);
+});
 
 test('extractInlineBroadcastMessage parses inline announce text', () => {
   assert.equal(
@@ -30,6 +49,19 @@ test('BroadcastParser captures inline broadcast', () => {
   const record = parser.parseActivity(activity('announce dinner is ready', 'OK'));
   assert.ok(record);
   assert.equal(record.message, 'dinner is ready');
+  assert.equal(record.trigger, 'broadcast-inline');
+});
+
+test('BroadcastParser captures targeted inline broadcast', () => {
+  const parser = new BroadcastParser();
+  const record = parser.parseActivity(activity(
+    'broadcast to office echo this is a test',
+    'OK',
+    { name: 'Office Echo' },
+  ));
+  assert.ok(record);
+  assert.equal(record.message, 'this is a test');
+  assert.equal(record.destination, 'office echo');
   assert.equal(record.trigger, 'broadcast-inline');
 });
 
@@ -57,6 +89,37 @@ test('BroadcastParser handles two-step broadcast follow-up', () => {
   assert.equal(record.trigger, 'broadcast-followup');
 });
 
+test('BroadcastParser handles targeted two-step announce follow-up', () => {
+  const parser = new BroadcastParser();
+  const now = Date.now();
+  parser.parseActivity({
+    creationTimestamp: now,
+    name: 'Kitchen Echo',
+    description: { summary: 'announce to office echo' },
+    alexaResponse: "what's the message?",
+    data: { recordKey: 'target-step-1' },
+  });
+
+  const record = parser.parseActivity({
+    creationTimestamp: now + 1000,
+    name: 'Kitchen Echo',
+    description: { summary: 'this is a test' },
+    alexaResponse: 'OK',
+    data: { recordKey: 'target-step-2' },
+  });
+
+  assert.ok(record);
+  assert.equal(record.message, 'this is a test');
+  assert.equal(record.destination, 'office echo');
+  assert.equal(record.trigger, 'broadcast-followup');
+});
+
+test('BroadcastParser does not treat announce to device as immediate message echo', () => {
+  const parser = new BroadcastParser();
+  const record = parser.parseActivity(activity('announce to office echo', "what's the message?"));
+  assert.equal(record, null);
+});
+
 test('BroadcastParser ignores non-broadcast utterances', () => {
   const parser = new BroadcastParser();
   const record = parser.parseActivity(activity('what time is it', "It's 3 PM"));
@@ -78,5 +141,30 @@ test('BroadcastParser deduplicates by activity id', () => {
 
 test('isBroadcastCommandOnly and isBroadcastPrompt helpers', () => {
   assert.equal(isBroadcastCommandOnly('broadcast'), true);
+  assert.equal(isBroadcastCommandOnly('announce to office echo'), true);
+  assert.equal(isBroadcastCommandOnly('broadcast to office echo this is a test'), false);
   assert.equal(isBroadcastPrompt("what's the message?"), true);
+});
+
+test('parseMessageDetails uses explicit destination on record', () => {
+  const details = parseMessageDetails({
+    message: 'this is a test',
+    destination: 'office echo',
+    device: 'Kitchen Echo',
+  });
+  assert.equal(details.destination, 'office echo');
+  assert.equal(details.message, 'this is a test');
+});
+
+test('buildBroadcastPayload uses explicit destination on record', () => {
+  const payload = buildBroadcastPayload({
+    message: 'this is a test',
+    destination: 'office echo',
+    device: 'Kitchen Echo',
+    timestamp: Date.parse('2026-06-27T12:00:00.000Z'),
+    trigger: 'broadcast-inline',
+  }, { udpBroadcast: { defaultDisplaySeconds: 120 } });
+
+  assert.equal(payload.message, 'this is a test');
+  assert.equal(payload.destination, 'office echo');
 });

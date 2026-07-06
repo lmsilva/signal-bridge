@@ -136,6 +136,7 @@ function createListener({ config, log }) {
       type: 'broadcast',
       device: record.device,
       message: record.message,
+      destination: record.destination || null,
       source: record.source,
       trigger: record.trigger,
     });
