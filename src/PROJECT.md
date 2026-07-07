@@ -68,6 +68,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/weather-location.js` | Extract local vs named location from weather questions |
 | `src/weather-fetch.js` | Open-Meteo geocode + forecast fetch (no API key) |
 | `src/timer-sync.js` | Poll Amazon notifications API; mirror active timers; fire verify |
+| `src/alarm-sync.js` | Poll Amazon notifications API; mirror active wake alarms (`Alarm`/`MusicAlarm`) |
+| `src/alexa-alarms.js` | Detect show/set/cancel wake-alarm voice commands (distinct from Vivint security) |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
 | `test/*.test.js` | Node built-in test suite (`npm test`) |
 | `src/bridge-state.js` | Dedup fingerprints + last timestamp on disk |
@@ -254,6 +256,7 @@ Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-07-06: **Wake alarms** — `"show my alarms"` / `"set alarm for 7 am"` poll Amazon `Alarm`/`MusicAlarm` notifications across all devices; UDP `alarm.snapshot` highlights the newly added alarm.
 - 2026-07-06: **Indoor air quality multi-monitor** — `summarizeMonitorReadings` merges VOC/PM2.5/CO/temp/humidity from the richest monitor reading into the top-level payload reading.
 - 2026-07-06: **Indoor air quality multi-monitor** — `"show indoor air quality"` parses qualitative bands ("pretty good") and per-monitor summaries (main floor, dome, machine room); no longer mislabels "Well, the" as a location.
 - 2026-07-06: **Unified event log** — broadcasts/announcements now append to `data/voice-events.jsonl` (same JSONL as voice queries and timers). Legacy `broadcast.txt` is read on startup for dedup migration only; no longer written.

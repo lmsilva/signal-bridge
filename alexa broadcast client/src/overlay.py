@@ -7,6 +7,7 @@ from tkinter import font as tkfont
 
 from src.display_panels import (
     AirQualityPanel,
+    AlarmPanel,
     BroadcastPanel,
     IndoorTemperaturePanel,
     MusicPanel,
@@ -116,6 +117,7 @@ class OverlayWindow:
             "indoor-temperature.query": IndoorTemperaturePanel(self.root, self.shell, self.config),
             "air-quality.query": AirQualityPanel(self.root, self.shell, self.config),
             "timer.snapshot": TimerPanel(self.root, self.shell, self.config),
+            "alarm.snapshot": AlarmPanel(self.root, self.shell, self.config),
             "shopping-list.snapshot": ShoppingListPanel(self.root, self.shell, self.config),
             "music.playing": MusicPanel(self.root, self.shell, self.config),
             "smart-home.command": SmartHomePanel(self.root, self.shell, self.config),

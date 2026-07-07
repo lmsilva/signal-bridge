@@ -7,15 +7,20 @@ const { matchesMusicQuery } = require('./music-info');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
+const {
+  matchesShowAlarmsQuery,
+  matchesAlarmSetQuery,
+  matchesAlarmCancelQuery,
+} = require('./alexa-alarms');
 const { parseSmartHomeCommand } = require('./smart-home-command');
 
 const TIME_QUERY_RE = /\b(?:what(?:'s|\s+is|\s+was)?\s+(?:the\s+)?time(?:\s+is\s+it)?|tell\s+me\s+(?:the\s+)?time|do\s+you\s+have\s+(?:the\s+)?time|time\s+please)\b/i;
 const WEATHER_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?(?:weather(?:\s+like)?|temperature|temp|forecast)|how(?:'s|\s+is)\s+(?:the\s+)?(?:weather|temperature|temp)|weather\s+(?:in|for|at|outside|today|tomorrow)|(?:is\s+it|will\s+it)\s+(?:rain|snow|sunny|cloudy|cold|hot|warm)|temperature(?:\s+outside|\s+today|\s+now|\s+in|\s+for|\s+at)?|how\s+(?:hot|cold|warm)\s+is\s+it|tell\s+me\s+(?:the\s+)?(?:weather|temperature|temp)|give\s+me\s+(?:the\s+)?(?:weather|temperature|temp)|what\s+is\s+it\s+like\s+outside)\b/i;
 const WEATHER_ANSWER_RE = /\b(?:(?:it's|it is|currently|right now|today|tonight).*(?:\d{1,3}\s+degrees|sunny|cloudy|rain|snow|wind|humidity|fahrenheit|celsius)|(?:\d{1,3}\s+degrees)\s+and\s+(?:sunny|cloudy|rainy|snowy|windy))\b/i;
 const SHOW_TIMERS_RE = /\b(?:show|list)\s+(?:me\s+)?(?:all\s+|my\s+)*timers?\b|\bwhat (?:are my timers|timers do i have)\b|\bhow much time is left on(?: my)? timers?\b/i;
-const TIMER_SET_RE = /\b(?:set|start|create|add)\b(?:(?!\btime\b).)*\b(?:timer|countdown|alarm)\b|\b(?:timer|countdown|alarm)\s+(?:for|to)\s+(?:\d|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+(?:timer|countdown|alarm)\b|\b(?:set|start)\s+(?:a\s+)?(?:timer|countdown|alarm)\s+(?:for\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+/i;
-const TIMER_SET_SPOKEN_RE = /\b(?:(?:starting|counting)\s+(?:now|down)|(?:timer|countdown|alarm)\s+(?:is\s+)?(?:set|started|on)|starting\s+(?:a|your)\s+\d|\d\s+(?:minute|min|hour|hr|second|sec)s?\s+(?:timer|countdown|alarm)\s+(?:starting|set))\b/i;
-const TIMER_CANCEL_RE = /\b(?:cancel|stop|delete|clear|remove)(?:\s+(?:the|my|all|a|an))?(?:\s+\S+){0,3}\s+(?:timers?|countdowns?|alarms?)\b|\bcancel\s+all\b/i;
+const TIMER_SET_RE = /\b(?:set|start|create|add)\b(?:(?!\btime\b).)*\b(?:timer|countdown)\b|\b(?:timer|countdown)\s+(?:for|to)\s+(?:\d|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+(?:timer|countdown)\b|\b(?:set|start)\s+(?:a\s+)?(?:timer|countdown)\s+(?:for\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+alarm\b/i;
+const TIMER_SET_SPOKEN_RE = /\b(?:(?:starting|counting)\s+(?:now|down)|(?:timer|countdown|alarm)\s+(?:is\s+)?(?:set|started|on)|starting\s+(?:a|your)\s+\d|\d\s+(?:minute|min|hour|hr|second|sec)s?\s+(?:timer|countdown|alarm)\s+((?:starting|set)))\b/i;
+const TIMER_CANCEL_RE = /\b(?:cancel|stop|delete|clear|remove)(?:\s+(?:the|my|all|a|an))?(?:\s+\S+){0,3}\s+(?:timers?|countdowns?)\b|\bcancel\s+all\b/i;
 
 function normalizeText(value) {
   return String(value || '')
@@ -197,6 +202,30 @@ function createVoiceQueryParser() {
       };
     }
 
+    if (matchesShowAlarmsQuery(summary)) {
+      return {
+        kind: 'alarm-list',
+        activityId,
+        device,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'show-alarms',
+      };
+    }
+
+    if (matchesAlarmCancelQuery(summary)) {
+      return {
+        kind: 'alarm-hint',
+        activityId,
+        device,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'alarm-cancel-voice',
+      };
+    }
+
     if (TIMER_CANCEL_RE.test(summary)) {
       return {
         kind: 'timer-hint',
@@ -206,6 +235,18 @@ function createVoiceQueryParser() {
         query: summary,
         spokenResponse: response || null,
         trigger: 'timer-cancel-voice',
+      };
+    }
+
+    if (matchesAlarmSetQuery(summary, response)) {
+      return {
+        kind: 'alarm-hint',
+        activityId,
+        device,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'alarm-set-voice',
       };
     }
 

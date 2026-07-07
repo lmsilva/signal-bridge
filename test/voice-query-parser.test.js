@@ -118,6 +118,27 @@ test('voice query parser detects named timer cancel hint', () => {
   assert.equal(event.trigger, 'timer-cancel-voice');
 });
 
+test('voice query parser detects show alarms command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('show my alarms', 'You have 2 alarms'));
+  assert.equal(event.kind, 'alarm-list');
+  assert.equal(event.trigger, 'show-alarms');
+});
+
+test('voice query parser detects set alarm for time command', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('set alarm for 7 am tomorrow', 'Alarm set for 7 am'));
+  assert.equal(event.kind, 'alarm-hint');
+  assert.equal(event.trigger, 'alarm-set-voice');
+});
+
+test('voice query parser routes duration alarm requests to timers', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('set a 5 minute alarm', 'Five minutes starting now'));
+  assert.equal(event.kind, 'timer-hint');
+  assert.equal(event.trigger, 'timer-set-voice');
+});
+
 test('voice query parser routes temperature inside to indoor panel', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity("what's the temperature inside", "It's 72 degrees inside"));

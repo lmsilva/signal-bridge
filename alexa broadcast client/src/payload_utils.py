@@ -11,6 +11,7 @@ DISPLAY_TYPES = (
     "indoor-temperature.query",
     "air-quality.query",
     "timer.snapshot",
+    "alarm.snapshot",
     "shopping-list.snapshot",
     "music.playing",
     "smart-home.command",
@@ -43,6 +44,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "indoor-temperature.query": ("Alexa", "Indoor"),
         "air-quality.query": ("Alexa", "Air Quality"),
         "timer.snapshot": ("Alexa", "Timers"),
+        "alarm.snapshot": ("Alexa", "Alarms"),
         "shopping-list.snapshot": ("Alexa", "Shopping List"),
         "music.playing": ("Alexa", "Now Playing"),
         "smart-home.command": ("Alexa", "Smart Home"),
@@ -129,6 +131,69 @@ def timer_detail_line(timer: dict | None, device: str, *, finished: bool = False
     if finished:
         return f"{line} — finished"
     return line
+
+
+def format_alarm_time(value: str | None) -> str:
+    parsed = parse_iso_timestamp(value or "")
+    if parsed:
+        return parsed.astimezone().strftime("%I:%M %p").lstrip("0")
+    return "—"
+
+
+def format_alarm_date(value: str | None) -> str:
+    parsed = parse_iso_timestamp(value or "")
+    if parsed:
+        return parsed.astimezone().strftime("%a %b %d")
+    return ""
+
+
+def alarm_label_name(alarm: dict | None) -> str | None:
+    label = (alarm or {}).get("label")
+    if label:
+        return str(label).strip()
+    return None
+
+
+def alarm_title(alarm: dict | None) -> str:
+    label = alarm_label_name(alarm)
+    if label:
+        return label
+    alarm_type = str((alarm or {}).get("alarmType") or "").lower()
+    if alarm_type == "music":
+        return "Music alarm"
+    return "Alarm"
+
+
+def alarm_detail_line(alarm: dict | None, device: str) -> str:
+    parts = []
+    date_text = format_alarm_date((alarm or {}).get("triggerTime"))
+    if date_text:
+        parts.append(date_text)
+    if device:
+        parts.append(f"on {device}")
+    recurrence = (alarm or {}).get("recurrence")
+    if recurrence:
+        parts.append("Repeats")
+    return " · ".join(parts) if parts else device or "Alarm"
+
+
+def alarm_until_line(alarm: dict | None) -> str | None:
+    remaining = (alarm or {}).get("remainingSec")
+    if remaining is None:
+        return None
+    remaining = max(0, int(remaining))
+    if remaining >= 86400:
+        days, remainder = divmod(remaining, 86400)
+        hours = remainder // 3600
+        return f"in {days}d {hours}h"
+    if remaining >= 3600:
+        hours, remainder = divmod(remaining, 3600)
+        minutes = remainder // 60
+        return f"in {hours}h {minutes}m"
+    if remaining >= 60:
+        minutes = remaining // 60
+        return f"in {minutes}m"
+    return f"in {remaining}s"
 
 
 def sample_hourly_indices(total: int, slots: int) -> list[int]:

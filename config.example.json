@@ -50,6 +50,11 @@
     "fireVerifySlackMs": 30000,
     "mirrorFile": "data/timer-mirror.json"
   },
+  "alarmSync": {
+    "enabled": true,
+    "pollIntervalMs": 60000,
+    "mirrorFile": "data/alarm-mirror.json"
+  },
   "sessionKeepAlive": {
     "enabled": true,
     "pingIntervalMs": 900000,

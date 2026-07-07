@@ -41,6 +41,7 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "indoor-temperature.query"}), "indoor-temperature.query")
         self.assertEqual(resolve_display_type({"type": "air-quality.query"}), "air-quality.query")
         self.assertEqual(resolve_display_type({"type": "timer.snapshot", "timers": []}), "timer.snapshot")
+        self.assertEqual(resolve_display_type({"type": "alarm.snapshot", "alarms": []}), "alarm.snapshot")
         self.assertEqual(resolve_display_type({"type": "tesla-battery.query"}), "tesla-battery.query")
         self.assertEqual(resolve_display_type({"type": "vivint-alarm.query"}), "vivint-alarm.query")
         self.assertEqual(resolve_display_type({"type": "alexa-notifications.query"}), "alexa-notifications.query")
@@ -53,6 +54,20 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(title_for_display_type("tesla-battery.query"), ("Alexa", "Tesla Battery"))
         self.assertEqual(title_for_display_type("vivint-alarm.query"), ("Alexa", "Security"))
         self.assertEqual(title_for_display_type("alexa-notifications.query"), ("Alexa", "Notifications"))
+        self.assertEqual(title_for_display_type("alarm.snapshot"), ("Alexa", "Alarms"))
+
+    def test_alarm_helpers(self):
+        from src.payload_utils import alarm_detail_line, alarm_title, alarm_until_line, format_alarm_time
+
+        alarm = {
+            "label": "Wake up",
+            "triggerTime": "2026-07-07T07:00:00+00:00",
+            "remainingSec": 3660,
+        }
+        self.assertEqual(alarm_title(alarm), "Wake up")
+        self.assertIn("on Kitchen Echo", alarm_detail_line(alarm, "Kitchen Echo"))
+        self.assertEqual(alarm_until_line(alarm), "in 1h 1m")
+        self.assertRegex(format_alarm_time(alarm["triggerTime"]), r"\d:\d\d")
 
     def test_is_display_payload(self):
         self.assertTrue(is_display_payload({"type": "time.query", "device": "Kitchen"}))

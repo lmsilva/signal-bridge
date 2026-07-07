@@ -45,6 +45,27 @@ class MainDisplayRoutingTests(unittest.TestCase):
         }
         self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
 
+    def test_alarm_snapshot_detected(self):
+        self.assertTrue(BroadcastClientApp._is_alarm_snapshot({"type": "alarm.snapshot"}))
+        self.assertFalse(BroadcastClientApp._is_alarm_snapshot({"type": "timer.snapshot"}))
+
+    def test_empty_alarm_list_snapshot_shown(self):
+        payload = {
+            "type": "alarm.snapshot",
+            "trigger": "show-alarms",
+            "event": {"kind": "list"},
+            "alarms": [],
+        }
+        self.assertTrue(BroadcastClientApp._alarm_payload_has_content(payload))
+
+    def test_alarm_set_snapshot_shown(self):
+        payload = {
+            "type": "alarm.snapshot",
+            "event": {"kind": "started"},
+            "alarms": [{"amazonId": "alarm-1", "device": "Kitchen Echo"}],
+        }
+        self.assertTrue(BroadcastClientApp._alarm_payload_has_content(payload))
+
     def test_new_payload_replaces_active_display(self):
         app = BroadcastClientApp.__new__(BroadcastClientApp)
         app.display_active = True

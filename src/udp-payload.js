@@ -253,6 +253,42 @@ function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) 
   };
 }
 
+function alarmDisplaySeconds(alarms, config) {
+  const base = displaySeconds(config);
+  const count = (alarms || []).length;
+  if (count <= 1) {
+    return base;
+  }
+  return Math.max(base, Math.min(180, base + (count - 1) * 8));
+}
+
+function buildAlarmSnapshotPayload({
+  alarms,
+  device,
+  timestamp,
+  trigger,
+  event,
+  highlightAmazonId,
+}, config) {
+  const highlightId = highlightAmazonId || null;
+  const enrichedAlarms = (alarms || []).map((alarm) => ({
+    ...alarm,
+    isNew: highlightId != null && alarm.amazonId === highlightId,
+  }));
+
+  return {
+    version: 2,
+    type: 'alarm.snapshot',
+    device: device || null,
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: alarmDisplaySeconds(enrichedAlarms, config),
+    trigger: trigger || 'alarm-sync',
+    alarms: enrichedAlarms,
+    event: event || { kind: 'list' },
+    highlightAmazonId: highlightId,
+  };
+}
+
 function buildTimerSnapshotPayload({
   timers,
   device,
@@ -285,6 +321,8 @@ module.exports = {
   buildNotificationsPayload,
   buildSmartHomePayload,
   buildTimerSnapshotPayload,
+  buildAlarmSnapshotPayload,
   displaySeconds,
   timerDisplaySeconds,
+  alarmDisplaySeconds,
 };

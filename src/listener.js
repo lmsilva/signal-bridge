@@ -20,6 +20,7 @@ const { extractWeatherLocation } = require('./weather-location');
 const { fetchWeatherForecast } = require('./weather-fetch');
 const { createEventsLog } = require('./events-log');
 const { createTimerSync } = require('./timer-sync');
+const { createAlarmSync } = require('./alarm-sync');
 const {
   buildBroadcastPayload,
   buildTimeQueryPayload,
@@ -33,6 +34,7 @@ const {
   buildNotificationsPayload,
   buildSmartHomePayload,
   buildTimerSnapshotPayload,
+  buildAlarmSnapshotPayload,
 } = require('./udp-payload');
 const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
 const { buildTeslaBatteryReading, parseBatteryPercentFromSpeech } = require('./tesla-battery');
@@ -111,6 +113,7 @@ function createListener({ config, log }) {
   let sessionKeepAlive = null;
   let authJournal = null;
   let timerSync = null;
+  let alarmSync = null;
   let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;
@@ -168,6 +171,17 @@ function createListener({ config, log }) {
         device: voiceEvent.device,
       });
       timerSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
+      return;
+    }
+
+    if (voiceEvent?.kind === 'alarm-hint' || voiceEvent?.kind === 'alarm-list') {
+      voiceQueryParser.markProcessed(activityId);
+      log.info('Alarm voice command detected', {
+        trigger: voiceEvent.trigger,
+        query: voiceEvent.query,
+        device: voiceEvent.device,
+      });
+      alarmSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
       return;
     }
 
@@ -448,6 +462,23 @@ function createListener({ config, log }) {
     log.info(`Voice event captured (${payload.type}) from ${event.device}`, logMeta);
   }
 
+  function handleAlarmSnapshot(snapshot) {
+    const payload = buildAlarmSnapshotPayload(snapshot, config);
+    voiceEventsLog.append({
+      type: payload.type,
+      trigger: payload.trigger,
+      alarmCount: payload.alarms.length,
+      event: payload.event,
+    });
+    sendUdpPayload(payload);
+    lastCaptureAt = Date.now();
+    log.info(`Alarm snapshot sent (${payload.trigger})`, {
+      activeAlarms: payload.alarms.length,
+      event: payload.event?.kind,
+      highlighted: payload.highlightAmazonId || null,
+    });
+  }
+
   function handleTimerSnapshot(snapshot) {
     const payload = buildTimerSnapshotPayload(snapshot, config);
     voiceEventsLog.append({
@@ -588,6 +619,7 @@ function createListener({ config, log }) {
       authStatus: authStatus?.status || 'ok',
       voiceEventsEnabled: voiceSettings.enabled,
       activeTimers: timerSync?.listActiveTimers?.().length ?? 0,
+      activeAlarms: alarmSync?.listActiveAlarms?.().length ?? 0,
     });
 
     if (authStatus?.status === 'reauth_required') {
@@ -822,6 +854,15 @@ function createListener({ config, log }) {
           getDeviceNameMap,
         });
         timerSync.start();
+
+        alarmSync = createAlarmSync({
+          alexa,
+          config,
+          log,
+          onSnapshot: handleAlarmSnapshot,
+          getDeviceNameMap,
+        });
+        alarmSync.start();
 
         resolve(alexa);
       });

@@ -18,6 +18,7 @@ class BroadcastClientApp:
             "indoor-temperature.query",
             "air-quality.query",
             "timer.snapshot",
+            "alarm.snapshot",
             "shopping-list.snapshot",
             "music.playing",
             "smart-home.command",
@@ -78,6 +79,19 @@ class BroadcastClientApp:
         self.root.after(100, self._poll_messages)
 
     @staticmethod
+    def _is_alarm_snapshot(payload: dict) -> bool:
+        return payload.get("type") == "alarm.snapshot"
+
+    @staticmethod
+    def _alarm_payload_has_content(payload: dict) -> bool:
+        kind = BroadcastClientApp._timer_event_kind(payload)
+        if kind in ("list", "started", "cancelled"):
+            return True
+        if payload.get("trigger") == "show-alarms":
+            return True
+        return bool(payload.get("alarms"))
+
+    @staticmethod
     def _is_timer_snapshot(payload: dict) -> bool:
         return payload.get("type") == "timer.snapshot"
 
@@ -105,6 +119,8 @@ class BroadcastClientApp:
     def _should_show(self, payload: dict) -> bool:
         if self._is_timer_snapshot(payload):
             return self._timer_payload_has_content(payload)
+        if self._is_alarm_snapshot(payload):
+            return self._alarm_payload_has_content(payload)
         display_type = payload.get("type")
         if display_type in self.DISPLAY_TYPES:
             return True

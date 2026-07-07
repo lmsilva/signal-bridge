@@ -77,6 +77,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `indoor-temperature.query` | Indoor thermostat reading — location label, temp/humidity, cold/comfort/hot icon |
 | `air-quality.query` | IAQ score ring + sensor tiles (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Active timers with **names**, device, remaining, duration; fired alert names timer + device |
+| `alarm.snapshot` | Active wake alarms across devices — time, location, optional label; highlights newly set alarm |
 | `shopping-list.snapshot` | Shopping list items with paging |
 | `music.playing` | Large centered album art + track info |
 | `smart-home.command` | Device on/off panel |
@@ -101,6 +102,8 @@ python test/send_test.py --type air-quality --seconds 45
 python test/send_test.py --type air-quality-poor --seconds 45
 python test/send_test.py --type timers --seconds 45
 python test/send_test.py --type timer-fired --seconds 120
+python test/send_test.py --type alarms --seconds 45
+python test/send_test.py --type alarm-set --seconds 45
 ```
 
 ---
@@ -182,6 +185,7 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-06: **Wake alarms overlay** — `alarm.snapshot` lists alarms by device/time; newly set alarm row gets accent outline + NEW badge.
 - 2026-07-06: **Now Playing album art** — placeholder frame hidden while art loads; cover replaces chip/♪ without misaligned accent border.
 - 2026-07-06: **Air quality overlay** — VOC/PM2.5/CO/temp/humidity tiles show alongside per-monitor rows (not either/or); extra spacing between "Indoor Air Quality" label and scale bar.
 - 2026-07-06: **Vivint alarm + notifications panels** — `vivint-alarm.query` shows lock icon + armed stay/away headline (green secure theme); `alexa-notifications.query` uses amber banner/cards (Echo notification LED color) with parsed notification text.

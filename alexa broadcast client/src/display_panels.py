@@ -24,6 +24,11 @@ from src.payload_utils import (
     format_indoor_location,
     format_timer_clock,
     format_timer_set_label,
+    format_alarm_time,
+    format_alarm_date,
+    alarm_title,
+    alarm_detail_line,
+    alarm_until_line,
     format_weather_location,
     format_air_quality_location,
     air_quality_band,
@@ -1994,6 +1999,153 @@ class TimerPanel(BasePanel):
             )
             self._countdown_items.append(remaining_id)
             self._countdown_suffix_items.append(suffix_id)
+
+    @staticmethod
+    def _format_device_name(device: str | None) -> str:
+        if not device:
+            return "Unknown device"
+        if len(device) >= 12 and device.isalnum() and device.upper() == device:
+            return "Echo device"
+        return device
+
+
+class AlarmPanel(BasePanel):
+    ROW_HEIGHT = 96
+    ROW_GAP = 14
+    ACCENT_WIDTH = 4
+
+    def _render(self, payload: dict):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        chip_fill = self.config.get("chipBackground", "#141a24")
+
+        alarms = list(payload.get("alarms") or [])
+        event = payload.get("event") or {}
+        event_kind = event.get("kind", "list")
+
+        headline = {
+            "started": "Alarm set",
+            "cancelled": "Alarm cancelled",
+            "list": "Active alarms",
+        }.get(event_kind, "Active alarms")
+
+        self._track(
+            self.canvas.create_text(
+                x + width // 2,
+                y,
+                anchor="n",
+                text=headline,
+                fill=text,
+                font=self.shell.section_title_font,
+            )
+        )
+        y += 68
+
+        if not alarms:
+            self._track(
+                self.canvas.create_text(
+                    x + width // 2,
+                    y + 40,
+                    anchor="n",
+                    text="No active alarms",
+                    fill=muted,
+                    font=self.shell.body_font,
+                )
+            )
+            return
+
+        for index, alarm in enumerate(alarms):
+            row_y = y + index * (self.ROW_HEIGHT + self.ROW_GAP)
+            is_new = bool(alarm.get("isNew"))
+            row_outline = accent if is_new else ""
+            outline_width = 2 if is_new else 0
+
+            self._track(
+                self.canvas.create_rectangle(
+                    x,
+                    row_y,
+                    x + width,
+                    row_y + self.ROW_HEIGHT,
+                    fill=chip_fill,
+                    outline=row_outline,
+                    width=outline_width,
+                )
+            )
+            self._track(
+                self.canvas.create_rectangle(
+                    x,
+                    row_y,
+                    x + self.ACCENT_WIDTH,
+                    row_y + self.ROW_HEIGHT,
+                    fill=accent if is_new else muted,
+                    outline="",
+                )
+            )
+
+            device = self._format_device_name(alarm.get("device"))
+            row_center_y = row_y + self.ROW_HEIGHT // 2
+            title = alarm_title(alarm)
+            subtitle = alarm_detail_line(alarm, device)
+            time_text = format_alarm_time(alarm.get("triggerTime"))
+            until_text = alarm_until_line(alarm)
+
+            self._track(
+                self.canvas.create_text(
+                    x + 24,
+                    row_center_y - 16,
+                    anchor="w",
+                    text=title,
+                    fill=accent if is_new else text,
+                    font=self.shell.section_label_font,
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    x + 24,
+                    row_center_y + 18,
+                    anchor="w",
+                    text=subtitle,
+                    fill=muted,
+                    font=self.shell.timer_meta_font,
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    x + width - 24,
+                    row_center_y - 18,
+                    anchor="e",
+                    text=time_text,
+                    fill=accent if is_new else text,
+                    font=self.shell.timer_remaining_font,
+                )
+            )
+            if until_text:
+                self._track(
+                    self.canvas.create_text(
+                        x + width - 24,
+                        row_center_y + 16,
+                        anchor="e",
+                        text=until_text,
+                        fill=muted,
+                        font=self.shell.forecast_label_font,
+                    )
+                )
+            if is_new:
+                self._track(
+                    self.canvas.create_text(
+                        x + width - 24,
+                        row_y + 12,
+                        anchor="ne",
+                        text="NEW",
+                        fill=accent,
+                        font=self.shell.forecast_label_font,
+                    )
+                )
 
     @staticmethod
     def _format_device_name(device: str | None) -> str:

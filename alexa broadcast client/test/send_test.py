@@ -338,6 +338,76 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "alarms":
+        now = datetime.now(timezone.utc)
+        return {
+            "version": 2,
+            "type": "alarm.snapshot",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "show-alarms",
+            "alarms": [
+                {
+                    "amazonId": "alarm-1",
+                    "device": "Kitchen Echo",
+                    "label": None,
+                    "triggerTime": (now + timedelta(hours=2)).isoformat().replace("+00:00", "Z"),
+                    "remainingSec": 7200,
+                    "status": "ON",
+                    "alarmType": "standard",
+                    "isNew": False,
+                },
+                {
+                    "amazonId": "alarm-2",
+                    "device": "Bedroom Echo",
+                    "label": "Wake up",
+                    "triggerTime": (now + timedelta(hours=8)).isoformat().replace("+00:00", "Z"),
+                    "remainingSec": 28800,
+                    "status": "ON",
+                    "alarmType": "standard",
+                    "isNew": True,
+                },
+            ],
+            "event": {"kind": "list"},
+            "highlightAmazonId": "alarm-2",
+        }
+
+    if args.type == "alarm-set":
+        now = datetime.now(timezone.utc)
+        return {
+            "version": 2,
+            "type": "alarm.snapshot",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "alarm-set-voice",
+            "alarms": [
+                {
+                    "amazonId": "alarm-1",
+                    "device": "Office Echo",
+                    "label": None,
+                    "triggerTime": (now + timedelta(hours=10)).isoformat().replace("+00:00", "Z"),
+                    "remainingSec": 36000,
+                    "status": "ON",
+                    "alarmType": "standard",
+                    "isNew": False,
+                },
+                {
+                    "amazonId": "alarm-3",
+                    "device": "Kitchen Echo",
+                    "label": None,
+                    "triggerTime": (now + timedelta(hours=12)).isoformat().replace("+00:00", "Z"),
+                    "remainingSec": 43200,
+                    "status": "ON",
+                    "alarmType": "standard",
+                    "isNew": True,
+                },
+            ],
+            "event": {"kind": "started", "amazonId": "alarm-3"},
+            "highlightAmazonId": "alarm-3",
+        }
+
     if args.type == "tesla-battery":
         percent = max(0, min(100, int(getattr(args, "percent", 78))))
         return {
@@ -428,7 +498,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "tesla-battery", "vivint-alarm", "notifications"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "vivint-alarm", "notifications"],
         default="broadcast",
         help="Payload type to send",
     )
