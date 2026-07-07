@@ -447,7 +447,7 @@ function mergeItems(...groups) {
       map.set(key, {
         id: item.id || item.itemId || existing?.id || null,
         value,
-        createdAt: item.createdAt || existing?.createdAt || new Date().toISOString(),
+        createdAt: item.createdAt ?? existing?.createdAt ?? ((item.id || item.itemId) ? null : new Date().toISOString()),
       });
     }
   }

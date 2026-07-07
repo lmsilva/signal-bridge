@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolveAirQualityLocation } = require('../src/air-quality-locations');
-const { iaqBand, parseSpokenAirQuality, parseMonitorSummaries, resolveAirQualityLocationFromTexts } = require('../src/air-quality-parse');
+const { iaqBand, parseSpokenAirQuality, parseMonitorSummaries, resolveAirQualityLocationFromTexts, summarizeMonitorReadings } = require('../src/air-quality-parse');
 const { mapDeviceReading } = require('../src/air-quality-fetch');
 const { matchesAirQualityQuery } = require('../src/air-quality');
 const { buildAirQualityPayload } = require('../src/udp-payload');
@@ -106,6 +106,25 @@ test('mapDeviceReading maps smarthome properties', () => {
   assert.equal(reading.pm25, 6);
   assert.equal(reading.co, 1);
   assert.equal(reading.voc, 220);
+});
+
+test('summarizeMonitorReadings averages scores and keeps sensor metrics', () => {
+  const summary = summarizeMonitorReadings([
+    {
+      iaqScore: 88,
+      band: 'good',
+      reading: { temperatureF: 72, humidity: 18, pm25: 6, co: 1, voc: 220 },
+    },
+    { iaqScore: 62, band: 'fair', reading: { temperatureF: 68 } },
+  ]);
+
+  assert.equal(summary.iaqScore, 75);
+  assert.equal(summary.band, 'fair');
+  assert.equal(summary.temperatureF, 72);
+  assert.equal(summary.humidity, 18);
+  assert.equal(summary.pm25, 6);
+  assert.equal(summary.co, 1);
+  assert.equal(summary.voc, 220);
 });
 
 test('buildAirQualityPayload includes location and reading', () => {

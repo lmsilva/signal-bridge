@@ -1243,6 +1243,7 @@ class AirQualityPanel(BasePanel):
             "co": reading.get("co") if reading.get("co") is not None else spoken_bits.get("co"),
             "voc": reading.get("voc") if reading.get("voc") is not None else spoken_bits.get("voc"),
         }
+        self._merge_monitor_metric_values(values, monitors)
 
         self._track(
             self.canvas.create_text(
@@ -1263,10 +1264,12 @@ class AirQualityPanel(BasePanel):
             for key, label, unit in self.METRICS
             if values.get(key) is not None
         ]
-        block_height = 220 + (stat_gap + stat_row_h if available_metrics else 0)
-        if monitors:
-            block_height = min(block_height, 180)
-        block_top = area_top + max(0, (bottom - area_top - block_height - len(monitors) * 64) // 2)
+        monitor_rows = min(len(monitors), 4)
+        metrics_h = (stat_gap + stat_row_h) if available_metrics else 0
+        monitors_h = monitor_rows * 64 if monitor_rows else 0
+        hero_h = 220
+        content_h = hero_h + metrics_h + (18 if metrics_h and monitors_h else 0) + monitors_h
+        block_top = area_top + max(0, (bottom - area_top - content_h) // 2)
 
         hero_bottom = self._draw_iaq_hero(
             center_x,
@@ -1279,45 +1282,31 @@ class AirQualityPanel(BasePanel):
             chip,
         )
 
+        cursor = hero_bottom + stat_gap
+        if available_metrics:
+            cursor = self._draw_air_quality_metrics(
+                x,
+                width,
+                cursor,
+                available_metrics,
+                values,
+                stat_row_h,
+                chip=chip,
+                text=text,
+                muted=muted,
+            ) + stat_gap
+
         if monitors:
             self._draw_monitor_rows(
                 x,
                 width,
-                hero_bottom + 18,
+                cursor,
                 bottom - 48,
                 monitors,
                 chip=chip,
                 text=text,
                 muted=muted,
             )
-        elif available_metrics:
-            stat_y = hero_bottom + stat_gap
-            col_count = len(available_metrics)
-            col_gap = 10
-            col_w = max(110, (width - col_gap * (col_count - 1)) // col_count)
-            grid_w = col_count * col_w + (col_count - 1) * col_gap
-            stat_x = x + max(0, (width - grid_w) // 2)
-
-            for index, (key, label, unit) in enumerate(available_metrics):
-                tile_x = stat_x + index * (col_w + col_gap)
-                value = values.get(key)
-                if key == "voc":
-                    band_word = voc_band_label(value)
-                    value_text = band_word or "—"
-                else:
-                    value_text = self._format_metric_value(value, unit)
-                self._draw_air_quality_stat(
-                    tile_x,
-                    stat_y,
-                    col_w,
-                    stat_row_h,
-                    label,
-                    value_text,
-                    chip=chip,
-                    text=text,
-                    muted=muted,
-                    value_color=text,
-                )
 
         if iaq_score is None:
             summary = spoken_bits.get("summary") or reading.get("summary")
@@ -1347,6 +1336,57 @@ class AirQualityPanel(BasePanel):
                         justify="center",
                     )
                 )
+
+    def _merge_monitor_metric_values(self, values: dict, monitors: list[dict]) -> None:
+        for monitor in monitors:
+            monitor_reading = monitor.get("reading")
+            if not isinstance(monitor_reading, dict):
+                continue
+            for key in ("temperatureF", "humidity", "pm25", "co", "voc"):
+                if values.get(key) is None and monitor_reading.get(key) is not None:
+                    values[key] = monitor_reading.get(key)
+
+    def _draw_air_quality_metrics(
+        self,
+        x: float,
+        width: float,
+        y: float,
+        available_metrics: list[tuple[str, str, str]],
+        values: dict,
+        stat_row_h: float,
+        *,
+        chip: str,
+        text: str,
+        muted: str,
+    ) -> float:
+        col_count = len(available_metrics)
+        col_gap = 10
+        col_w = max(110, (width - col_gap * (col_count - 1)) // col_count)
+        grid_w = col_count * col_w + (col_count - 1) * col_gap
+        stat_x = x + max(0, (width - grid_w) // 2)
+
+        for index, (key, label, unit) in enumerate(available_metrics):
+            tile_x = stat_x + index * (col_w + col_gap)
+            value = values.get(key)
+            if key == "voc":
+                band_word = voc_band_label(value)
+                value_text = band_word or "—"
+            else:
+                value_text = self._format_metric_value(value, unit)
+            self._draw_air_quality_stat(
+                tile_x,
+                y,
+                col_w,
+                stat_row_h,
+                label,
+                value_text,
+                chip=chip,
+                text=text,
+                muted=muted,
+                value_color=text,
+            )
+
+        return y + stat_row_h
 
     def _draw_monitor_rows(
         self,
@@ -1538,10 +1578,11 @@ class AirQualityPanel(BasePanel):
                 font=self.shell.body_font,
             )
         )
+        indoor_label_y = label_y + self.shell.body_font.metrics("linespace") + 8
         self._track(
             self.canvas.create_text(
                 center_x,
-                label_y + self.shell.body_font.metrics("linespace") + 8,
+                indoor_label_y,
                 anchor="n",
                 text="Indoor Air Quality",
                 fill=muted,
@@ -1549,7 +1590,7 @@ class AirQualityPanel(BasePanel):
             )
         )
 
-        scale_y = label_y + self.shell.body_font.metrics("linespace") + 28
+        scale_y = indoor_label_y + self.shell.chip_label_font.metrics("linespace") + 16
         scale_w = min(320, radius * 2 + 80)
         scale_x = center_x - scale_w / 2
         self._draw_scale_bar(scale_x, scale_y, scale_w, score, 0, 100, (100, 65, 35, 0), chip, band_color, muted, invert=True)
@@ -2152,6 +2193,7 @@ class MusicPanel(BasePanel):
         super().__init__(root, shell, config)
         self._art_image = None  # keep a reference or Tk garbage-collects it
         self._art_request = 0
+        self._art_placeholder_ids: list[int] = []
 
     def _render(self, payload: dict):
         layout = self.shell.layout
@@ -2183,18 +2225,21 @@ class MusicPanel(BasePanel):
         art_size = min(self.ART_SIZE, max(330, min(width - 80, available - 20)))
         art_y = y + art_size // 2 + 8
 
-        self._track(
+        art_url = music.get("artUrl")
+        loading_art = bool(art_url and Image is not None)
+        self._art_placeholder_ids = []
+        rect_id = self._track(
             self.canvas.create_rectangle(
                 center_x - art_size // 2,
                 art_y - art_size // 2,
                 center_x + art_size // 2,
                 art_y + art_size // 2,
                 fill=chip,
-                outline=accent,
-                width=2,
+                outline=accent if not loading_art else "",
+                width=2 if not loading_art else 0,
             )
         )
-        self._track(
+        note_id = self._track(
             self.canvas.create_text(
                 center_x,
                 art_y,
@@ -2204,9 +2249,9 @@ class MusicPanel(BasePanel):
                 font=self.shell.hero_font,
             )
         )
+        self._art_placeholder_ids.extend((rect_id, note_id))
 
-        art_url = music.get("artUrl")
-        if art_url and Image is not None:
+        if loading_art:
             self._load_art_async(art_url, center_x, art_y, art_size)
 
         cursor = art_y + art_size // 2 + 28
@@ -2284,9 +2329,17 @@ class MusicPanel(BasePanel):
 
         threading.Thread(target=fetch, daemon=True).start()
 
+    def _clear_art_placeholder(self):
+        for item_id in self._art_placeholder_ids:
+            self.canvas.delete(item_id)
+            if item_id in self._item_ids:
+                self._item_ids.remove(item_id)
+        self._art_placeholder_ids.clear()
+
     def _apply_art(self, request_id: int, image, cx: float, cy: float):
         if not self.visible or request_id != self._art_request:
             return
+        self._clear_art_placeholder()
         self._art_image = ImageTk.PhotoImage(image)
         self._track(self.canvas.create_image(cx, cy, image=self._art_image))
 

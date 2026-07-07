@@ -278,6 +278,23 @@ function mergeMonitorLists(primary = [], secondary = []) {
   return [...byId.values()];
 }
 
+function pickRichMonitorSensorReading(monitors = []) {
+  const sensorKeys = ['temperatureF', 'humidity', 'pm25', 'co', 'voc', 'iaqMax'];
+  let best = null;
+  let bestCount = -1;
+
+  for (const monitor of monitors) {
+    const reading = monitor.reading || {};
+    const count = sensorKeys.filter((key) => reading[key] != null).length;
+    if (count > bestCount) {
+      bestCount = count;
+      best = reading;
+    }
+  }
+
+  return best;
+}
+
 function summarizeMonitorReadings(monitors = [], config = {}) {
   const scores = monitors.map((entry) => entry.iaqScore ?? entry.reading?.iaqScore).filter((value) => value != null);
   const summary = {
@@ -289,18 +306,26 @@ function summarizeMonitorReadings(monitors = [], config = {}) {
   if (scores.length) {
     summary.iaqScore = Math.round(scores.reduce((total, value) => total + value, 0) / scores.length);
     summary.band = iaqBand(summary.iaqScore, config);
-    return summary;
+  } else {
+    const bands = monitors.map((entry) => entry.band).filter((band) => band && band !== 'unknown');
+    if (bands.includes('poor')) {
+      summary.band = 'poor';
+    } else if (bands.includes('moderate')) {
+      summary.band = 'moderate';
+    } else if (bands.includes('fair')) {
+      summary.band = 'fair';
+    } else if (bands.includes('good')) {
+      summary.band = 'good';
+    }
   }
 
-  const bands = monitors.map((entry) => entry.band).filter((band) => band && band !== 'unknown');
-  if (bands.includes('poor')) {
-    summary.band = 'poor';
-  } else if (bands.includes('moderate')) {
-    summary.band = 'moderate';
-  } else if (bands.includes('fair')) {
-    summary.band = 'fair';
-  } else if (bands.includes('good')) {
-    summary.band = 'good';
+  const sensorReading = pickRichMonitorSensorReading(monitors);
+  if (sensorReading) {
+    for (const key of ['temperatureF', 'humidity', 'pm25', 'co', 'voc', 'iaqMax']) {
+      if (summary[key] == null && sensorReading[key] != null) {
+        summary[key] = sensorReading[key];
+      }
+    }
   }
 
   return summary;

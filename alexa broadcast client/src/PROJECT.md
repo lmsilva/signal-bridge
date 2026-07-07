@@ -182,6 +182,8 @@ From repo root (bridge + client):
 
 ## Recent changes
 
+- 2026-07-06: **Now Playing album art** — placeholder frame hidden while art loads; cover replaces chip/♪ without misaligned accent border.
+- 2026-07-06: **Air quality overlay** — VOC/PM2.5/CO/temp/humidity tiles show alongside per-monitor rows (not either/or); extra spacing between "Indoor Air Quality" label and scale bar.
 - 2026-07-06: **Vivint alarm + notifications panels** — `vivint-alarm.query` shows lock icon + armed stay/away headline (green secure theme); `alexa-notifications.query` uses amber banner/cards (Echo notification LED color) with parsed notification text.
 - 2026-07-06: Empty notifications show **0 notifications** and "You're all caught up" when Alexa says there are none (including "no new notifications at the moment").
 - 2026-07-06: Shopping list rows are compact, left-aligned, body font (20px landscape), thin accent stripe (no bullets).
