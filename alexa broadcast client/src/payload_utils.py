@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 import re
@@ -16,6 +16,7 @@ DISPLAY_TYPES = (
     "music.playing",
     "smart-home.command",
     "tesla-battery.query",
+    "tesla-dashboard.query",
     "vivint-alarm.query",
     "alexa-notifications.query",
 )
@@ -49,6 +50,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "music.playing": ("Alexa", "Now Playing"),
         "smart-home.command": ("Alexa", "Smart Home"),
         "tesla-battery.query": ("Alexa", "Tesla Battery"),
+        "tesla-dashboard.query": ("Tesla", "mission control"),
         "vivint-alarm.query": ("Alexa", "Security"),
         "alexa-notifications.query": ("Alexa", "Notifications"),
     }
@@ -140,6 +142,18 @@ def format_alarm_time(value: str | None) -> str:
     return "—"
 
 
+def resolve_alarm_trigger_time(alarm: dict | None) -> str | None:
+    """Use triggerTime when present; otherwise derive from remainingSec."""
+    trigger = (alarm or {}).get("triggerTime")
+    if trigger:
+        return str(trigger)
+    remaining = (alarm or {}).get("remainingSec")
+    if remaining is not None and int(remaining) > 0:
+        fire_at = datetime.now(timezone.utc) + timedelta(seconds=int(remaining))
+        return fire_at.isoformat()
+    return None
+
+
 def format_alarm_date(value: str | None) -> str:
     parsed = parse_iso_timestamp(value or "")
     if parsed:
@@ -166,7 +180,7 @@ def alarm_title(alarm: dict | None) -> str:
 
 def alarm_detail_line(alarm: dict | None, device: str) -> str:
     parts = []
-    date_text = format_alarm_date((alarm or {}).get("triggerTime"))
+    date_text = format_alarm_date(resolve_alarm_trigger_time(alarm))
     if date_text:
         parts.append(date_text)
     if device:
@@ -368,6 +382,36 @@ def format_battery_percent(value: int | float | None) -> str:
     except (TypeError, ValueError):
         return "—"
     return f"{max(0, min(100, numeric))}%"
+
+
+def format_limit_reset_time(value: str | None) -> str:
+    parsed = parse_iso_timestamp(value or "")
+    if not parsed:
+        return ""
+    return parsed.astimezone().strftime("Try again at %I:%M %p").replace(" 0", " ")
+
+
+def format_freshness_sec(sec: int | float | None) -> str:
+    if sec is None:
+        return "just now"
+    sec = max(0, int(sec))
+    if sec < 60:
+        return f"{sec}s ago"
+    if sec < 3600:
+        return f"{sec // 60}m ago"
+    if sec < 86400:
+        return f"{sec // 3600}h ago"
+    return f"{sec // 86400}d ago"
+
+
+def format_cached_time_label(value: str | None) -> str:
+    parsed = parse_iso_timestamp(value or "")
+    if not parsed:
+        return ""
+    label = parsed.astimezone().strftime("%I:%M %p").lstrip("0")
+    if parsed.astimezone().date() != datetime.now().astimezone().date():
+        label = parsed.astimezone().strftime("%b %d, ") + label
+    return label
 
 
 _BATTERY_PERCENT_RE = re.compile(

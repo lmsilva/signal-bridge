@@ -7,7 +7,15 @@ function needsSpokenResponseUpgrade(event) {
     return false;
   }
 
-  if (event.kind === 'tesla-battery' || event.kind === 'music') {
+  if (event.kind === 'tesla-battery') {
+    return false;
+  }
+
+  if (event.kind === 'tesla-dashboard') {
+    return false;
+  }
+
+  if (event.kind === 'music') {
     return true;
   }
 

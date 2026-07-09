@@ -1,6 +1,4 @@
-const { parseBatteryPercentFromSpeech } = require('./tesla-battery');
-const { parseAlarmStatusFromSpeech } = require('./vivint-alarm');
-const { parseNotificationsFromSpeech } = require('./alexa-notifications');
+const { parseAlarmStatusFromSpeech } = require('./vivint-alarm');const { parseNotificationsFromSpeech } = require('./alexa-notifications');
 const { parseShoppingListFromSpeech } = require('./shopping-list');
 
 const DEFAULT_DEDUP_MS = 120000;
@@ -33,7 +31,11 @@ function hasSpokenResponse(event) {
 
 function contentSignature(event) {
   if (event?.kind === 'tesla-battery') {
-    return String(parseBatteryPercentFromSpeech(event?.spokenResponse) ?? '');
+    return normalizePart(event?.query) || 'tesla-battery';
+  }
+
+  if (event?.kind === 'tesla-dashboard') {
+    return normalizePart(event?.query) || 'tesla-dashboard';
   }
 
   if (event?.kind === 'shopping-list') {

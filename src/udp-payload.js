@@ -200,6 +200,24 @@ function buildTeslaBatteryPayload(event, config, { battery } = {}) {
   };
 }
 
+function teslaDashboardDisplaySeconds(config) {
+  return Math.max(displaySeconds(config), 120);
+}
+
+function buildTeslaDashboardPayload(event, config, { dashboard } = {}) {
+  return {
+    version: 2,
+    type: 'tesla-dashboard.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: teslaDashboardDisplaySeconds(config),
+    trigger: event.trigger || 'tesla-dashboard-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    dashboard: dashboard || null,
+  };
+}
+
 function buildVivintAlarmPayload(event, config, { alarm } = {}) {
   return {
     version: 2,
@@ -317,6 +335,7 @@ module.exports = {
   buildShoppingListPayload,
   buildMusicPayload,
   buildTeslaBatteryPayload,
+  buildTeslaDashboardPayload,
   buildVivintAlarmPayload,
   buildNotificationsPayload,
   buildSmartHomePayload,

@@ -6,11 +6,19 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
+    env_file:
+      - .env
     environment:
       TZ: ${TZ:-UTC}
       AMAZON_PAGE: ${AMAZON_PAGE:-amazon.com}
       ACCEPT_LANGUAGE: ${ACCEPT_LANGUAGE:-en-US}
       DEBUG: ${DEBUG:-0}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
+      TESLA_FLEET_DOMAIN: ${TESLA_FLEET_DOMAIN:-}
+      TESLA_FLEET_REGION: ${TESLA_FLEET_REGION:-na}
+      TESLA_VIN: ${TESLA_VIN:-}
+      TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-http://localhost:4381/callback}
     volumes:
       - ./data:/app/data
       - ./src:/app/src:ro

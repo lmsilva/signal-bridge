@@ -25,6 +25,7 @@ from src.payload_utils import (
     format_timer_clock,
     format_timer_set_label,
     format_alarm_time,
+    resolve_alarm_trigger_time,
     format_alarm_date,
     alarm_title,
     alarm_detail_line,
@@ -41,6 +42,9 @@ from src.payload_utils import (
     parse_spoken_battery_percent,
     parse_spoken_indoor,
     parse_spoken_weather,
+    format_limit_reset_time,
+    format_freshness_sec,
+    format_cached_time_label,
     format_temperature_f,
     sample_hourly_indices,
     timer_detail_line,
@@ -53,6 +57,18 @@ from src.payload_utils import (
 class BasePanel:
     needs_scroll = False
     scroller = None
+
+    # Shared dark "mission control" palette used by all panels.
+    GREEN = "#4ade80"
+    GREEN_BG = "#123524"
+    AMBER = "#f59e0b"
+    AMBER_BG = "#3a2605"
+    RED = "#ef4444"
+    RED_BG = "#3f1220"
+    CONTAINER = "#0d1524"
+    CARD = "#101b2d"
+    CARD_EDGE = "#1d2a40"
+    INNER = "#0a111e"
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         self.root = root
@@ -91,6 +107,55 @@ class BasePanel:
         widget.place(**kwargs)
         self._widgets.append(widget)
 
+    def _round_rect(self, x0, y0, x1, y1, *, radius=14, fill="", outline="", width=1, dash=None):
+        radius = max(2, min(int(radius), int(x1 - x0) // 2, int(y1 - y0) // 2))
+        points = [
+            x0 + radius, y0, x1 - radius, y0, x1, y0, x1, y0 + radius,
+            x1, y1 - radius, x1, y1, x1 - radius, y1, x0 + radius, y1,
+            x0, y1, x0, y1 - radius, x0, y0 + radius, x0, y0,
+        ]
+        kwargs = {"smooth": True, "fill": fill, "outline": outline, "width": width}
+        if dash:
+            kwargs["dash"] = dash
+        return self._track(self.canvas.create_polygon(points, **kwargs))
+
+    def _panel_card(self, x, y, w, h, *, radius=18, fill=None, outline=None, dash=None):
+        return self._round_rect(
+            x, y, x + w, y + h,
+            radius=radius,
+            fill=self.CARD if fill is None else fill,
+            outline=self.CARD_EDGE if outline is None else outline,
+            dash=dash,
+        )
+
+    def _container_frame(self, x, y, w, h, *, pad=20, radius=26):
+        """Large rounded backdrop that frames the whole panel."""
+        return self._round_rect(
+            x - pad, y - 14, x + w + pad, y + h + 12,
+            radius=radius, fill=self.CONTAINER, outline=self.CARD_EDGE,
+        )
+
+    def _pill(self, x, y, label, *, fill, fg, anchor="nw", font=None, outline=None):
+        font = font or self.shell.forecast_label_font
+        text_w = font.measure(label)
+        text_h = font.metrics("linespace")
+        pad_x, pad_y = 12, 5
+        w = text_w + pad_x * 2
+        h = text_h + pad_y * 2
+        if anchor == "ne":
+            x0 = x - w
+        elif anchor == "n":
+            x0 = x - w // 2
+        else:
+            x0 = x
+        self._round_rect(x0, y, x0 + w, y + h, radius=h // 2, fill=fill, outline=outline or fill)
+        self._track(
+            self.canvas.create_text(
+                x0 + w // 2, y + h // 2, anchor="center", text=label, fill=fg, font=font,
+            )
+        )
+        return h
+
     def _draw_dashboard_tile(
         self,
         x: float,
@@ -106,21 +171,11 @@ class BasePanel:
         accent: str,
         sublabel: str | None = None,
     ):
-        self._track(
-            self.canvas.create_rectangle(
-                x,
-                y,
-                x + width,
-                y + height,
-                fill=chip,
-                outline=muted,
-                width=1,
-            )
-        )
+        self._panel_card(x, y, width, height, fill=chip)
         self._track(
             self.canvas.create_text(
-                x + 14,
-                y + 12,
+                x + 16,
+                y + 14,
                 anchor="nw",
                 text=label,
                 fill=muted,
@@ -129,7 +184,7 @@ class BasePanel:
         )
         self._track(
             self.canvas.create_text(
-                x + 14,
+                x + 16,
                 y + height // 2 + 4,
                 anchor="w",
                 text=value,
@@ -140,7 +195,7 @@ class BasePanel:
         if sublabel:
             self._track(
                 self.canvas.create_text(
-                    x + 14,
+                    x + 16,
                     y + height - 14,
                     anchor="sw",
                     text=sublabel,
@@ -193,15 +248,14 @@ class BroadcastPanel(BasePanel):
 
         for index, label in enumerate(("FROM", "TO", "TIME")):
             chip_x = layout.content_x + index * (layout.chip_width + layout.chip_gap)
-            self._track(
-                self.canvas.create_rectangle(
-                    chip_x,
-                    layout.chip_y,
-                    chip_x + layout.chip_width,
-                    layout.chip_y + layout.chip_height,
-                    fill=chip_fill,
-                    outline="",
-                )
+            self._round_rect(
+                chip_x,
+                layout.chip_y,
+                chip_x + layout.chip_width,
+                layout.chip_y + layout.chip_height,
+                radius=16,
+                fill=self.CARD,
+                outline=self.CARD_EDGE,
             )
             self._track(
                 self.canvas.create_text(
@@ -321,18 +375,28 @@ class TimePanel(BasePanel):
         center_y = layout.message_area_top + int(layout.message_viewport_height * 0.34)
         radius = min(layout.content_width, layout.message_viewport_height) // 4
 
-        face = self.config.get("chipBackground", "#141a24")
         accent = self.config.get("accentColor", "#38bdf8")
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
 
         self._track(
             self.canvas.create_oval(
+                center_x - radius - 14,
+                center_y - radius - 14,
+                center_x + radius + 14,
+                center_y + radius + 14,
+                fill=self.INNER,
+                outline=self.CARD_EDGE,
+                width=1,
+            )
+        )
+        self._track(
+            self.canvas.create_oval(
                 center_x - radius,
                 center_y - radius,
                 center_x + radius,
                 center_y + radius,
-                fill=face,
+                fill=self.CARD,
                 outline=accent,
                 width=3,
             )
@@ -413,15 +477,14 @@ class TimePanel(BasePanel):
         )
 
         device = payload.get("device", "Unknown device")
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                layout.message_area_bottom - 12,
-                anchor="s",
-                text=f"Asked on {device}",
-                fill=muted,
-                font=self.shell.chip_value_font,
-            )
+        pill_font = self.shell.chip_value_font
+        pill_h = pill_font.metrics("linespace") + 10
+        self._pill(
+            center_x,
+            layout.message_area_bottom - pill_h - 8,
+            f"Asked on {device}",
+            fill=self.CARD, fg=muted, outline=self.CARD_EDGE,
+            anchor="n", font=pill_font,
         )
 
 
@@ -622,16 +685,15 @@ class WeatherPanel(BasePanel):
                         label = slot["time"][-5:]
                 temp = slot.get("temperatureF")
                 rain_chance = slot.get("precipitationProbability")
-                self._track(
-                    self.canvas.create_rectangle(
-                        slot_x,
-                        y,
-                        slot_x + inner_w,
-                        y + slot_height,
-                        fill=self.config.get("chipBackground", "#141a24"),
-                        outline=accent if is_now else "",
-                        width=2 if is_now else 0,
-                    )
+                self._round_rect(
+                    slot_x,
+                    y,
+                    slot_x + inner_w,
+                    y + slot_height,
+                    radius=14,
+                    fill=self.CARD,
+                    outline=accent if is_now else self.CARD_EDGE,
+                    width=2 if is_now else 1,
                 )
                 self._track(
                     self.canvas.create_text(
@@ -708,16 +770,15 @@ class WeatherPanel(BasePanel):
                 high = day.get("highF")
                 low = day.get("lowF")
                 rain_chance = day.get("precipitationProbability")
-                self._track(
-                    self.canvas.create_rectangle(
-                        day_x,
-                        y,
-                        day_x + inner_w,
-                        y + day_height,
-                        fill=self.config.get("chipBackground", "#141a24"),
-                        outline=accent if is_today else "",
-                        width=2 if is_today else 0,
-                    )
+                self._round_rect(
+                    day_x,
+                    y,
+                    day_x + inner_w,
+                    y + day_height,
+                    radius=14,
+                    fill=self.CARD,
+                    outline=accent if is_today else self.CARD_EDGE,
+                    width=2 if is_today else 1,
                 )
                 self._track(
                     self.canvas.create_text(
@@ -1073,16 +1134,14 @@ class IndoorTemperaturePanel(BasePanel):
         pill_w = text_w + pad_x * 2
         pill_h = font.metrics("linespace") + pad_y * 2
         left = center_x - pill_w / 2
-        self._track(
-            self.canvas.create_rectangle(
-                left,
-                y,
-                left + pill_w,
-                y + pill_h,
-                fill=chip,
-                outline=accent,
-                width=1,
-            )
+        self._round_rect(
+            left,
+            y,
+            left + pill_w,
+            y + pill_h,
+            radius=pill_h // 2,
+            fill=chip,
+            outline=accent,
         )
         self._track(
             self.canvas.create_text(
@@ -1425,30 +1484,27 @@ class AirQualityPanel(BasePanel):
             if score is not None:
                 status = f"{status} · {int(float(score))}"
 
-            self._track(
-                self.canvas.create_rectangle(
-                    card_x,
-                    cursor,
-                    card_x + card_w,
-                    cursor + row_h,
-                    fill=chip,
-                    outline=band_color,
-                    width=2,
-                )
+            self._round_rect(
+                card_x,
+                cursor,
+                card_x + card_w,
+                cursor + row_h,
+                radius=14,
+                fill=self.CARD,
+                outline=band_color,
+                width=2,
             )
-            self._track(
-                self.canvas.create_rectangle(
-                    card_x,
-                    cursor,
-                    card_x + 6,
-                    cursor + row_h,
-                    fill=band_color,
-                    outline="",
-                )
+            self._round_rect(
+                card_x + 8,
+                cursor + 10,
+                card_x + 14,
+                cursor + row_h - 10,
+                radius=3,
+                fill=band_color,
             )
             self._track(
                 self.canvas.create_text(
-                    card_x + 18,
+                    card_x + 26,
                     cursor + row_h / 2,
                     anchor="w",
                     text=label,
@@ -1484,16 +1540,14 @@ class AirQualityPanel(BasePanel):
         muted: str,
         value_color: str,
     ):
-        self._track(
-            self.canvas.create_rectangle(
-                x,
-                y,
-                x + width,
-                y + height,
-                fill=chip,
-                outline=muted,
-                width=1,
-            )
+        self._round_rect(
+            x,
+            y,
+            x + width,
+            y + height,
+            radius=14,
+            fill=self.CARD,
+            outline=self.CARD_EDGE,
         )
         self._track(
             self.canvas.create_text(
@@ -1638,28 +1692,25 @@ class AirQualityPanel(BasePanel):
         invert: bool = False,
     ):
         height = 8
-        self._track(
-            self.canvas.create_rectangle(
-                x,
-                y,
-                x + width,
-                y + height,
-                fill=track,
-                outline="",
-            )
+        self._round_rect(
+            x,
+            y,
+            x + width,
+            y + height,
+            radius=height // 2,
+            fill=track,
         )
         if value is not None:
             marker_x = x + self._scale_position(value, scale_min, scale_max, width, invert=invert)
-            self._track(
-                self.canvas.create_rectangle(
+            if marker_x - x > height:
+                self._round_rect(
                     x,
                     y,
                     marker_x,
                     y + height,
+                    radius=height // 2,
                     fill=fill,
-                    outline="",
                 )
-            )
             self._track(
                 self.canvas.create_oval(
                     marker_x - 6,
@@ -1906,19 +1957,18 @@ class TimerPanel(BasePanel):
         row_height = 112 if self._is_fired else 96
         for index, timer in enumerate(timers):
             row_y = y + index * (row_height + 14)
-            row_fill = "#2a1808" if self._is_fired else chip_fill
-            outline = alert if self._is_fired else ""
-            outline_width = 3 if self._is_fired else 0
-            self._track(
-                self.canvas.create_rectangle(
-                    x,
-                    row_y,
-                    x + width,
-                    row_y + row_height,
-                    fill=row_fill,
-                    outline=outline,
-                    width=outline_width,
-                )
+            row_fill = "#2a1808" if self._is_fired else self.CARD
+            outline = alert if self._is_fired else self.CARD_EDGE
+            outline_width = 3 if self._is_fired else 1
+            self._round_rect(
+                x,
+                row_y,
+                x + width,
+                row_y + row_height,
+                radius=18,
+                fill=row_fill,
+                outline=outline,
+                width=outline_width,
             )
 
             label = timer_label_name(timer)
@@ -2062,36 +2112,33 @@ class AlarmPanel(BasePanel):
         for index, alarm in enumerate(alarms):
             row_y = y + index * (self.ROW_HEIGHT + self.ROW_GAP)
             is_new = bool(alarm.get("isNew"))
-            row_outline = accent if is_new else ""
-            outline_width = 2 if is_new else 0
+            row_outline = accent if is_new else self.CARD_EDGE
+            outline_width = 2 if is_new else 1
 
-            self._track(
-                self.canvas.create_rectangle(
-                    x,
-                    row_y,
-                    x + width,
-                    row_y + self.ROW_HEIGHT,
-                    fill=chip_fill,
-                    outline=row_outline,
-                    width=outline_width,
-                )
+            self._round_rect(
+                x,
+                row_y,
+                x + width,
+                row_y + self.ROW_HEIGHT,
+                radius=16,
+                fill=self.CARD,
+                outline=row_outline,
+                width=outline_width,
             )
-            self._track(
-                self.canvas.create_rectangle(
-                    x,
-                    row_y,
-                    x + self.ACCENT_WIDTH,
-                    row_y + self.ROW_HEIGHT,
-                    fill=accent if is_new else muted,
-                    outline="",
-                )
+            self._round_rect(
+                x + 8,
+                row_y + 10,
+                x + 8 + self.ACCENT_WIDTH,
+                row_y + self.ROW_HEIGHT - 10,
+                radius=self.ACCENT_WIDTH // 2,
+                fill=accent if is_new else muted,
             )
 
             device = self._format_device_name(alarm.get("device"))
             row_center_y = row_y + self.ROW_HEIGHT // 2
             title = alarm_title(alarm)
             subtitle = alarm_detail_line(alarm, device)
-            time_text = format_alarm_time(alarm.get("triggerTime"))
+            time_text = format_alarm_time(resolve_alarm_trigger_time(alarm))
             until_text = alarm_until_line(alarm)
 
             self._track(
@@ -2274,26 +2321,23 @@ class ShoppingListPanel(BasePanel):
             row_color = accent if is_new else text
             card_outline = accent if is_new else muted
 
-            self._track(
-                self.canvas.create_rectangle(
-                    card_x0,
-                    row_y,
-                    card_x1,
-                    row_y + row_height,
-                    fill=chip,
-                    outline=card_outline,
-                    width=2 if is_new else 1,
-                )
+            self._round_rect(
+                card_x0,
+                row_y,
+                card_x1,
+                row_y + row_height,
+                radius=12,
+                fill=self.CARD,
+                outline=accent if is_new else self.CARD_EDGE,
+                width=2 if is_new else 1,
             )
-            self._track(
-                self.canvas.create_rectangle(
-                    card_x0,
-                    row_y,
-                    card_x0 + self.ACCENT_WIDTH,
-                    row_y + row_height,
-                    fill=accent if is_new else card_outline,
-                    outline="",
-                )
+            self._round_rect(
+                card_x0 + 8,
+                row_y + 8,
+                card_x0 + 8 + self.ACCENT_WIDTH,
+                row_y + row_height - 8,
+                radius=self.ACCENT_WIDTH // 2,
+                fill=accent if is_new else card_outline,
             )
             self._track(
                 self.canvas.create_text(
@@ -2380,16 +2424,15 @@ class MusicPanel(BasePanel):
         art_url = music.get("artUrl")
         loading_art = bool(art_url and Image is not None)
         self._art_placeholder_ids = []
-        rect_id = self._track(
-            self.canvas.create_rectangle(
-                center_x - art_size // 2,
-                art_y - art_size // 2,
-                center_x + art_size // 2,
-                art_y + art_size // 2,
-                fill=chip,
-                outline=accent if not loading_art else "",
-                width=2 if not loading_art else 0,
-            )
+        rect_id = self._round_rect(
+            center_x - art_size // 2,
+            art_y - art_size // 2,
+            center_x + art_size // 2,
+            art_y + art_size // 2,
+            radius=22,
+            fill=self.CARD,
+            outline=accent if not loading_art else self.CARD_EDGE,
+            width=2 if not loading_art else 1,
         )
         note_id = self._track(
             self.canvas.create_text(
@@ -2488,11 +2531,24 @@ class MusicPanel(BasePanel):
                 self._item_ids.remove(item_id)
         self._art_placeholder_ids.clear()
 
+    @staticmethod
+    def _round_image_corners(image, radius: int):
+        try:
+            from PIL import ImageDraw
+        except ImportError:
+            return image
+        image = image.convert("RGBA")
+        mask = Image.new("L", image.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle((0, 0, image.size[0], image.size[1]), radius=radius, fill=255)
+        image.putalpha(mask)
+        return image
+
     def _apply_art(self, request_id: int, image, cx: float, cy: float):
         if not self.visible or request_id != self._art_request:
             return
         self._clear_art_placeholder()
-        self._art_image = ImageTk.PhotoImage(image)
+        self._art_image = ImageTk.PhotoImage(self._round_image_corners(image, 22))
         self._track(self.canvas.create_image(cx, cy, image=self._art_image))
 
 
@@ -2521,10 +2577,23 @@ class TeslaBatteryPanel(BasePanel):
         if percent is None:
             percent = parse_spoken_battery_percent(payload.get("spokenResponse"))
         model = battery.get("model") or "Model Y"
+        status = str(battery.get("status") or "ok")
+        error_text = battery.get("error")
+        limit_reset = format_limit_reset_time(battery.get("limitResetAt"))
+        charging_label = battery.get("chargingLabel") or battery.get("chargingState")
+        stale = bool(battery.get("stale"))
+        is_error = not stale and (status not in ("ok", "") or (percent is None and error_text))
 
         percent_text = format_battery_percent(percent)
+        if is_error and error_text:
+            percent_text = str(error_text)
         percent_value = None if percent is None else max(0, min(100, int(round(float(percent)))))
         bar_color = battery_level_color(percent_value)
+        if is_error:
+            bar_color = "#f59e0b" if status == "rate_limited" else "#ef4444"
+        headline_color = "#ffffff" if percent_value is not None and not is_error else (
+            "#f59e0b" if status == "rate_limited" else "#ef4444" if is_error else text
+        )
 
         footer_block = (
             self.shell.section_title_font.metrics("linespace")
@@ -2587,29 +2656,26 @@ class TeslaBatteryPanel(BasePanel):
                 font=self.shell.forecast_label_font,
             )
         )
-        self._track(
-            self.canvas.create_rectangle(
-                bar_x0,
-                bar_y0,
-                bar_x1,
-                bar_y1,
-                fill=chip,
-                outline=muted,
-                width=2,
-            )
+        self._round_rect(
+            bar_x0,
+            bar_y0,
+            bar_x1,
+            bar_y1,
+            radius=bar_height // 2,
+            fill=self.INNER,
+            outline=self.CARD_EDGE,
+            width=2,
         )
 
         if percent_value is not None and bar_width > 0:
-            fill_width = max(4, int((bar_width - 4) * (percent_value / 100)))
-            self._track(
-                self.canvas.create_rectangle(
-                    bar_x0 + 2,
-                    bar_y0 + 2,
-                    bar_x0 + 2 + fill_width,
-                    bar_y1 - 2,
-                    fill=bar_color,
-                    outline="",
-                )
+            fill_width = max(bar_height, int((bar_width - 6) * (percent_value / 100)))
+            self._round_rect(
+                bar_x0 + 3,
+                bar_y0 + 3,
+                bar_x0 + 3 + fill_width,
+                bar_y1 - 3,
+                radius=(bar_height - 6) // 2,
+                fill=bar_color,
             )
 
         self._track(
@@ -2618,12 +2684,65 @@ class TeslaBatteryPanel(BasePanel):
                 bar_y0 + bar_height // 2,
                 anchor="center",
                 text=percent_text,
-                fill="#ffffff" if percent_value is not None else text,
+                fill=headline_color,
                 font=self.shell.section_title_font,
             )
         )
 
         cursor = bar_y1 + 28
+        if stale:
+            pill_y = cursor
+            self._pill(
+                center_x,
+                pill_y,
+                f"⚠ cached · {format_freshness_sec(battery.get('freshnessSec'))}",
+                fill=self.AMBER_BG,
+                fg=self.AMBER,
+                outline=self.AMBER_BG,
+                anchor="n",
+            )
+            cursor += 34
+            reason = str(battery.get("staleReason") or "Tesla unreachable")
+            cached_time = format_cached_time_label(battery.get("cachedAt") or battery.get("fetchedAt"))
+            legend = f"{reason} — data from {cached_time}" if cached_time else f"{reason} — showing last known data"
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=legend,
+                    fill=self.AMBER,
+                    font=self.shell.forecast_label_font,
+                    width=width - 80,
+                    justify="center",
+                )
+            )
+            cursor += self.shell.forecast_label_font.metrics("linespace") + 10
+        if limit_reset:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=limit_reset,
+                    fill=muted,
+                    font=self.shell.body_font,
+                )
+            )
+            cursor += self.shell.body_font.metrics("linespace") + 8
+        elif charging_label and not is_error:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=str(charging_label),
+                    fill=accent,
+                    font=self.shell.body_font,
+                )
+            )
+            cursor += self.shell.body_font.metrics("linespace") + 8
+
         self._track(
             self.canvas.create_text(
                 center_x,
@@ -2689,6 +2808,1091 @@ class TeslaBatteryPanel(BasePanel):
             )
 
 
+class TeslaDashboardPanel(BasePanel):
+    LOGO_NAME = "tesla-logo.png"
+    CAR_IMAGE_NAME = "tesla-model-y.png"
+    TOP_DOWN_IMAGE_NAME = "tesla-top-down.png"
+    # Wheel centers as fractions of the top-down render height (front/rear axle).
+    WHEEL_SLOTS = {"fl": (-1, 0.15), "fr": (1, 0.15), "rl": (-1, 0.84), "rr": (1, 0.84)}
+    MAP_ZOOM = 15
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._logo_photo = None
+        self._car_photo = None
+        self._top_down_photo = None
+        self._map_photo = None
+        self._map_request = 0
+        self._map_cache: dict = {}
+        self._map_overlay_floor = None
+        self._pulse_job = None
+        self._pulse_phase = 0
+        self._pulse_items: list[int] = []
+        self._pin_center = None
+
+    def hide(self):
+        if self._pulse_job:
+            self.root.after_cancel(self._pulse_job)
+            self._pulse_job = None
+        self._pulse_items = []
+        self._pin_center = None
+        self._map_overlay_floor = None
+        self._map_request += 1
+        super().hide()
+
+    def _render(self, payload: dict):
+        dashboard = payload.get("dashboard") or {}
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        top = int(self.shell.overlay.screen_h * (0.035 if layout.portrait else 0.05))
+        bottom = layout.message_area_bottom
+        pad = 20
+        self._round_rect(
+            x - pad, top - 14, x + width + pad, bottom + 12,
+            radius=26, fill=self.CONTAINER, outline=self.CARD_EDGE,
+        )
+
+        if dashboard.get("status") not in (None, "ok", ""):
+            self._render_error(dashboard, x, width, top)
+            return
+
+        if layout.portrait:
+            self._render_portrait(dashboard, x, width, top, bottom)
+        else:
+            self._render_landscape(dashboard, x, width, top, bottom)
+
+    def _render_error(self, dashboard: dict, x: int, width: int, top: int):
+        text = self.config["textColor"]
+        accent = self.AMBER if dashboard.get("status") == "rate_limited" else self.RED
+        message = dashboard.get("error") or "Tesla dashboard unavailable"
+        y = self._draw_header(x + 8, top, width - 16, dashboard)
+        self._track(
+            self.canvas.create_text(
+                x + width // 2,
+                y + 80,
+                anchor="n",
+                text=message,
+                fill=accent,
+                font=self.shell.body_font,
+                width=width - 80,
+                justify="center",
+            )
+        )
+        limit_reset = format_limit_reset_time(dashboard.get("limitResetAt"))
+        if limit_reset:
+            self._track(
+                self.canvas.create_text(
+                    x + width // 2,
+                    y + 150,
+                    anchor="n",
+                    text=limit_reset,
+                    fill=self.config["mutedTextColor"],
+                    font=self.shell.body_font,
+                )
+            )
+
+    def _freshness_label(self, dashboard: dict) -> str:
+        sec = dashboard.get("freshnessSec")
+        if sec is None:
+            return "just now"
+        sec = max(0, int(sec))
+        if sec < 60:
+            return f"{sec}s ago"
+        if sec < 3600:
+            return f"{sec // 60}m ago"
+        if sec < 86400:
+            return f"{sec // 3600}h ago"
+        return f"{sec // 86400}d ago"
+
+    def _cached_time_label(self, dashboard: dict) -> str | None:
+        stamp = dashboard.get("cachedAt") or dashboard.get("fetchedAt")
+        if not stamp:
+            return None
+        try:
+            cached = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).astimezone()
+        except ValueError:
+            return None
+        label = cached.strftime("%I:%M %p").lstrip("0")
+        if cached.date() != datetime.now().astimezone().date():
+            label = cached.strftime("%b %d, ") + label
+        return label
+
+    def _geofence_label(self, map_data: dict) -> str | None:
+        if map_data.get("locatedAtHome"):
+            return "At home"
+        if map_data.get("locatedAtWork"):
+            return "At work"
+        if map_data.get("locatedAtFavorite"):
+            return "Favorite"
+        return None
+
+    def _load_logo_image(self, size: int):
+        path = asset_path(self.LOGO_NAME)
+        if not path.exists() or Image is None or ImageTk is None:
+            return None
+        try:
+            image = Image.open(path).convert("RGBA")
+        except OSError:
+            return None
+        # Strip any white matte so the logo floats on the dark header.
+        cleaned = [
+            (r, g, b, 0) if (a == 0 or (r > 235 and g > 235 and b > 235)) else (r, g, b, a)
+            for r, g, b, a in image.getdata()
+        ]
+        image.putdata(cleaned)
+        image.thumbnail((size, size), Image.LANCZOS)
+        return image
+
+    @staticmethod
+    def _latlon_to_global_px(lat: float, lon: float, zoom: int):
+        scale = 256 * (1 << zoom)
+        x = (lon + 180.0) / 360.0 * scale
+        lat = max(-85.05112878, min(85.05112878, float(lat)))
+        siny = math.sin(math.radians(lat))
+        y = (0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi)) * scale
+        return x, y
+
+    def _fetch_map_tiles(self, lat: float, lon: float, zoom: int, w: int, h: int):
+        from PIL import ImageEnhance
+
+        center_x, center_y = self._latlon_to_global_px(lat, lon, zoom)
+        left = int(center_x - w / 2)
+        top = int(center_y - h / 2)
+        tile_x0, tile_y0 = left // 256, top // 256
+        tile_x1, tile_y1 = (left + w) // 256, (top + h) // 256
+        stitched = Image.new(
+            "RGB",
+            ((tile_x1 - tile_x0 + 1) * 256, (tile_y1 - tile_y0 + 1) * 256),
+            (10, 17, 30),
+        )
+        max_tile = (1 << zoom) - 1
+        for tx in range(tile_x0, tile_x1 + 1):
+            for ty in range(tile_y0, tile_y1 + 1):
+                if tx < 0 or ty < 0 or tx > max_tile or ty > max_tile:
+                    continue
+                url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
+                request = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "alexa-broadcast-client/1.0 (personal home display)"},
+                )
+                with urllib.request.urlopen(request, timeout=6) as response:
+                    tile = Image.open(io.BytesIO(response.read())).convert("RGB")
+                stitched.paste(tile, ((tx - tile_x0) * 256, (ty - tile_y0) * 256))
+        crop_left = left - tile_x0 * 256
+        crop_top = top - tile_y0 * 256
+        image = stitched.crop((crop_left, crop_top, crop_left + w, crop_top + h))
+        # Tone the map toward the dark theme while keeping streets clearly readable.
+        image = ImageEnhance.Color(image).enhance(0.75)
+        image = ImageEnhance.Contrast(image).enhance(1.12)
+        image = ImageEnhance.Brightness(image).enhance(0.88)
+        navy = Image.new("RGB", image.size, (16, 27, 48))
+        return Image.blend(image, navy, 0.12)
+
+    def _start_map_fetch(self, lat: float, lon: float, box):
+        if Image is None or ImageTk is None:
+            return
+        x0, y0, x1, y1 = box
+        w = max(64, int(x1 - x0) - 4)
+        h = max(64, int(y1 - y0) - 4)
+        key = (round(lat, 4), round(lon, 4), self.MAP_ZOOM, w, h)
+        self._map_request += 1
+        request_id = self._map_request
+        cached = self._map_cache.get(key)
+        if cached is not None:
+            self._apply_map(request_id, cached, box)
+            return
+
+        def fetch():
+            try:
+                image = self._fetch_map_tiles(lat, lon, self.MAP_ZOOM, w, h)
+            except Exception:
+                return
+            self._map_cache[key] = image
+            if len(self._map_cache) > 8:
+                self._map_cache.pop(next(iter(self._map_cache)))
+            self.root.after(0, lambda: self._apply_map(request_id, image, box))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _apply_map(self, request_id: int, image, box):
+        if not self.visible or request_id != self._map_request:
+            return
+        x0, y0, x1, y1 = box
+        self._map_photo = ImageTk.PhotoImage(image)
+        img_id = self._track(
+            self.canvas.create_image((x0 + x1) // 2, (y0 + y1) // 2, image=self._map_photo)
+        )
+        if self._map_overlay_floor is not None:
+            self.canvas.tag_lower(img_id, self._map_overlay_floor)
+
+    def _draw_header(self, x, y, width, dashboard: dict):
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        vehicle = dashboard.get("vehicle") or {}
+
+        circle_r = 28
+        cx, cy = x + circle_r + 4, y + circle_r + 2
+        self._track(
+            self.canvas.create_oval(
+                cx - circle_r, cy - circle_r, cx + circle_r, cy + circle_r,
+                outline="#31415e", width=2, dash=(4, 4),
+            )
+        )
+        logo = self._load_logo_image(circle_r * 2 - 16)
+        if logo is not None:
+            self._logo_photo = ImageTk.PhotoImage(logo)
+            self._track(self.canvas.create_image(cx, cy, image=self._logo_photo))
+
+        title_x = cx + circle_r + 18
+        self._track(
+            self.canvas.create_text(
+                title_x, y + 4, anchor="nw",
+                text="Tesla mission control",
+                fill=text,
+                font=self.shell.section_label_font,
+            )
+        )
+        online = "online" if vehicle.get("online", True) else str(vehicle.get("state") or "offline")
+        name = vehicle.get("name") or "Tesla"
+        name_id = self._track(
+            self.canvas.create_text(
+                title_x, y + 36, anchor="nw",
+                text=name,
+                fill=accent,
+                font=self.shell.forecast_label_font,
+            )
+        )
+        bbox = self.canvas.bbox(name_id)
+        dot_x = (bbox[2] if bbox else title_x) + 10
+        status_color = self.GREEN if vehicle.get("online", True) else muted
+        self._track(
+            self.canvas.create_text(
+                dot_x, y + 36, anchor="nw",
+                text=f"· {online}",
+                fill=status_color,
+                font=self.shell.forecast_label_font,
+            )
+        )
+        firmware = vehicle.get("firmware")
+        if firmware:
+            short_fw = str(firmware).split(" ")[-1][:16]
+            self._track(
+                self.canvas.create_text(
+                    x + width - 16, y + 6, anchor="ne",
+                    text=f"v{short_fw}",
+                    fill=muted,
+                    font=self.shell.forecast_label_font,
+                )
+            )
+        if dashboard.get("stale"):
+            self._pill(
+                x + width - 16, y + 30,
+                f"⚠ cached · {self._freshness_label(dashboard)}",
+                fill=self.AMBER_BG,
+                fg=self.AMBER,
+                outline=self.AMBER_BG,
+                anchor="ne",
+            )
+            legend = "Tesla unreachable — showing last known data"
+            cached_time = self._cached_time_label(dashboard)
+            if cached_time:
+                legend = f"Tesla unreachable — data from {cached_time}"
+            self._track(
+                self.canvas.create_text(
+                    x + width - 16, y + 62, anchor="ne",
+                    text=legend,
+                    fill=self.AMBER,
+                    font=self.shell.forecast_label_font,
+                )
+            )
+        else:
+            self._pill(
+                x + width - 16, y + 30,
+                f"⏱ {self._freshness_label(dashboard)}",
+                fill=self.CARD,
+                fg=muted,
+                outline=self.CARD_EDGE,
+                anchor="ne",
+            )
+        # The stale legend needs an extra row before the cards start.
+        return y + circle_r * 2 + (30 if dashboard.get("stale") else 16)
+
+    def _draw_map_card(self, x, y, width, height, dashboard: dict):
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        text = self.config["textColor"]
+        map_data = dashboard.get("map") or {}
+        nav = map_data.get("navigation") or {}
+
+        self._panel_card(x, y, width, height)
+        footer_h = 40
+        box = (x + 10, y + 10, x + width - 10, y + height - footer_h - 6)
+        self._round_rect(*box, radius=12, fill=self.INNER, outline=self.CARD_EDGE)
+        self._draw_map_placeholder(box)
+
+        lat = map_data.get("latitude")
+        lon = map_data.get("longitude")
+
+        pin_x = (box[0] + box[2]) // 2
+        pin_y = (box[1] + box[3]) // 2
+        self._pin_center = (pin_x, pin_y)
+        halo_id = self._track(
+            self.canvas.create_oval(
+                pin_x - 34, pin_y - 34, pin_x + 34, pin_y + 34,
+                fill="#12233d", outline="",
+            )
+        )
+        self._map_overlay_floor = halo_id
+        self._track(
+            self.canvas.create_oval(
+                pin_x - 22, pin_y - 22, pin_x + 22, pin_y + 22,
+                outline=accent, width=2,
+            )
+        )
+        self._track(
+            self.canvas.create_oval(
+                pin_x - 9, pin_y - 9, pin_x + 9, pin_y + 9,
+                fill=accent, outline="#0a111e", width=2,
+            )
+        )
+        heading = map_data.get("heading")
+        if heading is not None:
+            # Compass-needle chevron riding the accent ring (not a cursor arrow):
+            # a kite-shaped polygon pointing along the heading, just outside the ring.
+            theta = math.radians(float(heading) - 90)
+
+            def polar(radius, angle_offset_deg=0.0):
+                a = theta + math.radians(angle_offset_deg)
+                return pin_x + math.cos(a) * radius, pin_y + math.sin(a) * radius
+
+            tip = polar(33)
+            left = polar(21, -24)
+            notch = polar(24)
+            right = polar(21, 24)
+            self._track(
+                self.canvas.create_polygon(
+                    *tip, *left, *notch, *right,
+                    fill=accent, outline="#0a111e", width=1, joinstyle="round",
+                )
+            )
+
+        geofence = self._geofence_label(map_data)
+        if geofence:
+            self._pill(x + 20, y + 20, f"⌂ {geofence}", fill=self.GREEN_BG, fg=self.GREEN, outline="#1d5c38")
+        elif map_data.get("locationRestricted"):
+            self._pill(x + 20, y + 20, "Location hidden", fill=self.AMBER_BG, fg=self.AMBER)
+        driving = map_data.get("drivingChip") or "Parked"
+        self._pill(x + width - 20, y + 20, driving, fill="#0d1830", fg=text, outline=self.CARD_EDGE, anchor="ne")
+
+        location = map_data.get("locationLabel")
+        if not location and lat is not None and lon is not None:
+            location = f"{float(lat):.4f}, {float(lon):.4f}"
+        location = location or "Location unavailable"
+        self._track(
+            self.canvas.create_text(
+                x + 20, y + height - footer_h // 2 - 4, anchor="w",
+                text=f"📍 {location}",
+                fill=text,
+                font=self.shell.forecast_label_font,
+            )
+        )
+        footer = nav.get("footer") or "No active route"
+        self._track(
+            self.canvas.create_text(
+                x + width - 20, y + height - footer_h // 2 - 4, anchor="e",
+                text=footer,
+                fill=accent if nav.get("active") else muted,
+                font=self.shell.forecast_label_font,
+            )
+        )
+
+        if lat is not None and lon is not None:
+            self._start_map_fetch(float(lat), float(lon), box)
+
+        if not self._pulse_job:
+            self._pulse_phase = 0
+            self._schedule_pulse()
+
+    def _draw_map_placeholder(self, box):
+        """Faint street grid so the map card looks alive before tiles load."""
+        x0, y0, x1, y1 = box
+        road = "#152238"
+        w, h = x1 - x0, y1 - y0
+        for frac, slope in ((0.22, 0.06), (0.52, -0.04), (0.8, 0.08)):
+            yy = y0 + h * frac
+            self._track(
+                self.canvas.create_line(x0 + 4, yy - h * slope, x1 - 4, yy + h * slope, fill=road, width=5)
+            )
+        for frac, slope in ((0.25, 0.05), (0.58, -0.06), (0.85, 0.03)):
+            xx = x0 + w * frac
+            self._track(
+                self.canvas.create_line(xx - w * slope, y0 + 4, xx + w * slope, y1 - 4, fill=road, width=5)
+            )
+
+    def _schedule_pulse(self):
+        if not self.visible:
+            return
+        self._pulse_job = self.root.after(420, self._pulse_tick)
+
+    def _pulse_tick(self):
+        self._pulse_job = None
+        if not self.visible or not self._pin_center:
+            return
+        for item in self._pulse_items:
+            self.canvas.delete(item)
+        self._pulse_items = []
+        self._pulse_phase = (self._pulse_phase + 1) % 4
+        pin_x, pin_y = self._pin_center
+        radius = 24 + self._pulse_phase * 7
+        shades = ["#38bdf8", "#2e9dd2", "#2379a5", "#17527a"]
+        ring = self.canvas.create_oval(
+            pin_x - radius, pin_y - radius, pin_x + radius, pin_y + radius,
+            outline=shades[self._pulse_phase], width=2,
+        )
+        self._pulse_items.append(self._track(ring))
+        self._schedule_pulse()
+
+    def _draw_car_card(self, x, y, width, height, dashboard: dict):
+        muted = self.config["mutedTextColor"]
+        security = dashboard.get("security") or {}
+        secure = security.get("secureTheme") == "green"
+        secure_color = self.GREEN if secure else self.AMBER
+        secure_bg = self.GREEN_BG if secure else self.AMBER_BG
+
+        self._round_rect(
+            x, y, x + width, y + height,
+            radius=18, fill=self.CARD, outline="#31415e", dash=(6, 5),
+        )
+
+        image_path = asset_path(self.CAR_IMAGE_NAME)
+        img_w = min(width - 60, 460)
+        img_h = max(90, height - 44)
+        if image_path.exists() and Image is not None and ImageTk is not None:
+            try:
+                image = Image.open(image_path).convert("RGBA")
+                image.thumbnail((int(img_w), int(img_h)), Image.LANCZOS)
+                self._car_photo = ImageTk.PhotoImage(image)
+                self._track(
+                    self.canvas.create_image(
+                        x + width // 2,
+                        y + height // 2 + 10,
+                        image=self._car_photo,
+                    )
+                )
+            except OSError:
+                pass
+
+        left_badges = []
+        left_badges.append("🔒 Locked" if security.get("locked") else "🔓 Unlocked")
+        if security.get("sentryOn"):
+            left_badges.append("◉ Sentry on")
+        right_badges = [
+            ("Doors closed", True) if security.get("doorsClosed", True) else ("Door open", False),
+            ("Windows up", True) if security.get("windowsUp", True) else ("Window open", False),
+        ]
+
+        badge_y = y + 16
+        for label in left_badges:
+            h = self._pill(x + 16, badge_y, label, fill=secure_bg, fg=secure_color, outline=secure_bg)
+            badge_y += h + 8
+        badge_y = y + 16
+        for label, ok in right_badges:
+            h = self._pill(
+                x + width - 16, badge_y, label,
+                fill=self.CARD, fg=muted if ok else self.AMBER,
+                outline=self.CARD_EDGE, anchor="ne",
+            )
+            badge_y += h + 8
+
+    def _draw_battery_card(self, x, y, width, height, dashboard: dict):
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        text = self.config["textColor"]
+        battery = dashboard.get("battery") or {}
+        percent = battery.get("percent")
+        charging = battery.get("charging")
+        bar_color = battery_level_color(percent)
+
+        self._panel_card(x, y, width, height)
+        headline = f"⚡ {percent if percent is not None else '—'}% · {battery.get('rangeMiles') if battery.get('rangeMiles') is not None else '—'} mi"
+        plug_label = battery.get("chargingLabel") or ("Charging" if charging else "Not plugged in")
+        self._track(
+            self.canvas.create_text(x + 18, y + 16, anchor="nw", text=headline, fill=text, font=self.shell.chip_value_font)
+        )
+        self._track(
+            self.canvas.create_text(
+                x + width - 18, y + 20, anchor="ne",
+                text=plug_label,
+                fill=self.GREEN if charging else accent,
+                font=self.shell.forecast_label_font,
+            )
+        )
+
+        bar_y = y + 54
+        bar_h = 14
+        self._round_rect(x + 18, bar_y, x + width - 18, bar_y + bar_h, radius=bar_h // 2, fill=self.INNER)
+        if percent is not None:
+            pct = max(0, min(100, int(percent)))
+            fill_w = (width - 36) * pct / 100
+            if fill_w > bar_h:
+                self._round_rect(
+                    x + 18, bar_y, x + 18 + fill_w, bar_y + bar_h,
+                    radius=bar_h // 2, fill=bar_color,
+                )
+
+        detail_y = bar_y + bar_h + 14
+        if charging:
+            charge_bits = []
+            if battery.get("chargerPowerKw") is not None:
+                charge_bits.append(f"{battery['chargerPowerKw']} kW")
+            if battery.get("chargeCurrentAmp") is not None:
+                charge_bits.append(f"{battery['chargeCurrentAmp']} A")
+            if battery.get("chargerVoltage") is not None:
+                charge_bits.append(f"{battery['chargerVoltage']} V")
+            if battery.get("chargeRateMph") is not None:
+                charge_bits.append(f"{battery['chargeRateMph']} mi/hr")
+            if battery.get("timeToFullChargeMin") is not None:
+                charge_bits.append(f"{battery['timeToFullChargeMin']} min to full")
+            if charge_bits:
+                self._track(
+                    self.canvas.create_text(
+                        x + 18, detail_y, anchor="nw",
+                        text=" · ".join(charge_bits),
+                        fill=self.GREEN,
+                        font=self.shell.forecast_label_font,
+                    )
+                )
+                detail_y += 26
+
+        columns = []
+        if battery.get("ratedRangeMiles") is not None:
+            columns.append(f"Rated {battery['ratedRangeMiles']} mi")
+        if battery.get("lastChargeKwh") is not None:
+            columns.append(f"Last charge +{battery['lastChargeKwh']} kWh AC")
+        if battery.get("lifetimeEnergy"):
+            columns.append(f"Lifetime {battery['lifetimeEnergy']}")
+        if columns:
+            slot = (width - 36) / max(1, len(columns))
+            anchors = ["w", "center", "e"]
+            for idx, value in enumerate(columns[:3]):
+                if len(columns) == 1:
+                    cx, anchor = x + 18, "w"
+                else:
+                    anchor = anchors[idx] if len(columns) == 3 else ("w" if idx == 0 else "e")
+                    if anchor == "w":
+                        cx = x + 18
+                    elif anchor == "e":
+                        cx = x + width - 18
+                    else:
+                        cx = x + width / 2
+                self._track(
+                    self.canvas.create_text(
+                        cx, detail_y + 6, anchor=anchor,
+                        text=value,
+                        fill=muted,
+                        font=self.shell.forecast_label_font,
+                    )
+                )
+
+    def _stat_tile(self, x, y, w, h, icon, label):
+        muted = self.config["mutedTextColor"]
+        self._panel_card(x, y, w, h)
+        self._track(
+            self.canvas.create_text(
+                x + 16, y + 14, anchor="nw",
+                text=f"{icon} {label}",
+                fill=muted,
+                font=self.shell.chip_label_font,
+            )
+        )
+
+    def _draw_stat_grid(self, x, y, width, tile_h, gap, dashboard: dict):
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        climate = dashboard.get("climate") or {}
+        tires = dashboard.get("tires") or {}
+        odometer = dashboard.get("odometer") or {}
+        software = dashboard.get("software") or {}
+
+        tile_w = (width - gap) // 2
+        value_font = self.shell.chip_value_font
+        label_font = self.shell.forecast_label_font
+        positions = {
+            "climate": (x, y),
+            "tires": (x + tile_w + gap, y),
+            "odometer": (x, y + tile_h + gap),
+            "software": (x + tile_w + gap, y + tile_h + gap),
+        }
+
+        self._draw_climate_tile(*positions["climate"], tile_w, tile_h, climate)
+        self._draw_tires_tile(*positions["tires"], tile_w, tile_h, tires)
+        self._draw_odometer_tile(*positions["odometer"], tile_w, tile_h, odometer)
+
+        # Software
+        tx, ty = positions["software"]
+        self._stat_tile(tx, ty, tile_w, tile_h, "⬇", "Software")
+        update_available = software.get("updateAvailable")
+        sw_val = software.get("statusLabel") or ("Update ready" if update_available else "Up to date")
+        self._track(
+            self.canvas.create_text(
+                tx + 16, ty + tile_h // 2 + 2, anchor="w",
+                text=sw_val, fill=text, font=value_font,
+            )
+        )
+        if update_available:
+            sw_sub = str(software.get("updateVersion") or "").strip()
+            percent = software.get("downloadPercent")
+            if percent is not None:
+                sw_sub = f"{sw_sub} · {percent}% loaded".strip(" ·")
+            sw_sub = sw_sub or "Update pending"
+        else:
+            current = str(software.get("currentVersion") or "").strip()
+            sw_sub = f"v{current.split(' ')[0]}" if current else "No update pending"
+        self._track(
+            self.canvas.create_text(
+                tx + 16, ty + tile_h - 14, anchor="sw",
+                text=self._fit_text(sw_sub, label_font, tile_w - 32),
+                fill=accent if update_available else muted,
+                font=label_font,
+            )
+        )
+
+    def _climate_color(self, temp_f):
+        if temp_f is None:
+            return self.config["mutedTextColor"]
+        t = float(temp_f)
+        if t < 45:
+            return "#60a5fa"
+        if t < 62:
+            return "#38bdf8"
+        if t <= 78:
+            return self.GREEN
+        if t <= 90:
+            return self.AMBER
+        return self.RED
+
+    _TEMP_SCALE_STOPS = (
+        (30, (59, 130, 246)),
+        (60, (56, 189, 248)),
+        (70, (74, 222, 128)),
+        (85, (245, 158, 11)),
+        (110, (239, 68, 68)),
+    )
+
+    def _draw_temp_scale(self, x, y, width, inside_f, outside_f):
+        lo, hi = self._TEMP_SCALE_STOPS[0][0], self._TEMP_SCALE_STOPS[-1][0]
+
+        def color_at(temp):
+            temp = max(lo, min(hi, float(temp)))
+            stops = self._TEMP_SCALE_STOPS
+            for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+                if temp <= t1:
+                    frac = (temp - t0) / (t1 - t0)
+                    return "#%02x%02x%02x" % tuple(
+                        int(a + (b - a) * frac) for a, b in zip(c0, c1)
+                    )
+            return "#%02x%02x%02x" % stops[-1][1]
+
+        segments = 36
+        seg_w = width / segments
+        for i in range(segments):
+            temp = lo + (hi - lo) * (i + 0.5) / segments
+            self._track(
+                self.canvas.create_rectangle(
+                    x + i * seg_w, y, x + (i + 1) * seg_w + 1, y + 6,
+                    fill=color_at(temp), outline="",
+                )
+            )
+
+        def marker_x(temp):
+            frac = (max(lo, min(hi, float(temp))) - lo) / (hi - lo)
+            return x + frac * width
+
+        if outside_f is not None:
+            mx = marker_x(outside_f)
+            self._track(
+                self.canvas.create_oval(
+                    mx - 6, y - 3, mx + 6, y + 9,
+                    fill=self.INNER, outline="#94a3b8", width=2,
+                )
+            )
+        if inside_f is not None:
+            mx = marker_x(inside_f)
+            self._track(
+                self.canvas.create_oval(
+                    mx - 7, y - 4, mx + 7, y + 10,
+                    fill=color_at(inside_f), outline="#e2e8f0", width=2,
+                )
+            )
+
+    def _draw_climate_tile(self, tx, ty, w, h, climate: dict):
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        self._stat_tile(tx, ty, w, h, "🌡", "Climate")
+
+        inside = climate.get("insideTempF")
+        outside = climate.get("outsideTempF")
+        hvac_on = bool(climate.get("hvacOn"))
+        inside_color = self._climate_color(inside)
+
+        val_y = ty + h * 0.36
+        value_id = self._track(
+            self.canvas.create_text(
+                tx + 18, val_y, anchor="w",
+                text=f"{inside if inside is not None else '—'}°",
+                fill=inside_color,
+                font=self.shell.section_title_font,
+            )
+        )
+        bbox = self.canvas.bbox(value_id)
+        if bbox:
+            self._track(
+                self.canvas.create_text(
+                    bbox[2] + 8, val_y + 4, anchor="w",
+                    text="cabin",
+                    fill=muted,
+                    font=self.shell.forecast_label_font,
+                )
+            )
+        if outside is not None:
+            self._track(
+                self.canvas.create_text(
+                    tx + 18, val_y + self.shell.section_title_font.metrics("linespace") * 0.72,
+                    anchor="w",
+                    text=f"{outside}° outside",
+                    fill=self._climate_color(outside),
+                    font=self.shell.forecast_value_font,
+                )
+            )
+
+        self._draw_temp_scale(tx + 18, ty + h - 66, w - 36, inside, outside)
+
+        pill_y = ty + h - 44
+        pills = []
+        if hvac_on:
+            hot_cabin = inside is not None and outside is not None and inside > outside
+            hvac_label = "☀ Heat on" if (inside is not None and outside is not None and outside < 55 and not hot_cabin) else "❄ AC on"
+            pills.append((hvac_label, "❄ AC", "#0d2338", accent, "#1c4966"))
+        else:
+            pills.append(("HVAC off", "HVAC", self.INNER, muted, self.CARD_EDGE))
+        cop = str(climate.get("cabinOverheatProtection") or "").lower()
+        if cop and cop not in ("off", "false", "none"):
+            pills.append(("☀ Cabin protect", "☀ Protect", self.AMBER_BG, self.AMBER, self.AMBER_BG))
+
+        # Never let pills bleed past the tile edge — shorten, then drop if needed.
+        pill_x = tx + 16
+        right_limit = tx + w - 12
+        for label, short_label, fill, fg, outline in pills:
+            if pill_x + self._pill_width(label) > right_limit:
+                label = short_label
+            if pill_x + self._pill_width(label) > right_limit:
+                break
+            self._pill(pill_x, pill_y, label, fill=fill, fg=fg, outline=outline)
+            pill_x += self._pill_width(label) + 10
+
+    def _pill_width(self, label, font=None):
+        font = font or self.shell.forecast_label_font
+        return font.measure(label) + 24
+
+    def _fit_text(self, label: str, font, max_width: int) -> str:
+        if font.measure(label) <= max_width:
+            return label
+        while label and font.measure(label + "…") > max_width:
+            label = label[:-1]
+        return (label.rstrip() + "…") if label else ""
+
+    def _load_top_down_image(self, max_w: int, max_h: int):
+        path = asset_path(self.TOP_DOWN_IMAGE_NAME)
+        if not path.exists() or Image is None or ImageTk is None:
+            return None
+        try:
+            image = Image.open(path).convert("RGBA")
+        except OSError:
+            return None
+        image.thumbnail((max(1, int(max_w)), max(1, int(max_h))), Image.LANCZOS)
+        return image
+
+    def _draw_tires_tile(self, tx, ty, w, h, tires: dict):
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        self._stat_tile(tx, ty, w, h, "◎", "Tires (psi)")
+        warnings = tires.get("warnings") or {}
+        alert = tires.get("alert")
+
+        top_pad = 46
+        bottom_pad = 38
+        car_h = max(60, h - top_pad - bottom_pad)
+        # Give the render most of the tile; psi numbers sit tight beside the wheels.
+        label_room = self.shell.chip_value_font.measure("88.8") + 12
+        car_w = max(40, min(w - 2 * label_room - 8, w * 0.44, car_h * 0.46))
+        cx = tx + w / 2
+        cy = ty + top_pad + car_h / 2
+
+        image = self._load_top_down_image(car_w, car_h)
+        if image is not None:
+            self._top_down_photo = ImageTk.PhotoImage(image)
+            self._track(self.canvas.create_image(cx, cy, image=self._top_down_photo))
+            draw_w, draw_h = image.size
+        else:
+            draw_w, draw_h = car_w, car_h
+            self._round_rect(
+                cx - draw_w / 2, cy - draw_h / 2, cx + draw_w / 2, cy + draw_h / 2,
+                radius=draw_w * 0.44, fill="#182741", outline="#3b4d6e", width=2,
+            )
+            self._round_rect(
+                cx - draw_w * 0.30, cy - draw_h * 0.24, cx + draw_w * 0.30, cy + draw_h * 0.30,
+                radius=draw_w * 0.24, fill="#0a111e",
+            )
+
+        img_top = cy - draw_h / 2
+        for key, (side, frac) in self.WHEEL_SLOTS.items():
+            psi = tires.get(key)
+            warn = warnings.get(key)
+            wy = img_top + draw_h * frac
+            wheel_x = cx + side * (draw_w / 2 - max(3, draw_w * 0.05))
+            # Wheel marker anchored on the render's wheel position.
+            marker_h = max(14, draw_h * 0.075)
+            self._round_rect(
+                wheel_x - 3, wy - marker_h / 2, wheel_x + 3, wy + marker_h / 2,
+                radius=3,
+                fill=self.AMBER if warn else "#3b82f6",
+            )
+            label = f"{psi:g}" if isinstance(psi, (int, float)) else "—"
+            label_x = cx + side * (draw_w / 2 + 8)
+            self._track(
+                self.canvas.create_text(
+                    label_x, wy,
+                    anchor="e" if side < 0 else "w",
+                    text=label,
+                    fill=self.AMBER if warn else text,
+                    font=self.shell.chip_value_font,
+                )
+            )
+
+        self._track(
+            self.canvas.create_text(
+                tx + 16, ty + h - 14, anchor="sw",
+                text=self._fit_text(alert or "All nominal", self.shell.forecast_label_font, w - 32),
+                fill=self.AMBER if alert else muted,
+                font=self.shell.forecast_label_font,
+            )
+        )
+
+    def _draw_odometer_tile(self, tx, ty, w, h, odometer: dict):
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        label_font = self.shell.forecast_label_font
+        self._stat_tile(tx, ty, w, h, "🛣", "Odometer")
+
+        miles = odometer.get("miles")
+        odo_val = f"{miles:,}" if isinstance(miles, (int, float)) else "—"
+        val_y = ty + h * 0.30
+        value_id = self._track(
+            self.canvas.create_text(
+                tx + 18, val_y, anchor="w",
+                text=odo_val, fill=text, font=self.shell.section_title_font,
+            )
+        )
+        bbox = self.canvas.bbox(value_id)
+        if bbox:
+            self._track(
+                self.canvas.create_text(
+                    bbox[2] + 8, val_y + 5, anchor="w",
+                    text="mi", fill=muted, font=label_font,
+                )
+            )
+
+        cursor = ty + h * 0.30 + self.shell.section_title_font.metrics("linespace") * 0.75
+
+        fsd = odometer.get("fsdMilesPercent")
+        if fsd is not None:
+            pct = max(0, min(100, float(fsd)))
+            # Donut chart: FSD share of miles as an accent arc on a muted ring.
+            avail_h = (ty + h - 14 - label_font.metrics("linespace") * 2.4) - cursor
+            ring_r = max(26, min(w * 0.20, avail_h / 2 - 4))
+            ring_w = max(7, int(ring_r * 0.30))
+            donut_cx = tx + w - 18 - ring_r - ring_w / 2
+            donut_cy = cursor + avail_h / 2 + 2
+            arc_box = (
+                donut_cx - ring_r, donut_cy - ring_r,
+                donut_cx + ring_r, donut_cy + ring_r,
+            )
+            self._track(
+                self.canvas.create_arc(
+                    *arc_box, start=0, extent=359.9, style="arc",
+                    outline=self.INNER, width=ring_w,
+                )
+            )
+            if pct > 0.5:
+                self._track(
+                    self.canvas.create_arc(
+                        *arc_box, start=90, extent=-3.6 * pct, style="arc",
+                        outline=accent, width=ring_w,
+                    )
+                )
+            self._track(
+                self.canvas.create_text(
+                    donut_cx, donut_cy - 7, anchor="center",
+                    text=f"{pct:g}%", fill=text, font=self.shell.chip_value_font,
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    donut_cx, donut_cy + 11, anchor="center",
+                    text="FSD", fill=accent, font=label_font,
+                )
+            )
+            # Legend on the left of the donut.
+            legend_x = tx + 18
+            legend_y = donut_cy - label_font.metrics("linespace")
+            self._track(
+                self.canvas.create_oval(
+                    legend_x, legend_y - 4, legend_x + 8, legend_y + 4,
+                    fill=accent, outline="",
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    legend_x + 14, legend_y, anchor="w",
+                    text=f"FSD {pct:g}%", fill=text, font=label_font,
+                )
+            )
+            legend_y += label_font.metrics("linespace") + 8
+            self._track(
+                self.canvas.create_oval(
+                    legend_x, legend_y - 4, legend_x + 8, legend_y + 4,
+                    fill=self.INNER, outline=self.CARD_EDGE,
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    legend_x + 14, legend_y, anchor="w",
+                    text=f"Manual {100 - pct:g}%", fill=muted, font=label_font,
+                )
+            )
+
+        detail_lines = []
+        service = odometer.get("serviceDueInMiles")
+        if isinstance(service, (int, float)):
+            detail_lines.append((f"🔧 Tire rotation in {int(service):,} mi", self.AMBER if service <= 500 else muted))
+        added = odometer.get("lastChargeAddedMiles")
+        if isinstance(added, (int, float)) and added > 0:
+            detail_lines.append((f"⚡ +{int(added):,} mi last charge", muted))
+        if not detail_lines and fsd is None:
+            detail_lines.append(("Lifetime distance", muted))
+
+        line_y = ty + h - 14
+        for label, color in reversed(detail_lines[:2]):
+            self._track(
+                self.canvas.create_text(
+                    tx + 16, line_y, anchor="sw",
+                    text=self._fit_text(label, label_font, w - 32),
+                    fill=color, font=label_font,
+                )
+            )
+            line_y -= label_font.metrics("linespace") + 8
+
+    def _draw_media_strip(self, x, y, width, height, dashboard: dict):
+        muted = self.config["mutedTextColor"]
+        text = self.config["textColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        media = dashboard.get("media") or {}
+        playing = bool(media.get("playing"))
+
+        self._panel_card(x, y, width, height)
+        icon_size = min(40, height - 18)
+        icon_y = y + (height - icon_size) // 2
+        self._round_rect(
+            x + 16, icon_y, x + 16 + icon_size, icon_y + icon_size,
+            radius=10,
+            fill="#0d2338" if playing else self.INNER,
+            outline=accent if playing else self.CARD_EDGE,
+        )
+        self._track(
+            self.canvas.create_text(
+                x + 16 + icon_size // 2, icon_y + icon_size // 2, anchor="center",
+                text="♪",
+                fill=accent if playing else muted,
+                font=self.shell.section_label_font,
+            )
+        )
+        text_x = x + 16 + icon_size + 16
+        mid_y = y + height // 2
+        if playing:
+            title = media.get("title") or "Now playing"
+            bits = [b for b in (media.get("artist"), media.get("source")) if b]
+            vol = media.get("volume")
+            if vol is not None:
+                bits.append(f"vol {vol}")
+            self._track(self.canvas.create_text(text_x, mid_y - 11, anchor="w", text=title, fill=text, font=self.shell.section_label_font))
+            self._track(self.canvas.create_text(text_x, mid_y + 13, anchor="w", text=" · ".join(bits), fill=accent, font=self.shell.forecast_label_font))
+        else:
+            self._track(self.canvas.create_text(text_x, mid_y - 11, anchor="w", text="Nothing playing", fill=text, font=self.shell.section_label_font))
+            source = media.get("source")
+            vol = media.get("volume")
+            bits = []
+            # Only show a source when the bridge resolved a friendly name
+            # (raw firmware codes like "5" are filtered out bridge-side).
+            if source and not str(source).strip().replace(".", "").isdigit():
+                bits.append(f"Last source: {source}")
+            if vol is not None:
+                bits.append(f"vol {float(vol):g}")
+            sub = " · ".join(bits) if bits else "Tesla audio idle"
+            self._track(self.canvas.create_text(text_x, mid_y + 13, anchor="w", text=sub, fill=muted, font=self.shell.forecast_label_font))
+
+    def _render_portrait(self, dashboard: dict, x: int, width: int, top: int, bottom: int):
+        gap = 14
+        inner_x = x + 8
+        inner_w = width - 16
+        y = self._draw_header(inner_x, top, inner_w, dashboard) + 6
+
+        charging = bool((dashboard.get("battery") or {}).get("charging"))
+        media_h = 64
+        available = bottom - y - media_h - gap * 5
+        map_h = int(available * (0.28 if charging else 0.34))
+        car_h = int(available * 0.24)
+        battery_h = int(available * (0.22 if charging else 0.16))
+        stats_h = (available - map_h - car_h - battery_h) // 2
+
+        self._draw_map_card(inner_x, y, inner_w, map_h, dashboard)
+        y += map_h + gap
+        self._draw_car_card(inner_x, y, inner_w, car_h, dashboard)
+        y += car_h + gap
+        self._draw_battery_card(inner_x, y, inner_w, battery_h, dashboard)
+        y += battery_h + gap
+        self._draw_stat_grid(inner_x, y, inner_w, stats_h, gap, dashboard)
+        self._draw_media_strip(inner_x, bottom - media_h, inner_w, media_h, dashboard)
+
+    def _render_landscape(self, dashboard: dict, x: int, width: int, top: int, bottom: int):
+        gap = 14
+        inner_x = x + 8
+        inner_w = width - 16
+        y = self._draw_header(inner_x, top, inner_w, dashboard) + 6
+
+        media_h = 60
+        content_h = bottom - y - media_h - gap
+        col_w = (inner_w - gap * 2) // 3
+
+        charging = bool((dashboard.get("battery") or {}).get("charging"))
+        map_h = content_h if not charging else int(content_h * 0.9)
+        battery_h = int(content_h * (0.46 if charging else 0.38))
+
+        self._draw_map_card(inner_x, y, col_w, map_h, dashboard)
+        mid_x = inner_x + col_w + gap
+        self._draw_car_card(mid_x, y, col_w, content_h - battery_h - gap, dashboard)
+        self._draw_battery_card(mid_x, y + content_h - battery_h, col_w, battery_h, dashboard)
+
+        right_x = inner_x + (col_w + gap) * 2
+        tile_h = (content_h - gap) // 2
+        self._draw_stat_grid(right_x, y, col_w, tile_h, gap, dashboard)
+        self._draw_media_strip(inner_x, bottom - media_h, inner_w, media_h, dashboard)
+
+
 class SmartHomePanel(BasePanel):
     TYPE_LABELS = {
         "light": "Light",
@@ -2727,6 +3931,16 @@ class SmartHomePanel(BasePanel):
         icon_size = 120
         icon_y = y + (bottom - y) // 2 - 90
 
+        halo_r = int(icon_size * 0.85)
+        self._track(
+            self.canvas.create_oval(
+                center_x - halo_r, icon_y - halo_r,
+                center_x + halo_r, icon_y + halo_r,
+                fill=self.GREEN_BG if is_on else self.CARD,
+                outline=action_color if is_on else self.CARD_EDGE,
+                width=2,
+            )
+        )
         self._draw_device_icon(center_x, icon_y, icon_size, device_type, action_color if is_on else muted)
 
         cursor = icon_y + icon_size // 2 + 34
@@ -2752,20 +3966,15 @@ class SmartHomePanel(BasePanel):
                 width=width - 40,
             )
         )
-        cursor += self.shell.section_title_font.metrics("linespace") + 12
+        cursor += self.shell.section_title_font.metrics("linespace") + 16
         type_label = self.TYPE_LABELS.get(device_type, "Device")
         detail = type_label
         if origin:
             detail = f"{type_label} · asked on {origin}"
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text=detail,
-                fill=muted,
-                font=self.shell.body_font,
-            )
+        self._pill(
+            center_x, cursor, detail,
+            fill=self.CARD, fg=muted, outline=self.CARD_EDGE,
+            anchor="n", font=self.shell.body_font,
         )
 
     def _draw_device_icon(self, cx: float, cy: float, size: float, device_type: str, color: str):
@@ -2925,6 +4134,16 @@ class VivintAlarmPanel(BasePanel):
 
         icon_size = 140
         icon_y = y + (bottom - y) // 2 - 110
+        halo_r = int(icon_size * 0.8)
+        self._track(
+            self.canvas.create_oval(
+                center_x - halo_r, icon_y - halo_r,
+                center_x + halo_r, icon_y + halo_r,
+                fill=self.GREEN_BG if status == "armed" else self.CARD,
+                outline=accent if status == "armed" else self.CARD_EDGE,
+                width=2,
+            )
+        )
         self._draw_lock_icon(center_x, icon_y, icon_size, accent, chip, locked=status == "armed")
 
         cursor = icon_y + icon_size // 2 + 36
@@ -2964,17 +4183,12 @@ class VivintAlarmPanel(BasePanel):
                 font=self.shell.body_font,
             )
         )
-        cursor += self.shell.body_font.metrics("linespace") + 14
+        cursor += self.shell.body_font.metrics("linespace") + 16
 
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text=provider,
-                fill=muted,
-                font=self.shell.forecast_label_font,
-            )
+        self._pill(
+            center_x, cursor, provider,
+            fill=self.CARD, fg=muted, outline=self.CARD_EDGE,
+            anchor="n",
         )
 
     def _draw_lock_icon(self, cx: float, cy: float, size: float, color: str, chip: str, locked: bool):
@@ -3071,15 +4285,13 @@ class NotificationsPanel(BasePanel):
             items = [spoken.strip()]
 
         banner_h = 44
-        self._track(
-            self.canvas.create_rectangle(
-                x,
-                y,
-                x + width,
-                y + banner_h,
-                fill=accent,
-                outline="",
-            )
+        self._round_rect(
+            x,
+            y,
+            x + width,
+            y + banner_h,
+            radius=banner_h // 2,
+            fill=accent,
         )
         self._draw_bell_icon(x + 28, y + banner_h // 2, 22, self.config.get("overlayBackground", "#0b0f14"))
 
@@ -3134,30 +4346,26 @@ class NotificationsPanel(BasePanel):
                     )
                 break
 
-            self._track(
-                self.canvas.create_rectangle(
-                    card_x,
-                    cursor,
-                    card_x + card_width,
-                    cursor + card_h,
-                    fill=chip,
-                    outline=accent,
-                    width=1,
-                )
+            self._round_rect(
+                card_x,
+                cursor,
+                card_x + card_width,
+                cursor + card_h,
+                radius=14,
+                fill=self.CARD,
+                outline=accent,
             )
-            self._track(
-                self.canvas.create_rectangle(
-                    card_x,
-                    cursor,
-                    card_x + 6,
-                    cursor + card_h,
-                    fill=accent,
-                    outline="",
-                )
+            self._round_rect(
+                card_x + 8,
+                cursor + 8,
+                card_x + 14,
+                cursor + card_h - 8,
+                radius=3,
+                fill=accent,
             )
             self._track(
                 self.canvas.create_text(
-                    card_x + 18,
+                    card_x + 26,
                     cursor + 14,
                     anchor="nw",
                     text=card_text,

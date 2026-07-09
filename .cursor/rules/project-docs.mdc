@@ -29,14 +29,14 @@ If unsure whether a change warrants an update, update anyway when behavior or fi
 | Suite | Command | Location |
 |-------|---------|----------|
 | **Full (bridge + client)** | `run_all_tests.bat` | Repo root |
-| Bridge only | `npm test` | Repo root — 7 files, Node built-in test runner |
+| Bridge only | `npm test` | Repo root — Node built-in test runner (`test/*.test.js`) |
 | Client only | `alexa broadcast client\test\run_tests.bat` | Python `unittest` — `test_*.py` |
 
-Bridge tests: `test/*.test.js` — parser, UDP payloads, voice queries, weather location, timer sync.
+Bridge tests: `test/*.test.js` — parser, UDP payloads, voice queries, weather, timer sync, **Tesla Fleet** (`tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`).
 
-Client tests: `alexa broadcast client/test/test_*.py` — payload utils, config, weather fetch, main timer routing.
+Client tests: `alexa broadcast client/test/test_*.py` — payload utils (incl. `format_limit_reset_time`), config, weather fetch, main timer routing.
 
-Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired}`.
+Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired,tesla-battery,tesla-battery-limited}`.
 
 Portable build smoke: after `build_portable.bat`, confirm `dist/alexa broadcast client/Run Alexa Broadcast Client.bat` exists and `dist/alexa broadcast client.zip` was created.
 

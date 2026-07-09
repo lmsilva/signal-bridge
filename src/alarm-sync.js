@@ -5,11 +5,16 @@ const {
   mergeTimerMaps,
   diffTimerSnapshots,
 } = require('./timer-sync');
+const {
+  zonedLocalToUtcMs,
+  resolveAlarmTimeZone,
+} = require('./alarm-timezone');
 
 const DEFAULTS = {
   enabled: true,
   pollIntervalMs: 60 * 1000,
   mirrorFile: 'data/alarm-mirror.json',
+  localTimeZone: process.env.ALARM_LOCAL_TIMEZONE || 'America/Denver',
 };
 
 const ALARM_TYPES = new Set(['Alarm', 'MusicAlarm']);
@@ -41,15 +46,83 @@ function saveMirror(filePath, mirror) {
   }, null, 2)}\n`, 'utf8');
 }
 
-function parseAlarmRemainingSeconds(notification) {
-  const trigger = toEpochMs(notification?.triggerTime || notification?.alarmTime);
-  if (trigger != null) {
-    return Math.max(0, Math.round((trigger - Date.now()) / 1000));
+function parseAlarmRemainingSecondsFromField(notification) {
+  const remaining = Number(notification?.remainingTime);
+  if (Number.isNaN(remaining) || remaining <= 0) {
+    return null;
   }
+
+  // Amazon alarm remainingTime is usually milliseconds (e.g. 3_600_000 = 1 hour).
+  if (remaining > 1000) {
+    return Math.round(remaining / 1000);
+  }
+
+  return Math.round(remaining);
+}
+
+function parseOriginalDateTimeMs(notification, timeZone) {
+  const date = notification?.originalDate;
+  const time = notification?.originalTime;
+  if (!date || !time) {
+    return null;
+  }
+
+  const parsed = timeZone
+    ? zonedLocalToUtcMs(String(date).trim(), time, timeZone)
+    : Date.parse(`${String(date).trim()}T${String(time).trim().split('.')[0]}`);
+  if (parsed == null || Number.isNaN(parsed)) {
+    return null;
+  }
+
+  const recurrence = notification?.recurringPattern || notification?.recurrence;
+  if (
+    notification?.status === 'ON'
+    && !recurrence
+    && parsed < Date.now() - 60000
+  ) {
+    return parsed + 24 * 60 * 60 * 1000;
+  }
+
+  return parsed;
+}
+
+function parseAlarmTriggerMs(notification, timeZone) {
+  const fromOriginal = parseOriginalDateTimeMs(notification, timeZone);
+  if (fromOriginal != null) {
+    return fromOriginal;
+  }
+
+  for (const field of [
+    'triggerTime',
+    'alarmTime',
+    'scheduledTime',
+    'lastTriggerTimeInUtc',
+    'lastOccurrenceTimeInMilli',
+  ]) {
+    const ms = toEpochMs(notification?.[field]);
+    if (ms != null) {
+      return ms;
+    }
+  }
+
+  const remaining = parseAlarmRemainingSecondsFromField(notification);
+  if (remaining != null && remaining > 0) {
+    return Date.now() + remaining * 1000;
+  }
+
   return null;
 }
 
-function normalizeAlarmNotification(notification, deviceNameMap = {}) {
+function parseAlarmRemainingSeconds(notification, timeZone) {
+  const trigger = parseAlarmTriggerMs(notification, timeZone);
+  if (trigger != null) {
+    return Math.max(0, Math.round((trigger - Date.now()) / 1000));
+  }
+
+  return parseAlarmRemainingSecondsFromField(notification);
+}
+
+function normalizeAlarmNotification(notification, deviceNameMap = {}, options = {}) {
   if (!notification || !ALARM_TYPES.has(notification.type)) {
     return null;
   }
@@ -59,14 +132,15 @@ function normalizeAlarmNotification(notification, deviceNameMap = {}) {
     return null;
   }
 
-  const triggerMs = toEpochMs(notification.triggerTime || notification.alarmTime);
-  const remainingSec = parseAlarmRemainingSeconds(notification);
+  const timeZone = resolveAlarmTimeZone(notification, options);
+  const triggerMs = parseAlarmTriggerMs(notification, timeZone);
+  const remainingSec = parseAlarmRemainingSeconds(notification, timeZone);
   const serial = notification.deviceSerialNumber || null;
 
   return {
     amazonId,
     deviceSerialNumber: serial,
-    device: deviceNameMap[serial] || serial || 'unknown-device',
+    device: deviceNameMap[serial] || notification.deviceName || serial || 'unknown-device',
     label: notification.alarmLabel || notification.reminderLabel || null,
     status: notification.status || 'ON',
     triggerTime: triggerMs != null ? new Date(triggerMs).toISOString() : null,
@@ -282,7 +356,9 @@ function createAlarmSync({
       const currentMap = {};
 
       for (const notification of notifications) {
-        const normalized = normalizeAlarmNotification(notification, deviceNameMap);
+        const normalized = normalizeAlarmNotification(notification, deviceNameMap, {
+          localTimeZone: settings.localTimeZone,
+        });
         if (!normalized || !isActiveAlarm(normalized)) {
           continue;
         }
@@ -347,6 +423,8 @@ function createAlarmSync({
 module.exports = {
   createAlarmSync,
   normalizeAlarmNotification,
+  parseAlarmTriggerMs,
+  parseOriginalDateTimeMs,
   isActiveAlarm,
   listActiveAlarms,
   DEFAULTS,

@@ -19,7 +19,8 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 | **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` |
 | **Music** | "Alexa, play …" (now playing from device) | `music.playing` |
 | **Smart home** | "Alexa, turn the kitchen lights on" | `smart-home.command` |
-| **Tesla battery** | Custom routine: "Alexa, show my Tesla battery" | `tesla-battery.query` |
+| **Tesla battery** | Custom routine: "Alexa, show my Tesla battery" | `tesla-battery.query` (Fleet API when configured) |
+| **Tesla dashboard** | Custom routine: "Alexa, show Tesla dashboard" | `tesla-dashboard.query` (Fleet API `vehicle_data`) |
 | **Vivint alarm** | "Alexa, ask Vivint to arm" | `vivint-alarm.query` |
 | **Notifications** | "Alexa, show my notifications" | `alexa-notifications.query` |
 
@@ -58,7 +59,8 @@ On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-
 | `alexa broadcast client/` | Windows tray app + fullscreen overlay (Python/Tkinter) |
 | `config.example.json` | Default settings template |
 | `data/` | Runtime files (session, config, logs) — gitignored |
-| `DOCKER.md` | QNAP / Docker deployment guide |
+| `tesla-auth-pc.bat` | Windows OAuth helper (use from NAS share; handles UNC via `pushd`) |
+| `scripts/tesla-common.sh` | Shared helpers for `tesla-*.sh` NAS scripts |
 | `src/PROJECT.md` | Bridge architecture reference (for developers) |
 | `alexa broadcast client/src/PROJECT.md` | Display client architecture reference |
 
@@ -133,8 +135,24 @@ Copy `config.example.json` to `data/config.json` (Docker) or `config.json` (loca
 | `voiceEvents.eventsLogFile` | JSONL audit log for all captured events (default `data/voice-events.jsonl`) |
 | `timerSync.enabled` | Poll Amazon for active timers |
 | `sessionKeepAlive.*` | Token refresh and session health |
+| `teslaFleet.*` | Tesla Fleet API (domain, region, VIN, keep-alive) — secrets in `.env` |
 
 Secrets and runtime data live under `data/` and are not committed.
+
+### Tesla battery (Fleet API)
+
+1. Host your EC public key at `https://YOUR-DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`
+2. Copy `.env.example` → `.env` and set `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, optional `TESLA_VIN`
+3. `./tesla-register.sh` on NAS (or `npm run tesla-register` on PC) — register domain with Tesla (once per region)
+4. **On your Windows PC:** `npm run tesla-auth` or `tesla-auth-pc.bat`  
+   - Tesla portal redirect URI: `http://localhost:4381/callback` only (`http://` LAN IPs are **not** allowed)  
+   - Saves `data/tesla-session.json` on the NAS share (even when run from `\\nas\...`)
+5. Pair virtual key on phone: `https://www.tesla.com/_ak/YOUR-DOMAIN`
+6. Recreate Docker listener after `.env` changes: `docker compose up -d --force-recreate`
+
+Voice routine **"Alexa, show my Tesla battery"** fetches live `battery_level` from Fleet API (Alexa can reply "Sent to Display"). Without Tesla credentials, the bridge falls back to parsing Alexa's spoken answer.
+
+**"Alexa, show Tesla dashboard"** fetches full `vehicle_data` (location, security, climate, TPMS, software, media) and shows the mission-control overlay. Requires Fleet API credentials. If the car is asleep or unreachable, the bridge serves the last successful snapshot (`data/tesla-dashboard-cache.json`) and the overlay shows an amber "cached" pill with the snapshot time instead of an empty error screen.
 
 ---
 
@@ -162,6 +180,8 @@ Path is configurable via `voiceEvents.eventsLogFile`.
 | `data/shopping-list-cache.json` | Shopping list cache across add/show commands |
 | `data/session-auth-journal.jsonl` | Auth refresh and session health events |
 | `data/auth-status.json` | Re-auth recommended/required signal |
+| `data/tesla-session.json` | Tesla OAuth tokens (from `npm run tesla-auth`) |
+| `data/tesla-auth-status.json` | Tesla re-auth signal |
 
 **Legacy:** Older installs may still have `broadcast.txt` (tab-separated announcements). The bridge no longer writes this file; dedup state is migrated from it automatically on first startup after upgrade.
 
@@ -180,19 +200,22 @@ See `src/PROJECT.md` and `alexa broadcast client/src/PROJECT.md` for field-level
 ## Testing
 
 ```bash
-npm test                  # bridge unit tests (Node built-in runner)
-run_all_tests.bat         # bridge + Windows client tests (from repo root)
+npm test                  # bridge unit tests (205)
+run_all_tests.bat         # bridge + Windows client tests (205 + 44, from repo root)
 ```
+
+Bridge Tesla tests: `test/tesla-fleet.test.js`, `test/tesla-udp-payload.test.js`, `test/tesla-auth-status.test.js`, `test/tesla-battery.test.js`, `test/tesla-dashboard.test.js`, `test/tesla-dashboard-data.test.js`, `test/tesla-dashboard-cache.test.js`, plus voice gate/dedup updates.
 
 Manual UDP smoke tests (display client):
 
 ```bash
 cd "alexa broadcast client"
 python test/send_test.py --type broadcast
+python test/send_test.py --type tesla-battery --percent 78 --seconds 30
+python test/send_test.py --type tesla-dashboard --seconds 120
+python test/send_test.py --type tesla-dashboard-stale --seconds 120
+python test/send_test.py --type tesla-battery-limited --seconds 30
 python test/send_test.py --type weather --seconds 45
-python test/send_test.py --type timers --seconds 45
-python test/send_test.py --type vivint-alarm --seconds 30
-python test/send_test.py --type notifications --seconds 45
 ```
 
 ---

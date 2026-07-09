@@ -9,6 +9,10 @@
     "auth": "node src/auth.js",
     "diagnose": "node src/diagnose.js",
     "diagnose-indoor": "node src/diagnose-indoor.js",
+    "tesla-auth": "node src/tesla-auth.js",
+    "tesla-auth:code": "node src/tesla-auth.js --code",
+    "tesla-register": "node src/tesla-register.js",
+    "tesla-verify-register": "node src/tesla-register.js --verify-only",
     "test": "node --test --test-force-exit test/**/*.test.js",
     "test:client": "cd \"alexa broadcast client\" && python -m unittest discover -s test -p test_*.py -v"
   },

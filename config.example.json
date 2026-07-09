@@ -24,6 +24,7 @@
     "musicEvents": true,
     "smartHomeEvents": true,
     "teslaBatteryQueries": true,
+    "teslaDashboardQueries": true,
     "vivintAlarmQueries": true,
     "notificationQueries": true,
     "eventsLogFile": "data/voice-events.jsonl",
@@ -53,7 +54,8 @@
   "alarmSync": {
     "enabled": true,
     "pollIntervalMs": 60000,
-    "mirrorFile": "data/alarm-mirror.json"
+    "mirrorFile": "data/alarm-mirror.json",
+    "localTimeZone": "America/Denver"
   },
   "sessionKeepAlive": {
     "enabled": true,
@@ -71,5 +73,21 @@
     "failureThreshold": 5,
     "livenessProbe": true,
     "cookieRefreshIntervalMs": 14400000
+  },
+  "teslaFleet": {
+    "enabled": true,
+    "region": "na",
+    "domain": "fleetapi.example.com",
+    "vin": "",
+    "scopes": "openid offline_access vehicle_device_data vehicle_location",
+    "sessionFile": "data/tesla-session.json",
+    "authStatusFile": "data/tesla-auth-status.json",
+    "minRequestIntervalSec": 10,
+    "keepAlive": {
+      "enabled": true,
+      "pingIntervalMs": 900000,
+      "refreshWithinMs": 60000,
+      "proactiveRefreshAfterMs": 21600000
+    }
   }
 }

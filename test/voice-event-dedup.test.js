@@ -61,7 +61,7 @@ test('createVoiceEventDedup allows upgrade when spoken response arrives later', 
   );
 });
 
-test('createVoiceEventDedup allows percent upgrade for same activity id', () => {
+test('createVoiceEventDedup suppresses repeat tesla query for same activity id', () => {
   const dedup = createVoiceEventDedup({ dedupMs: 60000 });
   const base = {
     activityId: 'tesla-1',
@@ -74,6 +74,6 @@ test('createVoiceEventDedup allows percent upgrade for same activity id', () => 
   assert.equal(dedup.shouldEmit(base, 1000), true);
   assert.equal(
     dedup.shouldEmit({ ...base, spokenResponse: 'Your battery is 80 percent' }, 2000),
-    true,
+    false,
   );
 });

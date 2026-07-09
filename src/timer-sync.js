@@ -582,6 +582,7 @@ module.exports = {
   diffTimerSnapshots,
   parseRemainingSeconds,
   parseDurationSeconds,
+  normalizeRemainingTime,
   mergeTimerMaps,
   shouldEmitSnapshot,
   pickPrimaryTimerEvent,

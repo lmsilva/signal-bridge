@@ -1,6 +1,4 @@
-const { parseBatteryPercentFromSpeech } = require('./tesla-battery');
-const { hasAlarmStatusInSpeech } = require('./vivint-alarm');
-const { hasNotificationContent } = require('./alexa-notifications');
+const { hasAlarmStatusInSpeech } = require('./vivint-alarm');const { hasNotificationContent } = require('./alexa-notifications');
 
 const DEFAULT_TTL_MS = 90000;
 
@@ -24,17 +22,7 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
       return;
     }
 
-    if (event.kind === 'tesla-battery') {
-      if (parseBatteryPercentFromSpeech(event.spokenResponse) != null) {
-        return;
-      }
-      pending.set(pendingKey(event.device, 'tesla-battery'), { event, at: now });
-      prune(now);
-      return;
-    }
-
-    if (event.kind === 'shopping-list' && event.trigger === 'shopping-list-show') {
-      pending.set(pendingKey(event.device, 'shopping-list-show'), { event, at: now });
+    if (event.kind === 'shopping-list' && event.trigger === 'shopping-list-show') {      pending.set(pendingKey(event.device, 'shopping-list-show'), { event, at: now });
       prune(now);
       return;
     }
@@ -70,23 +58,7 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
     const device = helpers.getDeviceName(activity);
     prune(now);
 
-    const teslaPending = pending.get(pendingKey(device, 'tesla-battery'));
-    if (teslaPending && now - teslaPending.at <= ttlMs) {
-      const percent = parseBatteryPercentFromSpeech(response);
-      if (percent != null && /\bbattery\b/i.test(response)) {
-        pending.delete(pendingKey(device, 'tesla-battery'));
-        return {
-          ...teslaPending.event,
-          activityId: helpers.getActivityId(activity),
-          spokenResponse: response,
-          timestamp: activity?.creationTimestamp || now,
-          trigger: 'tesla-battery-response',
-        };
-      }
-    }
-
-    const shoppingPending = pending.get(pendingKey(device, 'shopping-list-show'));
-    if (shoppingPending && now - shoppingPending.at <= ttlMs) {
+    const shoppingPending = pending.get(pendingKey(device, 'shopping-list-show'));    if (shoppingPending && now - shoppingPending.at <= ttlMs) {
       if (helpers.matchesShoppingListSpeech(response, shoppingPending.event.query)) {
         pending.delete(pendingKey(device, 'shopping-list-show'));
         return {

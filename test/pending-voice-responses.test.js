@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPendingVoiceResponses } = require('../src/pending-voice-responses');
 
-test('tryComplete attaches orphan battery response to pending tesla query', () => {
+test('tesla battery queries are not tracked as pending responses', () => {
   const pending = createPendingVoiceResponses();
   pending.remember({
     kind: 'tesla-battery',
@@ -12,9 +12,8 @@ test('tryComplete attaches orphan battery response to pending tesla query', () =
     trigger: 'tesla-battery-query',
   });
 
-  const activity = { creationTimestamp: Date.now() };
   const completed = pending.tryComplete(
-    activity,
+    { creationTimestamp: Date.now() },
     'Your battery is 80 percent',
     {
       getDeviceName: () => 'Office Echo',
@@ -23,8 +22,7 @@ test('tryComplete attaches orphan battery response to pending tesla query', () =
     },
   );
 
-  assert.equal(completed?.spokenResponse, 'Your battery is 80 percent');
-  assert.equal(completed?.trigger, 'tesla-battery-response');
+  assert.equal(completed, null);
 });
 
 test('tryComplete attaches orphan Vivint arm response to pending query', () => {

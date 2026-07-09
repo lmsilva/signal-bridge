@@ -14,6 +14,14 @@ data/auth-status.json
 data/session-auth-journal.jsonl
 data/voice-events.jsonl
 data/timer-mirror.json
+data/tesla-session.json
+data/tesla-auth-status.json
+data/tesla-rate-limit.json
+data/tesla-dashboard-cache.json
+data/tesla-battery-cache.json
+data/tesla-private-key.pem
+data/tesla-public-key.pem
+data/diagnostics/
 data/config.json
 data/data/
 broadcast.txt

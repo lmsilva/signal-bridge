@@ -5,6 +5,7 @@ const { matchesAirQualityQuery } = require('./air-quality');
 const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
 const { matchesMusicQuery } = require('./music-info');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
+const { matchesTeslaDashboardQuery } = require('./tesla-dashboard');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
 const {
@@ -84,6 +85,19 @@ function createVoiceQueryParser() {
         query: summary,
         spokenResponse: response || null,
         trigger: shoppingListTrigger(summary, response),
+      };
+    }
+
+    if (matchesTeslaDashboardQuery(summary, response)) {
+      return {
+        kind: 'tesla-dashboard',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'tesla-dashboard-query',
       };
     }
 

@@ -30,6 +30,7 @@ const {
   buildShoppingListPayload,
   buildMusicPayload,
   buildTeslaBatteryPayload,
+  buildTeslaDashboardPayload,
   buildVivintAlarmPayload,
   buildNotificationsPayload,
   buildSmartHomePayload,
@@ -37,7 +38,9 @@ const {
   buildAlarmSnapshotPayload,
 } = require('./udp-payload');
 const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
-const { buildTeslaBatteryReading, parseBatteryPercentFromSpeech } = require('./tesla-battery');
+const { buildTeslaBatteryReading } = require('./tesla-battery');
+const { fetchTeslaBattery, fetchTeslaDashboard, isFleetConfigured, buildErrorReading } = require('./tesla-fleet-client');
+const { createTeslaSessionKeepAlive } = require('./tesla-session-keepalive');
 const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
 const { buildNotificationsReading, hasNotificationContent } = require('./alexa-notifications');
 const { fetchNowPlaying } = require('./music-info');
@@ -99,6 +102,7 @@ function createListener({ config, log }) {
     musicEvents: config.voiceEvents?.musicEvents !== false,
     smartHomeEvents: config.voiceEvents?.smartHomeEvents !== false,
     teslaBatteryQueries: config.voiceEvents?.teslaBatteryQueries !== false,
+    teslaDashboardQueries: config.voiceEvents?.teslaDashboardQueries !== false,
     vivintAlarmQueries: config.voiceEvents?.vivintAlarmQueries !== false,
     notificationQueries: config.voiceEvents?.notificationQueries !== false,
   };
@@ -114,6 +118,7 @@ function createListener({ config, log }) {
   let authJournal = null;
   let timerSync = null;
   let alarmSync = null;
+  let teslaKeepAlive = null;
   let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;
@@ -268,6 +273,10 @@ function createListener({ config, log }) {
       return;
     }
 
+    if (event.kind === 'tesla-dashboard' && !voiceSettings.teslaDashboardQueries) {
+      return;
+    }
+
     if (event.kind === 'vivint-alarm' && !voiceSettings.vivintAlarmQueries) {
       return;
     }
@@ -338,18 +347,84 @@ function createListener({ config, log }) {
       }
       payload = buildSmartHomePayload(event, config, typeInfo);
     } else if (event.kind === 'tesla-battery') {
-      const battery = buildTeslaBatteryReading(event.spokenResponse);
-      if (battery.percent == null) {
-        log.info('Tesla battery event without parsed percent', {
-          query: event.query,
-          spoken: String(event.spokenResponse || '').slice(0, 160) || null,
-        });
-        pendingVoiceResponses.remember(event);
-        scheduleResponseFollowup('tesla-battery');
+      const {
+        loadBatteryCache,
+        saveBatteryCache,
+        applyBatteryFallback,
+      } = require('./tesla-battery-cache');
+      let battery;
+      if (isFleetConfigured(config.teslaFleet)) {
+        try {
+          battery = await fetchTeslaBattery(config, log);
+          pendingVoiceResponses.forget(event.device, 'tesla-battery');
+        } catch (error) {
+          log.warn('Tesla Fleet API fetch failed', error.message || error);
+          battery = buildErrorReading(error);
+        }
       } else {
-        pendingVoiceResponses.forget(event.device, 'tesla-battery');
+        battery = buildTeslaBatteryReading(event.spokenResponse);
+        if (battery.percent == null) {
+          log.info('Tesla battery event without parsed percent', {
+            query: event.query,
+            spoken: String(event.spokenResponse || '').slice(0, 160) || null,
+          });
+          pendingVoiceResponses.remember(event);
+          scheduleResponseFollowup('tesla-battery');
+        } else {
+          pendingVoiceResponses.forget(event.device, 'tesla-battery');
+        }
+      }
+      if (battery?.status === 'ok' && battery.percent != null) {
+        battery = { ...battery, fetchedAt: new Date().toISOString() };
+        saveBatteryCache(config, battery, log);
+      } else {
+        const cached = loadBatteryCache(config);
+        if (cached) {
+          log.warn('Tesla battery unavailable, serving cached reading', {
+            reason: battery?.error || battery?.status || null,
+            cachedAt: cached.fetchedAt || null,
+          });
+          battery = applyBatteryFallback(battery, cached);
+        }
       }
       payload = buildTeslaBatteryPayload(event, config, { battery });
+    } else if (event.kind === 'tesla-dashboard') {
+      const {
+        loadDashboardCache,
+        saveDashboardCache,
+        applyDashboardFallback,
+      } = require('./tesla-dashboard-cache');
+      let dashboard;
+      if (isFleetConfigured(config.teslaFleet)) {
+        try {
+          dashboard = await fetchTeslaDashboard(config, log);
+          pendingVoiceResponses.forget(event.device, 'tesla-dashboard');
+        } catch (error) {
+          log.warn('Tesla dashboard fetch failed', error.message || error);
+          const { buildDashboardErrorReading } = require('./tesla-dashboard-data');
+          dashboard = buildDashboardErrorReading(error);
+        }
+      } else {
+        dashboard = {
+          status: 'auth_required',
+          error: 'Tesla Fleet API not configured',
+          fetchedAt: new Date().toISOString(),
+          freshnessSec: 0,
+        };
+      }
+      if (dashboard?.status === 'ok') {
+        saveDashboardCache(config, dashboard, log);
+      } else {
+        const cached = loadDashboardCache(config);
+        if (cached) {
+          log.warn('Tesla dashboard unavailable, serving cached snapshot', {
+            reason: dashboard?.error || dashboard?.status || null,
+            cachedAt: cached.fetchedAt || null,
+          });
+          dashboard = applyDashboardFallback(dashboard, cached);
+        }
+      }
+      payload = buildTeslaDashboardPayload(event, config, { dashboard });
     } else if (event.kind === 'vivint-alarm') {
       const alarm = buildVivintAlarmReading(event.spokenResponse, event.query);
       if (!hasAlarmStatusInSpeech(event.spokenResponse)) {
@@ -449,8 +524,13 @@ function createListener({ config, log }) {
     lastCaptureAt = Date.now();
     const logMeta = { query: event.query };
     if (event.kind === 'tesla-battery') {
-      logMeta.percent = payload?.battery?.percent ?? parseBatteryPercentFromSpeech(event.spokenResponse);
-      logMeta.spoken = String(event.spokenResponse || '').slice(0, 120) || null;
+      logMeta.percent = payload?.battery?.percent ?? null;
+      logMeta.source = payload?.battery?.source ?? null;
+      logMeta.status = payload?.battery?.status ?? null;
+    }
+    if (event.kind === 'tesla-dashboard') {
+      logMeta.status = payload?.dashboard?.status ?? null;
+      logMeta.vehicle = payload?.dashboard?.vehicle?.name ?? null;
     }
     if (event.kind === 'vivint-alarm') {
       logMeta.status = payload?.alarm?.status ?? null;
@@ -863,6 +943,13 @@ function createListener({ config, log }) {
           getDeviceNameMap,
         });
         alarmSync.start();
+
+        teslaKeepAlive = createTeslaSessionKeepAlive({
+          fleet: config.teslaFleet,
+          log,
+          settings: config.teslaFleet?.keepAlive,
+        });
+        teslaKeepAlive.start();
 
         resolve(alexa);
       });

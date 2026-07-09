@@ -3,13 +3,12 @@ const assert = require('node:assert/strict');
 const {
   needsSpokenResponseUpgrade,
   shouldMarkActivityProcessed,
-  hasSpokenResponse,
 } = require('../src/voice-event-gate');
 
-test('needsSpokenResponseUpgrade for tesla, music, vivint, notifications, and shopping show without speech', () => {
+test('needsSpokenResponseUpgrade for music, vivint, notifications, and shopping show without speech', () => {
   assert.equal(
     needsSpokenResponseUpgrade({ kind: 'tesla-battery', spokenResponse: null }),
-    true,
+    false,
   );
   assert.equal(
     needsSpokenResponseUpgrade({ kind: 'music', spokenResponse: '' }),
@@ -33,35 +32,20 @@ test('needsSpokenResponseUpgrade for tesla, music, vivint, notifications, and sh
   );
 });
 
-test('needsSpokenResponseUpgrade stops once Alexa has responded', () => {
+test('tesla dashboard processes immediately without Alexa spoken response', () => {
   assert.equal(
-    needsSpokenResponseUpgrade({
-      kind: 'tesla-battery',
-      spokenResponse: 'Your battery is 80 percent',
-    }),
-    false,
+    shouldMarkActivityProcessed({ kind: 'tesla-dashboard', spokenResponse: null }),
+    true,
   );
 });
 
-test('shouldMarkActivityProcessed defers until spoken response arrives', () => {
+test('shouldMarkActivityProcessed still defers music until spoken response arrives', () => {
   assert.equal(
-    shouldMarkActivityProcessed({ kind: 'tesla-battery', spokenResponse: null }),
+    shouldMarkActivityProcessed({ kind: 'music', spokenResponse: null }),
     false,
-  );
-  assert.equal(
-    shouldMarkActivityProcessed({
-      kind: 'tesla-battery',
-      spokenResponse: 'Your battery is 80 percent',
-    }),
-    true,
   );
   assert.equal(
     shouldMarkActivityProcessed({ kind: 'time', spokenResponse: null }),
     true,
   );
-});
-
-test('hasSpokenResponse treats whitespace as empty', () => {
-  assert.equal(hasSpokenResponse({ spokenResponse: '   ' }), false);
-  assert.equal(hasSpokenResponse({ spokenResponse: 'milk added' }), true);
 });

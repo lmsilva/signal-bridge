@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-06
+**Last updated:** 2026-07-08
 
 ---
 
@@ -70,6 +70,20 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/timer-sync.js` | Poll Amazon notifications API; mirror active timers; fire verify |
 | `src/alarm-sync.js` | Poll Amazon notifications API; mirror active wake alarms (`Alarm`/`MusicAlarm`) |
 | `src/alexa-alarms.js` | Detect show/set/cancel wake-alarm voice commands (distinct from Vivint security) |
+| `src/tesla-battery.js` | Voice match for "show my tesla battery"; speech-parse fallback |
+| `src/tesla-dashboard.js` | Voice match for "show tesla dashboard" |
+| `src/tesla-dashboard-data.js` | Map Fleet `vehicle_data` → dashboard UDP object |
+| `src/tesla-dashboard-cache.js` | Persist last good dashboard (`data/tesla-dashboard-cache.json`); stale fallback when fetch fails |
+| `src/tesla-battery-cache.js` | Persist last good battery reading (`data/tesla-battery-cache.json`); stale fallback (also reads dashboard cache) |
+| `src/tesla-config.js` | `.env` + `config.teslaFleet` → Fleet API settings |
+| `src/tesla-session.js` | Load/save `data/tesla-session.json` (access + refresh tokens) |
+| `src/tesla-token-refresh.js` | OAuth code exchange, partner token, refresh rotation |
+| `src/tesla-fleet-client.js` | `vehicle_data` fetch, wake fallback; `fetchTeslaBattery`, `fetchTeslaDashboard` |
+| `src/tesla-session-keepalive.js` | Proactive Tesla token refresh (listener startup) |
+| `src/tesla-auth-status.js` | `data/tesla-auth-status.json` when Tesla re-auth needed |
+| `src/tesla-auth.js` | One-shot OAuth (`npm run tesla-auth`, `tesla-auth-pc.bat`) |
+| `src/tesla-register.js` | Partner domain register + `--verify-only` |
+| `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
 | `test/*.test.js` | Node built-in test suite (`npm test`) |
 | `src/bridge-state.js` | Dedup fingerprints + last timestamp on disk |
@@ -81,7 +95,87 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `docker-compose.auth.yml` | One-shot auth container (host network, port 3456) |
 | `reauth.sh` | Stop listener, free port, run auth, restart listener |
 | `recreate.sh` | `docker compose up -d --no-build` (use `--build` only if image rebuild works) |
+| `docker-compose.tesla-auth.yml` | One-off Tesla OAuth container (host network, port 4381) |
+| `tesla-register.sh` | Register Fleet partner domain (exec or one-off container) |
+| `tesla-verify-register.sh` | Verify partner registration |
+| `tesla-auth.sh` | Tesla OAuth on NAS (SSH tunnel only — see script); use `tesla-auth-pc.bat` on PC |
+| `tesla-auth-pc.bat` | Tesla OAuth on Windows PC (recommended) |
+| `tesla-status.sh` | Show Tesla session / auth-status summary |
+| `.env` | Tesla secrets (`TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, …) — gitignored; loaded by `config.js` |
 | `data/` | **Runtime only** (gitignored): session, config, logs, bridge state, auth journal |
+
+---
+
+## Tesla Fleet API (battery)
+
+**Voice trigger:** custom routine **"Alexa, show my Tesla battery"** (Alexa may reply "Sent to Display"). Bridge matches on **user utterance** (`tesla-battery.js`), not Alexa speech.
+
+**Dashboard trigger:** **"Alexa, show Tesla dashboard"** → `tesla-dashboard.query` with full Fleet `vehicle_data` (map, security, battery, climate, TPMS, software, media). Requires Fleet API credentials (no speech fallback).
+
+**Dashboard cache fallback:** Every successful fetch is saved to `data/tesla-dashboard-cache.json`. If a later fetch fails (vehicle asleep/unreachable/rate limited), the listener serves the cached snapshot with `stale: true`, `staleReason`, `cachedAt`, and recomputed `freshnessSec`, so the display never goes empty; the client shows an amber "cached" pill + legend.
+
+**Battery cache fallback:** Same pattern for `tesla-battery.query` — `data/tesla-battery-cache.json` (falls back to dashboard cache if no dedicated battery cache). Throttled/rate-limited/offline fetches serve the last known % with `stale: true` instead of a blank error bar.
+
+**Data source:** When `.env` has `TESLA_CLIENT_ID` + `TESLA_CLIENT_SECRET` and `data/tesla-session.json` exists, `listener.js` calls `fetchTeslaBattery()` → UDP `tesla-battery.query` with live Fleet API data. Without credentials, falls back to parsing Alexa's spoken battery %.
+
+```
+Voice "show my tesla battery"  →  listener  →  tesla-fleet-client (OAuth token)
+                                              →  GET /api/1/vehicles/{vin}/vehicle_data
+                                              →  UDP tesla-battery.query  →  display client
+```
+
+### One-time setup
+
+| Step | Where | Command / action |
+|------|--------|------------------|
+| 1. Host PEM | Your domain | `https://DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem` |
+| 2. Secrets | Repo `.env` | `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, optional `TESLA_VIN` |
+| 3. Register domain | NAS | `./tesla-register.sh` then `./tesla-verify-register.sh` |
+| 4. OAuth | **Windows PC** | `tesla-auth-pc.bat` or `npm run tesla-auth` — includes `vehicle_location` scope for dashboard map |
+| 5. Virtual key | Phone (Tesla app) | `https://www.tesla.com/_ak/DOMAIN` |
+| 6. Restart listener | NAS | `./recreate.sh` after `.env` changes |
+
+**OAuth on PC:** repo on NAS share (`\\nas\...`) — `tesla-auth-pc.bat` uses `pushd` for UNC paths; saves session to `data/tesla-session.json` on the share.
+
+**NAS `./tesla-auth.sh`:** SSH tunnel only (`TESLA_USE_LOCALHOST_REDIRECT=1`); PC auth is the normal path.
+
+### Runtime files
+
+| File | Purpose |
+|------|---------|
+| `data/tesla-session.json` | OAuth access + refresh tokens |
+| `data/tesla-auth-status.json` | `reauth_required` / `reauth_recommended` |
+| `data/tesla-rate-limit.json` | Short-lived rate-limit state (optional) |
+
+### Config
+
+**`.env`:** `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, `TESLA_FLEET_REGION` (default `na`), `TESLA_VIN` (optional), `TESLA_REDIRECT_URI` (PC OAuth only).
+
+**`config.teslaFleet`:** `enabled`, `region`, `domain`, `vin`, `sessionFile`, `minRequestIntervalSec`, `keepAlive.*` — see `config.example.json`.
+
+Docker listener passes Tesla vars via `env_file: .env` in `docker-compose.yml`.
+
+### Voice pipeline notes
+
+- `voice-event-gate.js` — Tesla does **not** wait for Alexa spoken response.
+- `pending-voice-responses.js` — no Tesla pending/correlation.
+- `tesla-session-keepalive.js` — started with listener; refreshes tokens before expiry.
+
+### UDP `battery` object (`tesla-battery.query`)
+
+| Field | Success | Error |
+|-------|---------|-------|
+| `percent` | 0–100 | `null` |
+| `model` | e.g. `Model Y` | same |
+| `source` | `fleet-api` | `fleet-api` |
+| `status` | `ok` | `rate_limited`, `auth_required`, `vehicle_offline`, … |
+| `error` | — | Human-readable message |
+| `limitResetAt` | — | ISO timestamp when rate limited |
+| `chargingLabel` | e.g. `Charging` | — |
+| `stale` | — | `true` when serving cached reading after fetch failure |
+| `staleReason` | — | Original error (e.g. `Request throttled`) |
+| `cachedAt` | — | ISO timestamp of cached reading |
+| `freshnessSec` | — | Age of cached reading in seconds |
 
 ---
 
@@ -123,7 +217,7 @@ cd /share/Container/alexa-broadcast-bridge
    - **Push:** `ws-device-activity` → broadcast parser + voice query parser
    - **History fallback:** volume-change / connect / periodic poll → `getCustomerHistoryRecords()`
 5. **On broadcast match:** log → `data/voice-events.jsonl` → UDP `type: broadcast`
-6. **On voice match:** time/weather/indoor temperature/air quality → UDP + `data/voice-events.jsonl`; timer voice → immediate timer sync poll
+6. **On voice match:** time/weather/indoor/air quality/tesla-battery/shopping/… → UDP + `data/voice-events.jsonl`; timer/alarm voice → immediate sync poll
 7. **Timer sync:** periodic `getNotifications()` diff → UDP `type: timer.snapshot` with full active timer list
 8. **Dedup:** `BroadcastParser` + voice query processed-id set + `bridge-state.json`
 
@@ -150,7 +244,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `sessionFile` | Default `data/alexa-session.json` |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP to Windows client |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
-| `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/fetchWeather/fetchAirQuality` | Voice capture toggles |
+| `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/teslaBatteryQueries/fetchWeather/fetchAirQuality` | Voice capture toggles |
 | `voiceEvents.defaultLocation` | `{ name, latitude, longitude }` for generic/outdoor weather queries |
 | `indoorTemperature.coldBelowF/hotAboveF` | Comfort bands for display (defaults 68 / 74) |
 | `indoorTemperature.locations[]` | Optional override of thermostat names/aliases (empty = built-in list) |
@@ -158,6 +252,8 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `airQuality.monitors[]` | Optional override of air monitor names/aliases/entityId |
 | `voiceEvents.eventsLogFile` | Default `data/voice-events.jsonl` — all captured events (broadcasts + voice + timers) |
 | `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
+| `alarmSync.*` | Alarm poll/mirror; `localTimeZone` for `originalDate`/`originalTime` (default `America/Denver`) |
+| `teslaFleet.*` | Fleet API region, domain, VIN, keep-alive, `minRequestIntervalSec` |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
@@ -176,6 +272,9 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `indoor-temperature.query` | Indoor thermostat — "temperature on/at/in \<location\>" or "humidity of \<location\>" |
 | `air-quality.query` | Air quality monitor — IAQ score + sensor metrics (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` (`started`, `list`, `fired`) |
+| `tesla-battery.query` | "Show my tesla battery" — `battery` object from Fleet API or speech fallback |
+| `tesla-dashboard.query` | "Show Tesla dashboard" — `dashboard` object from Fleet API (`vehicle_data` + `location_data`) |
+| `alarm.snapshot` | Wake alarms list / newly set alarm highlight |
 
 **Indoor vs outdoor routing:** Generic "what's the temperature" → outdoor (`weather.query`). Location-specific ("top floor", "bedroom echo", "Room 14") → indoor. Spoken Alexa response supplies the reading (e.g. "It's 76 degrees on the top floor"). Humidity only when explicitly asked for a named location.
 
@@ -213,13 +312,13 @@ Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliab
 ## Testing
 
 ```bash
-npm test                    # bridge only (7 files)
-run_all_tests.bat           # repo root — bridge + Windows client
+npm test                    # bridge only (225 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (225 + 45)
 ```
 
-Bridge: **70** unit tests in `test/*.test.js` — broadcast parser, UDP payloads, voice query detection, indoor temperature routing/aliases, timer sync diff/fire logic, weather location parsing (query + spoken response), and helpers.
+Bridge tests in `test/*.test.js` — includes `tesla-fleet.test.js`, `tesla-udp-payload.test.js`, `tesla-auth-status.test.js`, `tesla-battery.test.js`, `tesla-battery-cache.test.js`, `tesla-dashboard.test.js`, `tesla-dashboard-data.test.js`, `tesla-dashboard-cache.test.js`, voice-event gate/dedup for Fleet API flow.
 
-Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload utils, config, weather fetch, main timer routing.
+Client tests in `alexa broadcast client/test/test_*.py` — includes `format_limit_reset_time` and Tesla fleet battery payload routing.
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 
@@ -244,6 +343,14 @@ Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload
 | `PROXY_OWN_IP=x.x.x.x ./reauth.sh` | Re-authenticate Amazon |
 | `docker compose logs -f` | Tail logs |
 | `npm run diagnose` | Test session inside container |
+| `npm run tesla-register` | Register `TESLA_FLEET_DOMAIN` with Tesla (run once; PEM must be hosted) |
+| `npm run tesla-verify-register` | Confirm domain registration |
+| `npm run tesla-auth` | Tesla OAuth on **PC** (`http://localhost:4381/callback`); saves `data/tesla-session.json` |
+| `tesla-auth-pc.bat` | Same as npm tesla-auth (Windows; `pushd` for UNC NAS paths) |
+| `./tesla-register.sh` | Register Fleet domain on NAS |
+| `./tesla-verify-register.sh` | Verify Fleet registration |
+| `./tesla-status.sh` | Tesla session / auth-status summary |
+| `docker compose exec -it alexa-broadcast sh` | Interactive shell in listener container |
 
 ---
 
@@ -256,6 +363,15 @@ Client: **31** unit tests in `alexa broadcast client/test/test_*.py` — payload
 
 ## Recent changes
 
+- 2026-07-08: **Battery cache fallback** — new `src/tesla-battery-cache.js` persists last good `tesla-battery.query` reading; throttled/rate-limited/offline fetches serve cached % with `stale`, `staleReason`, `cachedAt`, `freshnessSec` (also reads dashboard cache when no dedicated battery cache).
+- 2026-07-08: **Dashboard wake retry** — after `wake_up`, `fetchTeslaVehicleData` polls `vehicle_data` up to 3 times (4/6/8s backoff) before giving up, so a sleeping car recovers instead of returning "Vehicle unavailable". FSD mileage note: Fleet API only exposes it via Fleet Telemetry streaming (`SelfDrivingMilesSinceReset`, HW4 + fw 2025.44.25.5+), not `vehicle_data`, so `odometer.fsdMilesPercent` stays null on live fetches.
+- 2026-07-08: **Dashboard cache fallback** — new `src/tesla-dashboard-cache.js` persists the last good dashboard; failed fetches serve the cached snapshot marked `stale` instead of an empty error screen. Software tile mapping fixed: idle cars (`software_update.status === ''`) report `updateAvailable: false`, `downloadPercent: null`, "Up to date" (no more "downloaded 0%").
+- 2026-07-08: Dashboard data enrichments — `media.source` maps opaque numeric firmware codes to friendly names (Bluetooth device name / station fallback, else null); `odometer` adds `lastChargeAddedMiles`, `serviceDueInMiles` (tire-rotation countdown, 6,250 mi interval), `serviceIntervalMiles`.
+- 2026-07-08: Dashboard `map.locationLabel` is `null` (instead of "Location unavailable") when geodata missing, so the display client falls back to raw GPS coordinates on its live map.
+- 2026-07-08: **Tesla dashboard location scope** — added `vehicle_location` to OAuth scopes; dashboard retries without `location_data` when scope missing (map shows re-auth hint).
+- 2026-07-08: **Alarm time fix** — `alarm-sync.js` parses `originalDate` + `originalTime` when `triggerTime`/`alarmTime` are zero; `remainingTime` fallback.
+- 2026-07-08: NAS Tesla helper scripts — `tesla-register.sh`, `tesla-verify-register.sh`, `tesla-auth.sh`, `tesla-status.sh`, `docker-compose.tesla-auth.yml`.
+- 2026-07-08: **Tesla Fleet API battery** — live fetch via `tesla-fleet-client.js`; OAuth (`tesla-auth`), register (`tesla-register`), token keepalive; error/rate-limit payloads; display shows charging label + retry time.
 - 2026-07-06: **Wake alarms** — `"show my alarms"` / `"set alarm for 7 am"` poll Amazon `Alarm`/`MusicAlarm` notifications across all devices; UDP `alarm.snapshot` highlights the newly added alarm.
 - 2026-07-06: **Indoor air quality multi-monitor** — `summarizeMonitorReadings` merges VOC/PM2.5/CO/temp/humidity from the richest monitor reading into the top-level payload reading.
 - 2026-07-06: **Indoor air quality multi-monitor** — `"show indoor air quality"` parses qualitative bands ("pretty good") and per-monitor summaries (main floor, dome, machine room); no longer mislabels "Well, the" as a location.

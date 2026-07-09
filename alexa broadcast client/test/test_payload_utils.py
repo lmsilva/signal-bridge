@@ -9,6 +9,9 @@ from src.payload_utils import (
     format_air_quality_location,
     battery_level_color,
     format_battery_percent,
+    format_limit_reset_time,
+    format_freshness_sec,
+    format_cached_time_label,
     format_duration,
     format_indoor_location,
     format_timer_clock,
@@ -43,6 +46,7 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "timer.snapshot", "timers": []}), "timer.snapshot")
         self.assertEqual(resolve_display_type({"type": "alarm.snapshot", "alarms": []}), "alarm.snapshot")
         self.assertEqual(resolve_display_type({"type": "tesla-battery.query"}), "tesla-battery.query")
+        self.assertEqual(resolve_display_type({"type": "tesla-dashboard.query"}), "tesla-dashboard.query")
         self.assertEqual(resolve_display_type({"type": "vivint-alarm.query"}), "vivint-alarm.query")
         self.assertEqual(resolve_display_type({"type": "alexa-notifications.query"}), "alexa-notifications.query")
 
@@ -55,9 +59,56 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(title_for_display_type("vivint-alarm.query"), ("Alexa", "Security"))
         self.assertEqual(title_for_display_type("alexa-notifications.query"), ("Alexa", "Notifications"))
         self.assertEqual(title_for_display_type("alarm.snapshot"), ("Alexa", "Alarms"))
+        self.assertRegex(
+            format_limit_reset_time("2026-07-08T20:30:00+00:00"),
+            r"Try again at",
+        )
+        self.assertEqual(format_limit_reset_time(""), "")
+        self.assertEqual(format_limit_reset_time(None), "")
+        self.assertEqual(format_freshness_sec(45), "45s ago")
+        self.assertEqual(format_freshness_sec(125), "2m ago")
+        self.assertEqual(format_freshness_sec(7200), "2h ago")
+        self.assertRegex(format_cached_time_label("2026-07-08T20:30:00+00:00"), r"\d")
+
+    def test_tesla_fleet_battery_payload_fields(self):
+        payload = {
+            "type": "tesla-battery.query",
+            "battery": {
+                "percent": None,
+                "status": "rate_limited",
+                "error": "Tesla rate limit reached",
+                "limitResetAt": "2026-07-08T20:30:00+00:00",
+                "source": "fleet-api",
+            },
+        }
+        self.assertEqual(resolve_display_type(payload), "tesla-battery.query")
+        self.assertRegex(
+            format_limit_reset_time(payload["battery"]["limitResetAt"]),
+            r"Try again at",
+        )
+
+    def test_tesla_fleet_battery_ok_charging_label(self):
+        payload = {
+            "type": "tesla-battery.query",
+            "battery": {
+                "percent": 78,
+                "status": "ok",
+                "source": "fleet-api",
+                "chargingLabel": "Charging",
+            },
+        }
+        self.assertEqual(resolve_display_type(payload), "tesla-battery.query")
+        self.assertEqual(payload["battery"]["chargingLabel"], "Charging")
+        self.assertEqual(payload["battery"]["percent"], 78)
 
     def test_alarm_helpers(self):
-        from src.payload_utils import alarm_detail_line, alarm_title, alarm_until_line, format_alarm_time
+        from src.payload_utils import (
+            alarm_detail_line,
+            alarm_title,
+            alarm_until_line,
+            format_alarm_time,
+            resolve_alarm_trigger_time,
+        )
 
         alarm = {
             "label": "Wake up",
@@ -68,6 +119,14 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertIn("on Kitchen Echo", alarm_detail_line(alarm, "Kitchen Echo"))
         self.assertEqual(alarm_until_line(alarm), "in 1h 1m")
         self.assertRegex(format_alarm_time(alarm["triggerTime"]), r"\d:\d\d")
+
+    def test_resolve_alarm_trigger_time_from_remaining_sec(self):
+        from src.payload_utils import format_alarm_time, resolve_alarm_trigger_time
+
+        alarm = {"remainingSec": 3600}
+        resolved = resolve_alarm_trigger_time(alarm)
+        self.assertIsNotNone(resolved)
+        self.assertNotEqual(format_alarm_time(resolved), "—")
 
     def test_is_display_payload(self):
         self.assertTrue(is_display_payload({"type": "time.query", "device": "Kitchen"}))

@@ -215,6 +215,8 @@ docker compose logs -f
 ```
 
 | Listener exits / auth errors | Run `./reauth.sh` or auth compose; copy fresh session from PC |
+| Tesla battery shows error / no data | `./tesla-status.sh`; re-run `tesla-auth-pc.bat` on PC; pair virtual key `https://www.tesla.com/_ak/DOMAIN` |
+| `tesla-register` "Other update in progress" | Wait 5–15 min; `./tesla-verify-register.sh` |
 | `bind: address already in use` on port 3456 | Stop listener + `docker rm -f alexa-broadcast-auth`; use updated `docker-compose.auth.yml` with `network_mode: host` (no `ports:`) |
 | `failed to read dockerfile` / `error creating zfs mount` on build | QNAP Container Station Docker graph bug — **ignore for code updates**. Run `./recreate.sh` (no `--build`); `src/` is bind-mounted. To fix builds: restart Container Station in QNAP, or `docker system prune`, or build image on a PC and `docker load` |
 | No broadcasts captured | Check logs; test announce on Echo; confirm push connected |
@@ -240,3 +242,32 @@ For auth only:
 PROXY_OWN_IP=192.168.1.50
 PROXY_PORT=3456
 ```
+
+For Tesla Fleet API (listener + register scripts):
+
+```env
+TESLA_CLIENT_ID=...
+TESLA_CLIENT_SECRET=...
+TESLA_FLEET_DOMAIN=fleetapi.example.com
+TESLA_FLEET_REGION=na
+TESLA_VIN=...                 # optional
+```
+
+`docker-compose.yml` loads `.env` via `env_file`. After editing `.env`:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+### Tesla setup on NAS
+
+| Script | Purpose |
+|--------|---------|
+| `./tesla-register.sh` | Register partner domain (once) |
+| `./tesla-verify-register.sh` | Confirm registration + public key |
+| `./tesla-status.sh` | Check `data/tesla-session.json` |
+| `./recreate.sh` | Restart listener after `.env` / code changes |
+
+**OAuth:** run on your **Windows PC** — `tesla-auth-pc.bat` or `npm run tesla-auth` (Tesla only allows `http://localhost` for HTTP redirects). Session saves to `data/tesla-session.json` on the NAS share.
+
+`./tesla-auth.sh` on NAS is for SSH-tunnel advanced use only; see script output.

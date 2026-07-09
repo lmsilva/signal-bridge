@@ -9,6 +9,7 @@ Lightweight system-tray app for Windows that listens for UDP broadcast messages 
 - Fullscreen tinted overlay with fade in/out
 - Adapts layout for portrait or landscape based on screen resolution
 - Shows sender, destination, timestamp, and message
+- Tesla battery overlay (Fleet API %, charging label, rate-limit retry time)
 - Caps display duration at `maxDisplaySeconds` from config
 
 ## Portable build (no Python on target PC)
@@ -100,6 +101,13 @@ Or with custom text:
 
 ```powershell
 .\run_test.bat --message "Dinner is ready" --sender "Kitchen Echo" --destination "All devices" --seconds 15
+```
+
+Tesla battery overlays (requires bridge Fleet API setup or manual UDP):
+
+```powershell
+python send_test.py --type tesla-battery --percent 78 --seconds 30
+python send_test.py --type tesla-battery-limited --seconds 30
 ```
 
 ## Auto-start with Windows

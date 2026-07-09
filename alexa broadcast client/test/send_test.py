@@ -423,8 +423,148 @@ def build_payload(args) -> dict:
                 "percent": percent,
                 "model": "Model Y",
                 "label": "Battery",
+                "source": "fleet-api",
+                "status": "ok",
             },
         }
+
+    if args.type == "tesla-battery-limited":
+        return {
+            "version": 2,
+            "type": "tesla-battery.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "show my tesla battery",
+            "battery": {
+                "percent": None,
+                "model": "Model Y",
+                "label": "Battery unavailable",
+                "source": "fleet-api",
+                "status": "rate_limited",
+                "error": "Tesla rate limit reached",
+                "limitResetAt": (datetime.now(timezone.utc) + timedelta(minutes=3)).isoformat(),
+            },
+        }
+
+    if args.type == "tesla-battery-stale":
+        percent = max(0, min(100, int(getattr(args, "percent", 68))))
+        cached_at = (datetime.now(timezone.utc) - timedelta(minutes=12)).isoformat().replace("+00:00", "Z")
+        return {
+            "version": 2,
+            "type": "tesla-battery.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "show my tesla battery",
+            "battery": {
+                "percent": percent,
+                "model": "Model Y",
+                "label": "Battery",
+                "source": "fleet-api",
+                "status": "ok",
+                "stale": True,
+                "staleReason": "Request throttled",
+                "cachedAt": cached_at,
+                "fetchedAt": cached_at,
+                "freshnessSec": 12 * 60,
+                "limitResetAt": (datetime.now(timezone.utc) + timedelta(seconds=45)).isoformat(),
+            },
+        }
+
+    if args.type in ("tesla-dashboard", "tesla-dashboard-stale"):
+        payload = {
+            "version": 2,
+            "type": "tesla-dashboard.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": max(display_seconds, 120),
+            "trigger": "test",
+            "query": "show tesla dashboard",
+            "dashboard": {
+                "status": "ok",
+                "fetchedAt": _iso_now(),
+                "freshnessSec": 8,
+                "vehicle": {
+                    "name": "Luis's Model Y",
+                    "model": "Model Y",
+                    "online": True,
+                    "firmware": "2026.20.4",
+                },
+                "map": {
+                    "latitude": 39.6261,
+                    "longitude": -111.4399,
+                    "heading": 315,
+                    "headingLabel": "NW",
+                    "locationLabel": "Fairview, UT",
+                    "locatedAtHome": True,
+                    "drivingChip": "Heading NW · 0 mph · Park",
+                    "navigation": {"active": False, "footer": "No active route"},
+                },
+                "security": {
+                    "locked": True,
+                    "sentryOn": True,
+                    "doorsClosed": True,
+                    "windowsUp": True,
+                    "secureTheme": "green",
+                },
+                "battery": {
+                    "percent": 72,
+                    "rangeMiles": 231,
+                    "ratedRangeMiles": 244,
+                    "charging": False,
+                    "chargingLabel": "Not plugged in",
+                    "lastChargeKwh": 38,
+                    "lifetimeEnergy": "4.2 MWh",
+                },
+                "climate": {
+                    "insideTempF": 71,
+                    "outsideTempF": 94,
+                    "hvacOn": False,
+                    "cabinOverheatProtection": "on",
+                },
+                "tires": {
+                    "fl": 42.1,
+                    "fr": 42.3,
+                    "rl": 41.8,
+                    "rr": 39.2,
+                    "warnings": {"rr": "soft"},
+                    "alert": "Rear right soft warning",
+                },
+                "odometer": {
+                    "miles": 18442,
+                    "fsdMilesPercent": 31,
+                    "lastChargeAddedMiles": 118,
+                    "serviceDueInMiles": 558,
+                    "serviceIntervalMiles": 6250,
+                },
+                "software": {
+                    "statusLabel": "Update ready",
+                    "updateAvailable": True,
+                    "updateVersion": "2026.24.1",
+                    "downloadPercent": 100,
+                },
+                "media": {
+                    "playing": False,
+                    "source": "Spotify",
+                    "volume": 5.5,
+                },
+            },
+        }
+        if args.type == "tesla-dashboard-stale":
+            cached_at = (datetime.now(timezone.utc) - timedelta(minutes=25)).isoformat()
+            payload["dashboard"].update(
+                {
+                    "stale": True,
+                    "staleReason": "Vehicle unavailable",
+                    "cachedAt": cached_at,
+                    "fetchedAt": cached_at,
+                    "freshnessSec": 25 * 60,
+                }
+            )
+        return payload
 
     if args.type == "vivint-alarm":
         mode = getattr(args, "alarm_mode", "stay")
@@ -498,7 +638,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "vivint-alarm", "notifications"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-dashboard", "tesla-dashboard-stale", "vivint-alarm", "notifications"],
         default="broadcast",
         help="Payload type to send",
     )

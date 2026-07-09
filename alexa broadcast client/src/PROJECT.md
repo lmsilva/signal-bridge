@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-06
+**Last updated:** 2026-07-08
 
 ---
 
@@ -31,9 +31,9 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 |------|------|
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop; timer in-place updates + local fire handler |
 | `src/listener.py` | `UdpListener` — background thread, JSON decode, `on_message` callback |
-| `src/overlay.py` | Fullscreen shell: fade, dismiss countdown label (bottom), routes payloads to panels |
-| `src/display_panels.py` | Broadcast, time, weather, indoor temperature, timer overlays |
-| `src/payload_utils.py` | Type detection; `timer_label_name`, `timer_title`, `timer_detail_line` |
+| `src/overlay.py` | Fullscreen shell: fade, dismiss countdown label (bottom), routes payloads to panels; rounded backdrop frame behind all panels |
+| `src/display_panels.py` | All overlay panels; `BasePanel` has shared dark palette + `_round_rect`/`_pill`/`_panel_card` helpers; `TeslaDashboardPanel` fetches live OSM map tiles |
+| `src/payload_utils.py` | Type detection; timer helpers; `format_limit_reset_time` for Tesla rate limits |
 | `src/weather_fetch.py` | Client geocode + Open-Meteo fetch; spoken-response location extraction |
 | `src/message_scroll.py` | Long broadcast message scroll animation |
 | `src/tray_app.py` | pystray icon; exit triggers shutdown |
@@ -81,7 +81,8 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `shopping-list.snapshot` | Shopping list items with paging |
 | `music.playing` | Large centered album art + track info |
 | `smart-home.command` | Device on/off panel |
-| `tesla-battery.query` | Model Y image + battery % bar from custom routine |
+| `tesla-battery.query` | Model Y image + battery % bar; Fleet API data with error/rate-limit states; **stale cache** shows last known % with amber legend |
+| `tesla-dashboard.query` | Mission-control dashboard — live OSM map (from `map.latitude`/`longitude`, dark-tinted tiles, pulsing pin + heading arrow), car render with security pills, battery bar, climate/TPMS/odo/software 2×2 grid, media strip |
 | `vivint-alarm.query` | Lock icon + armed/disarmed status (Vivint stay/away) |
 | `alexa-notifications.query` | Amber notification banner + parsed notification cards |
 
@@ -93,6 +94,10 @@ Test locally:
 ```bash
 python test/send_test.py --type broadcast
 python test/send_test.py --type tesla-battery --percent 78 --seconds 30
+python test/send_test.py --type tesla-dashboard --seconds 120
+python test/send_test.py --type tesla-dashboard-stale --seconds 120
+python test/send_test.py --type tesla-battery-limited --seconds 30
+python test/send_test.py --type tesla-battery-stale --seconds 30
 python test/send_test.py --type vivint-alarm --seconds 30
 python test/send_test.py --type notifications --seconds 45
 python test/send_test.py --type weather --seconds 45
@@ -144,16 +149,16 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only
+test\run_tests.bat              # client unit tests only (45 tests)
 ```
 
 From repo root (bridge + client):
 
 ```powershell
-..\run_all_tests.bat
+..\run_all_tests.bat            # 207 bridge + 45 client
 ```
 
-**Unit tests:** `test/test_payload_utils.py`, `test_config.py`, `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds).
+**Unit tests:** `test/test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`), `test_config.py`, `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds).
 
 **Manual smoke:** `test/send_test.py` with client running; Windows Firewall must allow UDP on the listen port.
 
@@ -177,14 +182,34 @@ From repo root (bridge + client):
 1. Bridge running on NAS with valid `alexa-session.json`
 2. `udpBroadcast.enabled: true` in bridge `data/config.json`
 3. `voiceEvents` + `timerSync` enabled for weather/time/timer overlays
-4. Same UDP port both sides
-5. Windows firewall allows inbound UDP
-6. Optional: `targets: ["<this-pc-ip>"]` on bridge
+4. **Tesla battery:** `.env` + `data/tesla-session.json` on NAS; virtual key paired; `teslaBatteryQueries` enabled
+5. Same UDP port both sides
+6. Windows firewall allows inbound UDP
+7. Optional: `targets: ["<this-pc-ip>"]` on bridge
+
+### Tesla `battery` object (display)
+
+| Field | UI use |
+|-------|--------|
+| `percent` | Bar fill + centered % |
+| `chargingLabel` | Subtitle below bar when `status: ok` |
+| `status` / `error` | Error headline when not `ok` |
+| `limitResetAt` | `format_limit_reset_time()` → "Try again at …" |
+
+Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ---
 
 ## Recent changes
 
+- 2026-07-08: **Battery stale-cache legend** — `TeslaBatteryPanel` shows last cached % with amber "⚠ cached · Xm ago" pill + "{reason} — data from {time}" when `battery.stale`; `format_freshness_sec` / `format_cached_time_label` in `payload_utils.py`. Smoke: `send_test.py --type tesla-battery-stale`.
+- 2026-07-08: **Dashboard polish round 4** — shared backdrop frame is hidden while the Tesla dashboard is active (its own container was rendering as a double box); map heading indicator is now a compass-needle chevron riding the pulse ring (was a cursor-like arrow); odometer tile draws an FSD donut chart (accent arc + % in center + FSD/Manual legend) when `odometer.fsdMilesPercent` is present — note Tesla only exposes FSD mileage via Fleet Telemetry streaming (`SelfDrivingMilesSinceReset`, HW4 + fw 2025.44.25.5+), not the polled `vehicle_data` endpoint, so live payloads currently omit it.
+- 2026-07-08: **Dashboard polish round 3** — tires tile now uses the real top-down Model Y render (`assets/tesla-top-down.png`, transparent background) with psi labels aligned to the wheel positions and blue/amber wheel markers; climate pills auto-shorten ("☀ Protect") and never bleed past the tile edge; odometer/software footer lines truncate with "…" via `_fit_text`; software tile only mentions download % when an update actually exists (else shows current firmware); **stale-cache legend** — when the bridge serves a cached dashboard (`dashboard.stale`), header shows an amber "⚠ cached · Xm ago" pill plus "Tesla unreachable — data from {time}" legend (freshness label now supports h/d).
+- 2026-07-08: **Dashboard polish round 2** — map tiles rendered much brighter (light tint instead of heavy navy blend) and the dashboard shows fully opaque (opacity override, no desktop bleed); tires tile draws a top-down car with psi beside each wheel (amber wheel + ⚠ on warnings); climate tile has color-coded cabin/outside temps, a 30–110°F gradient scale with both markers, and AC/Heat/HVAC-off + cabin-protect pills; odometer tile adds FSD-vs-manual split bar, tire-rotation countdown, and range added last charge; media strip hides opaque numeric source codes (bridge maps to friendly names / Bluetooth device).
+- 2026-07-08: **Mission-control restyle for every panel** — shared rounded-card/pill helpers on `BasePanel` (`_round_rect`, `_panel_card`, `_pill`, dark palette constants); rounded backdrop frame in `overlay.py`; rounded chips/rows/bars across broadcast, weather, air quality, timers, alarms, shopping list, music (rounded album art), Tesla battery, smart home + Vivint (halo icons, pill footers), notifications.
+- 2026-07-08: **Tesla dashboard v2** — live OpenStreetMap tiles centered on GPS coords (dark navy tint, cached, background-fetched), pulsing pin ring animation, heading arrow, dashed car card with security pills, wheel-position TPMS grid, charging expands battery card; logo white matte stripped at load time; falls back to street-grid placeholder + coordinates text when offline/no label.
+- 2026-07-08: **Tesla mission control dashboard** — `TeslaDashboardPanel` card layout (portrait stack / landscape 3-col); logo + car render; charging expands battery card.
+- 2026-07-08: **Alarm time fix** — bridge parses Amazon `originalDate` + `originalTime` (v4 alarms often have `triggerTime: 0`); display falls back to `remainingSec` when `triggerTime` missing.
 - 2026-07-06: **Wake alarms overlay** — `alarm.snapshot` lists alarms by device/time; newly set alarm row gets accent outline + NEW badge.
 - 2026-07-06: **Now Playing album art** — placeholder frame hidden while art loads; cover replaces chip/♪ without misaligned accent border.
 - 2026-07-06: **Air quality overlay** — VOC/PM2.5/CO/temp/humidity tiles show alongside per-monitor rows (not either/or); extra spacing between "Indoor Air Quality" label and scale bar.

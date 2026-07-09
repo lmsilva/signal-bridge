@@ -15,6 +15,7 @@ from src.display_panels import (
     NotificationsPanel,
     SmartHomePanel,
     TeslaBatteryPanel,
+    TeslaDashboardPanel,
     TimePanel,
     TimerPanel,
     VivintAlarmPanel,
@@ -81,6 +82,7 @@ class OverlayWindow:
         self._on_closed = None
         self._active_panel = None
         self._active_panel_key = None
+        self._opacity_override = None
 
         self.root.withdraw()
         self.root.overrideredirect(True)
@@ -122,6 +124,7 @@ class OverlayWindow:
             "music.playing": MusicPanel(self.root, self.shell, self.config),
             "smart-home.command": SmartHomePanel(self.root, self.shell, self.config),
             "tesla-battery.query": TeslaBatteryPanel(self.root, self.shell, self.config),
+            "tesla-dashboard.query": TeslaDashboardPanel(self.root, self.shell, self.config),
             "vivint-alarm.query": VivintAlarmPanel(self.root, self.shell, self.config),
             "alexa-notifications.query": NotificationsPanel(self.root, self.shell, self.config),
         }
@@ -199,6 +202,16 @@ class OverlayWindow:
         if self.visible and self.on_user_dismiss:
             self.on_user_dismiss()
 
+    def _create_round_rect(self, x0, y0, x1, y1, *, radius, fill, outline):
+        points = [
+            x0 + radius, y0, x1 - radius, y0, x1, y0, x1, y0 + radius,
+            x1, y1 - radius, x1, y1, x1 - radius, y1, x0 + radius, y1,
+            x0, y1, x0, y1 - radius, x0, y0 + radius, x0, y0,
+        ]
+        return self.canvas.create_polygon(
+            points, smooth=True, fill=fill, outline=outline, width=1
+        )
+
     def _build_shell(self):
         self.canvas.delete("all")
         self.canvas.create_rectangle(
@@ -213,6 +226,20 @@ class OverlayWindow:
         layout = self.layout
         title_center_x = layout.content_x + layout.content_width // 2
         top_y = int(self.screen_h * (0.12 if self.portrait else 0.14))
+
+        # Rounded backdrop frame shared by every panel (mission-control look).
+        frame_pad = 26
+        self.frame_top = top_y - int(self.screen_h * 0.045)
+        self.frame_bottom = layout.message_area_bottom + 30
+        self.backdrop_frame_id = self._create_round_rect(
+            layout.content_x - frame_pad,
+            self.frame_top,
+            layout.content_x + layout.content_width + frame_pad,
+            self.frame_bottom,
+            radius=28,
+            fill="#0d1524",
+            outline="#1d2a40",
+        )
         title_color = self.config.get("titleColor", self.config["textColor"])
         self._default_title_accent_color = self.config.get("titleAccentColor", self.config["accentColor"])
         title_accent_color = self._default_title_accent_color
@@ -342,7 +369,19 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
-        self._set_title(display_type, payload)
+        if display_type == "tesla-dashboard.query":
+            self.canvas.itemconfigure(self.title_primary_id, text="")
+            self.canvas.itemconfigure(self.title_accent_id, text="")
+            # The dashboard draws its own full-size container, so hide the shared
+            # backdrop frame to avoid a double-box outline.
+            self.canvas.itemconfigure(self.backdrop_frame_id, state="hidden")
+            # Data-dense dashboard: render fully opaque so the map and stats pop
+            # instead of letting the desktop bleed through.
+            self._opacity_override = 1.0
+        else:
+            self.canvas.itemconfigure(self.backdrop_frame_id, state="normal")
+            self._opacity_override = None
+            self._set_title(display_type, payload)
 
         panel = self.panels[display_type]
         self._active_panel = panel
@@ -449,8 +488,7 @@ class OverlayWindow:
         self.root.focus_force()
         self.visible = True
         self._alpha = 1.0
-        opacity = float(self.config.get("overlayOpacity", 0.88))
-        self.root.attributes("-alpha", opacity)
+        self.root.attributes("-alpha", self._effective_opacity())
         self._on_show_ready()
         self._start_countdown(display_seconds)
 
@@ -468,6 +506,11 @@ class OverlayWindow:
         self._set_countdown_text("")
         self._notify_closed()
 
+    def _effective_opacity(self) -> float:
+        if self._opacity_override is not None:
+            return float(self._opacity_override)
+        return float(self.config.get("overlayOpacity", 0.88))
+
     def _fade_to(self, target: float, duration_ms: int, on_done=None):
         if self._fade_job:
             self.root.after_cancel(self._fade_job)
@@ -482,12 +525,11 @@ class OverlayWindow:
             step_index["value"] += 1
             self._alpha = start + delta * step_index["value"]
             self._alpha = max(0.0, min(1.0, self._alpha))
-            opacity = self._alpha * float(self.config.get("overlayOpacity", 0.88))
-            self.root.attributes("-alpha", opacity)
+            self.root.attributes("-alpha", self._alpha * self._effective_opacity())
 
             if step_index["value"] >= steps:
                 self._alpha = target
-                self.root.attributes("-alpha", target * float(self.config.get("overlayOpacity", 0.88)))
+                self.root.attributes("-alpha", target * self._effective_opacity())
                 if on_done:
                     on_done()
                 return

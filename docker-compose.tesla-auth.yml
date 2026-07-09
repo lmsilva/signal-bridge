@@ -1,0 +1,23 @@
+# One-off Tesla OAuth on the NAS (host networking).
+# ./tesla-auth.sh sets TESLA_OAUTH_REDIRECT_URI to http://<NAS_LAN_IP>:4381/callback
+# so your PC browser redirects back to the NAS — not your PC's localhost.
+services:
+  alexa-broadcast-tesla-auth:
+    image: alexa-broadcast-bridge:latest
+    container_name: alexa-broadcast-tesla-auth
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-UTC}
+      TESLA_CLIENT_ID: ${TESLA_CLIENT_ID:-}
+      TESLA_CLIENT_SECRET: ${TESLA_CLIENT_SECRET:-}
+      TESLA_FLEET_DOMAIN: ${TESLA_FLEET_DOMAIN:-}
+      TESLA_FLEET_REGION: ${TESLA_FLEET_REGION:-na}
+      TESLA_VIN: ${TESLA_VIN:-}
+      TESLA_OAUTH_REDIRECT_URI: ${TESLA_OAUTH_REDIRECT_URI:?Set TESLA_OAUTH_REDIRECT_URI via ./tesla-auth.sh}
+      TESLA_REDIRECT_URI: ""
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src:ro
+    command: ["node", "src/tesla-auth.js"]
