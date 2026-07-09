@@ -2954,30 +2954,92 @@ class TeslaDashboardPanel(BasePanel):
         y = (0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi)) * scale
         return x, y
 
+    _MAP_UNVERIFIED_SSL = False
+
+    @staticmethod
+    def _is_ssl_failure(error) -> bool:
+        import ssl
+
+        seen = set()
+        current = error
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            if isinstance(current, ssl.SSLError):
+                return True
+            current = getattr(current, "reason", None) or getattr(current, "__cause__", None)
+        return "CERTIFICATE_VERIFY_FAILED" in str(error) or "SSL" in str(error)
+
+    @classmethod
+    def _map_tile_cache_dir(cls):
+        from src.paths import app_root
+
+        return app_root() / "map-tiles"
+
+    def _log_map_error(self, message: str):
+        from src.paths import app_root
+
+        line = f"{datetime.now().isoformat(timespec='seconds')} {message}"
+        print(line, file=sys.stderr)
+        try:
+            log_path = app_root() / "map-errors.log"
+            if log_path.exists() and log_path.stat().st_size > 200_000:
+                log_path.unlink()
+            with open(log_path, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        except OSError:
+            pass
+
     def _fetch_map_tile(self, zoom: int, tx: int, ty: int):
         import ssl
+
+        cache_dir = self._map_tile_cache_dir()
+        cache_file = cache_dir / f"{zoom}_{tx}_{ty}.png"
+        if cache_file.exists():
+            try:
+                return Image.open(cache_file).convert("RGB")
+            except OSError:
+                pass
 
         url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
         request = urllib.request.Request(
             url,
             headers={"User-Agent": "alexa-broadcast-client/1.0 (personal home display)"},
         )
+
+        def download(context):
+            with urllib.request.urlopen(request, timeout=8, context=context) as response:
+                return response.read()
+
         last_error = None
         for attempt in range(2):
+            context = (
+                ssl._create_unverified_context()
+                if TeslaDashboardPanel._MAP_UNVERIFIED_SSL
+                else ssl.create_default_context()
+            )
             try:
-                with urllib.request.urlopen(request, timeout=8) as response:
-                    return Image.open(io.BytesIO(response.read())).convert("RGB")
-            except ssl.SSLCertVerificationError:
-                # Portable builds can ship without a usable CA bundle.
-                try:
-                    context = ssl._create_unverified_context()
-                    with urllib.request.urlopen(request, timeout=8, context=context) as response:
-                        return Image.open(io.BytesIO(response.read())).convert("RGB")
-                except Exception as error:
-                    last_error = error
+                data = download(context)
             except Exception as error:
-                last_error = error
-            time.sleep(0.4)
+                # urllib wraps cert failures in URLError; unwrap before deciding.
+                if not TeslaDashboardPanel._MAP_UNVERIFIED_SSL and self._is_ssl_failure(error):
+                    try:
+                        data = download(ssl._create_unverified_context())
+                        # Frozen builds without a CA bundle: remember the fallback.
+                        TeslaDashboardPanel._MAP_UNVERIFIED_SSL = True
+                    except Exception as fallback_error:
+                        last_error = fallback_error
+                        time.sleep(0.4)
+                        continue
+                else:
+                    last_error = error
+                    time.sleep(0.4)
+                    continue
+            try:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                cache_file.write_bytes(data)
+            except OSError:
+                pass
+            return Image.open(io.BytesIO(data)).convert("RGB")
         raise last_error if last_error else RuntimeError("tile fetch failed")
 
     def _fetch_map_tiles(self, lat: float, lon: float, zoom: int, w: int, h: int):
@@ -3003,18 +3065,20 @@ class TeslaDashboardPanel(BasePanel):
             if 0 <= tx <= max_tile and 0 <= ty <= max_tile
         ]
         fetched = 0
+        last_error = None
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {pool.submit(self._fetch_map_tile, zoom, tx, ty): (tx, ty) for tx, ty in coords}
             for future, (tx, ty) in futures.items():
                 try:
                     tile = future.result()
                 except Exception as error:
-                    print(f"map tile {zoom}/{tx}/{ty} failed: {error}", file=sys.stderr)
+                    last_error = error
+                    self._log_map_error(f"map tile {zoom}/{tx}/{ty} failed: {error!r}")
                     continue
                 stitched.paste(tile, ((tx - tile_x0) * 256, (ty - tile_y0) * 256))
                 fetched += 1
         if not fetched:
-            raise RuntimeError("no map tiles could be downloaded")
+            raise RuntimeError(f"no map tiles could be downloaded ({last_error!r})")
         crop_left = left - tile_x0 * 256
         crop_top = top - tile_y0 * 256
         image = stitched.crop((crop_left, crop_top, crop_left + w, crop_top + h))
@@ -3043,7 +3107,7 @@ class TeslaDashboardPanel(BasePanel):
             try:
                 image = self._fetch_map_tiles(lat, lon, self.MAP_ZOOM, w, h)
             except Exception as error:
-                print(f"map fetch failed for {lat:.4f},{lon:.4f}: {error}", file=sys.stderr)
+                self._log_map_error(f"map fetch failed for {lat:.4f},{lon:.4f}: {error!r}")
                 if retry:
                     # One delayed retry — transient network hiccups are common
                     # right after the display wakes.
@@ -3053,6 +3117,8 @@ class TeslaDashboardPanel(BasePanel):
                         and request_id == self._map_request
                         and self._start_map_fetch(lat, lon, box, retry=False),
                     )
+                else:
+                    self.root.after(0, lambda: self._show_map_error(request_id, box))
                 return
             self._map_cache[key] = image
             if len(self._map_cache) > 8:
@@ -3071,6 +3137,20 @@ class TeslaDashboardPanel(BasePanel):
         )
         if self._map_overlay_floor is not None:
             self.canvas.tag_lower(img_id, self._map_overlay_floor)
+
+    def _show_map_error(self, request_id: int, box):
+        """Surface tile failures on screen instead of a silent placeholder."""
+        if not self.visible or request_id != self._map_request:
+            return
+        x0, y0, x1, y1 = box
+        self._track(
+            self.canvas.create_text(
+                (x0 + x1) // 2, y1 - 18, anchor="s",
+                text="⚠ map offline — see map-errors.log",
+                fill=self.AMBER,
+                font=self.shell.forecast_label_font,
+            )
+        )
 
     def _draw_header(self, x, y, width, dashboard: dict):
         text = self.config["textColor"]
