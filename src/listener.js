@@ -599,6 +599,11 @@ function createListener({ config, log }) {
       matchesShoppingListSpeech,
     });
     if (completed) {
+      // Retire the original query activity too so later history polls don't
+      // re-parse it and emit the same display a third time.
+      if (completed.sourceActivityId && completed.sourceActivityId !== activityId) {
+        voiceQueryParser.markProcessed(completed.sourceActivityId);
+      }
       handleVoiceEvent(completed, activityId, trigger);
       return;
     }

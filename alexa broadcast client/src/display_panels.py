@@ -1,6 +1,7 @@
 import io
 import math
 import re
+import sys
 import threading
 import time
 import tkinter as tk
@@ -2953,7 +2954,35 @@ class TeslaDashboardPanel(BasePanel):
         y = (0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi)) * scale
         return x, y
 
+    def _fetch_map_tile(self, zoom: int, tx: int, ty: int):
+        import ssl
+
+        url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "alexa-broadcast-client/1.0 (personal home display)"},
+        )
+        last_error = None
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=8) as response:
+                    return Image.open(io.BytesIO(response.read())).convert("RGB")
+            except ssl.SSLCertVerificationError:
+                # Portable builds can ship without a usable CA bundle.
+                try:
+                    context = ssl._create_unverified_context()
+                    with urllib.request.urlopen(request, timeout=8, context=context) as response:
+                        return Image.open(io.BytesIO(response.read())).convert("RGB")
+                except Exception as error:
+                    last_error = error
+            except Exception as error:
+                last_error = error
+            time.sleep(0.4)
+        raise last_error if last_error else RuntimeError("tile fetch failed")
+
     def _fetch_map_tiles(self, lat: float, lon: float, zoom: int, w: int, h: int):
+        from concurrent.futures import ThreadPoolExecutor
+
         from PIL import ImageEnhance
 
         center_x, center_y = self._latlon_to_global_px(lat, lon, zoom)
@@ -2967,18 +2996,25 @@ class TeslaDashboardPanel(BasePanel):
             (10, 17, 30),
         )
         max_tile = (1 << zoom) - 1
-        for tx in range(tile_x0, tile_x1 + 1):
-            for ty in range(tile_y0, tile_y1 + 1):
-                if tx < 0 or ty < 0 or tx > max_tile or ty > max_tile:
+        coords = [
+            (tx, ty)
+            for tx in range(tile_x0, tile_x1 + 1)
+            for ty in range(tile_y0, tile_y1 + 1)
+            if 0 <= tx <= max_tile and 0 <= ty <= max_tile
+        ]
+        fetched = 0
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(self._fetch_map_tile, zoom, tx, ty): (tx, ty) for tx, ty in coords}
+            for future, (tx, ty) in futures.items():
+                try:
+                    tile = future.result()
+                except Exception as error:
+                    print(f"map tile {zoom}/{tx}/{ty} failed: {error}", file=sys.stderr)
                     continue
-                url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
-                request = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "alexa-broadcast-client/1.0 (personal home display)"},
-                )
-                with urllib.request.urlopen(request, timeout=6) as response:
-                    tile = Image.open(io.BytesIO(response.read())).convert("RGB")
                 stitched.paste(tile, ((tx - tile_x0) * 256, (ty - tile_y0) * 256))
+                fetched += 1
+        if not fetched:
+            raise RuntimeError("no map tiles could be downloaded")
         crop_left = left - tile_x0 * 256
         crop_top = top - tile_y0 * 256
         image = stitched.crop((crop_left, crop_top, crop_left + w, crop_top + h))
@@ -2989,7 +3025,7 @@ class TeslaDashboardPanel(BasePanel):
         navy = Image.new("RGB", image.size, (16, 27, 48))
         return Image.blend(image, navy, 0.12)
 
-    def _start_map_fetch(self, lat: float, lon: float, box):
+    def _start_map_fetch(self, lat: float, lon: float, box, *, retry: bool = True):
         if Image is None or ImageTk is None:
             return
         x0, y0, x1, y1 = box
@@ -3006,7 +3042,17 @@ class TeslaDashboardPanel(BasePanel):
         def fetch():
             try:
                 image = self._fetch_map_tiles(lat, lon, self.MAP_ZOOM, w, h)
-            except Exception:
+            except Exception as error:
+                print(f"map fetch failed for {lat:.4f},{lon:.4f}: {error}", file=sys.stderr)
+                if retry:
+                    # One delayed retry — transient network hiccups are common
+                    # right after the display wakes.
+                    self.root.after(
+                        3000,
+                        lambda: self.visible
+                        and request_id == self._map_request
+                        and self._start_map_fetch(lat, lon, box, retry=False),
+                    )
                 return
             self._map_cache[key] = image
             if len(self._map_cache) > 8:
@@ -3436,9 +3482,10 @@ class TeslaDashboardPanel(BasePanel):
         self._stat_tile(tx, ty, tile_w, tile_h, "⬇", "Software")
         update_available = software.get("updateAvailable")
         sw_val = software.get("statusLabel") or ("Update ready" if update_available else "Up to date")
+        sw_val_y = max(ty + tile_h // 2 + 2, ty + 44 + value_font.metrics("linespace") // 2)
         self._track(
             self.canvas.create_text(
-                tx + 16, ty + tile_h // 2 + 2, anchor="w",
+                tx + 16, sw_val_y, anchor="w",
                 text=sw_val, fill=text, font=value_font,
             )
         )
@@ -3532,6 +3579,7 @@ class TeslaDashboardPanel(BasePanel):
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
         accent = self.config.get("accentColor", "#38bdf8")
+        label_font = self.shell.forecast_label_font
         self._stat_tile(tx, ty, w, h, "🌡", "Climate")
 
         inside = climate.get("insideTempF")
@@ -3539,39 +3587,66 @@ class TeslaDashboardPanel(BasePanel):
         hvac_on = bool(climate.get("hvacOn"))
         inside_color = self._climate_color(inside)
 
-        val_y = ty + h * 0.36
+        # Bottom-anchored rows first (pills, then scale), so the temperature
+        # text above can adapt to whatever vertical space is actually left.
+        pill_h = label_font.metrics("linespace") + 10
+        pill_y = ty + h - 14 - pill_h
+        scale_y = pill_y - 22
+
+        content_top = ty + 40
+        title_ls = self.shell.section_title_font.metrics("linespace")
+        outside_ls = self.shell.forecast_value_font.metrics("linespace")
+        temp_room = scale_y - 10 - content_top
+        two_line = temp_room >= title_ls + outside_ls
+        show_scale = temp_room >= title_ls * 0.9
+        if not show_scale:
+            scale_y = None
+
         value_id = self._track(
             self.canvas.create_text(
-                tx + 18, val_y, anchor="w",
+                tx + 18, content_top, anchor="nw",
                 text=f"{inside if inside is not None else '—'}°",
                 fill=inside_color,
                 font=self.shell.section_title_font,
             )
         )
         bbox = self.canvas.bbox(value_id)
-        if bbox:
-            self._track(
-                self.canvas.create_text(
-                    bbox[2] + 8, val_y + 4, anchor="w",
-                    text="cabin",
-                    fill=muted,
-                    font=self.shell.forecast_label_font,
-                )
+        anchor_x = (bbox[2] if bbox else tx + 90) + 8
+        mid_y = content_top + title_ls // 2
+        self._track(
+            self.canvas.create_text(
+                anchor_x, mid_y, anchor="w",
+                text="cabin",
+                fill=muted,
+                font=label_font,
             )
+        )
         if outside is not None:
-            self._track(
-                self.canvas.create_text(
-                    tx + 18, val_y + self.shell.section_title_font.metrics("linespace") * 0.72,
-                    anchor="w",
-                    text=f"{outside}° outside",
-                    fill=self._climate_color(outside),
-                    font=self.shell.forecast_value_font,
+            if two_line:
+                self._track(
+                    self.canvas.create_text(
+                        tx + 18, content_top + title_ls + 2,
+                        anchor="nw",
+                        text=f"{outside}° outside",
+                        fill=self._climate_color(outside),
+                        font=self.shell.forecast_value_font,
+                    )
                 )
-            )
+            else:
+                # Compact tile: outside temp rides on the same line as "cabin".
+                cabin_w = label_font.measure("cabin")
+                self._track(
+                    self.canvas.create_text(
+                        anchor_x + cabin_w + 10, mid_y, anchor="w",
+                        text=f"· {outside}° out",
+                        fill=self._climate_color(outside),
+                        font=self.shell.forecast_value_font,
+                    )
+                )
 
-        self._draw_temp_scale(tx + 18, ty + h - 66, w - 36, inside, outside)
+        if scale_y is not None:
+            self._draw_temp_scale(tx + 18, scale_y, w - 36, inside, outside)
 
-        pill_y = ty + h - 44
         pills = []
         if hvac_on:
             hot_cabin = inside is not None and outside is not None and inside > outside
@@ -3691,28 +3766,33 @@ class TeslaDashboardPanel(BasePanel):
 
         miles = odometer.get("miles")
         odo_val = f"{miles:,}" if isinstance(miles, (int, float)) else "—"
-        val_y = ty + h * 0.30
+        title_ls = self.shell.section_title_font.metrics("linespace")
+        # Anchor below the tile title so the big number can't ride up over it.
+        val_top = ty + 40
         value_id = self._track(
             self.canvas.create_text(
-                tx + 18, val_y, anchor="w",
+                tx + 18, val_top, anchor="nw",
                 text=odo_val, fill=text, font=self.shell.section_title_font,
             )
         )
         bbox = self.canvas.bbox(value_id)
-        if bbox:
-            self._track(
-                self.canvas.create_text(
-                    bbox[2] + 8, val_y + 5, anchor="w",
-                    text="mi", fill=muted, font=label_font,
-                )
+        self._track(
+            self.canvas.create_text(
+                (bbox[2] if bbox else tx + 120) + 8, val_top + title_ls // 2, anchor="w",
+                text="mi", fill=muted, font=label_font,
             )
+        )
 
-        cursor = ty + h * 0.30 + self.shell.section_title_font.metrics("linespace") * 0.75
+        cursor = val_top + title_ls + 4
 
         fsd = odometer.get("fsdMilesPercent")
         if fsd is not None:
-            pct = max(0, min(100, float(fsd)))
             # Donut chart: FSD share of miles as an accent arc on a muted ring.
+            avail_h = (ty + h - 14 - label_font.metrics("linespace") * 2.4) - cursor
+            if avail_h < 56:
+                fsd = None
+        if fsd is not None:
+            pct = max(0, min(100, float(fsd)))
             avail_h = (ty + h - 14 - label_font.metrics("linespace") * 2.4) - cursor
             ring_r = max(26, min(w * 0.20, avail_h / 2 - 4))
             ring_w = max(7, int(ring_r * 0.30))
@@ -3786,8 +3866,11 @@ class TeslaDashboardPanel(BasePanel):
         if not detail_lines and fsd is None:
             detail_lines.append(("Lifetime distance", muted))
 
+        # Bottom-up detail rows; stop before they would collide with the value.
         line_y = ty + h - 14
         for label, color in reversed(detail_lines[:2]):
+            if line_y - label_font.metrics("linespace") < cursor:
+                break
             self._track(
                 self.canvas.create_text(
                     tx + 16, line_y, anchor="sw",
@@ -3854,10 +3937,17 @@ class TeslaDashboardPanel(BasePanel):
         charging = bool((dashboard.get("battery") or {}).get("charging"))
         media_h = 64
         available = bottom - y - media_h - gap * 5
-        map_h = int(available * (0.28 if charging else 0.34))
-        car_h = int(available * 0.24)
-        battery_h = int(available * (0.22 if charging else 0.16))
+        # Keep the stat tiles tall enough for their content; the map absorbs
+        # whatever is left over instead of squeezing the 2x2 grid.
+        map_h = int(available * (0.25 if charging else 0.30))
+        car_h = int(available * 0.21)
+        battery_h = int(available * (0.20 if charging else 0.14))
         stats_h = (available - map_h - car_h - battery_h) // 2
+        min_tile = 168
+        if stats_h < min_tile:
+            deficit = (min_tile - stats_h) * 2
+            map_h = max(160, map_h - deficit)
+            stats_h = (available - map_h - car_h - battery_h) // 2
 
         self._draw_map_card(inner_x, y, inner_w, map_h, dashboard)
         y += map_h + gap
@@ -4132,9 +4222,12 @@ class VivintAlarmPanel(BasePanel):
             accent = self.config.get("accentColor", "#38bdf8")
             secure_text = "Security Update"
 
-        icon_size = 140
-        icon_y = y + (bottom - y) // 2 - 110
+        # Layout flows top-down from actual rendered bounds so wrapped text
+        # never overlaps the lines below it (portrait screens wrap the headline).
+        content_h = bottom - y
+        icon_size = max(96, min(140, int(content_h * 0.16)))
         halo_r = int(icon_size * 0.8)
+        icon_y = y + int(content_h * 0.24)
         self._track(
             self.canvas.create_oval(
                 center_x - halo_r, icon_y - halo_r,
@@ -4146,22 +4239,30 @@ class VivintAlarmPanel(BasePanel):
         )
         self._draw_lock_icon(center_x, icon_y, icon_size, accent, chip, locked=status == "armed")
 
-        cursor = icon_y + icon_size // 2 + 36
-        self._track(
+        # Pick the largest headline font that fits on one line; fall back to
+        # wrapping with bbox-tracked flow if even the section font is too wide.
+        headline_font = self.shell.hero_font
+        if headline_font.measure(headline) > width - 60:
+            headline_font = self.shell.section_title_font
+
+        cursor = icon_y + halo_r + 40
+        headline_id = self._track(
             self.canvas.create_text(
                 center_x,
                 cursor,
                 anchor="n",
                 text=headline,
                 fill=accent,
-                font=self.shell.hero_font,
-                width=width - 40,
+                font=headline_font,
+                width=width - 60,
+                justify="center",
             )
         )
-        cursor += self.shell.hero_font.metrics("linespace") + 8
+        bbox = self.canvas.bbox(headline_id)
+        cursor = (bbox[3] if bbox else cursor + headline_font.metrics("linespace")) + 14
 
         if mode_label:
-            self._track(
+            mode_id = self._track(
                 self.canvas.create_text(
                     center_x,
                     cursor,
@@ -4171,19 +4272,21 @@ class VivintAlarmPanel(BasePanel):
                     font=self.shell.section_title_font,
                 )
             )
-            cursor += self.shell.section_title_font.metrics("linespace") + 10
+            bbox = self.canvas.bbox(mode_id)
+            cursor = (bbox[3] if bbox else cursor + self.shell.section_title_font.metrics("linespace")) + 12
 
-        self._track(
+        secure_id = self._track(
             self.canvas.create_text(
                 center_x,
                 cursor,
                 anchor="n",
                 text=secure_text,
-                fill=text,
+                fill=muted,
                 font=self.shell.body_font,
             )
         )
-        cursor += self.shell.body_font.metrics("linespace") + 16
+        bbox = self.canvas.bbox(secure_id)
+        cursor = (bbox[3] if bbox else cursor + self.shell.body_font.metrics("linespace")) + 20
 
         self._pill(
             center_x, cursor, provider,

@@ -64,6 +64,7 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
         return {
           ...shoppingPending.event,
           activityId: helpers.getActivityId(activity),
+          sourceActivityId: shoppingPending.event.activityId || null,
           spokenResponse: response,
           timestamp: activity?.creationTimestamp || now,
           trigger: 'shopping-list-show',
@@ -78,6 +79,7 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
         return {
           ...vivintPending.event,
           activityId: helpers.getActivityId(activity),
+          sourceActivityId: vivintPending.event.activityId || null,
           spokenResponse: response,
           timestamp: activity?.creationTimestamp || now,
           trigger: 'vivint-alarm-response',
@@ -92,6 +94,7 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
         return {
           ...notificationsPending.event,
           activityId: helpers.getActivityId(activity),
+          sourceActivityId: notificationsPending.event.activityId || null,
           spokenResponse: response,
           timestamp: activity?.creationTimestamp || now,
           trigger: 'alexa-notifications-response',

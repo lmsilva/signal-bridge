@@ -89,7 +89,13 @@ function parseAlarmStatusFromSpeech(spokenResponse, query) {
     return { status: 'disarmed', mode: null };
   }
   if (VIVINT_ARM_QUERY_RE.test(text) || (VIVINT_QUERY_RE.test(text) && /\barm\b/i.test(text))) {
-    return { status: 'armed', mode: null };
+    let mode = null;
+    if (/\baway\b/i.test(text)) {
+      mode = 'away';
+    } else if (/\b(?:stay|home)\b/i.test(text)) {
+      mode = 'stay';
+    }
+    return { status: 'armed', mode };
   }
 
   return null;

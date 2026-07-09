@@ -12,10 +12,17 @@ function normalizePart(value) {
     .toLowerCase();
 }
 
+// Kinds that flow through the pending-response upgrade path can surface the
+// same command under several activity ids (push event, history record, and the
+// separate response record), so fingerprint them by content instead.
+const CONTENT_FINGERPRINT_KINDS = new Set(['vivint-alarm', 'alexa-notifications']);
+
 function voiceEventFingerprint(event) {
-  const activityId = normalizePart(event?.activityId);
-  if (activityId) {
-    return activityId;
+  if (!CONTENT_FINGERPRINT_KINDS.has(event?.kind)) {
+    const activityId = normalizePart(event?.activityId);
+    if (activityId) {
+      return activityId;
+    }
   }
 
   return [
@@ -90,6 +97,12 @@ function createVoiceEventDedup({ dedupMs = DEFAULT_DEDUP_MS } = {}) {
     if (lastSeen && now - lastSeen.at < dedupMs) {
       if (!lastSeen.hadResponse && spoken) {
         recent.set(fingerprint, { at: now, hadResponse: true, signature });
+        // For content-fingerprinted kinds the signature fully describes the
+        // rendered panel; a spoken-response upgrade that changes nothing on
+        // screen would just replay the same display.
+        if (CONTENT_FINGERPRINT_KINDS.has(event?.kind) && signature && signature === lastSeen.signature) {
+          return false;
+        }
         return true;
       }
 

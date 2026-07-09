@@ -25,6 +25,20 @@ test('parseAlarmStatusFromSpeech reads disarmed response', () => {
   assert.equal(parsed?.status, 'disarmed');
 });
 
+test('parseAlarmStatusFromSpeech reads arm mode from query when no speech yet', () => {
+  const stay = parseAlarmStatusFromSpeech(null, 'ask vivint to arm stay');
+  assert.equal(stay?.status, 'armed');
+  assert.equal(stay?.mode, 'stay');
+
+  const away = parseAlarmStatusFromSpeech(null, 'ask vivint to arm away');
+  assert.equal(away?.status, 'armed');
+  assert.equal(away?.mode, 'away');
+
+  const plain = parseAlarmStatusFromSpeech(null, 'ask vivint to arm');
+  assert.equal(plain?.status, 'armed');
+  assert.equal(plain?.mode, null);
+});
+
 test('buildVivintAlarmReading builds armed label', () => {
   const reading = buildVivintAlarmReading('your system has been armed stay', 'ask Vivint to arm');
   assert.equal(reading.status, 'armed');

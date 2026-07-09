@@ -61,6 +61,54 @@ test('createVoiceEventDedup allows upgrade when spoken response arrives later', 
   );
 });
 
+test('vivint events fingerprint by content across different activity ids', () => {
+  const dedup = createVoiceEventDedup({ dedupMs: 60000 });
+  const base = {
+    kind: 'vivint-alarm',
+    device: 'Kitchen Echo',
+    query: 'ask vivint to arm',
+  };
+
+  // Initial push event (no spoken response yet) — emits.
+  assert.equal(dedup.shouldEmit({ ...base, activityId: 'push-1', spokenResponse: null }, 1000), true);
+  // Response arrives under a different activity id with new content — emits.
+  assert.equal(
+    dedup.shouldEmit(
+      { ...base, activityId: 'response-2', spokenResponse: 'your system has been armed stay' },
+      3000,
+    ),
+    true,
+  );
+  // History poll re-parses the original utterance (third id, same content) — suppressed.
+  assert.equal(
+    dedup.shouldEmit(
+      { ...base, activityId: 'history-3', spokenResponse: 'your system has been armed stay' },
+      6000,
+    ),
+    false,
+  );
+});
+
+test('vivint upgrade with identical rendered content is suppressed', () => {
+  const dedup = createVoiceEventDedup({ dedupMs: 60000 });
+  const base = {
+    kind: 'vivint-alarm',
+    device: 'Kitchen Echo',
+    query: 'ask vivint to arm stay',
+  };
+
+  // Query already carries the mode, so the initial display is complete.
+  assert.equal(dedup.shouldEmit({ ...base, activityId: 'push-1', spokenResponse: null }, 1000), true);
+  // Spoken response arrives but parses to the same status/mode — nothing new on screen.
+  assert.equal(
+    dedup.shouldEmit(
+      { ...base, activityId: 'response-2', spokenResponse: 'your system has been armed stay' },
+      3000,
+    ),
+    false,
+  );
+});
+
 test('createVoiceEventDedup suppresses repeat tesla query for same activity id', () => {
   const dedup = createVoiceEventDedup({ dedupMs: 60000 });
   const base = {

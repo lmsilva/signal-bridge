@@ -33,6 +33,7 @@ test('tryComplete attaches orphan Vivint arm response to pending query', () => {
     query: 'ask Vivint to arm',
     spokenResponse: null,
     trigger: 'vivint-alarm-query',
+    activityId: 'query-vivint',
   });
 
   const completed = pending.tryComplete(
@@ -47,4 +48,6 @@ test('tryComplete attaches orphan Vivint arm response to pending query', () => {
 
   assert.equal(completed?.spokenResponse, 'your system has been armed stay');
   assert.equal(completed?.trigger, 'vivint-alarm-response');
+  assert.equal(completed?.activityId, 'response-vivint');
+  assert.equal(completed?.sourceActivityId, 'query-vivint');
 });
