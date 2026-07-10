@@ -35,7 +35,43 @@ function to24Hour(hour, ampm) {
   return h;
 }
 
-function parseSpokenTime(text, referenceDate = new Date()) {
+function buildZonedInstant(referenceDate, hour, minute, second, timeZone) {
+  const dateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(referenceDate);
+  const pick = (type) => Number(dateParts.find((part) => part.type === type).value);
+  const year = pick('year');
+  const month = pick('month');
+  const day = pick('day');
+
+  let utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date(utcMs));
+    const ph = Number(parts.find((part) => part.type === 'hour').value);
+    const pm = Number(parts.find((part) => part.type === 'minute').value);
+    const ps = Number(parts.find((part) => part.type === 'second').value);
+    const deltaSec = (hour - ph) * 3600 + (minute - pm) * 60 + (second - ps);
+    if (deltaSec === 0) {
+      break;
+    }
+    utcMs += deltaSec * 1000;
+  }
+  return new Date(utcMs);
+}
+
+function parseSpokenTime(text, referenceDate = new Date(), { timeZone } = {}) {
   const source = String(text || '');
   if (!source) {
     return null;
@@ -71,8 +107,13 @@ function parseSpokenTime(text, referenceDate = new Date()) {
       // Spoken without am/pm — keep as-is; caller may refine with reference clock.
     }
 
-    const date = new Date(referenceDate);
-    date.setHours(hour, minute, second, 0);
+    const date = timeZone
+      ? buildZonedInstant(referenceDate, hour, minute, second, timeZone)
+      : (() => {
+        const local = new Date(referenceDate);
+        local.setHours(hour, minute, second, 0);
+        return local;
+      })();
 
     return {
       iso: date.toISOString(),

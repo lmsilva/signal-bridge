@@ -12,6 +12,8 @@ from src.payload_utils import (
     format_limit_reset_time,
     format_freshness_sec,
     format_cached_time_label,
+    format_charge_time_to_full,
+    format_tesla_media_volume_label,
     format_duration,
     format_indoor_location,
     format_timer_clock,
@@ -25,6 +27,7 @@ from src.payload_utils import (
     parse_spoken_indoor,
     parse_spoken_weather,
     resolve_display_type,
+    resolve_time_display_datetime,
     sample_hourly_indices,
     timer_detail_line,
     timer_title,
@@ -69,6 +72,33 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(format_freshness_sec(125), "2m ago")
         self.assertEqual(format_freshness_sec(7200), "2h ago")
         self.assertRegex(format_cached_time_label("2026-07-08T20:30:00+00:00"), r"\d")
+        self.assertEqual(format_charge_time_to_full(45), "45 min to full")
+        self.assertEqual(format_charge_time_to_full(394), "6h 34m to full")
+        self.assertEqual(format_charge_time_to_full(120), "2h to full")
+        self.assertEqual(format_tesla_media_volume_label({"volumePercent": 21}), "21% volume")
+        self.assertEqual(format_tesla_media_volume_label({"volume": 2.3333}), "21% volume")
+        self.assertEqual(format_tesla_media_volume_label({"volumePercent": 50}), "50% volume")
+
+    def test_resolve_time_display_prefers_parsed_components(self):
+        payload = {
+            "parsedTime": {
+                "iso": "2026-07-10T22:15:00.000Z",
+                "hour": 22,
+                "minute": 15,
+                "second": 0,
+            }
+        }
+        dt = resolve_time_display_datetime(payload)
+        self.assertEqual((dt.hour, dt.minute, dt.second), (22, 15, 0))
+
+    def test_resolve_time_display_ignores_activity_timestamp(self):
+        payload = {
+            "timestamp": "2026-07-10T22:15:00.000Z",
+        }
+        dt = resolve_time_display_datetime(payload)
+        now = datetime.now().astimezone()
+        self.assertEqual(dt.date(), now.date())
+        self.assertLess(abs((dt - now).total_seconds()), 2)
 
     def test_tesla_fleet_battery_payload_fields(self):
         payload = {

@@ -38,6 +38,7 @@ from src.payload_utils import (
     indoor_comfort_band,
     normalize_condition,
     parse_iso_timestamp,
+    resolve_time_display_datetime,
     parse_qualitative_air_quality_band,
     parse_spoken_air_quality,
     parse_spoken_battery_percent,
@@ -46,6 +47,8 @@ from src.payload_utils import (
     format_limit_reset_time,
     format_freshness_sec,
     format_cached_time_label,
+    format_charge_time_to_full,
+    format_tesla_media_volume_label,
     format_temperature_f,
     sample_hourly_indices,
     timer_detail_line,
@@ -330,23 +333,7 @@ class TimePanel(BasePanel):
         super().hide()
 
     def _resolve_datetime(self, payload: dict) -> datetime:
-        parsed = payload.get("parsedTime") or {}
-        if parsed.get("iso"):
-            dt = parse_iso_timestamp(parsed["iso"])
-            if dt:
-                return dt.astimezone()
-
-        spoken = payload.get("spokenResponse") or ""
-        for fmt in ("%I:%M %p", "%I:%M:%S %p", "%H:%M"):
-            try:
-                clock = datetime.strptime(spoken.strip().split("It's")[-1].strip(), fmt)
-                now = datetime.now().astimezone()
-                return now.replace(hour=clock.hour, minute=clock.minute, second=clock.second, microsecond=0)
-            except ValueError:
-                continue
-
-        ts = parse_iso_timestamp(payload.get("timestamp", ""))
-        return (ts or datetime.now(timezone.utc)).astimezone()
+        return resolve_time_display_datetime(payload)
 
     def _render(self, payload: dict):
         self._display_dt = self._resolve_datetime(payload)
@@ -3480,7 +3467,9 @@ class TeslaDashboardPanel(BasePanel):
             if battery.get("chargeRateMph") is not None:
                 charge_bits.append(f"{battery['chargeRateMph']} mi/hr")
             if battery.get("timeToFullChargeMin") is not None:
-                charge_bits.append(f"{battery['timeToFullChargeMin']} min to full")
+                eta = format_charge_time_to_full(battery.get("timeToFullChargeMin"))
+                if eta:
+                    charge_bits.append(eta)
             if charge_bits:
                 self._track(
                     self.canvas.create_text(
@@ -3989,22 +3978,22 @@ class TeslaDashboardPanel(BasePanel):
         if playing:
             title = media.get("title") or "Now playing"
             bits = [b for b in (media.get("artist"), media.get("source")) if b]
-            vol = media.get("volume")
-            if vol is not None:
-                bits.append(f"vol {vol}")
+            vol_label = format_tesla_media_volume_label(media)
+            if vol_label:
+                bits.append(vol_label)
             self._track(self.canvas.create_text(text_x, mid_y - 11, anchor="w", text=title, fill=text, font=self.shell.section_label_font))
             self._track(self.canvas.create_text(text_x, mid_y + 13, anchor="w", text=" · ".join(bits), fill=accent, font=self.shell.forecast_label_font))
         else:
             self._track(self.canvas.create_text(text_x, mid_y - 11, anchor="w", text="Nothing playing", fill=text, font=self.shell.section_label_font))
             source = media.get("source")
-            vol = media.get("volume")
             bits = []
             # Only show a source when the bridge resolved a friendly name
             # (raw firmware codes like "5" are filtered out bridge-side).
             if source and not str(source).strip().replace(".", "").isdigit():
                 bits.append(f"Last source: {source}")
-            if vol is not None:
-                bits.append(f"vol {float(vol):g}")
+            vol_label = format_tesla_media_volume_label(media)
+            if vol_label:
+                bits.append(vol_label)
             sub = " · ".join(bits) if bits else "Tesla audio idle"
             self._track(self.canvas.create_text(text_x, mid_y + 13, anchor="w", text=sub, fill=muted, font=self.shell.forecast_label_font))
 

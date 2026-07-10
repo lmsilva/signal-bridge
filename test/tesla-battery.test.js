@@ -7,8 +7,10 @@ const {
   clampPercent,
 } = require('../src/tesla-battery');
 
-test('matchesTeslaBatteryQuery detects show my tesla battery', () => {
+test('matchesTeslaBatteryQuery detects show tesla battery', () => {
+  assert.equal(matchesTeslaBatteryQuery('show tesla battery'), true);
   assert.equal(matchesTeslaBatteryQuery('show my tesla battery'), true);
+  assert.equal(matchesTeslaBatteryQuery('show the tesla battery'), true);
   assert.equal(matchesTeslaBatteryQuery('what is the weather'), false);
 });
 

@@ -19,7 +19,7 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 | **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` |
 | **Music** | "Alexa, play …" (now playing from device) | `music.playing` |
 | **Smart home** | "Alexa, turn the kitchen lights on" | `smart-home.command` |
-| **Tesla battery** | Custom routine: "Alexa, show my Tesla battery" | `tesla-battery.query` (Fleet API when configured) |
+| **Tesla battery** | Custom routine: "Alexa, show Tesla battery" | `tesla-battery.query` (Fleet API when configured) |
 | **Tesla dashboard** | Custom routine: "Alexa, show Tesla dashboard" | `tesla-dashboard.query` (Fleet API `vehicle_data`) |
 | **Vivint alarm** | "Alexa, ask Vivint to arm" | `vivint-alarm.query` |
 | **Notifications** | "Alexa, show my notifications" | `alexa-notifications.query` |
@@ -150,7 +150,7 @@ Secrets and runtime data live under `data/` and are not committed.
 5. Pair virtual key on phone: `https://www.tesla.com/_ak/YOUR-DOMAIN`
 6. Recreate Docker listener after `.env` changes: `docker compose up -d --force-recreate`
 
-Voice routine **"Alexa, show my Tesla battery"** fetches live `battery_level` from Fleet API (Alexa can reply "Sent to Display"). Without Tesla credentials, the bridge falls back to parsing Alexa's spoken answer.
+Voice routine **"Alexa, show Tesla battery"** fetches live `battery_level` from Fleet API (Alexa can reply "Sent to Display"). Without Tesla credentials, the bridge falls back to parsing Alexa's spoken answer.
 
 **"Alexa, show Tesla dashboard"** fetches full `vehicle_data` (location, security, climate, TPMS, software, media) and shows the mission-control overlay. Requires Fleet API credentials. If the car is asleep or unreachable, the bridge serves the last successful snapshot (`data/tesla-dashboard-cache.json`) and the overlay shows an amber "cached" pill with the snapshot time instead of an empty error screen.
 

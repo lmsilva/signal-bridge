@@ -7,7 +7,7 @@ test('voiceEventFingerprint prefers activity id', () => {
     activityId: 'record-123',
     kind: 'tesla-battery',
     device: 'Kitchen Echo',
-    query: 'show my tesla battery',
+    query: 'show tesla battery',
   });
   assert.equal(fp, 'record-123');
 });
@@ -47,7 +47,7 @@ test('createVoiceEventDedup allows upgrade when spoken response arrives later', 
     activityId: 'tesla-1',
     kind: 'tesla-battery',
     device: 'Office Echo',
-    query: 'show my tesla battery',
+    query: 'show tesla battery',
   };
 
   assert.equal(dedup.shouldEmit({ ...base, spokenResponse: null }, 1000), true);
@@ -115,7 +115,7 @@ test('createVoiceEventDedup suppresses repeat tesla query for same activity id',
     activityId: 'tesla-1',
     kind: 'tesla-battery',
     device: 'Office Echo',
-    query: 'show my tesla battery',
+    query: 'show tesla battery',
     spokenResponse: 'Checking your battery',
   };
 

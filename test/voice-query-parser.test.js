@@ -147,7 +147,7 @@ test('voice query parser routes temperature inside to indoor panel', () => {
 
 test('voice query parser detects tesla battery routine', () => {
   const parser = createVoiceQueryParser();
-  const event = parser.parse(activity('show my tesla battery', 'Your battery is at 78 percent'));
+  const event = parser.parse(activity('show tesla battery', 'Your battery is at 78 percent'));
   assert.equal(event?.kind, 'tesla-battery');
   assert.equal(event?.trigger, 'tesla-battery-query');
 });

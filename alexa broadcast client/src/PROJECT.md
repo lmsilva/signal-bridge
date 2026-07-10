@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-08
+**Last updated:** 2026-07-09
 
 ---
 
@@ -202,7 +202,9 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
-- 2026-07-08: **Map tile reliability** — SSL cert failures are now detected inside `URLError` wrappers (frozen builds without a CA bundle silently failed before); once the unverified-context fallback succeeds it sticks for the session. Tiles are disk-cached in `map-tiles/` next to the app so the home area renders instantly and offline. All failures append to `map-errors.log` (visible even for the windowed exe) and the map card shows "⚠ map offline — see map-errors.log" when every fetch attempt fails. Manual smoke: `.venv\Scripts\python.exe test\smoke_map_fetch.py [lat] [lon]`; unit tests in `test/test_map_fetch.py`.
+- 2026-07-09: **Time panel flicker fix** — `resolve_time_display_datetime` in `payload_utils.py` uses parsed hour/minute or current local time instead of the UDP activity timestamp (which caused a wrong hour flash before the tick corrected it).
+- 2026-07-09: **Media volume label** — Tesla dashboard media tile shows `21% volume` via `format_tesla_media_volume_label` (accepts bridge `volumePercent` or legacy raw 0–11 `volume`).
+- 2026-07-09: **Charge time to full** — Tesla battery card uses `format_charge_time_to_full()` on `timeToFullChargeMin` (e.g. `6h 34m to full` instead of misreading API hours as minutes). — SSL cert failures are now detected inside `URLError` wrappers (frozen builds without a CA bundle silently failed before); once the unverified-context fallback succeeds it sticks for the session. Tiles are disk-cached in `map-tiles/` next to the app so the home area renders instantly and offline. All failures append to `map-errors.log` (visible even for the windowed exe) and the map card shows "⚠ map offline — see map-errors.log" when every fetch attempt fails. Manual smoke: `.venv\Scripts\python.exe test\smoke_map_fetch.py [lat] [lon]`; unit tests in `test/test_map_fetch.py`.
 - 2026-07-08: **Portrait overlap fixes** — climate tile lays out bottom-up (pills, temp scale, then adaptive temp block: outside temp moves inline next to "cabin" on short tiles, scale drops when there's no room); odometer value anchors below the tile title, detail rows stop before colliding, FSD donut skipped under 56px; software tile value clamps below its title; portrait stat tiles get taller (map shrinks first, 168px tile minimum). Vivint alarm panel flows top-down with bbox-measured cursors (wrapped headline can't overlap "House Secured") and auto-downsizes the headline font to fit one line. Map tiles now fetch in parallel with per-tile retry, SSL-fallback, stderr logging, partial stitches, and one delayed retry on total failure.
 - 2026-07-08: **Battery stale-cache legend** — `TeslaBatteryPanel` shows last cached % with amber "⚠ cached · Xm ago" pill + "{reason} — data from {time}" when `battery.stale`; `format_freshness_sec` / `format_cached_time_label` in `payload_utils.py`. Smoke: `send_test.py --type tesla-battery-stale`.
 - 2026-07-08: **Dashboard polish round 4** — shared backdrop frame is hidden while the Tesla dashboard is active (its own container was rendering as a double box); map heading indicator is now a compass-needle chevron riding the pulse ring (was a cursor-like arrow); odometer tile draws an FSD donut chart (accent arc + % in center + FSD/Manual legend) when `odometer.fsdMilesPercent` is present — note Tesla only exposes FSD mileage via Fleet Telemetry streaming (`SelfDrivingMilesSinceReset`, HW4 + fw 2025.44.25.5+), not the polled `vehicle_data` endpoint, so live payloads currently omit it.

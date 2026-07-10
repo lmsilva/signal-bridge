@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-08
+**Last updated:** 2026-07-09
 
 ---
 
@@ -70,7 +70,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/timer-sync.js` | Poll Amazon notifications API; mirror active timers; fire verify |
 | `src/alarm-sync.js` | Poll Amazon notifications API; mirror active wake alarms (`Alarm`/`MusicAlarm`) |
 | `src/alexa-alarms.js` | Detect show/set/cancel wake-alarm voice commands (distinct from Vivint security) |
-| `src/tesla-battery.js` | Voice match for "show my tesla battery"; speech-parse fallback |
+| `src/tesla-battery.js` | Voice match for "show tesla battery"; speech-parse fallback |
 | `src/tesla-dashboard.js` | Voice match for "show tesla dashboard" |
 | `src/tesla-dashboard-data.js` | Map Fleet `vehicle_data` → dashboard UDP object |
 | `src/tesla-dashboard-cache.js` | Persist last good dashboard (`data/tesla-dashboard-cache.json`); stale fallback when fetch fails |
@@ -108,7 +108,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 
 ## Tesla Fleet API (battery)
 
-**Voice trigger:** custom routine **"Alexa, show my Tesla battery"** (Alexa may reply "Sent to Display"). Bridge matches on **user utterance** (`tesla-battery.js`), not Alexa speech.
+**Voice trigger:** custom routine **"Alexa, show Tesla battery"** (Alexa may reply "Sent to Display"). Bridge matches on **user utterance** (`tesla-battery.js`), not Alexa speech. Optional `my` / `the` still match.
 
 **Dashboard trigger:** **"Alexa, show Tesla dashboard"** → `tesla-dashboard.query` with full Fleet `vehicle_data` (map, security, battery, climate, TPMS, software, media). Requires Fleet API credentials (no speech fallback).
 
@@ -119,7 +119,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 **Data source:** When `.env` has `TESLA_CLIENT_ID` + `TESLA_CLIENT_SECRET` and `data/tesla-session.json` exists, `listener.js` calls `fetchTeslaBattery()` → UDP `tesla-battery.query` with live Fleet API data. Without credentials, falls back to parsing Alexa's spoken battery %.
 
 ```
-Voice "show my tesla battery"  →  listener  →  tesla-fleet-client (OAuth token)
+Voice "show tesla battery"  →  listener  →  tesla-fleet-client (OAuth token)
                                               →  GET /api/1/vehicles/{vin}/vehicle_data
                                               →  UDP tesla-battery.query  →  display client
 ```
@@ -272,7 +272,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `indoor-temperature.query` | Indoor thermostat — "temperature on/at/in \<location\>" or "humidity of \<location\>" |
 | `air-quality.query` | Air quality monitor — IAQ score + sensor metrics (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` (`started`, `list`, `fired`) |
-| `tesla-battery.query` | "Show my tesla battery" — `battery` object from Fleet API or speech fallback |
+| `tesla-battery.query` | "Show tesla battery" — `battery` object from Fleet API or speech fallback |
 | `tesla-dashboard.query` | "Show Tesla dashboard" — `dashboard` object from Fleet API (`vehicle_data` + `location_data`) |
 | `alarm.snapshot` | Wake alarms list / newly set alarm highlight |
 
@@ -363,7 +363,10 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 
 ## Recent changes
 
-- 2026-07-08: **Vivint duplicate-display fix** — `voice-event-dedup.js` fingerprints `vivint-alarm`/`alexa-notifications` by kind|device|query (not activity id) so push/history/response records of one command dedupe together; spoken-response upgrades that render identical content are suppressed; `pending-voice-responses.tryComplete` returns `sourceActivityId` and the listener retires the original query activity. `parseAlarmStatusFromSpeech` now reads stay/away mode from the query so the initial display is complete.
+- 2026-07-09: **Time display flicker** — `resolve_time_display_datetime` prefers parsed hour/minute over ISO/activity timestamp (UTC activity time showed as wrong local hour, e.g. 4:15 PM before 10:15 PM); bridge `parseSpokenTime` builds ISO in `alarmSync.localTimeZone`.
+- 2026-07-09: **Media volume display** — `formatMediaVolumePercent` converts Tesla cabin volume (0–11 scale) to `volumePercent` on dashboard `media`; client shows e.g. `21% volume` instead of raw `vol 2.3333`.
+- 2026-07-09: **Tesla battery voice phrase** — canonical routine trigger is **"show tesla battery"** (optional `my`/`the` still match); tests and smoke payloads updated.
+- 2026-07-09: **Charge time to full** — `estimateTimeToFullChargeMin` in `tesla-dashboard-data.js` computes remaining range at the current `charge_rate` (mi/hr) instead of treating Tesla's `time_to_full_charge` (hours) as minutes; falls back to `minutes_to_full_charge` or `time_to_full_charge * 60`. Dashboard battery exposes `timeToFullChargeMin`. — `voice-event-dedup.js` fingerprints `vivint-alarm`/`alexa-notifications` by kind|device|query (not activity id) so push/history/response records of one command dedupe together; spoken-response upgrades that render identical content are suppressed; `pending-voice-responses.tryComplete` returns `sourceActivityId` and the listener retires the original query activity. `parseAlarmStatusFromSpeech` now reads stay/away mode from the query so the initial display is complete.
 - 2026-07-08: **Battery cache fallback** — new `src/tesla-battery-cache.js` persists last good `tesla-battery.query` reading; throttled/rate-limited/offline fetches serve cached % with `stale`, `staleReason`, `cachedAt`, `freshnessSec` (also reads dashboard cache when no dedicated battery cache).
 - 2026-07-08: **Dashboard wake retry** — after `wake_up`, `fetchTeslaVehicleData` polls `vehicle_data` up to 3 times (4/6/8s backoff) before giving up, so a sleeping car recovers instead of returning "Vehicle unavailable". FSD mileage note: Fleet API only exposes it via Fleet Telemetry streaming (`SelfDrivingMilesSinceReset`, HW4 + fw 2025.44.25.5+), not `vehicle_data`, so `odometer.fsdMilesPercent` stays null on live fetches.
 - 2026-07-08: **Dashboard cache fallback** — new `src/tesla-dashboard-cache.js` persists the last good dashboard; failed fetches serve the cached snapshot marked `stale` instead of an empty error screen. Software tile mapping fixed: idle cars (`software_update.status === ''`) report `updateAvailable: false`, `downloadPercent: null`, "Up to date" (no more "downloaded 0%").

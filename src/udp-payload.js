@@ -35,7 +35,14 @@ function buildBroadcastPayload(record, config) {
 }
 
 function buildTimeQueryPayload(event, config) {
-  const parsedTime = parseSpokenTime(event.spokenResponse, new Date(event.timestamp));
+  const timeZone = config.voiceEvents?.localTimeZone
+    || config.alarmSync?.localTimeZone
+    || 'America/Denver';
+  const parsedTime = parseSpokenTime(
+    event.spokenResponse,
+    new Date(event.timestamp),
+    { timeZone },
+  );
 
   return {
     version: 2,

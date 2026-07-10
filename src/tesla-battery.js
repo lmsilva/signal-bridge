@@ -1,4 +1,5 @@
-const TESLA_BATTERY_QUERY_RE = /\b(?:show|read|tell\s+me|what(?:'s|\s+is))\s+(?:me\s+)?(?:my\s+)?tesla\s+battery\b|\btesla\s+battery\b.*\b(?:show|read|check|status)\b/i;
+/** Canonical voice phrase: "show tesla battery" (optional me/my/the). */
+const TESLA_BATTERY_QUERY_RE = /\b(?:show|read|tell\s+me|what(?:'s|\s+is))\s+(?:me\s+)?(?:my\s+)?(?:the\s+)?tesla\s+battery\b|\btesla\s+battery\b.*\b(?:show|read|check|status)\b/i;
 const YOUR_BATTERY_RE = /\b(?:your|the)\s+battery\s+is\s+(?:at\s+)?(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])/i;
 const BATTERY_PERCENT_RE = /\b(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])/i;
 const BATTERY_LEVEL_RE = /\bbattery(?:\s+level)?\s+(?:is\s+)?(?:at\s+)?(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])/i;

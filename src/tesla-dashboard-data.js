@@ -109,6 +109,45 @@ function formatMiles(value) {
   return Math.round(numeric);
 }
 
+/**
+ * Estimate minutes until 100% using remaining range at the current charge rate.
+ * Tesla's time_to_full_charge is in hours (often to the charge limit, not 100%).
+ */
+function estimateTimeToFullChargeMin(charge, percent, { isCharging = false } = {}) {
+  if (!isCharging || percent == null) {
+    return null;
+  }
+  const current = Number(percent);
+  const targetPercent = 100;
+  if (!Number.isFinite(current) || current >= targetPercent) {
+    return 0;
+  }
+
+  const chargeRateMph = Number(charge?.charge_rate);
+  const rangeMiles = Number(charge?.battery_range ?? charge?.est_battery_range);
+  if (Number.isFinite(chargeRateMph) && chargeRateMph > 0
+    && Number.isFinite(rangeMiles) && rangeMiles > 0 && current > 0) {
+    const fullRangeMiles = rangeMiles / (current / 100);
+    const milesRemaining = fullRangeMiles * ((targetPercent - current) / 100);
+    const hours = milesRemaining / chargeRateMph;
+    if (Number.isFinite(hours) && hours > 0) {
+      return Math.max(1, Math.round(hours * 60));
+    }
+  }
+
+  const apiMinutes = Number(charge?.minutes_to_full_charge);
+  if (Number.isFinite(apiMinutes) && apiMinutes > 0) {
+    return Math.round(apiMinutes);
+  }
+
+  const apiHours = Number(charge?.time_to_full_charge);
+  if (Number.isFinite(apiHours) && apiHours > 0) {
+    return Math.round(apiHours * 60);
+  }
+
+  return null;
+}
+
 function formatEnergyKwh(value) {
   const numeric = Number(value);
   if (Number.isNaN(numeric)) {
@@ -143,6 +182,21 @@ function mapMediaSource(media = {}) {
     return station;
   }
   return null;
+}
+
+const TESLA_MEDIA_VOLUME_MAX = 11;
+
+/** Tesla cabin volume is 0–11 (or vehicle max); return 0–100 for display. */
+function formatMediaVolumePercent(media = {}) {
+  const raw = media.audio_volume ?? media.media_audio_volume;
+  const vol = Number(raw);
+  if (!Number.isFinite(vol) || vol < 0) {
+    return null;
+  }
+  const maxRaw = media.audio_volume_max ?? media.media_audio_volume_max;
+  const max = Number(maxRaw);
+  const ceiling = Number.isFinite(max) && max > 0 ? max : TESLA_MEDIA_VOLUME_MAX;
+  return Math.max(0, Math.min(100, Math.round((vol / ceiling) * 100)));
 }
 
 const TIRE_ROTATION_INTERVAL_MILES = 6250;
@@ -327,7 +381,7 @@ function buildDashboardFromVehicleData(vehicleData, { fetchedAt, error = null, s
       chargeRateMph: charge.charge_rate ?? null,
       chargeCurrentAmp: charge.charge_current_request ?? charge.charger_actual_current ?? null,
       chargerVoltage: charge.charger_voltage ?? null,
-      timeToFullChargeMin: charge.time_to_full_charge ?? null,
+      timeToFullChargeMin: estimateTimeToFullChargeMin(charge, percent, { isCharging }),
       lastChargeKwh: charge.charge_energy_added ?? null,
       lifetimeEnergy: formatEnergyKwh(charge.lifetime_energy_used),
     },
@@ -362,7 +416,7 @@ function buildDashboardFromVehicleData(vehicleData, { fetchedAt, error = null, s
       title: media.now_playing_title || media.now_playing_line_one || null,
       artist: media.now_playing_artist || media.now_playing_line_two || null,
       source: mapMediaSource(media),
-      volume: media.audio_volume ?? media.media_audio_volume ?? null,
+      volumePercent: formatMediaVolumePercent(media),
     },
   };
 }
@@ -402,5 +456,7 @@ module.exports = {
   celsiusToF,
   headingLabel,
   mapMediaSource,
+  formatMediaVolumePercent,
   serviceDueInMiles,
+  estimateTimeToFullChargeMin,
 };

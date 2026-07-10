@@ -66,11 +66,89 @@ def parse_iso_timestamp(value: str) -> datetime | None:
         return None
 
 
+def resolve_time_display_datetime(payload: dict | None) -> datetime:
+    """Resolve the clock to show for a time.query payload.
+
+    Prefer parsed hour/minute (user-local wall clock) over ISO timestamps, which
+    can be wrong when the bridge runs in UTC. Never use the activity timestamp
+    as the clock — that causes a visible flicker (e.g. 4:15 PM before 10:15 PM).
+    """
+    payload = payload or {}
+    parsed = payload.get("parsedTime") or {}
+    hour = parsed.get("hour")
+    minute = parsed.get("minute")
+    if hour is not None and minute is not None:
+        now = datetime.now().astimezone()
+        second = parsed.get("second") or 0
+        try:
+            return now.replace(
+                hour=int(hour),
+                minute=int(minute),
+                second=int(second),
+                microsecond=0,
+            )
+        except ValueError:
+            pass
+
+    if parsed.get("iso"):
+        dt = parse_iso_timestamp(parsed["iso"])
+        if dt:
+            return dt.astimezone()
+
+    spoken = payload.get("spokenResponse") or ""
+    for fmt in ("%I:%M %p", "%I:%M:%S %p", "%H:%M"):
+        try:
+            clock = datetime.strptime(spoken.strip().split("It's")[-1].strip(), fmt)
+            now = datetime.now().astimezone()
+            return now.replace(
+                hour=clock.hour,
+                minute=clock.minute,
+                second=clock.second,
+                microsecond=0,
+            )
+        except ValueError:
+            continue
+
+    return datetime.now().astimezone()
+
+
 def format_chip_timestamp(value: str) -> str:
     parsed = parse_iso_timestamp(value)
     if parsed:
         return parsed.astimezone().strftime("%b %d · %I:%M %p")
     return value or datetime.now().astimezone().strftime("%b %d · %I:%M %p")
+
+
+def format_charge_time_to_full(minutes: int | float | None) -> str:
+    if minutes is None:
+        return ""
+    total = max(0, int(round(float(minutes))))
+    if total <= 0:
+        return "full"
+    hours, mins = divmod(total, 60)
+    if hours and mins:
+        return f"{hours}h {mins}m to full"
+    if hours:
+        return f"{hours}h to full"
+    return f"{mins} min to full"
+
+
+def format_tesla_media_volume_label(media: dict | None) -> str:
+    """Human-readable cabin volume (Tesla reports 0–11, not a percent)."""
+    if not media:
+        return ""
+    volume_percent = media.get("volumePercent")
+    if volume_percent is not None:
+        pct = max(0, min(100, int(round(float(volume_percent)))))
+        return f"{pct}% volume"
+    raw = media.get("volume")
+    if raw is None:
+        return ""
+    try:
+        pct = max(0, min(100, int(round(float(raw) / 11 * 100))))
+    except (TypeError, ValueError):
+        return ""
+    return f"{pct}% volume"
 
 
 def format_duration(seconds: int | float | None) -> str:

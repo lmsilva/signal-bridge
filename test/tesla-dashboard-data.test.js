@@ -5,7 +5,9 @@ const {
   barToPsi,
   headingLabel,
   mapMediaSource,
+  formatMediaVolumePercent,
   serviceDueInMiles,
+  estimateTimeToFullChargeMin,
 } = require('../src/tesla-dashboard-data');
 const { buildTeslaDashboardPayload } = require('../src/udp-payload');
 
@@ -79,6 +81,7 @@ test('buildDashboardFromVehicleData maps fleet vehicle_data', () => {
   assert.ok(dashboard.tires.alert);
   assert.equal(dashboard.media.playing, false);
   assert.equal(dashboard.media.source, 'Spotify');
+  assert.equal(dashboard.media.volumePercent, 50);
   assert.equal(dashboard.odometer.serviceDueInMiles, 6250 * 3 - 18442);
   assert.equal(dashboard.software.updateAvailable, true);
   assert.equal(dashboard.software.statusLabel, 'Update ready');
@@ -101,6 +104,16 @@ test('software tile stays quiet when no update exists', () => {
   assert.equal(dashboard.software.updateVersion, null);
 });
 
+test('formatMediaVolumePercent converts Tesla 0-11 scale to user percent', () => {
+  assert.equal(formatMediaVolumePercent({ media_audio_volume: 5.5 }), 50);
+  assert.equal(formatMediaVolumePercent({ media_audio_volume: 2.3333 }), 21);
+  assert.equal(
+    formatMediaVolumePercent({ media_audio_volume: 7, media_audio_volume_max: 10 }),
+    70,
+  );
+  assert.equal(formatMediaVolumePercent({}), null);
+});
+
 test('mapMediaSource hides opaque numeric codes and prefers bluetooth name', () => {
   assert.equal(mapMediaSource({ now_playing_source: 'Spotify' }), 'Spotify');
   assert.equal(mapMediaSource({ now_playing_source: '5' }), null);
@@ -118,6 +131,49 @@ test('serviceDueInMiles counts down to next tire rotation', () => {
   assert.equal(serviceDueInMiles(18442), 6250 * 3 - 18442);
   assert.equal(serviceDueInMiles(6250), 6250);
   assert.equal(serviceDueInMiles(null), null);
+});
+
+test('estimateTimeToFullChargeMin uses remaining range at current charge rate', () => {
+  const charge = {
+    battery_range: 140,
+    charge_rate: 21.3,
+    time_to_full_charge: 3.75,
+  };
+  const minutes = estimateTimeToFullChargeMin(charge, 50, { isCharging: true });
+  // 50% → 140 mi left of ~280 mi full; 140 mi at 21.3 mi/hr ≈ 6.57 h ≈ 394 min
+  assert.equal(minutes, 394);
+});
+
+test('estimateTimeToFullChargeMin converts Tesla hours when rate is unavailable', () => {
+  const minutes = estimateTimeToFullChargeMin(
+    { time_to_full_charge: 3.75 },
+    50,
+    { isCharging: true },
+  );
+  assert.equal(minutes, 225);
+});
+
+test('buildDashboardFromVehicleData maps charging time to full from charge rate', () => {
+  const dashboard = buildDashboardFromVehicleData({
+    state: 'online',
+    charge_state: {
+      battery_level: 50,
+      battery_range: 140,
+      charge_rate: 21.3,
+      charger_power: 6,
+      charger_voltage: 238,
+      charge_current_request: 24,
+      charging_state: 'Charging',
+      time_to_full_charge: 3.75,
+    },
+    drive_state: {},
+    vehicle_state: { locked: true },
+    climate_state: {},
+    vehicle_config: { car_type: 'modely' },
+  }, { fetchedAt: '2026-07-08T22:00:00.000Z' });
+
+  assert.equal(dashboard.battery.charging, true);
+  assert.equal(dashboard.battery.timeToFullChargeMin, 394);
 });
 
 test('buildTeslaDashboardPayload includes dashboard object', () => {

@@ -28,6 +28,18 @@ test('parseSpokenTime parses clock-style Alexa response', () => {
   assert.match(parsed.timeLabel, /3:45/);
 });
 
+test('parseSpokenTime builds ISO in configured local timezone', () => {
+  const parsed = parseSpokenTime(
+    "It's 10:15 PM",
+    new Date('2026-07-10T04:15:00.000Z'),
+    { timeZone: 'America/Denver' },
+  );
+  assert.ok(parsed);
+  assert.equal(parsed.hour, 22);
+  assert.equal(parsed.minute, 15);
+  assert.equal(parsed.iso, '2026-07-10T04:15:00.000Z');
+});
+
 test('extractWeatherLocation resolves local weather to configured default', () => {
   const location = extractWeatherLocation('what is the weather like outside', config.voiceEvents.defaultLocation);
   assert.equal(location.scope, 'local');

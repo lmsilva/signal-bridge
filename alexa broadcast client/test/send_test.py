@@ -417,7 +417,7 @@ def build_payload(args) -> dict:
             "timestamp": _iso_now(),
             "displaySeconds": display_seconds,
             "trigger": "test",
-            "query": "show my tesla battery",
+            "query": "show tesla battery",
             "spokenResponse": f"Your battery is at {percent} percent",
             "battery": {
                 "percent": percent,
@@ -436,7 +436,7 @@ def build_payload(args) -> dict:
             "timestamp": _iso_now(),
             "displaySeconds": display_seconds,
             "trigger": "test",
-            "query": "show my tesla battery",
+            "query": "show tesla battery",
             "battery": {
                 "percent": None,
                 "model": "Model Y",
@@ -458,7 +458,7 @@ def build_payload(args) -> dict:
             "timestamp": _iso_now(),
             "displaySeconds": display_seconds,
             "trigger": "test",
-            "query": "show my tesla battery",
+            "query": "show tesla battery",
             "battery": {
                 "percent": percent,
                 "model": "Model Y",
@@ -549,7 +549,7 @@ def build_payload(args) -> dict:
                 "media": {
                     "playing": False,
                     "source": "Spotify",
-                    "volume": 5.5,
+                    "volumePercent": 50,
                 },
             },
         }

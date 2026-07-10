@@ -7,7 +7,7 @@ test('tesla battery queries are not tracked as pending responses', () => {
   pending.remember({
     kind: 'tesla-battery',
     device: 'Office Echo',
-    query: 'show my tesla battery',
+    query: 'show tesla battery',
     spokenResponse: null,
     trigger: 'tesla-battery-query',
   });

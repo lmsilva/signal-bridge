@@ -5,7 +5,7 @@ const { buildTeslaBatteryPayload } = require('../src/udp-payload');
 test('buildTeslaBatteryPayload includes fleet-api battery fields', () => {
   const event = {
     device: 'Kitchen Echo',
-    query: 'show my tesla battery',
+    query: 'show tesla battery',
     trigger: 'tesla-battery-query',
     timestamp: '2026-07-08T21:00:00.000Z',
   };
@@ -31,7 +31,7 @@ test('buildTeslaBatteryPayload includes fleet-api battery fields', () => {
 
 test('buildTeslaBatteryPayload forwards rate-limit error metadata', () => {
   const payload = buildTeslaBatteryPayload(
-    { device: 'Office Echo', query: 'show my tesla battery' },
+    { device: 'Office Echo', query: 'show tesla battery' },
     {},
     {
       battery: {
