@@ -39,6 +39,28 @@ test('tesla dashboard processes immediately without Alexa spoken response', () =
   );
 });
 
+test('indoor query with unmatched location waits for the spoken response', () => {
+  assert.equal(
+    needsSpokenResponseUpgrade({
+      kind: 'indoor-temperature',
+      query: "what's the temperature in palmyra",
+      spokenResponse: null,
+    }),
+    true,
+  );
+});
+
+test('indoor query with a known room processes immediately', () => {
+  assert.equal(
+    needsSpokenResponseUpgrade({
+      kind: 'indoor-temperature',
+      query: "what's the temperature in Room 14",
+      spokenResponse: null,
+    }),
+    false,
+  );
+});
+
 test('shouldMarkActivityProcessed still defers music until spoken response arrives', () => {
   assert.equal(
     shouldMarkActivityProcessed({ kind: 'music', spokenResponse: null }),

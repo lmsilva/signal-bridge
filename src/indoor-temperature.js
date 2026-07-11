@@ -120,11 +120,25 @@ function matchesIndoorQuery(summary, response) {
 function resolveIndoorQueryLocation(query, spoken, config = {}) {
   const spokenReading = parseIndoorReading(spoken, config);
   const queryPhrase = extractIndoorLocationPhrase(query);
-  const phrase = queryPhrase || spokenReading.locationPhrase;
-  if (!phrase) {
-    return resolveIndoorLocation(cleanupLocationPhrase(query), config);
+  const spokenPhrase = spokenReading.locationPhrase;
+
+  // A phrase that maps to a configured sensor always wins; an unmatched query
+  // phrase (often a misheard transcript) yields to a matched spoken location.
+  const fromQuery = queryPhrase ? resolveIndoorLocation(queryPhrase, config) : null;
+  if (fromQuery?.matched) {
+    return fromQuery;
   }
-  return resolveIndoorLocation(phrase, config);
+  const fromSpoken = spokenPhrase ? resolveIndoorLocation(spokenPhrase, config) : null;
+  if (fromSpoken?.matched) {
+    return fromSpoken;
+  }
+  if (fromQuery) {
+    return fromQuery;
+  }
+  if (fromSpoken) {
+    return fromSpoken;
+  }
+  return resolveIndoorLocation(cleanupLocationPhrase(query), config);
 }
 
 function buildIndoorReading(event, config = {}) {

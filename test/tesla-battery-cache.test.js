@@ -6,6 +6,7 @@ const path = require('path');
 const {
   loadBatteryCache,
   saveBatteryCache,
+  buildRefreshingReading,
   applyBatteryFallback,
   resolveCachePath,
   readingFromDashboard,
@@ -87,6 +88,30 @@ test('applyBatteryFallback marks cached reading stale with age', () => {
   assert.equal(result.cachedAt, '2026-07-08T22:00:00.000Z');
   assert.equal(result.freshnessSec, 5 * 60);
   assert.equal(result.limitResetAt, '2026-07-08T22:01:00.000Z');
+});
+
+test('buildRefreshingReading marks cache as refreshing preview', () => {
+  const cached = {
+    status: 'ok',
+    percent: 71,
+    model: 'Model Y',
+    fetchedAt: '2026-07-11T18:00:00.000Z',
+  };
+  const now = Date.parse('2026-07-11T18:08:00.000Z');
+  const preview = buildRefreshingReading(cached, now);
+
+  assert.equal(preview.percent, 71);
+  assert.equal(preview.status, 'ok');
+  assert.equal(preview.stale, true);
+  assert.equal(preview.refreshing, true);
+  assert.equal(preview.staleReason, 'Refreshing live data');
+  assert.equal(preview.cachedAt, '2026-07-11T18:00:00.000Z');
+  assert.equal(preview.freshnessSec, 8 * 60);
+});
+
+test('buildRefreshingReading returns null without usable cache', () => {
+  assert.equal(buildRefreshingReading(null), null);
+  assert.equal(buildRefreshingReading({ status: 'ok', percent: null }), null);
 });
 
 test('applyBatteryFallback keeps live reading and error without cache', () => {

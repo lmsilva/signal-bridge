@@ -26,6 +26,7 @@ from src.payload_utils import (
     parse_spoken_battery_percent,
     parse_spoken_indoor,
     parse_spoken_weather,
+    processing_stage_message,
     resolve_display_type,
     resolve_time_display_datetime,
     sample_hourly_indices,
@@ -78,6 +79,28 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(format_tesla_media_volume_label({"volumePercent": 21}), "21% volume")
         self.assertEqual(format_tesla_media_volume_label({"volume": 2.3333}), "21% volume")
         self.assertEqual(format_tesla_media_volume_label({"volumePercent": 50}), "50% volume")
+
+    def test_processing_payload_type_and_title(self):
+        self.assertEqual(
+            resolve_display_type({"type": "request.processing"}), "request.processing"
+        )
+        self.assertEqual(
+            title_for_display_type("request.processing"), ("Alexa", "Working on it")
+        )
+
+    def test_processing_stage_message_picks_latest_reached_stage(self):
+        stages = [
+            {"afterSec": 0, "message": "Request received"},
+            {"afterSec": 5, "message": "Fetching data"},
+            {"afterSec": 12, "message": "Still working"},
+        ]
+        self.assertEqual(processing_stage_message(stages, 0), "Request received")
+        self.assertEqual(processing_stage_message(stages, 4.9), "Request received")
+        self.assertEqual(processing_stage_message(stages, 5), "Fetching data")
+        self.assertEqual(processing_stage_message(stages, 30), "Still working")
+        self.assertEqual(processing_stage_message([], 10), "")
+        self.assertEqual(processing_stage_message(None, 10), "")
+        self.assertEqual(processing_stage_message([{"bogus": True}], 10), "")
 
     def test_resolve_time_display_prefers_parsed_components(self):
         payload = {

@@ -6,6 +6,7 @@ const path = require('path');
 const {
   loadDashboardCache,
   saveDashboardCache,
+  buildRefreshingDashboard,
   applyDashboardFallback,
   resolveCachePath,
 } = require('../src/tesla-dashboard-cache');
@@ -57,6 +58,27 @@ test('applyDashboardFallback marks cached dashboard stale with age', () => {
   assert.equal(result.cachedAt, '2026-07-08T22:00:00.000Z');
   assert.equal(result.freshnessSec, 25 * 60);
   assert.equal(result.vehicle.name, 'Model Y');
+});
+
+test('buildRefreshingDashboard marks cache as refreshing preview', () => {
+  const cached = {
+    status: 'ok',
+    fetchedAt: '2026-07-11T18:00:00.000Z',
+    vehicle: { name: 'Model Y' },
+  };
+  const now = Date.parse('2026-07-11T18:06:00.000Z');
+  const preview = buildRefreshingDashboard(cached, now);
+
+  assert.equal(preview.stale, true);
+  assert.equal(preview.refreshing, true);
+  assert.equal(preview.staleReason, 'Refreshing live data');
+  assert.equal(preview.cachedAt, '2026-07-11T18:00:00.000Z');
+  assert.equal(preview.freshnessSec, 6 * 60);
+  assert.equal(preview.vehicle.name, 'Model Y');
+});
+
+test('buildRefreshingDashboard returns null without cache', () => {
+  assert.equal(buildRefreshingDashboard(null), null);
 });
 
 test('applyDashboardFallback keeps live dashboard and error without cache', () => {

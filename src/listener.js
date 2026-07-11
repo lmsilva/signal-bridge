@@ -34,6 +34,7 @@ const {
   buildVivintAlarmPayload,
   buildNotificationsPayload,
   buildSmartHomePayload,
+  buildProcessingAckPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
 } = require('./udp-payload');
@@ -68,6 +69,9 @@ const VOLUME_POLL_DELAY_MS = 2000;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
 const PERIODIC_LOOKBACK_MS = 15 * 60 * 1000;
 const PERIODIC_POLL_MS = 60 * 1000;
+// When the push channel is down, history polling is the only capture path, so
+// poll more aggressively to keep voice commands from feeling dropped.
+const PUSH_DOWN_POLL_MS = 15 * 1000;
 const HEALTH_LOG_MS = 5 * 60 * 1000;
 const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
@@ -207,7 +211,7 @@ function createListener({ config, log }) {
     }
 
     if (!voiceEventDedup.shouldEmit(voiceEvent)) {
-      if (shouldMarkActivityProcessed(voiceEvent)) {
+      if (shouldMarkActivityProcessed(voiceEvent, config)) {
         voiceQueryParser.markProcessed(activityId);
       }
       if (config.debug) {
@@ -221,7 +225,7 @@ function createListener({ config, log }) {
       return;
     }
 
-    if (shouldMarkActivityProcessed(voiceEvent)) {
+    if (shouldMarkActivityProcessed(voiceEvent, config)) {
       voiceQueryParser.markProcessed(activityId);
     } else {
       log.info('Voice event captured (awaiting Alexa response upgrade)', {
@@ -283,6 +287,38 @@ function createListener({ config, log }) {
 
     if (event.kind === 'alexa-notifications' && !voiceSettings.notificationQueries) {
       return;
+    }
+
+    // Slow external-API commands (Tesla Fleet can take 10-30s if the car has
+    // to wake) get instant on-screen feedback: the cached snapshot marked
+    // "refreshing" when one exists (real data replaces it once the live fetch
+    // lands), otherwise a processing acknowledgment placeholder.
+    if ((event.kind === 'tesla-battery' || event.kind === 'tesla-dashboard')
+      && isFleetConfigured(config.teslaFleet)) {
+      let preview = null;
+      if (event.kind === 'tesla-battery') {
+        const { loadBatteryCache, buildRefreshingReading } = require('./tesla-battery-cache');
+        const cachedReading = buildRefreshingReading(loadBatteryCache(config));
+        if (cachedReading) {
+          preview = buildTeslaBatteryPayload(event, config, { battery: cachedReading });
+        }
+      } else {
+        const { loadDashboardCache, buildRefreshingDashboard } = require('./tesla-dashboard-cache');
+        const cachedDashboard = buildRefreshingDashboard(loadDashboardCache(config));
+        if (cachedDashboard) {
+          preview = buildTeslaDashboardPayload(event, config, { dashboard: cachedDashboard });
+        }
+      }
+      if (preview) {
+        sendUdpPayload(preview);
+        log.info(`Cached preview sent while refreshing (${event.kind}) for ${event.device}`);
+      } else {
+        const ack = buildProcessingAckPayload(event, config);
+        if (ack) {
+          sendUdpPayload(ack);
+          log.info(`Processing ack sent (${event.kind}) for ${event.device}`);
+        }
+      }
     }
 
     let payload;
@@ -461,6 +497,16 @@ function createListener({ config, log }) {
         } catch (error) {
           log.warn('Indoor sensor fetch failed', error.message || error);
         }
+      }
+      // A location that matches no configured sensor with nothing to show is
+      // almost always a misheard transcript from a second Echo (e.g. "palmyra"
+      // for "Room 14") — displaying it just flashes a wrong room name.
+      if (!location?.matched && reading?.temperatureF == null && reading?.humidity == null) {
+        log.info('Indoor query skipped (unknown location, no reading yet)', {
+          query: event.query,
+          location: location?.query || null,
+        });
+        return;
       }
       payload = buildIndoorTemperaturePayload(event, config, { location, reading });
     } else if (event.kind === 'air-quality') {
@@ -817,6 +863,9 @@ function createListener({ config, log }) {
 
     alexa.on('ws-disconnect', (retries, message) => {
       log.warn('Disconnected from Alexa push channel', { retries, message });
+      // Cover the gap immediately — anything spoken around the disconnect
+      // would otherwise wait for the next periodic poll.
+      scheduleHistoryPoll('push-disconnect');
       authJournal?.recordFailure({
         type: 'push_disconnected',
         source: 'listener',
@@ -841,8 +890,26 @@ function createListener({ config, log }) {
       scheduleHistoryPoll('volume-change');
     });
 
+    // Any push traffic implies someone just talked to an Echo. Not every
+    // interaction emits a PUSH_ACTIVITY (e.g. "show my shopping list" often
+    // arrives only as a todo/content-focus push), so use these as capture
+    // hints and poll history shortly after. scheduleHistoryPoll debounces.
+    alexa.on('ws-todo-change', (change) => {
+      log.debug('Shopping/todo list change detected', change);
+      scheduleHistoryPoll('todo-change');
+    });
+
+    alexa.on('ws-content-focus-change', () => {
+      scheduleHistoryPoll('content-focus');
+    });
+
+    alexa.on('ws-media-change', () => {
+      scheduleHistoryPoll('media-change');
+    });
+
     alexa.on('ws-unknown-command', (command, payload) => {
       log.debug('Unknown push command', { command, payload });
+      scheduleHistoryPoll('push-command');
     });
   }
 
@@ -901,9 +968,17 @@ function createListener({ config, log }) {
           });
         }
 
+        let lastPeriodicPollAt = 0;
         periodicPollTimer = setInterval(() => {
-          pollRecentHistory('periodic', PERIODIC_LOOKBACK_MS);
-        }, PERIODIC_POLL_MS);
+          const pushConnected = alexa.isPushConnected?.() ?? false;
+          const interval = pushConnected ? PERIODIC_POLL_MS : PUSH_DOWN_POLL_MS;
+          const now = Date.now();
+          if (now - lastPeriodicPollAt < interval - 250) {
+            return;
+          }
+          lastPeriodicPollAt = now;
+          pollRecentHistory(pushConnected ? 'periodic' : 'periodic-push-down', PERIODIC_LOOKBACK_MS);
+        }, PUSH_DOWN_POLL_MS);
 
         healthTimer = setInterval(logHealth, HEALTH_LOG_MS);
         logHealth();

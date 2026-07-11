@@ -78,6 +78,23 @@ test('resolveIndoorQueryLocation prefers spoken location phrase', () => {
   assert.equal(location.entity, 'Room 10');
 });
 
+test('resolveIndoorQueryLocation lets a matched spoken room override a misheard query', () => {
+  // A second Echo transcribed "Room 14" as "palmyra"; Alexa's answer
+  // names the real room, which should win over the unmatched transcript.
+  const location = resolveIndoorQueryLocation(
+    "what's the temperature in palmyra",
+    "It's 72 degrees in Room 14",
+  );
+  assert.equal(location.entity, 'Room 10');
+  assert.equal(location.matched, true);
+});
+
+test('resolveIndoorQueryLocation keeps unmatched query phrase when nothing matches', () => {
+  const location = resolveIndoorQueryLocation("what's the temperature in palmyra", null);
+  assert.equal(location.matched, false);
+  assert.equal(location.label, 'Palmyra');
+});
+
 test('comfortBand uses cold below 68 and hot above 74', () => {
   assert.equal(comfortBand(67), 'cold');
   assert.equal(comfortBand(70), 'comfortable');

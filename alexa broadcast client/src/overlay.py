@@ -11,6 +11,7 @@ from src.display_panels import (
     BroadcastPanel,
     IndoorTemperaturePanel,
     MusicPanel,
+    ProcessingPanel,
     ShoppingListPanel,
     NotificationsPanel,
     SmartHomePanel,
@@ -127,6 +128,7 @@ class OverlayWindow:
             "tesla-dashboard.query": TeslaDashboardPanel(self.root, self.shell, self.config),
             "vivint-alarm.query": VivintAlarmPanel(self.root, self.shell, self.config),
             "alexa-notifications.query": NotificationsPanel(self.root, self.shell, self.config),
+            "request.processing": ProcessingPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 

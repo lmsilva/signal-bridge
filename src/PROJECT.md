@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-11
 
 ---
 
@@ -274,6 +274,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` (`started`, `list`, `fired`) |
 | `tesla-battery.query` | "Show tesla battery" — `battery` object from Fleet API or speech fallback |
 | `tesla-dashboard.query` | "Show Tesla dashboard" — `dashboard` object from Fleet API (`vehicle_data` + `location_data`) |
+| `request.processing` | Instant ack for slow external-API commands (Tesla) when **no cache exists** — `request.{title,source,timeoutSeconds,stages[]}`; when a cached snapshot exists the bridge sends it instead, flagged `stale+refreshing`. Either is replaced by the real payload when the fetch completes |
 | `alarm.snapshot` | Wake alarms list / newly set alarm highlight |
 
 **Indoor vs outdoor routing:** Generic "what's the temperature" → outdoor (`weather.query`). Location-specific ("top floor", "bedroom echo", "Room 14") → indoor. Spoken Alexa response supplies the reading (e.g. "It's 76 degrees on the top floor"). Humidity only when explicitly asked for a named location.
@@ -363,6 +364,8 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 
 ## Recent changes
 
+- 2026-07-11: **Cache-first Tesla + capture robustness + indoor mishear guard** — (1) Tesla battery/dashboard queries now send the cached snapshot instantly flagged `stale+refreshing` (`buildRefreshingReading`/`buildRefreshingDashboard` in the cache modules) while the live Fleet fetch runs; the live payload replaces it. The `request.processing` ack is only sent when no cache exists. (2) Listener polls history every 15s while the push channel is down (60s when up), polls immediately on `ws-disconnect`, and treats `ws-todo-change`/`ws-content-focus-change`/`ws-media-change`/`ws-unknown-command` push traffic as capture hints (debounced 2s poll) — fixes "show my shopping list" arriving up to 60s late when the interaction emitted no PUSH_ACTIVITY. (3) Indoor temperature queries naming an unmatched location (e.g. a second Echo mishearing "Room 14" as "palmyra") are no longer displayed with no data: `resolveIndoorQueryLocation` lets a matched spoken-response room override an unmatched query phrase, `voice-event-gate` defers unmatched indoor queries for the spoken-response upgrade, and the listener drops them entirely when no reading ever materializes.
+- 2026-07-11: **Processing acknowledgment for slow requests** — `buildProcessingAckPayload` (`udp-payload.js`) sends an instant `request.processing` UDP payload for Tesla battery/dashboard queries (Fleet API configured only) before the slow fetch starts. Payload carries `request.title/source/timeoutSeconds(45)/stages[]` (staged reassurance messages at 0/5/12/25s). The real data payload replaces the placeholder; on failure the existing error payload does. Fast kinds (weather, shopping list, music, …) intentionally get no ack — sub-3s loading states hurt UX.
 - 2026-07-09: **Time display flicker** — `resolve_time_display_datetime` prefers parsed hour/minute over ISO/activity timestamp (UTC activity time showed as wrong local hour, e.g. 4:15 PM before 10:15 PM); bridge `parseSpokenTime` builds ISO in `alarmSync.localTimeZone`.
 - 2026-07-09: **Media volume display** — `formatMediaVolumePercent` converts Tesla cabin volume (0–11 scale) to `volumePercent` on dashboard `media`; client shows e.g. `21% volume` instead of raw `vol 2.3333`.
 - 2026-07-09: **Tesla battery voice phrase** — canonical routine trigger is **"show tesla battery"** (optional `my`/`the` still match); tests and smoke payloads updated.

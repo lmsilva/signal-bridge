@@ -26,6 +26,7 @@ class BroadcastClientApp:
             "tesla-dashboard.query",
             "vivint-alarm.query",
             "alexa-notifications.query",
+            "request.processing",
         }
     )
 

@@ -408,6 +408,49 @@ def build_payload(args) -> dict:
             "highlightAmazonId": "alarm-3",
         }
 
+    if args.type == "processing":
+        return {
+            "version": 2,
+            "type": "request.processing",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 60,
+            "trigger": "processing-ack",
+            "kind": "tesla-dashboard",
+            "query": "show tesla dashboard",
+            "request": {
+                "title": "Tesla Dashboard",
+                "source": "Tesla Fleet API",
+                "timeoutSeconds": 45,
+                "stages": [
+                    {"afterSec": 0, "message": "Request received — contacting your Tesla…"},
+                    {"afterSec": 5, "message": "Fetching live vehicle data…"},
+                    {"afterSec": 12, "message": "Still working — your Tesla may be waking up…"},
+                    {"afterSec": 25, "message": "Hang tight — waking a sleeping vehicle can take up to 30 seconds…"},
+                ],
+            },
+        }
+
+    if args.type == "processing-timeout":
+        return {
+            "version": 2,
+            "type": "request.processing",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 20,
+            "trigger": "processing-ack",
+            "kind": "tesla-battery",
+            "query": "show tesla battery",
+            "request": {
+                "title": "Tesla Battery",
+                "source": "Tesla Fleet API",
+                "timeoutSeconds": 5,
+                "stages": [
+                    {"afterSec": 0, "message": "Request received — contacting your Tesla…"},
+                ],
+            },
+        }
+
     if args.type == "tesla-battery":
         percent = max(0, min(100, int(getattr(args, "percent", 78))))
         return {
@@ -448,6 +491,32 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "tesla-battery-refreshing":
+        percent = max(0, min(100, int(getattr(args, "percent", 71))))
+        cached_at = (datetime.now(timezone.utc) - timedelta(minutes=8)).isoformat().replace("+00:00", "Z")
+        return {
+            "version": 2,
+            "type": "tesla-battery.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "show tesla battery",
+            "battery": {
+                "percent": percent,
+                "model": "Model Y",
+                "label": "Battery",
+                "source": "fleet-api",
+                "status": "ok",
+                "stale": True,
+                "refreshing": True,
+                "staleReason": "Refreshing live data",
+                "cachedAt": cached_at,
+                "fetchedAt": cached_at,
+                "freshnessSec": 8 * 60,
+            },
+        }
+
     if args.type == "tesla-battery-stale":
         percent = max(0, min(100, int(getattr(args, "percent", 68))))
         cached_at = (datetime.now(timezone.utc) - timedelta(minutes=12)).isoformat().replace("+00:00", "Z")
@@ -474,7 +543,7 @@ def build_payload(args) -> dict:
             },
         }
 
-    if args.type in ("tesla-dashboard", "tesla-dashboard-stale"):
+    if args.type in ("tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing"):
         payload = {
             "version": 2,
             "type": "tesla-dashboard.query",
@@ -564,6 +633,18 @@ def build_payload(args) -> dict:
                     "freshnessSec": 25 * 60,
                 }
             )
+        if args.type == "tesla-dashboard-refreshing":
+            cached_at = (datetime.now(timezone.utc) - timedelta(minutes=6)).isoformat()
+            payload["dashboard"].update(
+                {
+                    "stale": True,
+                    "refreshing": True,
+                    "staleReason": "Refreshing live data",
+                    "cachedAt": cached_at,
+                    "fetchedAt": cached_at,
+                    "freshnessSec": 6 * 60,
+                }
+            )
         return payload
 
     if args.type == "vivint-alarm":
@@ -638,7 +719,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-dashboard", "tesla-dashboard-stale", "vivint-alarm", "notifications"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout"],
         default="broadcast",
         help="Payload type to send",
     )

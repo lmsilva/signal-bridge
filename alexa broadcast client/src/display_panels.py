@@ -38,6 +38,7 @@ from src.payload_utils import (
     indoor_comfort_band,
     normalize_condition,
     parse_iso_timestamp,
+    processing_stage_message,
     resolve_time_display_datetime,
     parse_qualitative_air_quality_band,
     parse_spoken_air_quality,
@@ -474,6 +475,182 @@ class TimePanel(BasePanel):
             fill=self.CARD, fg=muted, outline=self.CARD_EDGE,
             anchor="n", font=pill_font,
         )
+
+
+class ProcessingPanel(BasePanel):
+    """Instant acknowledgment while the bridge fetches slow external-API data.
+
+    Shows an animated spinner with staged reassurance messages (from the
+    payload) and flips to a timeout/failure state if the real data never
+    arrives. The real payload simply replaces this panel when it lands.
+    """
+
+    TICK_MS = 90
+    DEFAULT_TIMEOUT_SEC = 45
+
+    def __init__(self, root, shell, config):
+        super().__init__(root, shell, config)
+        self._tick_job = None
+        self._started_at = 0.0
+        self._spinner_angle = 0.0
+        self._payload: dict = {}
+        self._timed_out = False
+
+    def _render(self, payload: dict):
+        self._payload = payload
+        self._started_at = time.time()
+        self._spinner_angle = 0.0
+        self._timed_out = False
+        self._draw()
+        self._schedule_tick()
+
+    def _schedule_tick(self):
+        self._stop_tick()
+        self._tick_job = self.root.after(self.TICK_MS, self._on_tick)
+
+    def _on_tick(self):
+        if not self.visible:
+            return
+        self._spinner_angle = (self._spinner_angle - 9) % 360
+        self._draw()
+        if not self._timed_out:
+            self._schedule_tick()
+
+    def _elapsed_sec(self) -> float:
+        return max(0.0, time.time() - self._started_at)
+
+    def _timeout_sec(self) -> float:
+        request = self._payload.get("request") or {}
+        try:
+            value = float(request.get("timeoutSeconds"))
+        except (TypeError, ValueError):
+            return float(self.DEFAULT_TIMEOUT_SEC)
+        return value if value > 0 else float(self.DEFAULT_TIMEOUT_SEC)
+
+    def _draw(self):
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+
+        layout = self.shell.layout
+        accent = self.config.get("accentColor", "#38bdf8")
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+
+        request = self._payload.get("request") or {}
+        elapsed = self._elapsed_sec()
+        timed_out = elapsed >= self._timeout_sec()
+        self._timed_out = timed_out
+
+        center_x = layout.content_x + layout.content_width // 2
+        area_h = layout.message_area_bottom - layout.message_area_top
+        center_y = layout.message_area_top + int(area_h * 0.34)
+        radius = max(44, min(layout.content_width, area_h) // 6)
+
+        # Halo ring + animated spinner arc (static broken ring on timeout).
+        ring_color = self.RED if timed_out else accent
+        self._track(
+            self.canvas.create_oval(
+                center_x - radius - 12, center_y - radius - 12,
+                center_x + radius + 12, center_y + radius + 12,
+                fill=self.INNER, outline=self.CARD_EDGE, width=1,
+            )
+        )
+        self._track(
+            self.canvas.create_oval(
+                center_x - radius, center_y - radius,
+                center_x + radius, center_y + radius,
+                fill=self.CARD, outline=self.CARD_EDGE, width=2,
+            )
+        )
+        if timed_out:
+            self._track(
+                self.canvas.create_text(
+                    center_x, center_y, anchor="center",
+                    text="!", fill=ring_color, font=self.shell.hero_font,
+                )
+            )
+        else:
+            self._track(
+                self.canvas.create_arc(
+                    center_x - radius, center_y - radius,
+                    center_x + radius, center_y + radius,
+                    start=self._spinner_angle, extent=100,
+                    style=tk.ARC, outline=ring_color, width=5,
+                )
+            )
+            self._track(
+                self.canvas.create_arc(
+                    center_x - radius, center_y - radius,
+                    center_x + radius, center_y + radius,
+                    start=self._spinner_angle + 180, extent=60,
+                    style=tk.ARC, outline=ring_color, width=3,
+                )
+            )
+            self._track(
+                self.canvas.create_text(
+                    center_x, center_y, anchor="center",
+                    text="⋯", fill=accent, font=self.shell.section_title_font,
+                )
+            )
+
+        title = request.get("title") or "Your request"
+        headline = f"{title} unavailable" if timed_out else f"Getting {title}…"
+        text_y = center_y + radius + 40
+        self._track(
+            self.canvas.create_text(
+                center_x, text_y, anchor="n",
+                text=headline, fill=text, font=self.shell.section_title_font,
+            )
+        )
+        text_y += self.shell.section_title_font.metrics("linespace") + 14
+
+        if timed_out:
+            message = "This is taking longer than expected — the request may have failed."
+            detail = "Please try asking again in a moment."
+        else:
+            message = processing_stage_message(request.get("stages"), elapsed)
+            message = message or "Request received — fetching live data…"
+            detail = ""
+            if elapsed >= 5:
+                detail = f"{int(elapsed)}s elapsed"
+
+        self._track(
+            self.canvas.create_text(
+                center_x, text_y, anchor="n",
+                text=message, fill=muted, font=self.shell.body_font,
+                width=layout.message_content_width - 40, justify="center",
+            )
+        )
+        text_y += self.shell.body_font.metrics("linespace") * 2 + 10
+
+        if detail:
+            self._track(
+                self.canvas.create_text(
+                    center_x, text_y, anchor="n",
+                    text=detail,
+                    fill=self.RED if timed_out else muted,
+                    font=self.shell.forecast_label_font,
+                )
+            )
+
+        source = request.get("source")
+        device = self._payload.get("device")
+        bits = []
+        if device:
+            bits.append(f"Asked on {device}")
+        if source and not timed_out:
+            bits.append(f"via {source}")
+        if bits:
+            pill_font = self.shell.chip_value_font
+            pill_h = pill_font.metrics("linespace") + 10
+            self._pill(
+                center_x,
+                layout.message_area_bottom - pill_h - 8,
+                " · ".join(bits),
+                fill=self.CARD, fg=muted, outline=self.CARD_EDGE,
+                anchor="n", font=pill_font,
+            )
 
 
 class WeatherPanel(BasePanel):
@@ -2679,27 +2856,43 @@ class TeslaBatteryPanel(BasePanel):
 
         cursor = bar_y1 + 28
         if stale:
+            refreshing = bool(battery.get("refreshing"))
+            cached_time = format_cached_time_label(battery.get("cachedAt") or battery.get("fetchedAt"))
+            if refreshing:
+                pill_text = f"⟳ updating · cached {format_freshness_sec(battery.get('freshnessSec'))}"
+                pill_fill, pill_fg = self.CARD, accent
+                pill_outline = self.CARD_EDGE
+                legend_fill = muted
+                legend = (
+                    f"Showing saved data from {cached_time} — fetching live update…"
+                    if cached_time
+                    else "Showing saved data — fetching live update…"
+                )
+            else:
+                pill_text = f"⚠ cached · {format_freshness_sec(battery.get('freshnessSec'))}"
+                pill_fill, pill_fg = self.AMBER_BG, self.AMBER
+                pill_outline = self.AMBER_BG
+                legend_fill = self.AMBER
+                reason = str(battery.get("staleReason") or "Tesla unreachable")
+                legend = f"{reason} — data from {cached_time}" if cached_time else f"{reason} — showing last known data"
             pill_y = cursor
             self._pill(
                 center_x,
                 pill_y,
-                f"⚠ cached · {format_freshness_sec(battery.get('freshnessSec'))}",
-                fill=self.AMBER_BG,
-                fg=self.AMBER,
-                outline=self.AMBER_BG,
+                pill_text,
+                fill=pill_fill,
+                fg=pill_fg,
+                outline=pill_outline,
                 anchor="n",
             )
             cursor += 34
-            reason = str(battery.get("staleReason") or "Tesla unreachable")
-            cached_time = format_cached_time_label(battery.get("cachedAt") or battery.get("fetchedAt"))
-            legend = f"{reason} — data from {cached_time}" if cached_time else f"{reason} — showing last known data"
             self._track(
                 self.canvas.create_text(
                     center_x,
                     cursor,
                     anchor="n",
                     text=legend,
-                    fill=self.AMBER,
+                    fill=legend_fill,
                     font=self.shell.forecast_label_font,
                     width=width - 80,
                     justify="center",
@@ -3200,23 +3393,39 @@ class TeslaDashboardPanel(BasePanel):
                 )
             )
         if dashboard.get("stale"):
+            refreshing = bool(dashboard.get("refreshing"))
+            cached_time = self._cached_time_label(dashboard)
+            if refreshing:
+                pill_text = f"⟳ updating · cached {self._freshness_label(dashboard)}"
+                pill_fill, pill_fg = self.CARD, accent
+                pill_outline = self.CARD_EDGE
+                legend_fill = muted
+                legend = (
+                    f"Showing saved data from {cached_time} — fetching live update…"
+                    if cached_time
+                    else "Showing saved data — fetching live update…"
+                )
+            else:
+                pill_text = f"⚠ cached · {self._freshness_label(dashboard)}"
+                pill_fill, pill_fg = self.AMBER_BG, self.AMBER
+                pill_outline = self.AMBER_BG
+                legend_fill = self.AMBER
+                legend = "Tesla unreachable — showing last known data"
+                if cached_time:
+                    legend = f"Tesla unreachable — data from {cached_time}"
             self._pill(
                 x + width - 16, y + 30,
-                f"⚠ cached · {self._freshness_label(dashboard)}",
-                fill=self.AMBER_BG,
-                fg=self.AMBER,
-                outline=self.AMBER_BG,
+                pill_text,
+                fill=pill_fill,
+                fg=pill_fg,
+                outline=pill_outline,
                 anchor="ne",
             )
-            legend = "Tesla unreachable — showing last known data"
-            cached_time = self._cached_time_label(dashboard)
-            if cached_time:
-                legend = f"Tesla unreachable — data from {cached_time}"
             self._track(
                 self.canvas.create_text(
                     x + width - 16, y + 62, anchor="ne",
                     text=legend,
-                    fill=self.AMBER,
+                    fill=legend_fill,
                     font=self.shell.forecast_label_font,
                 )
             )

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-11
 
 ---
 
@@ -85,6 +85,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `tesla-dashboard.query` | Mission-control dashboard — live OSM map (from `map.latitude`/`longitude`, dark-tinted tiles, pulsing pin + heading arrow), car render with security pills, battery bar, climate/TPMS/odo/software 2×2 grid, media strip |
 | `vivint-alarm.query` | Lock icon + armed/disarmed status (Vivint stay/away) |
 | `alexa-notifications.query` | Amber notification banner + parsed notification cards |
+| `request.processing` | Animated spinner + staged "working on it" messages while bridge fetches slow external data (Tesla); timeout failure state after `request.timeoutSeconds` |
 
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -202,6 +203,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-11: **Refreshing cache legend** — Tesla battery panel and dashboard header render `stale+refreshing` payloads (bridge cache preview while the live fetch runs) with a calm accent "⟳ updating · cached Xm ago" pill and "Showing saved data from {time} — fetching live update…" legend instead of the amber unreachable styling; the live payload replaces the preview. Smoke: `send_test.py --type tesla-battery-refreshing` / `--type tesla-dashboard-refreshing`.
+- 2026-07-11: **Processing placeholder panel** — new `ProcessingPanel` (`request.processing`) shows an animated spinner, staged reassurance messages from the payload (`processing_stage_message` in `payload_utils.py`), an elapsed-seconds pill after 5s, and a timeout/failure state ("… unavailable / try again") after `request.timeoutSeconds` (45s default). Real data payload replaces it via the normal advance path. Smoke: `send_test.py --type processing` / `--type processing-timeout`.
 - 2026-07-09: **Time panel flicker fix** — `resolve_time_display_datetime` in `payload_utils.py` uses parsed hour/minute or current local time instead of the UDP activity timestamp (which caused a wrong hour flash before the tick corrected it).
 - 2026-07-09: **Media volume label** — Tesla dashboard media tile shows `21% volume` via `format_tesla_media_volume_label` (accepts bridge `volumePercent` or legacy raw 0–11 `volume`).
 - 2026-07-09: **Charge time to full** — Tesla battery card uses `format_charge_time_to_full()` on `timeToFullChargeMin` (e.g. `6h 34m to full` instead of misreading API hours as minutes). — SSL cert failures are now detected inside `URLError` wrappers (frozen builds without a CA bundle silently failed before); once the unverified-context fallback succeeds it sticks for the session. Tiles are disk-cached in `map-tiles/` next to the app so the home area renders instantly and offline. All failures append to `map-errors.log` (visible even for the windowed exe) and the map card shows "⚠ map offline — see map-errors.log" when every fetch attempt fails. Manual smoke: `.venv\Scripts\python.exe test\smoke_map_fetch.py [lat] [lon]`; unit tests in `test/test_map_fetch.py`.

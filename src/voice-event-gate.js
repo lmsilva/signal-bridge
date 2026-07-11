@@ -1,8 +1,10 @@
+const { resolveIndoorQueryLocation } = require('./indoor-temperature');
+
 function hasSpokenResponse(event) {
   return Boolean(String(event?.spokenResponse || '').trim());
 }
 
-function needsSpokenResponseUpgrade(event) {
+function needsSpokenResponseUpgrade(event, config = {}) {
   if (!event || hasSpokenResponse(event)) {
     return false;
   }
@@ -27,11 +29,19 @@ function needsSpokenResponseUpgrade(event) {
     return true;
   }
 
+  // An indoor query naming a room we can't map to a sensor is usually a
+  // misheard transcript; wait for Alexa's answer instead of flashing a wrong
+  // location on screen (the answer may name the real room, or never come).
+  if (event.kind === 'indoor-temperature') {
+    const location = resolveIndoorQueryLocation(event.query, null, config?.indoorTemperature || {});
+    return !location?.matched;
+  }
+
   return false;
 }
 
-function shouldMarkActivityProcessed(event) {
-  return !needsSpokenResponseUpgrade(event);
+function shouldMarkActivityProcessed(event, config = {}) {
+  return !needsSpokenResponseUpgrade(event, config);
 }
 
 module.exports = {

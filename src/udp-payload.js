@@ -257,6 +257,63 @@ function buildNotificationsPayload(event, config, { notifications } = {}) {
   };
 }
 
+// Immediate "we got your request" acks are only worth showing for commands
+// that routinely take >3s (UX guidance: loading states for short operations
+// feel slower, not faster). Tesla Fleet calls can take 10-30s when the
+// vehicle has to wake, so those get a placeholder with staged reassurance
+// messages timed around the ~10s attention threshold.
+const PROCESSING_ACK_TIMEOUT_SEC = 45;
+
+const SLOW_REQUEST_INFO = {
+  'tesla-battery': {
+    title: 'Tesla Battery',
+    source: 'Tesla Fleet API',
+    stages: [
+      { afterSec: 0, message: 'Request received — contacting your Tesla…' },
+      { afterSec: 5, message: 'Fetching battery status from your vehicle…' },
+      { afterSec: 12, message: 'Still working — your Tesla may be waking up…' },
+      { afterSec: 25, message: 'Hang tight — waking a sleeping vehicle can take up to 30 seconds…' },
+    ],
+  },
+  'tesla-dashboard': {
+    title: 'Tesla Dashboard',
+    source: 'Tesla Fleet API',
+    stages: [
+      { afterSec: 0, message: 'Request received — contacting your Tesla…' },
+      { afterSec: 5, message: 'Fetching live vehicle data…' },
+      { afterSec: 12, message: 'Still working — your Tesla may be waking up…' },
+      { afterSec: 25, message: 'Hang tight — waking a sleeping vehicle can take up to 30 seconds…' },
+    ],
+  },
+};
+
+function buildProcessingAckPayload(event, config) {
+  const info = SLOW_REQUEST_INFO[event.kind];
+  if (!info) {
+    return null;
+  }
+
+  return {
+    version: 2,
+    type: 'request.processing',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    // Ceiling covers the timeout plus ~15s for the failure state to be read
+    // before the overlay dismisses itself; the real payload replaces this
+    // placeholder long before then in the normal case.
+    displaySeconds: PROCESSING_ACK_TIMEOUT_SEC + 15,
+    trigger: 'processing-ack',
+    kind: event.kind,
+    query: event.query,
+    request: {
+      title: info.title,
+      source: info.source,
+      timeoutSeconds: PROCESSING_ACK_TIMEOUT_SEC,
+      stages: info.stages,
+    },
+  };
+}
+
 function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
   const spokenTarget = event.command?.target || null;
   return {
@@ -346,6 +403,7 @@ module.exports = {
   buildVivintAlarmPayload,
   buildNotificationsPayload,
   buildSmartHomePayload,
+  buildProcessingAckPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
   displaySeconds,

@@ -19,6 +19,7 @@ DISPLAY_TYPES = (
     "tesla-dashboard.query",
     "vivint-alarm.query",
     "alexa-notifications.query",
+    "request.processing",
 )
 
 
@@ -53,8 +54,24 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "tesla-dashboard.query": ("Tesla", "mission control"),
         "vivint-alarm.query": ("Alexa", "Security"),
         "alexa-notifications.query": ("Alexa", "Notifications"),
+        "request.processing": ("Alexa", "Working on it"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
+
+
+def processing_stage_message(stages: list | None, elapsed_sec: float) -> str:
+    """Latest stage message whose afterSec threshold has been reached."""
+    message = ""
+    for stage in stages or []:
+        if not isinstance(stage, dict):
+            continue
+        try:
+            after = float(stage.get("afterSec", 0))
+        except (TypeError, ValueError):
+            continue
+        if elapsed_sec >= after and stage.get("message"):
+            message = str(stage["message"])
+    return message
 
 
 def parse_iso_timestamp(value: str) -> datetime | None:

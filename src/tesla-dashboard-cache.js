@@ -47,6 +47,29 @@ function saveDashboardCache(config, dashboard, log) {
 }
 
 /**
+ * Cached dashboard served instantly while the live Fleet fetch runs. The
+ * `refreshing` flag tells the client to show a calm "updating…" legend
+ * instead of the amber "Tesla unreachable" fallback styling.
+ */
+function buildRefreshingDashboard(cached, now = Date.now()) {
+  if (!cached) {
+    return null;
+  }
+  const cachedAtMs = Date.parse(cached.fetchedAt || '');
+  const freshnessSec = Number.isFinite(cachedAtMs)
+    ? Math.max(0, Math.round((now - cachedAtMs) / 1000))
+    : null;
+  return {
+    ...cached,
+    stale: true,
+    refreshing: true,
+    staleReason: 'Refreshing live data',
+    cachedAt: cached.fetchedAt || null,
+    freshnessSec,
+  };
+}
+
+/**
  * When a live fetch failed, fall back to the last good dashboard (if any),
  * marking it stale so the client can show a "cached" legend.
  */
@@ -72,5 +95,6 @@ module.exports = {
   resolveCachePath,
   loadDashboardCache,
   saveDashboardCache,
+  buildRefreshingDashboard,
   applyDashboardFallback,
 };
