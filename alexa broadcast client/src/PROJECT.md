@@ -139,6 +139,10 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
   - Includes weather/timer test batch files in output
 - **Distributable zip:** `build_portable.bat` also writes **`dist/alexa broadcast client.zip`**
   - Contains the `alexa broadcast client/` folder; extract on the display PC and run the launcher bat
+- **Tracked deploy artifacts (git):** `.gitignore` keeps the unpacked `dist/alexa broadcast client/` tree out of git, but tracks:
+  - `dist/Deploy Alexa Broadcast Client.bat` — one-click deploy on the poster PC (`C:\MoviePoster`)
+  - `dist/alexa broadcast client.zip` — packaged client
+  - `dist/send-test.exe` — UDP smoke-test helper
 - **Auto-start:** shortcut in `shell:startup` on Windows
 
 **Portable build:** run `build_portable.bat --no-pause` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally.
@@ -203,6 +207,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-11: **Track deploy artifacts in git** — `.gitignore` now allows `dist/Deploy Alexa Broadcast Client.bat`, `dist/alexa broadcast client.zip`, and `dist/send-test.exe` while still ignoring the unpacked PyInstaller folder. Deploy bat kills the running client, replaces `C:\MoviePoster\alexa broadcast client` from the NAS zip, and launches it.
 - 2026-07-11: **Weather location: warning-idiom guard** — `resolve_location_for_fetch`/`extract_named_location` (`weather_fetch.py`) reject weather-warning idioms as cities via `_LOCATION_STOPWORD_RE` and only mine Alexa's spoken answer for a location when the query has no local marker (`_LOCAL_SCOPE_RE`). Fixes "what's the weather outside" showing "effect until Tuesday morning" as the location instead of the configured default. Matches the bridge fix in `weather-location.js`.
 - 2026-07-11: **Refreshing cache legend** — Tesla battery panel and dashboard header render `stale+refreshing` payloads (bridge cache preview while the live fetch runs) with a calm accent "⟳ updating · cached Xm ago" pill and "Showing saved data from {time} — fetching live update…" legend instead of the amber unreachable styling; the live payload replaces the preview. Smoke: `send_test.py --type tesla-battery-refreshing` / `--type tesla-dashboard-refreshing`.
 - 2026-07-11: **Processing placeholder panel** — new `ProcessingPanel` (`request.processing`) shows an animated spinner, staged reassurance messages from the payload (`processing_stage_message` in `payload_utils.py`), an elapsed-seconds pill after 5s, and a timeout/failure state ("… unavailable / try again") after `request.timeoutSeconds` (45s default). Real data payload replaces it via the normal advance path. Smoke: `send_test.py --type processing` / `--type processing-timeout`.

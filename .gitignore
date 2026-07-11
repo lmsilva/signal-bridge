@@ -28,7 +28,12 @@ broadcast.txt
 
 # Windows broadcast client
 alexa broadcast client/.venv/
-alexa broadcast client/dist/
+# Keep packaged deploy artifacts in git; ignore the unpacked PyInstaller tree
+# (recreated by build_portable.bat) and any other dist leftovers.
+alexa broadcast client/dist/**
+!alexa broadcast client/dist/Deploy Alexa Broadcast Client.bat
+!alexa broadcast client/dist/send-test.exe
+!alexa broadcast client/dist/alexa broadcast client.zip
 alexa broadcast client/build/
 alexa broadcast client/map-tiles/
 alexa broadcast client/map-errors.log
