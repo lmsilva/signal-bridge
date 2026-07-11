@@ -81,6 +81,30 @@ test('extractWeatherLocation prefers explicit query city over spoken default', (
   assert.match(location.query, /Chicago/i);
 });
 
+test('extractWeatherLocation ignores weather-warning idioms in spoken response', () => {
+  // "weather outside" is local scope, and Alexa's answer mentions a warning
+  // "in effect until Tuesday morning" — must default, not parse a fake city.
+  const location = extractWeatherLocation(
+    "what's the weather outside",
+    config.voiceEvents.defaultLocation,
+    'There is a wind advisory in effect until Tuesday morning. It is 99 degrees and sunny.',
+  );
+  assert.equal(location.scope, 'local');
+  assert.equal(location.latitude, 47.6062);
+  assert.doesNotMatch(location.query, /effect|tuesday/i);
+});
+
+test('extractWeatherLocation does not treat warning idioms as a city for generic query', () => {
+  // Even a generic query (no local marker) must reject non-place phrases.
+  const location = extractWeatherLocation(
+    "what's the weather",
+    config.voiceEvents.defaultLocation,
+    'A flood warning is in effect until Tuesday morning.',
+  );
+  assert.equal(location.scope, 'local');
+  assert.equal(location.latitude, 47.6062);
+});
+
 test('buildTimeQueryPayload uses protocol v2', () => {
   const payload = buildTimeQueryPayload({
     device: 'Kitchen Echo',

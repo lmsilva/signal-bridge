@@ -55,6 +55,25 @@ class WeatherFetchTests(unittest.TestCase):
             "New York",
         )
 
+    def test_extract_named_location_rejects_warning_idioms(self):
+        self.assertIsNone(
+            extract_named_location("There is a wind advisory in effect until Tuesday morning.")
+        )
+        self.assertIsNone(
+            extract_named_location("It is 99 degrees and sunny in the afternoon")
+        )
+
+    def test_resolve_location_ignores_warning_idiom_for_local_query(self):
+        resolved = resolve_location_for_fetch(
+            {"scope": "local", "query": "local", "latitude": 40.0, "longitude": -111.0},
+            {"name": "Home", "latitude": 40.0, "longitude": -111.0},
+            spoken_response="A wind advisory is in effect until Tuesday morning. It is 99 degrees.",
+            query_text="what's the weather outside",
+        )
+        self.assertIsNotNone(resolved)
+        self.assertAlmostEqual(resolved["latitude"], 40.0, places=1)
+        self.assertAlmostEqual(resolved["longitude"], -111.0, places=1)
+
     def test_resolve_location_does_not_use_default_for_named_city(self):
         resolved = resolve_location_for_fetch(
             {"scope": "local", "query": "Home", "latitude": 40.0, "longitude": -111.0},

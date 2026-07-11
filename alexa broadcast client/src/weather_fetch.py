@@ -63,6 +63,22 @@ _SPOKEN_LOCATION_PATTERNS = (
 )
 
 
+_LOCAL_SCOPE_RE = re.compile(
+    r"\b(?:outside|here|local|my\s+area|right\s+now|today|tonight|this\s+weekend)\b", re.I
+)
+# Words that never appear in a real place name but do show up in Alexa weather
+# answers ("a warning is in effect until Tuesday morning", "90 degrees and
+# sunny"). Guards the "in <place>" patterns from capturing warning idioms.
+_LOCATION_STOPWORD_RE = re.compile(
+    r"\b(?:effect|warning|warnings|advisory|advisories|watch|watches|alert|alerts|until|through|"
+    r"degrees?|fahrenheit|celsius|humidity|wind|winds|windy|rain|rainy|snow|snowy|sunny|cloudy|"
+    r"cloud|clouds|overcast|storm|storms|thunderstorm|fog|forecast|expect|expected|chance|"
+    r"precipitation|monday|tuesday|wednesday|thursday|friday|saturday|sunday|morning|afternoon|"
+    r"evening|tonight|tomorrow|overnight|weekend|mph)\b",
+    re.I,
+)
+
+
 def _clean_location_name(value: str) -> str:
     cleaned = re.sub(r"\s+", " ", (value or "").strip())
     cleaned = re.sub(
@@ -80,6 +96,10 @@ def normalize_transcript(value: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _is_plausible_location_name(name: str) -> bool:
+    return len(name) >= 2 and not _LOCATION_STOPWORD_RE.search(name)
+
+
 def extract_named_location(*texts: str | None) -> str | None:
     for text in texts:
         normalized = normalize_transcript(text)
@@ -90,7 +110,7 @@ def extract_named_location(*texts: str | None) -> str | None:
             if not match:
                 continue
             name = _clean_location_name(match.group(1))
-            if len(name) >= 2:
+            if _is_plausible_location_name(name):
                 return name
     return None
 
@@ -161,11 +181,19 @@ def resolve_location_for_fetch(
     named_query = None
     if location.get("scope") == "named":
         query = str(location.get("query") or "").strip()
-        if query and query.lower() != "local":
+        if query and query.lower() != "local" and not _LOCATION_STOPWORD_RE.search(query):
             named_query = query
 
+    # An explicit city in the query always applies.
     if not named_query:
-        named_query = extract_named_location(query_text, spoken_response, location.get("query"))
+        named_query = extract_named_location(query_text)
+
+    # Only mine Alexa's spoken answer for a city when the query is generic (no
+    # "outside"/"here"/local marker). Otherwise phrases like "a warning is in
+    # effect until Tuesday morning" get misread as a location and the fetch
+    # fails instead of falling back to the configured default.
+    if not named_query and not _LOCAL_SCOPE_RE.search(normalize_transcript(query_text)):
+        named_query = extract_named_location(spoken_response, location.get("query"))
 
     if named_query:
         geocoded = geocode_location(named_query)
