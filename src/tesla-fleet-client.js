@@ -485,6 +485,93 @@ async function fetchTeslaDashboard(config, log) {
   }
 }
 
+/**
+ * Background-safe Tesla fetch: only pulls live vehicle_data when the car is
+ * already online. Never sends wake_up — waking hourly would burn Fleet free-tier
+ * credit and drain the 12V/HV battery.
+ *
+ * Returns null when the vehicle is asleep/offline/unreachable so the caller can
+ * keep the existing disk cache untouched.
+ */
+async function fetchTeslaDashboardIfOnline(config, log) {
+  const fleet = config.teslaFleet;
+  if (!isFleetConfigured(fleet)) {
+    return null;
+  }
+
+  loadPersistedRateLimit(fleet);
+
+  if (isRateLimited()) {
+    log?.info?.('Tesla background cache skipped — rate limited', {
+      until: rateLimitUntil,
+    });
+    return null;
+  }
+
+  const minIntervalMs = Math.max(0, Number(fleet.minRequestIntervalSec || 0)) * 1000;
+  const now = Date.now();
+  if (minIntervalMs > 0 && lastFetchAt > 0 && now - lastFetchAt < minIntervalMs) {
+    log?.debug?.('Tesla background cache skipped — min request interval');
+    return null;
+  }
+
+  let accessToken;
+  try {
+    ({ accessToken } = await getValidAccessToken(fleet, { log }));
+  } catch (error) {
+    log?.warn?.('Tesla background cache skipped — auth', error.message || error);
+    return null;
+  }
+
+  const vin = await resolveVin(fleet, accessToken);
+  lastFetchAt = Date.now();
+
+  let connectivity;
+  try {
+    connectivity = await fetchVehicleSnapshot(fleet, accessToken, vin);
+  } catch (error) {
+    if (error.status === 429) {
+      setRateLimit(error.limitResetAt);
+      persistRateLimitState(fleet, rateLimitUntil);
+    }
+    log?.warn?.('Tesla background cache skipped — connectivity check failed', {
+      status: error.status || null,
+      message: error.message || String(error),
+    });
+    return null;
+  }
+
+  const state = String(connectivity?.state || '').toLowerCase();
+  if (state !== 'online') {
+    log?.info?.('Tesla background cache skipped — vehicle not online', { state: state || null });
+    return null;
+  }
+
+  try {
+    const { vehicleData, locationRestricted } = await fetchDashboardVehicleData(
+      fleet,
+      accessToken,
+      vin,
+    );
+    const fetchedAt = new Date().toISOString();
+    return buildDashboardFromVehicleData(vehicleData, {
+      fetchedAt,
+      status: 'ok',
+      locationRestricted,
+    });
+  } catch (error) {
+    if (error.status === 429) {
+      setRateLimit(error.limitResetAt);
+      persistRateLimitState(fleet, rateLimitUntil);
+    }
+    log?.warn?.('Tesla background cache fetch failed', {
+      status: error.status || null,
+      message: error.message || String(error),
+    });
+    return null;
+  }
+}
+
 function resetFleetClientState() {
   lastFetchAt = 0;
   rateLimitUntil = null;
@@ -495,6 +582,7 @@ module.exports = {
   isFleetConfigured,
   fetchTeslaBattery,
   fetchTeslaDashboard,
+  fetchTeslaDashboardIfOnline,
   isLocationScopeError,
   buildFleetReading,
   buildErrorReading,

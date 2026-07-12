@@ -42,6 +42,9 @@ const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingLi
 const { buildTeslaBatteryReading } = require('./tesla-battery');
 const { fetchTeslaBattery, fetchTeslaDashboard, isFleetConfigured, buildErrorReading } = require('./tesla-fleet-client');
 const { createTeslaSessionKeepAlive } = require('./tesla-session-keepalive');
+const { createBackgroundCacheRefresh } = require('./background-cache-refresh');
+const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
+const { loadAirQualityCache, saveAirQualityCache } = require('./air-quality-cache');
 const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
 const { buildNotificationsReading, hasNotificationContent } = require('./alexa-notifications');
 const { fetchNowPlaying } = require('./music-info');
@@ -123,6 +126,7 @@ function createListener({ config, log }) {
   let timerSync = null;
   let alarmSync = null;
   let teslaKeepAlive = null;
+  let backgroundCacheRefresh = null;
   let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;
@@ -524,6 +528,9 @@ function createListener({ config, log }) {
           } else {
             reading = await enrichAirQualityReading(alexa, location, reading, airQualityConfig);
           }
+          if (Array.isArray(monitors) && monitors.length) {
+            saveAirQualityCache(config, { location, reading, monitors }, log);
+          }
         } catch (error) {
           log.warn('Air quality fetch failed', error.message || error);
         }
@@ -533,6 +540,17 @@ function createListener({ config, log }) {
         const qualitative = parseQualitativeBand(event.spokenResponse, airQualityConfig);
         if (qualitative) {
           reading.band = qualitative;
+        }
+      }
+
+      if ((!reading.band || reading.band === 'unknown') && reading.iaqScore == null && !monitors.length) {
+        const cached = loadAirQualityCache(config);
+        if (cached?.monitors?.length) {
+          log.info('Air quality unavailable, serving cached reading', {
+            cachedAt: cached.savedAt || null,
+          });
+          monitors = cached.monitors;
+          reading = mergeAirQualityReadings(reading, cached.reading || summarizeMonitorReadings(monitors, airQualityConfig));
         }
       }
 
@@ -552,9 +570,23 @@ function createListener({ config, log }) {
               query: event.query,
               location: location?.query || location?.resolvedName,
             });
+          } else if (location?.scope === 'local') {
+            saveWeatherCache(config, {
+              location: weather.location || location,
+              weather,
+            }, log);
           }
         } catch (error) {
           log.warn('Weather fetch failed', error.message || error);
+        }
+      }
+      if (!weather && location?.scope === 'local') {
+        const cached = loadWeatherCache(config);
+        if (cached?.weather) {
+          log.info('Weather unavailable, serving cached forecast', {
+            cachedAt: cached.savedAt || null,
+          });
+          weather = cached.weather;
         }
       }
       payload = buildWeatherQueryPayload(event, config, {
@@ -751,6 +783,7 @@ function createListener({ config, log }) {
       voiceEventsEnabled: voiceSettings.enabled,
       activeTimers: timerSync?.listActiveTimers?.().length ?? 0,
       activeAlarms: alarmSync?.listActiveAlarms?.().length ?? 0,
+      backgroundCache: backgroundCacheRefresh?.getStatus?.() || null,
     });
 
     if (authStatus?.status === 'reauth_required') {
@@ -1030,6 +1063,13 @@ function createListener({ config, log }) {
           settings: config.teslaFleet?.keepAlive,
         });
         teslaKeepAlive.start();
+
+        backgroundCacheRefresh = createBackgroundCacheRefresh({
+          alexa,
+          config,
+          log,
+        });
+        backgroundCacheRefresh.start();
 
         resolve(alexa);
       });

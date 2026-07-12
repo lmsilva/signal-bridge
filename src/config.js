@@ -112,6 +112,14 @@ function loadConfig() {
     ROOT,
     config.shoppingListCacheFile || 'data/shopping-list-cache.json',
   );
+  config.weatherCachePath = path.resolve(
+    ROOT,
+    config.weatherCacheFile || 'data/weather-cache.json',
+  );
+  config.airQualityCachePath = path.resolve(
+    ROOT,
+    config.airQualityCacheFile || 'data/air-quality-cache.json',
+  );
 
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);
 

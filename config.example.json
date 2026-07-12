@@ -74,6 +74,15 @@
     "livenessProbe": true,
     "cookieRefreshIntervalMs": 14400000
   },
+  "backgroundCache": {
+    "enabled": true,
+    "intervalMs": 3600000,
+    "startupDelayMs": 90000,
+    "weather": true,
+    "shoppingList": true,
+    "airQuality": true,
+    "tesla": true
+  },
   "teslaFleet": {
     "enabled": true,
     "region": "na",

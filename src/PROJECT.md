@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-11
+**Last updated:** 2026-07-12
 
 ---
 
@@ -75,6 +75,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-dashboard-data.js` | Map Fleet `vehicle_data` → dashboard UDP object |
 | `src/tesla-dashboard-cache.js` | Persist last good dashboard (`data/tesla-dashboard-cache.json`); stale fallback when fetch fails |
 | `src/tesla-battery-cache.js` | Persist last good battery reading (`data/tesla-battery-cache.json`); stale fallback (also reads dashboard cache) |
+| `src/weather-cache.js` | Persist default-location Open-Meteo forecast (`data/weather-cache.json`) |
+| `src/air-quality-cache.js` | Persist indoor air-quality monitors (`data/air-quality-cache.json`) |
+| `src/background-cache-refresh.js` | Hourly background refresh: weather, shopping list, air quality, Tesla (online-only / never wakes) |
 | `src/tesla-config.js` | `.env` + `config.teslaFleet` → Fleet API settings |
 | `src/tesla-session.js` | Load/save `data/tesla-session.json` (access + refresh tokens) |
 | `src/tesla-token-refresh.js` | OAuth code exchange, partner token, refresh rotation |
@@ -115,6 +118,17 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 **Dashboard cache fallback:** Every successful fetch is saved to `data/tesla-dashboard-cache.json`. If a later fetch fails (vehicle asleep/unreachable/rate limited), the listener serves the cached snapshot with `stale: true`, `staleReason`, `cachedAt`, and recomputed `freshnessSec`, so the display never goes empty; the client shows an amber "cached" pill + legend.
 
 **Battery cache fallback:** Same pattern for `tesla-battery.query` — `data/tesla-battery-cache.json` (falls back to dashboard cache if no dedicated battery cache). Throttled/rate-limited/offline fetches serve the last known % with `stale: true` instead of a blank error bar.
+
+**Hourly background cache refresh** (`background-cache-refresh.js`, started from `listener.js`): every hour (configurable via `backgroundCache` in config) the bridge quietly refreshes disk caches for:
+
+| Source | Cache file | Notes |
+|--------|------------|-------|
+| Weather (default location) | `data/weather-cache.json` | Open-Meteo — free, no key |
+| Shopping list | `data/shopping-list-cache.json` | Amazon lists API via alexa-remote2 |
+| Indoor air quality | `data/air-quality-cache.json` | Smart Home sensor query |
+| Tesla battery + dashboard | existing Tesla cache files | **Online-only** — checks vehicle state first and **never sends `wake_up`**. Sleeping cars keep the prior cache. Hourly wakes would burn Fleet free-tier credit (~$0.02/wake) and are intentionally avoided. |
+
+Voice queries still fetch live data when possible; caches are used for Tesla cache-first previews and as fallbacks when a live weather/air-quality fetch fails.
 
 **Data source:** When `.env` has `TESLA_CLIENT_ID` + `TESLA_CLIENT_SECRET` and `data/tesla-session.json` exists, `listener.js` calls `fetchTeslaBattery()` → UDP `tesla-battery.query` with live Fleet API data. Without credentials, falls back to parsing Alexa's spoken battery %.
 
@@ -364,6 +378,7 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 
 ## Recent changes
 
+- 2026-07-12: **Hourly background cache refresh** — new `background-cache-refresh.js` (started from listener) refreshes weather (default location), shopping list, indoor air quality, and Tesla battery/dashboard caches every hour. Tesla uses `fetchTeslaDashboardIfOnline` (never wakes a sleeping vehicle — protects Fleet free-tier credit). New `weather-cache.js` / `air-quality-cache.js`; voice weather/air-quality paths save on success and fall back to cache on failure. Config: `backgroundCache` in `config.example.json`.
 - 2026-07-11: **Weather location: warning-idiom guard** — `extractWeatherLocation` (`weather-location.js`) no longer mines the spoken response for a city when the query has a local marker ("outside"/"here"/"my area"/…); those default to the configured location. A new `LOCATION_STOPWORD_RE` rejects non-place phrases (effect/warning/until/degrees/weekdays/…) so Alexa answers like "a warning is in effect until Tuesday morning" can't be parsed as a location. Spoken-response mining still applies to truly generic queries ("what's the weather"). Mirrored client-side in `weather_fetch.py` (`_LOCAL_SCOPE_RE`, `_LOCATION_STOPWORD_RE`, gated `resolve_location_for_fetch`).
 - 2026-07-11: **Cache-first Tesla + capture robustness + indoor mishear guard** — (1) Tesla battery/dashboard queries now send the cached snapshot instantly flagged `stale+refreshing` (`buildRefreshingReading`/`buildRefreshingDashboard` in the cache modules) while the live Fleet fetch runs; the live payload replaces it. The `request.processing` ack is only sent when no cache exists. (2) Listener polls history every 15s while the push channel is down (60s when up), polls immediately on `ws-disconnect`, and treats `ws-todo-change`/`ws-content-focus-change`/`ws-media-change`/`ws-unknown-command` push traffic as capture hints (debounced 2s poll) — fixes "show my shopping list" arriving up to 60s late when the interaction emitted no PUSH_ACTIVITY. (3) Indoor temperature queries naming an unmatched location (e.g. a second Echo mishearing "Room 14" as "palmyra") are no longer displayed with no data: `resolveIndoorQueryLocation` lets a matched spoken-response room override an unmatched query phrase, `voice-event-gate` defers unmatched indoor queries for the spoken-response upgrade, and the listener drops them entirely when no reading ever materializes.
 - 2026-07-11: **Processing acknowledgment for slow requests** — `buildProcessingAckPayload` (`udp-payload.js`) sends an instant `request.processing` UDP payload for Tesla battery/dashboard queries (Fleet API configured only) before the slow fetch starts. Payload carries `request.title/source/timeoutSeconds(45)/stages[]` (staged reassurance messages at 0/5/12/25s). The real data payload replaces the placeholder; on failure the existing error payload does. Fast kinds (weather, shopping list, music, …) intentionally get no ack — sub-3s loading states hurt UX.
