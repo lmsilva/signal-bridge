@@ -20,12 +20,92 @@ test('createVoiceEventDedup suppresses repeated events for same activity id', ()
     device: 'Office Echo',
     query: 'lights on',
     spokenResponse: 'Okay',
-    timestamp: Date.now(),
+    timestamp: 1000,
   };
 
   assert.equal(dedup.shouldEmit(event, 1000), true);
   assert.equal(dedup.shouldEmit(event, 5000), false);
-  assert.equal(dedup.shouldEmit(event, 70000), true);
+  // Same record re-read after the rolling window (same creation timestamp)
+  // is still the same utterance — never re-display it.
+  assert.equal(dedup.shouldEmit(event, 70000), false);
+  // The user actually repeating the command produces a new record with a new
+  // id and timestamp — that must display.
+  assert.equal(
+    dedup.shouldEmit({ ...event, activityId: 'a2', timestamp: 70000 }, 70000),
+    true,
+  );
+});
+
+test('history re-read minutes later never re-displays the same vivint command', () => {
+  // Regression: "ask vivint to arm" displayed, then re-displayed minutes
+  // later when a history poll re-read the same records after the 2-minute
+  // dedup window had expired.
+  const dedup = createVoiceEventDedup({ dedupMs: 120000 });
+  const base = {
+    kind: 'vivint-alarm',
+    device: 'Bedroom Echo',
+    query: 'ask vivint to arm',
+  };
+
+  // Initial capture at T=0s (query record, no speech yet) — displays.
+  assert.equal(
+    dedup.shouldEmit({ ...base, activityId: 'q-1', timestamp: 1000, spokenResponse: null }, 1000),
+    true,
+  );
+  // Response record 5s later — upgrade displays (content changed).
+  assert.equal(
+    dedup.shouldEmit(
+      { ...base, activityId: 'r-2', timestamp: 6000, spokenResponse: 'your system has been armed stay' },
+      6000,
+    ),
+    true,
+  );
+  // Periodic history polls re-read both records 3, 5, and 10 minutes later —
+  // same creation timestamps, so all suppressed.
+  for (const later of [180000, 300000, 600000]) {
+    assert.equal(
+      dedup.shouldEmit({ ...base, activityId: 'q-1', timestamp: 1000, spokenResponse: null }, later),
+      false,
+      `query record re-read at ${later}ms should not re-display`,
+    );
+    assert.equal(
+      dedup.shouldEmit(
+        { ...base, activityId: 'r-2', timestamp: 6000, spokenResponse: 'your system has been armed stay' },
+        later,
+      ),
+      false,
+      `response record re-read at ${later}ms should not re-display`,
+    );
+  }
+
+  // But the user genuinely asking again 10 minutes later (new records, new
+  // timestamps) must display.
+  assert.equal(
+    dedup.shouldEmit(
+      { ...base, activityId: 'q-9', timestamp: 600000, spokenResponse: null },
+      600000,
+    ),
+    true,
+  );
+});
+
+test('late spoken-response upgrade of a re-read record does not re-display', () => {
+  const dedup = createVoiceEventDedup({ dedupMs: 120000 });
+  const base = {
+    kind: 'vivint-alarm',
+    device: 'Bedroom Echo',
+    query: 'ask vivint to arm',
+    activityId: 'q-1',
+    timestamp: 1000,
+  };
+
+  assert.equal(dedup.shouldEmit({ ...base, spokenResponse: null }, 1000), true);
+  // The same record shows up again 4 minutes later, now with the response
+  // attached. The user already saw the panel — no late replay.
+  assert.equal(
+    dedup.shouldEmit({ ...base, spokenResponse: 'your system has been armed stay' }, 240000),
+    false,
+  );
 });
 
 test('createVoiceEventDedup allows repeat commands with new activity ids', () => {
