@@ -18,7 +18,13 @@
     "https": true,
     "httpRedirectPort": 47811,
     "certDir": "data/web-certs",
-    "certHosts": []
+    "certHosts": [],
+    "controlAuth": {
+      "enabled": true,
+      "pinDigits": 4,
+      "pinDisplaySeconds": null,
+      "sessionMinutes": 30
+    }
   },
   "voiceEvents": {
     "enabled": true,

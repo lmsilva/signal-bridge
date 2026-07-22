@@ -727,6 +727,15 @@ def build_payload(args) -> dict:
             "system": {"action": "poweroff"},
         }
 
+    if args.type == "display-auth":
+        return {
+            "version": 2,
+            "type": "display.auth",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "displaySeconds": args.seconds,
+            "auth": {"pin": getattr(args, "pin", None) or "1234"},
+        }
+
     if args.type == "display-discover":
         return {
             "version": 2,
@@ -806,12 +815,13 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "input-click", "input-key"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key"],
         default="broadcast",
         help="Payload type to send",
     )
     parser.add_argument("--percent", type=int, default=78, help="Battery percent for --type tesla-battery")
     parser.add_argument("--url", default="https://example.com", help="Page for --type web-open")
+    parser.add_argument("--pin", default="1234", help="PIN for --type display-auth")
     parser.add_argument("--message", default="This is a test broadcast message", help="Broadcast message body")
     parser.add_argument("--sender", default="Kitchen Echo", help="Sender/device label")
     parser.add_argument("--destination", default="All devices", help="Broadcast destination label")

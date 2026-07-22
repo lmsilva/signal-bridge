@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-21
+**Last updated:** 2026-07-22
 
 ---
 
@@ -102,6 +102,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `web.close` | **Command:** kill the WebView2 host |
 | `system.command` | **Command:** `system.action` `reboot`/`poweroff` → Windows `shutdown /r|/s /t 5` (closes browser overlay first) |
 | `display.discover` | **Command:** remember bridge host from packet `_rinfo` + re-announce |
+| `display.auth` | Overlay: unlock PIN, or green **Authenticated** for ~1s when `auth.status` is `ok` |
 | `input.pointer` / `input.key` | **Command:** remote mouse (Win32 relative `SendInput`) / keyboard (`pynput`) |
 
 
@@ -235,6 +236,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-22: **PIN Authenticated flash** — `display.auth` with `auth.status: ok` replaces the PIN with green “Authenticated” (~1s) then dismisses; overlay chrome title follows.
+- 2026-07-21: **Stable display id + PIN overlay** — `display.id` is per-machine (name can duplicate); announce includes `shortId`; new `display.auth` panel shows unlock PIN from the control page.
 - 2026-07-21: **Docs — client README + requirements** — user guide covers announce/`bridgeHosts`, control page targeting, WebView2 browser, remote input; `requirements.txt` annotated.
 - 2026-07-21: **Mouse move via SendInput** — relative Win32 `SendInput` instead of pynput `SetCursorPos` so touchpad deltas work (including while an RDP session is watching the poster PC).
 - 2026-07-21: **Announce unicast to NAS** — `bridgeHosts` + `discoveryPort` (default `192.168.1.10:47833`) so announces reach the bridge when `255.255.255.255` is dropped; learn bridge IP from `display.discover` sender.

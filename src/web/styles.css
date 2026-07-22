@@ -115,6 +115,61 @@ body {
   line-height: 1.35;
 }
 
+.btn-icon.unlocked {
+  border-color: rgba(52, 211, 153, 0.55);
+  color: var(--good);
+}
+
+.control-lock {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px 18px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.control-lock-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.control-lock-text {
+  margin: 0 0 18px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.pin-input {
+  width: 100%;
+  margin: 12px 0 8px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
+.pin-input.is-invalid {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+
+.pin-sheet-error {
+  margin: 0 0 14px;
+  color: #f87171;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  min-height: 1.25em;
+}
+
 .app-title {
   display: flex;
   align-items: center;

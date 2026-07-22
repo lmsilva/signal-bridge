@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Display Control</title>
-  <link rel="stylesheet" href="/styles.css?v=kb2">
+  <link rel="stylesheet" href="/styles.css?v=pin4">
 </head>
 <body>
   <header class="app-header">
@@ -27,6 +27,9 @@
       <select id="display-select" class="display-select" aria-label="Target display">
         <option value="">Looking for displays…</option>
       </select>
+      <button type="button" class="btn btn-outline btn-icon" id="btn-display-unlock" title="Unlock remote control with on-screen PIN" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+      </button>
       <button type="button" class="btn btn-outline btn-icon" id="btn-display-refresh" title="Ask displays to announce">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
       </button>
@@ -122,13 +125,18 @@
           </div>
         </div>
 
-        <p class="hint">Commands go to the display selected above. A confirmation tap is required for power actions.</p>
+        <p class="hint">Power actions require unlocking the selected display with the on-screen PIN. A confirmation tap is also required.</p>
       </div>
     </section>
 
     <!-- ========================== CONTROL TAB ========================== -->
     <section class="tab-panel" id="tab-control">
-      <div class="card-grid control-grid">
+      <div class="control-lock" id="control-lock" hidden>
+        <p class="control-lock-title">Display locked</p>
+        <p class="control-lock-text">A PIN will appear on the display. Enter it here to unlock mouse and keyboard.</p>
+        <button type="button" class="btn btn-accent" id="btn-control-unlock">Show PIN &amp; Unlock</button>
+      </div>
+      <div class="card-grid control-grid" id="control-grid">
         <div class="section-label">Touchpad</div>
         <div class="card touchpad-card">
           <div class="touchpad" id="touchpad" role="application" aria-label="Remote touchpad">
@@ -243,6 +251,20 @@
     </div>
   </div>
 
+  <!-- Control PIN unlock sheet -->
+  <div class="sheet-backdrop" id="pin-sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-title">Enter display PIN</div>
+      <p class="hint" id="pin-sheet-hint">Look at the display for a 4-digit code.</p>
+      <input id="pin-sheet-input" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="••••" aria-label="PIN code">
+      <p class="pin-sheet-error" id="pin-sheet-error" hidden role="alert"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-outline" id="pin-sheet-cancel">Cancel</button>
+        <button class="btn btn-accent" id="pin-sheet-verify">Unlock</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/jsqr.min.js"></script>
   <script>
     // Fallback: if the vendored copy is missing on the bridge, load from CDN
@@ -251,6 +273,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="/app.js?v=kb2"></script>
+  <script src="/app.js?v=pin4"></script>
 </body>
 </html>

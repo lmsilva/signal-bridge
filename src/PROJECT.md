@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-21
+**Last updated:** 2026-07-22
 
 ---
 
@@ -59,7 +59,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/port-utils.js` | Pre-check port 3456 before auth proxy bind |
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`) |
-| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; resolve target → unicast host |
+| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer voice queries from history |
@@ -283,6 +283,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `webServer.https` | `true` (default) — self-signed TLS; required for live camera QR on iOS |
 | `webServer.httpRedirectPort` | Optional plain HTTP redirect to HTTPS (default `47811`; set `0` to disable) |
 | `webServer.certDir` / `certHosts` | Cert folder (`data/web-certs`) and extra SAN hostnames/IPs (include your NAS LAN IP) |
+| `webServer.controlAuth.*` | PIN unlock for mouse/keyboard/power (`enabled`, `pinDigits`, `pinDisplaySeconds` null→`defaultDisplaySeconds`, `sessionMinutes`) |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
@@ -309,8 +310,9 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `web.close` | Control page "Close Browser" — client kills the WebView2 overlay |
 | `system.command` | Control page Remote tab — `system.action` = `reboot` \| `poweroff`; client runs Windows `shutdown` |
 | `display.discover` | Control page refresh — clients re-announce; payload may include `discovery.port` |
-| `display.announce` | **Inbound** on `:47833` — client registration (`display.{id,name,port}`) |
-| `input.pointer` / `input.key` | Control tab — relative mouse / key; requires `target.id` (single display) |
+| `display.announce` | **Inbound** on `:47833` — client registration (`display.{id,shortId,name,port}`); id is per-machine, not name |
+| `display.auth` | Control unlock PIN overlay — `auth.pin` + `displaySeconds`; after verify, `auth.status: "ok"` for ~1s green Authenticated flash |
+| `input.pointer` / `input.key` | Control tab — relative mouse / key; requires unlocked `target.id` + `controlToken` |
 
 Optional `target: { id }` or `{ all: true }` on outbound commands for unicast vs broadcast delivery (`display-registry.resolveDelivery`).
 
@@ -409,9 +411,12 @@ Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`**
 
 | Route | Effect |
 |-------|--------|
-| `GET /api/displays` | Known displays from `display.announce` registry |
+| `GET /api/displays` | Known displays from `display.announce` registry (`id` unique; `label` disambiguates duplicate names) |
 | `GET /api/displays/events` | SSE stream — pushes `displays` events whenever the registry changes |
 | `POST /api/displays/discover` | Broadcast `display.discover` (clients re-announce to `:47833`) |
+| `POST /api/displays/auth/start` | Show 4-digit PIN on selected display (`display.auth`); required before mouse/keyboard/power |
+| `POST /api/displays/auth/verify` | `{targetId,pin}` → `controlToken` session for that display |
+| `POST /api/displays/auth/status` | Unlock / challenge status for a display |
 | `POST /api/push/tesla-dashboard` / `tesla-battery` | Synthetic event (`trigger: "web-api"`) through `listener.recordVoiceEvent`; body may include `targetId` |
 | `POST /api/push/url` `{url,targetId?}` | Validate → UDP `web.open` (unicast when one display selected) |
 | `POST /api/push/close-browser` | UDP `web.close` |
@@ -427,6 +432,8 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-22: **PIN UX + stale display prune** — wrong PIN shows inline error on the control sheet (`control_auth_incorrect_pin`); successful verify sends `display.auth` with `auth.status: ok` (1s Authenticated flash); registry **removes** displays that miss re-announce (~12 min / 2 heartbeats); web PIN hint omits timeout (client may differ) and locks input to 4 digits.
+- 2026-07-21: **Display id + PIN unlock** — duplicate `displayName` values stay unique via per-machine `display.id` / picker `label` (`Name · ab12`); mouse/keyboard/power require on-screen 4-digit PIN (`display.auth`) then a per-display `controlToken`.
 - 2026-07-21: **Control keyboard Shift vs Caps** — Shift one-shots the next key; Caps latches letters only; SPA JS/CSS served `no-store` + mtime cache-bust (phones were caching sticky-Shift keyboard logic).
 - 2026-07-21: **Docs — full feature map** — root `README.md` / `DOCKER.md` / client `README.md` cover display announce, control page, WebView2 browser, remote input; `package.json` description updated.
 - 2026-07-21: **Control tab iPhone layout** — solid sticky display bar (no hint bleed), always-visible touchpad + nudge arrows, CSS-grid keyboard that stays aligned on narrow screens, scroll-to-top on tab switch.

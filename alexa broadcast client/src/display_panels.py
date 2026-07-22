@@ -4807,3 +4807,80 @@ class NotificationsPanel(BasePanel):
                 outline="",
             )
         )
+
+
+class AuthPinPanel(BasePanel):
+    """Show a one-time unlock PIN, or a brief green Authenticated flash."""
+
+    def _render(self, payload: dict):
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+
+        layout = self.shell.layout
+        accent = self.config.get("accentColor", "#38bdf8")
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        auth = payload.get("auth") or {}
+        status = str(auth.get("status") or "").strip().lower()
+        authenticated = status in ("ok", "authenticated", "success")
+        pin = str(auth.get("pin") or "").strip()
+        if not pin and not authenticated:
+            pin = "----"
+
+        center_x = layout.content_x + layout.content_width // 2
+        area_top = layout.message_area_top
+        area_bottom = layout.message_area_bottom
+        center_y = area_top + int((area_bottom - area_top) * 0.42)
+
+        card_w = min(layout.content_width - 24, 520)
+        card_h = min(int((area_bottom - area_top) * 0.55), 360)
+        left = center_x - card_w // 2
+        top = center_y - card_h // 2
+        self._panel_card(left, top, card_w, card_h)
+
+        if authenticated:
+            success = "#22c55e"
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    top + int(card_h * 0.48),
+                    anchor="center",
+                    text="Authenticated",
+                    fill=success,
+                    font=self.shell.hero_font,
+                )
+            )
+            return
+
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                top + int(card_h * 0.18),
+                anchor="center",
+                text="CONTROL UNLOCK",
+                fill=accent,
+                font=self.shell.chip_label_font,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                top + int(card_h * 0.48),
+                anchor="center",
+                text=pin,
+                fill=text,
+                font=self.shell.hero_font,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                top + int(card_h * 0.78),
+                anchor="center",
+                text="Enter this PIN on your phone to unlock\nmouse, keyboard, and power controls",
+                fill=muted,
+                font=self.shell.chip_value_font,
+                justify=tk.CENTER,
+            )
+        )

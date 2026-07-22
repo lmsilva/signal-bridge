@@ -22,10 +22,13 @@ const {
   buildWebClosePayload,
   buildSystemCommandPayload,
   buildDisplayDiscoverPayload,
+  buildDisplayAuthPinPayload,
+  buildDisplayAuthOkPayload,
   buildInputPointerPayload,
   buildInputKeyPayload,
 } = require('./udp-payload');
 const { ALL_TARGET_ID } = require('./display-registry');
+const { createDisplayControlAuth } = require('./display-control-auth');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -158,6 +161,7 @@ function createWebServer({
       : Number(config.webServer.httpRedirectPort),
   };
   const staticRoot = webRoot || path.join(__dirname, 'web');
+  const controlAuth = createDisplayControlAuth(config, log);
   let server = null;
   let redirectServer = null;
 
@@ -213,6 +217,28 @@ function createWebServer({
       return ALL_TARGET_ID;
     }
     return String(body.targetId).trim();
+  }
+
+  function controlTokenFrom(req, body) {
+    const header = String(req?.headers?.authorization || '');
+    if (header.toLowerCase().startsWith('bearer ')) {
+      return header.slice(7).trim();
+    }
+    return String(body?.controlToken || '').trim();
+  }
+
+  function requireControlAuth(req, body, res) {
+    const targetId = targetIdFrom(body);
+    const gate = controlAuth.assertAuthorized(targetId, controlTokenFrom(req, body));
+    if (!gate.ok) {
+      sendJson(res, gate.status || 401, {
+        ok: false,
+        error: gate.error,
+        code: gate.code,
+      });
+      return null;
+    }
+    return targetId;
   }
 
   function sendCommandPayload(payload, targetId, res, okBody = {}) {
@@ -313,7 +339,11 @@ function createWebServer({
     sendCommandPayload(payload, targetIdFrom(body), res);
   }
 
-  function handleSystemCommand(action, body, res) {
+  function handleSystemCommand(req, action, body, res) {
+    const targetId = requireControlAuth(req, body, res);
+    if (targetId == null) {
+      return;
+    }
     const payload = buildSystemCommandPayload({
       action,
       device: deviceFrom(body),
@@ -324,8 +354,79 @@ function createWebServer({
       return;
     }
     activeWebPush = null;
-    log.info(`System ${action} sent to display PC`);
-    sendCommandPayload(payload, targetIdFrom(body), res, { action });
+    log.info(`System ${action} sent to display PC`, { targetId });
+    sendCommandPayload(payload, targetId, res, { action });
+  }
+
+  function handleControlAuthStart(body, res) {
+    const targetId = targetIdFrom(body);
+    const challenge = controlAuth.startChallenge(targetId);
+    if (challenge.error) {
+      sendJson(res, 400, { ok: false, error: challenge.error });
+      return;
+    }
+    const payload = buildDisplayAuthPinPayload({
+      pin: challenge.pin,
+      displaySeconds: challenge.displaySeconds,
+      device: deviceFrom(body),
+      trigger: 'web-api',
+    }, config);
+    if (!payload) {
+      sendJson(res, 500, { ok: false, error: 'Could not build PIN payload' });
+      return;
+    }
+    if (typeof deliverTargetedPayload === 'function') {
+      const delivery = deliverTargetedPayload(payload, targetId);
+      if (delivery?.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        ...controlAuth.publicChallengeView(challenge),
+        target: delivery.target,
+      });
+      return;
+    }
+    sendUdpPayload(payload);
+    sendJson(res, 200, { ok: true, ...controlAuth.publicChallengeView(challenge) });
+  }
+
+  function handleControlAuthVerify(body, res) {
+    const targetId = targetIdFrom(body);
+    const result = controlAuth.verifyPin(targetId, body?.pin);
+        if (result.error) {
+      sendJson(res, 403, {
+        ok: false,
+        error: result.error,
+        code: String(result.error).startsWith('Incorrect PIN')
+          ? 'control_auth_incorrect_pin'
+          : 'control_auth_failed',
+      });
+      return;
+    }
+
+    // Replace the on-screen PIN with a brief green "Authenticated" flash.
+    const okPayload = buildDisplayAuthOkPayload({
+      displaySeconds: 1,
+      device: deviceFrom(body),
+      trigger: 'web-api',
+    });
+    if (typeof deliverTargetedPayload === 'function') {
+      deliverTargetedPayload(okPayload, targetId);
+    } else {
+      sendUdpPayload(okPayload);
+    }
+
+    sendJson(res, 200, { ok: true, ...result });
+  }
+
+  function handleControlAuthStatus(req, body, res) {
+    const targetId = targetIdFrom(body);
+    sendJson(res, 200, {
+      ok: true,
+      ...controlAuth.getStatus(targetId, controlTokenFrom(req, body)),
+    });
   }
 
   function handleDisplaysList(res) {
@@ -386,8 +487,11 @@ function createWebServer({
     });
   }
 
-  function handleInputPointer(body, res) {
-    const targetId = targetIdFrom(body);
+  function handleInputPointer(req, body, res) {
+    const targetId = requireControlAuth(req, body, res);
+    if (targetId == null) {
+      return;
+    }
     if (!targetId || targetId === ALL_TARGET_ID || targetId.toLowerCase() === 'all') {
       sendJson(res, 400, {
         ok: false,
@@ -406,8 +510,11 @@ function createWebServer({
     sendCommandPayload(payload, targetId, res);
   }
 
-  function handleInputKey(body, res) {
-    const targetId = targetIdFrom(body);
+  function handleInputKey(req, body, res) {
+    const targetId = requireControlAuth(req, body, res);
+    if (targetId == null) {
+      return;
+    }
     if (!targetId || targetId === ALL_TARGET_ID || targetId.toLowerCase() === 'all') {
       sendJson(res, 400, {
         ok: false,
@@ -839,19 +946,28 @@ function createWebServer({
             handleCloseBrowser(body, res);
             return;
           case '/api/system/reboot':
-            handleSystemCommand('reboot', body, res);
+            handleSystemCommand(req, 'reboot', body, res);
             return;
           case '/api/system/poweroff':
-            handleSystemCommand('poweroff', body, res);
+            handleSystemCommand(req, 'poweroff', body, res);
             return;
           case '/api/displays/discover':
             handleDisplaysDiscover(res);
             return;
+          case '/api/displays/auth/start':
+            handleControlAuthStart(body, res);
+            return;
+          case '/api/displays/auth/verify':
+            handleControlAuthVerify(body, res);
+            return;
+          case '/api/displays/auth/status':
+            handleControlAuthStatus(req, body, res);
+            return;
           case '/api/input/pointer':
-            handleInputPointer(body, res);
+            handleInputPointer(req, body, res);
             return;
           case '/api/input/key':
-            handleInputKey(body, res);
+            handleInputKey(req, body, res);
             return;
           case '/api/auth/tesla/start':
             await handleTeslaAuthStart(res);

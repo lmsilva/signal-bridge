@@ -20,6 +20,7 @@ DISPLAY_TYPES = (
     "vivint-alarm.query",
     "alexa-notifications.query",
     "request.processing",
+    "display.auth",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -106,8 +107,20 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "vivint-alarm.query": ("Alexa", "Security"),
         "alexa-notifications.query": ("Alexa", "Notifications"),
         "request.processing": ("Alexa", "Working on it"),
+        "display.auth": ("Unlock", "Enter this PIN on your phone"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
+
+
+def title_for_payload(payload: dict) -> tuple[str, str]:
+    """Overlay chrome titles; auth success replaces the PIN prompt."""
+    display_type = str((payload or {}).get("type") or "")
+    if display_type == "display.auth":
+        auth = (payload or {}).get("auth") or {}
+        status = str(auth.get("status") or "").strip().lower()
+        if status in ("ok", "authenticated", "success"):
+            return ("Unlock", "Authenticated")
+    return title_for_display_type(display_type)
 
 
 def processing_stage_message(stages: list | None, elapsed_sec: float) -> str:

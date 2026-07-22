@@ -37,6 +37,7 @@ class BroadcastClientApp:
             "vivint-alarm.query",
             "alexa-notifications.query",
             "request.processing",
+            "display.auth",
         }
     )
 

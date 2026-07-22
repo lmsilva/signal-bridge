@@ -390,6 +390,43 @@ function buildDisplayDiscoverPayload({ trigger, discoveryPort } = {}, config) {
   };
 }
 
+function buildDisplayAuthPinPayload({ pin, displaySeconds, device, trigger } = {}, config) {
+  const code = String(pin || '').replace(/\D/g, '');
+  if (code.length < 4) {
+    return null;
+  }
+  const seconds = Number(displaySeconds)
+    || Number(config?.udpBroadcast?.defaultDisplaySeconds)
+    || 120;
+  return {
+    version: 2,
+    type: 'display.auth',
+    device: device || 'Control Page',
+    timestamp: new Date().toISOString(),
+    displaySeconds: Math.max(10, seconds),
+    trigger: trigger || 'web-api',
+    auth: {
+      pin: code,
+    },
+  };
+}
+
+/** Brief success flash after a valid control PIN — replaces the PIN overlay. */
+function buildDisplayAuthOkPayload({ displaySeconds = 1, device, trigger } = {}) {
+  const seconds = Number(displaySeconds);
+  return {
+    version: 2,
+    type: 'display.auth',
+    device: device || 'Control Page',
+    timestamp: new Date().toISOString(),
+    displaySeconds: Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.round(seconds)) : 1,
+    trigger: trigger || 'web-api',
+    auth: {
+      status: 'ok',
+    },
+  };
+}
+
 function buildInputPointerPayload({
   dx = 0,
   dy = 0,
@@ -554,6 +591,8 @@ module.exports = {
   buildWebClosePayload,
   buildSystemCommandPayload,
   buildDisplayDiscoverPayload,
+  buildDisplayAuthPinPayload,
+  buildDisplayAuthOkPayload,
   buildInputPointerPayload,
   buildInputKeyPayload,
   buildTimerSnapshotPayload,

@@ -8,6 +8,7 @@
 
   const ALL_DISPLAYS = '*';
   const STORAGE_TARGET_KEY = 'displayControl.targetId';
+  const STORAGE_TOKEN_PREFIX = 'displayControl.token.';
 
   async function apiPost(route, body = {}) {
     const response = await fetch(route, {
@@ -22,7 +23,10 @@
       data = null;
     }
     if (!response.ok) {
-      throw new Error(data?.error || `Request failed (${response.status})`);
+      const err = new Error(data?.error || `Request failed (${response.status})`);
+      err.status = response.status;
+      err.code = data?.code;
+      throw err;
     }
     return data || {};
   }
@@ -45,13 +49,65 @@
     return Boolean(id) && id !== ALL_DISPLAYS;
   }
 
+  function controlTokenFor(displayId) {
+    if (!displayId || displayId === ALL_DISPLAYS) {
+      return '';
+    }
+    try {
+      return sessionStorage.getItem(STORAGE_TOKEN_PREFIX + displayId) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function setControlToken(displayId, token) {
+    try {
+      if (!token) {
+        sessionStorage.removeItem(STORAGE_TOKEN_PREFIX + displayId);
+      } else {
+        sessionStorage.setItem(STORAGE_TOKEN_PREFIX + displayId, token);
+      }
+    } catch {
+      // private mode
+    }
+  }
+
   function withTarget(body = {}) {
-    return { ...body, targetId: selectedTargetId() };
+    const targetId = selectedTargetId();
+    const out = { ...body, targetId };
+    const token = controlTokenFor(targetId);
+    if (token) {
+      out.controlToken = token;
+    }
+    return out;
+  }
+
+  function isDisplayUnlocked() {
+    return Boolean(controlTokenFor(selectedTargetId()));
   }
 
   // -------------------------------------------------------- Display picker
 
   let knownDisplays = [];
+
+  function updateControlLockUi() {
+    const single = isSingleDisplaySelected();
+    const unlocked = single && isDisplayUnlocked();
+    const unlockBtn = $('btn-display-unlock');
+    if (unlockBtn) {
+      unlockBtn.hidden = !single;
+      unlockBtn.classList.toggle('unlocked', unlocked);
+      unlockBtn.title = unlocked
+        ? 'Remote control unlocked for this display'
+        : 'Unlock remote control with on-screen PIN';
+    }
+    const lock = $('control-lock');
+    const grid = $('control-grid');
+    if (lock && grid) {
+      lock.hidden = !single || unlocked;
+      grid.hidden = single && !unlocked;
+    }
+  }
 
   function updateControlTabVisibility() {
     const controlBtn = $('tab-btn-control');
@@ -69,6 +125,7 @@
         controlPanel.classList.remove('active');
       }
     }
+    updateControlLockUi();
     const hint = $('display-bar-hint');
     if (!hint) {
       return;
@@ -77,11 +134,16 @@
       hint.textContent = 'No displays yet — tap refresh after the client starts, or wait for the 5‑minute heartbeat.';
     } else if (single) {
       const entry = knownDisplays.find((d) => d.id === selectedTargetId());
-      hint.textContent = entry?.stale
-        ? `${entry.name} looks offline (no recent heartbeat). Control may still work if it is awake.`
-        : `Controlling ${entry?.name || 'selected display'}.`;
+      const label = entry?.label || entry?.name || 'selected display';
+      if (entry?.stale) {
+        hint.textContent = `${label} looks offline (no recent heartbeat).`;
+      } else if (isDisplayUnlocked()) {
+        hint.textContent = `Unlocked — controlling ${label}.`;
+      } else {
+        hint.textContent = `${label} — unlock with the on-screen PIN for mouse, keyboard, and power.`;
+      }
     } else {
-      hint.textContent = 'All Displays selected — push and power commands go everywhere. Pick one display for mouse/keyboard.';
+      hint.textContent = 'All Displays — push goes everywhere. Pick one display to unlock remote control.';
     }
   }
 
@@ -116,8 +178,9 @@
 
     for (const d of knownDisplays) {
       const opt = document.createElement('option');
-      opt.value = d.id;
-      opt.textContent = d.stale ? `${d.name} (offline?)` : d.name;
+      opt.value = d.id; // always unique — never target by friendly name
+      const label = d.label || d.name;
+      opt.textContent = d.stale ? `${label} (offline?)` : label;
       select.appendChild(opt);
     }
     const allOpt = document.createElement('option');
@@ -143,6 +206,8 @@
       if (newest) {
         toast(`Display online: ${newest.name}`, 'good');
       }
+    } else if (!quiet && knownDisplays.length < previousCount) {
+      toast('Removed offline display(s)', 'bad');
     }
   }
 
@@ -235,6 +300,7 @@
       // Push/Settings scroll can hide the touchpad under the sticky header.
       window.scrollTo(0, 0);
       document.scrollingElement?.scrollTo?.(0, 0);
+      updateControlLockUi();
     });
   });
 
@@ -692,6 +758,126 @@
     }
   }
 
+  // ------------------------------------------- Control PIN unlock
+
+  function clearPinSheetError() {
+    const err = $('pin-sheet-error');
+    const input = $('pin-sheet-input');
+    if (err) {
+      err.hidden = true;
+      err.textContent = '';
+    }
+    input?.classList.remove('is-invalid');
+  }
+
+  function showPinSheetError(message) {
+    const err = $('pin-sheet-error');
+    const input = $('pin-sheet-input');
+    if (err) {
+      err.hidden = false;
+      err.textContent = message || 'Incorrect PIN — try again';
+    }
+    input?.classList.add('is-invalid');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  }
+
+  async function startPinChallenge() {
+    if (!isSingleDisplaySelected()) {
+      toast('Select a single display first', 'bad');
+      return false;
+    }
+    await apiPost('/api/displays/auth/start', withTarget());
+    clearPinSheetError();
+    $('pin-sheet-hint').textContent = 'A PIN is on the display now — enter it below.';
+    $('pin-sheet-input').value = '';
+    $('pin-sheet').hidden = false;
+    setTimeout(() => $('pin-sheet-input')?.focus(), 50);
+    return true;
+  }
+
+  async function ensureControlUnlocked() {
+    if (!isSingleDisplaySelected()) {
+      toast('Select a single display first', 'bad');
+      return false;
+    }
+    if (isDisplayUnlocked()) {
+      return true;
+    }
+    try {
+      await startPinChallenge();
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+    return false;
+  }
+
+  async function verifyPinFromSheet() {
+    const pin = String($('pin-sheet-input')?.value || '').trim();
+    if (!pin) {
+      showPinSheetError('Enter the PIN shown on the display');
+      return;
+    }
+    clearPinSheetError();
+    try {
+      const result = await apiPost('/api/displays/auth/verify', withTarget({ pin }));
+      setControlToken(selectedTargetId(), result.token);
+      $('pin-sheet').hidden = true;
+      clearPinSheetError();
+      updateControlLockUi();
+      updateControlTabVisibility();
+      toast('Display unlocked for remote control', 'good');
+    } catch (error) {
+      const incorrect = error.code === 'control_auth_incorrect_pin'
+        || /incorrect pin/i.test(error.message || '');
+      if (incorrect) {
+        showPinSheetError(error.message || 'Incorrect PIN — try again');
+        toast(error.message || 'Incorrect PIN', 'bad');
+        return;
+      }
+      showPinSheetError(error.message || 'Could not verify PIN');
+      toast(error.message, 'bad');
+    }
+  }
+
+  $('btn-display-unlock')?.addEventListener('click', async () => {
+    if (isDisplayUnlocked()) {
+      toast('Already unlocked for this display', 'good');
+      return;
+    }
+    try {
+      await startPinChallenge();
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  });
+  $('btn-control-unlock')?.addEventListener('click', async () => {
+    try {
+      await startPinChallenge();
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  });
+  $('pin-sheet-cancel')?.addEventListener('click', () => {
+    $('pin-sheet').hidden = true;
+    clearPinSheetError();
+  });
+  $('pin-sheet-verify')?.addEventListener('click', () => {
+    verifyPinFromSheet();
+  });
+  $('pin-sheet-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      verifyPinFromSheet();
+    }
+  });
+  $('pin-sheet-input')?.addEventListener('input', (e) => {
+    const el = e.target;
+    el.value = String(el.value || '').replace(/\D/g, '').slice(0, 4);
+    clearPinSheetError();
+  });
+
   // -------------------------------------------------- Remote confirm logic
 
   const CONFIRM_WINDOW_MS = 5000;
@@ -700,6 +886,9 @@
     let revertTimer = null;
 
     button.addEventListener('click', async () => {
+      if (!(await ensureControlUnlocked())) {
+        return;
+      }
       if (!button.classList.contains('confirming')) {
         button.classList.add('confirming');
         button.textContent = 'Tap to confirm';
@@ -723,6 +912,11 @@
           'good',
         );
       } catch (error) {
+        if (error.code === 'control_auth_required') {
+          setControlToken(selectedTargetId(), '');
+          updateControlLockUi();
+          await ensureControlUnlocked();
+        }
         toast(error.message, 'bad');
       } finally {
         setTimeout(() => { button.disabled = false; }, 2000);
@@ -777,7 +971,7 @@
 
   function flushPointer() {
     pointerFlush = null;
-    if (!isSingleDisplaySelected()) {
+    if (!isSingleDisplaySelected() || !isDisplayUnlocked()) {
       pendingDx = 0;
       pendingDy = 0;
       return;
@@ -789,7 +983,12 @@
     if (!dx && !dy) {
       return;
     }
-    apiPost('/api/input/pointer', withTarget({ dx, dy })).catch(() => {});
+    apiPost('/api/input/pointer', withTarget({ dx, dy })).catch((error) => {
+      if (error.code === 'control_auth_required') {
+        setControlToken(selectedTargetId(), '');
+        updateControlLockUi();
+      }
+    });
   }
 
   function queuePointer(dx, dy) {
@@ -801,20 +1000,22 @@
   }
 
   async function sendPointerButtons(buttons) {
-    if (!isSingleDisplaySelected()) {
-      toast('Select a single display for mouse control', 'bad');
+    if (!(await ensureControlUnlocked())) {
       return;
     }
     try {
       await apiPost('/api/input/pointer', withTarget({ dx: 0, dy: 0, buttons }));
     } catch (error) {
+      if (error.code === 'control_auth_required') {
+        setControlToken(selectedTargetId(), '');
+        updateControlLockUi();
+      }
       toast(error.message, 'bad');
     }
   }
 
   async function sendKey(key, extraMods = []) {
-    if (!isSingleDisplaySelected()) {
-      toast('Select a single display for keyboard control', 'bad');
+    if (!(await ensureControlUnlocked())) {
       return false;
     }
     // stickyMods is only Ctrl/Alt/Win — never Shift/Caps (those are handled by the keyboard).
@@ -826,6 +1027,10 @@
       await apiPost('/api/input/key', withTarget({ key, modifiers, action: 'press' }));
       return true;
     } catch (error) {
+      if (error.code === 'control_auth_required') {
+        setControlToken(selectedTargetId(), '');
+        updateControlLockUi();
+      }
       toast(error.message, 'bad');
       return false;
     }
@@ -846,8 +1051,8 @@
     const SENSITIVITY = 2.1;
 
     pad.addEventListener('pointerdown', (e) => {
-      if (!isSingleDisplaySelected()) {
-        toast('Select a single display for mouse control', 'bad');
+      if (!isDisplayUnlocked()) {
+        ensureControlUnlocked();
         return;
       }
       tracking = true;

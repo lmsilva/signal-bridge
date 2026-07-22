@@ -62,7 +62,15 @@ function makeConfig(overrides = {}) {
     proxyPort: 3456,
     proxyOwnIp: '127.0.0.1',
     udpBroadcast: { defaultDisplaySeconds: 120 },
-    webServer: { enabled: true, port: 0, https: false, httpRedirectPort: 0, certDir: 'certs' },
+    webServer: {
+      enabled: true,
+      port: 0,
+      https: false,
+      httpRedirectPort: 0,
+      certDir: 'certs',
+      // Existing route tests disable PIN unlock; dedicated tests cover controlAuth.
+      controlAuth: { enabled: false },
+    },
     teslaFleet: {
       enabled: false,
       sessionPath: path.join(dataDir, 'tesla-session.json'),
@@ -387,6 +395,90 @@ test('tesla callback rejects state mismatch', async () => {
   }
 });
 
+test('control PIN unlock gates input and power', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-pin-'));
+  const { createDisplayRegistry } = require('../src/display-registry');
+  const registry = createDisplayRegistry({ ROOT: dataDir }, { warn() {}, info() {} });
+  registry.upsertFromAnnounce({
+    display: { id: 'disp-pin', name: 'Poster', shortId: 'pin1' },
+  }, { address: '192.168.0.20' });
+
+  const targeted = [];
+  const { webServer, base } = await startTestServer({
+    config: makeConfig({
+      ROOT: dataDir,
+      webServer: {
+        enabled: true,
+        port: 0,
+        https: false,
+        httpRedirectPort: 0,
+        certDir: 'certs',
+        controlAuth: { enabled: true, pinDisplaySeconds: 45, sessionMinutes: 5 },
+      },
+    }),
+    displayRegistry: registry,
+    deliverTargetedPayload: (payload, targetId) => {
+      const delivery = registry.resolveDelivery(targetId);
+      targeted.push({ payload, delivery });
+      return delivery;
+    },
+  });
+  try {
+    const denied = await postJson(base, '/api/input/key', {
+      targetId: 'disp-pin',
+      key: 'a',
+    });
+    assert.equal(denied.status, 401);
+    assert.equal(denied.body.code, 'control_auth_required');
+
+    const started = await postJson(base, '/api/displays/auth/start', {
+      targetId: 'disp-pin',
+    });
+    assert.equal(started.status, 200);
+    assert.equal(started.body.ok, true);
+    assert.equal(started.body.pin, undefined);
+    const pinPayload = targeted.find((t) => t.payload.type === 'display.auth');
+    assert.ok(pinPayload);
+    const pin = pinPayload.payload.auth.pin;
+
+    const bad = await postJson(base, '/api/displays/auth/verify', {
+      targetId: 'disp-pin',
+      pin: '0000',
+    });
+    assert.equal(bad.status, 403);
+    assert.equal(bad.body.code, 'control_auth_incorrect_pin');
+    assert.match(bad.body.error, /Incorrect PIN/);
+
+    const verified = await postJson(base, '/api/displays/auth/verify', {
+      targetId: 'disp-pin',
+      pin,
+    });
+    assert.equal(verified.status, 200);
+    assert.ok(verified.body.token);
+
+    const okFlash = targeted.filter((t) => t.payload.type === 'display.auth'
+      && t.payload.auth?.status === 'ok');
+    assert.equal(okFlash.length, 1);
+    assert.equal(okFlash[0].payload.displaySeconds, 1);
+
+    const okKey = await postJson(base, '/api/input/key', {
+      targetId: 'disp-pin',
+      key: 'a',
+      controlToken: verified.body.token,
+    });
+    assert.equal(okKey.status, 200);
+
+    const reboot = await postJson(base, '/api/system/reboot', {
+      targetId: 'disp-pin',
+      controlToken: verified.body.token,
+    });
+    assert.equal(reboot.status, 200);
+  } finally {
+    webServer.stop();
+    registry.stop();
+  }
+});
+
 test('displays list and discover endpoints', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-disp-'));
   const { createDisplayRegistry } = require('../src/display-registry');
@@ -462,6 +554,7 @@ test('displays list and discover endpoints', async () => {
     assert.match(events, /disp-y|Kitchen/);
   } finally {
     webServer.stop();
+    registry.stop();
   }
 });
 

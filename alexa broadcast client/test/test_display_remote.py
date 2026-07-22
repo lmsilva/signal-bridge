@@ -12,13 +12,23 @@ class DisplayIdentityTests(unittest.TestCase):
     def test_build_announce_payload(self):
         payload = build_announce_payload({
             "displayName": "Kitchen TV",
-            "displayId": "disp-fixed",
+            "displayId": "disp-fixedabcd",
             "listenPort": 47832,
         })
         self.assertEqual(payload["type"], "display.announce")
-        self.assertEqual(payload["display"]["id"], "disp-fixed")
+        self.assertEqual(payload["display"]["id"], "disp-fixedabcd")
+        self.assertEqual(payload["display"]["shortId"], "abcd")
         self.assertEqual(payload["display"]["name"], "Kitchen TV")
         self.assertEqual(payload["display"]["port"], 47832)
+
+    def test_display_id_ignores_name_so_duplicates_stay_unique(self):
+        from src.display_identity import resolve_display_id
+
+        a = resolve_display_id({"displayName": "Poster Display", "displayId": ""})
+        b = resolve_display_id({"displayName": "Other Name", "displayId": ""})
+        # Same machine id file → same id even if friendly names differ.
+        self.assertEqual(a, b)
+        self.assertTrue(a.startswith("disp-"))
 
     def test_announce_unicasts_to_bridge_hosts(self):
         from src.display_announce import DisplayAnnouncer

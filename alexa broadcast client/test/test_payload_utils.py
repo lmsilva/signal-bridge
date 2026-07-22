@@ -36,6 +36,7 @@ from src.payload_utils import (
     timer_detail_line,
     timer_title,
     title_for_display_type,
+    title_for_payload,
     voc_band_label,
 )
 
@@ -226,6 +227,18 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(title_for_display_type("weather.query"), ("Alexa", "Weather"))
         self.assertEqual(title_for_display_type("indoor-temperature.query"), ("Alexa", "Indoor"))
         self.assertEqual(title_for_display_type("air-quality.query"), ("Alexa", "Air Quality"))
+        self.assertEqual(
+            title_for_display_type("display.auth"),
+            ("Unlock", "Enter this PIN on your phone"),
+        )
+        self.assertEqual(
+            title_for_payload({"type": "display.auth", "auth": {"status": "ok"}}),
+            ("Unlock", "Authenticated"),
+        )
+        self.assertEqual(
+            title_for_payload({"type": "display.auth", "auth": {"pin": "1234"}}),
+            ("Unlock", "Enter this PIN on your phone"),
+        )
 
     def test_air_quality_helpers(self):
         self.assertEqual(format_air_quality_location({"label": "Main Floor"}), "Main Floor")

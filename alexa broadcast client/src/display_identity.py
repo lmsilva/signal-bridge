@@ -48,17 +48,25 @@ def _load_or_create_machine_id() -> str:
 
 
 def resolve_display_id(config: dict) -> str:
-    """Stable id: hash of machine GUID + display name (survives renames of hostname)."""
+    """Stable per-machine id (not tied to displayName — duplicate names are OK)."""
     explicit = str(config.get("displayId") or "").strip()
     if explicit:
         return explicit
-    name = resolve_display_name(config)
     machine = _load_or_create_machine_id()
-    digest = hashlib.sha256(f"{machine}|{name}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(machine.encode("utf-8")).hexdigest()[:16]
     return f"disp-{digest}"
 
 
+def resolve_display_short_id(config: dict) -> str:
+    """Short suffix for UI disambiguation when two displays share a name."""
+    display_id = resolve_display_id(config)
+    raw = display_id.replace("disp-", "")
+    return raw[-4:] if len(raw) >= 4 else raw
+
+
 def build_announce_payload(config: dict) -> dict:
+    display_id = resolve_display_id(config)
+    short_id = resolve_display_short_id(config)
     return {
         "version": 2,
         "type": "display.announce",
@@ -66,7 +74,8 @@ def build_announce_payload(config: dict) -> dict:
             __import__("datetime").timezone.utc
         ).isoformat().replace("+00:00", "Z"),
         "display": {
-            "id": resolve_display_id(config),
+            "id": display_id,
+            "shortId": short_id,
             "name": resolve_display_name(config),
             "port": int(config.get("listenPort") or 47832),
         },

@@ -8,6 +8,7 @@ from tkinter import font as tkfont
 from src.display_panels import (
     AirQualityPanel,
     AlarmPanel,
+    AuthPinPanel,
     BroadcastPanel,
     IndoorTemperaturePanel,
     MusicPanel,
@@ -22,7 +23,7 @@ from src.display_panels import (
     VivintAlarmPanel,
     WeatherPanel,
 )
-from src.payload_utils import resolve_display_type, title_for_display_type
+from src.payload_utils import resolve_display_type, title_for_display_type, title_for_payload
 from src.weather_fetch import enrich_weather_payload
 
 
@@ -129,6 +130,7 @@ class OverlayWindow:
             "vivint-alarm.query": VivintAlarmPanel(self.root, self.shell, self.config),
             "alexa-notifications.query": NotificationsPanel(self.root, self.shell, self.config),
             "request.processing": ProcessingPanel(self.root, self.shell, self.config),
+            "display.auth": AuthPinPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
@@ -324,7 +326,10 @@ class OverlayWindow:
             callback()
 
     def _set_title(self, display_type: str, payload: dict | None = None):
-        primary, accent = title_for_display_type(display_type)
+        if payload:
+            primary, accent = title_for_payload(payload)
+        else:
+            primary, accent = title_for_display_type(display_type)
         accent_color = self._default_title_accent_color
         if payload:
             theme = payload.get("themeAccent")
@@ -339,6 +344,11 @@ class OverlayWindow:
                     accent_color = "#4ade80"
                 elif status == "disarmed":
                     accent_color = self.config.get("mutedTextColor", "#94a3b8")
+            elif display_type == "display.auth":
+                auth = payload.get("auth") or {}
+                status = str(auth.get("status") or "").strip().lower()
+                if status in ("ok", "authenticated", "success"):
+                    accent_color = "#22c55e"
         self.canvas.itemconfigure(self.title_primary_id, text=primary)
         self.canvas.itemconfigure(self.title_accent_id, text=accent, fill=accent_color)
         self.canvas.tag_raise("overlay_chrome")

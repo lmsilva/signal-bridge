@@ -12,9 +12,9 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 |------|----------------|
 | **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
 | **Control web page** | Phone/tablet UI at `https://<NAS_IP>:47810/` — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth |
-| **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); the control page lists them live and can target one or all |
+| **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); the control page lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
-| **Remote input** | Touchpad + on-screen keyboard from the phone control page (mouse/keyboard injection on the selected display) |
+| **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 4-digit PIN appears on that screen; enter it on the phone to unlock for ~30 minutes |
 
 ---
 
