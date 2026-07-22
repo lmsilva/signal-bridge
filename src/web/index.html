@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Display Control</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=kb2">
 </head>
 <body>
   <header class="app-header">
@@ -152,14 +152,8 @@
 
         <div class="section-label">Keyboard</div>
         <div class="card keyboard-card">
-          <div class="mod-row" id="mod-row">
-            <button type="button" class="key mod" data-mod="ctrl">Ctrl</button>
-            <button type="button" class="key mod" data-mod="alt">Alt</button>
-            <button type="button" class="key mod" data-mod="shift">Shift</button>
-            <button type="button" class="key mod" data-mod="meta">Win</button>
-          </div>
           <div class="keyboard" id="keyboard"></div>
-          <p class="hint keyboard-hint">Sticky modifiers stay on until you tap them again.</p>
+          <p class="hint keyboard-hint">Shift applies to the next key only. Caps stays on for letters until you tap it again. Ctrl / Alt / Win stay sticky.</p>
         </div>
       </div>
     </section>
@@ -257,6 +251,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=kb2"></script>
 </body>
 </html>

@@ -762,6 +762,14 @@ function createWebServer({
 
   // ---- Static + routing ------------------------------------------------------
 
+  function assetVersion(fileName) {
+    try {
+      return String(fs.statSync(path.join(staticRoot, fileName)).mtimeMs);
+    } catch {
+      return String(Date.now());
+    }
+  }
+
   function serveStatic(pathname, res) {
     const filePath = resolveStaticPath(staticRoot, pathname);
     if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
@@ -770,9 +778,25 @@ function createWebServer({
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
+    // Never cache the SPA shell / JS / CSS — phones were keeping stale keyboard logic.
+    const noStore = ext === '.html' || ext === '.js' || ext === '.css';
+    if (ext === '.html') {
+      let html = fs.readFileSync(filePath, 'utf8');
+      const vJs = assetVersion('app.js');
+      const vCss = assetVersion('styles.css');
+      html = html
+        .replace(/(href="\/styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vCss}$2`)
+        .replace(/(src="\/app\.js)(?:\?[^"]*)?(")/, `$1?v=${vJs}$2`);
+      res.writeHead(200, {
+        'Content-Type': MIME_TYPES[ext] || 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(html);
+      return;
+    }
     res.writeHead(200, {
       'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'max-age=300',
+      'Cache-Control': noStore ? 'no-store' : 'max-age=300',
     });
     fs.createReadStream(filePath).pipe(res);
   }

@@ -689,17 +689,10 @@ body {
   overflow-x: hidden;
 }
 
-.mod-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
 .keyboard {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   width: 100%;
 }
 
@@ -709,27 +702,30 @@ body {
   width: 100%;
 }
 
-/* Column counts match the JS keyboard rows. */
+/* Column counts match the JS keyboard rows (15-unit QWERTY). */
+.key-row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .key-row.cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .key-row.cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.key-row.cols-10 { grid-template-columns: repeat(10, minmax(0, 1fr)); }
-.key-row.cols-11 { grid-template-columns: repeat(11, minmax(0, 1fr)); }
-.key-row.cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.key-row.cols-15 { grid-template-columns: repeat(15, minmax(0, 1fr)); }
 
 .key {
   min-width: 0;
-  min-height: 40px;
-  padding: 4px 2px;
+  min-height: 42px;
+  padding: 3px 2px;
   border-radius: 7px;
   border: 1px solid var(--line);
   background: var(--bg-elev-2);
   color: var(--text);
-  font-size: clamp(0.58rem, 2.6vw, 0.78rem);
+  font-size: clamp(0.62rem, 2.7vw, 0.82rem);
   font-weight: 600;
   line-height: 1.05;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
 }
 
 .key:active {
@@ -738,26 +734,59 @@ body {
   border-color: var(--accent);
 }
 
-.key.mod {
-  min-height: 42px;
-  font-size: 0.78rem;
+.key .key-sub {
+  font-size: 0.55em;
+  font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1;
 }
 
-.key.mod.active {
-  background: rgba(56, 189, 248, 0.22);
-  border-color: var(--accent);
-  color: var(--accent);
+.key.shifted .key-sub {
+  opacity: 0.55;
 }
 
-.key.wide {
-  /* spanned via grid-column when needed */
+.key .key-main {
+  font-size: 1em;
+  line-height: 1;
 }
 
 .key.span-2 { grid-column: span 2; }
 .key.span-3 { grid-column: span 3; }
+.key.span-4 { grid-column: span 4; }
+.key.span-5 { grid-column: span 5; }
+.key.span-6 { grid-column: span 6; }
+.key.span-7 { grid-column: span 7; }
 
-.key.space {
-  grid-column: span 4;
+.key-backspace,
+.key-enter,
+.key-shift,
+.key-caps,
+.key-space,
+.key-action,
+.key-mod {
+  background: #121c31;
+  font-size: clamp(0.58rem, 2.4vw, 0.74rem);
+}
+
+.key-backspace,
+.key-enter {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.key-space {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.key-shift.active,
+.key-caps.active,
+.key-mod.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .keyboard-hint {
@@ -768,7 +797,7 @@ body {
 
 @media (max-width: 420px) {
   .key {
-    min-height: 38px;
+    min-height: 40px;
     border-radius: 6px;
   }
 
@@ -777,7 +806,7 @@ body {
     padding-right: 6px;
   }
 
-  .mod-row { gap: 4px; }
+  .key-row { gap: 2px; }
 }
 
 /* ---------- Landscape / wide layouts ---------- */

@@ -815,13 +815,19 @@
   async function sendKey(key, extraMods = []) {
     if (!isSingleDisplaySelected()) {
       toast('Select a single display for keyboard control', 'bad');
-      return;
+      return false;
     }
-    const modifiers = [...new Set([...stickyMods, ...extraMods])];
+    // stickyMods is only Ctrl/Alt/Win — never Shift/Caps (those are handled by the keyboard).
+    const modifiers = [...new Set([
+      ...[...stickyMods].filter((m) => m !== 'shift'),
+      ...extraMods,
+    ])];
     try {
       await apiPost('/api/input/key', withTarget({ key, modifiers, action: 'press' }));
+      return true;
     } catch (error) {
       toast(error.message, 'bad');
+      return false;
     }
   }
 
@@ -924,92 +930,185 @@
     });
   });
 
-  document.querySelectorAll('#mod-row .mod').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const mod = btn.dataset.mod;
-      if (stickyMods.has(mod)) {
-        stickyMods.delete(mod);
-        btn.classList.remove('active');
-      } else {
-        stickyMods.add(mod);
-        btn.classList.add('active');
-      }
-    });
-  });
-
   (function buildKeyboard() {
     const root = $('keyboard');
     if (!root) {
       return;
     }
 
-    // Each row declares a column count so CSS grid keeps keys aligned on phones
-    // (flex-wrap was wrapping mid-row and looking broken on iPhone).
+    // Shift = one-shot (next key only). Caps = latch for letters until pressed again.
+    // Never put "shift" into stickyMods — that made Shift behave like Caps.
+    let shiftArmed = false;
+    let capsLock = false;
+
+    const char = (base, shiftLabel = null) => ({
+      key: base,
+      label: base,
+      shiftLabel: shiftLabel == null ? base : shiftLabel,
+      kind: 'char',
+    });
+
     const rows = [
       {
         cols: 7,
         keys: [
-          { key: 'Escape', label: 'Esc', span: 1 },
-          { key: 'F1', label: 'F1' }, { key: 'F2', label: 'F2' }, { key: 'F3', label: 'F3' },
-          { key: 'F4', label: 'F4' }, { key: 'F5', label: 'F5' }, { key: 'F6', label: 'F6' },
+          { key: 'Escape', label: 'Esc', kind: 'action', cls: 'key-action' },
+          { key: 'F1', label: 'F1', kind: 'action' }, { key: 'F2', label: 'F2', kind: 'action' },
+          { key: 'F3', label: 'F3', kind: 'action' }, { key: 'F4', label: 'F4', kind: 'action' },
+          { key: 'F5', label: 'F5', kind: 'action' }, { key: 'F6', label: 'F6', kind: 'action' },
         ],
       },
       {
         cols: 6,
         keys: [
-          { key: 'F7', label: 'F7' }, { key: 'F8', label: 'F8' }, { key: 'F9', label: 'F9' },
-          { key: 'F10', label: 'F10' }, { key: 'F11', label: 'F11' }, { key: 'F12', label: 'F12' },
+          { key: 'F7', label: 'F7', kind: 'action' }, { key: 'F8', label: 'F8', kind: 'action' },
+          { key: 'F9', label: 'F9', kind: 'action' }, { key: 'F10', label: 'F10', kind: 'action' },
+          { key: 'F11', label: 'F11', kind: 'action' }, { key: 'F12', label: 'F12', kind: 'action' },
         ],
       },
       {
-        cols: 12,
+        cols: 15,
         keys: [
-          { key: '1', label: '1' }, { key: '2', label: '2' }, { key: '3', label: '3' },
-          { key: '4', label: '4' }, { key: '5', label: '5' }, { key: '6', label: '6' },
-          { key: '7', label: '7' }, { key: '8', label: '8' }, { key: '9', label: '9' },
-          { key: '0', label: '0' }, { key: '-', label: '-' },
-          { key: 'Backspace', label: '⌫', span: 1 },
+          char('`', '~'),
+          char('1', '!'), char('2', '@'), char('3', '#'), char('4', '$'), char('5', '%'),
+          char('6', '^'), char('7', '&'), char('8', '*'), char('9', '('), char('0', ')'),
+          char('-', '_'), char('=', '+'),
+          { key: 'Backspace', label: '⌫', kind: 'action', span: 2, cls: 'key-backspace' },
         ],
       },
       {
-        cols: 11,
+        cols: 15,
         keys: [
-          { key: 'q', label: 'Q' }, { key: 'w', label: 'W' }, { key: 'e', label: 'E' },
-          { key: 'r', label: 'R' }, { key: 't', label: 'T' }, { key: 'y', label: 'Y' },
-          { key: 'u', label: 'U' }, { key: 'i', label: 'I' }, { key: 'o', label: 'O' },
-          { key: 'p', label: 'P' }, { key: 'Tab', label: 'Tab', span: 1 },
+          { key: 'Tab', label: 'Tab', kind: 'action', span: 2, cls: 'key-action' },
+          char('q', 'Q'), char('w', 'W'), char('e', 'E'), char('r', 'R'), char('t', 'T'),
+          char('y', 'Y'), char('u', 'U'), char('i', 'I'), char('o', 'O'), char('p', 'P'),
+          char('[', '{'), char(']', '}'), char('\\', '|'),
         ],
       },
       {
-        cols: 11,
+        cols: 15,
         keys: [
-          { key: 'a', label: 'A' }, { key: 's', label: 'S' }, { key: 'd', label: 'D' },
-          { key: 'f', label: 'F' }, { key: 'g', label: 'G' }, { key: 'h', label: 'H' },
-          { key: 'j', label: 'J' }, { key: 'k', label: 'K' }, { key: 'l', label: 'L' },
-          { key: "'", label: "'" },
-          { key: 'Enter', label: '⏎', span: 1 },
+          { kind: 'caps', label: 'Caps', span: 2, cls: 'key-caps' },
+          char('a', 'A'), char('s', 'S'), char('d', 'D'), char('f', 'F'), char('g', 'G'),
+          char('h', 'H'), char('j', 'J'), char('k', 'K'), char('l', 'L'),
+          char(';', ':'), char("'", '"'),
+          { key: 'Enter', label: 'Enter', kind: 'action', span: 2, cls: 'key-enter' },
         ],
       },
       {
-        cols: 11,
+        cols: 15,
         keys: [
-          { key: 'z', label: 'Z' }, { key: 'x', label: 'X' }, { key: 'c', label: 'C' },
-          { key: 'v', label: 'V' }, { key: 'b', label: 'B' }, { key: 'n', label: 'N' },
-          { key: 'm', label: 'M' }, { key: ',', label: ',' }, { key: '.', label: '.' },
-          { key: '/', label: '/' }, { key: 'Delete', label: 'Del', span: 1 },
+          { kind: 'shift', label: 'Shift', span: 3, cls: 'key-shift' },
+          char('z', 'Z'), char('x', 'X'), char('c', 'C'), char('v', 'V'), char('b', 'B'),
+          char('n', 'N'), char('m', 'M'),
+          char(',', '<'), char('.', '>'), char('/', '?'),
+          { kind: 'shift', label: 'Shift', span: 2, cls: 'key-shift' },
         ],
       },
       {
-        cols: 10,
+        cols: 15,
         keys: [
-          { key: 'ArrowLeft', label: '←' }, { key: 'ArrowUp', label: '↑' },
-          { key: 'ArrowDown', label: '↓' }, { key: 'ArrowRight', label: '→' },
-          { key: ' ', label: 'Space', span: 4 },
-          { chord: ['alt', 'F4'], label: 'Alt+F4', span: 1 },
-          { chord: ['ctrl', 'w'], label: 'Ctrl+W', span: 1 },
+          { kind: 'mod', mod: 'ctrl', label: 'Ctrl', cls: 'key-mod' },
+          { kind: 'mod', mod: 'alt', label: 'Alt', cls: 'key-mod' },
+          { kind: 'mod', mod: 'meta', label: 'Win', cls: 'key-mod' },
+          { key: ' ', label: 'Space', kind: 'action', span: 7, cls: 'key-space' },
+          { key: 'Delete', label: 'Del', kind: 'action', cls: 'key-action' },
+          { key: 'ArrowLeft', label: '←', kind: 'action' },
+          { key: 'ArrowUp', label: '↑', kind: 'action' },
+          { key: 'ArrowDown', label: '↓', kind: 'action' },
+          { key: 'ArrowRight', label: '→', kind: 'action' },
+        ],
+      },
+      {
+        cols: 4,
+        keys: [
+          { chord: ['alt', 'F4'], label: 'Alt+F4', kind: 'chord', cls: 'key-action' },
+          { chord: ['ctrl', 'w'], label: 'Ctrl+W', kind: 'chord', cls: 'key-action' },
+          { chord: ['ctrl', 'c'], label: 'Ctrl+C', kind: 'chord', cls: 'key-action' },
+          { chord: ['ctrl', 'v'], label: 'Ctrl+V', kind: 'chord', cls: 'key-action' },
         ],
       },
     ];
+
+    const keyButtons = [];
+
+    function isLetterKey(def) {
+      return def.kind === 'char' && /^[a-z]$/i.test(def.key);
+    }
+
+    /** Number-row / punctuation symbols — Shift only (not Caps). */
+    function showSymbols() {
+      return shiftArmed;
+    }
+
+    /** Letter uppercase — Shift (one-shot) or Caps (latched). */
+    function showUpperLetters() {
+      return shiftArmed || capsLock;
+    }
+
+    function consumeShift() {
+      if (!shiftArmed) {
+        return;
+      }
+      shiftArmed = false;
+      refreshKeyboard();
+    }
+
+    function paintKey(btn, def) {
+      if (def.kind === 'shift') {
+        btn.classList.toggle('active', shiftArmed);
+        btn.textContent = def.label;
+        return;
+      }
+      if (def.kind === 'caps') {
+        btn.classList.toggle('active', capsLock);
+        btn.textContent = def.label;
+        return;
+      }
+      if (def.kind === 'mod') {
+        btn.classList.toggle('active', stickyMods.has(def.mod));
+        btn.textContent = def.label;
+        return;
+      }
+      if (def.kind === 'char') {
+        const useShiftGlyph = isLetterKey(def) ? showUpperLetters() : showSymbols();
+        const main = useShiftGlyph ? def.shiftLabel : def.label;
+        const sub = useShiftGlyph ? def.label : def.shiftLabel;
+        if (sub && sub !== main) {
+          btn.innerHTML = `<span class="key-sub">${sub}</span><span class="key-main">${main}</span>`;
+        } else {
+          btn.textContent = main;
+        }
+        btn.classList.toggle('shifted', useShiftGlyph);
+        return;
+      }
+      btn.textContent = def.label;
+    }
+
+    function refreshKeyboard() {
+      for (const { btn, def } of keyButtons) {
+        paintKey(btn, def);
+      }
+    }
+
+    function toggleStickyMod(mod) {
+      if (stickyMods.has(mod)) {
+        stickyMods.delete(mod);
+      } else {
+        stickyMods.add(mod);
+      }
+      refreshKeyboard();
+    }
+
+    function modifiersForKey(def) {
+      const mods = [];
+      if (shiftArmed) {
+        mods.push('shift');
+      } else if (capsLock && isLetterKey(def)) {
+        mods.push('shift');
+      }
+      return mods;
+    }
 
     for (const row of rows) {
       const rowEl = document.createElement('div');
@@ -1018,27 +1117,55 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'key';
-        const span = Number(def.span) || 1;
-        if (span === 2) {
-          btn.classList.add('span-2');
-        } else if (span === 3) {
-          btn.classList.add('span-3');
-        } else if (span === 4) {
-          btn.classList.add('space');
+        if (def.cls) {
+          btn.classList.add(...String(def.cls).split(/\s+/));
         }
-        btn.textContent = def.label;
+        const span = Number(def.span) || 1;
+        if (span >= 2 && span <= 7) {
+          btn.classList.add(`span-${span}`);
+        }
+        paintKey(btn, def);
+        keyButtons.push({ btn, def });
+
         btn.addEventListener('click', () => {
-          if (def.chord) {
+          if (def.kind === 'shift') {
+            // One-shot arm (tap again to cancel). Does not touch capsLock.
+            shiftArmed = !shiftArmed;
+            refreshKeyboard();
+            return;
+          }
+          if (def.kind === 'caps') {
+            capsLock = !capsLock;
+            // Caps does not keep Shift armed.
+            shiftArmed = false;
+            refreshKeyboard();
+            return;
+          }
+          if (def.kind === 'mod') {
+            // Only ctrl / alt / meta — ignore accidental "shift" sticky.
+            if (def.mod === 'shift') {
+              return;
+            }
+            toggleStickyMod(def.mod);
+            return;
+          }
+          if (def.kind === 'chord') {
             const [mod, key] = def.chord;
             sendKey(key, [mod]);
-          } else {
-            sendKey(def.key);
+            consumeShift();
+            return;
           }
+          // Snapshot before send so async lag cannot re-apply a stale one-shot.
+          const oneShot = modifiersForKey(def);
+          sendKey(def.key, oneShot);
+          consumeShift();
         });
         rowEl.appendChild(btn);
       }
       root.appendChild(rowEl);
     }
+
+    refreshKeyboard();
   })();
 
   // -------------------------------------------------------------- Start up

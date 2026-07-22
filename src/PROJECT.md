@@ -427,6 +427,7 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-21: **Control keyboard Shift vs Caps** — Shift one-shots the next key; Caps latches letters only; SPA JS/CSS served `no-store` + mtime cache-bust (phones were caching sticky-Shift keyboard logic).
 - 2026-07-21: **Docs — full feature map** — root `README.md` / `DOCKER.md` / client `README.md` cover display announce, control page, WebView2 browser, remote input; `package.json` description updated.
 - 2026-07-21: **Control tab iPhone layout** — solid sticky display bar (no hint bleed), always-visible touchpad + nudge arrows, CSS-grid keyboard that stays aligned on narrow screens, scroll-to-top on tab switch.
 - 2026-07-21: **Display announce reachability + live picker** — announces use dedicated `:47833` (not overlay `:47832`); clients unicast to `bridgeHosts` (LAN broadcast often never hits the NAS). Control page listens via `GET /api/displays/events` SSE so new displays appear without refresh. Host-network Docker does not need UDP port publish.
