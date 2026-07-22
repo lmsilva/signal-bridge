@@ -22,6 +22,14 @@ DISPLAY_TYPES = (
     "request.processing",
 )
 
+# Control-page commands — accepted by the UDP listener but never rendered as
+# timed overlay panels (handled in main.BroadcastClientApp).
+COMMAND_TYPES = (
+    "web.open",
+    "web.close",
+    "system.command",
+)
+
 
 def resolve_display_type(payload: dict) -> str:
     explicit = payload.get("type")
@@ -36,6 +44,15 @@ def resolve_display_type(payload: dict) -> str:
 
 def is_display_payload(payload: dict) -> bool:
     return bool(resolve_display_type(payload))
+
+
+def is_command_payload(payload: dict) -> bool:
+    return payload.get("type") in COMMAND_TYPES
+
+
+def is_accepted_payload(payload: dict) -> bool:
+    """True for overlay display payloads and control commands (web/system)."""
+    return is_display_payload(payload) or is_command_payload(payload)
 
 
 def title_for_display_type(display_type: str) -> tuple[str, str]:

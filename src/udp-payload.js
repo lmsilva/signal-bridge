@@ -314,6 +314,65 @@ function buildProcessingAckPayload(event, config) {
   };
 }
 
+// Web browser display: the client keeps the page open until an explicit
+// web.close arrives, so web.open carries persistent: true and no meaningful
+// displaySeconds. These payloads originate from the control web page, not
+// from voice events.
+function buildWebOpenPayload({ url, device, timestamp, trigger } = {}, config) {
+  const normalizedUrl = String(url || '').trim();
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return null;
+  }
+
+  return {
+    version: 2,
+    type: 'web.open',
+    device: device || 'Control Page',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: 0,
+    persistent: true,
+    trigger: trigger || 'web-api',
+    web: {
+      url: normalizedUrl,
+      // Fallback display window for the friendly error message when the
+      // client cannot load the page (standard dismiss sequence applies).
+      errorDisplaySeconds: Math.min(30, displaySeconds(config)),
+    },
+  };
+}
+
+function buildWebClosePayload({ device, timestamp, trigger } = {}, config) {
+  return {
+    version: 2,
+    type: 'web.close',
+    device: device || 'Control Page',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: 0,
+    trigger: trigger || 'web-api',
+  };
+}
+
+const SYSTEM_COMMAND_ACTIONS = new Set(['reboot', 'poweroff']);
+
+function buildSystemCommandPayload({ action, device, timestamp, trigger } = {}, config) {
+  const normalizedAction = String(action || '').trim().toLowerCase();
+  if (!SYSTEM_COMMAND_ACTIONS.has(normalizedAction)) {
+    return null;
+  }
+
+  return {
+    version: 2,
+    type: 'system.command',
+    device: device || 'Control Page',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: 0,
+    trigger: trigger || 'web-api',
+    system: {
+      action: normalizedAction,
+    },
+  };
+}
+
 function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
   const spokenTarget = event.command?.target || null;
   return {
@@ -404,6 +463,9 @@ module.exports = {
   buildNotificationsPayload,
   buildSmartHomePayload,
   buildProcessingAckPayload,
+  buildWebOpenPayload,
+  buildWebClosePayload,
+  buildSystemCommandPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
   displaySeconds,

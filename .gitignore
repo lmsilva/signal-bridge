@@ -27,6 +27,7 @@ data/tesla-public-key.pem
 data/diagnostics/
 data/config.json
 data/data/
+data/web-certs/
 broadcast.txt
 
 # Windows broadcast client

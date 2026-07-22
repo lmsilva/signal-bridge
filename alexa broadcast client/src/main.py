@@ -1,4 +1,5 @@
 import queue
+import subprocess
 import sys
 import tkinter as tk
 from tkinter import messagebox
@@ -7,6 +8,12 @@ from src.config import effective_display_seconds, load_config
 from src.listener import UdpListener
 from src.overlay import OverlayWindow
 from src.tray_app import run_tray
+from src.payload_utils import COMMAND_TYPES
+from src.web_overlay import (
+    WebOverlayManager,
+    build_web_error_payload,
+    build_web_opening_payload,
+)
 
 
 class BroadcastClientApp:
@@ -30,6 +37,9 @@ class BroadcastClientApp:
         }
     )
 
+    # Bridge control commands — handled outside the overlay/timeout path.
+    COMMAND_TYPES = frozenset(COMMAND_TYPES)
+
     def __init__(self):
         self.config = load_config()
         self.message_queue = queue.Queue()
@@ -42,6 +52,7 @@ class BroadcastClientApp:
         self.tray_icon = None
         self.root = None
         self.overlay = None
+        self.web_overlay = WebOverlayManager(self.config)
 
     def start(self):
         self.listener.start()
@@ -73,12 +84,52 @@ class BroadcastClientApp:
         try:
             while True:
                 payload = self.message_queue.get_nowait()
+                if payload.get("type") in self.COMMAND_TYPES:
+                    self._handle_command_payload(payload)
+                    continue
                 seconds = effective_display_seconds(payload, self.config)
                 self._show_payload(payload, seconds)
         except queue.Empty:
             pass
 
         self.root.after(100, self._poll_messages)
+
+    def _handle_command_payload(self, payload: dict):
+        command_type = payload.get("type")
+        if command_type == "web.open":
+            url = (payload.get("web") or {}).get("url")
+            if not url:
+                return
+            # Always acknowledge receipt on-screen first — otherwise a silent
+            # spawn failure looks like the push never arrived.
+            ack = build_web_opening_payload(payload)
+            self._show_payload(ack, effective_display_seconds(ack, self.config))
+            # Pre-flight + spawn happen off-thread; on failure the friendly
+            # error message flows back through the normal display path.
+            self.web_overlay.open_url(
+                url,
+                on_failure=lambda _reason, p=payload: self.message_queue.put(
+                    build_web_error_payload(p)
+                ),
+            )
+        elif command_type == "web.close":
+            self.web_overlay.close()
+        elif command_type == "system.command":
+            self._run_system_command((payload.get("system") or {}).get("action"))
+
+    def _run_system_command(self, action: str):
+        flags = {"reboot": "/r", "poweroff": "/s"}
+        flag = flags.get(action)
+        if not flag:
+            return
+        self.web_overlay.close()
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            subprocess.Popen(
+                ["shutdown", flag, "/t", "5"], creationflags=creationflags
+            )
+        except OSError as exc:
+            print(f"System {action} failed: {exc}", file=sys.stderr)
 
     @staticmethod
     def _is_alarm_snapshot(payload: dict) -> bool:
@@ -151,6 +202,7 @@ class BroadcastClientApp:
         self.display_active = False
 
     def shutdown(self):
+        self.web_overlay.close()
         self.listener.stop()
         if self.tray_icon:
             self.tray_icon.stop()

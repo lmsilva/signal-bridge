@@ -11,6 +11,14 @@
     "defaultDisplaySeconds": 120,
     "targets": []
   },
+  "webServer": {
+    "enabled": true,
+    "port": 47810,
+    "https": true,
+    "httpRedirectPort": 47811,
+    "certDir": "data/web-certs",
+    "certHosts": []
+  },
   "voiceEvents": {
     "enabled": true,
     "timeQueries": true,

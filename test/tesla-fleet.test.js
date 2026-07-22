@@ -144,6 +144,37 @@ test('resolveTeslaFleetConfig prefers TESLA_OAUTH_REDIRECT_URI', () => {
   }
 });
 
+test('resolveCallbackListen binds :4381 HTTP for public domain redirect', () => {
+  const { resolveCallbackListen } = require('../src/tesla-auth');
+  const listen = resolveCallbackListen({
+    redirectUri: 'https://fleetapi.example.com/callback',
+  });
+  assert.equal(listen.redirectUri, 'https://fleetapi.example.com/callback');
+  assert.equal(listen.port, 4381);
+  assert.equal(listen.useHttps, false);
+  assert.equal(listen.listenHost, '0.0.0.0');
+  assert.equal(listen.pathname, '/callback');
+});
+
+test('resolveCallbackListen keeps loopback redirect as local listen', () => {
+  const { resolveCallbackListen } = require('../src/tesla-auth');
+  const listen = resolveCallbackListen('http://localhost:4381/callback');
+  assert.equal(listen.port, 4381);
+  assert.equal(listen.useHttps, false);
+  assert.equal(listen.listenHost, 'localhost');
+});
+
+test('resolveCallbackListen honors TESLA_CALLBACK_LISTEN override', () => {
+  const { resolveCallbackListen } = require('../src/tesla-auth');
+  const listen = resolveCallbackListen({
+    redirectUri: 'https://fleetapi.example.com/callback',
+    callbackListenUri: 'http://127.0.0.1:9999/callback',
+  });
+  assert.equal(listen.port, 9999);
+  assert.equal(listen.hostname, '127.0.0.1');
+  assert.equal(listen.useHttps, false);
+});
+
 test('parseAuthorizationCodeArg reads --code flag', () => {
   const { parseAuthorizationCodeArg } = require('../src/tesla-auth');
   assert.equal(parseAuthorizationCodeArg(['node', 'auth', '--code', 'NA_abc']), 'NA_abc');

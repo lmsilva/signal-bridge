@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-11
+**Last updated:** 2026-07-21
 
 ---
 
@@ -37,6 +37,8 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 | `src/weather_fetch.py` | Client geocode + Open-Meteo fetch; spoken-response location extraction |
 | `src/message_scroll.py` | Long broadcast message scroll animation |
 | `src/tray_app.py` | pystray icon; exit triggers shutdown |
+| `src/web_overlay.py` | `WebOverlayManager` — pre-flights pushed URLs, spawns/kills the WebView2 host; `build_web_error_payload` for the friendly failure message |
+| `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top browser with layered-window opacity (`webview-host.exe` in portable build) |
 | `src/config.py` | Load `config.json`; `effective_display_seconds` (timers use full duration) |
 | `src/paths.py` | Resolve config path for dev vs portable build |
 | `config.json` | User settings (port, fade, display caps, colors) |
@@ -86,6 +88,9 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `vivint-alarm.query` | Lock icon + armed/disarmed status (Vivint stay/away) |
 | `alexa-notifications.query` | Amber notification banner + parsed notification cards |
 | `request.processing` | Animated spinner + staged "working on it" messages while bridge fetches slow external data (Tesla); timeout failure state after `request.timeoutSeconds` |
+| `web.open` | **Command (no overlay):** pre-flight `web.url`; success → spawn `webview-host` (persistent frameless browser, stays until `web.close`); failure → "Cannot display content at this time" broadcast with `web.errorDisplaySeconds` timeout |
+| `web.close` | **Command:** kill the WebView2 host |
+| `system.command` | **Command:** `system.action` `reboot`/`poweroff` → Windows `shutdown /r|/s /t 5` (closes browser overlay first) |
 
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -110,6 +115,10 @@ python test/send_test.py --type timers --seconds 45
 python test/send_test.py --type timer-fired --seconds 120
 python test/send_test.py --type alarms --seconds 45
 python test/send_test.py --type alarm-set --seconds 45
+python test/send_test.py --type web-open --url https://example.com
+python test/send_test.py --type web-open-bad          # friendly error path
+python test/send_test.py --type web-close
+python test/send_test.py --type system-reboot         # careful: actually reboots
 ```
 
 ---
@@ -124,6 +133,7 @@ python test/send_test.py --type alarm-set --seconds 45
 | `defaultDisplaySeconds` | 30 | If payload omits `displaySeconds` |
 | `fadeInMs` / `fadeOutMs` | 400 / 600 | Animation |
 | `overlayBackground` | dark rgba | Fullscreen tint |
+| `webOverlayOpacity` | 0.88 | WebView2 browser overlay opacity (matches `overlayOpacity`) |
 | Font / layout keys | — | See `config.py` + `overlay.py` |
 
 Timer and fired-timer overlays use the payload's full `displaySeconds` (not shortened to remaining time). Bridge `data/config.json` should list this PC in `udpBroadcast.targets` if LAN broadcast is flaky.
@@ -147,23 +157,25 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 
 **Portable build:** run `build_portable.bat --no-pause` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally.
 
-**Requirements:** Python 3.10+, `pystray`, `Pillow` (see `requirements.txt`).
+**Requirements:** Python 3.10+, `pystray`, `Pillow`, `pywebview` (see `requirements.txt`). The web display mode needs the **Edge WebView2 runtime** on the poster PC (preinstalled on Win10/11); if missing, the client shows the friendly error instead.
+
+**Multi-exe layout:** `alexa-broadcast-client.exe` + `webview-host.exe` share the `dist/alexa broadcast client/` folder (one `COLLECT`); `send-test.exe` stays a separate onefile helper.
 
 ---
 
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only (45 tests)
+test\run_tests.bat              # client unit tests only (78 tests)
 ```
 
 From repo root (bridge + client):
 
 ```powershell
-..\run_all_tests.bat            # 207 bridge + 45 client
+..\run_all_tests.bat            # 280 bridge + 78 client
 ```
 
-**Unit tests:** `test/test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`), `test_config.py`, `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds).
+**Unit tests:** `test/test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`), `test_config.py`, `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds), `test_web_overlay.py` (URL pre-flight, host command build, web/system command routing, friendly error payload).
 
 **Manual smoke:** `test/send_test.py` with client running; Windows Firewall must allow UDP on the listen port.
 
@@ -207,6 +219,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-21: **Web browser display + remote commands** — new `web_overlay.py` (URL pre-flight with SSL fallback, spawn/kill of the host, early-death watch) and `webview_host.py` (pywebview/Edge WebView2, frameless fullscreen on-top). `main.py` intercepts `COMMAND_TYPES` (`web.open`/`web.close`/`system.command`) before the display path; failures show "Cannot display content at this time" through the normal overlay. **UDP listener fix:** `listener.py` previously dropped non-display types via `is_display_payload`, so `web.open` never reached the app (Tesla still worked). Now accepts commands via `is_accepted_payload` / `COMMAND_TYPES` in `payload_utils.py`. WebView2 layered-window alpha removed (blank window). Smoke types: `web-open`, `web-open-bad`, `web-close`, `system-reboot`, `system-poweroff`.
 - 2026-07-11: **Track deploy artifacts in git** — `.gitignore` now allows `dist/Deploy Alexa Broadcast Client.bat`, `dist/alexa broadcast client.zip`, and `dist/send-test.exe` while still ignoring the unpacked PyInstaller folder. Deploy bat kills the running client, replaces `C:\MoviePoster\alexa broadcast client` from the NAS zip, and launches it.
 - 2026-07-11: **Weather location: warning-idiom guard** — `resolve_location_for_fetch`/`extract_named_location` (`weather_fetch.py`) reject weather-warning idioms as cities via `_LOCATION_STOPWORD_RE` and only mine Alexa's spoken answer for a location when the query has no local marker (`_LOCAL_SCOPE_RE`). Fixes "what's the weather outside" showing "effect until Tuesday morning" as the location instead of the configured default. Matches the bridge fix in `weather-location.js`.
 - 2026-07-11: **Refreshing cache legend** — Tesla battery panel and dashboard header render `stale+refreshing` payloads (bridge cache preview while the live fetch runs) with a calm accent "⟳ updating · cached Xm ago" pill and "Showing saved data from {time} — fetching live update…" legend instead of the amber unreachable styling; the live payload replaces the preview. Smoke: `send_test.py --type tesla-battery-refreshing` / `--type tesla-dashboard-refreshing`.

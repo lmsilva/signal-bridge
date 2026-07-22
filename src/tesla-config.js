@@ -37,6 +37,12 @@ function resolveTeslaFleetConfig(config, fileConfig = {}) {
       || process.env.TESLA_REDIRECT_URI
       || fleet.redirectUri
       || 'http://localhost:4381/callback',
+    // Where the bridge binds the one-shot OAuth callback locally. When the
+    // public redirect URI is a real domain (Apache/nginx TLS proxy), leave this
+    // unset to auto-bind http://0.0.0.0:4381 with the same path.
+    callbackListenUri: process.env.TESLA_CALLBACK_LISTEN
+      || fleet.callbackListenUri
+      || '',
     scopes: fleet.scopes || DEFAULT_SCOPES,
     sessionFile: sessionRel,
     sessionPath: path.resolve(config.ROOT || path.resolve(__dirname, '..'), sessionRel),

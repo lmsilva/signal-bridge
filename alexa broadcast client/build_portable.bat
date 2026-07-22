@@ -47,6 +47,7 @@ if errorlevel 1 goto PipFailed
 rem A client running from dist\ locks files there and breaks rebuild/zip.
 echo Closing any running display client...
 taskkill /f /im alexa-broadcast-client.exe >nul 2>&1
+taskkill /f /im webview-host.exe >nul 2>&1
 taskkill /f /im send-test.exe >nul 2>&1
 
 echo.
@@ -62,6 +63,12 @@ if errorlevel 1 (
 set "DIST=dist\alexa broadcast client"
 if not exist "%DIST%\alexa-broadcast-client.exe" (
   echo Expected output not found: %DIST%\alexa-broadcast-client.exe
+  pause
+  popd
+  exit /b 1
+)
+if not exist "%DIST%\webview-host.exe" (
+  echo Expected output not found: %DIST%\webview-host.exe
   pause
   popd
   exit /b 1

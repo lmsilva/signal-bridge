@@ -1080,6 +1080,11 @@ function createListener({ config, log }) {
     start,
     alexa,
     udpBroadcaster,
+    // Exposed for the control web server: synthetic events (e.g. web pushes
+    // of the Tesla dashboard) flow through the same pipeline as voice events,
+    // including cached previews, processing acks, and cache fallbacks.
+    recordVoiceEvent,
+    sendUdpPayload,
   };
 }
 

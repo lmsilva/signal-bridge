@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Display Control</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-title">
+      <span class="app-dot"></span>
+      Display Control
+    </div>
+    <div class="header-status" id="header-status" title="Bridge status">
+      <span class="pulse" id="bridge-pulse"></span>
+      <span id="bridge-status-text">connecting…</span>
+    </div>
+  </header>
+
+  <main class="content" id="content">
+
+    <!-- ============================ PUSH TAB ============================ -->
+    <section class="tab-panel active" id="tab-push">
+      <div class="card-grid">
+
+        <div class="section-label">Tesla</div>
+        <div class="card-row">
+          <button class="push-card" id="btn-tesla-dashboard">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6.5 10.5 9 8l3 3 3.5-3.5L18 10"/></svg>
+            </span>
+            <span class="push-card-title">Tesla Dashboard</span>
+            <span class="push-card-sub">Map, climate, tires &amp; more</span>
+          </button>
+          <button class="push-card" id="btn-tesla-battery">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="17" height="9" rx="2"/><path d="M21.5 10.5v3"/><path d="M6 10.5v3M9.5 10.5v3M13 10.5v3"/></svg>
+            </span>
+            <span class="push-card-title">Tesla Battery</span>
+            <span class="push-card-sub">Charge level &amp; status</span>
+          </button>
+        </div>
+
+        <div class="section-label">Web Browser</div>
+
+        <div class="card" id="browser-active-card" hidden>
+          <div class="active-url-row">
+            <span class="active-dot"></span>
+            <div class="active-url-text">
+              <div class="active-url-label">Now on display</div>
+              <div class="active-url" id="active-url">—</div>
+            </div>
+          </div>
+          <button class="btn btn-danger btn-block" id="btn-close-browser">Close Browser</button>
+        </div>
+
+        <div class="card">
+          <label class="field-label" for="url-input">Push a web page</label>
+          <div class="url-row">
+            <input type="url" id="url-input" inputmode="url" autocapitalize="off"
+                   autocomplete="off" autocorrect="off" spellcheck="false"
+                   placeholder="https://…">
+            <button class="btn btn-accent" id="btn-push-url">Push</button>
+          </div>
+          <div class="or-divider"><span>or</span></div>
+          <button class="btn btn-outline btn-block" id="btn-scan-qr">
+            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+            Scan QR Code
+          </button>
+          <input type="file" id="qr-file" accept="image/*" capture="environment" hidden>
+          <p class="hint" id="qr-hint">Point your camera at a QR code (autodarts, karaoke queue, …). Uses the live camera over HTTPS — open this page as <strong>https://</strong> and accept the certificate warning once on your iPhone.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =========================== REMOTE TAB =========================== -->
+    <section class="tab-panel" id="tab-remote">
+      <div class="card-grid">
+        <div class="section-label">Display PC</div>
+
+        <div class="card">
+          <div class="remote-row">
+            <span class="remote-icon accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </span>
+            <div class="remote-text">
+              <div class="remote-title">Restart</div>
+              <div class="remote-sub">Reboot the display PC</div>
+            </div>
+            <button class="btn btn-outline confirm-btn" id="btn-reboot" data-action="reboot" data-label="Restart">Restart</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="remote-row">
+            <span class="remote-icon danger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+            </span>
+            <div class="remote-text">
+              <div class="remote-title">Power Off</div>
+              <div class="remote-sub">Shut down the display PC</div>
+            </div>
+            <button class="btn btn-outline confirm-btn danger" id="btn-poweroff" data-action="poweroff" data-label="Power Off">Power Off</button>
+          </div>
+        </div>
+
+        <p class="hint">Commands are sent over the local network to the display client. A confirmation tap is required.</p>
+      </div>
+    </section>
+
+    <!-- ========================== SETTINGS TAB ========================== -->
+    <section class="tab-panel" id="tab-settings">
+      <div class="card-grid">
+        <div class="section-label">Authentication</div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">Amazon Alexa</div>
+            <span class="status-pill" id="alexa-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="alexa-status-detail">Checking session…</p>
+          <button class="btn btn-accent btn-block" id="btn-alexa-auth">Re-authenticate Amazon</button>
+          <div class="auth-followup" id="alexa-auth-followup" hidden>
+            <a class="btn btn-outline btn-block" id="alexa-proxy-link" href="#" target="_blank" rel="noopener">Open Amazon Login</a>
+            <p class="hint">Log in with your Amazon account. When it completes, the bridge restarts itself with the new session (about 30 seconds).</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">Tesla</div>
+            <span class="status-pill" id="tesla-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="tesla-status-detail">Checking session…</p>
+          <button class="btn btn-accent btn-block" id="btn-tesla-auth">Authenticate Tesla</button>
+          <div class="auth-followup" id="tesla-auth-followup" hidden>
+            <a class="btn btn-outline btn-block" id="tesla-auth-link" href="#" target="_blank" rel="noopener">Open Tesla Login</a>
+            <p class="hint" id="tesla-auth-hint">Sign in with your Tesla account. You'll be sent back here automatically when it completes.</p>
+          </div>
+        </div>
+
+        <p class="hint" id="bridge-meta"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="push">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 8v5M9.5 10.5 12 8l2.5 2.5"/></svg>
+      <span>Push</span>
+    </button>
+    <button class="tab-btn" data-tab="remote">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+      <span>Remote</span>
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <!-- Live QR camera scanner -->
+  <div class="sheet-backdrop" id="qr-scanner-sheet" hidden>
+    <div class="sheet sheet-scanner">
+      <div class="sheet-title">Scan QR code</div>
+      <div class="scanner-frame">
+        <video id="qr-video" playsinline muted autoplay></video>
+        <div class="scanner-reticle"></div>
+      </div>
+      <p class="hint" id="qr-scanner-status">Starting camera…</p>
+      <div class="sheet-actions sheet-actions-stack">
+        <button class="btn btn-outline btn-block" id="qr-scanner-photo">Use photo instead</button>
+        <button class="btn btn-outline btn-block" id="qr-scanner-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR confirm sheet -->
+  <div class="sheet-backdrop" id="qr-sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-title">Push this link?</div>
+      <div class="sheet-url" id="qr-sheet-url"></div>
+      <div class="sheet-actions">
+        <button class="btn btn-outline" id="qr-sheet-cancel">Cancel</button>
+        <button class="btn btn-accent" id="qr-sheet-push">Push to Display</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/jsqr.min.js"></script>
+  <script>
+    // Fallback: if the vendored copy is missing on the bridge, load from CDN
+    // (the phone has internet even though the bridge page is LAN-hosted).
+    if (typeof jsQR !== 'function') {
+      document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
+    }
+  </script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -14,6 +14,7 @@ DEFAULTS = {
     "fadeOutMs": 600,
     "overlayBackground": "#0f172a",
     "overlayOpacity": 0.88,
+    "webOverlayOpacity": 0.88,
     "chipBackground": "#141a24",
     "accentColor": "#38bdf8",
     "alertColor": "#f97316",

@@ -144,9 +144,10 @@ Secrets and runtime data live under `data/` and are not committed.
 1. Host your EC public key at `https://YOUR-DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem`
 2. Copy `.env.example` → `.env` and set `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, optional `TESLA_VIN`
 3. `./tesla-register.sh` on NAS (or `npm run tesla-register` on PC) — register domain with Tesla (once per region)
-4. **On your Windows PC:** `npm run tesla-auth` or `tesla-auth-pc.bat`  
-   - Tesla portal redirect URI: `http://localhost:4381/callback` only (`http://` LAN IPs are **not** allowed)  
-   - Saves `data/tesla-session.json` on the NAS share (even when run from `\\nas\...`)
+4. **OAuth (pick one):**
+   - **Windows PC:** `npm run tesla-auth` or `tesla-auth-pc.bat` — Tesla portal redirect URI `http://localhost:4381/callback` (`http://` is only allowed for localhost)
+   - **Phone (control page):** Settings → Authenticate Tesla — Tesla requires a public CA domain (not a LAN IP). Add `https://fleetapi.YOURDOMAIN/callback` in the Tesla developer app and `.env`, and reverse-proxy that path on the host that serves the Fleet domain to `http://<NAS_IP>:4381/callback`
+   - Saves `data/tesla-session.json` on the NAS share
 5. Pair virtual key on phone: `https://www.tesla.com/_ak/YOUR-DOMAIN`
 6. Recreate Docker listener after `.env` changes: `docker compose up -d --force-recreate`
 

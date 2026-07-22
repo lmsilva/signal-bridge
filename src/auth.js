@@ -20,8 +20,11 @@ function extractProxyUrl(error, config) {
   return match?.[0] || `http://${config.proxyOwnIp}:${config.proxyPort}/`;
 }
 
-async function runAuth({ exitOnComplete = true } = {}) {
-  const config = loadConfig();
+async function runAuth({ exitOnComplete = true, overrides = {} } = {}) {
+  // Overrides let a host process (e.g. the control web server) inject the
+  // LAN address the browser must reach the proxy on, since DEFAULTS captures
+  // PROXY_OWN_IP at module load time.
+  const config = { ...loadConfig(), ...overrides };
   const log = createLogger(config);
   const existingSession = loadSession(config.sessionPath) || {};
   const alexa = new Alexa();

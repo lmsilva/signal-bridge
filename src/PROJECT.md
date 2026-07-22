@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-12
+**Last updated:** 2026-07-21
 
 ---
 
@@ -87,6 +87,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-auth.js` | One-shot OAuth (`npm run tesla-auth`, `tesla-auth-pc.bat`) |
 | `src/tesla-register.js` | Partner domain register + `--verify-only` |
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
+| `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (push Tesla/URL, close browser, reboot/poweroff, phone auth flows); self-signed TLS via `web-tls.js` |
+| `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
+| `src/web/` | Mobile-first control page assets: `index.html`, `app.js`, `styles.css`, vendored `jsqr.min.js` (live camera QR over HTTPS; photo fallback) |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
 | `test/*.test.js` | Node built-in test suite (`npm test`) |
 | `src/bridge-state.js` | Dedup fingerprints + last timestamp on disk |
@@ -146,6 +149,7 @@ Voice "show tesla battery"  →  listener  →  tesla-fleet-client (OAuth token)
 | 2. Secrets | Repo `.env` | `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, optional `TESLA_VIN` |
 | 3. Register domain | NAS | `./tesla-register.sh` then `./tesla-verify-register.sh` |
 | 4. OAuth | **Windows PC** | `tesla-auth-pc.bat` or `npm run tesla-auth` — includes `vehicle_location` scope for dashboard map |
+| 4b. OAuth (phone) | Control page | Settings → **Authenticate Tesla** — Tesla requires a **public CA domain** redirect (LAN IPs are rejected). Use `TESLA_REDIRECT_URI=https://fleetapi.YOURDOMAIN/callback`, register that URI in the Tesla app, and reverse-proxy `/callback` on the Pi/host that serves the Fleet domain → `http://<NAS_IP>:4381/callback`. Bridge auto-binds plain HTTP `:4381` when redirect host is not localhost |
 | 5. Virtual key | Phone (Tesla app) | `https://www.tesla.com/_ak/DOMAIN` |
 | 6. Restart listener | NAS | `./recreate.sh` after `.env` changes |
 
@@ -163,7 +167,7 @@ Voice "show tesla battery"  →  listener  →  tesla-fleet-client (OAuth token)
 
 ### Config
 
-**`.env`:** `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, `TESLA_FLEET_REGION` (default `na`), `TESLA_VIN` (optional), `TESLA_REDIRECT_URI` (PC OAuth only).
+**`.env`:** `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_FLEET_DOMAIN`, `TESLA_FLEET_REGION` (default `na`), `TESLA_VIN` (optional), `TESLA_REDIRECT_URI` (public URI Tesla sees; PC can use `http://localhost:4381/callback`), optional `TESLA_CALLBACK_LISTEN` (local bind override; default `http://0.0.0.0:4381` when redirect is a non-loopback host).
 
 **`config.teslaFleet`:** `enabled`, `region`, `domain`, `vin`, `sessionFile`, `minRequestIntervalSec`, `keepAlive.*` — see `config.example.json`.
 
@@ -268,6 +272,10 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
 | `alarmSync.*` | Alarm poll/mirror; `localTimeZone` for `originalDate`/`originalTime` (default `America/Denver`) |
 | `teslaFleet.*` | Fleet API region, domain, VIN, keep-alive, `minRequestIntervalSec` |
+| `webServer.enabled/port` | Control web page HTTPS port (default enabled, `47810`) |
+| `webServer.https` | `true` (default) — self-signed TLS; required for live camera QR on iOS |
+| `webServer.httpRedirectPort` | Optional plain HTTP redirect to HTTPS (default `47811`; set `0` to disable) |
+| `webServer.certDir` / `certHosts` | Cert folder (`data/web-certs`) and extra SAN hostnames/IPs (include your NAS LAN IP) |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
@@ -290,6 +298,9 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `tesla-dashboard.query` | "Show Tesla dashboard" — `dashboard` object from Fleet API (`vehicle_data` + `location_data`) |
 | `request.processing` | Instant ack for slow external-API commands (Tesla) when **no cache exists** — `request.{title,source,timeoutSeconds,stages[]}`; when a cached snapshot exists the bridge sends it instead, flagged `stale+refreshing`. Either is replaced by the real payload when the fetch completes |
 | `alarm.snapshot` | Wake alarms list / newly set alarm highlight |
+| `web.open` | Control page pushes a URL — `web.{url,errorDisplaySeconds}`, `persistent: true`; client opens it in a WebView2 overlay that stays until `web.close` |
+| `web.close` | Control page "Close Browser" — client kills the WebView2 overlay |
+| `system.command` | Control page Remote tab — `system.action` = `reboot` \| `poweroff`; client runs Windows `shutdown` |
 
 **Indoor vs outdoor routing:** Generic "what's the temperature" → outdoor (`weather.query`). Location-specific ("top floor", "bedroom echo", "Room 14") → indoor. Spoken Alexa response supplies the reading (e.g. "It's 76 degrees on the top floor"). Humidity only when explicitly asked for a named location.
 
@@ -327,13 +338,13 @@ Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliab
 ## Testing
 
 ```bash
-npm test                    # bridge only (225 tests)
-run_all_tests.bat           # repo root — bridge + Windows client (225 + 45)
+npm test                    # bridge only (280 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (280 + 78)
 ```
 
-Bridge tests in `test/*.test.js` — includes `tesla-fleet.test.js`, `tesla-udp-payload.test.js`, `tesla-auth-status.test.js`, `tesla-battery.test.js`, `tesla-battery-cache.test.js`, `tesla-dashboard.test.js`, `tesla-dashboard-data.test.js`, `tesla-dashboard-cache.test.js`, voice-event gate/dedup for Fleet API flow.
+Bridge tests in `test/*.test.js` — includes `tesla-fleet.test.js`, `tesla-udp-payload.test.js`, `tesla-auth-status.test.js`, `tesla-battery.test.js`, `tesla-battery-cache.test.js`, `tesla-dashboard.test.js`, `tesla-dashboard-data.test.js`, `tesla-dashboard-cache.test.js`, voice-event gate/dedup for Fleet API flow, `web-command-payloads.test.js` (web.open/web.close/system.command builders), and `web-server.test.js` (static + API routes, URL validation, Tesla phone-OAuth callback flow with mocked token endpoint).
 
-Client tests in `alexa broadcast client/test/test_*.py` — includes `format_limit_reset_time` and Tesla fleet battery payload routing.
+Client tests in `alexa broadcast client/test/test_*.py` — includes `format_limit_reset_time`, Tesla fleet battery payload routing, and `test_web_overlay.py` (pre-flight, host command, command routing, error payload).
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 
@@ -376,8 +387,35 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 
 ---
 
+## Control web page (`src/web-server.js` + `src/web/`)
+
+Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`** (config `webServer.{enabled,port,https}`; zero new npm deps — plain `node:https` + auto self-signed cert in `data/web-certs/`, lives under the mounted `./src` volume so no Docker rebuild). Optional HTTP→HTTPS redirect on port **47811**. Three tabs: **Push** / **Remote** / **Settings**. Trusted-LAN, no page auth; destructive actions need an in-page confirm tap.
+
+**iPhone / Chrome QR:** open the **https** URL once, accept the certificate warning (Advanced → Proceed), then **Scan QR Code** uses the live camera (`getUserMedia` + jsQR). Plain HTTP cannot use the camera on iOS — put your NAS IP in `webServer.certHosts` (or `PROXY_OWN_IP`) before first cert generation, or delete `data/web-certs/` and restart after updating hosts.
+
+**JSON API:**
+
+| Route | Effect |
+|-------|--------|
+| `POST /api/push/tesla-dashboard` / `tesla-battery` | Synthetic event (`trigger: "web-api"`, device `Control Page`) through `listener.recordVoiceEvent` — cache-first preview + live Fleet fetch, same as voice |
+| `POST /api/push/url` `{url}` | Validate → UDP `web.open`; best-effort reachability check in the response |
+| `POST /api/push/close-browser` | UDP `web.close` |
+| `POST /api/system/reboot` / `poweroff` | UDP `system.command` |
+| `POST /api/auth/tesla/start` | Returns Tesla authorize URL + opens one-shot local callback (default `http://0.0.0.0:4381`, 10-min timeout) → `saveTokensFromCode`. Public `TESLA_REDIRECT_URI` (e.g. `https://fleetapi…/callback`) must be proxied from the Fleet domain host to that listen port |
+| `POST /api/auth/alexa/start` | Runs vendored login proxy in-process (`runAuth({exitOnComplete:false, overrides:{proxyOwnIp}})`, port 3456; `proxyOwnIp` derived from request Host); on success the bridge saves the session and **exits 0** so Docker `restart: unless-stopped` brings it back fresh |
+| `GET /api/status` | Alexa/Tesla auth state, active pushed URL, uptime |
+
+QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode → confirm sheet → `POST /api/push/url`. `installAuthProxyPatch()` now runs at the top of `index.js` (before `alexa-remote2` loads) so the in-process login proxy works in listener mode.
+
+---
+
 ## Recent changes
 
+- 2026-07-21: **Persistent Tesla callback on :4381** — when `TESLA_REDIRECT_URI` is a public domain, the bridge binds the local callback at web-server startup (Apache proxy no longer gets connection refused between logins). Idle `/callback` returns a “start Authenticate Tesla” page.
+- 2026-07-21: **Tesla phone OAuth via Fleet domain proxy** — Tesla rejects LAN IP redirect URIs. Phone flow uses `https://fleetapi…/callback` (CA cert on Pi) proxied to NAS `:4381`; `resolveCallbackListen` separates public redirect URI from local HTTP bind. LAN-IP HTTPS self-signed callback kept only for loopback/dev.
+- 2026-07-21: **Tesla phone OAuth HTTPS callback** — local callback can use TLS via `web-tls.js` when redirect/listen is https loopback.
+- 2026-07-21: **Control page HTTPS + live camera QR** — self-signed TLS via `web-tls.js` (`https://<NAS_IP>:47810/`, optional HTTP redirect `:47811`). Scan QR uses `getUserMedia` + jsQR/BarcodeDetector (iOS Chrome needs the secure context + accepted cert). Photo capture remains as fallback.
+- 2026-07-21: **Mobile control page + web browser display** — new `src/web-server.js` + `src/web/` SPA (Push / Remote / Settings; QR photo decode via vendored jsQR). New UDP payloads `web.open` / `web.close` / `system.command` (`udp-payload.js`). Listener exposes `recordVoiceEvent`/`sendUdpPayload`; `index.js` starts the web server after the listener and installs the auth-proxy patch at startup. Phone-based Tesla OAuth (on-demand :4381 callback) and in-process Alexa re-auth with restart-on-success. Config: `webServer.{enabled,port:47810}`. Client side: WebView2 overlay host (see client `PROJECT.md`).
 - 2026-07-12: **Duplicate re-display fix (timestamp-aware dedup)** — `voice-event-dedup.js` now remembers each emitted activity *instant* (fingerprint + `creationTimestamp`, 30-min retention) in addition to the 2-min rolling fingerprint window. History polls re-read the same records for the whole 15-min lookback; after the 2-min window expired those re-reads re-displayed the command (e.g. "ask vivint to arm" showing again minutes later). Re-reads carry the *same* creation timestamp and are now suppressed indefinitely, while a genuinely repeated command produces a new record/timestamp and still displays. Late spoken-response upgrades of an already-shown record (>2 min) are also suppressed.
 - 2026-07-12: **Hourly background cache refresh** — new `background-cache-refresh.js` (started from listener) refreshes weather (default location), shopping list, indoor air quality, and Tesla battery/dashboard caches every hour. Tesla uses `fetchTeslaDashboardIfOnline` (never wakes a sleeping vehicle — protects Fleet free-tier credit). New `weather-cache.js` / `air-quality-cache.js`; voice weather/air-quality paths save on success and fall back to cache on failure. Config: `backgroundCache` in `config.example.json`.
 - 2026-07-11: **Weather location: warning-idiom guard** — `extractWeatherLocation` (`weather-location.js`) no longer mines the spoken response for a city when the query has a local marker ("outside"/"here"/"my area"/…); those default to the configured location. A new `LOCATION_STOPWORD_RE` rejects non-place phrases (effect/warning/until/degrees/weekdays/…) so Alexa answers like "a warning is in effect until Tuesday morning" can't be parsed as a location. Spoken-response mining still applies to truly generic queries ("what's the weather"). Mirrored client-side in `weather_fetch.py` (`_LOCAL_SCOPE_RE`, `_LOCATION_STOPWORD_RE`, gated `resolve_location_for_fetch`).

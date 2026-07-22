@@ -184,6 +184,18 @@ class PayloadUtilsTests(unittest.TestCase):
     def test_is_display_payload(self):
         self.assertTrue(is_display_payload({"type": "time.query", "device": "Kitchen"}))
         self.assertFalse(is_display_payload({"version": 2}))
+        # Commands are not display payloads, but they must still be accepted
+        # by the UDP listener (is_accepted_payload).
+        self.assertFalse(is_display_payload({"type": "web.open", "web": {"url": "https://x"}}))
+
+    def test_command_payloads_are_accepted(self):
+        from src.payload_utils import is_accepted_payload, is_command_payload
+
+        for command_type in ("web.open", "web.close", "system.command"):
+            payload = {"type": command_type, "version": 2}
+            self.assertTrue(is_command_payload(payload), command_type)
+            self.assertTrue(is_accepted_payload(payload), command_type)
+            self.assertFalse(is_display_payload(payload), command_type)
 
     def test_title_for_display_type(self):
         self.assertEqual(title_for_display_type("weather.query"), ("Alexa", "Weather"))

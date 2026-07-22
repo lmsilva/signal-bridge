@@ -4,7 +4,7 @@ import sys
 import threading
 from typing import Callable
 
-from src.payload_utils import is_display_payload
+from src.payload_utils import is_accepted_payload
 
 
 class UdpListener:
@@ -60,7 +60,9 @@ class UdpListener:
             except (UnicodeDecodeError, json.JSONDecodeError):
                 continue
 
-            if isinstance(payload, dict) and is_display_payload(payload):
+            # Accept display overlays AND control commands (web.open / web.close /
+            # system.command). Commands were previously dropped by is_display_payload.
+            if isinstance(payload, dict) and is_accepted_payload(payload):
                 self.on_message(payload)
 
         sock.close()

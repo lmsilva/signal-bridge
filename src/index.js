@@ -1,6 +1,13 @@
+const { installAuthProxyPatch } = require('./auth-proxy-patch');
+
+// Must run before alexa-remote2 / alexa-cookie2 load the stock proxy so the
+// control web page can start the login proxy in-process later.
+installAuthProxyPatch();
+
 const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { createListener } = require('./listener');
+const { createWebServer } = require('./web-server');
 const { installRefreshPatch } = require('./auth-refresh-patch');
 
 function registerShutdown(log) {
@@ -50,6 +57,18 @@ async function main() {
 
   try {
     await listener.start();
+
+    const webServer = createWebServer({
+      config,
+      log,
+      sendUdpPayload: listener.sendUdpPayload,
+      recordVoiceEvent: listener.recordVoiceEvent,
+    });
+    webServer.start().catch((error) => {
+      // The control page is a convenience — never take the listener down
+      // because its port is busy.
+      log.error('Control web server unavailable', error?.message || error);
+    });
   } catch (error) {
     if (isAuthError(error)) {
       log.error('Amazon session expired or invalid');

@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const { exec } = require('child_process');
 const { URL } = require('url');
 const crypto = require('crypto');
@@ -8,6 +9,7 @@ const { ensurePortAvailable } = require('./port-utils');
 const { resolveTeslaFleetConfig, requireTeslaCredentials } = require('./tesla-config');
 const { loadTeslaSession, saveTeslaSession, sessionFromTokenResponse } = require('./tesla-session');
 const { exchangeAuthorizationCode } = require('./tesla-token-refresh');
+const { ensureWebTls } = require('./web-tls');
 
 function openBrowser(url) {
   const platform = process.platform;
@@ -31,10 +33,111 @@ function resolveListenHost(hostname) {
 
 function parseRedirect(redirectUri) {
   const parsed = new URL(redirectUri);
-  const port = parsed.port ? Number(parsed.port) : (parsed.protocol === 'https:' ? 443 : 80);
+  const useHttps = parsed.protocol === 'https:';
+  const port = parsed.port ? Number(parsed.port) : (useHttps ? 443 : 80);
   const hostname = parsed.hostname || 'localhost';
   const pathname = parsed.pathname || '/callback';
-  return { hostname, port, pathname };
+  return { hostname, port, pathname, useHttps, protocol: parsed.protocol };
+}
+
+function isLoopbackHost(hostname) {
+  return !hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+/**
+ * Public redirect URI (what Tesla sees) vs local bind address.
+ * Phone OAuth uses a CA-certified domain (e.g. https://fleetapi…/callback) that
+ * Apache proxies to a plain HTTP listener on the NAS (:4381).
+ *
+ * @param {string|{redirectUri?: string, callbackListenUri?: string}} fleetOrRedirectUri
+ */
+function resolveCallbackListen(fleetOrRedirectUri = {}) {
+  const redirectUri = typeof fleetOrRedirectUri === 'string'
+    ? fleetOrRedirectUri
+    : (fleetOrRedirectUri.redirectUri || 'http://localhost:4381/callback');
+  const explicit = typeof fleetOrRedirectUri === 'string'
+    ? ''
+    : String(fleetOrRedirectUri.callbackListenUri || '').trim();
+  const redirect = parseRedirect(redirectUri);
+
+  if (explicit) {
+    const listen = parseRedirect(explicit);
+    if (!listen.pathname || listen.pathname === '/') {
+      listen.pathname = redirect.pathname;
+    }
+    return {
+      redirectUri,
+      redirect,
+      listenUri: explicit,
+      hostname: listen.hostname,
+      port: listen.port,
+      pathname: listen.pathname,
+      useHttps: listen.useHttps,
+      protocol: listen.protocol,
+      listenHost: resolveListenHost(listen.hostname),
+    };
+  }
+
+  if (isLoopbackHost(redirect.hostname)) {
+    return {
+      redirectUri,
+      redirect,
+      listenUri: redirectUri,
+      hostname: redirect.hostname,
+      port: redirect.port,
+      pathname: redirect.pathname,
+      useHttps: redirect.useHttps,
+      protocol: redirect.protocol,
+      listenHost: resolveListenHost(redirect.hostname),
+    };
+  }
+
+  // Non-loopback redirect (public domain or LAN IP) → bind plain HTTP :4381 for a TLS proxy.
+  const pathname = redirect.pathname || '/callback';
+  const listenUri = `http://0.0.0.0:4381${pathname}`;
+  return {
+    redirectUri,
+    redirect,
+    listenUri,
+    hostname: '0.0.0.0',
+    port: 4381,
+    pathname,
+    useHttps: false,
+    protocol: 'http:',
+    listenHost: '0.0.0.0',
+  };
+}
+
+/**
+ * Create the local OAuth callback server for the resolved *listen* address.
+ * `fleetOrRedirectUri` is the public redirect URI string or a fleet-like object.
+ */
+function createRedirectCallbackServer(fleetOrRedirectUri, requestListener, config = null) {
+  const listen = resolveCallbackListen(
+    typeof fleetOrRedirectUri === 'string' && config?.teslaFleet?.redirectUri
+      ? {
+        redirectUri: config.teslaFleet.redirectUri,
+        callbackListenUri: config.teslaFleet.callbackListenUri || '',
+      }
+      : (typeof fleetOrRedirectUri === 'string'
+        ? fleetOrRedirectUri
+        : {
+          redirectUri: fleetOrRedirectUri?.redirectUri || config?.teslaFleet?.redirectUri,
+          callbackListenUri: fleetOrRedirectUri?.callbackListenUri
+            || config?.teslaFleet?.callbackListenUri
+            || '',
+        }),
+  );
+
+  let server;
+  if (listen.useHttps) {
+    const cfg = config || loadConfig();
+    const tls = ensureWebTls(cfg, { hosts: [listen.hostname] });
+    server = https.createServer({ key: tls.key, cert: tls.cert }, requestListener);
+  } else {
+    server = http.createServer(requestListener);
+  }
+  return { server, ...listen };
 }
 
 function buildAuthorizeUrl(fleet, state) {
@@ -80,11 +183,12 @@ function closeServer(server) {
   });
 }
 
-function waitForCallback(fleet, state, log) {
-  const { hostname, port, pathname } = parseRedirect(fleet.redirectUri);
-
+function waitForCallback(fleet, state, log, config = null) {
   return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
+    let server;
+    const listenInfo = resolveCallbackListen(fleet);
+
+    const requestListener = (req, res) => {
       const finishWithError = async (error) => {
         try {
           await closeServer(server);
@@ -94,8 +198,11 @@ function waitForCallback(fleet, state, log) {
         reject(error);
       };
 
-      const reqUrl = new URL(req.url || '/', `http://${req.headers.host || hostname}`);
-      if (reqUrl.pathname !== pathname) {
+      const reqUrl = new URL(
+        req.url || '/',
+        `${listenInfo.useHttps ? 'https' : 'http'}://${req.headers.host || listenInfo.hostname}`,
+      );
+      if (reqUrl.pathname !== listenInfo.pathname) {
         res.writeHead(404);
         res.end('Not found');
         return;
@@ -130,12 +237,15 @@ function waitForCallback(fleet, state, log) {
       res.end(successHtml(), () => {
         closeServer(server).then(() => resolve(code)).catch(reject);
       });
-    });
+    };
 
+    ({ server } = createRedirectCallbackServer(fleet, requestListener, config));
     server.on('error', reject);
-    const listenHost = resolveListenHost(hostname);
-    server.listen(port, listenHost, () => {
-      log.info(`Listening for Tesla callback on ${fleet.redirectUri} (bind ${listenHost}:${port})`);
+    server.listen(listenInfo.port, listenInfo.listenHost, () => {
+      log.info(
+        `Listening for Tesla callback on ${fleet.redirectUri} `
+        + `(bind ${listenInfo.listenUri}${listenInfo.useHttps ? ', TLS' : ''})`,
+      );
     });
   });
 }
@@ -192,19 +302,19 @@ async function runTeslaAuth({ exitOnComplete = true, authorizationCode = null } 
     return session;
   }
 
-  const { port } = parseRedirect(fleet.redirectUri);
-  const portReady = await ensurePortAvailable(port, log);
+  const listenInfo = resolveCallbackListen(fleet);
+  const portReady = await ensurePortAvailable(listenInfo.port, log);
   if (!portReady) {
     if (exitOnComplete) {
       process.exitCode = 1;
     }
-    throw new Error(`Port ${port} is in use`);
+    throw new Error(`Port ${listenInfo.port} is in use`);
   }
 
   const state = crypto.randomBytes(16).toString('hex');
   const authorizeUrl = buildAuthorizeUrl(fleet, state);
 
-  const callbackPromise = waitForCallback(fleet, state, log);
+  const callbackPromise = waitForCallback(fleet, state, log, config);
   log.info(`Open this URL in your browser:\n${authorizeUrl}`);
   openBrowser(authorizeUrl);
   log.info('Waiting for Tesla login to complete...');
@@ -235,6 +345,9 @@ module.exports = {
   buildAuthorizeUrl,
   parseRedirect,
   resolveListenHost,
+  resolveCallbackListen,
+  isLoopbackHost,
   parseAuthorizationCodeArg,
   saveTokensFromCode,
+  createRedirectCallbackServer,
 };

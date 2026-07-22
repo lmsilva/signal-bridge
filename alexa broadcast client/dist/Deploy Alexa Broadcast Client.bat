@@ -11,6 +11,7 @@ set "LOCALZIP=%DEST%\alexa broadcast client.zip"
 set "EXE=%APPDIR%\alexa-broadcast-client.exe"
 
 taskkill /F /IM "alexa-broadcast-client.exe" >nul 2>&1
+taskkill /F /IM "webview-host.exe" >nul 2>&1
 ping 127.0.0.1 -n 3 >nul
 
 if not exist "%DEST%" mkdir "%DEST%" >nul 2>&1
