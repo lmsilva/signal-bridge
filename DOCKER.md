@@ -7,7 +7,16 @@
 | **Listener** (always on) | `docker compose up -d` | Captures broadcasts |
 | **Auth** (one-time / rare) | `docker compose -f docker-compose.auth.yml up` | Creates `data/alexa-session.json` |
 
-The listener container only needs the saved session file. It does **not** expose any web UI.
+The listener container needs the saved session file. With **`network_mode: host`** it also serves the **control web page** on the NAS LAN:
+
+| Service | Address |
+|---------|---------|
+| Control UI (HTTPS) | `https://<NAS_IP>:47810/` |
+| Optional HTTP→HTTPS | `http://<NAS_IP>:47811/` |
+| Overlay / commands UDP | `:47832` (outbound to displays) |
+| Display announce UDP | `:47833` (inbound from displays) |
+
+No `ports:` mapping is required — host networking shares the NAS stack. See the [main README](README.md) for display discovery and the phone UI.
 
 ---
 
@@ -95,7 +104,7 @@ Captured events append to `data/voice-events.jsonl` on the host (JSON lines: bro
 4. Under **Volumes**, map only:
    - Host `./data` → Container `/app/data`
 5. **Restart policy**: Unless stopped
-6. No ports required for the listener
+6. **Network:** use host networking (as in `docker-compose.yml`) so UDP discovery and the control page work on the LAN — do not rely on published port maps for UDP
 7. Deploy / Start
 
 View logs in Container Station → your container → **Logs**.
@@ -169,25 +178,36 @@ Session and `data/voice-events.jsonl` are on mounted volumes and are preserved.
 
 ---
 
-## 6. UDP broadcast to Windows display client
+## 6. UDP + displays + control page
 
-When an Alexa announcement is captured, the bridge also sends a JSON packet over UDP to the **Alexa Broadcast Client** on your Windows PC.
+When an Alexa announcement is captured, the bridge sends JSON over UDP to the **Alexa Broadcast Client** on your Windows PC(s).
 
-Add to `data/config.json`:
+Add to `data/config.json` (defaults are in `config.example.json`):
 
 ```json
 "udpBroadcast": {
   "enabled": true,
   "port": 47832,
-  "defaultDisplaySeconds": 30,
+  "discoveryPort": 47833,
+  "defaultDisplaySeconds": 120,
   "targets": ["192.168.1.100"]
+},
+"webServer": {
+  "enabled": true,
+  "port": 47810,
+  "https": true,
+  "httpRedirectPort": 47811,
+  "certHosts": ["192.168.1.10"]
 }
 ```
 
-- `targets`: your Windows PC LAN IP (recommended for Docker reliability)
-- `docker-compose.yml` uses `network_mode: host` so LAN UDP broadcast works on the NAS
+- `targets`: optional Windows PC LAN IP(s) if overlay broadcast is unreliable
+- `discoveryPort`: bridge listens here for `display.announce` from clients (not the same as overlay port)
+- On each display PC set `bridgeHosts: ["<NAS_IP>"]` and `discoveryPort: 47833` so announces reach the NAS
+- `certHosts`: include the NAS LAN IP so phones can accept the self-signed cert for QR camera
+- `docker-compose.yml` uses `network_mode: host` — required for LAN UDP and the control page
 
-See `alexa broadcast client/README.md` for the Windows side.
+See `alexa broadcast client/README.md` and the [main README](README.md) (Control web page / Display discovery).
 
 ---
 
@@ -221,7 +241,10 @@ docker compose logs -f
 | `failed to read dockerfile` / `error creating zfs mount` on build | QNAP Container Station Docker graph bug — **ignore for code updates**. Run `./recreate.sh` (no `--build`); `src/` is bind-mounted. To fix builds: restart Container Station in QNAP, or `docker system prune`, or build image on a PC and `docker load` |
 | No broadcasts captured | Check logs; test announce on Echo; confirm push connected |
 | Re-auth on QNAP | Stop listener, run `docker-compose.auth.yml`, then `docker compose up -d` |
-| Windows client not receiving | Add PC IP to `udpBroadcast.targets`; check Windows firewall on port 47832 |
+| Windows client not receiving overlays | Add PC IP to `udpBroadcast.targets`; check Windows firewall on port **47832** |
+| Control page shows no displays | Client needs `bridgeHosts: ["<NAS_IP>"]` + restart; bridge must listen on **47833** (check logs for “UDP display discovery listening”); tap refresh on the control page |
+| Control page / QR camera blocked | Use **https://** `:47810`, accept cert once; put NAS IP in `webServer.certHosts`, delete `data/web-certs/` and recreate if SAN was wrong |
+| Pushed URL does nothing | Client needs WebView2; check client logs; try `send_test.py --type web-open` |
 
 ---
 

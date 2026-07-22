@@ -63,6 +63,8 @@ async function main() {
       log,
       sendUdpPayload: listener.sendUdpPayload,
       recordVoiceEvent: listener.recordVoiceEvent,
+      displayRegistry: listener.displayRegistry,
+      deliverTargetedPayload: listener.deliverTargetedPayload,
     });
     webServer.start().catch((error) => {
       // The control page is a convenience — never take the listener down

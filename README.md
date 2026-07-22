@@ -6,6 +6,18 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 
 ---
 
+## Features at a glance
+
+| Area | What you get |
+|------|----------------|
+| **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
+| **Control web page** | Phone/tablet UI at `https://<NAS_IP>:47810/` — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth |
+| **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); the control page lists them live and can target one or all |
+| **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
+| **Remote input** | Touchpad + on-screen keyboard from the phone control page (mouse/keyboard injection on the selected display) |
+
+---
+
 ## What it captures
 
 | Category | Example voice commands | UDP `type` |
@@ -16,6 +28,7 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 | **Indoor temperature** | "Alexa, what's the temperature on the top floor?" | `indoor-temperature.query` |
 | **Air quality** | "Alexa, what is the air quality?" | `air-quality.query` |
 | **Timers** | Set, cancel, "show my timers", timer fired | `timer.snapshot` |
+| **Alarms** | "Alexa, show my alarms" / set / cancel | `alarm.snapshot` |
 | **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` |
 | **Music** | "Alexa, play …" (now playing from device) | `music.playing` |
 | **Smart home** | "Alexa, turn the kitchen lights on" | `smart-home.command` |
@@ -31,23 +44,87 @@ All captured events are logged to **`data/voice-events.jsonl`** and sent over UD
 ## How it works
 
 ```
-Echo / Alexa app  →  Amazon cloud  →  Bridge (NAS or PC)
+Echo / Alexa app  →  Amazon cloud  →  Bridge (NAS Docker, host network)
                                           │
-                    ┌─────────────────────┼─────────────────────┐
-                    ▼                     ▼                     ▼
-         data/voice-events.jsonl   data/bridge-state.json   UDP :47832
-              (all events)              (dedup state)              │
-                                                                   ▼
-                                                      Windows display client
-                                                      (fullscreen overlays)
+          ┌───────────────────────────────┼───────────────────────────────┐
+          ▼                               ▼                               ▼
+ data/voice-events.jsonl          HTTPS :47810                     UDP :47832
+ (audit log)                      Control web page                 overlays / commands
+                                          │                               │
+                                          │                    ┌──────────┴──────────┐
+                                          │                    ▼                     ▼
+                                          │           Windows display client   (optional more PCs)
+                                          │                    │
+                                          │         ┌──────────┼──────────┐
+                                          │         ▼          ▼          ▼
+                                          │    Tk overlay  WebView2   mouse/key
+                                          │                 browser
+                                          │
+                                          └──── display.announce ←── UDP :47833
+                                                (client → bridge registry)
 ```
 
 1. **Push path:** Amazon sends device-activity WebSocket events → bridge parses them immediately.
 2. **History fallback:** Volume changes, reconnects, and periodic polls call `getCustomerHistoryRecords()` for anything missed.
-3. **On match:** Build typed UDP payload → append one JSON line to **`data/voice-events.jsonl`** → send UDP to the display client.
-4. **Timers:** Amazon's notifications API is polled; active timer lists and fire events emit `timer.snapshot` UDP payloads.
+3. **On match:** Build typed UDP payload → append one JSON line to **`data/voice-events.jsonl`** → send UDP to display client(s) on **`:47832`**.
+4. **Timers / alarms:** Amazon's notifications API is polled; lists and fire/set events emit snapshot UDP payloads.
+5. **Display discovery:** Each client periodically unicasts `display.announce` to the NAS on **`:47833`** (and replies to `display.discover`). The bridge keeps `data/displays-registry.json` and the control page updates live (SSE).
+6. **Control page:** Trusted-LAN HTTPS UI can push overlays, open/close a browser URL, reboot/power off, and inject mouse/keyboard to a **selected** display (unicast).
 
 On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-events.jsonl`**. Legacy **`broadcast.txt`** files (if present from older installs) are still read once for dedup migration but are no longer written.
+
+---
+
+## Control web page
+
+Open **`https://<NAS_IP>:47810/`** on your phone (accept the self-signed certificate once). Optional HTTP redirect: `:47811` → HTTPS.
+
+| Tab | Actions |
+|-----|---------|
+| **Push** | Tesla dashboard / battery, open URL (type or scan QR), close browser |
+| **Remote** | Reboot / power off the selected display PC |
+| **Control** | Touchpad + on-screen keyboard (single display only) |
+| **Settings** | Re-authenticate Amazon Alexa / Tesla Fleet |
+
+**Display picker** (sticky at the top): lists clients that have announced. Default is the first display; **All Displays** is last. Refresh asks every client to re-announce. New displays appear without reloading the page.
+
+**Requirements:** Bridge `webServer.enabled` (default on), Docker `network_mode: host`, and at least one display client with `bridgeHosts` pointing at the NAS (see [Display discovery](#display-discovery)).
+
+iPhone camera QR needs HTTPS + accepting the cert. Put your NAS LAN IP in `webServer.certHosts` (or `PROXY_OWN_IP`) before the first cert is generated, or delete `data/web-certs/` and restart after updating hosts.
+
+---
+
+## Display discovery
+
+Displays **advertise to the bridge** so the control page knows who is online and can target them.
+
+| Direction | Port | Payload |
+|-----------|------|---------|
+| Client → bridge | **47833** (`discoveryPort`) | `display.announce` — id, name, listen port |
+| Bridge → clients | **47832** | `display.discover` — asks clients to announce now |
+| Bridge → clients | **47832** | overlays + `web.*` / `system.*` / `input.*` (optionally `target.id`) |
+
+Clients should set in their `config.json`:
+
+```json
+"displayName": "Poster Display",
+"bridgeHosts": ["192.168.1.10"],
+"discoveryPort": 47833
+```
+
+Unicast to `bridgeHosts` is important: LAN broadcast to `255.255.255.255` often never reaches a NAS. Host-network Docker does **not** need a published UDP port map for discovery.
+
+---
+
+## Browser on the display (WebView2)
+
+From the control page **Push → Open URL** (or QR scan):
+
+1. Bridge validates the URL and sends UDP `web.open` (unicast if one display is selected).
+2. The Windows client pre-flights the URL, then launches a frameless fullscreen **Edge WebView2** window (persistent profile for saved passwords).
+3. The browser stays up until **Close Browser** (`web.close`) or a power command.
+
+Needs the **WebView2 runtime** on the display PC (included on modern Windows 10/11). Failures show a short “Cannot display content at this time” overlay.
 
 ---
 
@@ -55,13 +132,14 @@ On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-
 
 | Path | Role |
 |------|------|
-| `src/` | Bridge source (listener, parsers, UDP payloads, session keep-alive) |
-| `alexa broadcast client/` | Windows tray app + fullscreen overlay (Python/Tkinter) |
+| `src/` | Bridge source (listener, parsers, UDP, display registry, control web server) |
+| `src/web/` | Mobile control page (HTML/JS/CSS) |
+| `alexa broadcast client/` | Windows tray app + overlays + WebView2 host (Python) |
 | `config.example.json` | Default settings template |
-| `data/` | Runtime files (session, config, logs) — gitignored |
+| `data/` | Runtime files (session, config, logs, certs, display registry) — gitignored |
 | `tesla-auth-pc.bat` | Windows OAuth helper (use from NAS share; handles UNC via `pushd`) |
 | `scripts/tesla-common.sh` | Shared helpers for `tesla-*.sh` NAS scripts |
-| `src/PROJECT.md` | Bridge architecture reference (for developers) |
+| `src/PROJECT.md` | Bridge architecture reference (for developers / agents) |
 | `alexa broadcast client/src/PROJECT.md` | Display client architecture reference |
 
 ---
@@ -69,7 +147,11 @@ On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-
 ## Prerequisites
 
 - **Bridge:** Node.js 18+, Amazon account with Alexa devices
-- **Display client:** Windows 10+, same LAN as the bridge (UDP port 47832)
+- **Display client:** Windows 10+, same LAN as the bridge
+  - UDP **47832** (overlays / commands)
+  - Outbound UDP **47833** to the NAS (display announce)
+  - Edge **WebView2** for pushed URLs
+- **Phone control:** browser that can reach `https://<NAS_IP>:47810/`
 
 ---
 
@@ -101,14 +183,14 @@ You can also send an announcement from the Alexa mobile app.
 
 ## Production deployment (QNAP NAS)
 
-Typical setup: bridge in Docker on the NAS, display client on a Windows poster PC.
+Typical setup: bridge in Docker on the NAS (`network_mode: host`), display client on a Windows poster PC.
 
 ```bash
 ./recreate.sh          # restart listener (src/ is bind-mounted; no rebuild needed for code changes)
 ./reauth.sh            # re-authenticate when session expires
 ```
 
-See **[DOCKER.md](DOCKER.md)** for full QNAP Container Station instructions, auth workflow, and troubleshooting.
+See **[DOCKER.md](DOCKER.md)** for full QNAP Container Station instructions, auth workflow, control-page ports, and troubleshooting.
 
 **Display PC:** build the portable client on a Windows machine with Python 3.10+:
 
@@ -117,7 +199,7 @@ cd "alexa broadcast client"
 build_portable.bat --no-pause
 ```
 
-Copy `dist\alexa-broadcast-client-portable.zip` to the poster PC and run `Run Alexa Broadcast Client.bat`.
+Copy `dist\alexa broadcast client.zip` to the poster PC, extract, set `bridgeHosts` / `displayName` in `config.json`, then run `Run Alexa Broadcast Client.bat`.
 
 ---
 
@@ -127,12 +209,16 @@ Copy `config.example.json` to `data/config.json` (Docker) or `config.json` (loca
 
 | Key | Purpose |
 |-----|---------|
-| `udpBroadcast.port` | UDP port (default **47832**) |
-| `udpBroadcast.targets` | Optional unicast IPs if LAN broadcast is unreliable |
+| `udpBroadcast.port` | Overlay/command UDP port (default **47832**) |
+| `udpBroadcast.discoveryPort` | Listen for `display.announce` (default **47833**) |
+| `udpBroadcast.targets` | Optional unicast IPs if LAN broadcast of overlays is unreliable |
+| `webServer.enabled/port` | Control page HTTPS (default **47810**) |
+| `webServer.httpRedirectPort` | Optional HTTP→HTTPS redirect (default **47811**; `0` = off) |
+| `webServer.certHosts` | Extra SAN names/IPs for the self-signed cert (include NAS LAN IP) |
 | `voiceEvents.enabled` | Master switch for voice query capture |
-| `voiceEvents.*Queries` | Per-feature toggles (`timeQueries`, `weatherQueries`, `shoppingListQueries`, `teslaBatteryQueries`, `vivintAlarmQueries`, `notificationQueries`, …) |
+| `voiceEvents.*Queries` | Per-feature toggles (`timeQueries`, `weatherQueries`, `shoppingListQueries`, `teslaBatteryQueries`, …) |
 | `voiceEvents.defaultLocation` | Lat/lon for generic outdoor weather |
-| `voiceEvents.eventsLogFile` | JSONL audit log for all captured events (default `data/voice-events.jsonl`) |
+| `voiceEvents.eventsLogFile` | JSONL audit log (default `data/voice-events.jsonl`) |
 | `timerSync.enabled` | Poll Amazon for active timers |
 | `sessionKeepAlive.*` | Token refresh and session health |
 | `teslaFleet.*` | Tesla Fleet API (domain, region, VIN, keep-alive) — secrets in `.env` |
@@ -177,6 +263,8 @@ Path is configurable via `voiceEvents.eventsLogFile`.
 |------|---------|
 | `data/alexa-session.json` | Saved Amazon session (from `npm run auth`) |
 | `data/bridge-state.json` | Dedup fingerprints and last-seen timestamps |
+| `data/displays-registry.json` | Known display clients from `display.announce` |
+| `data/web-certs/` | Self-signed TLS for the control page |
 | `data/timer-mirror.json` | Local mirror of active Amazon timers |
 | `data/shopping-list-cache.json` | Shopping list cache across add/show commands |
 | `data/session-auth-journal.jsonl` | Auth refresh and session health events |
@@ -192,7 +280,12 @@ Path is configurable via `voiceEvents.eventsLogFile`.
 
 All payloads include `"version": 2` and a `"type"` field. Legacy clients that only read `message` still work for broadcasts.
 
-Default port: **47832**. Payloads include `displaySeconds` (how long the overlay should stay up).
+| Port | Use |
+|------|-----|
+| **47832** | Bridge → clients: overlays, `web.open` / `web.close`, `system.command`, `input.*`, `display.discover` |
+| **47833** | Clients → bridge: `display.announce` |
+
+Payloads may include `displaySeconds`, and optionally `target: { id }` or `target: { all: true }` for directed delivery.
 
 See `src/PROJECT.md` and `alexa broadcast client/src/PROJECT.md` for field-level details and overlay behavior.
 
@@ -201,11 +294,9 @@ See `src/PROJECT.md` and `alexa broadcast client/src/PROJECT.md` for field-level
 ## Testing
 
 ```bash
-npm test                  # bridge unit tests (205)
-run_all_tests.bat         # bridge + Windows client tests (205 + 44, from repo root)
+npm test                  # bridge unit tests
+run_all_tests.bat         # bridge + Windows client tests (from repo root)
 ```
-
-Bridge Tesla tests: `test/tesla-fleet.test.js`, `test/tesla-udp-payload.test.js`, `test/tesla-auth-status.test.js`, `test/tesla-battery.test.js`, `test/tesla-dashboard.test.js`, `test/tesla-dashboard-data.test.js`, `test/tesla-dashboard-cache.test.js`, plus voice gate/dedup updates.
 
 Manual UDP smoke tests (display client):
 
@@ -214,8 +305,8 @@ cd "alexa broadcast client"
 python test/send_test.py --type broadcast
 python test/send_test.py --type tesla-battery --percent 78 --seconds 30
 python test/send_test.py --type tesla-dashboard --seconds 120
-python test/send_test.py --type tesla-dashboard-stale --seconds 120
-python test/send_test.py --type tesla-battery-limited --seconds 30
+python test/send_test.py --type web-open --url https://example.com
+python test/send_test.py --type display-discover
 python test/send_test.py --type weather --seconds 45
 ```
 
@@ -239,6 +330,7 @@ If auth breaks after an Amazon change, run `npm run auth` (or `./reauth.sh` on t
 - Announcements sent **only** from the Alexa app may not always appear in voice history.
 - Generic "what's the temperature" routes to **outdoor weather**; location-specific phrases ("top floor", "bedroom echo") route to **indoor temperature**.
 - Indoor locations, air monitor names, and device aliases can be customized in `config.json` — see `src/PROJECT.md`.
+- The control page is intended for a **trusted LAN** (no login gate on the page itself).
 
 ---
 

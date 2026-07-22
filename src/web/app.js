@@ -6,6 +6,9 @@
 
   // ------------------------------------------------------------ API helpers
 
+  const ALL_DISPLAYS = '*';
+  const STORAGE_TARGET_KEY = 'displayControl.targetId';
+
   async function apiPost(route, body = {}) {
     const response = await fetch(route, {
       method: 'POST',
@@ -32,6 +35,180 @@
     return response.json();
   }
 
+  function selectedTargetId() {
+    const value = $('display-select')?.value;
+    return value || ALL_DISPLAYS;
+  }
+
+  function isSingleDisplaySelected() {
+    const id = selectedTargetId();
+    return Boolean(id) && id !== ALL_DISPLAYS;
+  }
+
+  function withTarget(body = {}) {
+    return { ...body, targetId: selectedTargetId() };
+  }
+
+  // -------------------------------------------------------- Display picker
+
+  let knownDisplays = [];
+
+  function updateControlTabVisibility() {
+    const controlBtn = $('tab-btn-control');
+    const single = isSingleDisplaySelected();
+    if (controlBtn) {
+      controlBtn.hidden = !single;
+    }
+    if (!single) {
+      const controlPanel = $('tab-control');
+      const activeControl = document.querySelector('.tab-btn.active')?.dataset?.tab === 'control';
+      if (activeControl) {
+        document.querySelector('.tab-btn[data-tab="push"]')?.click();
+      }
+      if (controlPanel) {
+        controlPanel.classList.remove('active');
+      }
+    }
+    const hint = $('display-bar-hint');
+    if (!hint) {
+      return;
+    }
+    if (!knownDisplays.length) {
+      hint.textContent = 'No displays yet — tap refresh after the client starts, or wait for the 5‑minute heartbeat.';
+    } else if (single) {
+      const entry = knownDisplays.find((d) => d.id === selectedTargetId());
+      hint.textContent = entry?.stale
+        ? `${entry.name} looks offline (no recent heartbeat). Control may still work if it is awake.`
+        : `Controlling ${entry?.name || 'selected display'}.`;
+    } else {
+      hint.textContent = 'All Displays selected — push and power commands go everywhere. Pick one display for mouse/keyboard.';
+    }
+  }
+
+  function displaysFingerprint(displays) {
+    return (displays || [])
+      .map((d) => `${d.id}|${d.name}|${d.host || ''}|${d.stale ? 1 : 0}|${d.lastSeen || ''}`)
+      .join(';');
+  }
+
+  let lastDisplaysFingerprint = '';
+
+  function renderDisplaySelect(displays, { quiet = false } = {}) {
+    const next = Array.isArray(displays) ? displays : [];
+    const fingerprint = displaysFingerprint(next);
+    const select = $('display-select');
+    if (!select) {
+      return;
+    }
+
+    // Avoid wiping the <select> (and losing focus) when nothing meaningful changed.
+    if (fingerprint === lastDisplaysFingerprint && select.options.length > 0) {
+      updateControlTabVisibility();
+      return;
+    }
+
+    const previousCount = knownDisplays.length;
+    knownDisplays = next;
+    lastDisplaysFingerprint = fingerprint;
+
+    const previous = select.value || localStorage.getItem(STORAGE_TARGET_KEY) || '';
+    select.innerHTML = '';
+
+    for (const d of knownDisplays) {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.stale ? `${d.name} (offline?)` : d.name;
+      select.appendChild(opt);
+    }
+    const allOpt = document.createElement('option');
+    allOpt.value = ALL_DISPLAYS;
+    allOpt.textContent = 'All Displays';
+    select.appendChild(allOpt);
+
+    const ids = new Set(knownDisplays.map((d) => d.id));
+    if (previous && previous !== ALL_DISPLAYS && ids.has(previous)) {
+      select.value = previous;
+    } else if (previous === ALL_DISPLAYS) {
+      select.value = ALL_DISPLAYS;
+    } else if (knownDisplays.length) {
+      select.value = knownDisplays[0].id;
+    } else {
+      select.value = ALL_DISPLAYS;
+    }
+    localStorage.setItem(STORAGE_TARGET_KEY, select.value);
+    updateControlTabVisibility();
+
+    if (!quiet && knownDisplays.length > previousCount) {
+      const newest = knownDisplays.find((d) => !d.stale) || knownDisplays[0];
+      if (newest) {
+        toast(`Display online: ${newest.name}`, 'good');
+      }
+    }
+  }
+
+  async function refreshDisplays({ discover = false, quiet = false } = {}) {
+    try {
+      if (discover) {
+        await apiPost('/api/displays/discover');
+        await new Promise((r) => setTimeout(r, 900));
+      }
+      const data = await apiGet('/api/displays');
+      renderDisplaySelect(data.displays || [], { quiet });
+    } catch (error) {
+      if (discover) {
+        toast(error.message || 'Discover failed', 'bad');
+      }
+    }
+  }
+
+  let displayEvents = null;
+
+  function startDisplayEvents() {
+    if (displayEvents) {
+      return;
+    }
+    try {
+      displayEvents = new EventSource('/api/displays/events');
+    } catch {
+      // Fall back to polling only.
+      return;
+    }
+    displayEvents.addEventListener('displays', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        renderDisplaySelect(data.displays || []);
+      } catch {
+        // ignore malformed events
+      }
+    });
+    displayEvents.onerror = () => {
+      // Browser will retry EventSource automatically.
+    };
+  }
+
+  function stopDisplayEvents() {
+    if (displayEvents) {
+      displayEvents.close();
+      displayEvents = null;
+    }
+  }
+
+  $('display-select')?.addEventListener('change', () => {
+    localStorage.setItem(STORAGE_TARGET_KEY, selectedTargetId());
+    updateControlTabVisibility();
+  });
+
+  $('btn-display-refresh')?.addEventListener('click', async () => {
+    const btn = $('btn-display-refresh');
+    btn.disabled = true;
+    try {
+      await refreshDisplays({ discover: true });
+      toast('Asked displays to announce themselves', 'good');
+    } finally {
+      setTimeout(() => { btn.disabled = false; }, 800);
+    }
+  });
+
   // ------------------------------------------------------------------ Toast
 
   function toast(message, kind = '') {
@@ -54,6 +231,10 @@
       document.querySelectorAll('.tab-panel').forEach((panel) => {
         panel.classList.toggle('active', panel.id === `tab-${btn.dataset.tab}`);
       });
+      // Keep Control (and other tabs) starting at the top — otherwise a prior
+      // Push/Settings scroll can hide the touchpad under the sticky header.
+      window.scrollTo(0, 0);
+      document.scrollingElement?.scrollTo?.(0, 0);
     });
   });
 
@@ -176,8 +357,8 @@
   async function pushTesla(kind, button) {
     button.classList.add('busy');
     try {
-      await apiPost(`/api/push/tesla-${kind}`);
-      toast(`Tesla ${kind} sent to display`, 'good');
+      await apiPost(`/api/push/tesla-${kind}`, withTarget());
+      toast(`Tesla ${kind} sent`, 'good');
     } catch (error) {
       toast(error.message, 'bad');
     } finally {
@@ -210,7 +391,7 @@
     const button = $('btn-push-url');
     button.disabled = true;
     try {
-      const result = await apiPost('/api/push/url', { url });
+      const result = await apiPost('/api/push/url', withTarget({ url }));
       if (result.reachable === false) {
         toast('Pushed — but the page did not respond. The display will show an error if it cannot load.', 'bad');
       } else {
@@ -244,7 +425,7 @@
 
   $('btn-close-browser').addEventListener('click', async () => {
     try {
-      await apiPost('/api/push/close-browser');
+      await apiPost('/api/push/close-browser', withTarget());
       toast('Browser closed on display', 'good');
       pollStatus();
     } catch (error) {
@@ -534,7 +715,7 @@
       button.textContent = button.dataset.label;
       button.disabled = true;
       try {
-        await apiPost(`/api/system/${button.dataset.action}`);
+        await apiPost(`/api/system/${button.dataset.action}`, withTarget());
         toast(
           button.dataset.action === 'reboot'
             ? 'Restart sent — the display PC is rebooting'
@@ -587,7 +768,284 @@
     }
   });
 
+  // -------------------------------------------------- Touchpad + keyboard
+
+  const stickyMods = new Set();
+  let pendingDx = 0;
+  let pendingDy = 0;
+  let pointerFlush = null;
+
+  function flushPointer() {
+    pointerFlush = null;
+    if (!isSingleDisplaySelected()) {
+      pendingDx = 0;
+      pendingDy = 0;
+      return;
+    }
+    const dx = pendingDx;
+    const dy = pendingDy;
+    pendingDx = 0;
+    pendingDy = 0;
+    if (!dx && !dy) {
+      return;
+    }
+    apiPost('/api/input/pointer', withTarget({ dx, dy })).catch(() => {});
+  }
+
+  function queuePointer(dx, dy) {
+    pendingDx += dx;
+    pendingDy += dy;
+    if (!pointerFlush) {
+      pointerFlush = requestAnimationFrame(flushPointer);
+    }
+  }
+
+  async function sendPointerButtons(buttons) {
+    if (!isSingleDisplaySelected()) {
+      toast('Select a single display for mouse control', 'bad');
+      return;
+    }
+    try {
+      await apiPost('/api/input/pointer', withTarget({ dx: 0, dy: 0, buttons }));
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  }
+
+  async function sendKey(key, extraMods = []) {
+    if (!isSingleDisplaySelected()) {
+      toast('Select a single display for keyboard control', 'bad');
+      return;
+    }
+    const modifiers = [...new Set([...stickyMods, ...extraMods])];
+    try {
+      await apiPost('/api/input/key', withTarget({ key, modifiers, action: 'press' }));
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  }
+
+  (function initTouchpad() {
+    const pad = $('touchpad');
+    if (!pad) {
+      return;
+    }
+    let tracking = false;
+    let lastX = 0;
+    let lastY = 0;
+    let moved = false;
+    let downAt = 0;
+    let longTimer = null;
+
+    const SENSITIVITY = 2.1;
+
+    pad.addEventListener('pointerdown', (e) => {
+      if (!isSingleDisplaySelected()) {
+        toast('Select a single display for mouse control', 'bad');
+        return;
+      }
+      tracking = true;
+      moved = false;
+      downAt = Date.now();
+      lastX = e.clientX;
+      lastY = e.clientY;
+      try {
+        pad.setPointerCapture(e.pointerId);
+      } catch {
+        // older WebKit
+      }
+      pad.classList.add('active');
+      longTimer = setTimeout(() => {
+        if (tracking && !moved) {
+          sendPointerButtons({ right: 'click' });
+          tracking = false;
+          pad.classList.remove('active');
+        }
+      }, 550);
+      e.preventDefault();
+    });
+
+    pad.addEventListener('pointermove', (e) => {
+      if (!tracking) {
+        return;
+      }
+      const dx = (e.clientX - lastX) * SENSITIVITY;
+      const dy = (e.clientY - lastY) * SENSITIVITY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (Math.abs(dx) > 0.35 || Math.abs(dy) > 0.35) {
+        moved = true;
+        if (longTimer) {
+          clearTimeout(longTimer);
+          longTimer = null;
+        }
+        queuePointer(dx, dy);
+      }
+      e.preventDefault();
+    });
+
+    function endPointer(e) {
+      if (!tracking) {
+        return;
+      }
+      tracking = false;
+      pad.classList.remove('active');
+      if (longTimer) {
+        clearTimeout(longTimer);
+        longTimer = null;
+      }
+      if (!moved && Date.now() - downAt < 500) {
+        sendPointerButtons({ left: 'click' });
+      }
+      flushPointer();
+      e.preventDefault();
+    }
+
+    pad.addEventListener('pointerup', endPointer);
+    pad.addEventListener('pointercancel', endPointer);
+    // Stop iOS Safari from scrolling the page while dragging the pad.
+    pad.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  })();
+
+  $('btn-mouse-left')?.addEventListener('click', () => sendPointerButtons({ left: 'click' }));
+  $('btn-mouse-right')?.addEventListener('click', () => sendPointerButtons({ right: 'click' }));
+
+  document.querySelectorAll('.nudge').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const raw = String(btn.dataset.nudge || '0,0').split(',');
+      const dx = Number(raw[0]) || 0;
+      const dy = Number(raw[1]) || 0;
+      if (!isSingleDisplaySelected()) {
+        toast('Select a single display for mouse control', 'bad');
+        return;
+      }
+      queuePointer(dx, dy);
+      flushPointer();
+    });
+  });
+
+  document.querySelectorAll('#mod-row .mod').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mod = btn.dataset.mod;
+      if (stickyMods.has(mod)) {
+        stickyMods.delete(mod);
+        btn.classList.remove('active');
+      } else {
+        stickyMods.add(mod);
+        btn.classList.add('active');
+      }
+    });
+  });
+
+  (function buildKeyboard() {
+    const root = $('keyboard');
+    if (!root) {
+      return;
+    }
+
+    // Each row declares a column count so CSS grid keeps keys aligned on phones
+    // (flex-wrap was wrapping mid-row and looking broken on iPhone).
+    const rows = [
+      {
+        cols: 7,
+        keys: [
+          { key: 'Escape', label: 'Esc', span: 1 },
+          { key: 'F1', label: 'F1' }, { key: 'F2', label: 'F2' }, { key: 'F3', label: 'F3' },
+          { key: 'F4', label: 'F4' }, { key: 'F5', label: 'F5' }, { key: 'F6', label: 'F6' },
+        ],
+      },
+      {
+        cols: 6,
+        keys: [
+          { key: 'F7', label: 'F7' }, { key: 'F8', label: 'F8' }, { key: 'F9', label: 'F9' },
+          { key: 'F10', label: 'F10' }, { key: 'F11', label: 'F11' }, { key: 'F12', label: 'F12' },
+        ],
+      },
+      {
+        cols: 12,
+        keys: [
+          { key: '1', label: '1' }, { key: '2', label: '2' }, { key: '3', label: '3' },
+          { key: '4', label: '4' }, { key: '5', label: '5' }, { key: '6', label: '6' },
+          { key: '7', label: '7' }, { key: '8', label: '8' }, { key: '9', label: '9' },
+          { key: '0', label: '0' }, { key: '-', label: '-' },
+          { key: 'Backspace', label: '⌫', span: 1 },
+        ],
+      },
+      {
+        cols: 11,
+        keys: [
+          { key: 'q', label: 'Q' }, { key: 'w', label: 'W' }, { key: 'e', label: 'E' },
+          { key: 'r', label: 'R' }, { key: 't', label: 'T' }, { key: 'y', label: 'Y' },
+          { key: 'u', label: 'U' }, { key: 'i', label: 'I' }, { key: 'o', label: 'O' },
+          { key: 'p', label: 'P' }, { key: 'Tab', label: 'Tab', span: 1 },
+        ],
+      },
+      {
+        cols: 11,
+        keys: [
+          { key: 'a', label: 'A' }, { key: 's', label: 'S' }, { key: 'd', label: 'D' },
+          { key: 'f', label: 'F' }, { key: 'g', label: 'G' }, { key: 'h', label: 'H' },
+          { key: 'j', label: 'J' }, { key: 'k', label: 'K' }, { key: 'l', label: 'L' },
+          { key: "'", label: "'" },
+          { key: 'Enter', label: '⏎', span: 1 },
+        ],
+      },
+      {
+        cols: 11,
+        keys: [
+          { key: 'z', label: 'Z' }, { key: 'x', label: 'X' }, { key: 'c', label: 'C' },
+          { key: 'v', label: 'V' }, { key: 'b', label: 'B' }, { key: 'n', label: 'N' },
+          { key: 'm', label: 'M' }, { key: ',', label: ',' }, { key: '.', label: '.' },
+          { key: '/', label: '/' }, { key: 'Delete', label: 'Del', span: 1 },
+        ],
+      },
+      {
+        cols: 10,
+        keys: [
+          { key: 'ArrowLeft', label: '←' }, { key: 'ArrowUp', label: '↑' },
+          { key: 'ArrowDown', label: '↓' }, { key: 'ArrowRight', label: '→' },
+          { key: ' ', label: 'Space', span: 4 },
+          { chord: ['alt', 'F4'], label: 'Alt+F4', span: 1 },
+          { chord: ['ctrl', 'w'], label: 'Ctrl+W', span: 1 },
+        ],
+      },
+    ];
+
+    for (const row of rows) {
+      const rowEl = document.createElement('div');
+      rowEl.className = `key-row cols-${row.cols}`;
+      for (const def of row.keys) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'key';
+        const span = Number(def.span) || 1;
+        if (span === 2) {
+          btn.classList.add('span-2');
+        } else if (span === 3) {
+          btn.classList.add('span-3');
+        } else if (span === 4) {
+          btn.classList.add('space');
+        }
+        btn.textContent = def.label;
+        btn.addEventListener('click', () => {
+          if (def.chord) {
+            const [mod, key] = def.chord;
+            sendKey(key, [mod]);
+          } else {
+            sendKey(def.key);
+          }
+        });
+        rowEl.appendChild(btn);
+      }
+      root.appendChild(rowEl);
+    }
+  })();
+
   // -------------------------------------------------------------- Start up
 
+  refreshDisplays({ quiet: true });
+  startDisplayEvents();
   startPolling();
+  // Fallback poll if EventSource is blocked or drops (SSE is primary).
+  setInterval(() => refreshDisplays({ quiet: true }), 60000);
 })();

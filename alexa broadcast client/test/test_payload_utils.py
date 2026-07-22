@@ -20,12 +20,15 @@ from src.payload_utils import (
     format_timer_set_label,
     format_weather_location,
     indoor_comfort_band,
+    is_accepted_payload,
+    is_command_payload,
     is_display_payload,
     normalize_condition,
     parse_spoken_air_quality,
     parse_spoken_battery_percent,
     parse_spoken_indoor,
     parse_spoken_weather,
+    payload_targets_display,
     processing_stage_message,
     resolve_display_type,
     resolve_time_display_datetime,
@@ -189,13 +192,35 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertFalse(is_display_payload({"type": "web.open", "web": {"url": "https://x"}}))
 
     def test_command_payloads_are_accepted(self):
-        from src.payload_utils import is_accepted_payload, is_command_payload
-
-        for command_type in ("web.open", "web.close", "system.command"):
+        for command_type in (
+            "web.open",
+            "web.close",
+            "system.command",
+            "input.pointer",
+            "input.key",
+            "display.discover",
+        ):
             payload = {"type": command_type, "version": 2}
             self.assertTrue(is_command_payload(payload), command_type)
             self.assertTrue(is_accepted_payload(payload), command_type)
             self.assertFalse(is_display_payload(payload), command_type)
+
+    def test_payload_targets_display(self):
+        self.assertTrue(payload_targets_display({"type": "web.open"}, "disp-1"))
+        self.assertTrue(
+            payload_targets_display({"type": "web.open", "target": {"all": True}}, "disp-1")
+        )
+        self.assertTrue(
+            payload_targets_display({"type": "web.open", "target": {"id": "disp-1"}}, "disp-1")
+        )
+        self.assertFalse(
+            payload_targets_display({"type": "web.open", "target": {"id": "disp-2"}}, "disp-1")
+        )
+        self.assertTrue(
+            payload_targets_display(
+                {"type": "display.discover", "target": {"id": "other"}}, "disp-1"
+            )
+        )
 
     def test_title_for_display_type(self):
         self.assertEqual(title_for_display_type("weather.query"), ("Alexa", "Weather"))

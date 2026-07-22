@@ -8,6 +8,7 @@
   "udpBroadcast": {
     "enabled": true,
     "port": 47832,
+    "discoveryPort": 47833,
     "defaultDisplaySeconds": 120,
     "targets": []
   },

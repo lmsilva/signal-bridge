@@ -28,6 +28,7 @@ data/diagnostics/
 data/config.json
 data/data/
 data/web-certs/
+data/displays-registry.json
 broadcast.txt
 
 # Windows broadcast client

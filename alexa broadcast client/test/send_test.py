@@ -727,6 +727,34 @@ def build_payload(args) -> dict:
             "system": {"action": "poweroff"},
         }
 
+    if args.type == "display-discover":
+        return {
+            "version": 2,
+            "type": "display.discover",
+            "timestamp": _iso_now(),
+            "trigger": "test",
+        }
+
+    if args.type == "input-click":
+        return {
+            "version": 2,
+            "type": "input.pointer",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "trigger": "test",
+            "pointer": {"dx": 0, "dy": 0, "buttons": {"left": "click"}},
+        }
+
+    if args.type == "input-key":
+        return {
+            "version": 2,
+            "type": "input.key",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "trigger": "test",
+            "key": {"key": "Tab", "modifiers": [], "action": "press"},
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -778,7 +806,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "input-click", "input-key"],
         default="broadcast",
         help="Payload type to send",
     )

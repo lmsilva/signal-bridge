@@ -7,6 +7,7 @@ const { getActivityId, getDeviceName } = require('./parser');
 const { extractSpokenResponse } = require('./activity-response');
 const { createPendingVoiceResponses } = require('./pending-voice-responses');
 const { createUdpBroadcaster } = require('./broadcast-udp');
+const { createDisplayRegistry, attachTarget } = require('./display-registry');
 const { createSessionKeepAlive, isAuthRelatedMessage } = require('./session-keepalive');
 const { markReauthRequired, markReauthRecommended, clearAuthStatus, readAuthStatus } = require('./auth-status');
 const { createSessionAuthJournal } = require('./session-auth-journal');
@@ -91,7 +92,18 @@ function createListener({ config, log }) {
     ...bridgeState,
     fingerprintFn: fingerprint,
   });
-  const udpBroadcaster = createUdpBroadcaster(config, log);
+  const displayRegistry = createDisplayRegistry(config, log);
+  const udpBroadcaster = createUdpBroadcaster(config, log, {
+    onMessage: (payload, rinfo) => {
+      if (payload?.type !== 'display.announce') {
+        return;
+      }
+      const entry = displayRegistry.upsertFromAnnounce(payload, rinfo);
+      if (entry) {
+        log.info(`Display announced: ${entry.name} (${entry.id}) @ ${entry.host || '?'}`);
+      }
+    },
+  });
   const voiceQueryParser = createVoiceQueryParser();
   const voiceEventDedup = createVoiceEventDedup();
   const pendingVoiceResponses = createPendingVoiceResponses();
@@ -145,8 +157,18 @@ function createListener({ config, log }) {
     return map;
   }
 
-  function sendUdpPayload(payload) {
-    udpBroadcaster.send(payload);
+  function sendUdpPayload(payload, options = {}) {
+    return udpBroadcaster.send(payload, options);
+  }
+
+  function deliverTargetedPayload(payload, targetId) {
+    const delivery = displayRegistry.resolveDelivery(targetId);
+    if (delivery.error && !delivery.isAll) {
+      return delivery;
+    }
+    const out = attachTarget(payload, delivery.target);
+    sendUdpPayload(out, delivery.sendOptions);
+    return delivery;
   }
 
   function recordBroadcast(record) {
@@ -249,6 +271,14 @@ function createListener({ config, log }) {
       return;
     }
 
+    const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
+    const emitVoicePayload = (payload) => {
+      if (!payload) {
+        return;
+      }
+      sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+    };
+
     if (event.kind === 'time' && !voiceSettings.timeQueries) {
       return;
     }
@@ -314,12 +344,12 @@ function createListener({ config, log }) {
         }
       }
       if (preview) {
-        sendUdpPayload(preview);
+        emitVoicePayload(preview);
         log.info(`Cached preview sent while refreshing (${event.kind}) for ${event.device}`);
       } else {
         const ack = buildProcessingAckPayload(event, config);
         if (ack) {
-          sendUdpPayload(ack);
+          emitVoicePayload(ack);
           log.info(`Processing ack sent (${event.kind}) for ${event.device}`);
         }
       }
@@ -598,7 +628,7 @@ function createListener({ config, log }) {
     }
 
     voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
-    sendUdpPayload(payload);
+    emitVoicePayload(payload);
     lastCaptureAt = Date.now();
     const logMeta = { query: event.query };
     if (event.kind === 'tesla-battery') {
@@ -946,16 +976,25 @@ function createListener({ config, log }) {
     });
   }
 
-  function start() {
+  async function start() {
+    // Bind UDP early so display.announce heartbeats work even while Alexa init runs.
+    if (udpBroadcaster.settings.enabled) {
+      try {
+        await udpBroadcaster.start();
+      } catch (error) {
+        log.warn('UDP socket failed to bind — display discovery unavailable', error?.message || error);
+      }
+    }
+
     const session = loadSession(config.sessionPath);
     activeSession = session;
     if (!session) {
-      return Promise.reject(new Error(`No session found at ${config.sessionPath}. Run: npm run auth`));
+      throw new Error(`No session found at ${config.sessionPath}. Run: npm run auth`);
     }
 
     const initOptions = buildAlexaInitOptions(config, session, { mode: 'listener' });
     if (!initOptions) {
-      return Promise.reject(new Error('Session file is missing authentication data. Run: npm run auth'));
+      throw new Error('Session file is missing authentication data. Run: npm run auth');
     }
 
     initOptions.logger = config.debug ? log.debug.bind(log) : undefined;
@@ -1080,6 +1119,8 @@ function createListener({ config, log }) {
     start,
     alexa,
     udpBroadcaster,
+    displayRegistry,
+    deliverTargetedPayload,
     // Exposed for the control web server: synthetic events (e.g. web pushes
     // of the Tesla dashboard) flow through the same pipeline as voice events,
     // including cached previews, processing acks, and cache fallbacks.

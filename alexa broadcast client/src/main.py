@@ -5,6 +5,9 @@ import tkinter as tk
 from tkinter import messagebox
 
 from src.config import effective_display_seconds, load_config
+from src.display_announce import DisplayAnnouncer
+from src.display_identity import resolve_display_id, resolve_display_name
+from src.input_control import handle_input_payload
 from src.listener import UdpListener
 from src.overlay import OverlayWindow
 from src.tray_app import run_tray
@@ -42,13 +45,17 @@ class BroadcastClientApp:
 
     def __init__(self):
         self.config = load_config()
+        self.display_id = resolve_display_id(self.config)
+        self.display_name = resolve_display_name(self.config)
         self.message_queue = queue.Queue()
         self.display_active = False
         self.listener = UdpListener(
             port=self.config["listenPort"],
             address=self.config["listenAddress"],
             on_message=self.message_queue.put,
+            display_id=self.display_id,
         )
+        self.announcer = DisplayAnnouncer(self.config)
         self.tray_icon = None
         self.root = None
         self.overlay = None
@@ -67,6 +74,11 @@ class BroadcastClientApp:
             print(message, file=sys.stderr)
             raise RuntimeError(message)
 
+        print(
+            f"Display identity: {self.display_name} ({self.display_id})",
+            flush=True,
+        )
+        self.announcer.start()
         self.tray_icon = run_tray(on_exit=self.shutdown)
 
         self.root = tk.Tk()
@@ -96,6 +108,17 @@ class BroadcastClientApp:
 
     def _handle_command_payload(self, payload: dict):
         command_type = payload.get("type")
+        if command_type == "display.discover":
+            rinfo = payload.get("_rinfo") or {}
+            discovery = payload.get("discovery") or {}
+            self.announcer.remember_bridge_host(
+                rinfo.get("address"),
+                discovery.get("port"),
+            )
+            self.announcer.announce_now(rinfo.get("address"))
+            return
+        if handle_input_payload(payload):
+            return
         if command_type == "web.open":
             url = (payload.get("web") or {}).get("url")
             if not url:
@@ -203,6 +226,7 @@ class BroadcastClientApp:
 
     def shutdown(self):
         self.web_overlay.close()
+        self.announcer.stop()
         self.listener.stop()
         if self.tray_icon:
             self.tray_icon.stop()

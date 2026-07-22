@@ -8,6 +8,12 @@ CONFIG_PATH = ensure_config_file()
 DEFAULTS = {
     "listenPort": 47832,
     "listenAddress": "0.0.0.0",
+    # Friendly name shown in the bridge control page. Falls back to hostname.
+    "displayName": "",
+    # Bridge NAS IP(s) for display.announce unicasts (broadcast often fails to NAS).
+    "bridgeHosts": ["192.168.1.10"],
+    # Dedicated announce port on the bridge (overlay traffic stays on listenPort).
+    "discoveryPort": 47833,
     "maxDisplaySeconds": 120,
     "defaultDisplaySeconds": 120,
     "fadeInMs": 400,

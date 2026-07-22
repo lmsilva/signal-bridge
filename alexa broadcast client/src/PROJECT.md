@@ -9,19 +9,24 @@
 
 ## What this is
 
-A **Windows system-tray app** (Python + Tkinter) that listens for **UDP JSON** messages from the [NAS bridge](../../src/PROJECT.md) and shows a **fullscreen overlay** with the announcement text (e.g. on a movie-poster display PC).
+A **Windows system-tray app** (Python + Tkinter) that listens for **UDP JSON** from the [NAS bridge](../../src/PROJECT.md), shows **fullscreen overlays**, opens pushed URLs in **WebView2**, **announces** itself for the bridge display picker, and applies **remote mouse/keyboard** from the phone control page.
 
-Pair project: **alexa-broadcast-bridge** (Node, Docker on QNAP).
+Pair project: **alexa-broadcast-bridge** (Node, Docker on QNAP). User guide: [README.md](../README.md).
 
 ---
 
 ## System context
 
 ```
-Alexa "announce …"  →  Bridge (NAS)  →  UDP JSON :47832  →  This client  →  Fullscreen overlay
+Alexa / control page  →  Bridge (NAS)  →  UDP :47832  →  This client
+                                ↑                            │
+                                └──── display.announce ──────┘
+                                      (UDP :47833 → bridgeHosts)
+
+Client paths: Tk overlay panels | webview-host (WebView2) | input_control (SendInput/pynput)
 ```
 
-The client does **not** talk to Amazon. It receives UDP and renders UI. Weather may be **fetched client-side** (Open-Meteo) when the bridge payload lacks `weather` or coordinates look wrong for the requested city.
+The client does **not** talk to Amazon. Weather may be **fetched client-side** (Open-Meteo) when the bridge payload lacks `weather` or coordinates look wrong for the requested city.
 
 ---
 
@@ -38,7 +43,10 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 | `src/message_scroll.py` | Long broadcast message scroll animation |
 | `src/tray_app.py` | pystray icon; exit triggers shutdown |
 | `src/web_overlay.py` | `WebOverlayManager` — pre-flights pushed URLs, spawns/kills the WebView2 host; `build_web_error_payload` for the friendly failure message |
-| `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top browser with layered-window opacity (`webview-host.exe` in portable build) |
+| `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top; persistent profile (`private_mode=False`) for saved passwords |
+| `src/display_identity.py` | Stable `display.id` + `displayName` (hostname fallback) for bridge registration |
+| `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); responds to `display.discover` |
+| `src/input_control.py` | Apply `input.pointer` / `input.key` — Win32 relative `SendInput` for mouse move (RDP-friendly), `pynput` for clicks/keys |
 | `src/config.py` | Load `config.json`; `effective_display_seconds` (timers use full duration) |
 | `src/paths.py` | Resolve config path for dev vs portable build |
 | `config.json` | User settings (port, fade, display caps, colors) |
@@ -56,14 +64,16 @@ The client does **not** talk to Amazon. It receives UDP and renders UI. Weather 
 ## Runtime flow
 
 1. `BroadcastClientApp.start()` binds UDP (`0.0.0.0:47832` by default)
-2. `run_tray()` — background tray icon
-3. Hidden `tk.Tk` root; `OverlayWindow` created but not shown until message
-4. `_poll_messages()` every 100ms — drains queue from UDP thread
-5. **Non-timer payloads:** `_enqueue_display()` queues when overlay active
-6. **`timer.snapshot` payloads:** update in-place via `_handle_timer_display()` — not queued; replaces pending timer snapshots
-7. **Local timer fire:** overlay countdown hits 0 → `on_local_timer_fired` → fired alert with full `displaySeconds`
-8. `overlay.show()` / `advance()` — routes by `type`; fade in/out unchanged
-9. Click dismisses current overlay or advances queue (timers excluded from queue)
+2. `DisplayAnnouncer` starts — immediate + every 5 min `display.announce` to `bridgeHosts`:`discoveryPort`
+3. `run_tray()` — background tray icon
+4. Hidden `tk.Tk` root; `OverlayWindow` created but not shown until message
+5. `_poll_messages()` every 100ms — drains queue from UDP thread
+6. **Commands first:** `web.open` / `web.close` / `system.command` / `input.*` / `display.discover` (re-announce)
+7. **Non-timer display payloads:** `_enqueue_display()` queues when overlay active
+8. **`timer.snapshot`:** in-place update via `_handle_timer_display()`
+9. **Local timer fire:** overlay countdown hits 0 → fired alert with full `displaySeconds`
+10. Target filter: ignore payloads whose `target.id` is not this display
+11. Click dismisses current overlay or advances queue (timers excluded from queue)
 
 ---
 
@@ -91,6 +101,8 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `web.open` | **Command (no overlay):** pre-flight `web.url`; success → spawn `webview-host` (persistent frameless browser, stays until `web.close`); failure → "Cannot display content at this time" broadcast with `web.errorDisplaySeconds` timeout |
 | `web.close` | **Command:** kill the WebView2 host |
 | `system.command` | **Command:** `system.action` `reboot`/`poweroff` → Windows `shutdown /r|/s /t 5` (closes browser overlay first) |
+| `display.discover` | **Command:** remember bridge host from packet `_rinfo` + re-announce |
+| `input.pointer` / `input.key` | **Command:** remote mouse (Win32 relative `SendInput`) / keyboard (`pynput`) |
 
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -129,6 +141,9 @@ python test/send_test.py --type system-reboot         # careful: actually reboot
 |-----|---------|-------|
 | `listenPort` | 47832 | Must match bridge `udpBroadcast.port` |
 | `listenAddress` | `0.0.0.0` | All interfaces |
+| `displayName` | hostname | Shown in bridge control page picker |
+| `bridgeHosts` | `["192.168.1.10"]` | NAS IP(s) for announce unicasts |
+| `discoveryPort` | 47833 | Must match bridge `udpBroadcast.discoveryPort` |
 | `maxDisplaySeconds` | 30 | Hard cap on overlay duration |
 | `defaultDisplaySeconds` | 30 | If payload omits `displaySeconds` |
 | `fadeInMs` / `fadeOutMs` | 400 / 600 | Animation |
@@ -136,7 +151,7 @@ python test/send_test.py --type system-reboot         # careful: actually reboot
 | `webOverlayOpacity` | 0.88 | WebView2 browser overlay opacity (matches `overlayOpacity`) |
 | Font / layout keys | — | See `config.py` + `overlay.py` |
 
-Timer and fired-timer overlays use the payload's full `displaySeconds` (not shortened to remaining time). Bridge `data/config.json` should list this PC in `udpBroadcast.targets` if LAN broadcast is flaky.
+Timer and fired-timer overlays use the payload's full `displaySeconds` (not shortened to remaining time). Set `bridgeHosts` so discovery works; optionally list this PC in bridge `udpBroadcast.targets` if overlay broadcast is flaky.
 
 ---
 
@@ -196,13 +211,14 @@ From repo root (bridge + client):
 
 ## Bridge integration checklist
 
-1. Bridge running on NAS with valid `alexa-session.json`
-2. `udpBroadcast.enabled: true` in bridge `data/config.json`
-3. `voiceEvents` + `timerSync` enabled for weather/time/timer overlays
-4. **Tesla battery:** `.env` + `data/tesla-session.json` on NAS; virtual key paired; `teslaBatteryQueries` enabled
-5. Same UDP port both sides
-6. Windows firewall allows inbound UDP
-7. Optional: `targets: ["<this-pc-ip>"]` on bridge
+1. Bridge running on NAS with valid `alexa-session.json` and `network_mode: host`
+2. `udpBroadcast.enabled: true` + `discoveryPort: 47833` in bridge `data/config.json`
+3. This client: `bridgeHosts: ["<NAS_IP>"]`, matching `discoveryPort`, friendly `displayName`
+4. Control page `https://<NAS_IP>:47810/` lists this display after announce / refresh
+5. `voiceEvents` + `timerSync` enabled for weather/time/timer overlays
+6. **Tesla:** `.env` + `data/tesla-session.json` on NAS; virtual key paired
+7. Same overlay UDP port both sides (**47832**); firewall allows inbound UDP
+8. WebView2 installed for URL push; optional `targets: ["<this-pc-ip>"]` on bridge for overlays
 
 ### Tesla `battery` object (display)
 
@@ -219,6 +235,10 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-21: **Docs — client README + requirements** — user guide covers announce/`bridgeHosts`, control page targeting, WebView2 browser, remote input; `requirements.txt` annotated.
+- 2026-07-21: **Mouse move via SendInput** — relative Win32 `SendInput` instead of pynput `SetCursorPos` so touchpad deltas work (including while an RDP session is watching the poster PC).
+- 2026-07-21: **Announce unicast to NAS** — `bridgeHosts` + `discoveryPort` (default `192.168.1.10:47833`) so announces reach the bridge when `255.255.255.255` is dropped; learn bridge IP from `display.discover` sender.
+- 2026-07-21: **Display discovery + remote input** — `displayName` / stable id, announce heartbeat, target filter on UDP commands, `pynput` mouse/keyboard injection, WebView2 persistent profile (`private_mode=False`) for password save. Smoke: `display-discover`, `input-click`, `input-key`.
 - 2026-07-21: **Web browser display + remote commands** — new `web_overlay.py` (URL pre-flight with SSL fallback, spawn/kill of the host, early-death watch) and `webview_host.py` (pywebview/Edge WebView2, frameless fullscreen on-top). `main.py` intercepts `COMMAND_TYPES` (`web.open`/`web.close`/`system.command`) before the display path; failures show "Cannot display content at this time" through the normal overlay. **UDP listener fix:** `listener.py` previously dropped non-display types via `is_display_payload`, so `web.open` never reached the app (Tesla still worked). Now accepts commands via `is_accepted_payload` / `COMMAND_TYPES` in `payload_utils.py`. WebView2 layered-window alpha removed (blank window). Smoke types: `web-open`, `web-open-bad`, `web-close`, `system-reboot`, `system-poweroff`.
 - 2026-07-11: **Track deploy artifacts in git** — `.gitignore` now allows `dist/Deploy Alexa Broadcast Client.bat`, `dist/alexa broadcast client.zip`, and `dist/send-test.exe` while still ignoring the unpacked PyInstaller folder. Deploy bat kills the running client, replaces `C:\MoviePoster\alexa broadcast client` from the NAS zip, and launches it.
 - 2026-07-11: **Weather location: warning-idiom guard** — `resolve_location_for_fetch`/`extract_named_location` (`weather_fetch.py`) reject weather-warning idioms as cities via `_LOCATION_STOPWORD_RE` and only mine Alexa's spoken answer for a location when the query has no local marker (`_LOCAL_SCOPE_RE`). Fixes "what's the weather outside" showing "effect until Tuesday morning" as the location instead of the configured default. Matches the bridge fix in `weather-location.js`.

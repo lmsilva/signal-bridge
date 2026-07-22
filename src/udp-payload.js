@@ -373,6 +373,93 @@ function buildSystemCommandPayload({ action, device, timestamp, trigger } = {}, 
   };
 }
 
+function buildDisplayDiscoverPayload({ trigger, discoveryPort } = {}, config) {
+  const port = Number(
+    discoveryPort
+      ?? config?.udpBroadcast?.discoveryPort
+      ?? 47833,
+  );
+  return {
+    version: 2,
+    type: 'display.discover',
+    timestamp: new Date().toISOString(),
+    trigger: trigger || 'web-api',
+    discovery: {
+      port,
+    },
+  };
+}
+
+function buildInputPointerPayload({
+  dx = 0,
+  dy = 0,
+  buttons = null,
+  wheel = 0,
+  device,
+  timestamp,
+  trigger,
+} = {}) {
+  const pointer = {
+    dx: Number(dx) || 0,
+    dy: Number(dy) || 0,
+  };
+  if (buttons && typeof buttons === 'object') {
+    pointer.buttons = buttons;
+  }
+  const wheelVal = Number(wheel) || 0;
+  if (wheelVal) {
+    pointer.wheel = wheelVal;
+  }
+
+  return {
+    version: 2,
+    type: 'input.pointer',
+    device: device || 'Control Page',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: 0,
+    trigger: trigger || 'web-api',
+    pointer,
+  };
+}
+
+const INPUT_KEY_ACTIONS = new Set(['press', 'down', 'up']);
+const INPUT_MODIFIERS = new Set(['ctrl', 'alt', 'shift', 'meta', 'win']);
+
+function buildInputKeyPayload({
+  key,
+  modifiers = [],
+  action = 'press',
+  device,
+  timestamp,
+  trigger,
+} = {}) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) {
+    return null;
+  }
+  const normalizedAction = INPUT_KEY_ACTIONS.has(String(action || '').toLowerCase())
+    ? String(action).toLowerCase()
+    : 'press';
+  const mods = (Array.isArray(modifiers) ? modifiers : [])
+    .map((m) => String(m || '').toLowerCase())
+    .map((m) => (m === 'win' || m === 'cmd' || m === 'super' ? 'meta' : m))
+    .filter((m) => INPUT_MODIFIERS.has(m));
+
+  return {
+    version: 2,
+    type: 'input.key',
+    device: device || 'Control Page',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: 0,
+    trigger: trigger || 'web-api',
+    key: {
+      key: normalizedKey,
+      modifiers: [...new Set(mods)],
+      action: normalizedAction,
+    },
+  };
+}
+
 function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
   const spokenTarget = event.command?.target || null;
   return {
@@ -466,6 +553,9 @@ module.exports = {
   buildWebOpenPayload,
   buildWebClosePayload,
   buildSystemCommandPayload,
+  buildDisplayDiscoverPayload,
+  buildInputPointerPayload,
+  buildInputKeyPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
   displaySeconds,

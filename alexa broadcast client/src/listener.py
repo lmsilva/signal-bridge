@@ -4,14 +4,21 @@ import sys
 import threading
 from typing import Callable
 
-from src.payload_utils import is_accepted_payload
+from src.payload_utils import is_accepted_payload, payload_targets_display
 
 
 class UdpListener:
-    def __init__(self, port: int, address: str, on_message: Callable[[dict], None]):
+    def __init__(
+        self,
+        port: int,
+        address: str,
+        on_message: Callable[[dict], None],
+        display_id: str | None = None,
+    ):
         self.port = port
         self.address = address
         self.on_message = on_message
+        self.display_id = display_id or ""
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._thread = None
@@ -49,7 +56,7 @@ class UdpListener:
 
         while not self._stop.is_set():
             try:
-                data, _addr = sock.recvfrom(65535)
+                data, addr = sock.recvfrom(65535)
             except socket.timeout:
                 continue
             except OSError:
@@ -60,9 +67,13 @@ class UdpListener:
             except (UnicodeDecodeError, json.JSONDecodeError):
                 continue
 
-            # Accept display overlays AND control commands (web.open / web.close /
-            # system.command). Commands were previously dropped by is_display_payload.
-            if isinstance(payload, dict) and is_accepted_payload(payload):
-                self.on_message(payload)
+            # Accept display overlays AND control commands (web/system/input).
+            if not isinstance(payload, dict) or not is_accepted_payload(payload):
+                continue
+            if self.display_id and not payload_targets_display(payload, self.display_id):
+                continue
+            # Stash sender so display.discover can unicast announces back to the bridge.
+            payload["_rinfo"] = {"address": addr[0], "port": addr[1]}
+            self.on_message(payload)
 
         sock.close()

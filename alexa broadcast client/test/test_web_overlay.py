@@ -175,6 +175,7 @@ class CommandRoutingTests(unittest.TestCase):
         app.config = {"defaultDisplaySeconds": 30, "maxDisplaySeconds": 120}
         app.web_overlay = mock.Mock()
         app.message_queue = mock.Mock()
+        app.announcer = mock.Mock()
         app.display_active = False
         app.overlay = mock.Mock(visible=False)
         app._show_payload = mock.Mock()
@@ -184,6 +185,7 @@ class CommandRoutingTests(unittest.TestCase):
         app = self._make_app()
         for command_type in BroadcastClientApp.COMMAND_TYPES:
             self.assertNotIn(command_type, BroadcastClientApp.DISPLAY_TYPES)
+            # discover/input are commands but _should_show only cares about overlays
             self.assertFalse(app._should_show({"type": command_type}))
 
     def test_web_open_routes_to_manager(self):

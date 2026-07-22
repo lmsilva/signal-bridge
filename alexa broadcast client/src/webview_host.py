@@ -10,10 +10,19 @@ Frozen build:  webview-host.exe --url ... (see alexa-broadcast-client.spec)
 
 import argparse
 import ctypes
+import os
 import sys
 import time
+from pathlib import Path
 
 WINDOW_TITLE = "Alexa Broadcast Web Display"
+
+
+def webview_storage_path() -> str:
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    path = Path(base) / "AlexaBroadcastClient" / "webview-profile"
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
@@ -83,9 +92,13 @@ def main(argv=None) -> int:
             background_color="#0f172a",
         )
 
-        # Edge WebView2 (Chromium) explicitly: fail fast when the runtime is
-        # missing instead of falling back to the legacy MSHTML engine.
-        webview.start(gui="edgechromium", private_mode=True)
+        # Edge WebView2 (Chromium) with a persistent profile so sites can offer
+        # "save password" / keep cookies between pushes (private_mode clears that).
+        webview.start(
+            gui="edgechromium",
+            private_mode=False,
+            storage_path=webview_storage_path(),
+        )
     except Exception as exc:  # noqa: BLE001 - runtime missing / engine failure
         print(f"webview_host: failed to start WebView2: {exc}", file=sys.stderr)
         return 3

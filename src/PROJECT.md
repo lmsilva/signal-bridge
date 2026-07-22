@@ -9,9 +9,11 @@
 
 ## What this is
 
-A **Node.js service** that connects to a personal Amazon/Alexa account (unofficially, via `alexa-remote2`), listens for **broadcast/announcement** voice activity, logs matches, and **UDP-broadcasts** JSON to LAN clients (e.g. the Windows display app).
+A **Node.js service** that connects to a personal Amazon/Alexa account (unofficially, via `alexa-remote2`), listens for household voice activity, logs matches, **UDP-broadcasts** JSON to LAN display clients, serves a **phone control page**, and maintains a **display registry** from client announces.
 
 There is **no supported Amazon API** for passive broadcast listening. Detection uses Alexa **push events** + **voice history polling** and heuristics in `parser.js`.
+
+User-facing overview: repo root `README.md`. Docker: `DOCKER.md`.
 
 ---
 
@@ -20,14 +22,17 @@ There is **no supported Amazon API** for passive broadcast listening. Detection 
 ```
 Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
                                               │
-                    ┌─────────────────────────┼─────────────────────────┐
-                    ▼                         ▼                         ▼
-            data/voice-events.jsonl     data/alexa-session.json    UDP :47832
-            data/bridge-state.json                              (JSON payload)
-                                                                        │
-                                                                        ▼
-                                                          Windows client (see
-                                                          alexa broadcast client/src/PROJECT.md)
+        ┌─────────────────────────────────────┼─────────────────────────────────────┐
+        ▼                                     ▼                                     ▼
+ data/voice-events.jsonl              HTTPS :47810                           UDP :47832
+ data/alexa-session.json              control web (src/web/)                 overlays / commands
+ data/displays-registry.json                  │                                     │
+                                              │                                     ▼
+                                              │                           Windows client(s)
+                                              │                           (overlays, WebView2,
+                                              │                            remote input)
+                                              │                                     │
+                                              └──── UDP :47833 ◄── display.announce ─┘
 ```
 
 **Typical deployment:** QNAP NAS, Docker, `network_mode: host`, `./data` volume for session + config.
@@ -53,7 +58,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/vendor/alexa-cookie-proxy.js` | Patched login proxy (font fixes, static assets, UI CSS injection) |
 | `src/port-utils.js` | Pre-check port 3456 before auth proxy bind |
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
-| `src/broadcast-udp.js` | Send JSON to `255.255.255.255` + optional `targets[]` |
+| `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`) |
+| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer voice queries from history |
@@ -87,7 +93,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-auth.js` | One-shot OAuth (`npm run tesla-auth`, `tesla-auth-pc.bat`) |
 | `src/tesla-register.js` | Partner domain register + `--verify-only` |
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
-| `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (push Tesla/URL, close browser, reboot/poweroff, phone auth flows); self-signed TLS via `web-tls.js` |
+| `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (display picker, push Tesla/URL, close browser, reboot/poweroff, mouse/keyboard input, phone auth); self-signed TLS via `web-tls.js` |
 | `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
 | `src/web/` | Mobile-first control page assets: `index.html`, `app.js`, `styles.css`, vendored `jsqr.min.js` (live camera QR over HTTPS; photo fallback) |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
@@ -260,7 +266,8 @@ Priority: env vars → `data/config.json` → `config.example.json`
 |-----|---------|
 | `amazonPage` / `acceptLanguage` | Region (e.g. `amazon.com`, `en-US`) |
 | `sessionFile` | Default `data/alexa-session.json` |
-| `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP to Windows client |
+| `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP overlays/commands to Windows clients (`:47832`) |
+| `udpBroadcast.discoveryPort` | Listen for `display.announce` (default **47833**) |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
 | `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/teslaBatteryQueries/fetchWeather/fetchAirQuality` | Voice capture toggles |
 | `voiceEvents.defaultLocation` | `{ name, latitude, longitude }` for generic/outdoor weather queries |
@@ -301,6 +308,11 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `web.open` | Control page pushes a URL — `web.{url,errorDisplaySeconds}`, `persistent: true`; client opens it in a WebView2 overlay that stays until `web.close` |
 | `web.close` | Control page "Close Browser" — client kills the WebView2 overlay |
 | `system.command` | Control page Remote tab — `system.action` = `reboot` \| `poweroff`; client runs Windows `shutdown` |
+| `display.discover` | Control page refresh — clients re-announce; payload may include `discovery.port` |
+| `display.announce` | **Inbound** on `:47833` — client registration (`display.{id,name,port}`) |
+| `input.pointer` / `input.key` | Control tab — relative mouse / key; requires `target.id` (single display) |
+
+Optional `target: { id }` or `{ all: true }` on outbound commands for unicast vs broadcast delivery (`display-registry.resolveDelivery`).
 
 **Indoor vs outdoor routing:** Generic "what's the temperature" → outdoor (`weather.query`). Location-specific ("top floor", "bedroom echo", "Room 14") → indoor. Spoken Alexa response supplies the reading (e.g. "It's 76 degrees on the top floor"). Humidity only when explicitly asked for a named location.
 
@@ -329,7 +341,7 @@ Example timer snapshot:
 }
 ```
 
-Default port **47832**. Use `targets: ["<windows-ip>"]` if broadcast is unreliable from Docker.
+Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<windows-ip>"]` if overlay broadcast is unreliable from Docker. Clients must unicast announces to the NAS via `bridgeHosts`.
 
 **Display PC deploy:** user runs `alexa broadcast client\build_portable.bat` when ready; output is **`alexa broadcast client/dist/alexa broadcast client.zip`** (see client `src/PROJECT.md`). Agents build only when explicitly asked.
 
@@ -397,10 +409,14 @@ Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`**
 
 | Route | Effect |
 |-------|--------|
-| `POST /api/push/tesla-dashboard` / `tesla-battery` | Synthetic event (`trigger: "web-api"`, device `Control Page`) through `listener.recordVoiceEvent` — cache-first preview + live Fleet fetch, same as voice |
-| `POST /api/push/url` `{url}` | Validate → UDP `web.open`; best-effort reachability check in the response |
+| `GET /api/displays` | Known displays from `display.announce` registry |
+| `GET /api/displays/events` | SSE stream — pushes `displays` events whenever the registry changes |
+| `POST /api/displays/discover` | Broadcast `display.discover` (clients re-announce to `:47833`) |
+| `POST /api/push/tesla-dashboard` / `tesla-battery` | Synthetic event (`trigger: "web-api"`) through `listener.recordVoiceEvent`; body may include `targetId` |
+| `POST /api/push/url` `{url,targetId?}` | Validate → UDP `web.open` (unicast when one display selected) |
 | `POST /api/push/close-browser` | UDP `web.close` |
 | `POST /api/system/reboot` / `poweroff` | UDP `system.command` |
+| `POST /api/input/pointer` / `key` | Relative mouse / key injection — **requires** a single `targetId` (not All) |
 | `POST /api/auth/tesla/start` | Returns Tesla authorize URL + opens one-shot local callback (default `http://0.0.0.0:4381`, 10-min timeout) → `saveTokensFromCode`. Public `TESLA_REDIRECT_URI` (e.g. `https://fleetapi…/callback`) must be proxied from the Fleet domain host to that listen port |
 | `POST /api/auth/alexa/start` | Runs vendored login proxy in-process (`runAuth({exitOnComplete:false, overrides:{proxyOwnIp}})`, port 3456; `proxyOwnIp` derived from request Host); on success the bridge saves the session and **exits 0** so Docker `restart: unless-stopped` brings it back fresh |
 | `GET /api/status` | Alexa/Tesla auth state, active pushed URL, uptime |
@@ -411,6 +427,10 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-21: **Docs — full feature map** — root `README.md` / `DOCKER.md` / client `README.md` cover display announce, control page, WebView2 browser, remote input; `package.json` description updated.
+- 2026-07-21: **Control tab iPhone layout** — solid sticky display bar (no hint bleed), always-visible touchpad + nudge arrows, CSS-grid keyboard that stays aligned on narrow screens, scroll-to-top on tab switch.
+- 2026-07-21: **Display announce reachability + live picker** — announces use dedicated `:47833` (not overlay `:47832`); clients unicast to `bridgeHosts` (LAN broadcast often never hits the NAS). Control page listens via `GET /api/displays/events` SSE so new displays appear without refresh. Host-network Docker does not need UDP port publish.
+- 2026-07-21: **Display discovery + remote mouse/keyboard** — clients announce `display.announce` (start + every 5 min); bridge registry + control-page picker (default first display, All last). Targeted push/remote via `target.id` + unicast; `input.pointer` / `input.key` only for a single display (touchpad + full on-screen keyboard). Refresh = `display.discover` broadcast.
 - 2026-07-21: **Persistent Tesla callback on :4381** — when `TESLA_REDIRECT_URI` is a public domain, the bridge binds the local callback at web-server startup (Apache proxy no longer gets connection refused between logins). Idle `/callback` returns a “start Authenticate Tesla” page.
 - 2026-07-21: **Tesla phone OAuth via Fleet domain proxy** — Tesla rejects LAN IP redirect URIs. Phone flow uses `https://fleetapi…/callback` (CA cert on Pi) proxied to NAS `:4381`; `resolveCallbackListen` separates public redirect URI from local HTTP bind. LAN-IP HTTPS self-signed callback kept only for loopback/dev.
 - 2026-07-21: **Tesla phone OAuth HTTPS callback** — local callback can use TLS via `web-tls.js` when redirect/listen is https loopback.

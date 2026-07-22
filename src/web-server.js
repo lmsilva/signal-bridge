@@ -21,7 +21,11 @@ const {
   buildWebOpenPayload,
   buildWebClosePayload,
   buildSystemCommandPayload,
+  buildDisplayDiscoverPayload,
+  buildInputPointerPayload,
+  buildInputKeyPayload,
 } = require('./udp-payload');
+const { ALL_TARGET_ID } = require('./display-registry');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -136,6 +140,8 @@ function createWebServer({
   log,
   sendUdpPayload,
   recordVoiceEvent,
+  displayRegistry = null,
+  deliverTargetedPayload = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -202,12 +208,42 @@ function createWebServer({
     return device || 'Control Page';
   }
 
+  function targetIdFrom(body) {
+    if (body?.targetId == null || body.targetId === '') {
+      return ALL_TARGET_ID;
+    }
+    return String(body.targetId).trim();
+  }
+
+  function sendCommandPayload(payload, targetId, res, okBody = {}) {
+    if (typeof deliverTargetedPayload === 'function') {
+      const delivery = deliverTargetedPayload(payload, targetId);
+      if (delivery?.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return false;
+      }
+      sendJson(res, 200, { ok: true, target: delivery.target, ...okBody });
+      return true;
+    }
+    sendUdpPayload(payload);
+    sendJson(res, 200, { ok: true, ...okBody });
+    return true;
+  }
+
   // ---- Push handlers -------------------------------------------------------
 
   function handleTeslaPush(kind, body, res) {
     if (typeof recordVoiceEvent !== 'function') {
       sendJson(res, 503, { ok: false, error: 'Tesla push unavailable — listener not ready' });
       return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
     }
     const event = {
       kind,
@@ -216,14 +252,15 @@ function createWebServer({
       trigger: 'web-api',
       timestamp: Date.now(),
       spokenResponse: null,
+      targetId,
     };
     // Fire and forget: Tesla fetches can take up to 30s (vehicle wake); the
     // voice pipeline already sends a cached preview / processing ack first.
     recordVoiceEvent(event).catch((error) => {
       log.error(`Web push ${kind} failed`, error?.message || error);
     });
-    log.info(`Web push accepted (${kind})`, { device: event.device });
-    sendJson(res, 202, { ok: true, kind });
+    log.info(`Web push accepted (${kind})`, { device: event.device, targetId });
+    sendJson(res, 202, { ok: true, kind, targetId });
   }
 
   async function handleUrlPush(body, res) {
@@ -243,22 +280,37 @@ function createWebServer({
       return;
     }
 
-    sendUdpPayload(payload);
-    activeWebPush = { url: validation.url, pushedAt: new Date().toISOString() };
-    log.info('Web URL pushed to display', { url: validation.url });
+    const targetId = targetIdFrom(body);
+    activeWebPush = { url: validation.url, pushedAt: new Date().toISOString(), targetId };
+    log.info('Web URL pushed to display', { url: validation.url, targetId });
 
     // Best-effort reachability info for instant phone feedback; the client
     // does its own pre-flight and shows the friendly error when needed.
     const check = await checkUrlReachable(validation.url);
+    if (typeof deliverTargetedPayload === 'function') {
+      const delivery = deliverTargetedPayload(payload, targetId);
+      if (delivery?.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        sent: true,
+        url: validation.url,
+        target: delivery.target,
+        ...check,
+      });
+      return;
+    }
+    sendUdpPayload(payload);
     sendJson(res, 200, { ok: true, sent: true, url: validation.url, ...check });
   }
 
   function handleCloseBrowser(body, res) {
     const payload = buildWebClosePayload({ device: deviceFrom(body), trigger: 'web-api' }, config);
-    sendUdpPayload(payload);
     activeWebPush = null;
     log.info('Web browser close sent to display');
-    sendJson(res, 200, { ok: true });
+    sendCommandPayload(payload, targetIdFrom(body), res);
   }
 
   function handleSystemCommand(action, body, res) {
@@ -271,10 +323,110 @@ function createWebServer({
       sendJson(res, 400, { ok: false, error: `Unknown system action: ${action}` });
       return;
     }
-    sendUdpPayload(payload);
     activeWebPush = null;
     log.info(`System ${action} sent to display PC`);
-    sendJson(res, 200, { ok: true, action });
+    sendCommandPayload(payload, targetIdFrom(body), res, { action });
+  }
+
+  function handleDisplaysList(res) {
+    const displays = displayRegistry?.list?.() || [];
+    sendJson(res, 200, { ok: true, displays });
+  }
+
+  function handleDisplaysDiscover(res) {
+    const payload = buildDisplayDiscoverPayload({ trigger: 'web-api' }, config);
+    sendUdpPayload(payload);
+    log.info('Display discover broadcast sent', {
+      discoveryPort: payload.discovery?.port,
+    });
+    sendJson(res, 200, { ok: true, sent: true, discoveryPort: payload.discovery?.port });
+  }
+
+  function handleDisplaysEvents(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    });
+    res.write(': connected\n\n');
+
+    const sendList = (reason, entry = null) => {
+      const body = JSON.stringify({
+        reason,
+        entry,
+        displays: displayRegistry?.list?.() || [],
+      });
+      res.write(`event: displays\ndata: ${body}\n\n`);
+    };
+
+    sendList('hello');
+
+    const unsubscribe = displayRegistry?.onChange
+      ? displayRegistry.onChange((entry, displays) => {
+        try {
+          const body = JSON.stringify({ reason: 'announce', entry, displays });
+          res.write(`event: displays\ndata: ${body}\n\n`);
+        } catch {
+          // client gone
+        }
+      })
+      : () => {};
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  }
+
+  function handleInputPointer(body, res) {
+    const targetId = targetIdFrom(body);
+    if (!targetId || targetId === ALL_TARGET_ID || targetId.toLowerCase() === 'all') {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Mouse control requires a single display — select one display first',
+      });
+      return;
+    }
+    const payload = buildInputPointerPayload({
+      dx: body?.dx,
+      dy: body?.dy,
+      buttons: body?.buttons || null,
+      wheel: body?.wheel,
+      device: deviceFrom(body),
+      trigger: 'web-api',
+    });
+    sendCommandPayload(payload, targetId, res);
+  }
+
+  function handleInputKey(body, res) {
+    const targetId = targetIdFrom(body);
+    if (!targetId || targetId === ALL_TARGET_ID || targetId.toLowerCase() === 'all') {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Keyboard control requires a single display — select one display first',
+      });
+      return;
+    }
+    const payload = buildInputKeyPayload({
+      key: body?.key,
+      modifiers: body?.modifiers,
+      action: body?.action,
+      device: deviceFrom(body),
+      trigger: 'web-api',
+    });
+    if (!payload) {
+      sendJson(res, 400, { ok: false, error: 'Missing key' });
+      return;
+    }
+    sendCommandPayload(payload, targetId, res);
   }
 
   // ---- Tesla OAuth (phone flow) --------------------------------------------
@@ -597,6 +749,10 @@ function createWebServer({
           error: teslaAuth.error,
         },
       },
+      displays: {
+        count: displayRegistry?.list?.()?.length || 0,
+        online: (displayRegistry?.list?.() || []).filter((d) => !d.stale).length,
+      },
       web: {
         activeUrl: activeWebPush?.url || null,
         pushedAt: activeWebPush?.pushedAt || null,
@@ -631,6 +787,14 @@ function createWebServer({
           sendJson(res, 200, buildStatus());
           return;
         }
+        if (pathname === '/api/displays') {
+          handleDisplaysList(res);
+          return;
+        }
+        if (pathname === '/api/displays/events') {
+          handleDisplaysEvents(req, res);
+          return;
+        }
         serveStatic(pathname, res);
         return;
       }
@@ -655,6 +819,15 @@ function createWebServer({
             return;
           case '/api/system/poweroff':
             handleSystemCommand('poweroff', body, res);
+            return;
+          case '/api/displays/discover':
+            handleDisplaysDiscover(res);
+            return;
+          case '/api/input/pointer':
+            handleInputPointer(body, res);
+            return;
+          case '/api/input/key':
+            handleInputKey(body, res);
             return;
           case '/api/auth/tesla/start':
             await handleTeslaAuthStart(res);

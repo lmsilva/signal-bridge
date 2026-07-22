@@ -1,7 +1,7 @@
 {
   "name": "alexa-broadcast-bridge",
   "version": "0.1.0",
-  "description": "Proof of concept: listen for Alexa broadcast/announcement events and log them",
+  "description": "Alexa household bridge: voice → UDP overlays, display discovery, HTTPS control page, WebView2 URL push",
   "private": true,
   "main": "src/index.js",
   "scripts": {

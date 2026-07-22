@@ -28,6 +28,15 @@ COMMAND_TYPES = (
     "web.open",
     "web.close",
     "system.command",
+    "input.pointer",
+    "input.key",
+    "display.discover",
+)
+
+# Bridge discovery / heartbeats — never shown as overlays.
+META_TYPES = (
+    "display.announce",
+    "display.discover",
 )
 
 
@@ -50,9 +59,34 @@ def is_command_payload(payload: dict) -> bool:
     return payload.get("type") in COMMAND_TYPES
 
 
+def is_meta_payload(payload: dict) -> bool:
+    return payload.get("type") in META_TYPES
+
+
 def is_accepted_payload(payload: dict) -> bool:
-    """True for overlay display payloads and control commands (web/system)."""
+    """True for overlay display payloads and control commands (web/system/input)."""
     return is_display_payload(payload) or is_command_payload(payload)
+
+
+def payload_targets_display(payload: dict, display_id: str) -> bool:
+    """False when the payload is aimed at a different display.
+
+    Missing target / target.all → everyone (backward compatible).
+    display.discover is always accepted so clients can re-announce.
+    """
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("type") == "display.discover":
+        return True
+    target = payload.get("target")
+    if not target or not isinstance(target, dict):
+        return True
+    if target.get("all") is True:
+        return True
+    wanted = str(target.get("id") or "").strip()
+    if not wanted:
+        return True
+    return wanted == str(display_id or "").strip()
 
 
 def title_for_display_type(display_type: str) -> tuple[str, str]:

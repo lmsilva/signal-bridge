@@ -88,6 +88,8 @@ async function startTestServer(options = {}) {
     sendUdpPayload: (payload) => sent.push(payload),
     recordVoiceEvent: options.recordVoiceEvent
       || (async (event) => { recorded.push(event); }),
+    displayRegistry: options.displayRegistry || null,
+    deliverTargetedPayload: options.deliverTargetedPayload || null,
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
@@ -380,6 +382,84 @@ test('tesla callback rejects state mismatch', async () => {
 
     const status = (await request(base + '/api/status')).body;
     assert.equal(status.tesla.auth.status, 'error');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('displays list and discover endpoints', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-disp-'));
+  const { createDisplayRegistry } = require('../src/display-registry');
+  const registry = createDisplayRegistry({ ROOT: dataDir }, { warn() {}, info() {} });
+  registry.upsertFromAnnounce({
+    display: { id: 'disp-x', name: 'Living Room' },
+  }, { address: '192.168.0.9' });
+
+  const targeted = [];
+  const { webServer, base, sent } = await startTestServer({
+    config: makeConfig({ ROOT: dataDir }),
+    displayRegistry: registry,
+    deliverTargetedPayload: (payload, targetId) => {
+      const delivery = registry.resolveDelivery(targetId);
+      targeted.push({ payload, delivery });
+      return delivery;
+    },
+  });
+  try {
+    const list = await request(base + '/api/displays');
+    assert.equal(list.status, 200);
+    assert.equal(list.body.displays.length, 1);
+    assert.equal(list.body.displays[0].name, 'Living Room');
+
+    const discover = await postJson(base, '/api/displays/discover');
+    assert.equal(discover.status, 200);
+    assert.equal(sent.some((p) => p.type === 'display.discover'), true);
+
+    const badInput = await postJson(base, '/api/input/pointer', {
+      targetId: '*',
+      dx: 1,
+      dy: 1,
+    });
+    assert.equal(badInput.status, 400);
+
+    const okInput = await postJson(base, '/api/input/key', {
+      targetId: 'disp-x',
+      key: 'Tab',
+    });
+    assert.equal(okInput.status, 200);
+    assert.equal(okInput.body.target.id, 'disp-x');
+    assert.equal(targeted.at(-1).payload.type, 'input.key');
+
+    // Live list: SSE should emit hello, then announce when registry changes.
+    const events = await new Promise((resolve, reject) => {
+      const url = new URL(base + '/api/displays/events');
+      const lib = url.protocol === 'https:' ? require('https') : require('http');
+      const chunks = [];
+      const req = lib.get(url, { rejectUnauthorized: false }, (res) => {
+        assert.equal(res.statusCode, 200);
+        res.on('data', (c) => chunks.push(c.toString('utf8')));
+        setTimeout(() => {
+          registry.upsertFromAnnounce({
+            display: { id: 'disp-y', name: 'Kitchen' },
+          }, { address: '192.168.0.10' });
+          setTimeout(() => {
+            req.destroy();
+            resolve(chunks.join(''));
+          }, 80);
+        }, 40);
+      });
+      req.on('error', (err) => {
+        if (err?.code === 'ECONNRESET') {
+          resolve(chunks.join(''));
+          return;
+        }
+        reject(err);
+      });
+      setTimeout(() => reject(new Error('SSE timeout')), 2000);
+    });
+    assert.match(events, /event: displays/);
+    assert.match(events, /disp-x/);
+    assert.match(events, /disp-y|Kitchen/);
   } finally {
     webServer.stop();
   }

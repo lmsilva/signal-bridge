@@ -1,3 +1,7 @@
-pystray>=0.19.5
-Pillow>=10.0.0
-pywebview>=5.1
+# Runtime dependencies for the Windows display client (dev + portable build).
+# See README.md for feature mapping.
+
+pystray>=0.19.5          # system tray icon
+Pillow>=10.0.0           # tray / image helpers
+pywebview>=5.1           # Edge WebView2 host for web.open browser overlay
+pynput>=1.7.6            # remote keyboard + mouse clicks (moves use Win32 SendInput)
