@@ -7,11 +7,11 @@
 | **Listener** (always on) | `docker compose up -d` | Captures broadcasts |
 | **Auth** (one-time / rare) | `docker compose -f docker-compose.auth.yml up` | Creates `data/alexa-session.json` |
 
-The listener container needs the saved session file. With **`network_mode: host`** it also serves the **control web page** on the NAS LAN:
+The listener container needs the saved session file. With **`network_mode: host`** it also serves the **Signal** control UI on the NAS LAN:
 
 | Service | Address |
 |---------|---------|
-| Control UI (HTTPS) | `https://<NAS_IP>:47810/` |
+| Signal UI (HTTPS) | `https://<NAS_IP>:47810/` |
 | Optional HTTP→HTTPS | `http://<NAS_IP>:47811/` |
 | Overlay / commands UDP | `:47832` (outbound to displays) |
 | Display announce UDP | `:47833` (inbound from displays) |

@@ -1,8 +1,14 @@
-# Alexa Broadcast Bridge
+# Signal Bridge
 
-A Node.js service that connects to your personal Alexa account (unofficially, via `alexa-remote2`), listens for household voice activity, and **UDP-broadcasts JSON** to LAN display clients. The companion [**Windows display client**](alexa%20broadcast%20client/README.md) shows fullscreen overlays on a poster PC, movie screen, or kitchen display.
+<p align="center">
+  <img src="docs/signal-bridge-logo.png" alt="Signal Bridge logo" width="160" height="160">
+</p>
 
-There is **no supported Amazon API** for passive listening. The bridge uses Alexa **push events** plus **voice history polling** and heuristics to detect what happened.
+**Signal Bridge** connects household services to smart displays: it monitors Alexa (and other integrations), bridges events across the LAN, and gives you a phone UI — **Signal** — to push content, unlock remote control, and manage displays.
+
+The companion [**Windows display client**](alexa%20broadcast%20client/README.md) shows fullscreen overlays on a poster PC, movie screen, or kitchen display. Alexa voice capture still uses `alexa-remote2` (unofficial); there is **no supported Amazon API** for passive listening.
+
+> Formerly *Alexa Broadcast Bridge* — same stack, broader role (multi-service bridge → displays).
 
 ---
 
@@ -11,8 +17,8 @@ There is **no supported Amazon API** for passive listening. The bridge uses Alex
 | Area | What you get |
 |------|----------------|
 | **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
-| **Control web page** | Phone/tablet UI at `https://<NAS_IP>:47810/` — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth |
-| **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); the control page lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
+| **Signal (control UI)** | Phone/tablet UI at `https://<NAS_IP>:47810/` — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth |
+| **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); Signal lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
 | **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 4-digit PIN appears on that screen; enter it on the phone to unlock for ~30 minutes |
 
@@ -49,7 +55,7 @@ Echo / Alexa app  →  Amazon cloud  →  Bridge (NAS Docker, host network)
           ┌───────────────────────────────┼───────────────────────────────┐
           ▼                               ▼                               ▼
  data/voice-events.jsonl          HTTPS :47810                     UDP :47832
- (audit log)                      Control web page                 overlays / commands
+ (audit log)                      Signal (control UI)              overlays / commands
                                           │                               │
                                           │                    ┌──────────┴──────────┐
                                           │                    ▼                     ▼
@@ -68,14 +74,14 @@ Echo / Alexa app  →  Amazon cloud  →  Bridge (NAS Docker, host network)
 2. **History fallback:** Volume changes, reconnects, and periodic polls call `getCustomerHistoryRecords()` for anything missed.
 3. **On match:** Build typed UDP payload → append one JSON line to **`data/voice-events.jsonl`** → send UDP to display client(s) on **`:47832`**.
 4. **Timers / alarms:** Amazon's notifications API is polled; lists and fire/set events emit snapshot UDP payloads.
-5. **Display discovery:** Each client periodically unicasts `display.announce` to the NAS on **`:47833`** (and replies to `display.discover`). The bridge keeps `data/displays-registry.json` and the control page updates live (SSE).
-6. **Control page:** Trusted-LAN HTTPS UI can push overlays, open/close a browser URL, reboot/power off, and inject mouse/keyboard to a **selected** display (unicast).
+5. **Display discovery:** Each client periodically unicasts `display.announce` to the NAS on **`:47833`** (and replies to `display.discover`). The bridge keeps `data/displays-registry.json` and Signal updates live (SSE).
+6. **Signal UI:** Trusted-LAN HTTPS UI can push overlays, open/close a browser URL, reboot/power off, and inject mouse/keyboard to a **selected** display (unicast).
 
 On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-events.jsonl`**. Legacy **`broadcast.txt`** files (if present from older installs) are still read once for dedup migration but are no longer written.
 
 ---
 
-## Control web page
+## Signal (control UI)
 
 Open **`https://<NAS_IP>:47810/`** on your phone (accept the self-signed certificate once). Optional HTTP redirect: `:47811` → HTTPS.
 
@@ -96,7 +102,7 @@ iPhone camera QR needs HTTPS + accepting the cert. Put your NAS LAN IP in `webSe
 
 ## Display discovery
 
-Displays **advertise to the bridge** so the control page knows who is online and can target them.
+Displays **advertise to the bridge** so Signal knows who is online and can target them.
 
 | Direction | Port | Payload |
 |-----------|------|---------|
@@ -118,7 +124,7 @@ Unicast to `bridgeHosts` is important: LAN broadcast to `255.255.255.255` often 
 
 ## Browser on the display (WebView2)
 
-From the control page **Push → Open URL** (or QR scan):
+From **Signal → Push → Open URL** (or QR scan):
 
 1. Bridge validates the URL and sends UDP `web.open` (unicast if one display is selected).
 2. The Windows client pre-flights the URL, then launches a frameless fullscreen **Edge WebView2** window (persistent profile for saved passwords).
@@ -133,7 +139,7 @@ Needs the **WebView2 runtime** on the display PC (included on modern Windows 10/
 | Path | Role |
 |------|------|
 | `src/` | Bridge source (listener, parsers, UDP, display registry, control web server) |
-| `src/web/` | Mobile control page (HTML/JS/CSS) |
+| `src/web/` | Signal UI (HTML/JS/CSS + logo) |
 | `alexa broadcast client/` | Windows tray app + overlays + WebView2 host (Python) |
 | `config.example.json` | Default settings template |
 | `data/` | Runtime files (session, config, logs, certs, display registry) — gitignored |
@@ -212,7 +218,7 @@ Copy `config.example.json` to `data/config.json` (Docker) or `config.json` (loca
 | `udpBroadcast.port` | Overlay/command UDP port (default **47832**) |
 | `udpBroadcast.discoveryPort` | Listen for `display.announce` (default **47833**) |
 | `udpBroadcast.targets` | Optional unicast IPs if LAN broadcast of overlays is unreliable |
-| `webServer.enabled/port` | Control page HTTPS (default **47810**) |
+| `webServer.enabled/port` | Signal UI HTTPS (default **47810**) |
 | `webServer.httpRedirectPort` | Optional HTTP→HTTPS redirect (default **47811**; `0` = off) |
 | `webServer.certHosts` | Extra SAN names/IPs for the self-signed cert (include NAS LAN IP) |
 | `voiceEvents.enabled` | Master switch for voice query capture |
@@ -232,7 +238,7 @@ Secrets and runtime data live under `data/` and are not committed.
 3. `./tesla-register.sh` on NAS (or `npm run tesla-register` on PC) — register domain with Tesla (once per region)
 4. **OAuth (pick one):**
    - **Windows PC:** `npm run tesla-auth` or `tesla-auth-pc.bat` — Tesla portal redirect URI `http://localhost:4381/callback` (`http://` is only allowed for localhost)
-   - **Phone (control page):** Settings → Authenticate Tesla — Tesla requires a public CA domain (not a LAN IP). Add `https://fleetapi.YOURDOMAIN/callback` in the Tesla developer app and `.env`, and reverse-proxy that path on the host that serves the Fleet domain to `http://<NAS_IP>:4381/callback`
+   - **Phone (Signal):** Settings → Authenticate Tesla — Tesla requires a public CA domain (not a LAN IP). Add `https://fleetapi.YOURDOMAIN/callback` in the Tesla developer app and `.env`, and reverse-proxy that path on the host that serves the Fleet domain to `http://<NAS_IP>:4381/callback`
    - Saves `data/tesla-session.json` on the NAS share
 5. Pair virtual key on phone: `https://www.tesla.com/_ak/YOUR-DOMAIN`
 6. Recreate Docker listener after `.env` changes: `docker compose up -d --force-recreate`
@@ -264,7 +270,7 @@ Path is configurable via `voiceEvents.eventsLogFile`.
 | `data/alexa-session.json` | Saved Amazon session (from `npm run auth`) |
 | `data/bridge-state.json` | Dedup fingerprints and last-seen timestamps |
 | `data/displays-registry.json` | Known display clients from `display.announce` |
-| `data/web-certs/` | Self-signed TLS for the control page |
+| `data/web-certs/` | Self-signed TLS for the Signal UI |
 | `data/timer-mirror.json` | Local mirror of active Amazon timers |
 | `data/shopping-list-cache.json` | Shopping list cache across add/show commands |
 | `data/session-auth-journal.jsonl` | Auth refresh and session health events |
@@ -330,7 +336,7 @@ If auth breaks after an Amazon change, run `npm run auth` (or `./reauth.sh` on t
 - Announcements sent **only** from the Alexa app may not always appear in voice history.
 - Generic "what's the temperature" routes to **outdoor weather**; location-specific phrases ("top floor", "bedroom echo") route to **indoor temperature**.
 - Indoor locations, air monitor names, and device aliases can be customized in `config.json` — see `src/PROJECT.md`.
-- The control page is intended for a **trusted LAN** (no login gate on the page itself).
+- The Signal UI is intended for a **trusted LAN** (no login gate on the page itself).
 
 ---
 

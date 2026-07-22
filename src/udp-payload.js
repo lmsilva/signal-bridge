@@ -327,7 +327,7 @@ function buildWebOpenPayload({ url, device, timestamp, trigger } = {}, config) {
   return {
     version: 2,
     type: 'web.open',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date(timestamp || Date.now()).toISOString(),
     displaySeconds: 0,
     persistent: true,
@@ -345,7 +345,7 @@ function buildWebClosePayload({ device, timestamp, trigger } = {}, config) {
   return {
     version: 2,
     type: 'web.close',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date(timestamp || Date.now()).toISOString(),
     displaySeconds: 0,
     trigger: trigger || 'web-api',
@@ -363,7 +363,7 @@ function buildSystemCommandPayload({ action, device, timestamp, trigger } = {}, 
   return {
     version: 2,
     type: 'system.command',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date(timestamp || Date.now()).toISOString(),
     displaySeconds: 0,
     trigger: trigger || 'web-api',
@@ -401,7 +401,7 @@ function buildDisplayAuthPinPayload({ pin, displaySeconds, device, trigger } = {
   return {
     version: 2,
     type: 'display.auth',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date().toISOString(),
     displaySeconds: Math.max(10, seconds),
     trigger: trigger || 'web-api',
@@ -417,7 +417,7 @@ function buildDisplayAuthOkPayload({ displaySeconds = 1, device, trigger } = {})
   return {
     version: 2,
     type: 'display.auth',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date().toISOString(),
     displaySeconds: Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.round(seconds)) : 1,
     trigger: trigger || 'web-api',
@@ -451,7 +451,7 @@ function buildInputPointerPayload({
   return {
     version: 2,
     type: 'input.pointer',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date(timestamp || Date.now()).toISOString(),
     displaySeconds: 0,
     trigger: trigger || 'web-api',
@@ -485,7 +485,7 @@ function buildInputKeyPayload({
   return {
     version: 2,
     type: 'input.key',
-    device: device || 'Control Page',
+    device: device || 'Signal',
     timestamp: new Date(timestamp || Date.now()).toISOString(),
     displaySeconds: 0,
     trigger: trigger || 'web-api',

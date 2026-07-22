@@ -1,4 +1,4 @@
-/* Display Control — control page logic (vanilla JS, no framework) */
+/* Signal Bridge — control page logic (vanilla JS, no framework) */
 (() => {
   'use strict';
 

@@ -159,7 +159,7 @@ test('tesla push endpoints feed synthetic events into the voice pipeline', async
     assert.equal(recorded.length, 2);
     assert.equal(recorded[0].kind, 'tesla-dashboard');
     assert.equal(recorded[0].trigger, 'web-api');
-    assert.equal(recorded[0].device, 'Control Page');
+    assert.equal(recorded[0].device, 'Signal');
     assert.equal(recorded[1].kind, 'tesla-battery');
     assert.equal(recorded[1].device, 'iPhone');
   } finally {

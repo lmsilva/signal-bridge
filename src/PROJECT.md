@@ -1,4 +1,4 @@
-# Alexa Broadcast Bridge — project map
+# Signal Bridge — project map
 
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
@@ -9,7 +9,7 @@
 
 ## What this is
 
-A **Node.js service** that connects to a personal Amazon/Alexa account (unofficially, via `alexa-remote2`), listens for household voice activity, logs matches, **UDP-broadcasts** JSON to LAN display clients, serves a **phone control page**, and maintains a **display registry** from client announces.
+A **Node.js service (Signal Bridge)** that bridges household services to smart displays: Alexa voice (via `alexa-remote2`), Tesla/Vivint and more, **UDP** overlays to LAN clients, the **Signal** phone UI (`src/web/`), and a **display registry** from client announces.
 
 There is **no supported Amazon API** for passive broadcast listening. Detection uses Alexa **push events** + **voice history polling** and heuristics in `parser.js`.
 
@@ -95,7 +95,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
 | `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (display picker, push Tesla/URL, close browser, reboot/poweroff, mouse/keyboard input, phone auth); self-signed TLS via `web-tls.js` |
 | `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
-| `src/web/` | Mobile-first control page assets: `index.html`, `app.js`, `styles.css`, vendored `jsqr.min.js` (live camera QR over HTTPS; photo fallback) |
+| `src/web/` | **Signal** UI assets: `index.html`, `app.js`, `styles.css`, `logo.svg` / `favicon.svg` / `logo.png`, vendored `jsqr.min.js` |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
 | `test/*.test.js` | Node built-in test suite (`npm test`) |
 | `src/bridge-state.js` | Dedup fingerprints + last timestamp on disk |
@@ -432,6 +432,7 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-22: **Signal Bridge branding** — product renamed from Alexa Broadcast Bridge; phone UI title **Signal** with logo/favicon; README hero uses `docs/signal-bridge-logo.png`.
 - 2026-07-22: **PIN UX + stale display prune** — wrong PIN shows inline error on the control sheet (`control_auth_incorrect_pin`); successful verify sends `display.auth` with `auth.status: ok` (1s Authenticated flash); registry **removes** displays that miss re-announce (~12 min / 2 heartbeats); web PIN hint omits timeout (client may differ) and locks input to 4 digits.
 - 2026-07-21: **Display id + PIN unlock** — duplicate `displayName` values stay unique via per-machine `display.id` / picker `label` (`Name · ab12`); mouse/keyboard/power require on-screen 4-digit PIN (`display.auth`) then a per-display `controlToken`.
 - 2026-07-21: **Control keyboard Shift vs Caps** — Shift one-shots the next key; Caps latches letters only; SPA JS/CSS served `no-store` + mtime cache-bust (phones were caching sticky-Shift keyboard logic).

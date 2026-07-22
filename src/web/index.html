@@ -6,16 +6,19 @@
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Display Control</title>
-  <link rel="stylesheet" href="/styles.css?v=pin4">
+  <meta name="apple-mobile-web-app-title" content="Signal">
+  <title>Signal</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css?v=signal1">
 </head>
 <body>
   <header class="app-header">
     <div class="app-title">
-      <span class="app-dot"></span>
-      Display Control
+      <img class="app-logo" src="/logo.png" width="28" height="28" alt="">
+      Signal
     </div>
-    <div class="header-status" id="header-status" title="Bridge status">
+    <div class="header-status" id="header-status" title="Signal Bridge status">
       <span class="pulse" id="bridge-pulse"></span>
       <span id="bridge-status-text">connecting…</span>
     </div>
@@ -273,6 +276,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="/app.js?v=pin4"></script>
+  <script src="/app.js?v=signal1"></script>
 </body>
 </html>

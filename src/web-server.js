@@ -209,7 +209,7 @@ function createWebServer({
 
   function deviceFrom(body) {
     const device = String(body?.device || '').trim();
-    return device || 'Control Page';
+    return device || 'Signal';
   }
 
   function targetIdFrom(body) {
@@ -610,7 +610,7 @@ function createWebServer({
       finish(
         200,
         'No Tesla login in progress',
-        'Open the control page → Settings → Authenticate Tesla, then complete login. '
+        'Open Signal → Settings → Authenticate Tesla, then complete login. '
         + 'This callback URL stays ready for the Apache proxy.',
       );
       return;
@@ -638,7 +638,7 @@ function createWebServer({
       teslaAuth.status = 'success';
       teslaAuth.error = null;
       clearTeslaAuthPending();
-      finish(200, 'Tesla login complete', 'You can close this tab and return to the control page.');
+      finish(200, 'Tesla login complete', 'You can close this tab and return to Signal.');
     } catch (error) {
       teslaAuth.status = 'error';
       teslaAuth.error = error?.message || String(error);

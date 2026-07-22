@@ -1,7 +1,7 @@
 {
   "name": "alexa-broadcast-bridge",
   "version": "0.1.0",
-  "description": "Alexa household bridge: voice → UDP overlays, display discovery, HTTPS control page, WebView2 URL push",
+  "description": "Signal Bridge — multi-service LAN bridge to smart displays (Alexa voice, Tesla, HTTPS Signal UI, discovery, WebView2 push)",
   "private": true,
   "main": "src/index.js",
   "scripts": {

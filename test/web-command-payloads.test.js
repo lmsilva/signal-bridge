@@ -15,7 +15,7 @@ test('buildWebOpenPayload builds persistent payload with normalized url', () => 
   assert.equal(payload.type, 'web.open');
   assert.equal(payload.persistent, true);
   assert.equal(payload.displaySeconds, 0);
-  assert.equal(payload.device, 'Control Page');
+  assert.equal(payload.device, 'Signal');
   assert.equal(payload.trigger, 'web-api');
   assert.equal(payload.web.url, 'https://play.autodarts.io/board/abc');
   assert.equal(payload.web.errorDisplaySeconds, 30);

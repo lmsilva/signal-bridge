@@ -9,16 +9,16 @@
 
 ## What this is
 
-A **Windows system-tray app** (Python + Tkinter) that listens for **UDP JSON** from the [NAS bridge](../../src/PROJECT.md), shows **fullscreen overlays**, opens pushed URLs in **WebView2**, **announces** itself for the bridge display picker, and applies **remote mouse/keyboard** from the phone control page.
+A **Windows system-tray app** (Python + Tkinter) that listens for **UDP JSON** from [Signal Bridge](../../src/PROJECT.md), shows **fullscreen overlays**, opens pushed URLs in **WebView2**, **announces** itself for the Signal display picker, and applies **remote mouse/keyboard** from the Signal phone UI.
 
-Pair project: **alexa-broadcast-bridge** (Node, Docker on QNAP). User guide: [README.md](../README.md).
+Pair project: **Signal Bridge** (Node, Docker on QNAP; repo folder may still be `alexa-broadcast-bridge`). User guide: [README.md](../README.md).
 
 ---
 
 ## System context
 
 ```
-Alexa / control page  →  Bridge (NAS)  →  UDP :47832  →  This client
+Alexa / Signal UI  →  Signal Bridge (NAS)  →  UDP :47832  →  This client
                                 ↑                            │
                                 └──── display.announce ──────┘
                                       (UDP :47833 → bridgeHosts)
@@ -236,6 +236,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-22: **Signal Bridge branding** — docs/UI refer to Signal Bridge / Signal phone UI (logo on bridge README + web header).
 - 2026-07-22: **PIN Authenticated flash** — `display.auth` with `auth.status: ok` replaces the PIN with green “Authenticated” (~1s) then dismisses; overlay chrome title follows.
 - 2026-07-21: **Stable display id + PIN overlay** — `display.id` is per-machine (name can duplicate); announce includes `shortId`; new `display.auth` panel shows unlock PIN from the control page.
 - 2026-07-21: **Docs — client README + requirements** — user guide covers announce/`bridgeHosts`, control page targeting, WebView2 browser, remote input; `requirements.txt` annotated.

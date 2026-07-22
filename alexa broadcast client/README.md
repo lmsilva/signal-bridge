@@ -1,6 +1,6 @@
 # Alexa Broadcast Client (Windows)
 
-System-tray app for Windows that listens for UDP JSON from the [Alexa Broadcast Bridge](../README.md) and shows fullscreen overlays on your display PC (movie poster, kitchen screen, etc.). It can also open a pushed URL in a fullscreen browser and accept remote mouse/keyboard from the bridge control page.
+System-tray app for Windows that listens for UDP JSON from [**Signal Bridge**](../README.md) and shows fullscreen overlays on your display PC (movie poster, kitchen screen, etc.). It can also open a pushed URL in a fullscreen browser and accept remote mouse/keyboard from the **Signal** phone UI.
 
 The client does **not** talk to Amazon. The NAS bridge does that; this app only receives UDP and renders UI / runs commands.
 
@@ -10,7 +10,7 @@ The client does **not** talk to Amazon. The NAS bridge does that; this app only 
 
 - Runs minimized in the system tray
 - Listens on `0.0.0.0:47832` for overlays and commands
-- **Advertises to the bridge** (`display.announce` → NAS `:47833`) so the phone control page can list and target this PC
+- **Advertises to the bridge** (`display.announce` → NAS `:47833`) so the Signal UI can list and target this PC
 - Fullscreen tinted overlays with fade in/out (portrait or landscape)
 - Voice-driven panels: broadcasts, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications
 - **Web browser mode:** `web.open` → frameless Edge WebView2 fullscreen until `web.close`
