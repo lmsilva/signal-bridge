@@ -3,6 +3,8 @@
  * Persists to data/displays-registry.json so the control page remembers
  * names across bridge restarts (host/IP refresh on next announce).
  * Entries that miss heartbeats are pruned (removed) after STALE_AFTER_MS.
+ * A manual discover ("Refresh") also runs a short sweep and drops anyone
+ * who does not re-announce in time.
  */
 
 const fs = require('fs');
@@ -10,6 +12,7 @@ const path = require('path');
 
 const STALE_AFTER_MS = 12 * 60 * 1000; // missed ~2 heartbeats (5 min interval)
 const PRUNE_INTERVAL_MS = 60 * 1000;
+const DISCOVER_SWEEP_MS = 2500;
 const ALL_TARGET_ID = '*';
 
 function defaultRegistryPath(config) {
@@ -18,11 +21,16 @@ function defaultRegistryPath(config) {
 
 function createDisplayRegistry(config, log = console) {
   const filePath = config.displaysRegistryPath || defaultRegistryPath(config);
+  const discoverSweepMs = Number(config.discoverSweepMs) > 0
+    ? Number(config.discoverSweepMs)
+    : DISCOVER_SWEEP_MS;
   /** @type {Map<string, object>} */
   const byId = new Map();
   /** @type {Set<(entry: object, list: object[]) => void>} */
   const listeners = new Set();
   let pruneTimer = null;
+  let sweepTimer = null;
+  let sweepGeneration = 0;
 
   function load() {
     try {
@@ -118,6 +126,67 @@ function createDisplayRegistry(config, log = console) {
       notify({ pruned: true, removedIds: removed });
     }
     return removed;
+  }
+
+  /**
+   * Drop displays whose lastSeen is before `sinceMs` (used after discover).
+   * @returns {string[]} removed display ids
+   */
+  function pruneNotSeenSince(sinceMs) {
+    const removed = [];
+    for (const [id, entry] of byId) {
+      const lastMs = entry?.lastSeen ? Date.parse(entry.lastSeen) : 0;
+      // Keep only displays that announced strictly after the sweep started.
+      if (!lastMs || lastMs <= sinceMs) {
+        byId.delete(id);
+        removed.push(id);
+        log.info?.('Removed display after discover (no reply)', {
+          id,
+          name: entry.name,
+          lastSeen: entry.lastSeen,
+        });
+      }
+    }
+    if (removed.length) {
+      persist();
+      notify({ pruned: true, reason: 'discover-sweep', removedIds: removed });
+    }
+    return removed;
+  }
+
+  /**
+   * After broadcasting display.discover, wait briefly for re-announces, then
+   * remove anyone who did not check in since this sweep started.
+   * @returns {Promise<{ removed: string[], displays: object[], superseded?: boolean }>}
+   */
+  function scheduleDiscoverSweep({ graceMs = discoverSweepMs, now = Date.now() } = {}) {
+    const startedAt = now;
+    const gen = ++sweepGeneration;
+    if (sweepTimer) {
+      clearTimeout(sweepTimer);
+      sweepTimer = null;
+    }
+    return new Promise((resolve) => {
+      sweepTimer = setTimeout(() => {
+        sweepTimer = null;
+        if (gen !== sweepGeneration) {
+          resolve({
+            removed: [],
+            superseded: true,
+            displays: list({ skipPrune: true }),
+          });
+          return;
+        }
+        const removed = pruneNotSeenSince(startedAt);
+        resolve({
+          removed,
+          displays: list({ skipPrune: true }),
+        });
+      }, Math.max(0, Number(graceMs) || 0));
+      if (typeof sweepTimer.unref === 'function') {
+        sweepTimer.unref();
+      }
+    });
   }
 
   function upsertFromAnnounce(payload, rinfo = {}) {
@@ -224,6 +293,11 @@ function createDisplayRegistry(config, log = console) {
       clearInterval(pruneTimer);
       pruneTimer = null;
     }
+    if (sweepTimer) {
+      clearTimeout(sweepTimer);
+      sweepTimer = null;
+    }
+    sweepGeneration += 1;
   }
 
   load();
@@ -235,12 +309,15 @@ function createDisplayRegistry(config, log = console) {
 
   return {
     STALE_AFTER_MS,
+    DISCOVER_SWEEP_MS: discoverSweepMs,
     ALL_TARGET_ID,
     filePath,
     upsertFromAnnounce,
     get,
     list,
     pruneStale,
+    pruneNotSeenSince,
+    scheduleDiscoverSweep,
     resolveDelivery,
     persist,
     onChange,
@@ -263,4 +340,5 @@ module.exports = {
   attachTarget,
   ALL_TARGET_ID,
   STALE_AFTER_MS,
+  DISCOVER_SWEEP_MS,
 };

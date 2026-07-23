@@ -172,7 +172,7 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
   - `dist/send-test.exe` — UDP smoke-test helper
 - **Auto-start:** shortcut in `shell:startup` on Windows
 
-**Portable build:** run `build_portable.bat --no-pause` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally.
+**Portable build:** run `build_portable.bat` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally. Success exits immediately; `--pause` keeps the window open.
 
 **Requirements:** Python 3.10+, `pystray`, `Pillow`, `pywebview` (see `requirements.txt`). The web display mode needs the **Edge WebView2 runtime** on the poster PC (preinstalled on Win10/11); if missing, the client shows the friendly error instead.
 
@@ -237,6 +237,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-23: **Tesla battery landscape layout** — landscape uses a car | status two-column layout; portrait still stacks but reserves height for cache/rate-limit blocks so "Tesla" / "Tesla Battery" are never clipped.
+- 2026-07-23: **Portable build quiet on Windows** — PyInstaller spec freezes only Windows `webview`/`pynput` backends (no android ModuleNotFoundError), overrides stale `pycparser.lextab` hooks, and `build_portable.bat` exits immediately on success (`--pause` to keep the window open).
 - 2026-07-23: **Fix overlay stacking / bleed** — removed process-wide `SetProcessDpiAwareness` (it inflated Tk font pixels while cards used fixed offsets, stacking Tesla dashboard sections). All display overlays force full opacity so movie posters no longer show through; shell message area no longer reserves unused chip rows; battery card + media strip lay out from font metrics; portrait dashboard packs media under the stat grid with section floors.
 - 2026-07-23: **Hide OS cursor during remote control** — while the software pointer is active, system cursors are replaced with a blank cursor (`SetSystemCursor`); a `WH_MOUSE_LL` hook restores them on the first physical (non-injected) mouse move, and idle timeout restores them too. Software arrow shrunk to 18px.
 - 2026-07-23: **Remote cursor click-through** — overlay was eating clicks/scrolls (Tk canvas child kept hit-testing; `SetWindowLong` also cleared the chroma-key → opaque black block). Now hardens `WS_EX_TRANSPARENT` on toplevel+children, restores `SetLayeredWindowAttributes` color key, and ducks the overlay for the instant of each click/wheel.

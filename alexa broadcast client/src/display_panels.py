@@ -2760,78 +2760,237 @@ class TeslaBatteryPanel(BasePanel):
             "#f59e0b" if status == "rate_limited" else "#ef4444" if is_error else text
         )
 
-        footer_block = (
-            self.shell.section_title_font.metrics("linespace")
-            + self.shell.body_font.metrics("linespace")
-            + 96
-        )
-        available_height = bottom - y - footer_block
-        image_width = min(self.IMAGE_MAX_WIDTH, width - 60, max(320, int(width * 0.82)))
-        image_height = max(180, min(int(available_height * 0.72), int(image_width * 0.56)))
+        status_bits = self._status_bits(battery, stale, limit_reset, charging_label, is_error)
+        title_font = self.shell.section_title_font
+        body_font = self.shell.body_font
+        label_font = self.shell.forecast_label_font
+        bar_height = 36 if layout.portrait else 32
+        bar_gap = 18 if layout.portrait else 12
+        footer_h = title_font.metrics("linespace") + 6 + body_font.metrics("linespace")
+        status_h = self._status_block_height(status_bits, width - 80)
+        # Bar block: 0%/100% labels + bar + gap before status/footer.
+        bar_block_h = label_font.metrics("linespace") + 6 + bar_height + bar_gap
 
-        image_path = asset_path(self.IMAGE_NAME)
-        image_top = y + 8
-        if image_path.exists() and Image is not None and ImageTk is not None:
-            try:
-                image = Image.open(image_path).convert("RGBA")
-                image.thumbnail((image_width, image_height), Image.LANCZOS)
-                self._photo = ImageTk.PhotoImage(image)
-                image_center_y = image_top + image.height // 2
-                self._track(
-                    self.canvas.create_image(
+        if layout.portrait:
+            self._render_stack(
+                x=x,
+                width=width,
+                top=y,
+                bottom=bottom,
+                center_x=center_x,
+                accent=accent,
+                chip=chip,
+                muted=muted,
+                text=text,
+                model=model,
+                percent_text=percent_text,
+                percent_value=percent_value,
+                bar_color=bar_color,
+                headline_color=headline_color,
+                status_bits=status_bits,
+                bar_height=bar_height,
+                bar_gap=bar_gap,
+                bar_block_h=bar_block_h,
+                status_h=status_h,
+                footer_h=footer_h,
+                image_frac=0.62,
+                image_max=self.IMAGE_MAX_WIDTH,
+            )
+        else:
+            self._render_landscape(
+                x=x,
+                width=width,
+                top=y,
+                bottom=bottom,
+                accent=accent,
+                chip=chip,
+                muted=muted,
+                text=text,
+                model=model,
+                percent_text=percent_text,
+                percent_value=percent_value,
+                bar_color=bar_color,
+                headline_color=headline_color,
+                status_bits=status_bits,
+                bar_height=bar_height,
+                bar_gap=bar_gap,
+                bar_block_h=bar_block_h,
+                status_h=status_h,
+                footer_h=footer_h,
+            )
+
+    def _status_bits(self, battery, stale, limit_reset, charging_label, is_error):
+        bits = []
+        if stale:
+            refreshing = bool(battery.get("refreshing"))
+            cached_time = format_cached_time_label(battery.get("cachedAt") or battery.get("fetchedAt"))
+            accent = self.config.get("accentColor", "#38bdf8")
+            muted = self.config["mutedTextColor"]
+            if refreshing:
+                bits.append({
+                    "kind": "pill",
+                    "text": f"⟳ updating · cached {format_freshness_sec(battery.get('freshnessSec'))}",
+                    "fill": self.CARD,
+                    "fg": accent,
+                    "outline": self.CARD_EDGE,
+                })
+                bits.append({
+                    "kind": "legend",
+                    "text": (
+                        f"Showing saved data from {cached_time} — fetching live update…"
+                        if cached_time
+                        else "Showing saved data — fetching live update…"
+                    ),
+                    "fill": muted,
+                })
+            else:
+                bits.append({
+                    "kind": "pill",
+                    "text": f"⚠ cached · {format_freshness_sec(battery.get('freshnessSec'))}",
+                    "fill": self.AMBER_BG,
+                    "fg": self.AMBER,
+                    "outline": self.AMBER_BG,
+                })
+                reason = str(battery.get("staleReason") or "Tesla unreachable")
+                bits.append({
+                    "kind": "legend",
+                    "text": (
+                        f"{reason} — data from {cached_time}"
+                        if cached_time
+                        else f"{reason} — showing last known data"
+                    ),
+                    "fill": self.AMBER,
+                })
+        if limit_reset:
+            bits.append({"kind": "body", "text": limit_reset, "fill": self.config["mutedTextColor"]})
+        elif charging_label and not is_error:
+            bits.append({
+                "kind": "body",
+                "text": str(charging_label),
+                "fill": self.config.get("accentColor", "#38bdf8"),
+            })
+        return bits
+
+    def _status_block_height(self, status_bits, wrap_width: int) -> int:
+        if not status_bits:
+            return 0
+        label_font = self.shell.forecast_label_font
+        body_font = self.shell.body_font
+        height = 0
+        for bit in status_bits:
+            if bit["kind"] == "pill":
+                height += label_font.metrics("linespace") + 14 + 8
+            elif bit["kind"] == "legend":
+                # Estimate wrapped lines from measured width.
+                lines = max(1, int(math.ceil(label_font.measure(bit["text"]) / max(1, wrap_width))))
+                height += label_font.metrics("linespace") * lines + 8
+            else:
+                height += body_font.metrics("linespace") + 8
+        return height
+
+    def _draw_status_bits(self, center_x, cursor, width, status_bits):
+        label_font = self.shell.forecast_label_font
+        body_font = self.shell.body_font
+        for bit in status_bits:
+            if bit["kind"] == "pill":
+                h = self._pill(
+                    center_x,
+                    cursor,
+                    bit["text"],
+                    fill=bit["fill"],
+                    fg=bit["fg"],
+                    outline=bit["outline"],
+                    anchor="n",
+                )
+                cursor += h + 8
+            elif bit["kind"] == "legend":
+                item = self._track(
+                    self.canvas.create_text(
                         center_x,
-                        image_center_y,
-                        image=self._photo,
+                        cursor,
+                        anchor="n",
+                        text=bit["text"],
+                        fill=bit["fill"],
+                        font=label_font,
+                        width=width - 80,
+                        justify="center",
                     )
                 )
-                cursor = image_top + image.height + 52
-            except OSError:
-                cursor = y + 40
-                self._draw_fallback_car(center_x, cursor, image_width, accent, chip)
-                cursor += int(image_height * 0.55) + 52
-        else:
-            cursor = y + 40
-            self._draw_fallback_car(center_x, cursor, image_width, accent, chip)
-            cursor += int(image_height * 0.55) + 52
+                bbox = self.canvas.bbox(item)
+                cursor = (bbox[3] if bbox else cursor + label_font.metrics("linespace")) + 8
+            else:
+                self._track(
+                    self.canvas.create_text(
+                        center_x,
+                        cursor,
+                        anchor="n",
+                        text=bit["text"],
+                        fill=bit["fill"],
+                        font=body_font,
+                    )
+                )
+                cursor += body_font.metrics("linespace") + 8
+        return cursor
 
-        bar_width = min(width - 100, 560)
-        bar_height = 42
-        bar_x0 = center_x - bar_width // 2
-        bar_y0 = cursor
-        bar_x1 = bar_x0 + bar_width
-        bar_y1 = bar_y0 + bar_height
-
+    def _draw_footer(self, center_x, cursor, model, text, muted):
+        title_font = self.shell.section_title_font
+        body_font = self.shell.body_font
         self._track(
             self.canvas.create_text(
-                bar_x0,
-                bar_y0 - 8,
-                anchor="sw",
-                text="0%",
+                center_x,
+                cursor,
+                anchor="n",
+                text=model,
+                fill=text,
+                font=title_font,
+            )
+        )
+        cursor += title_font.metrics("linespace") + 6
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text="Tesla Battery",
                 fill=muted,
-                font=self.shell.forecast_label_font,
+                font=body_font,
+            )
+        )
+        return cursor + body_font.metrics("linespace")
+
+    def _draw_battery_bar(
+        self,
+        center_x,
+        bar_y0,
+        bar_width,
+        bar_height,
+        percent_text,
+        percent_value,
+        bar_color,
+        headline_color,
+        muted,
+    ):
+        bar_x0 = center_x - bar_width // 2
+        bar_x1 = bar_x0 + bar_width
+        bar_y1 = bar_y0 + bar_height
+        label_font = self.shell.forecast_label_font
+        self._track(
+            self.canvas.create_text(
+                bar_x0, bar_y0 - 6, anchor="sw", text="0%", fill=muted, font=label_font,
             )
         )
         self._track(
             self.canvas.create_text(
-                bar_x1,
-                bar_y0 - 8,
-                anchor="se",
-                text="100%",
-                fill=muted,
-                font=self.shell.forecast_label_font,
+                bar_x1, bar_y0 - 6, anchor="se", text="100%", fill=muted, font=label_font,
             )
         )
         self._round_rect(
-            bar_x0,
-            bar_y0,
-            bar_x1,
-            bar_y1,
+            bar_x0, bar_y0, bar_x1, bar_y1,
             radius=bar_height // 2,
             fill=self.INNER,
             outline=self.CARD_EDGE,
             width=2,
         )
-
         if percent_value is not None and bar_width > 0:
             fill_width = max(bar_height, int((bar_width - 6) * (percent_value / 100)))
             self._round_rect(
@@ -2839,10 +2998,9 @@ class TeslaBatteryPanel(BasePanel):
                 bar_y0 + 3,
                 bar_x0 + 3 + fill_width,
                 bar_y1 - 3,
-                radius=(bar_height - 6) // 2,
+                radius=max(2, (bar_height - 6) // 2),
                 fill=bar_color,
             )
-
         self._track(
             self.canvas.create_text(
                 center_x,
@@ -2853,98 +3011,128 @@ class TeslaBatteryPanel(BasePanel):
                 font=self.shell.section_title_font,
             )
         )
+        return bar_y1
 
-        cursor = bar_y1 + 28
-        if stale:
-            refreshing = bool(battery.get("refreshing"))
-            cached_time = format_cached_time_label(battery.get("cachedAt") or battery.get("fetchedAt"))
-            if refreshing:
-                pill_text = f"⟳ updating · cached {format_freshness_sec(battery.get('freshnessSec'))}"
-                pill_fill, pill_fg = self.CARD, accent
-                pill_outline = self.CARD_EDGE
-                legend_fill = muted
-                legend = (
-                    f"Showing saved data from {cached_time} — fetching live update…"
-                    if cached_time
-                    else "Showing saved data — fetching live update…"
+    def _place_car_image(self, center_x, image_top, image_width, image_height, accent, chip):
+        image_path = asset_path(self.IMAGE_NAME)
+        if image_path.exists() and Image is not None and ImageTk is not None:
+            try:
+                image = Image.open(image_path).convert("RGBA")
+                image.thumbnail((max(40, image_width), max(40, image_height)), Image.LANCZOS)
+                self._photo = ImageTk.PhotoImage(image)
+                self._track(
+                    self.canvas.create_image(
+                        center_x,
+                        image_top + image.height // 2,
+                        image=self._photo,
+                    )
                 )
-            else:
-                pill_text = f"⚠ cached · {format_freshness_sec(battery.get('freshnessSec'))}"
-                pill_fill, pill_fg = self.AMBER_BG, self.AMBER
-                pill_outline = self.AMBER_BG
-                legend_fill = self.AMBER
-                reason = str(battery.get("staleReason") or "Tesla unreachable")
-                legend = f"{reason} — data from {cached_time}" if cached_time else f"{reason} — showing last known data"
-            pill_y = cursor
-            self._pill(
-                center_x,
-                pill_y,
-                pill_text,
-                fill=pill_fill,
-                fg=pill_fg,
-                outline=pill_outline,
-                anchor="n",
-            )
-            cursor += 34
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cursor,
-                    anchor="n",
-                    text=legend,
-                    fill=legend_fill,
-                    font=self.shell.forecast_label_font,
-                    width=width - 80,
-                    justify="center",
-                )
-            )
-            cursor += self.shell.forecast_label_font.metrics("linespace") + 10
-        if limit_reset:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cursor,
-                    anchor="n",
-                    text=limit_reset,
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
-            )
-            cursor += self.shell.body_font.metrics("linespace") + 8
-        elif charging_label and not is_error:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cursor,
-                    anchor="n",
-                    text=str(charging_label),
-                    fill=accent,
-                    font=self.shell.body_font,
-                )
-            )
-            cursor += self.shell.body_font.metrics("linespace") + 8
+                return image_top + image.height
+            except OSError:
+                pass
+        self._draw_fallback_car(center_x, image_top + 20, image_width, accent, chip)
+        return image_top + max(80, int(image_height * 0.55))
 
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text=model,
-                fill=text,
-                font=self.shell.section_title_font,
-            )
+    def _render_stack(
+        self,
+        *,
+        x,
+        width,
+        top,
+        bottom,
+        center_x,
+        accent,
+        chip,
+        muted,
+        text,
+        model,
+        percent_text,
+        percent_value,
+        bar_color,
+        headline_color,
+        status_bits,
+        bar_height,
+        bar_gap,
+        bar_block_h,
+        status_h,
+        footer_h,
+        image_frac,
+        image_max,
+    ):
+        gap_after_image = 20
+        reserved = bar_block_h + status_h + footer_h + gap_after_image + 8
+        available = max(100, bottom - top - reserved)
+        image_width = min(image_max, width - 60, max(220, int(width * 0.78)))
+        image_height = max(90, min(int(available * image_frac), int(image_width * 0.52), available))
+
+        image_bottom = self._place_car_image(center_x, top + 4, image_width, image_height, accent, chip)
+        cursor = image_bottom + gap_after_image
+
+        # If the image still overshoots (font metrics / wrap), pull the bar up.
+        content_tail = bar_block_h + status_h + footer_h
+        if cursor + content_tail > bottom:
+            cursor = max(top + 40, bottom - content_tail)
+
+        bar_width = min(width - 100, 560)
+        bar_y1 = self._draw_battery_bar(
+            center_x, cursor, bar_width, bar_height,
+            percent_text, percent_value, bar_color, headline_color, muted,
         )
-        cursor += self.shell.section_title_font.metrics("linespace") + 8
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text="Tesla Battery",
-                fill=muted,
-                font=self.shell.body_font,
-            )
+        cursor = bar_y1 + bar_gap
+        cursor = self._draw_status_bits(center_x, cursor, width, status_bits)
+        self._draw_footer(center_x, cursor, model, text, muted)
+
+    def _render_landscape(
+        self,
+        *,
+        x,
+        width,
+        top,
+        bottom,
+        accent,
+        chip,
+        muted,
+        text,
+        model,
+        percent_text,
+        percent_value,
+        bar_color,
+        headline_color,
+        status_bits,
+        bar_height,
+        bar_gap,
+        bar_block_h,
+        status_h,
+        footer_h,
+    ):
+        gap = 28
+        # Car on the left, status column on the right — keeps short landscape
+        # height free for cache / rate-limit copy without clipping the footer.
+        col_gap = gap
+        left_w = int(width * 0.46)
+        right_x = x + left_w + col_gap
+        right_w = width - left_w - col_gap
+        right_cx = right_x + right_w // 2
+        area_h = max(160, bottom - top)
+
+        image_width = min(520, left_w - 10)
+        image_height = max(100, min(int(area_h * 0.92), int(image_width * 0.55)))
+        image_top = top + max(0, (area_h - image_height) // 2)
+        self._place_car_image(x + left_w // 2, image_top, image_width, image_height, accent, chip)
+
+        info_h = bar_block_h + status_h + footer_h
+        cursor = top + max(0, (area_h - info_h) // 2)
+        # Keep the info column inside the message band even if wrap estimates are low.
+        if cursor + info_h > bottom:
+            cursor = max(top, bottom - info_h)
+        bar_width = min(right_w - 20, 420)
+        bar_y1 = self._draw_battery_bar(
+            right_cx, cursor, bar_width, bar_height,
+            percent_text, percent_value, bar_color, headline_color, muted,
         )
+        cursor = bar_y1 + bar_gap
+        cursor = self._draw_status_bits(right_cx, cursor, right_w, status_bits)
+        self._draw_footer(right_cx, cursor, model, text, muted)
 
     def _draw_fallback_car(self, center_x: float, top_y: float, width: float, accent: str, chip: str):
         half_w = width * 0.42

@@ -247,15 +247,19 @@
   async function refreshDisplays({ discover = false, quiet = false } = {}) {
     try {
       if (discover) {
-        await apiPost('/api/displays/discover');
-        await new Promise((r) => setTimeout(r, 900));
+        // Server waits for re-announces, then prunes silent displays.
+        const data = await apiPost('/api/displays/discover');
+        renderDisplaySelect(data.displays || [], { quiet });
+        return data;
       }
       const data = await apiGet('/api/displays');
       renderDisplaySelect(data.displays || [], { quiet });
+      return data;
     } catch (error) {
       if (discover) {
         toast(error.message || 'Discover failed', 'bad');
       }
+      return null;
     }
   }
 
@@ -300,10 +304,20 @@
     const btn = $('btn-display-refresh');
     btn.disabled = true;
     try {
-      await refreshDisplays({ discover: true });
-      toast('Asked displays to announce themselves', 'good');
+      const data = await refreshDisplays({ discover: true });
+      const removed = data?.removedIds?.length || 0;
+      if (removed) {
+        toast(
+          removed === 1
+            ? 'Removed 1 offline display'
+            : `Removed ${removed} offline displays`,
+          'bad',
+        );
+      } else {
+        toast('Asked displays to announce themselves', 'good');
+      }
     } finally {
-      setTimeout(() => { btn.disabled = false; }, 800);
+      setTimeout(() => { btn.disabled = false; }, 400);
     }
   });
 

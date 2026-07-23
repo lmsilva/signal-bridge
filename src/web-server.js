@@ -434,13 +434,32 @@ function createWebServer({
     sendJson(res, 200, { ok: true, displays });
   }
 
-  function handleDisplaysDiscover(res) {
+  async function handleDisplaysDiscover(res) {
     const payload = buildDisplayDiscoverPayload({ trigger: 'web-api' }, config);
     sendUdpPayload(payload);
     log.info('Display discover broadcast sent', {
       discoveryPort: payload.discovery?.port,
     });
-    sendJson(res, 200, { ok: true, sent: true, discoveryPort: payload.discovery?.port });
+
+    // Wait for live clients to re-announce, then drop anyone who stayed silent.
+    let removed = [];
+    let displays = displayRegistry?.list?.({ skipPrune: true }) || [];
+    if (typeof displayRegistry?.scheduleDiscoverSweep === 'function') {
+      const sweep = await displayRegistry.scheduleDiscoverSweep();
+      removed = sweep.removed || [];
+      displays = sweep.displays || displays;
+      if (removed.length) {
+        log.info('Discover sweep removed offline displays', { removed });
+      }
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      sent: true,
+      discoveryPort: payload.discovery?.port,
+      removedIds: removed,
+      displays,
+    });
   }
 
   function handleDisplaysEvents(req, res) {
@@ -952,7 +971,7 @@ function createWebServer({
             handleSystemCommand(req, 'poweroff', body, res);
             return;
           case '/api/displays/discover':
-            handleDisplaysDiscover(res);
+            await handleDisplaysDiscover(res);
             return;
           case '/api/displays/auth/start':
             handleControlAuthStart(body, res);

@@ -46,7 +46,7 @@ Do **not** automatically run `build_portable.bat` after display client edits unl
 
 When the user **does** ask for a portable build:
 
-1. Run **`alexa broadcast client\build_portable.bat --no-pause`** from a Windows machine with Python 3.10+ (use `subst Z:` if UNC `\\nas\...` breaks `cmd`).
+1. Run **`alexa broadcast client\build_portable.bat`** from a Windows machine with Python 3.10+ (use `subst Z:` if UNC `\\nas\...` breaks `cmd`). Success exits without pause; use `--pause` to keep the window open, or `--no-pause` to also skip failure pauses (agents/CI).
 2. **Do not run** `alexa-broadcast-client.exe` or `Run Alexa Broadcast Client.bat` unless the user explicitly asks you to test locally.
 3. Confirm outputs exist:
    - `alexa broadcast client/dist/alexa broadcast client/Run Alexa Broadcast Client.bat`

@@ -59,7 +59,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/port-utils.js` | Pre-check port 3456 before auth proxy bind |
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`) |
-| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; resolve target → unicast host |
+| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer voice queries from history |
@@ -413,7 +413,7 @@ Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`**
 |-------|--------|
 | `GET /api/displays` | Known displays from `display.announce` registry (`id` unique; `label` disambiguates duplicate names) |
 | `GET /api/displays/events` | SSE stream — pushes `displays` events whenever the registry changes |
-| `POST /api/displays/discover` | Broadcast `display.discover` (clients re-announce to `:47833`) |
+| `POST /api/displays/discover` | Broadcast `display.discover`, wait ~2.5s for re-announces, prune silent displays; returns `{ displays, removedIds }` |
 | `POST /api/displays/auth/start` | Show 4-digit PIN on selected display (`display.auth`); required before mouse/keyboard/power |
 | `POST /api/displays/auth/verify` | `{targetId,pin}` → `controlToken` session for that display |
 | `POST /api/displays/auth/status` | Unlock / challenge status for a display |
@@ -432,6 +432,7 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-23: **Discover refresh prunes offline displays** — `POST /api/displays/discover` waits ~2.5s for re-announces then removes anyone who stayed silent (`scheduleDiscoverSweep` in `display-registry.js`); Signal UI Refresh uses the pruned list and toasts when offline displays were dropped.
 - 2026-07-23: **Signal-only Docker containers** — listener is `signal-bridge`; one-shot auth is `signal-alexa-auth` / `signal-tesla-auth`. `recreate.sh` restarts the listener with `--remove-orphans` and removes any leftover auth/pre-rename containers (they are never needed again).
 - 2026-07-23: **GitHub/repo rename to `signal-bridge`** — GitHub repo, npm package name, Docker image/container/service, and docs use Signal Bridge; old `alexa-broadcast-bridge` image is auto-tagged when present. Local NAS folder may still be named `alexa-broadcast-bridge` until renamed on disk.
 - 2026-07-23: **PIN sheet above keyboard** — PIN unlock sheet is centered (not bottom-docked) and tracks `visualViewport` `--keyboard-inset` so the phone keyboard cannot cover the PIN field; viewport uses `interactive-widget=resizes-content`.

@@ -159,3 +159,36 @@ test('registry removes displays that miss re-announce', () => {
     registry.stop();
   }
 });
+
+test('discover sweep drops displays that do not re-announce', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'disp-sweep-'));
+  const registry = createDisplayRegistry(
+    { ROOT: root, discoverSweepMs: 40 },
+    { warn() {}, info() {} },
+  );
+  try {
+    registry.upsertFromAnnounce({
+      display: { id: 'disp-alive', name: 'Alive', shortId: 'aaaa' },
+    }, { address: '10.0.0.1' });
+    registry.upsertFromAnnounce({
+      display: { id: 'disp-gone', name: 'Gone', shortId: 'bbbb' },
+    }, { address: '10.0.0.2' });
+
+    const sweepStarted = Date.now();
+    const sweepPromise = registry.scheduleDiscoverSweep({ now: sweepStarted, graceMs: 40 });
+
+    // Only the live display replies after discover.
+    await new Promise((r) => setTimeout(r, 10));
+    registry.upsertFromAnnounce({
+      display: { id: 'disp-alive', name: 'Alive', shortId: 'aaaa' },
+    }, { address: '10.0.0.1' });
+
+    const result = await sweepPromise;
+    assert.deepEqual(result.removed, ['disp-gone']);
+    assert.equal(result.displays.length, 1);
+    assert.equal(result.displays[0].id, 'disp-alive');
+    assert.equal(registry.get('disp-gone'), null);
+  } finally {
+    registry.stop();
+  }
+});

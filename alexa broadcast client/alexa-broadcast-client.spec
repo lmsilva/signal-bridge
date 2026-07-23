@@ -4,10 +4,33 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# Only freeze Windows GUI backends. collect_submodules('webview') otherwise
+# tries to import android/gtk/cocoa/qt and prints scary ModuleNotFoundError
+# warnings on a Windows build machine.
+_SKIP_NAME_PARTS = frozenset({
+    'android',
+    'cocoa',
+    'gtk',
+    'qt',
+    'darwin',
+    'darwin_vks',
+    'uinput',
+    'xorg',
+})
+
+
+def _windows_only(name: str) -> bool:
+    # Module tails are often "_darwin" / "_xorg" — match the platform token.
+    return not any(
+        part.lstrip('_') in _SKIP_NAME_PARTS
+        for part in name.lower().split('.')
+    )
+
+
 # pywebview (Edge WebView2) needs its platform submodules plus bundled
 # .NET assemblies (WebView2Loader / Microsoft.Web.WebView2.*).
 webview_hiddenimports = (
-    collect_submodules('webview')
+    collect_submodules('webview', filter=_windows_only)
     + ['clr', 'clr_loader', 'pythonnet']
 )
 webview_datas = (
@@ -19,7 +42,7 @@ webview_datas = (
 # pynput picks its _win32 backend submodules dynamically at import time;
 # listing only pynput.mouse/keyboard leaves the backends out of the freeze
 # and the import fails silently at runtime (remote keyboard breaks).
-pynput_hiddenimports = collect_submodules('pynput')
+pynput_hiddenimports = collect_submodules('pynput', filter=_windows_only)
 
 a = Analysis(
     ['src/main.py'],
@@ -53,7 +76,7 @@ a = Analysis(
         'urllib.parse',
         'urllib.error',
     ],
-    hookspath=[],
+    hookspath=['packaging/pyi_hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
@@ -90,7 +113,7 @@ host_a = Analysis(
     binaries=[],
     datas=webview_datas,
     hiddenimports=webview_hiddenimports,
-    hookspath=[],
+    hookspath=['packaging/pyi_hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
@@ -141,7 +164,7 @@ test_a = Analysis(
     binaries=[],
     datas=[],
     hiddenimports=[],
-    hookspath=[],
+    hookspath=['packaging/pyi_hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],

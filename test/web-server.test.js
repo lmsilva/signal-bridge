@@ -482,10 +482,16 @@ test('control PIN unlock gates input and power', async () => {
 test('displays list and discover endpoints', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-disp-'));
   const { createDisplayRegistry } = require('../src/display-registry');
-  const registry = createDisplayRegistry({ ROOT: dataDir }, { warn() {}, info() {} });
+  const registry = createDisplayRegistry(
+    { ROOT: dataDir, discoverSweepMs: 30 },
+    { warn() {}, info() {} },
+  );
   registry.upsertFromAnnounce({
     display: { id: 'disp-x', name: 'Living Room' },
   }, { address: '192.168.0.9' });
+  registry.upsertFromAnnounce({
+    display: { id: 'disp-y', name: 'Offline Room' },
+  }, { address: '192.168.0.10' });
 
   const targeted = [];
   const { webServer, base, sent } = await startTestServer({
@@ -500,12 +506,22 @@ test('displays list and discover endpoints', async () => {
   try {
     const list = await request(base + '/api/displays');
     assert.equal(list.status, 200);
-    assert.equal(list.body.displays.length, 1);
-    assert.equal(list.body.displays[0].name, 'Living Room');
+    assert.equal(list.body.displays.length, 2);
+
+    // Live client re-announces during the discover sweep window.
+    setTimeout(() => {
+      registry.upsertFromAnnounce({
+        display: { id: 'disp-x', name: 'Living Room' },
+      }, { address: '192.168.0.9' });
+    }, 5);
 
     const discover = await postJson(base, '/api/displays/discover');
     assert.equal(discover.status, 200);
     assert.equal(sent.some((p) => p.type === 'display.discover'), true);
+    assert.deepEqual(discover.body.removedIds, ['disp-y']);
+    assert.equal(discover.body.displays.length, 1);
+    assert.equal(discover.body.displays[0].id, 'disp-x');
+    assert.equal(registry.list().length, 1);
 
     const badInput = await postJson(base, '/api/input/pointer', {
       targetId: '*',

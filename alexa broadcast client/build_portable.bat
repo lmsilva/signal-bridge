@@ -1,8 +1,23 @@
 @echo off
-rem Usage: build_portable.bat [--no-pause]
-rem   --no-pause  Skip final pause (for agents/CI)
+rem Usage: build_portable.bat [--pause] [--no-pause]
+rem   Success exits immediately (terminal closes when double-clicked).
+rem   --pause     Keep the window open after success
+rem   --no-pause  Skip pause on failure too (agents/CI)
 setlocal EnableExtensions
 pushd "%~dp0"
+
+set "PAUSE_ON_SUCCESS=0"
+set "PAUSE_ON_FAIL=1"
+:ParseArgs
+if "%~1"=="" goto ArgsDone
+if /I "%~1"=="--pause" set "PAUSE_ON_SUCCESS=1"
+if /I "%~1"=="--no-pause" (
+  set "PAUSE_ON_SUCCESS=0"
+  set "PAUSE_ON_FAIL=0"
+)
+shift
+goto ParseArgs
+:ArgsDone
 
 set "BUILD_VENV=%LOCALAPPDATA%\alexa-broadcast-client-build-venv"
 set "VENV_PY=%BUILD_VENV%\Scripts\python.exe"
@@ -13,7 +28,7 @@ if not defined PYTHON where python >nul 2>&1 && set "PYTHON=python"
 if not defined PYTHON if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PYTHON=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
 if not defined PYTHON (
   echo Python not found. Install Python 3.10+ from https://www.python.org/downloads/
-  pause
+  if "%PAUSE_ON_FAIL%"=="1" pause
   popd
   exit /b 1
 )
@@ -32,7 +47,7 @@ if not exist "%VENV_PY%" (
   %PYTHON% -m venv "%BUILD_VENV%"
   if errorlevel 1 (
     echo Failed to create build virtual environment.
-    pause
+    if "%PAUSE_ON_FAIL%"=="1" pause
     popd
     exit /b 1
   )
@@ -55,7 +70,7 @@ echo Building portable Alexa Broadcast Client...
 "%VENV_PY%" -m PyInstaller --noconfirm alexa-broadcast-client.spec
 if errorlevel 1 (
   echo Build failed.
-  pause
+  if "%PAUSE_ON_FAIL%"=="1" pause
   popd
   exit /b 1
 )
@@ -63,13 +78,13 @@ if errorlevel 1 (
 set "DIST=dist\alexa broadcast client"
 if not exist "%DIST%\alexa-broadcast-client.exe" (
   echo Expected output not found: %DIST%\alexa-broadcast-client.exe
-  pause
+  if "%PAUSE_ON_FAIL%"=="1" pause
   popd
   exit /b 1
 )
 if not exist "%DIST%\webview-host.exe" (
   echo Expected output not found: %DIST%\webview-host.exe
-  pause
+  if "%PAUSE_ON_FAIL%"=="1" pause
   popd
   exit /b 1
 )
@@ -81,7 +96,7 @@ copy /Y "dist\send-test.exe" "%DIST%\test\send-test.exe" >nul
 call :WriteLauncher "%DIST%\Run Alexa Broadcast Client.bat"
 if not exist "%DIST%\Run Alexa Broadcast Client.bat" (
   echo Failed to create launcher: %DIST%\Run Alexa Broadcast Client.bat
-  pause
+  if "%PAUSE_ON_FAIL%"=="1" pause
   popd
   exit /b 1
 )
@@ -138,7 +153,7 @@ echo.
 echo Copy the zip to your display PC, extract it, and run:
 echo   Run Alexa Broadcast Client.bat
 echo.
-if /I not "%~1"=="--no-pause" pause
+if "%PAUSE_ON_SUCCESS%"=="1" pause
 popd
 exit /b 0
 
@@ -146,7 +161,7 @@ exit /b 0
 echo Failed to create zip: %ZIP%
 echo Close any program using files in dist\ (display client, Explorer preview)
 echo and run this script again.
-pause
+if "%PAUSE_ON_FAIL%"=="1" pause
 popd
 exit /b 1
 
@@ -154,7 +169,7 @@ exit /b 1
 echo Failed to install dependencies.
 echo Try deleting the build environment and run this script again:
 echo   rmdir /s /q "%BUILD_VENV%"
-pause
+if "%PAUSE_ON_FAIL%"=="1" pause
 popd
 exit /b 1
 
