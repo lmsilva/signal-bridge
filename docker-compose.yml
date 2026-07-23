@@ -1,8 +1,8 @@
 services:
-  alexa-broadcast:
+  signal-bridge:
     build: .
-    image: alexa-broadcast-bridge:latest
-    container_name: alexa-broadcast-bridge
+    image: signal-bridge:latest
+    container_name: signal-bridge
     restart: unless-stopped
     stdin_open: true
     tty: true

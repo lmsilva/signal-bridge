@@ -77,19 +77,24 @@ wait_for_port_free() {
 }
 
 echo "Stopping listener and any old auth container..."
-docker compose stop alexa-broadcast 2>/dev/null || true
-docker stop alexa-broadcast-bridge 2>/dev/null || true
+docker compose stop signal-bridge alexa-broadcast 2>/dev/null || true
+docker stop signal-bridge alexa-broadcast-bridge 2>/dev/null || true
 docker rm -f alexa-broadcast-auth 2>/dev/null || true
 
 echo "Freeing port ${PROXY_PORT}..."
 wait_for_port_free "${PROXY_PORT}" || exit 1
 
-if ! docker image inspect alexa-broadcast-bridge:latest >/dev/null 2>&1; then
-  echo ""
-  echo "ERROR: Docker image alexa-broadcast-bridge:latest not found."
-  echo "QNAP build often fails — build the image on another machine and load it, or fix Container Station."
-  echo "If the listener was running before, the image should already exist."
-  exit 1
+if ! docker image inspect signal-bridge:latest >/dev/null 2>&1; then
+  if docker image inspect alexa-broadcast-bridge:latest >/dev/null 2>&1; then
+    echo "Tagging existing alexa-broadcast-bridge:latest as signal-bridge:latest..."
+    docker tag alexa-broadcast-bridge:latest signal-bridge:latest
+  else
+    echo ""
+    echo "ERROR: Docker image signal-bridge:latest not found."
+    echo "QNAP build often fails — build the image on another machine and load it, or fix Container Station."
+    echo "If the listener was running before, the image should already exist."
+    exit 1
+  fi
 fi
 
 echo ""

@@ -11,7 +11,7 @@
 
 A **Windows system-tray app** (Python + Tkinter) that listens for **UDP JSON** from [Signal Bridge](../../src/PROJECT.md), shows **fullscreen overlays**, opens pushed URLs in **WebView2**, **announces** itself for the Signal display picker, and applies **remote mouse/keyboard** from the Signal phone UI.
 
-Pair project: **Signal Bridge** (Node, Docker on QNAP; repo folder may still be `alexa-broadcast-bridge`). User guide: [README.md](../README.md).
+Pair project: **Signal Bridge** (Node, Docker on QNAP; GitHub: `signal-bridge`). User guide: [README.md](../README.md).
 
 ---
 

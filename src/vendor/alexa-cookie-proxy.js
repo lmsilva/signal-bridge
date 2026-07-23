@@ -1,4 +1,4 @@
-/* Patched Amazon login proxy for alexa-broadcast-bridge auth flow. */
+/* Patched Amazon login proxy for Signal Bridge Alexa auth flow. */
 'use strict';
 
 const modifyResponse = require('http-proxy-response-rewrite');

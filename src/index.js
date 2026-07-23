@@ -52,7 +52,7 @@ async function main() {
 
   registerShutdown(log);
 
-  log.info('Alexa Broadcast Bridge starting');
+  log.info('Signal Bridge starting');
   log.info('Running in foreground debug mode');
 
   try {

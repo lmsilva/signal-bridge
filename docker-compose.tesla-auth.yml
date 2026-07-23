@@ -4,7 +4,7 @@
 # PC browser auth normally uses http://localhost:4381/callback via npm run tesla-auth.
 services:
   alexa-broadcast-tesla-auth:
-    image: alexa-broadcast-bridge:latest
+    image: signal-bridge:latest
     container_name: alexa-broadcast-tesla-auth
     network_mode: host
     env_file:

@@ -43,8 +43,8 @@ touch data/voice-events.jsonl
 SSH into the NAS or use File Station:
 
 ```bash
-mkdir -p /share/Container/alexa-broadcast-bridge
-cd /share/Container/alexa-broadcast-bridge
+mkdir -p /share/Container/signal-bridge
+cd /share/Container/signal-bridge
 ```
 
 Copy the whole project there (or `git clone`), including:
@@ -64,7 +64,7 @@ Copy the whole project there (or `git clone`), including:
 ## 2. Build and start (SSH)
 
 ```bash
-cd /share/Container/alexa-broadcast-bridge
+cd /share/Container/signal-bridge
 docker compose build
 docker compose up -d
 ```
@@ -78,7 +78,7 @@ docker compose logs -f
 Attach to the live process (see output in your terminal):
 
 ```bash
-docker attach alexa-broadcast-bridge
+docker attach signal-bridge
 ```
 
 Detach without stopping the container: **Ctrl+P**, then **Ctrl+Q**  
@@ -100,7 +100,7 @@ Captured events append to `data/voice-events.jsonl` on the host (JSON lines: bro
 
 1. Open **Container Station** → **Create** → **Create application**
 2. Choose **Import** → **Upload** `docker-compose.yml` (or create from the UI using the same settings)
-3. Set **project path** to the folder on the NAS (e.g. `/share/Container/alexa-broadcast-bridge`)
+3. Set **project path** to the folder on the NAS (e.g. `/share/Container/signal-bridge`)
 4. Under **Volumes**, map only:
    - Host `./data` → Container `/app/data`
 5. **Restart policy**: Unless stopped
@@ -120,8 +120,8 @@ Use this if the session expired or refresh fails.
 1. Stop the listener and free port 3456:
 
 ```bash
-cd /share/Container/alexa-broadcast-bridge
-docker compose stop alexa-broadcast-bridge
+cd /share/Container/signal-bridge
+docker compose stop signal-bridge
 docker rm -f alexa-broadcast-auth
 ```
 
@@ -165,7 +165,7 @@ PC is already on the NAS. **`./src` is bind-mounted** into the container, so Jav
 changes apply on restart **without** rebuilding the image:
 
 ```bash
-cd /share/Container/alexa-broadcast-bridge
+cd /share/Container/signal-bridge
 ./recreate.sh
 ```
 
@@ -180,7 +180,7 @@ Session and `data/voice-events.jsonl` are on mounted volumes and are preserved.
 
 ## 6. UDP + displays + control page
 
-When an Alexa announcement is captured, the bridge sends JSON over UDP to the **Alexa Broadcast Client** on your Windows PC(s).
+When an Alexa announcement is captured, the bridge sends JSON over UDP to the **Signal display client** on your Windows PC(s).
 
 Add to `data/config.json` (defaults are in `config.example.json`):
 
@@ -207,7 +207,7 @@ Add to `data/config.json` (defaults are in `config.example.json`):
 - `certHosts`: include the NAS LAN IP so phones can accept the self-signed cert for QR camera
 - `docker-compose.yml` uses `network_mode: host` — required for LAN UDP and the control page
 
-See `alexa broadcast client/README.md` and the [main README](README.md) (Control web page / Display discovery).
+See `Signal display client/README.md` and the [main README](README.md) (Control web page / Display discovery).
 
 ---
 
@@ -224,7 +224,7 @@ See `alexa broadcast client/README.md` and the [main README](README.md) (Control
 This happens when Docker mounts `./config.json` but that **file did not exist** on the NAS. Docker creates an empty **directory** instead.
 
 ```bash
-cd /share/Container/alexa-broadcast-bridge
+cd /share/Container/signal-bridge
 docker compose down
 rm -rf config.json
 mkdir -p data

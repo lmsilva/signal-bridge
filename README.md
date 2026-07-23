@@ -8,8 +8,6 @@
 
 The companion [**Windows display client**](alexa%20broadcast%20client/README.md) shows fullscreen overlays on a poster PC, movie screen, or kitchen display. Alexa voice capture still uses `alexa-remote2` (unofficial); there is **no supported Amazon API** for passive listening.
 
-> Formerly *Alexa Broadcast Bridge* — same stack, broader role (multi-service bridge → displays).
-
 ---
 
 ## Features at a glance
@@ -20,7 +18,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | **Signal (control UI)** | Phone/tablet UI at `https://<NAS_IP>:47810/` — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth |
 | **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); Signal lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
-| **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 4-digit PIN appears on that screen; enter it on the phone to unlock for ~30 minutes |
+| **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 4-digit PIN appears on that screen; enter it on the phone to unlock for ~1 hour |
 
 ---
 

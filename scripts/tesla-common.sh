@@ -1,11 +1,16 @@
 # Shared helpers for ./tesla-*.sh (source from repo root scripts only).
 
 tesla_check_prereqs() {
-  if ! docker image inspect alexa-broadcast-bridge:latest >/dev/null 2>&1; then
-    echo ""
-    echo "ERROR: Docker image alexa-broadcast-bridge:latest not found."
-    echo "QNAP build often fails — build on another machine and docker load, or fix Container Station."
-    exit 1
+  if ! docker image inspect signal-bridge:latest >/dev/null 2>&1; then
+    if docker image inspect alexa-broadcast-bridge:latest >/dev/null 2>&1; then
+      echo "Tagging existing alexa-broadcast-bridge:latest as signal-bridge:latest..."
+      docker tag alexa-broadcast-bridge:latest signal-bridge:latest
+    else
+      echo ""
+      echo "ERROR: Docker image signal-bridge:latest not found."
+      echo "QNAP build often fails — build on another machine and docker load, or fix Container Station."
+      exit 1
+    fi
   fi
 
   if [[ ! -f .env ]]; then
@@ -17,7 +22,8 @@ tesla_check_prereqs() {
 }
 
 tesla_listener_running() {
-  docker compose ps --status running alexa-broadcast 2>/dev/null | grep -q alexa-broadcast
+  docker compose ps --status running signal-bridge 2>/dev/null | grep -q signal-bridge \
+    || docker compose ps --status running alexa-broadcast 2>/dev/null | grep -q alexa-broadcast
 }
 
 # Run a node command in the listener container, or a one-off container if stopped.
@@ -25,10 +31,10 @@ tesla_run_node() {
   tesla_check_prereqs
 
   if tesla_listener_running; then
-    docker compose exec -T alexa-broadcast node "$@"
+    docker compose exec -T signal-bridge node "$@"
   else
     echo "Listener not running — using one-off container (./data mounted)..."
-    docker compose run --rm --no-deps alexa-broadcast node "$@"
+    docker compose run --rm --no-deps signal-bridge node "$@"
   fi
 }
 

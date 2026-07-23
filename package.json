@@ -1,5 +1,5 @@
 {
-  "name": "alexa-broadcast-bridge",
+  "name": "signal-bridge",
   "version": "0.1.0",
   "description": "Signal Bridge — multi-service LAN bridge to smart displays (Alexa voice, Tesla, HTTPS Signal UI, discovery, WebView2 push)",
   "private": true,

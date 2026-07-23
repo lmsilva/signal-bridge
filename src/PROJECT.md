@@ -225,7 +225,7 @@ Every **15 minutes** the bridge runs a single **ping cycle** (no separate refres
 **Dump auth diagnostics to a file (run on NAS):**
 
 ```bash
-cd /share/Container/alexa-broadcast-bridge
+cd /share/Container/signal-bridge
 ./scripts/dump-auth-diagnostics.sh
 # or: cat data/diagnostics/auth-dump-*.txt
 ```
@@ -369,7 +369,7 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 - **`network_mode: host`** — required for UDP LAN + auth proxy on NAS IP
 - **`./src:/app/src:ro`** — edit JS on host without image rebuild
 - **`./data:/app/data`** — session + config persist across restarts
-- Listener service name: `alexa-broadcast` (container: `alexa-broadcast-bridge`)
+- Listener service name: `signal-bridge` (container/image: `signal-bridge`)
 - Auth: `docker compose -p alexa-auth -f docker-compose.auth.yml up --no-build`
 
 ---
@@ -390,7 +390,7 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 | `./tesla-register.sh` | Register Fleet domain on NAS |
 | `./tesla-verify-register.sh` | Verify Fleet registration |
 | `./tesla-status.sh` | Tesla session / auth-status summary |
-| `docker compose exec -it alexa-broadcast sh` | Interactive shell in listener container |
+| `docker compose exec -it signal-bridge sh` | Interactive shell in listener container |
 
 ---
 
@@ -432,6 +432,7 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-23: **GitHub/repo rename to `signal-bridge`** — GitHub repo, npm package name, Docker image/container/service, and docs use Signal Bridge; old `alexa-broadcast-bridge` image is auto-tagged when present. Local NAS folder may still be named `alexa-broadcast-bridge` until renamed on disk.
 - 2026-07-23: **PIN sheet above keyboard** — PIN unlock sheet is centered (not bottom-docked) and tracks `visualViewport` `--keyboard-inset` so the phone keyboard cannot cover the PIN field; viewport uses `interactive-widget=resizes-content`.
 - 2026-07-23: **Consistent lock + standard touchpad** — Remote tab hides power actions behind the same "Display locked" panel as Control; unlock expires 1h after PIN entry on both sides (`CONTROL_TOKEN_TTL_MS` in `app.js`, `sessionMinutes` default 60) and the header lock icon now locks on tap when unlocked; touchpad gains standard two-finger gestures — tap = right click, slide = scroll (wheel via `input.pointer`) — nudge arrow buttons removed.
 - 2026-07-22: **Signal Bridge branding** — product renamed from Alexa Broadcast Bridge; phone UI title **Signal** with logo/favicon; README hero uses `docs/signal-bridge-logo.png`.

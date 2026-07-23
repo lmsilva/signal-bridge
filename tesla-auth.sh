@@ -15,12 +15,12 @@ run_code_exchange() {
     docker compose exec -T \
       -e TESLA_OAUTH_REDIRECT_URI="$redirect" \
       -e TESLA_REDIRECT_URI="$redirect" \
-      alexa-broadcast node src/tesla-auth.js --code "$code"
+      signal-bridge node src/tesla-auth.js --code "$code"
   else
     docker compose run --rm --no-deps \
       -e TESLA_OAUTH_REDIRECT_URI="$redirect" \
       -e TESLA_REDIRECT_URI="$redirect" \
-      alexa-broadcast node src/tesla-auth.js --code "$code"
+      signal-bridge node src/tesla-auth.js --code "$code"
   fi
 }
 
@@ -36,7 +36,7 @@ if [[ "${TESLA_USE_LOCALHOST_REDIRECT:-0}" != "1" ]]; then
   echo "Tesla developer portal only allows http:// for localhost — not LAN IPs like 192.168.x.x."
   echo ""
   echo "Recommended (easiest) — run on your Windows PC:"
-  echo "  cd \\\\nas\\container\\alexa-broadcast-bridge"
+  echo "  cd \\\\nas\\container\\signal-bridge"
   echo "  npm run tesla-auth"
   echo "  (or double-click tesla-auth-pc.bat)"
   echo ""
@@ -52,11 +52,6 @@ fi
 export TESLA_OAUTH_REDIRECT_URI="http://localhost:${TESLA_AUTH_PORT}/callback"
 
 tesla_check_prereqs
-
-if ! docker image inspect alexa-broadcast-bridge:latest >/dev/null 2>&1; then
-  echo "ERROR: Docker image alexa-broadcast-bridge:latest not found."
-  exit 1
-fi
 
 echo ""
 echo "Using redirect URI: ${TESLA_OAUTH_REDIRECT_URI}"

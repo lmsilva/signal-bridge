@@ -9,8 +9,8 @@ mkdir -p data/diagnostics
   cat data/auth-status.json 2>/dev/null || echo "(missing)"
   echo ""
   echo "=== session meta ==="
-  if docker compose ps --status running alexa-broadcast >/dev/null 2>&1; then
-    docker compose exec -T alexa-broadcast node -e "
+  if docker compose ps --status running signal-bridge >/dev/null 2>&1; then
+    docker compose exec -T signal-bridge node -e "
       const c = require('./src/config').loadConfig();
       const s = require('./src/session').loadSession(c.sessionPath);
       const m = require('./src/session-meta').getSessionMeta(c, s);
@@ -32,7 +32,7 @@ mkdir -p data/diagnostics
   tail -30 data/voice-events.jsonl 2>/dev/null || echo "(missing)"
   echo ""
   echo "=== docker logs (auth-related, last 72h) ==="
-  docker compose logs --since 72h alexa-broadcast 2>&1 \
+  docker compose logs --since 72h signal-bridge 2>&1 \
     | grep -iE 'session|auth|refresh|reauth|degraded|cookie|token|401|403|register|weather|voice event' \
     | tail -300 || echo "(docker logs failed)"
 } | tee "$OUT"
