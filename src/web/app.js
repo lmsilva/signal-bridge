@@ -49,13 +49,32 @@
     return Boolean(id) && id !== ALL_DISPLAYS;
   }
 
+  // Client-side cap on how long an unlock lasts — after this the user must
+  // re-enter a PIN even if the tab (and its sessionStorage) survived overnight.
+  const CONTROL_TOKEN_TTL_MS = 60 * 60 * 1000;
+
   function controlTokenFor(displayId) {
     if (!displayId || displayId === ALL_DISPLAYS) {
       return '';
     }
     try {
-      return sessionStorage.getItem(STORAGE_TOKEN_PREFIX + displayId) || '';
+      const raw = sessionStorage.getItem(STORAGE_TOKEN_PREFIX + displayId);
+      if (!raw) {
+        return '';
+      }
+      const entry = JSON.parse(raw);
+      if (!entry?.token || Date.now() - (entry.at || 0) > CONTROL_TOKEN_TTL_MS) {
+        sessionStorage.removeItem(STORAGE_TOKEN_PREFIX + displayId);
+        return '';
+      }
+      return entry.token;
     } catch {
+      // Legacy plain-string tokens (no timestamp) are treated as expired.
+      try {
+        sessionStorage.removeItem(STORAGE_TOKEN_PREFIX + displayId);
+      } catch {
+        // private mode
+      }
       return '';
     }
   }
@@ -65,7 +84,10 @@
       if (!token) {
         sessionStorage.removeItem(STORAGE_TOKEN_PREFIX + displayId);
       } else {
-        sessionStorage.setItem(STORAGE_TOKEN_PREFIX + displayId, token);
+        sessionStorage.setItem(
+          STORAGE_TOKEN_PREFIX + displayId,
+          JSON.stringify({ token, at: Date.now() }),
+        );
       }
     } catch {
       // private mode
@@ -98,7 +120,7 @@
       unlockBtn.hidden = !single;
       unlockBtn.classList.toggle('unlocked', unlocked);
       unlockBtn.title = unlocked
-        ? 'Remote control unlocked for this display'
+        ? 'Unlocked — tap to lock this display again'
         : 'Unlock remote control with on-screen PIN';
     }
     const lock = $('control-lock');
@@ -107,7 +129,18 @@
       lock.hidden = !single || unlocked;
       grid.hidden = single && !unlocked;
     }
+    // Remote tab (power actions) mirrors the Control tab: no controls until
+    // the display is unlocked with the on-screen PIN.
+    const remoteLock = $('remote-lock');
+    const remoteGrid = $('remote-grid');
+    if (remoteLock && remoteGrid) {
+      remoteLock.hidden = unlocked;
+      remoteGrid.hidden = !unlocked;
+    }
   }
+
+  // Re-check every minute so the lock UI snaps back when the 1h unlock expires.
+  setInterval(updateControlLockUi, 60_000);
 
   function updateControlTabVisibility() {
     const controlBtn = $('tab-btn-control');
@@ -789,14 +822,55 @@
       toast('Select a single display first', 'bad');
       return false;
     }
-    await apiPost('/api/displays/auth/start', withTarget());
+    // Open the sheet and focus the input BEFORE any await — mobile browsers
+    // only pop the keyboard when focus happens inside the user's tap gesture.
     clearPinSheetError();
-    $('pin-sheet-hint').textContent = 'A PIN is on the display now — enter it below.';
+    $('pin-sheet-hint').textContent = 'Requesting PIN…';
     $('pin-sheet-input').value = '';
     $('pin-sheet').hidden = false;
-    setTimeout(() => $('pin-sheet-input')?.focus(), 50);
+    syncKeyboardInset();
+    const pinInput = $('pin-sheet-input');
+    pinInput?.focus({ preventScroll: false });
+    // Keep the field in the visible area above the keyboard.
+    setTimeout(() => {
+      pinInput?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 50);
+    try {
+      await apiPost('/api/displays/auth/start', withTarget());
+    } catch (error) {
+      $('pin-sheet').hidden = true;
+      throw error;
+    }
+    $('pin-sheet-hint').textContent = 'A PIN is on the display now — enter it below.';
     return true;
   }
+
+  function syncKeyboardInset() {
+    const vv = window.visualViewport;
+    if (!vv) {
+      document.documentElement.style.setProperty('--keyboard-inset', '0px');
+      return;
+    }
+    // How much of the layout viewport is covered by the OS keyboard.
+    const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncKeyboardInset);
+    window.visualViewport.addEventListener('scroll', syncKeyboardInset);
+  }
+  window.addEventListener('focusin', (e) => {
+    if (e.target && e.target.id === 'pin-sheet-input') {
+      syncKeyboardInset();
+      setTimeout(() => {
+        e.target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 100);
+    }
+  });
+  window.addEventListener('focusout', () => {
+    setTimeout(syncKeyboardInset, 100);
+  });
 
   async function ensureControlUnlocked() {
     if (!isSingleDisplaySelected()) {
@@ -844,7 +918,10 @@
 
   $('btn-display-unlock')?.addEventListener('click', async () => {
     if (isDisplayUnlocked()) {
-      toast('Already unlocked for this display', 'good');
+      // Tap while unlocked = lock now (deauthenticate this display).
+      setControlToken(selectedTargetId(), '');
+      updateControlLockUi();
+      toast('Display locked — PIN required to control it again', 'good');
       return;
     }
     try {
@@ -859,6 +936,9 @@
     } catch (error) {
       toast(error.message, 'bad');
     }
+  });
+  $('btn-remote-unlock')?.addEventListener('click', () => {
+    ensureControlUnlocked();
   });
   $('pin-sheet-cancel')?.addEventListener('click', () => {
     $('pin-sheet').hidden = true;
@@ -967,6 +1047,7 @@
   const stickyMods = new Set();
   let pendingDx = 0;
   let pendingDy = 0;
+  let pendingWheel = 0;
   let pointerFlush = null;
 
   function flushPointer() {
@@ -974,16 +1055,23 @@
     if (!isSingleDisplaySelected() || !isDisplayUnlocked()) {
       pendingDx = 0;
       pendingDy = 0;
+      pendingWheel = 0;
       return;
     }
     const dx = pendingDx;
     const dy = pendingDy;
+    const wheel = pendingWheel;
     pendingDx = 0;
     pendingDy = 0;
-    if (!dx && !dy) {
+    pendingWheel = 0;
+    if (!dx && !dy && !wheel) {
       return;
     }
-    apiPost('/api/input/pointer', withTarget({ dx, dy })).catch((error) => {
+    const body = { dx, dy };
+    if (wheel) {
+      body.wheel = wheel;
+    }
+    apiPost('/api/input/pointer', withTarget(body)).catch((error) => {
       if (error.code === 'control_auth_required') {
         setControlToken(selectedTargetId(), '');
         updateControlLockUi();
@@ -994,6 +1082,13 @@
   function queuePointer(dx, dy) {
     pendingDx += dx;
     pendingDy += dy;
+    if (!pointerFlush) {
+      pointerFlush = requestAnimationFrame(flushPointer);
+    }
+  }
+
+  function queueWheel(steps) {
+    pendingWheel += steps;
     if (!pointerFlush) {
       pointerFlush = requestAnimationFrame(flushPointer);
     }
@@ -1041,75 +1136,115 @@
     if (!pad) {
       return;
     }
-    let tracking = false;
-    let lastX = 0;
-    let lastY = 0;
-    let moved = false;
-    let downAt = 0;
-    let longTimer = null;
 
     const SENSITIVITY = 2.1;
+    const SCROLL_PX_PER_STEP = 24; // finger pixels per wheel notch
+    const TAP_MAX_MS = 350;
+    const MOVE_TOLERANCE_PX = 12; // total travel allowed before a tap is off
+
+    // pointerId → last position. Standard touchpad gestures:
+    //   1 finger drag → move cursor · tap → left click · hold → right click
+    //   2 finger drag → scroll     · tap → right click
+    const touches = new Map();
+    let movedPx = 0;
+    let downAt = 0;
+    let longTimer = null;
+    let longPressFired = false;
+    let scrollPx = 0;
+    let maxTouches = 0;
+
+    function clearLongTimer() {
+      if (longTimer) {
+        clearTimeout(longTimer);
+        longTimer = null;
+      }
+    }
 
     pad.addEventListener('pointerdown', (e) => {
       if (!isDisplayUnlocked()) {
         ensureControlUnlocked();
         return;
       }
-      tracking = true;
-      moved = false;
-      downAt = Date.now();
-      lastX = e.clientX;
-      lastY = e.clientY;
+      if (touches.size === 0) {
+        movedPx = 0;
+        downAt = Date.now();
+        longPressFired = false;
+        scrollPx = 0;
+        maxTouches = 0;
+        longTimer = setTimeout(() => {
+          longTimer = null;
+          if (touches.size === 1 && movedPx <= MOVE_TOLERANCE_PX) {
+            longPressFired = true;
+            sendPointerButtons({ right: 'click' });
+          }
+        }, 550);
+      } else {
+        // Second finger down → scroll/tap gesture, never a long-press.
+        clearLongTimer();
+      }
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      maxTouches = Math.max(maxTouches, touches.size);
       try {
         pad.setPointerCapture(e.pointerId);
       } catch {
         // older WebKit
       }
       pad.classList.add('active');
-      longTimer = setTimeout(() => {
-        if (tracking && !moved) {
-          sendPointerButtons({ right: 'click' });
-          tracking = false;
-          pad.classList.remove('active');
-        }
-      }, 550);
       e.preventDefault();
     });
 
     pad.addEventListener('pointermove', (e) => {
-      if (!tracking) {
+      const touch = touches.get(e.pointerId);
+      if (!touch) {
         return;
       }
-      const dx = (e.clientX - lastX) * SENSITIVITY;
-      const dy = (e.clientY - lastY) * SENSITIVITY;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      if (Math.abs(dx) > 0.35 || Math.abs(dy) > 0.35) {
-        moved = true;
-        if (longTimer) {
-          clearTimeout(longTimer);
-          longTimer = null;
+      const rawDx = e.clientX - touch.x;
+      const rawDy = e.clientY - touch.y;
+      touch.x = e.clientX;
+      touch.y = e.clientY;
+      movedPx += Math.abs(rawDx) + Math.abs(rawDy);
+      if (movedPx > MOVE_TOLERANCE_PX) {
+        clearLongTimer();
+      }
+
+      if (touches.size >= 2) {
+        // Two-finger vertical slide → wheel. Each finger reports its own
+        // moves, so divide by the finger count to average the gesture.
+        // Slide up = scroll up (positive Windows wheel).
+        scrollPx += -rawDy / touches.size;
+        const steps = Math.trunc(scrollPx / SCROLL_PX_PER_STEP);
+        if (steps) {
+          scrollPx -= steps * SCROLL_PX_PER_STEP;
+          queueWheel(steps);
         }
-        queuePointer(dx, dy);
+      } else if (Math.abs(rawDx) > 0.35 || Math.abs(rawDy) > 0.35) {
+        // Move the cursor right away; MOVE_TOLERANCE_PX only decides whether
+        // the release still counts as a tap.
+        queuePointer(rawDx * SENSITIVITY, rawDy * SENSITIVITY);
       }
       e.preventDefault();
     });
 
     function endPointer(e) {
-      if (!tracking) {
+      if (!touches.has(e.pointerId)) {
         return;
       }
-      tracking = false;
-      pad.classList.remove('active');
-      if (longTimer) {
-        clearTimeout(longTimer);
-        longTimer = null;
-      }
-      if (!moved && Date.now() - downAt < 500) {
-        sendPointerButtons({ left: 'click' });
-      }
-      flushPointer();
+      touches.delete(e.pointerId);
       e.preventDefault();
+      if (touches.size > 0) {
+        return; // wait for the last finger before deciding tap vs. gesture
+      }
+      pad.classList.remove('active');
+      clearLongTimer();
+      const isTap = !longPressFired
+        && movedPx <= MOVE_TOLERANCE_PX
+        && Date.now() - downAt < TAP_MAX_MS;
+      if (isTap) {
+        // Standard touchpad: one-finger tap = left, two-finger tap = right.
+        sendPointerButtons(maxTouches >= 2 ? { right: 'click' } : { left: 'click' });
+      }
+      longPressFired = false;
+      flushPointer();
     }
 
     pad.addEventListener('pointerup', endPointer);
@@ -1120,20 +1255,6 @@
 
   $('btn-mouse-left')?.addEventListener('click', () => sendPointerButtons({ left: 'click' }));
   $('btn-mouse-right')?.addEventListener('click', () => sendPointerButtons({ right: 'click' }));
-
-  document.querySelectorAll('.nudge').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const raw = String(btn.dataset.nudge || '0,0').split(',');
-      const dx = Number(raw[0]) || 0;
-      const dy = Number(raw[1]) || 0;
-      if (!isSingleDisplaySelected()) {
-        toast('Select a single display for mouse control', 'bad');
-        return;
-      }
-      queuePointer(dx, dy);
-      flushPointer();
-    });
-  });
 
   (function buildKeyboard() {
     const root = $('keyboard');

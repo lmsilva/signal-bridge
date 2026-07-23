@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -10,7 +10,7 @@
   <title>Signal Bridge</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="/styles.css?v=signal2">
+  <link rel="stylesheet" href="/styles.css?v=signal6">
 </head>
 <body>
   <header class="app-header">
@@ -99,7 +99,12 @@
 
     <!-- =========================== REMOTE TAB =========================== -->
     <section class="tab-panel" id="tab-remote">
-      <div class="card-grid">
+      <div class="control-lock" id="remote-lock" hidden>
+        <p class="control-lock-title">Display locked</p>
+        <p class="control-lock-text">A PIN will appear on the display. Enter it here to unlock power actions.</p>
+        <button type="button" class="btn btn-accent" id="btn-remote-unlock">Show PIN &amp; Unlock</button>
+      </div>
+      <div class="card-grid" id="remote-grid">
         <div class="section-label">Display PC</div>
 
         <div class="card">
@@ -128,7 +133,7 @@
           </div>
         </div>
 
-        <p class="hint">Power actions require unlocking the selected display with the on-screen PIN. A confirmation tap is also required.</p>
+        <p class="hint">A confirmation tap is required for power actions.</p>
       </div>
     </section>
 
@@ -145,19 +150,11 @@
           <div class="touchpad" id="touchpad" role="application" aria-label="Remote touchpad">
             <div class="touchpad-glow"></div>
             <div class="touchpad-label">TOUCHPAD</div>
-            <div class="touchpad-hint">Drag to move cursor · Tap to click · Hold for right-click</div>
+            <div class="touchpad-hint">Drag to move cursor · Tap to click · Two-finger tap to right-click · Two-finger slide to scroll</div>
           </div>
           <div class="touchpad-actions">
             <button type="button" class="btn btn-outline" id="btn-mouse-left">Left click</button>
             <button type="button" class="btn btn-outline" id="btn-mouse-right">Right click</button>
-          </div>
-          <div class="nudge-row" aria-label="Nudge cursor">
-            <button type="button" class="btn btn-outline nudge" data-nudge="0,-40">↑</button>
-            <div class="nudge-mid">
-              <button type="button" class="btn btn-outline nudge" data-nudge="-40,0">←</button>
-              <button type="button" class="btn btn-outline nudge" data-nudge="40,0">→</button>
-            </div>
-            <button type="button" class="btn btn-outline nudge" data-nudge="0,40">↓</button>
           </div>
         </div>
 
@@ -276,6 +273,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="/app.js?v=signal2"></script>
+  <script src="/app.js?v=signal6"></script>
 </body>
 </html>

@@ -59,6 +59,13 @@ class DisplayIdentityTests(unittest.TestCase):
 
 
 class InputControlTests(unittest.TestCase):
+    def setUp(self):
+        from src import input_control as ic
+
+        # Isolate tracked cursor state between tests.
+        ic._tracked_pos = None
+        ic._on_cursor_moved = None
+
     def test_handle_input_payload_types(self):
         with mock.patch("src.input_control.handle_pointer") as pointer:
             with mock.patch("src.input_control.handle_key") as key:
@@ -68,31 +75,112 @@ class InputControlTests(unittest.TestCase):
                 key.assert_called_once()
                 self.assertFalse(handle_input_payload({"type": "web.close"}))
 
-    def test_pointer_moves_and_clicks(self):
-        mouse = mock.Mock()
-        with mock.patch("src.input_control._ensure_pynput"):
-            with mock.patch("src.input_control._move_relative", return_value=True) as move:
-                with mock.patch("src.input_control._mouse", mouse):
-                    with mock.patch("src.input_control._Button") as Button:
-                        Button.left = "L"
-                        Button.right = "R"
-                        Button.middle = "M"
-                        handle_pointer({"dx": 4, "dy": -2, "buttons": {"left": "click"}})
-                        move.assert_called_once_with(4, -2)
-                        mouse.move.assert_not_called()
-                        mouse.click.assert_called_once_with("L", 1)
+    def test_move_uses_absolute_sendinput_and_notifies_overlay(self):
+        from src import input_control as ic
 
-    def test_pointer_falls_back_to_pynput_move(self):
+        batches = []
+        moved = []
+        ic.set_cursor_moved_callback(lambda x, y: moved.append((x, y)))
+        with mock.patch(
+            "src.input_control._send_mouse_events",
+            side_effect=lambda events: batches.append(list(events)) or True,
+        ):
+            with mock.patch("src.input_control._virtual_screen", return_value=(0, 0, 1000, 1000)):
+                with mock.patch("src.input_control._cursor_pos", return_value=(100, 200)):
+                    handle_pointer({"dx": 6, "dy": -3})
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(len(batches[0]), 1)
+        nx, ny, flags, _data = batches[0][0]
+        self.assertEqual(nx, round(106 * 65535 / 999))
+        self.assertEqual(ny, round(197 * 65535 / 999))
+        self.assertEqual(flags, ic.ABS_MOVE_FLAGS)
+        self.assertEqual(moved, [(106, 197)])
+
+    def test_click_moves_to_tracked_position_first(self):
+        # Under RDP, bare button events click at the frozen system arrow —
+        # so every click is preceded by an absolute move to our tracked tip,
+        # then plain LEFTDOWN/LEFTUP (no ABSOLUTE ORed onto the button flags).
+        from src import input_control as ic
+
+        batches = []
+        with mock.patch(
+            "src.input_control._send_mouse_events",
+            side_effect=lambda events: batches.append(list(events)) or True,
+        ):
+            with mock.patch("src.input_control._virtual_screen", return_value=(0, 0, 1000, 1000)):
+                with mock.patch("src.input_control._cursor_pos", return_value=(100, 200)):
+                    handle_pointer({"dx": 10, "dy": 0})
+                    handle_pointer({"buttons": {"left": "click"}})
+        self.assertEqual(len(batches), 2)
+        click_batch = batches[1]
+        self.assertEqual(len(click_batch), 3)
+        self.assertEqual(click_batch[0][2], ic.ABS_MOVE_FLAGS)
+        self.assertEqual(click_batch[1][2], ic.MOUSEEVENTF_LEFTDOWN)
+        self.assertEqual(click_batch[2][2], ic.MOUSEEVENTF_LEFTUP)
+
+    def test_wheel_and_right_click_include_absolute_aim(self):
+        from src import input_control as ic
+
+        batches = []
+        with mock.patch(
+            "src.input_control._send_mouse_events",
+            side_effect=lambda events: batches.append(list(events)) or True,
+        ):
+            with mock.patch("src.input_control._virtual_screen", return_value=(0, 0, 1000, 1000)):
+                with mock.patch("src.input_control._cursor_pos", return_value=(50, 50)):
+                    handle_pointer({"wheel": -2, "buttons": {"right": "click"}})
+        self.assertEqual(len(batches), 2)
+        wheel_batch = batches[0]
+        self.assertEqual(wheel_batch[-1][2], ic.MOUSEEVENTF_WHEEL)
+        self.assertEqual(wheel_batch[-1][3], -2 * ic.WHEEL_DELTA)
+        click_batch = batches[1]
+        self.assertEqual(click_batch[-2][2], ic.MOUSEEVENTF_RIGHTDOWN)
+        self.assertEqual(click_batch[-1][2], ic.MOUSEEVENTF_RIGHTUP)
+
+    def test_click_ducks_overlay_before_injecting(self):
+        ducked = []
+        from src import input_control as ic
+
+        ic.set_cursor_duck_callback(lambda: ducked.append(True))
+        with mock.patch("src.input_control._send_mouse_events", return_value=True):
+            with mock.patch("src.input_control._virtual_screen", return_value=(0, 0, 1000, 1000)):
+                with mock.patch("src.input_control._cursor_pos", return_value=(10, 10)):
+                    handle_pointer({"buttons": {"left": "click"}})
+        self.assertTrue(ducked)
+
+    def test_pointer_falls_back_to_pynput_when_sendinput_unavailable(self):
         mouse = mock.Mock()
-        with mock.patch("src.input_control._ensure_pynput"):
-            with mock.patch("src.input_control._move_relative", return_value=False):
-                with mock.patch("src.input_control._mouse", mouse):
-                    with mock.patch("src.input_control._Button") as Button:
-                        Button.left = "L"
-                        Button.right = "R"
-                        Button.middle = "M"
-                        handle_pointer({"dx": 3, "dy": 1})
-                        mouse.move.assert_called_once_with(3, 1)
+        with mock.patch("src.input_control._send_mouse_events", return_value=False):
+            with mock.patch("src.input_control._set_cursor_pos", return_value=False):
+                with mock.patch("src.input_control._virtual_screen", return_value=(0, 0, 1000, 1000)):
+                    with mock.patch("src.input_control._cursor_pos", return_value=(0, 0)):
+                        with mock.patch("src.input_control._ensure_pynput"):
+                            with mock.patch("src.input_control._mouse", mouse):
+                                with mock.patch("src.input_control._Button") as Button:
+                                    Button.left = "L"
+                                    Button.right = "R"
+                                    Button.middle = "M"
+                                    handle_pointer({"dx": 3, "dy": 1, "buttons": {"left": "click"}})
+                                    mouse.move.assert_called_once_with(3, 1)
+                                    mouse.click.assert_called_once_with("L", 1)
+
+    def test_pointer_survives_broken_pynput(self):
+        with mock.patch("src.input_control._send_mouse_events", return_value=False):
+            with mock.patch("src.input_control._set_cursor_pos", return_value=False):
+                with mock.patch("src.input_control._virtual_screen", return_value=None):
+                    with mock.patch("src.input_control._cursor_pos", return_value=None):
+                        with mock.patch(
+                            "src.input_control._ensure_pynput",
+                            side_effect=ImportError("no pynput"),
+                        ):
+                            handle_pointer({"dx": 5, "dy": 5, "buttons": {"left": "click"}})
+
+    def test_key_survives_broken_pynput(self):
+        with mock.patch(
+            "src.input_control._ensure_pynput",
+            side_effect=ImportError("no pynput"),
+        ):
+            handle_key({"key": "a", "action": "press"})
 
     def test_key_chord_presses_modifiers(self):
         keyboard = mock.Mock()
@@ -106,6 +194,29 @@ class InputControlTests(unittest.TestCase):
                     keyboard.press.assert_any_call("F4")
                     keyboard.release.assert_any_call("F4")
                     keyboard.release.assert_any_call("ALT")
+
+
+class RemoteCursorOverlayTests(unittest.TestCase):
+    def test_overlay_is_compact(self):
+        from src.remote_cursor import RemoteCursorOverlay
+
+        self.assertLessEqual(RemoteCursorOverlay.SIZE, 20)
+
+    def test_duck_does_not_restore_system_cursor(self):
+        from src.remote_cursor import RemoteCursorOverlay
+
+        root = mock.Mock()
+        root.after = mock.Mock(return_value="timer")
+        root.after_cancel = mock.Mock()
+        overlay = RemoteCursorOverlay(root)
+        overlay._visible = True
+        overlay._system_hidden = True
+        overlay._win = mock.Mock()
+        with mock.patch.object(overlay, "_restore_system_cursor") as restore:
+            with mock.patch.object(overlay, "_stop_physical_mouse_watch"):
+                overlay.duck()
+        restore.assert_not_called()
+        overlay._win.withdraw.assert_called_once()
 
 
 if __name__ == "__main__":

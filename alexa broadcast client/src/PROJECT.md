@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-23
 
 ---
 
@@ -46,7 +46,8 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top; persistent profile (`private_mode=False`) for saved passwords |
 | `src/display_identity.py` | Stable `display.id` + `displayName` (hostname fallback) for bridge registration |
 | `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); responds to `display.discover` |
-| `src/input_control.py` | Apply `input.pointer` / `input.key` — Win32 relative `SendInput` for mouse move (RDP-friendly), `pynput` for clicks/keys |
+| `src/input_control.py` | Apply `input.pointer` / `input.key` — absolute Win32 `SendInput` (tracked position + DPI-aware); clicks aimed at tracked tip; `pynput` for keys |
+| `src/remote_cursor.py` | Click-through software arrow at the remote tip; blanks system cursors while active; restores on idle or physical (non-injected) mouse move |
 | `src/config.py` | Load `config.json`; `effective_display_seconds` (timers use full duration) |
 | `src/paths.py` | Resolve config path for dev vs portable build |
 | `config.json` | User settings (port, fade, display caps, colors) |
@@ -103,7 +104,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `system.command` | **Command:** `system.action` `reboot`/`poweroff` → Windows `shutdown /r|/s /t 5` (closes browser overlay first) |
 | `display.discover` | **Command:** remember bridge host from packet `_rinfo` + re-announce |
 | `display.auth` | Overlay: unlock PIN, or green **Authenticated** for ~1s when `auth.status` is `ok` |
-| `input.pointer` / `input.key` | **Command:** remote mouse (Win32 relative `SendInput`) / keyboard (`pynput`) |
+| `input.pointer` / `input.key` | **Command:** remote mouse — move/click/wheel all via Win32 `SendInput` (`pynput` only as fallback) / keyboard (`pynput`) |
 
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -236,6 +237,11 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-23: **Hide OS cursor during remote control** — while the software pointer is active, system cursors are replaced with a blank cursor (`SetSystemCursor`); a `WH_MOUSE_LL` hook restores them on the first physical (non-injected) mouse move, and idle timeout restores them too. Software arrow shrunk to 18px.
+- 2026-07-23: **Remote cursor click-through** — overlay was eating clicks/scrolls (Tk canvas child kept hit-testing; `SetWindowLong` also cleared the chroma-key → opaque black block). Now hardens `WS_EX_TRANSPARENT` on toplevel+children, restores `SetLayeredWindowAttributes` color key, and ducks the overlay for the instant of each click/wheel.
+- 2026-07-23: **Software remote cursor + aimed clicks** — `remote_cursor.py` paints a click-through topmost arrow at the tracked remote tip (RDP/kiosk often freeze the system pointer while hover still tracks). Moves/clicks/wheel inject absolute `SendInput` batches aimed at that tip so clicks land where the overlay is, not at the frozen system arrow. Process DPI awareness set at startup so coordinates agree.
+- 2026-07-23: **Absolute cursor moves** — pointer moves are injected as `MOUSEEVENTF_ABSOLUTE|VIRTUALDESK` SendInput events (delta applied to `GetCursorPos`, normalized to the virtual desktop). Relative injected moves are discarded under RDP, and `SetCursorPos` only moves the logical position (hover tracks but the drawn arrow freezes over RDP); absolute injection moves both. `SetCursorPos` kept as last-resort fallback (`input_control.py`).
+- 2026-07-23: **Remote mouse hardening** — clicks/wheel now injected via Win32 `SendInput` like moves (`input_control.py`), so mouse control no longer depends on `pynput` loading; `_poll_messages` (`main.py`) wraps payload handling so a failing command can't kill the UDP loop (this previously made all input silently stop); PyInstaller spec bundles all `pynput` submodules (`collect_submodules`) — the dynamic `_win32` backends were missing from the freeze; `SendInput` rejections log a hint that an elevated foreground app requires running the client as admin.
 - 2026-07-22: **Signal Bridge branding** — docs/UI refer to Signal Bridge / Signal phone UI (logo on bridge README + web header).
 - 2026-07-22: **PIN Authenticated flash** — `display.auth` with `auth.status: ok` replaces the PIN with green “Authenticated” (~1s) then dismisses; overlay chrome title follows.
 - 2026-07-21: **Stable display id + PIN overlay** — `display.id` is per-machine (name can duplicate); announce includes `shortId`; new `display.auth` panel shows unlock PIN from the control page.

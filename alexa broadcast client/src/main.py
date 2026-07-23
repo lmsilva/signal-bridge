@@ -7,9 +7,15 @@ from tkinter import messagebox
 from src.config import effective_display_seconds, load_config
 from src.display_announce import DisplayAnnouncer
 from src.display_identity import resolve_display_id, resolve_display_name
-from src.input_control import handle_input_payload
+from src.input_control import (
+    ensure_dpi_aware,
+    handle_input_payload,
+    set_cursor_duck_callback,
+    set_cursor_moved_callback,
+)
 from src.listener import UdpListener
 from src.overlay import OverlayWindow
+from src.remote_cursor import RemoteCursorOverlay
 from src.tray_app import run_tray
 from src.payload_utils import COMMAND_TYPES
 from src.web_overlay import (
@@ -60,9 +66,14 @@ class BroadcastClientApp:
         self.tray_icon = None
         self.root = None
         self.overlay = None
+        self.remote_cursor = None
         self.web_overlay = WebOverlayManager(self.config)
 
     def start(self):
+        # Coordinate spaces for GetCursorPos / SendInput / Tk geometry must
+        # agree — otherwise remote moves look like hover-only with a frozen
+        # system arrow (especially on high-DPI and over RDP).
+        ensure_dpi_aware()
         self.listener.start()
         if not self.listener.wait_until_ready():
             error = self.listener.bind_error
@@ -90,18 +101,41 @@ class BroadcastClientApp:
             on_user_dismiss=self._on_user_dismiss,
             on_local_timer_fired=self._on_local_timer_fired,
         )
+        self.remote_cursor = RemoteCursorOverlay(self.root)
+        set_cursor_moved_callback(self._on_remote_cursor_moved)
+        set_cursor_duck_callback(self._on_remote_cursor_duck)
         self.root.after(100, self._poll_messages)
         self.root.mainloop()
+
+    def _on_remote_cursor_moved(self, x: int, y: int):
+        # Tk callbacks must run on the main thread — input is already applied
+        # from the poll loop on that thread, so this is safe to call directly.
+        if self.remote_cursor is not None:
+            self.remote_cursor.show_at(x, y)
+
+    def _on_remote_cursor_duck(self):
+        if self.remote_cursor is not None:
+            self.remote_cursor.duck()
 
     def _poll_messages(self):
         try:
             while True:
                 payload = self.message_queue.get_nowait()
-                if payload.get("type") in self.COMMAND_TYPES:
-                    self._handle_command_payload(payload)
-                    continue
-                seconds = effective_display_seconds(payload, self.config)
-                self._show_payload(payload, seconds)
+                # One bad payload must never kill the poll loop — an uncaught
+                # exception here would stop the after() rescheduling and the
+                # client would silently ignore all UDP from then on.
+                try:
+                    if payload.get("type") in self.COMMAND_TYPES:
+                        self._handle_command_payload(payload)
+                        continue
+                    seconds = effective_display_seconds(payload, self.config)
+                    self._show_payload(payload, seconds)
+                except Exception as exc:
+                    print(
+                        f"Failed to handle {payload.get('type')} payload: {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
         except queue.Empty:
             pass
 
@@ -227,6 +261,11 @@ class BroadcastClientApp:
 
     def shutdown(self):
         self.web_overlay.close()
+        set_cursor_moved_callback(None)
+        set_cursor_duck_callback(None)
+        if self.remote_cursor:
+            self.remote_cursor.destroy()
+            self.remote_cursor = None
         self.announcer.stop()
         self.listener.stop()
         if self.tray_icon:

@@ -32,6 +32,13 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
   min-height: 100%;
+  /* Kill double-tap-to-zoom — fatal on the touchpad and on-screen keyboard.
+     The touchpad itself stays touch-action: none for multi-finger gestures. */
+  touch-action: manipulation;
+}
+
+button, input, select {
+  touch-action: manipulation;
 }
 
 body {
@@ -620,6 +627,22 @@ body {
 
 .sheet-scanner { max-width: 560px; }
 
+/* PIN sheet: center in the visible viewport so the phone keyboard can't
+   cover the input (bottom sheets disappear under iOS/Android keyboards). */
+#pin-sheet.sheet-backdrop {
+  align-items: center;
+  padding: 16px;
+  padding-bottom: calc(16px + var(--keyboard-inset, 0px));
+}
+
+#pin-sheet .sheet {
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  max-height: min(70dvh, 420px);
+  overflow: auto;
+  margin-bottom: 0;
+}
+
 .scanner-frame {
   position: relative;
   width: 100%;
@@ -726,26 +749,6 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 10px;
-}
-
-.nudge-row {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.nudge-mid {
-  display: flex;
-  gap: 8px;
-}
-
-.nudge {
-  width: 52px;
-  min-height: 44px;
-  padding: 0;
-  font-size: 1.05rem;
 }
 
 .keyboard-card {

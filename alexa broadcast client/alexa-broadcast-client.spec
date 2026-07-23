@@ -16,6 +16,11 @@ webview_datas = (
     + collect_data_files('pythonnet')
 )
 
+# pynput picks its _win32 backend submodules dynamically at import time;
+# listing only pynput.mouse/keyboard leaves the backends out of the freeze
+# and the import fails silently at runtime (remote keyboard breaks).
+pynput_hiddenimports = collect_submodules('pynput')
+
 a = Analysis(
     ['src/main.py'],
     pathex=['.'],
@@ -27,9 +32,7 @@ a = Analysis(
         'PIL',
         'PIL.Image',
         'PIL.ImageDraw',
-        'pynput',
-        'pynput.keyboard',
-        'pynput.mouse',
+        *pynput_hiddenimports,
         'src.config',
         'src.display_announce',
         'src.display_identity',
@@ -41,6 +44,7 @@ a = Analysis(
         'src.overlay',
         'src.paths',
         'src.payload_utils',
+        'src.remote_cursor',
         'src.tray_app',
         'src.weather_fetch',
         'src.web_overlay',

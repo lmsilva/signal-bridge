@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-23
 
 ---
 
@@ -283,7 +283,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `webServer.https` | `true` (default) — self-signed TLS; required for live camera QR on iOS |
 | `webServer.httpRedirectPort` | Optional plain HTTP redirect to HTTPS (default `47811`; set `0` to disable) |
 | `webServer.certDir` / `certHosts` | Cert folder (`data/web-certs`) and extra SAN hostnames/IPs (include your NAS LAN IP) |
-| `webServer.controlAuth.*` | PIN unlock for mouse/keyboard/power (`enabled`, `pinDigits`, `pinDisplaySeconds` null→`defaultDisplaySeconds`, `sessionMinutes`) |
+| `webServer.controlAuth.*` | PIN unlock for mouse/keyboard/power (`enabled`, `pinDigits`, `pinDisplaySeconds` null→`defaultDisplaySeconds`, `sessionMinutes` default 60 — mirrors the 1h client-side lock) |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
@@ -432,6 +432,8 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-23: **PIN sheet above keyboard** — PIN unlock sheet is centered (not bottom-docked) and tracks `visualViewport` `--keyboard-inset` so the phone keyboard cannot cover the PIN field; viewport uses `interactive-widget=resizes-content`.
+- 2026-07-23: **Consistent lock + standard touchpad** — Remote tab hides power actions behind the same "Display locked" panel as Control; unlock expires 1h after PIN entry on both sides (`CONTROL_TOKEN_TTL_MS` in `app.js`, `sessionMinutes` default 60) and the header lock icon now locks on tap when unlocked; touchpad gains standard two-finger gestures — tap = right click, slide = scroll (wheel via `input.pointer`) — nudge arrow buttons removed.
 - 2026-07-22: **Signal Bridge branding** — product renamed from Alexa Broadcast Bridge; phone UI title **Signal** with logo/favicon; README hero uses `docs/signal-bridge-logo.png`.
 - 2026-07-22: **PIN UX + stale display prune** — wrong PIN shows inline error on the control sheet (`control_auth_incorrect_pin`); successful verify sends `display.auth` with `auth.status: ok` (1s Authenticated flash); registry **removes** displays that miss re-announce (~12 min / 2 heartbeats); web PIN hint omits timeout (client may differ) and locks input to 4 digits.
 - 2026-07-21: **Display id + PIN unlock** — duplicate `displayName` values stay unique via per-machine `display.id` / picker `label` (`Name · ab12`); mouse/keyboard/power require on-screen 4-digit PIN (`display.auth`) then a per-display `controlToken`.
