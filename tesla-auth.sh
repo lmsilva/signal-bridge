@@ -68,7 +68,7 @@ echo "3. Wait for 'Tesla authentication complete'."
 echo ""
 
 TESLA_OAUTH_REDIRECT_URI="$TESLA_OAUTH_REDIRECT_URI" \
-  docker compose -p alexa-tesla-auth -f docker-compose.tesla-auth.yml up --no-build
+  docker compose -p signal-tesla-auth -f docker-compose.tesla-auth.yml up --no-build
 
 echo ""
 echo "Session saved to data/tesla-session.json"

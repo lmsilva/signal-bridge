@@ -174,25 +174,6 @@ _BUTTON_FLAGS = {
 
 _input_struct = None
 _point_cls = None
-_dpi_aware = False
-
-
-def ensure_dpi_aware() -> None:
-    """Make GetCursorPos / GetSystemMetrics / SendInput share one coordinate space."""
-    global _dpi_aware
-    if _dpi_aware or sys.platform != "win32":
-        return
-    try:
-        import ctypes
-
-        try:
-            # Per-monitor v2 when available (Win 10+).
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            ctypes.windll.user32.SetProcessDPIAware()
-        _dpi_aware = True
-    except Exception as exc:
-        print(f"DPI awareness setup failed: {exc}", file=sys.stderr, flush=True)
 
 
 def _win32_input_struct():
@@ -289,7 +270,6 @@ def _cursor_pos():
     global _point_cls
     if sys.platform != "win32":
         return None
-    ensure_dpi_aware()
     try:
         import ctypes
 
@@ -319,7 +299,6 @@ def _virtual_screen():
     """(x, y, width, height) of the full virtual desktop, or None."""
     if sys.platform != "win32":
         return None
-    ensure_dpi_aware()
     try:
         import ctypes
 
@@ -468,7 +447,6 @@ def _pynput_mouse(action, description: str) -> None:
 def handle_pointer(pointer: dict[str, Any] | None) -> None:
     if not isinstance(pointer, dict):
         return
-    ensure_dpi_aware()
 
     dx = float(pointer.get("dx") or 0)
     dy = float(pointer.get("dy") or 0)

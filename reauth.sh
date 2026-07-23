@@ -18,7 +18,7 @@ fi
 kill_port_listeners() {
   local port=$1
 
-  docker rm -f alexa-broadcast-auth 2>/dev/null || true
+  docker rm -f signal-alexa-auth alexa-broadcast-auth 2>/dev/null || true
 
   if command -v fuser >/dev/null 2>&1; then
     fuser -k "${port}/tcp" 2>/dev/null || true
@@ -77,16 +77,16 @@ wait_for_port_free() {
 }
 
 echo "Stopping listener and any old auth container..."
-docker compose stop signal-bridge alexa-broadcast 2>/dev/null || true
-docker stop signal-bridge alexa-broadcast-bridge 2>/dev/null || true
-docker rm -f alexa-broadcast-auth 2>/dev/null || true
+docker compose stop signal-bridge 2>/dev/null || true
+docker stop signal-bridge 2>/dev/null || true
+docker rm -f signal-alexa-auth alexa-broadcast-auth 2>/dev/null || true
 
 echo "Freeing port ${PROXY_PORT}..."
 wait_for_port_free "${PROXY_PORT}" || exit 1
 
 if ! docker image inspect signal-bridge:latest >/dev/null 2>&1; then
   if docker image inspect alexa-broadcast-bridge:latest >/dev/null 2>&1; then
-    echo "Tagging existing alexa-broadcast-bridge:latest as signal-bridge:latest..."
+    echo "Tagging alexa-broadcast-bridge:latest as signal-bridge:latest..."
     docker tag alexa-broadcast-bridge:latest signal-bridge:latest
   else
     echo ""
@@ -104,11 +104,11 @@ echo "(Do not press Ctrl+C until you see 'Authentication complete' — container
 echo ""
 
 PROXY_OWN_IP="$PROXY_OWN_IP" PROXY_PORT="$PROXY_PORT" \
-  docker compose -p alexa-auth -f docker-compose.auth.yml up --no-build
+  docker compose -p signal-auth -f docker-compose.auth.yml up --no-build
 
 echo ""
 echo "Starting listener..."
-docker compose up -d --no-build --force-recreate
+docker compose up -d --no-build --force-recreate --remove-orphans
 
 echo ""
-echo "Done. Check logs with: docker compose logs -f"
+echo "Done. Check logs with: docker compose logs -f signal-bridge"

@@ -22,8 +22,7 @@ tesla_check_prereqs() {
 }
 
 tesla_listener_running() {
-  docker compose ps --status running signal-bridge 2>/dev/null | grep -q signal-bridge \
-    || docker compose ps --status running alexa-broadcast 2>/dev/null | grep -q alexa-broadcast
+  docker compose ps --status running signal-bridge 2>/dev/null | grep -q signal-bridge
 }
 
 # Run a node command in the listener container, or a one-off container if stopped.
@@ -41,7 +40,7 @@ tesla_run_node() {
 tesla_kill_port() {
   local port=$1
 
-  docker rm -f alexa-broadcast-tesla-auth 2>/dev/null || true
+  docker rm -f signal-tesla-auth alexa-broadcast-tesla-auth 2>/dev/null || true
 
   if command -v fuser >/dev/null 2>&1; then
     fuser -k "${port}/tcp" 2>/dev/null || true

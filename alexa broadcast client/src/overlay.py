@@ -170,12 +170,15 @@ class OverlayWindow:
         top_y = int(self.screen_h * (0.12 if self.portrait else 0.14))
         accent_line_height = self.title_accent_font.metrics("linespace")
         received_y = top_y + self.title_primary_font.metrics("linespace") + 6
+        # Chips were removed from the shell; keep chip_* fields for panels that
+        # still size cards from them, but start the message area right under the
+        # title stack so content is not crushed into the lower third.
         chip_gap = 16
         chip_count = 3
         chip_width = (content_width - chip_gap * (chip_count - 1)) // chip_count
         chip_height = 72 if self.portrait else 78
-        chip_y = received_y + accent_line_height + 32
-        message_area_top = chip_y + chip_height + 36
+        chip_y = received_y + accent_line_height + 24
+        message_area_top = chip_y
         countdown_y = self.screen_h - 40
         message_area_bottom = countdown_y - 48
         message_content_width = content_width - 48
@@ -387,13 +390,13 @@ class OverlayWindow:
             # The dashboard draws its own full-size container, so hide the shared
             # backdrop frame to avoid a double-box outline.
             self.canvas.itemconfigure(self.backdrop_frame_id, state="hidden")
-            # Data-dense dashboard: render fully opaque so the map and stats pop
-            # instead of letting the desktop bleed through.
-            self._opacity_override = 1.0
         else:
             self.canvas.itemconfigure(self.backdrop_frame_id, state="normal")
-            self._opacity_override = None
             self._set_title(display_type, payload)
+
+        # Fullscreen overlays stay opaque so desktop media never bleeds through
+        # sparse canvas regions (Tesla battery over a movie poster, etc.).
+        self._opacity_override = 1.0
 
         panel = self.panels[display_type]
         self._active_panel = panel

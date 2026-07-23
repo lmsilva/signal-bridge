@@ -122,7 +122,7 @@ Use this if the session expired or refresh fails.
 ```bash
 cd /share/Container/signal-bridge
 docker compose stop signal-bridge
-docker rm -f alexa-broadcast-auth
+docker rm -f signal-alexa-auth
 ```
 
 2. Make sure `docker-compose.auth.yml` uses **`network_mode: host`** and has **no `ports:` section**.  
@@ -137,7 +137,7 @@ PROXY_OWN_IP=192.168.1.10 ./reauth.sh
 Or manually:
 
 ```bash
-PROXY_OWN_IP=192.168.1.10 docker compose -p alexa-auth -f docker-compose.auth.yml up
+PROXY_OWN_IP=192.168.1.10 docker compose -p signal-auth -f docker-compose.auth.yml up
 ```
 
 4. Browser: **http://192.168.1.10:3456/** → Amazon login → wait for **Authentication complete** → **Ctrl+C**
@@ -145,8 +145,8 @@ PROXY_OWN_IP=192.168.1.10 docker compose -p alexa-auth -f docker-compose.auth.ym
 5. Start listener:
 
 ```bash
-docker compose up -d --force-recreate
-docker compose logs -f
+docker compose up -d --force-recreate --remove-orphans
+docker compose logs -f signal-bridge
 ```
 
 If port 3456 is still busy, use another port:
@@ -173,6 +173,12 @@ Only use `./recreate.sh --build` when you changed `Dockerfile` or `package.json`
 (and only if Container Station build works). If build fails with a ZFS/graph error,
 `recreate.sh` falls back to restart with the existing image — your `src/` changes
 still load.
+
+`recreate.sh` restarts **`signal-bridge`** with `--remove-orphans` and removes any
+leftover one-shot auth containers (`signal-alexa-auth` / `signal-tesla-auth`) plus
+pre-rename leftovers if they still exist. You never need those old stopped
+containers again — auth helpers are recreated only when you run `./reauth.sh` or
+Tesla auth.
 
 Session and `data/voice-events.jsonl` are on mounted volumes and are preserved.
 
@@ -237,7 +243,7 @@ docker compose logs -f
 | Listener exits / auth errors | Run `./reauth.sh` or auth compose; copy fresh session from PC |
 | Tesla battery shows error / no data | `./tesla-status.sh`; re-run `tesla-auth-pc.bat` on PC; pair virtual key `https://www.tesla.com/_ak/DOMAIN` |
 | `tesla-register` "Other update in progress" | Wait 5–15 min; `./tesla-verify-register.sh` |
-| `bind: address already in use` on port 3456 | Stop listener + `docker rm -f alexa-broadcast-auth`; use updated `docker-compose.auth.yml` with `network_mode: host` (no `ports:`) |
+| `bind: address already in use` on port 3456 | Stop listener + `docker rm -f signal-alexa-auth`; use updated `docker-compose.auth.yml` with `network_mode: host` (no `ports:`) |
 | `failed to read dockerfile` / `error creating zfs mount` on build | QNAP Container Station Docker graph bug — **ignore for code updates**. Run `./recreate.sh` (no `--build`); `src/` is bind-mounted. To fix builds: restart Container Station in QNAP, or `docker system prune`, or build image on a PC and `docker load` |
 | No broadcasts captured | Check logs; test announce on Echo; confirm push connected |
 | Re-auth on QNAP | Stop listener, run `docker-compose.auth.yml`, then `docker compose up -d` |

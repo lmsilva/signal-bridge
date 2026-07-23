@@ -1,17 +1,16 @@
-# One-off auth: exposes the Amazon login proxy on the NAS itself.
-# Uses host networking (no Docker port mapping — avoids QNAP bind conflicts).
+# One-off Amazon login proxy on the NAS (host networking — no Docker port maps).
 #
 # Usage:
 #   PROXY_OWN_IP=192.168.1.10 ./reauth.sh
 #
 # Or manually:
 #   docker compose stop signal-bridge
-#   docker rm -f alexa-broadcast-auth
-#   PROXY_OWN_IP=192.168.1.10 docker compose -p alexa-auth -f docker-compose.auth.yml up
+#   docker rm -f signal-alexa-auth
+#   PROXY_OWN_IP=192.168.1.10 docker compose -p signal-auth -f docker-compose.auth.yml up
 services:
-  alexa-broadcast-auth:
+  signal-alexa-auth:
     image: signal-bridge:latest
-    container_name: alexa-broadcast-auth
+    container_name: signal-alexa-auth
     network_mode: host
     environment:
       TZ: ${TZ:-UTC}

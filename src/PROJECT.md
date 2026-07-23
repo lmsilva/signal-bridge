@@ -106,7 +106,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `docker-compose.yml` | Long-running listener container |
 | `docker-compose.auth.yml` | One-shot auth container (host network, port 3456) |
 | `reauth.sh` | Stop listener, free port, run auth, restart listener |
-| `recreate.sh` | `docker compose up -d --no-build` (use `--build` only if image rebuild works) |
+| `recreate.sh` | Restart `signal-bridge` (`--force-recreate --remove-orphans`); clears ephemeral auth containers (use `--build` only if image rebuild works) |
 | `docker-compose.tesla-auth.yml` | One-off Tesla OAuth container (host network, port 4381) |
 | `tesla-register.sh` | Register Fleet partner domain (exec or one-off container) |
 | `tesla-verify-register.sh` | Verify partner registration |
@@ -370,7 +370,7 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 - **`./src:/app/src:ro`** — edit JS on host without image rebuild
 - **`./data:/app/data`** — session + config persist across restarts
 - Listener service name: `signal-bridge` (container/image: `signal-bridge`)
-- Auth: `docker compose -p alexa-auth -f docker-compose.auth.yml up --no-build`
+- Auth: `docker compose -p signal-auth -f docker-compose.auth.yml up --no-build`
 
 ---
 
@@ -432,6 +432,7 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-23: **Signal-only Docker containers** — listener is `signal-bridge`; one-shot auth is `signal-alexa-auth` / `signal-tesla-auth`. `recreate.sh` restarts the listener with `--remove-orphans` and removes any leftover auth/pre-rename containers (they are never needed again).
 - 2026-07-23: **GitHub/repo rename to `signal-bridge`** — GitHub repo, npm package name, Docker image/container/service, and docs use Signal Bridge; old `alexa-broadcast-bridge` image is auto-tagged when present. Local NAS folder may still be named `alexa-broadcast-bridge` until renamed on disk.
 - 2026-07-23: **PIN sheet above keyboard** — PIN unlock sheet is centered (not bottom-docked) and tracks `visualViewport` `--keyboard-inset` so the phone keyboard cannot cover the PIN field; viewport uses `interactive-widget=resizes-content`.
 - 2026-07-23: **Consistent lock + standard touchpad** — Remote tab hides power actions behind the same "Display locked" panel as Control; unlock expires 1h after PIN entry on both sides (`CONTROL_TOKEN_TTL_MS` in `app.js`, `sessionMinutes` default 60) and the header lock icon now locks on tap when unlocked; touchpad gains standard two-finger gestures — tap = right click, slide = scroll (wheel via `input.pointer`) — nudge arrow buttons removed.

@@ -3590,7 +3590,7 @@ class TeslaDashboardPanel(BasePanel):
 
         image_path = asset_path(self.CAR_IMAGE_NAME)
         img_w = min(width - 60, 460)
-        img_h = max(90, height - 44)
+        img_h = max(80, height - 52)
         if image_path.exists() and Image is not None and ImageTk is not None:
             try:
                 image = Image.open(image_path).convert("RGBA")
@@ -3599,7 +3599,7 @@ class TeslaDashboardPanel(BasePanel):
                 self._track(
                     self.canvas.create_image(
                         x + width // 2,
-                        y + height // 2 + 10,
+                        y + height // 2,
                         image=self._car_photo,
                     )
                 )
@@ -3636,24 +3636,33 @@ class TeslaDashboardPanel(BasePanel):
         percent = battery.get("percent")
         charging = battery.get("charging")
         bar_color = battery_level_color(percent)
+        value_font = self.shell.chip_value_font
+        label_font = self.shell.forecast_label_font
+        value_h = value_font.metrics("linespace")
+        label_h = label_font.metrics("linespace")
 
         self._panel_card(x, y, width, height)
         headline = f"⚡ {percent if percent is not None else '—'}% · {battery.get('rangeMiles') if battery.get('rangeMiles') is not None else '—'} mi"
         plug_label = battery.get("chargingLabel") or ("Charging" if charging else "Not plugged in")
+        pad_top = 12
         self._track(
-            self.canvas.create_text(x + 18, y + 16, anchor="nw", text=headline, fill=text, font=self.shell.chip_value_font)
+            self.canvas.create_text(x + 18, y + pad_top, anchor="nw", text=headline, fill=text, font=value_font)
         )
         self._track(
             self.canvas.create_text(
-                x + width - 18, y + 20, anchor="ne",
+                x + width - 18, y + pad_top + 2, anchor="ne",
                 text=plug_label,
                 fill=self.GREEN if charging else accent,
-                font=self.shell.forecast_label_font,
+                font=label_font,
             )
         )
 
-        bar_y = y + 54
         bar_h = 14
+        bar_y = y + pad_top + value_h + 10
+        # Keep the bar + optional detail rows inside the card when height is tight.
+        min_detail = label_h + 8
+        if bar_y + bar_h + min_detail > y + height - 10:
+            bar_y = max(y + pad_top + value_h + 6, y + height - bar_h - min_detail - 10)
         self._round_rect(x + 18, bar_y, x + width - 18, bar_y + bar_h, radius=bar_h // 2, fill=self.INNER)
         if percent is not None:
             pct = max(0, min(100, int(percent)))
@@ -3664,7 +3673,10 @@ class TeslaDashboardPanel(BasePanel):
                     radius=bar_h // 2, fill=bar_color,
                 )
 
-        detail_y = bar_y + bar_h + 14
+        detail_y = bar_y + bar_h + 10
+        if detail_y + label_h > y + height - 8:
+            return
+
         if charging:
             charge_bits = []
             if battery.get("chargerPowerKw") is not None:
@@ -3685,10 +3697,13 @@ class TeslaDashboardPanel(BasePanel):
                         x + 18, detail_y, anchor="nw",
                         text=" · ".join(charge_bits),
                         fill=self.GREEN,
-                        font=self.shell.forecast_label_font,
+                        font=label_font,
                     )
                 )
-                detail_y += 26
+                detail_y += label_h + 8
+
+        if detail_y + label_h > y + height - 8:
+            return
 
         columns = []
         if battery.get("ratedRangeMiles") is not None:
@@ -3698,7 +3713,6 @@ class TeslaDashboardPanel(BasePanel):
         if battery.get("lifetimeEnergy"):
             columns.append(f"Lifetime {battery['lifetimeEnergy']}")
         if columns:
-            slot = (width - 36) / max(1, len(columns))
             anchors = ["w", "center", "e"]
             for idx, value in enumerate(columns[:3]):
                 if len(columns) == 1:
@@ -3713,10 +3727,10 @@ class TeslaDashboardPanel(BasePanel):
                         cx = x + width / 2
                 self._track(
                     self.canvas.create_text(
-                        cx, detail_y + 6, anchor=anchor,
+                        cx, detail_y, anchor=anchor,
                         text=value,
                         fill=muted,
-                        font=self.shell.forecast_label_font,
+                        font=label_font,
                     )
                 )
 
@@ -4164,9 +4178,13 @@ class TeslaDashboardPanel(BasePanel):
         accent = self.config.get("accentColor", "#38bdf8")
         media = dashboard.get("media") or {}
         playing = bool(media.get("playing"))
+        title_font = self.shell.section_label_font
+        sub_font = self.shell.forecast_label_font
+        title_h = title_font.metrics("linespace")
+        sub_h = sub_font.metrics("linespace")
 
         self._panel_card(x, y, width, height)
-        icon_size = min(40, height - 18)
+        icon_size = min(40, max(24, height - 18))
         icon_y = y + (height - icon_size) // 2
         self._round_rect(
             x + 16, icon_y, x + 16 + icon_size, icon_y + icon_size,
@@ -4179,21 +4197,26 @@ class TeslaDashboardPanel(BasePanel):
                 x + 16 + icon_size // 2, icon_y + icon_size // 2, anchor="center",
                 text="♪",
                 fill=accent if playing else muted,
-                font=self.shell.section_label_font,
+                font=title_font,
             )
         )
         text_x = x + 16 + icon_size + 16
-        mid_y = y + height // 2
+        # Stack title + subtitle inside the strip instead of fixed ±11/±13 offsets
+        # that collide when fonts are large or the strip is short.
+        block_h = title_h + 4 + sub_h
+        mid_y = y + max(height // 2, (height - block_h) // 2 + title_h // 2)
+        title_y = mid_y - (4 + sub_h) // 2
+        sub_y = title_y + title_h // 2 + 4 + sub_h // 2
         if playing:
             title = media.get("title") or "Now playing"
             bits = [b for b in (media.get("artist"), media.get("source")) if b]
             vol_label = format_tesla_media_volume_label(media)
             if vol_label:
                 bits.append(vol_label)
-            self._track(self.canvas.create_text(text_x, mid_y - 11, anchor="w", text=title, fill=text, font=self.shell.section_label_font))
-            self._track(self.canvas.create_text(text_x, mid_y + 13, anchor="w", text=" · ".join(bits), fill=accent, font=self.shell.forecast_label_font))
+            self._track(self.canvas.create_text(text_x, title_y, anchor="w", text=title, fill=text, font=title_font))
+            self._track(self.canvas.create_text(text_x, sub_y, anchor="w", text=" · ".join(bits), fill=accent, font=sub_font))
         else:
-            self._track(self.canvas.create_text(text_x, mid_y - 11, anchor="w", text="Nothing playing", fill=text, font=self.shell.section_label_font))
+            self._track(self.canvas.create_text(text_x, title_y, anchor="w", text="Nothing playing", fill=text, font=title_font))
             source = media.get("source")
             bits = []
             # Only show a source when the bridge resolved a friendly name
@@ -4204,7 +4227,7 @@ class TeslaDashboardPanel(BasePanel):
             if vol_label:
                 bits.append(vol_label)
             sub = " · ".join(bits) if bits else "Tesla audio idle"
-            self._track(self.canvas.create_text(text_x, mid_y + 13, anchor="w", text=sub, fill=muted, font=self.shell.forecast_label_font))
+            self._track(self.canvas.create_text(text_x, sub_y, anchor="w", text=sub, fill=muted, font=sub_font))
 
     def _render_portrait(self, dashboard: dict, x: int, width: int, top: int, bottom: int):
         gap = 14
@@ -4213,19 +4236,46 @@ class TeslaDashboardPanel(BasePanel):
         y = self._draw_header(inner_x, top, inner_w, dashboard) + 6
 
         charging = bool((dashboard.get("battery") or {}).get("charging"))
-        media_h = 64
-        available = bottom - y - media_h - gap * 5
-        # Keep the stat tiles tall enough for their content; the map absorbs
-        # whatever is left over instead of squeezing the 2x2 grid.
-        map_h = int(available * (0.25 if charging else 0.30))
-        car_h = int(available * 0.21)
-        battery_h = int(available * (0.20 if charging else 0.14))
-        stats_h = (available - map_h - car_h - battery_h) // 2
-        min_tile = 168
+        media_h = 72
+        # Gaps: after map, car, battery, between stat rows, before media (=5).
+        stack_budget = max(280, bottom - y - media_h - gap * 5)
+        map_h = int(stack_budget * (0.25 if charging else 0.28))
+        car_h = int(stack_budget * 0.20)
+        battery_h = int(stack_budget * (0.22 if charging else 0.16))
+        map_h = max(140, map_h)
+        car_h = max(120, car_h)
+        battery_h = max(88 if charging else 80, battery_h)
+        stats_h = (stack_budget - map_h - car_h - battery_h) // 2
+        min_tile = 150
         if stats_h < min_tile:
-            deficit = (min_tile - stats_h) * 2
-            map_h = max(160, map_h - deficit)
-            stats_h = (available - map_h - car_h - battery_h) // 2
+            need = (min_tile - stats_h) * 2
+            for attr, floor in (("map_h", 140), ("car_h", 120)):
+                if need <= 0:
+                    break
+                current = map_h if attr == "map_h" else car_h
+                shrink = min(need, max(0, current - floor))
+                if attr == "map_h":
+                    map_h -= shrink
+                else:
+                    car_h -= shrink
+                need -= shrink
+            stats_h = (stack_budget - map_h - car_h - battery_h) // 2
+        stats_h = max(110, stats_h)
+
+        # If floors still overshoot, shrink map then car then stats proportionally
+        # so the stack always ends above the media strip.
+        used = map_h + car_h + battery_h + stats_h * 2
+        if used > stack_budget:
+            overflow = used - stack_budget
+            shrink = min(overflow, max(0, map_h - 120))
+            map_h -= shrink
+            overflow -= shrink
+            if overflow > 0:
+                shrink = min(overflow, max(0, car_h - 100))
+                car_h -= shrink
+                overflow -= shrink
+            if overflow > 0:
+                stats_h = max(96, stats_h - (overflow + 1) // 2)
 
         self._draw_map_card(inner_x, y, inner_w, map_h, dashboard)
         y += map_h + gap
@@ -4234,7 +4284,11 @@ class TeslaDashboardPanel(BasePanel):
         self._draw_battery_card(inner_x, y, inner_w, battery_h, dashboard)
         y += battery_h + gap
         self._draw_stat_grid(inner_x, y, inner_w, stats_h, gap, dashboard)
-        self._draw_media_strip(inner_x, bottom - media_h, inner_w, media_h, dashboard)
+        media_y = y + stats_h * 2 + gap + gap
+        # Clamp into the remaining band so the strip never covers the grid.
+        media_y = min(media_y, bottom - media_h)
+        media_y = max(media_y, y + stats_h * 2 + gap)
+        self._draw_media_strip(inner_x, media_y, inner_w, media_h, dashboard)
 
     def _render_landscape(self, dashboard: dict, x: int, width: int, top: int, bottom: int):
         gap = 14
@@ -4242,21 +4296,23 @@ class TeslaDashboardPanel(BasePanel):
         inner_w = width - 16
         y = self._draw_header(inner_x, top, inner_w, dashboard) + 6
 
-        media_h = 60
-        content_h = bottom - y - media_h - gap
+        media_h = 68
+        content_h = max(200, bottom - y - media_h - gap)
         col_w = (inner_w - gap * 2) // 3
 
         charging = bool((dashboard.get("battery") or {}).get("charging"))
         map_h = content_h if not charging else int(content_h * 0.9)
         battery_h = int(content_h * (0.46 if charging else 0.38))
+        battery_h = min(max(100, battery_h), max(100, content_h // 2))
+        car_h = max(100, content_h - battery_h - gap)
 
         self._draw_map_card(inner_x, y, col_w, map_h, dashboard)
         mid_x = inner_x + col_w + gap
-        self._draw_car_card(mid_x, y, col_w, content_h - battery_h - gap, dashboard)
-        self._draw_battery_card(mid_x, y + content_h - battery_h, col_w, battery_h, dashboard)
+        self._draw_car_card(mid_x, y, col_w, car_h, dashboard)
+        self._draw_battery_card(mid_x, y + car_h + gap, col_w, min(battery_h, content_h - car_h - gap), dashboard)
 
         right_x = inner_x + (col_w + gap) * 2
-        tile_h = (content_h - gap) // 2
+        tile_h = max(110, (content_h - gap) // 2)
         self._draw_stat_grid(right_x, y, col_w, tile_h, gap, dashboard)
         self._draw_media_strip(inner_x, bottom - media_h, inner_w, media_h, dashboard)
 

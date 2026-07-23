@@ -8,7 +8,6 @@ from src.config import effective_display_seconds, load_config
 from src.display_announce import DisplayAnnouncer
 from src.display_identity import resolve_display_id, resolve_display_name
 from src.input_control import (
-    ensure_dpi_aware,
     handle_input_payload,
     set_cursor_duck_callback,
     set_cursor_moved_callback,
@@ -70,10 +69,10 @@ class BroadcastClientApp:
         self.web_overlay = WebOverlayManager(self.config)
 
     def start(self):
-        # Coordinate spaces for GetCursorPos / SendInput / Tk geometry must
-        # agree — otherwise remote moves look like hover-only with a frozen
-        # system arrow (especially on high-DPI and over RDP).
-        ensure_dpi_aware()
+        # Do not call SetProcessDpiAwareness here: making the process DPI-aware
+        # inflates Tk font pixel metrics while panel layouts still use fixed
+        # offsets, which stacks Tesla/dashboard cards on top of each other.
+        # SendInput uses the same (DPI-unaware) metrics as GetCursorPos.
         self.listener.start()
         if not self.listener.wait_until_ready():
             error = self.listener.bind_error

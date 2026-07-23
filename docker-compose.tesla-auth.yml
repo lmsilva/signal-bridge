@@ -3,9 +3,9 @@
 # Phone/control-page auth uses https://<NAS_LAN_IP>:4381/callback (see .env TESLA_REDIRECT_URI).
 # PC browser auth normally uses http://localhost:4381/callback via npm run tesla-auth.
 services:
-  alexa-broadcast-tesla-auth:
+  signal-tesla-auth:
     image: signal-bridge:latest
-    container_name: alexa-broadcast-tesla-auth
+    container_name: signal-tesla-auth
     network_mode: host
     env_file:
       - .env
