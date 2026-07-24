@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-07-24
 
 ---
 
@@ -405,6 +405,8 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 
 Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`** (config `webServer.{enabled,port,https}`; zero new npm deps — plain `node:https` + auto self-signed cert in `data/web-certs/`, lives under the mounted `./src` volume so no Docker rebuild). Optional HTTP→HTTPS redirect on port **47811**. Three tabs: **Push** / **Remote** / **Settings**. Trusted-LAN, no page auth; destructive actions need an in-page confirm tap.
 
+**Reverse-proxy subpaths:** the SPA uses a dynamic `<base href>` (from `location.pathname`) plus relative asset/API URLs, so a path-stripping proxy (e.g. public `/signal/` → bridge `/`) works without hardcoding a prefix. Prefer a trailing slash on the public mount URL.
+
 **iPhone / Chrome QR:** open the **https** URL once, accept the certificate warning (Advanced → Proceed), then **Scan QR Code** uses the live camera (`getUserMedia` + jsQR). Plain HTTP cannot use the camera on iOS — put your NAS IP in `webServer.certHosts` (or `PROXY_OWN_IP`) before first cert generation, or delete `data/web-certs/` and restart after updating hosts.
 
 **JSON API:**
@@ -432,6 +434,7 @@ QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode 
 
 ## Recent changes
 
+- 2026-07-24: **Control UI works under reverse-proxy prefixes** — `index.html` sets `<base href>` from the browser path and loads CSS/JS/logo relatively; `app.js` resolves `/api/...` via `appUrl()` so fetch/SSE stay under the mount (path-stripping proxies to `:47810`).
 - 2026-07-23: **Discover refresh prunes offline displays** — `POST /api/displays/discover` waits ~2.5s for re-announces then removes anyone who stayed silent (`scheduleDiscoverSweep` in `display-registry.js`); Signal UI Refresh uses the pruned list and toasts when offline displays were dropped.
 - 2026-07-23: **Signal-only Docker containers** — listener is `signal-bridge`; one-shot auth is `signal-alexa-auth` / `signal-tesla-auth`. `recreate.sh` restarts the listener with `--remove-orphans` and removes any leftover auth/pre-rename containers (they are never needed again).
 - 2026-07-23: **GitHub/repo rename to `signal-bridge`** — GitHub repo, npm package name, Docker image/container/service, and docs use Signal Bridge; old `alexa-broadcast-bridge` image is auto-tagged when present. Local NAS folder may still be named `alexa-broadcast-bridge` until renamed on disk.

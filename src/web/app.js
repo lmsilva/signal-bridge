@@ -10,8 +10,18 @@
   const STORAGE_TARGET_KEY = 'displayControl.targetId';
   const STORAGE_TOKEN_PREFIX = 'displayControl.token.';
 
+  // Root-absolute paths ("/api/...") ignore <base href>, so strip the leading
+  // slash and let fetch/EventSource resolve against the page mount prefix.
+  function appUrl(route) {
+    const path = String(route || '');
+    if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('//')) {
+      return path;
+    }
+    return path.replace(/^\//, '');
+  }
+
   async function apiPost(route, body = {}) {
-    const response = await fetch(route, {
+    const response = await fetch(appUrl(route), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -32,7 +42,7 @@
   }
 
   async function apiGet(route) {
-    const response = await fetch(route, { cache: 'no-store' });
+    const response = await fetch(appUrl(route), { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`Request failed (${response.status})`);
     }
@@ -270,7 +280,7 @@
       return;
     }
     try {
-      displayEvents = new EventSource('/api/displays/events');
+      displayEvents = new EventSource(appUrl('/api/displays/events'));
     } catch {
       // Fall back to polling only.
       return;

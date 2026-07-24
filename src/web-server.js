@@ -86,6 +86,27 @@ function resolveStaticPath(webRoot, urlPathname) {
   return resolved;
 }
 
+/**
+ * Directory path for a control-page URL, always ending with `/`.
+ * Used by the SPA `<base href>` so assets/API work at `/` or under a
+ * reverse-proxy prefix (proxy strips the prefix before requests hit here).
+ */
+function computeWebBasePath(pathname) {
+  let pathName = String(pathname || '/');
+  if (!pathName.startsWith('/')) {
+    pathName = `/${pathName}`;
+  }
+  if (/\/index\.html$/i.test(pathName)) {
+    pathName = pathName.slice(0, -'index.html'.length);
+  } else if (!pathName.endsWith('/')) {
+    pathName += '/';
+  }
+  if (!pathName.endsWith('/')) {
+    pathName += '/';
+  }
+  return pathName;
+}
+
 async function checkUrlReachable(url, timeoutMs = URL_CHECK_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -911,8 +932,8 @@ function createWebServer({
       const vJs = assetVersion('app.js');
       const vCss = assetVersion('styles.css');
       html = html
-        .replace(/(href="\/styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vCss}$2`)
-        .replace(/(src="\/app\.js)(?:\?[^"]*)?(")/, `$1?v=${vJs}$2`);
+        .replace(/(href="(?:\.\/)?styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vCss}$2`)
+        .replace(/(src="(?:\.\/)?app\.js)(?:\?[^"]*)?(")/, `$1?v=${vJs}$2`);
       res.writeHead(200, {
         'Content-Type': MIME_TYPES[ext] || 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -1125,5 +1146,6 @@ module.exports = {
   createWebServer,
   validatePushUrl,
   resolveStaticPath,
+  computeWebBasePath,
   checkUrlReachable,
 };

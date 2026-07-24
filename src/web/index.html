@@ -8,14 +8,29 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Signal Bridge">
   <title>Signal Bridge</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="/styles.css?v=signal6">
+  <script>
+    // Resolve relative assets/API under the current mount path (e.g. / or /signal/).
+    (function () {
+      var path = location.pathname || '/';
+      if (/\/index\.html$/i.test(path)) {
+        path = path.slice(0, -'index.html'.length);
+      } else if (path.charAt(path.length - 1) !== '/') {
+        path += '/';
+      }
+      if (path.charAt(path.length - 1) !== '/') path += '/';
+      var base = document.createElement('base');
+      base.href = path;
+      document.head.insertBefore(base, document.head.firstChild);
+    })();
+  </script>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="logo.png">
+  <link rel="stylesheet" href="styles.css?v=signal7">
 </head>
 <body>
   <header class="app-header">
     <div class="app-title">
-      <img class="app-logo" src="/logo.png" width="28" height="28" alt="">
+      <img class="app-logo" src="logo.png" width="28" height="28" alt="">
       Signal Bridge
     </div>
     <div class="header-status" id="header-status" title="Signal Bridge status">
@@ -265,7 +280,7 @@
     </div>
   </div>
 
-  <script src="/jsqr.min.js"></script>
+  <script src="jsqr.min.js"></script>
   <script>
     // Fallback: if the vendored copy is missing on the bridge, load from CDN
     // (the phone has internet even though the bridge page is LAN-hosted).
@@ -273,6 +288,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="/app.js?v=signal6"></script>
+  <script src="app.js?v=signal7"></script>
 </body>
 </html>

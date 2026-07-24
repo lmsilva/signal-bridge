@@ -9,6 +9,7 @@ const {
   createWebServer,
   validatePushUrl,
   resolveStaticPath,
+  computeWebBasePath,
 } = require('../src/web-server');
 
 // Plain non-pooled requests: global fetch keeps pooled keep-alive sockets per
@@ -128,6 +129,34 @@ test('resolveStaticPath blocks path traversal', () => {
   assert.equal(resolveStaticPath(root, '/'), path.join(root, 'index.html'));
 });
 
+test('computeWebBasePath preserves reverse-proxy mount directories', () => {
+  assert.equal(computeWebBasePath('/'), '/');
+  assert.equal(computeWebBasePath('/index.html'), '/');
+  assert.equal(computeWebBasePath('/signal'), '/signal/');
+  assert.equal(computeWebBasePath('/signal/'), '/signal/');
+  assert.equal(computeWebBasePath('/signal/index.html'), '/signal/');
+  assert.equal(computeWebBasePath('signal'), '/signal/');
+});
+
+test('control page HTML uses relative asset URLs for subpath proxies', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  assert.match(html, /createElement\('base'\)/);
+  assert.match(html, /href="styles\.css/);
+  assert.match(html, /src="app\.js/);
+  assert.match(html, /src="logo\.png"/);
+  assert.match(html, /href="favicon\.svg"/);
+  assert.doesNotMatch(html, /href="\/styles\.css/);
+  assert.doesNotMatch(html, /src="\/app\.js/);
+  assert.doesNotMatch(html, /src="\/logo\.png"/);
+});
+
+test('control page JS resolves API routes against the document base', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/app.js'), 'utf8');
+  assert.match(js, /function appUrl\(/);
+  assert.match(js, /EventSource\(appUrl\(/);
+  assert.match(js, /fetch\(appUrl\(/);
+});
+
 test('serves the control page and static assets', async () => {
   const { webServer, base } = await startTestServer();
   try {
@@ -141,6 +170,24 @@ test('serves the control page and static assets', async () => {
 
     const missing = await request(base + '/nope.css');
     assert.equal(missing.status, 404);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('serves real SPA shell with cache-busted relative assets', async () => {
+  const realWebRoot = path.join(__dirname, '../src/web');
+  const { webServer, base } = await startTestServer({ webRoot: realWebRoot });
+  try {
+    const index = await request(base + '/');
+    assert.equal(index.status, 200);
+    assert.match(index.text, /href="styles\.css\?v=\d+(?:\.\d+)?"/);
+    assert.match(index.text, /src="app\.js\?v=\d+(?:\.\d+)?"/);
+    assert.doesNotMatch(index.text, /href="\/styles\.css/);
+
+    const css = await request(base + '/styles.css');
+    assert.equal(css.status, 200);
+    assert.match(css.headers['content-type'], /css/);
   } finally {
     webServer.stop();
   }
