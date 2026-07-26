@@ -45,6 +45,32 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         panel._steam = {"mode": "playing"}
         self.assertFalse(panel._is_last_played())
 
+    def test_format_elapsed_tracks_seconds_then_minutes(self):
+        self.assertEqual(SteamNowPlayingPanel.format_elapsed(45), "45s")
+        self.assertEqual(SteamNowPlayingPanel.format_elapsed(65), "1m 05s")
+        self.assertEqual(SteamNowPlayingPanel.format_elapsed(3725), "1h 02m")
+
+    def test_format_ago_for_last_played_corner(self):
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime(2026, 7, 26, 19, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(
+            SteamNowPlayingPanel.format_ago(now - timedelta(seconds=20), now=now),
+            "just now",
+        )
+        self.assertEqual(
+            SteamNowPlayingPanel.format_ago(now - timedelta(minutes=12), now=now),
+            "12m ago",
+        )
+        self.assertEqual(
+            SteamNowPlayingPanel.format_ago(now - timedelta(hours=5), now=now),
+            "5h ago",
+        )
+        self.assertEqual(
+            SteamNowPlayingPanel.format_ago(now - timedelta(days=3), now=now),
+            "3d ago",
+        )
+
     def test_badge_padding_is_roomier_than_text(self):
         # Guard against the tight white box that clipped NOW PLAYING.
         pad_x, pad_y = 28, 16

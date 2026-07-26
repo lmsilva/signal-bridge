@@ -209,22 +209,56 @@ class SteamNowPlayingPanel(BasePanel):
         local = dt.astimezone() if dt.tzinfo else dt
         return local.strftime("%I:%M %p").lstrip("0")
 
-    def _fmt_elapsed(self):
+    def _elapsed_seconds(self) -> int:
+        """Seconds since this play session started (client clock vs startedAt)."""
         if self._started_at:
             start = self._started_at
             if start.tzinfo is None:
                 start = start.replace(tzinfo=timezone.utc)
-            seconds = max(
+            return max(
                 0,
                 int((datetime.now(timezone.utc) - start.astimezone(timezone.utc)).total_seconds()),
             )
-        else:
-            seconds = int(self._steam.get("elapsedSec") or 0)
+        return max(0, int(self._steam.get("elapsedSec") or 0))
+
+    @staticmethod
+    def format_elapsed(seconds: int) -> str:
+        """Human elapsed for an active session: 45s → 12m 05s → 1h 03m."""
+        seconds = max(0, int(seconds))
         hours, rem = divmod(seconds, 3600)
-        minutes = rem // 60
+        minutes, secs = divmod(rem, 60)
         if hours:
-            return f"{hours}h {minutes}m"
-        return f"{minutes}m"
+            return f"{hours}h {minutes:02d}m"
+        if minutes:
+            return f"{minutes}m {secs:02d}s"
+        return f"{secs}s"
+
+    def _fmt_elapsed(self):
+        return self.format_elapsed(self._elapsed_seconds())
+
+    @staticmethod
+    def format_ago(dt, *, now=None) -> str:
+        """Relative age for last-played header (not a live session timer)."""
+        if not dt:
+            return "—"
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        seconds = max(0, int((now.astimezone(timezone.utc) - dt.astimezone(timezone.utc)).total_seconds()))
+        if seconds < 60:
+            return "just now"
+        if seconds < 3600:
+            return f"{seconds // 60}m ago"
+        if seconds < 86400:
+            hours = seconds // 3600
+            return f"{hours}h ago"
+        days = seconds // 86400
+        if days < 14:
+            return f"{days}d ago"
+        local = dt.astimezone()
+        return local.strftime("%b %d").lstrip("0")
 
     def _round_rect(self, x0, y0, x1, y1, _radius, **kwargs):
         item = self.canvas.create_rectangle(x0, y0, x1, y1, **kwargs)
@@ -289,17 +323,26 @@ class SteamNowPlayingPanel(BasePanel):
             mid_x, cy, anchor="center", text=badge, fill=badge_text,
             font=badge_font,
         ))
-        right_label = "PLAYTIME" if last_played else "ELAPSED"
-        right_value = (self._steam.get("playtimeLabel") or "—") if last_played else self._fmt_elapsed()
+        if last_played:
+            # No live ELAPSED on last-played — show how long ago instead.
+            # Lifetime playtime stays in the footer ("YOUR PLAYTIME").
+            right_label = "AGO"
+            right_value = self.format_ago(start_dt)
+            self._elapsed_value_id = None
+        else:
+            right_label = "ELAPSED"
+            right_value = self._fmt_elapsed()
         self._item_ids.append(self.canvas.create_text(
             hx1, cy - 10, anchor="e", text=right_label, fill=self.ACCENT,
             font=self.shell.chip_label_font,
         ))
-        self._elapsed_value_id = self.canvas.create_text(
+        value_id = self.canvas.create_text(
             hx1, cy + 12, anchor="e", text=right_value, fill=text,
             font=self.shell.chip_value_font,
         )
-        self._item_ids.append(self._elapsed_value_id)
+        self._item_ids.append(value_id)
+        if not last_played:
+            self._elapsed_value_id = value_id
 
         x0, y0, x1, y1 = boxes["hero"]
         self._round_rect(x0, y0, x1, y1, 18, fill="#0d1524", outline="#1d2a40")
@@ -441,10 +484,16 @@ class SteamNowPlayingPanel(BasePanel):
         else:
             ach_text = "—"
         players = steam.get("currentPlayers")
-        players_text = f"{int(players):,}" if players is not None else "—"
+        if players is not None:
+            count = int(players)
+            unit = "player" if count == 1 else "players"
+            players_text = f"{count:,} {unit}"
+        else:
+            players_text = "—"
         cols = (
             ("YOUR PLAYTIME", playtime),
             ("ACHIEVEMENTS", ach_text),
+            # Steam GetNumberOfCurrentPlayers — worldwide concurrent players.
             ("PLAYING NOW", players_text),
         )
         col_w = (fx1 - fx0) / 3
@@ -461,7 +510,7 @@ class SteamNowPlayingPanel(BasePanel):
 
     def _schedule_elapsed_tick(self):
         self._stop_elapsed_tick()
-        if self._is_last_played():
+        if self._is_last_played() or self._elapsed_value_id is None:
             return
 
         def tick():
@@ -471,9 +520,10 @@ class SteamNowPlayingPanel(BasePanel):
                 self.canvas.itemconfigure(self._elapsed_value_id, text=self._fmt_elapsed())
             except Exception:
                 pass
-            self._tick_job = self.root.after(15_000, tick)
+            # 1s cadence so the counter tracks the real session length.
+            self._tick_job = self.root.after(1_000, tick)
 
-        self._tick_job = self.root.after(15_000, tick)
+        self._tick_job = self.root.after(1_000, tick)
 
     def _start_image_fetches(self, steam):
         self._fetch_token += 1

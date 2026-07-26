@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam presence on display.announce)
+**Last updated:** 2026-07-26 (Steam elapsed / last-played AGO)
 
 ---
 
@@ -258,6 +258,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-26: **Steam footer players** — **PLAYING NOW** value shows `N players` (worldwide concurrent). Portable rebuild required.
+- 2026-07-26: **Steam elapsed / last-played AGO** — playing sessions tick ELAPSED every second from `startedAt` (`45s` / `12m 05s` / `1h 02m`); last-played header shows **AGO** (relative) instead of a live timer (lifetime playtime stays in the footer). Portable rebuild required.
 - 2026-07-26: **Steam fields on display.announce (optional)** — announce can carry `hostname` + `steamAppId`; unused for default any-PC Now Playing (games on MOVIETHEATERPC, overlays on MOVIETHEATERPOSTER).
 - 2026-07-26: **Guest Snaps portrait QR spacing** — more air under “Join Wi‑Fi” / “Open Guest Snaps”; portrait cards spread leftover height between title, QR, and footer; landscape unchanged (`vcenter_content`). Portable rebuild required.
 - 2026-07-26: **Steam portrait layout + description scroll** — cap poster height so meta/footer use the bottom; screenshots sit in a reserved band (no text overlap); long `shortDescription` scrolls in a clipped viewport (pause/scroll/loop); smaller STEAM corner chip. Portable rebuild required.
