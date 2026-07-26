@@ -252,6 +252,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- Privacy history rewrite: example LAN IP/fleet domain placeholders; portable zip untracked; household dumps/config removed from git history.
 - 2026-07-26: **Scan-QR inside photo frame** — Shared Photos / photo-push corner QR no longer sits in a right gutter beside the image. It overlays the **lower-right of the hero photo** (both orientations), is a bit larger (168/188px), caption is **"Scan for photo"** (bold, soft shadow for readability on bright regions), and the font is fitted so the label width matches the QR exactly.
 - 2026-07-26: **Privacy — no personal client config in git** — `config.json` is gitignored; ship `config.example.json` with placeholder bridge IP / display name / home coords. First-run `ensure_config_file` copies the example (PyInstaller packs the example, not a machine-specific config). Portable zip configs sanitized to the same placeholders.
 - 2026-07-26: **Scan-QR badge stays on-canvas (portrait + landscape)** — the slideshow / shared-photo badge was anchored to raw `screen_w`/`screen_h` and clipped off-screen; both panels share `BasePanel._photo_stage_geometry` / `_draw_scan_qr_badge` so placement stays inside layout bounds (later revised to sit on the photo itself — see "Scan-QR inside photo frame" above).
