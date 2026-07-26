@@ -1,7 +1,17 @@
 import argparse
 import json
+import os
 import socket
+import sys
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+# Allow `from src.lan_crypto` when run as test/send_test.py
+_CLIENT_ROOT = Path(__file__).resolve().parents[1]
+if str(_CLIENT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CLIENT_ROOT))
+
+from src.lan_crypto import encode_outbound, is_enabled  # noqa: E402
 
 ALEXA_MAX_MESSAGE_CHARACTERS = 8000
 DEFAULT_LOCATION = {
@@ -803,20 +813,20 @@ def build_payload(args) -> dict:
             "displaySeconds": max(display_seconds, 180),
             "trigger": "test",
             "guestPhotobooth": {
-                "title": "Guest Photo Booth",
+                "title": "Guest Snaps",
                 "subtitle": "Two quick scans to share a photo",
                 "wifi": {
                     "content": "WIFI:T:WPA;S:Home Network;P:letmein123;;",
                     "ssid": "Home Network",
-                    "stepLabel": "Step 1",
-                    "heading": "Connect to Wi‑Fi",
-                    "hint": "Scan to join our home network",
+                    "stepLabel": "1",
+                    "heading": "Join Wi‑Fi",
+                    "hint": "Scan to connect",
                 },
                 "booth": {
                     "content": args.url if args.url != "https://example.com" else "https://192.168.1.10:47810/",
-                    "stepLabel": "Step 2",
-                    "heading": "Open the photo booth",
-                    "hint": "Already connected to home Wi‑Fi? Scan to access the guest photo booth",
+                    "stepLabel": "2",
+                    "heading": "Open Guest Snaps",
+                    "hint": "Already on Wi‑Fi? Scan here",
                 },
             },
         }
@@ -989,6 +999,12 @@ def main():
         default=ALEXA_MAX_MESSAGE_CHARACTERS,
         help="Character count used with --long",
     )
+    parser.add_argument(
+        "--secret",
+        default=os.environ.get("LAN_UDP_SECRET") or os.environ.get("UDP_SECRET") or "",
+        help="LAN UDP shared secret (AES-GCM). Defaults to LAN_UDP_SECRET env. "
+             "Required when the display client has udpSecret set.",
+    )
     args = parser.parse_args()
 
     if args.long:
@@ -997,13 +1013,16 @@ def main():
         args.message = build_max_length_message(max(1, args.max_chars))
 
     payload = build_payload(args)
-    body = json.dumps(payload).encode("utf-8")
+    wire = encode_outbound(payload, args.secret)
+    body = json.dumps(wire, separators=(",", ":")).encode("utf-8")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.sendto(body, (args.host, args.port))
     sock.close()
 
     print_payload_summary(payload, args.host, args.port, body)
+    if is_enabled(args.secret):
+        print("(sent as AES-GCM v3 envelope)")
 
 
 if __name__ == "__main__":

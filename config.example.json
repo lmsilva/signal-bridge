@@ -10,7 +10,8 @@
     "port": 47832,
     "discoveryPort": 47833,
     "defaultDisplaySeconds": 120,
-    "targets": []
+    "targets": [],
+    "sharedSecret": ""
   },
   "webServer": {
     "enabled": true,

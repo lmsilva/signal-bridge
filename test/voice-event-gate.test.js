@@ -19,6 +19,10 @@ test('needsSpokenResponseUpgrade for music, vivint, notifications, and shopping 
     false,
   );
   assert.equal(
+    needsSpokenResponseUpgrade({ kind: 'music', trigger: 'music-skip', spokenResponse: '' }),
+    false,
+  );
+  assert.equal(
     needsSpokenResponseUpgrade({ kind: 'vivint-alarm', spokenResponse: null }),
     true,
   );
@@ -72,6 +76,10 @@ test('shouldMarkActivityProcessed still defers music-play until spoken response 
   );
   assert.equal(
     shouldMarkActivityProcessed({ kind: 'music', trigger: 'music-query', spokenResponse: null }),
+    true,
+  );
+  assert.equal(
+    shouldMarkActivityProcessed({ kind: 'music', trigger: 'music-skip', spokenResponse: null }),
     true,
   );
   assert.equal(

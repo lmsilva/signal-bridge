@@ -1,5 +1,5 @@
-// Detect "play <song/artist/...>" voice commands and "what song is playing"
-// queries, then fetch now-playing info for either.
+// Detect "play <song/artist/...>" voice commands, "what song is playing"
+// queries, and "next"/"skip" track advances — then fetch now-playing info.
 
 const PLAY_MUSIC_RE = /^(?:alexa[,\s]+)?play\b/i;
 const MUSIC_BLOCKLIST_RE = /\b(?:timer|alarm|announcement|game|jeopardy|question)\b/i;
@@ -16,6 +16,15 @@ const NOW_PLAYING_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:this\s+)?song(?:\s+is\
 // now-playing line ("Currently playing …", "This is X by Y"), still treat
 // it as a now-playing query so we don't silently drop the display.
 const NOW_PLAYING_ANSWER_RE = /\b(?:currently\s+playing|now\s+playing|you'?re\s+listening\s+to|this\s+is\s+.+\s+by\s+)\b/i;
+
+// Whole-utterance skip/next. Bare "next"/"skip" is shared with news/briefings;
+// explicit "... song/track" phrases are music-intent regardless of provider.
+const MUSIC_SKIP_RE = /^(?:alexa[,\s]+)?(?:next(?:\s+(?:song|track|one))?|skip(?:\s+(?:(?:this|the)\s+)?(?:song|track))?)$/i;
+const MUSIC_SKIP_EXPLICIT_SONG_RE = /\b(?:song|track)\b/i;
+
+// Providers that mean "advance the next thing" but are not a song card.
+const NON_MUSIC_PROVIDER_RE = /\b(?:flash\s*briefing|news|audible|kindle|podcast|npr|bbc\s*news|iheart\s*news|siriusxm\s*news)\b/i;
+const MUSIC_PROVIDER_RE = /\b(?:amazon\s*music|spotify|apple\s*music|pandora|youtube\s*music|deezer|tidal|iheartradio|iheart\s*radio|sirius(?:xm)?|tunein|amazon\s*unlimited)\b/i;
 
 function normalizeQueryText(value) {
   return String(value || '')
@@ -51,6 +60,37 @@ function matchesNowPlayingQuery(summary, response) {
     return true;
   }
   return false;
+}
+
+function matchesMusicSkipQuery(summary) {
+  const text = normalizeQueryText(summary);
+  if (!text || MUSIC_BLOCKLIST_RE.test(text)) {
+    return false;
+  }
+  return MUSIC_SKIP_RE.test(text);
+}
+
+function isExplicitSongSkipQuery(summary) {
+  const text = normalizeQueryText(summary);
+  return Boolean(text && MUSIC_SKIP_RE.test(text) && MUSIC_SKIP_EXPLICIT_SONG_RE.test(text));
+}
+
+function isMusicPlayerContent(nowPlaying, { explicitSongSkip = false } = {}) {
+  if (!nowPlaying || !nowPlaying.song) {
+    return false;
+  }
+  if (explicitSongSkip) {
+    return true;
+  }
+  const provider = String(nowPlaying.provider || '').trim();
+  if (provider && NON_MUSIC_PROVIDER_RE.test(provider)) {
+    return false;
+  }
+  if (provider && MUSIC_PROVIDER_RE.test(provider)) {
+    return true;
+  }
+  // Song-like card: title + artist, and not a known non-music provider.
+  return Boolean(nowPlaying.artist);
 }
 
 function emptyNowPlaying(device) {
@@ -122,13 +162,55 @@ async function fetchNowPlaying(alexa, serialOrName, device, { attempts = 4, dela
   return lastSeen;
 }
 
+/**
+ * After "next"/"skip", player-info often still reports the old track as
+ * PLAYING for a beat. Prefer a title that differs from the first poll; if
+ * the skip already finished before we looked (title never changes across
+ * the budget), return the settled lastSeen so the card still appears.
+ * Caller should run isMusicPlayerContent before showing a card.
+ */
+async function fetchNowPlayingAfterSkip(
+  alexa,
+  serialOrName,
+  device,
+  { attempts = 5, delayMs = 1200 } = {},
+) {
+  let baselineTitle = null;
+  let lastSeen = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const playerInfo = await getPlayerInfoOnce(alexa, serialOrName);
+    const normalized = normalizePlayerInfo(playerInfo, device);
+    if (normalized) {
+      lastSeen = normalized;
+      if (baselineTitle == null) {
+        baselineTitle = normalized.song;
+      } else if (
+        normalized.song
+        && normalized.song !== baselineTitle
+        && normalized.state === 'PLAYING'
+      ) {
+        return normalized;
+      }
+    }
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+  return lastSeen;
+}
+
 module.exports = {
   matchesMusicQuery,
   matchesNowPlayingQuery,
+  matchesMusicSkipQuery,
+  isExplicitSongSkipQuery,
+  isMusicPlayerContent,
   fetchNowPlaying,
+  fetchNowPlayingAfterSkip,
   normalizePlayerInfo,
   emptyNowPlaying,
   normalizeQueryText,
   PLAY_MUSIC_RE,
   NOW_PLAYING_QUERY_RE,
+  MUSIC_SKIP_RE,
 };

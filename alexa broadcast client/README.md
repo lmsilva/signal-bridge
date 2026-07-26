@@ -60,7 +60,7 @@ dist\alexa broadcast client\
 Or use the zip: `dist\alexa broadcast client.zip`.
 
 1. Extract / copy to the poster PC  
-2. Edit `config.json` — set `displayName` and `bridgeHosts` to your NAS IP  
+2. Edit `config.json` — set `displayName`, `bridgeHosts` to your NAS IP, and `udpSecret` to match the bridge `LAN_UDP_SECRET`  
 3. Double-click `Run Alexa Broadcast Client.bat`  
 4. Allow Windows Firewall (private network) for UDP  
 5. On your phone open `https://<NAS_IP>:47810/` and confirm this display appears  
@@ -105,6 +105,7 @@ Build extras: `requirements-build.txt` (adds PyInstaller).
 | `listenAddress` | `0.0.0.0` | Bind address |
 | `displayName` | hostname | Friendly name in the bridge control page |
 | `bridgeHosts` | `["192.168.1.10"]` | NAS IP(s) for `display.announce` unicasts |
+| `udpSecret` | `""` | Shared AES-GCM secret (must match bridge `LAN_UDP_SECRET`). Empty = plaintext UDP |
 | `discoveryPort` | 47833 | Bridge discovery listen port |
 | `maxDisplaySeconds` | 30 | Hard cap on most overlay durations |
 | `defaultDisplaySeconds` | 30 | Used if payload omits duration |
@@ -118,6 +119,7 @@ Copy `config.example.json` to `config.json` and set your bridge IP / display nam
   "listenPort": 47832,
   "displayName": "Poster Display",
   "bridgeHosts": ["192.168.1.10"],
+  "udpSecret": "",
   "discoveryPort": 47833,
   "maxDisplaySeconds": 120,
   "defaultDisplaySeconds": 60

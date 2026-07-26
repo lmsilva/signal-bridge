@@ -6,3 +6,4 @@ Pillow>=10.0.0           # tray / image helpers
 pywebview>=5.1           # Edge WebView2 host for web.open browser overlay
 pynput>=1.7.6            # remote keyboard + mouse clicks (moves use Win32 SendInput)
 qrcode>=7.4              # generates the qr.display overlay's QR code bitmap (pure Python, uses Pillow)
+cryptography>=42.0.0     # AES-256-GCM for LAN UDP (udpSecret / LAN_UDP_SECRET)

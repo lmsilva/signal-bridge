@@ -148,11 +148,20 @@ function loadConfig() {
       || 12,
   };
 
-  // Guest Photo Booth dual-QR overlay (Alexa "guest photobooth").
+  // Guest Snaps dual-QR overlay (Alexa "open guest snaps").
   // Secrets live in .env; see resolveGuestPhotoboothSettings().
   config.guestPhotobooth = {
     ...(config.guestPhotobooth || {}),
   };
+
+  // Shared secret for AES-GCM UDP between bridge and display clients.
+  // Prefer .env LAN_UDP_SECRET; optional udpBroadcast.sharedSecret in config.json.
+  config.lanUdpSecret = String(
+    process.env.LAN_UDP_SECRET
+    || config.udpBroadcast?.sharedSecret
+    || config.lanUdpSecret
+    || '',
+  ).trim();
 
   return config;
 }

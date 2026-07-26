@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (guest photobooth dual-QR)
+**Last updated:** 2026-07-26 (LAN UDP AES-GCM)
 
 ---
 
@@ -35,7 +35,8 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | Path | Role |
 |------|------|
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop; timer in-place updates + local fire handler; reconfigures `stdout`/`stderr` to UTF-8 (`errors="backslashreplace"`) at startup so a stray non-ASCII character in any `print()`/log call can't silently kill a background thread (Windows consoles often default to `cp1252`) |
-| `src/listener.py` | `UdpListener` — background thread, JSON decode, `on_message` callback |
+| `src/listener.py` | `UdpListener` — background thread; decrypts v3 AES-GCM envelopes when `udpSecret` set, then JSON decode / `on_message` |
+| `src/lan_crypto.py` | Shared-secret AES-256-GCM seal/open for UDP (`udpSecret` must match bridge `LAN_UDP_SECRET`); ±120s timestamp freshness |
 | `src/overlay.py` | Fullscreen shell: fade, dismiss countdown label (bottom), routes payloads to panels; rounded backdrop frame behind all panels |
 | `src/display_panels.py` | All overlay panels; `BasePanel` has shared dark palette + `_round_rect`/`_pill`/`_panel_card` helpers; `TeslaDashboardPanel` fetches live OSM map tiles (via `map_tiles.py`); `QrPanel` renders a QR code locally via `qrcode` from the bridge's `qr.content` string (URL or Wi-Fi); `GuestPhotoboothPanel` dual-QR party welcome (`guest.photobooth`) — Wi‑Fi join + booth URL, portrait stack / landscape pair; `PhotoSlideshowPanel` plays through every stored photo once, newest-first (fetched off-thread, SSL-tolerant, centered for portrait/landscape), stopping on the last photo instead of looping, with a "Photo x of y" counter, a "Shared <date>" label, and a small corner QR code (via `QrPanel._build_qr_image`) linking to the current photo for viewing on a phone; `RoutePlannerPanel` renders `route-planner.query` instantly (header/distance/duration/mode badge) then independently fetches 5 tiles (map, 2× place facts, 2× weather) off-thread, each swapping its own spinner for content as it lands, plus a local-times strip once both weather fetches land; `MusicPanel`'s song/artist/album/detail lines are single-line only — each renders via `text_marquee.MarqueeLine`, so a title too wide for its column scrolls horizontally instead of wrapping (which could overflow the fixed vertical space reserved for the stacked lines) |
 | `src/map_tiles.py` | Shared OSM tile fetch/stitch/cache/SSL-fallback + Web Mercator pixel math (`latlon_to_global_px`/`global_px_to_latlon`); `zoom_to_fit` picks the tightest zoom that fits two points in a box (Route Planner); `project_points_to_pixels` maps a route polyline onto the stitched tile image. Extracted from `TeslaDashboardPanel` (still its only single-point caller) so `RoutePlannerPanel` can reuse the same plumbing for a two-point map |
@@ -48,7 +49,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/web_overlay.py` | `WebOverlayManager` — pre-flights pushed URLs, spawns/kills the WebView2 host; `build_web_error_payload` for the friendly failure message |
 | `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top; persistent profile (`private_mode=False`) for saved passwords |
 | `src/display_identity.py` | Stable `display.id` + `displayName` (hostname fallback) for bridge registration |
-| `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); responds to `display.discover`; log messages are ASCII-only (no `→`) so they can't raise `UnicodeEncodeError` on a `cp1252` console and silently kill the background announce thread |
+| `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); encrypts when `udpSecret` set; responds to `display.discover`; log messages are ASCII-only (no `→`) so they can't raise `UnicodeEncodeError` on a `cp1252` console and silently kill the background announce thread |
 | `src/input_control.py` | Apply `input.pointer` / `input.key` / `input.text` — absolute Win32 `SendInput` (tracked tip); clicks aimed at tip; `pynput` for keys; `handle_text()` types a whole string in one call (`Controller.type()`, Unicode-safe) instead of one keystroke per key, with optional trailing Enter. Keeps the process DPI-*unaware* so Tk overlay layouts match font metrics. |
 | `src/remote_cursor.py` | Click-through software arrow at the remote tip; blanks system cursors while active; restores on idle or physical (non-injected) mouse move |
 | `src/config.py` | Load `config.json`; `effective_display_seconds` (timers and `photo.slideshow` use the payload's full requested duration, bypassing `maxDisplaySeconds`) |
@@ -60,7 +61,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `requirements-build.txt` | PyInstaller + runtime deps for portable build |
 | `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor|input-text|photo-slideshow|route-planner|route-planner-flight …`) |
 | `test/run_tests.bat` | Python `unittest` for `test_*.py` |
-| `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing, `QrPanel`, `PhotoSlideshowPanel`, `map_tiles` (incl. `zoom_to_fit`), `place_facts`, `RoutePlannerPanel` layout math + formatting helpers, `input_control`/display remote, `text_marquee` (`MarqueeLine` fit-vs-overflow, tick/pause/reset cycle, `stop()`) |
+| `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing, `QrPanel`, `PhotoSlideshowPanel`, `map_tiles` (incl. `zoom_to_fit`), `place_facts`, `RoutePlannerPanel` layout math + formatting helpers, `TeslaBatteryPanel.battery_bar_height`, `input_control`/display remote, `text_marquee` (`MarqueeLine` fit-vs-overflow, tick/pause/reset cycle, `stop()`) |
 | `README.md` | User-facing setup / portable build guide |
 
 ---
@@ -161,6 +162,7 @@ python test/send_test.py --type route-planner-flight   # flight fallback: dashed
 | `listenAddress` | `0.0.0.0` | All interfaces |
 | `displayName` | hostname | Shown in bridge control page picker |
 | `bridgeHosts` | `["192.168.1.10"]` | NAS IP(s) for announce unicasts |
+| `udpSecret` | `""` | Shared secret for AES-GCM UDP (must match bridge `LAN_UDP_SECRET`). Empty = plaintext |
 | `discoveryPort` | 47833 | Must match bridge `udpBroadcast.discoveryPort` |
 | `maxDisplaySeconds` | 30 | Hard cap on overlay duration |
 | `defaultDisplaySeconds` | 30 | If payload omits `displaySeconds` |
@@ -254,7 +256,10 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
-- 2026-07-26: **Guest Photo Booth dual-QR overlay** — new `GuestPhotoboothPanel` for bridge `guest.photobooth` (Alexa "guest photobooth"): Step 1 Wi‑Fi QR + Step 2 booth URL, stacked on portrait / side-by-side on landscape with a clear "then" cue. `effective_display_seconds` bypasses `maxDisplaySeconds` for this type. Smoke: `send_test.py --type guest-photobooth`.
+- 2026-07-26: **LAN UDP AES-GCM** — `lan_crypto.py` + `udpSecret` encrypts overlays/commands and `display.announce` when set (must match bridge `LAN_UDP_SECRET`). Adds `cryptography` runtime dep. Smoke: `send_test.py --secret …`. Portable rebuild required after deploy.
+- 2026-07-26: **Tesla battery bar fits percent** — charge pill height follows `section_title_font` linespace (`battery_bar_height`, ~52–56px floor) so in-bar labels like `80%` are not clipped. Unit: `test_tesla_battery_panel.py`.
+- 2026-07-26: **Guest Snaps dual-QR overlay + Smart Home spacing** — rebranded panel owns chrome (no duplicate shell title / outer frame); portrait "then" lives in a dedicated band between cards so footers never overlap. Smart Home on/off centers the whole stack and grows gaps under the button from leftover height. Smoke: `send_test.py --type guest-photobooth`.
+- 2026-07-26: **Guest Photo Booth dual-QR overlay (initial)** — `GuestPhotoboothPanel` for `guest.photobooth`; `effective_display_seconds` bypasses `maxDisplaySeconds`.
 - 2026-07-26: **Shared Photos layout polish + non-overlapping scan QR** — QR sits in a **right gutter beside the photo** (landscape) or a **band below the photo** (portrait), never on the image; "Photo x of y" / shared date are **centered under** the title stack (no more bumping into "Shared Photos"). Client geocode strips trailing US state names and picks the matching `admin1` hit (same as the bridge).
 - Privacy history rewrite: example LAN IP/fleet domain placeholders; portable zip untracked; household dumps/config removed from git history.
 - 2026-07-26: **Scan-QR inside photo frame** — (superseded by the non-overlapping gutter/band layout above).

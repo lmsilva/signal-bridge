@@ -251,6 +251,8 @@ test('control page has a Slideshow Manager tab with a camera roll grid and delet
   assert.match(html, /id="btn-slideshow-select"/);
   assert.match(html, /id="btn-slideshow-select-all"/);
   assert.match(html, /id="btn-slideshow-delete-selected"/);
+  // Whole label is one flex child so .btn gap does not render as "Delete ( 0 )".
+  assert.match(html, /class="btn-label">Delete \(/);
   assert.match(html, /id="photo-lightbox"/);
   assert.match(html, /id="photo-delete-sheet"/);
   assert.match(html, /id="slideshow-order-tabs"/);
@@ -295,6 +297,15 @@ test('control-lock card has top spacing so it does not crowd the sticky display 
   const margin = /margin:\s*(\d+)px/.exec(match[1]);
   assert.ok(margin, 'expected .control-lock to set an explicit top margin');
   assert.ok(Number(margin[1]) >= 20, 'expected at least 20px of breathing room above the lock card');
+});
+
+test('display bar lock/refresh icons use a larger shared icon size', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+  const match = css.match(/\.btn-icon\s+svg\s*\{([^}]*)\}/);
+  assert.ok(match, 'expected .btn-icon svg rule');
+  const width = /width:\s*(\d+)px/.exec(match[1]);
+  assert.ok(width, 'expected .btn-icon svg to set width');
+  assert.ok(Number(width[1]) >= 24, 'expected refresh/lock icons at least 24px');
 });
 
 test('serves the guest booth and admin static assets', async () => {

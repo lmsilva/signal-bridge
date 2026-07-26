@@ -1,38 +1,84 @@
 /**
- * Voice match + config helpers for the dual-QR Guest Photo Booth overlay.
+ * Voice match + config helpers for Guest Snaps:
+ *   - dual-QR welcome ("open guest snaps")
+ *   - Shared Photo Slideshow ("slideshow guest snaps")
  *
- * Phrases like "guest photobooth" / "show guest photo booth" push a page with
- * (1) a Wi-Fi join QR and (2) a URL QR for the public booth at `/`.
+ * Prefer "open guest snaps" — Alexa reserves "photobooth" and tries to run its
+ * own feature. Legacy "guest photobooth" phrases still match as a fallback.
  *
- * Settings are resolved from (first non-empty wins):
+ * Settings resolve from (first non-empty wins):
  *   process.env → root `.env` on disk → `data/guest-photobooth.json` → config.guestPhotobooth
- * The data-file path matters in Docker: `./data` is bind-mounted, while compose
- * `env_file` only injects vars at container create time.
  */
 
 const fs = require('fs');
 const path = require('path');
 
+// Primary brand phrase — "Alexa, open guest snaps"
+const GUEST_SNAPS_RE = /\b(?:open|show|start|launch|display)?\s*(?:the\s+)?guest\s*snaps?\b/i;
+// Legacy aliases (Alexa often hijacks bare "photobooth")
 const GUEST_PHOTOBOOTH_RE = /\b(?:show|open|start|launch|display)?\s*(?:the\s+)?guest\s*photo\s*-?\s*booths?\b|\bguest\s*photo\s*-?\s*booth\b|\bguest\s*photo\s*boot\b/i;
+
+// "Alexa, slideshow guest snaps" / "guest snaps slideshow" — Shared Photo
+// Slideshow of every stored guest photo (not the dual-QR welcome).
+const GUEST_SNAPS_SLIDESHOW_RE = /\b(?:(?:show|start|play|open|launch|display)\s+)?(?:(?:the\s+)?(?:guest\s*snaps?\s+slideshow|slideshow\s+(?:of\s+)?(?:the\s+)?guest\s*snaps?)|(?:the\s+)?slideshow\s+guest\s*snaps?)\b/i;
 
 function normalizeText(value) {
   return String(value || '')
-    .replace(/[\u2018\u2019\u2032`´]/g, "'")
+    .replace(/[\u2018\u2019\u2032`´']/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function matchesGuestPhotoboothQuery(summary, response) {
+function matchesGuestSnapsSlideshowQuery(summary, response) {
   const text = normalizeText(summary);
   const spoken = normalizeText(response);
-  if (GUEST_PHOTOBOOTH_RE.test(text)) {
+  if (text && GUEST_SNAPS_SLIDESHOW_RE.test(text)) {
     return true;
   }
-  // Some activities leave the transcript thin and only echo the skill name back.
-  if (GUEST_PHOTOBOOTH_RE.test(spoken) && /\bguest\b/i.test(text || spoken)) {
+  if (spoken && GUEST_SNAPS_SLIDESHOW_RE.test(spoken) && /\b(?:guest|slideshow)\b/i.test(text || spoken)) {
     return true;
   }
   return false;
+}
+
+function matchesGuestPhotoboothQuery(summary, response) {
+  // Slideshow phrasing also contains "guest snaps" — handle that path first.
+  if (matchesGuestSnapsSlideshowQuery(summary, response)) {
+    return false;
+  }
+  const text = normalizeText(summary);
+  const spoken = normalizeText(response);
+  if (GUEST_SNAPS_RE.test(text) || GUEST_PHOTOBOOTH_RE.test(text)) {
+    return true;
+  }
+  if (
+    (GUEST_SNAPS_RE.test(spoken) || GUEST_PHOTOBOOTH_RE.test(spoken))
+    && /\bguest\b/i.test(text || spoken)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Absolute http(s) URLs for UDP `photo.slideshow` from qr-image-cache `list()`. */
+function photosToSlideshowEntries(listed, config = {}) {
+  const origin = String(defaultGuestPhotoboothUrl(config) || '').replace(/\/$/, '');
+  if (!origin) {
+    return [];
+  }
+  return (Array.isArray(listed) ? listed : [])
+    .map((entry) => {
+      const rel = String(entry?.path || '').trim();
+      if (!rel) {
+        return null;
+      }
+      const pathPart = rel.startsWith('/') ? rel : `/${rel}`;
+      return {
+        url: `${origin}${pathPart}`,
+        uploadedAt: entry.createdAt || null,
+      };
+    })
+    .filter(Boolean);
 }
 
 function truthyEnv(value) {
@@ -106,10 +152,6 @@ function loadGuestPhotoboothFile(config = {}) {
   return {};
 }
 
-/**
- * Resolve guest Wi-Fi + booth URL from env / data file / config.
- * Returns null fields when required pieces are missing (caller decides whether to send).
- */
 function resolveGuestPhotoboothSettings(config = {}) {
   const guest = { ...loadGuestPhotoboothFile(config), ...(config.guestPhotobooth || {}) };
   const root = config.ROOT || path.resolve(__dirname, '..');
@@ -194,8 +236,12 @@ function defaultGuestPhotoboothUrl(config = {}) {
 }
 
 module.exports = {
+  GUEST_SNAPS_RE,
   GUEST_PHOTOBOOTH_RE,
+  GUEST_SNAPS_SLIDESHOW_RE,
+  matchesGuestSnapsSlideshowQuery,
   matchesGuestPhotoboothQuery,
+  photosToSlideshowEntries,
   resolveGuestPhotoboothSettings,
   defaultGuestPhotoboothUrl,
   loadGuestPhotoboothFile,

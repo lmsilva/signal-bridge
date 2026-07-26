@@ -253,7 +253,7 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "guest.photobooth"}), "guest.photobooth")
         self.assertEqual(
             title_for_display_type("guest.photobooth"),
-            ("Signal", "Guest Photo Booth"),
+            ("Signal", "Guest Snaps"),
         )
 
     def test_photo_slideshow_is_a_recognized_display_type(self):

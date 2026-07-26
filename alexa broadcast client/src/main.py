@@ -64,6 +64,7 @@ class BroadcastClientApp:
             address=self.config["listenAddress"],
             on_message=self.message_queue.put,
             display_id=self.display_id,
+            udp_secret=self.config.get("udpSecret") or "",
         )
         self.announcer = DisplayAnnouncer(self.config)
         self.tray_icon = None
@@ -93,6 +94,14 @@ class BroadcastClientApp:
             f"Display identity: {self.display_name} ({self.display_id})",
             flush=True,
         )
+        if str(self.config.get("udpSecret") or "").strip():
+            print("UDP LAN encryption enabled (AES-256-GCM shared secret)", flush=True)
+        else:
+            print(
+                "WARNING: UDP LAN encryption disabled — set udpSecret in config.json "
+                "(matching bridge LAN_UDP_SECRET) to encrypt overlays and remote input",
+                flush=True,
+            )
         self.announcer.start()
         self.tray_icon = run_tray(on_exit=self.shutdown)
 

@@ -394,11 +394,11 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
-        if display_type in ("tesla-dashboard.query", "route-planner.query"):
+        if display_type in ("tesla-dashboard.query", "route-planner.query", "guest.photobooth"):
             self.canvas.itemconfigure(self.title_primary_id, text="")
             self.canvas.itemconfigure(self.title_accent_id, text="")
-            # Both panels draw their own full-size container/header, so hide the
-            # shared backdrop frame + generic title to avoid double-drawing.
+            # These panels draw their own header — hide the shared backdrop +
+            # generic title so we never get "frame inside a frame" / duplicate titles.
             self.canvas.itemconfigure(self.backdrop_frame_id, state="hidden")
         else:
             self.canvas.itemconfigure(self.backdrop_frame_id, state="normal")

@@ -3,11 +3,18 @@ const { extractSpokenResponse } = require('./activity-response');
 const { matchesIndoorQuery } = require('./indoor-temperature');
 const { matchesAirQualityQuery } = require('./air-quality');
 const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
-const { matchesMusicQuery, matchesNowPlayingQuery } = require('./music-info');
+const {
+  matchesMusicQuery,
+  matchesNowPlayingQuery,
+  matchesMusicSkipQuery,
+} = require('./music-info');
 const { matchesRouteQuery } = require('./route-query');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
 const { matchesTeslaDashboardQuery } = require('./tesla-dashboard');
-const { matchesGuestPhotoboothQuery } = require('./guest-photobooth');
+const {
+  matchesGuestPhotoboothQuery,
+  matchesGuestSnapsSlideshowQuery,
+} = require('./guest-photobooth');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
 const {
@@ -122,6 +129,23 @@ function createVoiceQueryParser() {
       };
     }
 
+    // Slideshow before dual-QR welcome — "slideshow guest snaps" also
+    // contains the "guest snaps" brand phrase.
+    if (matchesGuestSnapsSlideshowQuery(summary, response)) {
+      return {
+        kind: 'photo-slideshow',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'guest-snaps-slideshow-query',
+        // Party slideshow fans out to every known display.
+        targetId: '*',
+      };
+    }
+
     if (matchesGuestPhotoboothQuery(summary, response)) {
       return {
         kind: 'guest-photobooth',
@@ -188,6 +212,21 @@ function createVoiceQueryParser() {
         query: summary,
         spokenResponse: response || null,
         trigger: 'music-play',
+      };
+    }
+
+    // "next" / "skip" — advance track, then show the new song (listener
+    // gates out news/flash-briefing via player-info).
+    if (matchesMusicSkipQuery(summary)) {
+      return {
+        kind: 'music',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'music-skip',
       };
     }
 

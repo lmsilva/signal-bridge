@@ -114,7 +114,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "request.processing": ("Alexa", "Working on it"),
         "display.auth": ("Unlock", "Enter this PIN on your phone"),
         "qr.display": ("Signal", "QR Code"),
-        "guest.photobooth": ("Signal", "Guest Photo Booth"),
+        "guest.photobooth": ("Signal", "Guest Snaps"),
         "photo.slideshow": ("Signal", "Shared Photos"),
         "route-planner.query": ("Alexa", "Route Planner"),
     }

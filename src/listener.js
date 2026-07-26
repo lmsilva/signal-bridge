@@ -42,8 +42,14 @@ const {
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
   buildGuestPhotoboothPayload,
+  buildPhotoSlideshowPayload,
 } = require('./udp-payload');
-const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
+const {
+  resolveGuestPhotoboothSettings,
+  photosToSlideshowEntries,
+} = require('./guest-photobooth');
+const { createQrImageCache } = require('./qr-image-cache');
+const { createSlideshowSettings } = require('./slideshow-settings');
 const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
 const { buildTeslaBatteryReading } = require('./tesla-battery');
 const { fetchTeslaBattery, fetchTeslaDashboard, isFleetConfigured, buildErrorReading } = require('./tesla-fleet-client');
@@ -53,7 +59,13 @@ const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { loadAirQualityCache, saveAirQualityCache } = require('./air-quality-cache');
 const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
 const { buildNotificationsReading, hasNotificationContent } = require('./alexa-notifications');
-const { fetchNowPlaying, emptyNowPlaying } = require('./music-info');
+const {
+  fetchNowPlaying,
+  fetchNowPlayingAfterSkip,
+  emptyNowPlaying,
+  isMusicPlayerContent,
+  isExplicitSongSkipQuery,
+} = require('./music-info');
 const { resolveDeviceType } = require('./smart-home-command');
 const { listSmarthomeEndpoints } = require('./smarthome-devices');
 const { enrichAirQualityReading, enrichAllMonitors } = require('./air-quality-fetch');
@@ -131,7 +143,12 @@ function createListener({ config, log }) {
     notificationQueries: config.voiceEvents?.notificationQueries !== false,
     routeQueries: config.voiceEvents?.routeQueries !== false,
     guestPhotoboothQueries: config.voiceEvents?.guestPhotoboothQueries !== false,
+    photoSlideshowQueries: config.voiceEvents?.photoSlideshowQueries !== false,
   };
+  // Same on-disk photo index / slideshow prefs the web UI uses — list() always
+  // reloads from disk, so a second instance here stays in sync with uploads.
+  const qrImageCache = createQrImageCache(config, log);
+  const slideshowSettings = createSlideshowSettings(config, log);
 
   function persistBridgeState() {
     saveBridgeState(config.bridgeStatePath, parser.getState());
@@ -206,13 +223,32 @@ function createListener({ config, log }) {
 
   function scheduleMusicQueryRetry(event, attempt = 1) {
     const delayMs = attempt === 1 ? 2500 : 4000;
+    const isSkip = event.trigger === 'music-skip';
     setTimeout(async () => {
       let nowPlaying = null;
       try {
-        nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device, {
-          attempts: 2,
-          delayMs: 900,
-        });
+        if (isSkip) {
+          nowPlaying = await fetchNowPlayingAfterSkip(
+            alexa,
+            event.deviceSerial || event.device,
+            event.device,
+            { attempts: 3, delayMs: 1000 },
+          );
+          const explicitSongSkip = isExplicitSongSkipQuery(event.query);
+          if (nowPlaying && !isMusicPlayerContent(nowPlaying, { explicitSongSkip })) {
+            log.info(`Music skip retry ignored non-music content for ${event.device}`, {
+              query: event.query,
+              provider: nowPlaying.provider,
+              song: nowPlaying.song,
+            });
+            return;
+          }
+        } else {
+          nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device, {
+            attempts: 2,
+            delayMs: 900,
+          });
+        }
       } catch (error) {
         log.warn('Player info retry fetch failed', error.message || error);
       }
@@ -228,6 +264,10 @@ function createListener({ config, log }) {
       }
       if (attempt < 2) {
         scheduleMusicQueryRetry(event, attempt + 1);
+      } else if (isSkip) {
+        // Skip/next: silent give-up — don't flash "Nothing playing" for news
+        // advances or a slow player-info API mid-playlist.
+        log.info(`Music skip gave up after retries for ${event.device}`, { query: event.query });
       } else {
         // Don't leave the display blank — previous behavior silently
         // returned after retries, so "what's playing" with a slow/empty
@@ -380,6 +420,10 @@ function createListener({ config, log }) {
       return;
     }
 
+    if (event.kind === 'photo-slideshow' && !voiceSettings.photoSlideshowQueries) {
+      return;
+    }
+
     // Slow external-API commands (Tesla Fleet can take 10-30s if the car has
     // to wake) get instant on-screen feedback: the cached snapshot marked
     // "refreshing" when one exists (real data replaces it once the live fetch
@@ -454,18 +498,41 @@ function createListener({ config, log }) {
       );
     } else if (event.kind === 'music') {
       let nowPlaying = null;
+      const isSkip = event.trigger === 'music-skip';
+      const explicitSongSkip = isSkip && isExplicitSongSkipQuery(event.query);
       try {
-        // "music-play" waits longer for playback to actually start; a
-        // "what song is playing" query is asking about something already
-        // playing (or not), so a shorter budget is usually enough. But right
-        // after "Alexa, next"/"skip" the player-info API can still be mid
-        // transition (old track fading out, new one not yet reporting
-        // PLAYING+title) for a couple of seconds, so give it a bit more room
-        // than a single quick check before falling back to the retry below.
-        const fetchOptions = event.trigger === 'music-query'
-          ? { attempts: 3, delayMs: 900 }
-          : undefined;
-        nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device, fetchOptions);
+        if (isSkip) {
+          // Wait for the post-skip title when possible; gate out news/briefing.
+          nowPlaying = await fetchNowPlayingAfterSkip(
+            alexa,
+            event.deviceSerial || event.device,
+            event.device,
+          );
+          if (nowPlaying && !isMusicPlayerContent(nowPlaying, { explicitSongSkip })) {
+            log.info(`Music skip ignored non-music content for ${event.device}`, {
+              query: event.query,
+              provider: nowPlaying.provider,
+              song: nowPlaying.song,
+            });
+            return;
+          }
+        } else {
+          // "music-play" waits longer for playback to actually start; a
+          // "what song is playing" query is asking about something already
+          // playing (or not), so a shorter budget is usually enough. But right
+          // after someone said "next"/"skip" and then asks what's playing, the
+          // player-info API can still be mid transition — give music-query a
+          // bit more room before falling back to the retry below.
+          const fetchOptions = event.trigger === 'music-query'
+            ? { attempts: 3, delayMs: 900 }
+            : undefined;
+          nowPlaying = await fetchNowPlaying(
+            alexa,
+            event.deviceSerial || event.device,
+            event.device,
+            fetchOptions,
+          );
+        }
       } catch (error) {
         log.warn('Player info fetch failed', error.message || error);
       }
@@ -473,11 +540,9 @@ function createListener({ config, log }) {
         // Unlike other kinds, there's no later history re-poll that helps
         // here — the activity/spoken-response is already complete, the only
         // thing not ready yet is Amazon's separate player-info API. Retry
-        // that directly a couple more times so a query asked right after
-        // "next"/"skip" doesn't silently go nowhere (previously the user had
-        // to ask again to get a fresh attempt at a moment the track had
-        // settled).
-        if (event.trigger === 'music-query') {
+        // that directly a couple more times so a query (or skip) right after
+        // a track change doesn't silently go nowhere.
+        if (event.trigger === 'music-query' || isSkip) {
           scheduleMusicQueryRetry(event);
         }
         return;
@@ -780,6 +845,40 @@ function createListener({ config, log }) {
         query: event.query,
         ssid: settings.ssid,
         boothUrl: settings.boothUrl,
+      });
+      return;
+    } else if (event.kind === 'photo-slideshow') {
+      const listed = qrImageCache.list();
+      const photos = photosToSlideshowEntries(listed, config);
+      if (!photos.length) {
+        log.warn('Guest Snaps slideshow skipped — no stored photos (or PROXY_OWN_IP unset for photo URLs)', {
+          listed: listed.length,
+          query: event.query,
+        });
+        return;
+      }
+      event = { ...event, targetId: '*' };
+      payload = buildPhotoSlideshowPayload({
+        photos,
+        secondsPerPhoto: slideshowSettings.getSecondsPerPhoto(),
+        device: event.device,
+        timestamp: event.timestamp,
+        trigger: event.trigger || 'guest-snaps-slideshow-query',
+        order: slideshowSettings.getOrder(),
+      });
+      if (!payload) {
+        log.warn('Guest Snaps slideshow payload build failed', { query: event.query });
+        return;
+      }
+      const allDelivery = displayRegistry.resolveDelivery('*');
+      sendUdpPayload(attachTarget(payload, allDelivery.target), allDelivery.sendOptions);
+      voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
+      lastCaptureAt = Date.now();
+      log.info(`Voice event sent (photo-slideshow) for ${event.device}`, {
+        query: event.query,
+        count: payload.slideshow.photos.length,
+        order: slideshowSettings.getOrder(),
+        secondsPerPhoto: payload.slideshow.secondsPerPhoto,
       });
       return;
     } else {

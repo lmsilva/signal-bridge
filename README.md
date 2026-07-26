@@ -34,7 +34,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | **Timers** | Set, cancel, "show my timers", timer fired | `timer.snapshot` |
 | **Alarms** | "Alexa, show my alarms" / set / cancel | `alarm.snapshot` |
 | **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` |
-| **Music** | "Alexa, play …" (now playing from device) | `music.playing` |
+| **Music** | "Alexa, play …", "what's playing", or "next"/"skip" (music only — not news/briefing) | `music.playing` |
 | **Smart home** | "Alexa, turn the kitchen lights on" | `smart-home.command` |
 | **Tesla battery** | Custom routine: "Alexa, show Tesla battery" | `tesla-battery.query` (Fleet API when configured) |
 | **Tesla dashboard** | Custom routine: "Alexa, show Tesla dashboard" | `tesla-dashboard.query` (Fleet API `vehicle_data`) |
@@ -88,7 +88,7 @@ Accept the self-signed certificate once. Optional HTTP redirect: `:47811` → HT
 | `https://<NAS_IP>:47810/` | Guests | Photo booth — pick a display and share a photo (saved to the party slideshow) |
 | `https://<NAS_IP>:47810/admin/` | Host | Full control UI (password from `ADMIN_PASSWORD` in `.env`) |
 
-**Alexa “guest photobooth”:** say *Alexa, guest photobooth* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/`).
+**Alexa “Guest Snaps”:** say *Alexa, open guest snaps* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Say *Alexa, slideshow guest snaps* to play every stored guest photo on all displays. Prefer these over “photobooth” — Alexa reserves that word. Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/`).
 
 Admin tabs after login:
 
@@ -117,6 +117,15 @@ Displays **advertise to the bridge** so Signal knows who is online and can targe
 | Client → bridge | **47833** (`discoveryPort`) | `display.announce` — id, name, listen port |
 | Bridge → clients | **47832** | `display.discover` — asks clients to announce now |
 | Bridge → clients | **47832** | overlays + `web.*` / `system.*` / `input.*` (optionally `target.id`) |
+
+### LAN UDP encryption
+
+UDP overlays and remote input are **plaintext unless you set a shared secret**. Put the same long random value in:
+
+- Bridge `.env`: `LAN_UDP_SECRET=...` (see `.env.example`; `openssl rand -base64 32`)
+- Each display `config.json`: `"udpSecret": "..."`
+
+Then `./recreate.sh` and redeploy the portable client. When set, traffic uses AES-256-GCM (protocol v3 envelope). Mismatched/missing secrets drop packets (check bridge/client logs). Leave empty only for local plaintext testing.
 
 Clients should set in their `config.json`:
 
@@ -213,7 +222,7 @@ cd "alexa broadcast client"
 build_portable.bat --no-pause
 ```
 
-Copy `dist\alexa broadcast client.zip` to the poster PC, extract, set `bridgeHosts` / `displayName` in `config.json`, then run `Run Alexa Broadcast Client.bat`.
+Copy `dist\alexa broadcast client.zip` to the poster PC, extract, set `bridgeHosts` / `displayName` / `udpSecret` (match `LAN_UDP_SECRET`) in `config.json`, then run `Run Alexa Broadcast Client.bat`.
 
 ---
 
@@ -290,7 +299,7 @@ Path is configurable via `voiceEvents.eventsLogFile`.
 
 ---
 
-## UDP protocol (v2)
+## UDP protocol (v2 payloads; optional v3 encrypted wire)
 
 All payloads include `"version": 2` and a `"type"` field. Legacy clients that only read `message` still work for broadcasts.
 

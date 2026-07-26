@@ -3062,7 +3062,11 @@ class TeslaBatteryPanel(BasePanel):
         title_font = self.shell.section_title_font
         body_font = self.shell.body_font
         label_font = self.shell.forecast_label_font
-        bar_height = 36 if layout.portrait else 32
+        # Percent is drawn *inside* the bar with section_title_font — size the
+        # pill from that font so "80%" (etc.) isn't clipped top/bottom.
+        bar_height = self.battery_bar_height(
+            title_font.metrics("linespace"), portrait=layout.portrait,
+        )
         bar_gap = 18 if layout.portrait else 12
         footer_h = title_font.metrics("linespace") + 6 + body_font.metrics("linespace")
         status_h = self._status_block_height(status_bits, width - 80)
@@ -3256,6 +3260,13 @@ class TeslaBatteryPanel(BasePanel):
         )
         return cursor + body_font.metrics("linespace")
 
+    @staticmethod
+    def battery_bar_height(percent_font_linespace: int, *, portrait: bool) -> int:
+        """Bar tall enough for the in-bar percent label (unit-tested)."""
+        pad = 22
+        floor = 56 if portrait else 52
+        return max(floor, int(percent_font_linespace) + pad)
+
     def _draw_battery_bar(
         self,
         center_x,
@@ -3272,14 +3283,15 @@ class TeslaBatteryPanel(BasePanel):
         bar_x1 = bar_x0 + bar_width
         bar_y1 = bar_y0 + bar_height
         label_font = self.shell.forecast_label_font
+        percent_font = self.shell.section_title_font
         self._track(
             self.canvas.create_text(
-                bar_x0, bar_y0 - 6, anchor="sw", text="0%", fill=muted, font=label_font,
+                bar_x0, bar_y0 - 8, anchor="sw", text="0%", fill=muted, font=label_font,
             )
         )
         self._track(
             self.canvas.create_text(
-                bar_x1, bar_y0 - 6, anchor="se", text="100%", fill=muted, font=label_font,
+                bar_x1, bar_y0 - 8, anchor="se", text="100%", fill=muted, font=label_font,
             )
         )
         self._round_rect(
@@ -3306,7 +3318,7 @@ class TeslaBatteryPanel(BasePanel):
                 anchor="center",
                 text=percent_text,
                 fill=headline_color,
-                font=self.shell.section_title_font,
+                font=percent_font,
             )
         )
         return bar_y1
@@ -4673,6 +4685,41 @@ class SmartHomePanel(BasePanel):
         "device": "Device",
     }
 
+    @staticmethod
+    def compute_stack_layout(area_h: int, portrait: bool, *, on_h: int, name_h: int, pill_h: int) -> dict:
+        """Vertically balance icon + labels — unit-tested spacing math."""
+        area_h = max(280, int(area_h))
+        icon_size = 150 if portrait else 128
+        # Prefer breathing room under the button; leftover space is shared
+        # evenly above the stack and between the text rows (not dumped as a
+        # huge empty band above a cramped label cluster).
+        gap_icon_on = 56 if portrait else 40
+        gap_on_name = 28 if portrait else 18
+        gap_name_pill = 28 if portrait else 18
+        stack_h = icon_size + gap_icon_on + on_h + gap_on_name + name_h + gap_name_pill + pill_h
+        leftover = max(0, area_h - stack_h)
+        if leftover > 0:
+            # ~35% top inset, rest split across the three gaps.
+            top_pad = int(leftover * 0.35)
+            share = (leftover - top_pad) / 3
+            gap_icon_on += int(share)
+            gap_on_name += int(share)
+            gap_name_pill += int(share)
+        else:
+            top_pad = 8
+            # Shrink icon slightly before crushing text gaps.
+            overflow = stack_h - area_h
+            icon_size = max(96, icon_size - overflow)
+            stack_h = icon_size + gap_icon_on + on_h + gap_on_name + name_h + gap_name_pill + pill_h
+            top_pad = max(8, (area_h - stack_h) // 2)
+        return {
+            "icon_size": icon_size,
+            "top_pad": top_pad,
+            "gap_icon_on": gap_icon_on,
+            "gap_on_name": gap_on_name,
+            "gap_name_pill": gap_name_pill,
+        }
+
     def _render(self, payload: dict):
         layout = self.shell.layout
         x = layout.content_x
@@ -4681,7 +4728,6 @@ class SmartHomePanel(BasePanel):
         bottom = layout.message_area_bottom
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
         alert = self.config.get("alertColor", "#f97316")
 
         command = payload.get("command") or {}
@@ -4694,8 +4740,19 @@ class SmartHomePanel(BasePanel):
         is_on = action == "on"
         action_color = "#4ade80" if is_on else muted
         center_x = x + width // 2
-        icon_size = 120
-        icon_y = y + (bottom - y) // 2 - 90
+
+        on_h = self.shell.hero_font.metrics("linespace")
+        name_h = self.shell.section_title_font.metrics("linespace")
+        pill_h = self.shell.body_font.metrics("linespace") + 18
+        geo = self.compute_stack_layout(
+            bottom - y,
+            layout.portrait,
+            on_h=on_h,
+            name_h=name_h,
+            pill_h=pill_h,
+        )
+        icon_size = geo["icon_size"]
+        icon_y = y + geo["top_pad"] + icon_size // 2
 
         halo_r = int(icon_size * 0.85)
         self._track(
@@ -4709,7 +4766,7 @@ class SmartHomePanel(BasePanel):
         )
         self._draw_device_icon(center_x, icon_y, icon_size, device_type, action_color if is_on else muted)
 
-        cursor = icon_y + icon_size // 2 + 34
+        cursor = icon_y + icon_size // 2 + geo["gap_icon_on"]
         self._track(
             self.canvas.create_text(
                 center_x,
@@ -4720,7 +4777,7 @@ class SmartHomePanel(BasePanel):
                 font=self.shell.hero_font,
             )
         )
-        cursor += self.shell.hero_font.metrics("linespace") + 10
+        cursor += on_h + geo["gap_on_name"]
         self._track(
             self.canvas.create_text(
                 center_x,
@@ -4732,7 +4789,7 @@ class SmartHomePanel(BasePanel):
                 width=width - 40,
             )
         )
-        cursor += self.shell.section_title_font.metrics("linespace") + 16
+        cursor += name_h + geo["gap_name_pill"]
         type_label = self.TYPE_LABELS.get(device_type, "Device")
         detail = type_label
         if origin:
@@ -5500,11 +5557,11 @@ class QrPanel(BasePanel):
 
 
 class GuestPhotoboothPanel(BasePanel):
-    """Party welcome screen: Wi‑Fi QR + guest photo booth URL QR.
+    """Guest Snaps welcome: Wi‑Fi QR + booth URL QR.
 
-    Portrait stacks the two steps; landscape places them side by side with a
-    clear "then" cue so guests know to join the network first, then open the
-    booth. QR bitmaps are generated locally (same as QrPanel).
+    Owns its chrome (shared title/backdrop hidden in overlay.py) so the brand
+    appears once. Portrait stacks steps with a dedicated connector band between
+    cards so "then" never overlaps card footers; landscape pairs them.
     """
 
     ACCENT = "#38bdf8"
@@ -5523,46 +5580,81 @@ class GuestPhotoboothPanel(BasePanel):
         super().hide()
 
     @staticmethod
-    def compute_card_geometry(content_w: int, content_h: int, portrait: bool) -> dict:
+    def compute_card_geometry(
+        content_w: int,
+        content_h: int,
+        portrait: bool,
+        *,
+        header_h: int | None = None,
+    ) -> dict:
         """Pure layout math for portrait stack vs landscape pair (unit-tested)."""
         content_w = max(320, int(content_w))
         content_h = max(360, int(content_h))
-        header_h = 96 if portrait else 78
-        gap = 22 if portrait else 28
-        usable_h = max(240, content_h - header_h)
+        # Caller should pass a measured header (title + subtitle + pad) so the
+        # subtitle never lands under the card tops in landscape.
+        if header_h is None:
+            header_h = 78 if portrait else 96
+        else:
+            header_h = max(56, int(header_h))
+
         if portrait:
+            connector_h = 40
+            usable_h = max(240, content_h - header_h - connector_h)
             card_w = content_w
-            card_h = max(200, (usable_h - gap) // 2)
-            qr_budget = min(card_w - 72, card_h - 118)
-            qr_size = int(max(140, min(280, qr_budget)))
+            card_h = max(200, usable_h // 2)
+            qr_budget = min(card_w - 64, card_h - 100)
+            qr_size = int(max(150, min(300, qr_budget)))
+            y0 = header_h
+            y1 = header_h + card_h + connector_h
             return {
                 "portrait": True,
                 "header_h": header_h,
-                "gap": gap,
+                "connector_h": connector_h,
+                "gap": connector_h,
+                "origin_y": 0,
                 "card_w": card_w,
                 "card_h": card_h,
                 "qr_size": qr_size,
+                "vcenter_content": False,
                 "cards": (
-                    {"x": 0, "y": header_h},
-                    {"x": 0, "y": header_h + card_h + gap},
+                    {"x": 0, "y": y0},
+                    {"x": 0, "y": y1},
                 ),
+                "connector": {
+                    "x": content_w // 2,
+                    "y": header_h + card_h + connector_h // 2,
+                },
             }
 
+        # Landscape: size cards to the QR block (not full remaining height),
+        # leave a wide gutter for "then", and vertically center the whole block.
+        gap = 56
         card_w = max(240, (content_w - gap) // 2)
-        card_h = usable_h
-        qr_budget = min(card_w - 64, card_h - 130)
-        qr_size = int(max(160, min(320, qr_budget)))
+        # Chrome inside each card: step row + footer lines + padding.
+        inner_chrome = 110
+        max_card_h = max(220, content_h - header_h - 16)
+        qr_size = int(max(140, min(280, card_w - 56, max_card_h - inner_chrome)))
+        card_h = qr_size + inner_chrome
+        block_h = header_h + card_h
+        origin_y = max(0, (content_h - block_h) // 2)
         return {
             "portrait": False,
             "header_h": header_h,
+            "connector_h": 0,
             "gap": gap,
+            "origin_y": origin_y,
             "card_w": card_w,
             "card_h": card_h,
             "qr_size": qr_size,
+            "vcenter_content": True,
             "cards": (
-                {"x": 0, "y": header_h},
-                {"x": card_w + gap, "y": header_h},
+                {"x": 0, "y": origin_y + header_h},
+                {"x": card_w + gap, "y": origin_y + header_h},
             ),
+            "connector": {
+                "x": card_w + gap // 2,
+                "y": origin_y + header_h + card_h // 2,
+            },
         }
 
     def _render(self, payload: dict):
@@ -5575,49 +5667,56 @@ class GuestPhotoboothPanel(BasePanel):
         data = payload.get("guestPhotobooth") or {}
         wifi = data.get("wifi") or {}
         booth = data.get("booth") or {}
-        title = str(data.get("title") or "Guest Photo Booth").strip()
+        title = str(data.get("title") or "Guest Snaps").strip()
         subtitle = str(data.get("subtitle") or "Two quick scans to share a photo").strip()
 
         layout = self.shell.layout
         x0 = layout.content_x
         width = layout.content_width
-        top = layout.message_area_top
+        # Own the top of the screen (shell title/backdrop are hidden).
+        top = int(self.shell.overlay.screen_h * (0.045 if layout.portrait else 0.05))
         bottom = layout.message_area_bottom
         height = max(360, bottom - top)
-        geo = self.compute_card_geometry(width, height, layout.portrait)
+        title_h = self.shell.section_title_font.metrics("linespace")
+        sub_h = self.shell.body_font.metrics("linespace") if subtitle else 0
+        # Extra pad under the subtitle so landscape cards never cover it.
+        header_h = title_h + (6 + sub_h if subtitle else 0) + (28 if layout.portrait else 36)
+        geo = self.compute_card_geometry(
+            width, height, layout.portrait, header_h=header_h,
+        )
         center_x = x0 + width // 2
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
-
-        self._container_frame(x0, top, width, height, pad=18, radius=28)
+        # Landscape may shift the whole composition down to center it.
+        origin = top + geo.get("origin_y", 0)
 
         self._track(
             self.canvas.create_text(
                 center_x,
-                top + 8,
+                origin,
                 anchor="n",
                 text=title,
                 fill=text,
                 font=self.shell.section_title_font,
             )
         )
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                top + 8 + self.shell.section_title_font.metrics("linespace") + 4,
-                anchor="n",
-                text=subtitle,
-                fill=muted,
-                font=self.shell.body_font,
+        if subtitle:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    origin + title_h + 6,
+                    anchor="n",
+                    text=subtitle,
+                    fill=muted,
+                    font=self.shell.body_font,
+                )
             )
-        )
 
-        origin_y = top
         wifi_card = geo["cards"][0]
         booth_card = geo["cards"][1]
         self._draw_step_card(
             x0 + wifi_card["x"],
-            origin_y + wifi_card["y"],
+            top + wifi_card["y"],
             geo["card_w"],
             geo["card_h"],
             geo["qr_size"],
@@ -5625,10 +5724,11 @@ class GuestPhotoboothPanel(BasePanel):
             accent=self.STEP_WIFI,
             qr_attr="_wifi_qr_image",
             detail=str(wifi.get("ssid") or "").strip(),
+            vcenter=geo.get("vcenter_content", False),
         )
         self._draw_step_card(
             x0 + booth_card["x"],
-            origin_y + booth_card["y"],
+            top + booth_card["y"],
             geo["card_w"],
             geo["card_h"],
             geo["qr_size"],
@@ -5636,33 +5736,21 @@ class GuestPhotoboothPanel(BasePanel):
             accent=self.STEP_BOOTH,
             qr_attr="_booth_qr_image",
             detail="",
+            vcenter=geo.get("vcenter_content", False),
         )
 
-        if not geo["portrait"]:
-            mid_x = x0 + geo["card_w"] + geo["gap"] // 2
-            mid_y = origin_y + geo["header_h"] + geo["card_h"] // 2
-            self._pill(
-                mid_x,
-                mid_y - 14,
-                "then",
-                fill="#1e293b",
-                fg=self.ACCENT,
-                anchor="n",
-                font=self.shell.chip_value_font,
-                outline="#334155",
-            )
-        else:
-            mid_y = origin_y + geo["header_h"] + geo["card_h"] + geo["gap"] // 2
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    mid_y,
-                    anchor="center",
-                    text="↓  then",
-                    fill=self.ACCENT,
-                    font=self.shell.chip_value_font,
-                )
-            )
+        connector = geo["connector"]
+        label = "↓ then" if geo["portrait"] else "then"
+        self._pill(
+            x0 + connector["x"],
+            top + connector["y"] - 14,
+            label,
+            fill="#0f172a",
+            fg=self.ACCENT,
+            anchor="n",
+            font=self.shell.chip_value_font,
+            outline="#334155",
+        )
 
     def _draw_step_card(
         self,
@@ -5676,48 +5764,57 @@ class GuestPhotoboothPanel(BasePanel):
         accent: str,
         qr_attr: str,
         detail: str,
+        vcenter: bool = False,
     ):
         muted = self.config["mutedTextColor"]
         text = self.config["textColor"]
         self._panel_card(x, y, w, h, radius=22, fill=self.CARD, outline=self.CARD_EDGE)
 
-        step_label = str(step.get("stepLabel") or "").strip() or "Step"
+        step_label = str(step.get("stepLabel") or "").strip() or "1"
         heading = str(step.get("heading") or "").strip() or "Scan"
         hint = str(step.get("hint") or "").strip()
         content = str(step.get("content") or "").strip()
+        # Compact step chip: "1" / "2" or keep "Step N" if sent that way.
+        if step_label.isdigit():
+            step_chip = f"Step {step_label}"
+        else:
+            step_chip = step_label
 
-        pad = 18
-        cursor = y + 14
+        pad = 16
+        line_h = self.shell.chip_value_font.metrics("linespace")
+        header_row_h = max(34, self.shell.body_font.metrics("linespace") + 14)
+        footer_reserve = 12 + (line_h + 4 if detail else 0) + (line_h if hint else 0)
+        frame_pad = 10
+        draw_size = min(qr_size, max(120, h - header_row_h - footer_reserve - 24))
+        content_h = header_row_h + (draw_size + frame_pad * 2) + footer_reserve
+        cursor = y + 12
+        if vcenter and content_h < h - 8:
+            cursor = y + max(12, (h - content_h) // 2)
+
         self._pill(
             x + pad,
             cursor,
-            step_label,
+            step_chip,
             fill=accent,
             fg="#0b1220",
             font=self.shell.chip_value_font,
         )
-        cursor += 34
+        # Heading on the same row as the chip when space allows.
+        chip_w = self.shell.chip_value_font.measure(step_chip) + 28
         self._track(
             self.canvas.create_text(
-                x + pad,
-                cursor,
+                x + pad + chip_w + 10,
+                cursor + 4,
                 anchor="nw",
                 text=heading,
                 fill=text,
                 font=self.shell.body_font,
-                width=w - pad * 2,
+                width=max(80, w - pad * 2 - chip_w - 10),
             )
         )
-        cursor += self.shell.body_font.metrics("linespace") + 10
+        cursor += header_row_h
 
-        qr_x = x + (w - qr_size) // 2
-        # Leave room for hint (+ optional SSID) under the code.
-        footer_reserve = 52 if detail else 40
-        max_qr = max(120, h - (cursor - y) - footer_reserve - 12)
-        draw_size = min(qr_size, max_qr)
         qr_x = x + (w - draw_size) // 2
-
-        frame_pad = 10
         self._round_rect(
             qr_x - frame_pad,
             cursor - frame_pad,
@@ -5752,8 +5849,10 @@ class GuestPhotoboothPanel(BasePanel):
                 )
             )
 
-        footer_y = cursor + draw_size + frame_pad + 10
-        if detail:
+        footer_y = cursor + draw_size + frame_pad + 8
+        # Never draw past the card bottom (avoids overlap with the "then" band).
+        footer_limit = y + h - 8
+        if detail and footer_y + line_h <= footer_limit:
             self._track(
                 self.canvas.create_text(
                     x + w // 2,
@@ -5764,8 +5863,8 @@ class GuestPhotoboothPanel(BasePanel):
                     font=self.shell.chip_value_font,
                 )
             )
-            footer_y += self.shell.chip_value_font.metrics("linespace") + 2
-        if hint:
+            footer_y += line_h + 2
+        if hint and footer_y + line_h <= footer_limit:
             self._track(
                 self.canvas.create_text(
                     x + w // 2,

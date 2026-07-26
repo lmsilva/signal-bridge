@@ -1,9 +1,9 @@
-import json
 import socket
 import sys
 import threading
 from typing import Callable
 
+from src.lan_crypto import decode_inbound, is_enabled
 from src.payload_utils import is_accepted_payload, payload_targets_display
 
 
@@ -14,15 +14,18 @@ class UdpListener:
         address: str,
         on_message: Callable[[dict], None],
         display_id: str | None = None,
+        udp_secret: str | None = None,
     ):
         self.port = port
         self.address = address
         self.on_message = on_message
         self.display_id = display_id or ""
+        self.udp_secret = udp_secret or ""
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._thread = None
         self.bind_error = None
+        self._last_decrypt_warn = 0.0
 
     def start(self):
         self.bind_error = None
@@ -37,6 +40,19 @@ class UdpListener:
 
     def stop(self):
         self._stop.set()
+
+    def _warn_decrypt(self):
+        import time
+        now = time.time()
+        if now - self._last_decrypt_warn < 30:
+            return
+        self._last_decrypt_warn = now
+        print(
+            "UDP inbound dropped (decrypt failed or plaintext while encryption required) "
+            "— check udpSecret matches the bridge LAN_UDP_SECRET",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def _run(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -62,9 +78,10 @@ class UdpListener:
             except OSError:
                 break
 
-            try:
-                payload = json.loads(data.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = decode_inbound(data, self.udp_secret)
+            if payload is None:
+                if is_enabled(self.udp_secret):
+                    self._warn_decrypt()
                 continue
 
             # Accept display overlays AND control commands (web/system/input).

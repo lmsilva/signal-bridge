@@ -1,6 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { matchesMusicQuery, matchesNowPlayingQuery, normalizePlayerInfo } = require('../src/music-info');
+const {
+  matchesMusicQuery,
+  matchesNowPlayingQuery,
+  matchesMusicSkipQuery,
+  isExplicitSongSkipQuery,
+  isMusicPlayerContent,
+  normalizePlayerInfo,
+  fetchNowPlayingAfterSkip,
+} = require('../src/music-info');
 
 test('matchesMusicQuery detects play commands', () => {
   assert.equal(matchesMusicQuery('play bohemian rhapsody', 'Playing Bohemian Rhapsody'), true);
@@ -35,6 +43,84 @@ test('matchesNowPlayingQuery ignores unrelated and blocklisted phrases', () => {
   assert.equal(matchesNowPlayingQuery(null), false);
 });
 
+test('matchesMusicSkipQuery detects next/skip and rejects calendar/shopping phrasing', () => {
+  assert.equal(matchesMusicSkipQuery('next'), true);
+  assert.equal(matchesMusicSkipQuery('alexa next'), true);
+  assert.equal(matchesMusicSkipQuery('alexa, next'), true);
+  assert.equal(matchesMusicSkipQuery('next song'), true);
+  assert.equal(matchesMusicSkipQuery('next track'), true);
+  assert.equal(matchesMusicSkipQuery('skip'), true);
+  assert.equal(matchesMusicSkipQuery('skip this song'), true);
+  assert.equal(matchesMusicSkipQuery('skip the track'), true);
+  assert.equal(matchesMusicSkipQuery("what's next"), false);
+  assert.equal(matchesMusicSkipQuery('say next'), false);
+  assert.equal(matchesMusicSkipQuery('next on my calendar'), false);
+  assert.equal(matchesMusicSkipQuery('set a timer'), false);
+  assert.equal(matchesMusicSkipQuery('play next'), false); // handled as music-play
+});
+
+test('isExplicitSongSkipQuery only for song/track wording', () => {
+  assert.equal(isExplicitSongSkipQuery('next song'), true);
+  assert.equal(isExplicitSongSkipQuery('skip this track'), true);
+  assert.equal(isExplicitSongSkipQuery('next'), false);
+  assert.equal(isExplicitSongSkipQuery('skip'), false);
+});
+
+test('isMusicPlayerContent accepts music providers and song-like cards', () => {
+  assert.equal(
+    isMusicPlayerContent({
+      song: 'Song',
+      artist: 'Artist',
+      provider: 'Amazon Music',
+    }),
+    true,
+  );
+  assert.equal(
+    isMusicPlayerContent({
+      song: 'Song',
+      artist: 'Artist',
+      provider: 'Spotify',
+    }),
+    true,
+  );
+  assert.equal(
+    isMusicPlayerContent({
+      song: 'Song',
+      artist: 'Someone',
+      provider: null,
+    }),
+    true,
+  );
+});
+
+test('isMusicPlayerContent rejects news/briefing/audible unless explicit song skip', () => {
+  const news = {
+    song: 'Top headlines',
+    artist: null,
+    provider: 'Flash Briefing',
+  };
+  assert.equal(isMusicPlayerContent(news), false);
+  assert.equal(isMusicPlayerContent(news, { explicitSongSkip: true }), true);
+  assert.equal(
+    isMusicPlayerContent({
+      song: 'Chapter 3',
+      artist: 'Author',
+      provider: 'Audible',
+    }),
+    false,
+  );
+  assert.equal(
+    isMusicPlayerContent({
+      song: 'Morning update',
+      artist: null,
+      provider: 'NPR',
+    }),
+    false,
+  );
+  // Title alone without artist/provider is not enough for bare "next".
+  assert.equal(isMusicPlayerContent({ song: 'Something', artist: null, provider: null }), false);
+});
+
 test('normalizePlayerInfo extracts song artist album and art', () => {
   const info = normalizePlayerInfo({
     infoText: { title: 'Song', subText1: 'Artist', subText2: 'Album' },
@@ -48,4 +134,63 @@ test('normalizePlayerInfo extracts song artist album and art', () => {
   assert.equal(info.album, 'Album');
   assert.equal(info.artUrl, 'https://example.com/cover.jpg');
   assert.equal(info.device, 'Kitchen Echo');
+});
+
+test('fetchNowPlayingAfterSkip returns the new title once it changes', async () => {
+  const bodies = [
+    {
+      playerInfo: {
+        infoText: { title: 'Old Song', subText1: 'A' },
+        state: 'PLAYING',
+        provider: { providerDisplayName: 'Amazon Music' },
+      },
+    },
+    {
+      playerInfo: {
+        infoText: { title: 'Old Song', subText1: 'A' },
+        state: 'PLAYING',
+        provider: { providerDisplayName: 'Amazon Music' },
+      },
+    },
+    {
+      playerInfo: {
+        infoText: { title: 'New Song', subText1: 'B' },
+        state: 'PLAYING',
+        provider: { providerDisplayName: 'Amazon Music' },
+      },
+    },
+  ];
+  let i = 0;
+  const alexa = {
+    getPlayerInfo(_id, cb) {
+      cb(null, bodies[Math.min(i, bodies.length - 1)]);
+      i += 1;
+    },
+  };
+
+  const result = await fetchNowPlayingAfterSkip(alexa, 'serial', 'Kitchen', {
+    attempts: 5,
+    delayMs: 1,
+  });
+  assert.equal(result.song, 'New Song');
+  assert.equal(result.artist, 'B');
+});
+
+test('fetchNowPlayingAfterSkip falls back to settled lastSeen when title never changes', async () => {
+  const alexa = {
+    getPlayerInfo(_id, cb) {
+      cb(null, {
+        playerInfo: {
+          infoText: { title: 'Same Song', subText1: 'Artist' },
+          state: 'PLAYING',
+          provider: { providerDisplayName: 'Spotify' },
+        },
+      });
+    },
+  };
+  const result = await fetchNowPlayingAfterSkip(alexa, 'serial', 'Kitchen', {
+    attempts: 3,
+    delayMs: 1,
+  });
+  assert.equal(result.song, 'Same Song');
 });

@@ -12,6 +12,7 @@ import socket
 import threading
 
 from src.display_identity import build_announce_payload
+from src.lan_crypto import encode_outbound
 
 ANNOUNCE_INTERVAL_SEC = 5 * 60
 DEFAULT_DISCOVERY_PORT = 47833
@@ -61,7 +62,8 @@ class DisplayAnnouncer:
             self.remember_bridge_host(bridge_hint)
 
         payload = build_announce_payload(self.config)
-        body = json.dumps(payload).encode("utf-8")
+        wire = encode_outbound(payload, self.config.get("udpSecret") or "")
+        body = json.dumps(wire, separators=(",", ":")).encode("utf-8")
         targets = set(self._bridge_hosts)
         # Always try broadcast as a fallback (works on some LANs).
         targets.add("255.255.255.255")

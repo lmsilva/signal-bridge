@@ -117,18 +117,20 @@ body {
 }
 
 .btn-icon {
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  /* Icon-only buttons: no flex gap (would pad between anonymous text nodes). */
+  gap: 0;
 }
 
 .btn-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 
 .display-bar-hint {
@@ -360,7 +362,10 @@ body {
 .btn:active { transform: scale(0.97); }
 .btn[disabled] { opacity: 0.5; pointer-events: none; }
 
-.btn-svg { width: 20px; height: 20px; }
+.btn-svg { width: 24px; height: 24px; }
+
+/* Keep label + count as one flex child so .btn gap doesn't become "Delete ( 0 )". */
+.btn-label { display: inline; }
 
 .btn-accent { background: var(--accent); color: var(--accent-ink); }
 .btn-accent:active { background: var(--accent-press); }

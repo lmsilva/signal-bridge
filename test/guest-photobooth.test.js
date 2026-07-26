@@ -2,18 +2,57 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   matchesGuestPhotoboothQuery,
+  matchesGuestSnapsSlideshowQuery,
+  photosToSlideshowEntries,
   resolveGuestPhotoboothSettings,
   defaultGuestPhotoboothUrl,
 } = require('../src/guest-photobooth');
 const { buildGuestPhotoboothPayload, buildWifiQrContent } = require('../src/udp-payload');
 const { createVoiceQueryParser } = require('../src/voice-query-parser');
 
-test('matches guest photobooth voice phrases', () => {
+test('matches guest snaps and legacy photobooth voice phrases', () => {
+  assert.equal(matchesGuestPhotoboothQuery('open guest snaps', ''), true);
+  assert.equal(matchesGuestPhotoboothQuery('guest snaps', ''), true);
+  assert.equal(matchesGuestPhotoboothQuery('show the guest snaps', ''), true);
   assert.equal(matchesGuestPhotoboothQuery('guest photobooth', ''), true);
   assert.equal(matchesGuestPhotoboothQuery('guest photo booth', ''), true);
-  assert.equal(matchesGuestPhotoboothQuery('show the guest photo booth', ''), true);
-  assert.equal(matchesGuestPhotoboothQuery('open guest photo-booth', ''), true);
   assert.equal(matchesGuestPhotoboothQuery("what's the weather", ''), false);
+});
+
+test('matches guest snaps slideshow phrases and not the dual-QR welcome', () => {
+  assert.equal(matchesGuestSnapsSlideshowQuery('slideshow guest snaps', ''), true);
+  assert.equal(matchesGuestSnapsSlideshowQuery('guest snaps slideshow', ''), true);
+  assert.equal(matchesGuestSnapsSlideshowQuery('show guest snaps slideshow', ''), true);
+  assert.equal(matchesGuestSnapsSlideshowQuery('slideshow of the guest snaps', ''), true);
+  assert.equal(matchesGuestSnapsSlideshowQuery('open guest snaps', ''), false);
+  assert.equal(matchesGuestSnapsSlideshowQuery("what's the weather", ''), false);
+  // Must not route slideshow phrasing to the dual-QR welcome.
+  assert.equal(matchesGuestPhotoboothQuery('slideshow guest snaps', ''), false);
+  assert.equal(matchesGuestPhotoboothQuery('guest snaps slideshow', ''), false);
+});
+
+test('photosToSlideshowEntries builds absolute URLs from cache list paths', () => {
+  const entries = photosToSlideshowEntries(
+    [
+      { path: '/qr-images/abc.jpg', createdAt: '2026-07-26T12:00:00.000Z' },
+      { path: 'qr-images/def.png', createdAt: '2026-07-26T11:00:00.000Z' },
+    ],
+    { proxyOwnIp: '192.168.1.50', webServer: { port: 47810, https: true } },
+  );
+  assert.deepEqual(entries, [
+    {
+      url: 'https://192.168.1.50:47810/qr-images/abc.jpg',
+      uploadedAt: '2026-07-26T12:00:00.000Z',
+    },
+    {
+      url: 'https://192.168.1.50:47810/qr-images/def.png',
+      uploadedAt: '2026-07-26T11:00:00.000Z',
+    },
+  ]);
+  assert.deepEqual(
+    photosToSlideshowEntries([{ path: '/qr-images/x.jpg' }], { proxyOwnIp: '127.0.0.1' }),
+    [],
+  );
 });
 
 test('voice query parser returns guest-photobooth with all-displays target', () => {
@@ -21,12 +60,26 @@ test('voice query parser returns guest-photobooth with all-displays target', () 
   const event = parser.parse({
     creationTimestamp: Date.now(),
     name: 'Kitchen Echo',
-    description: { summary: 'guest photobooth' },
+    description: { summary: 'open guest snaps' },
     alexaResponse: '',
     data: { recordKey: 'guest-booth-1' },
   });
   assert.equal(event?.kind, 'guest-photobooth');
   assert.equal(event?.trigger, 'guest-photobooth-query');
+  assert.equal(event?.targetId, '*');
+});
+
+test('voice query parser returns photo-slideshow for slideshow guest snaps', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Kitchen Echo',
+    description: { summary: 'slideshow guest snaps' },
+    alexaResponse: '',
+    data: { recordKey: 'guest-slides-1' },
+  });
+  assert.equal(event?.kind, 'photo-slideshow');
+  assert.equal(event?.trigger, 'guest-snaps-slideshow-query');
   assert.equal(event?.targetId, '*');
 });
 
@@ -123,16 +176,17 @@ test('buildGuestPhotoboothPayload includes wifi + booth QR content', () => {
     configured: true,
   };
   const payload = buildGuestPhotoboothPayload(
-    { device: 'Kitchen', query: 'guest photobooth', trigger: 'guest-photobooth-query' },
+    { device: 'Kitchen', query: 'open guest snaps', trigger: 'guest-photobooth-query' },
     {},
     settings,
   );
   assert.equal(payload.type, 'guest.photobooth');
   assert.equal(payload.displaySeconds, 180);
+  assert.equal(payload.guestPhotobooth.title, 'Guest Snaps');
   assert.equal(payload.guestPhotobooth.wifi.content, buildWifiQrContent({ ssid: 'Home', password: 'pw' }));
   assert.equal(payload.guestPhotobooth.booth.content, 'https://192.168.1.50:47810/');
-  assert.match(payload.guestPhotobooth.booth.hint, /Already connected/i);
-  assert.match(payload.guestPhotobooth.wifi.hint, /home network/i);
+  assert.match(payload.guestPhotobooth.booth.hint, /Already on Wi/i);
+  assert.match(payload.guestPhotobooth.wifi.hint, /Scan to connect/i);
 });
 
 test('buildGuestPhotoboothPayload rejects incomplete settings', () => {

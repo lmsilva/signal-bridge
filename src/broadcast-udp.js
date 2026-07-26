@@ -1,4 +1,5 @@
 const dgram = require('dgram');
+const { encodeOutbound, decodeInbound, isEnabled } = require('./lan-crypto');
 
 const DEFAULT_PORT = 47832;
 const DEFAULT_DISCOVERY_PORT = 47833;
@@ -17,6 +18,8 @@ function createUdpBroadcaster(config, log, { onMessage } = {}) {
     targets: Array.isArray(config.udpBroadcast?.targets) ? config.udpBroadcast.targets : [],
     defaultDisplaySeconds: Number(config.udpBroadcast?.defaultDisplaySeconds || 120),
   };
+  const lanSecret = String(config.lanUdpSecret || '').trim();
+  let lastDecryptWarnAt = 0;
 
   let sendSocket = null;
   let discoverySocket = null;
@@ -24,17 +27,24 @@ function createUdpBroadcaster(config, log, { onMessage } = {}) {
   let startPromise = null;
   let listeningForAnnounces = false;
 
+  function warnDecryptOnce(reason) {
+    const now = Date.now();
+    if (now - lastDecryptWarnAt < 30_000) {
+      return;
+    }
+    lastDecryptWarnAt = now;
+    log.warn(`UDP inbound dropped (${reason}) — check LAN_UDP_SECRET matches the display client udpSecret`);
+  }
+
   function handleInbound(msg, rinfo) {
     if (typeof onMessage !== 'function') {
       return;
     }
-    let payload = null;
-    try {
-      payload = JSON.parse(msg.toString('utf8'));
-    } catch {
-      return;
-    }
-    if (!payload || typeof payload !== 'object') {
+    const payload = decodeInbound(msg, lanSecret);
+    if (!payload) {
+      if (isEnabled(lanSecret)) {
+        warnDecryptOnce('decrypt failed or plaintext while encryption required');
+      }
       return;
     }
     try {
@@ -129,7 +139,8 @@ function createUdpBroadcaster(config, log, { onMessage } = {}) {
 
     try {
       const sock = await ensureSendSocket();
-      const body = Buffer.from(JSON.stringify(payload), 'utf8');
+      const wire = encodeOutbound(payload, lanSecret);
+      const body = Buffer.from(JSON.stringify(wire), 'utf8');
       const unicastHost = options.host ? String(options.host).trim() : '';
 
       const deliveries = unicastHost
@@ -165,6 +176,14 @@ function createUdpBroadcaster(config, log, { onMessage } = {}) {
     }
 
     startPromise = (async () => {
+      if (isEnabled(lanSecret)) {
+        log.info('UDP LAN encryption enabled (AES-256-GCM shared secret)');
+      } else {
+        log.warn(
+          'UDP LAN encryption disabled — set LAN_UDP_SECRET in .env '
+          + '(and matching udpSecret on display clients) to encrypt overlays and remote input',
+        );
+      }
       await ensureSendSocket();
       try {
         await startDiscoverySocket();

@@ -624,20 +624,20 @@ function buildGuestPhotoboothPayload(event, config, settings) {
     trigger: event?.trigger || 'guest-photobooth-query',
     query: event?.query || null,
     guestPhotobooth: {
-      title: 'Guest Photo Booth',
+      title: 'Guest Snaps',
       subtitle: 'Two quick scans to share a photo',
       wifi: {
         content: wifiContent,
         ssid: String(settings.ssid || '').trim(),
-        stepLabel: 'Step 1',
-        heading: 'Connect to Wi‑Fi',
-        hint: 'Scan to join our home network',
+        stepLabel: '1',
+        heading: 'Join Wi‑Fi',
+        hint: 'Scan to connect',
       },
       booth: {
         content: boothUrl,
-        stepLabel: 'Step 2',
-        heading: 'Open the photo booth',
-        hint: 'Already connected to home Wi‑Fi? Scan to access the guest photo booth',
+        stepLabel: '2',
+        heading: 'Open Guest Snaps',
+        hint: 'Already on Wi‑Fi? Scan here',
       },
     },
   };

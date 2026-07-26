@@ -14,6 +14,9 @@ DEFAULTS = {
     "bridgeHosts": ["192.168.1.10"],
     # Dedicated announce port on the bridge (overlay traffic stays on listenPort).
     "discoveryPort": 47833,
+    # Shared secret for AES-GCM UDP with the bridge (must match LAN_UDP_SECRET).
+    # Empty = plaintext (dev only). Set the same long random string on both sides.
+    "udpSecret": "",
     "maxDisplaySeconds": 120,
     "defaultDisplaySeconds": 120,
     "fadeInMs": 400,

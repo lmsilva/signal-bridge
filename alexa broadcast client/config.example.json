@@ -4,6 +4,7 @@
   "displayName": "Living Room Display",
   "bridgeHosts": ["192.168.1.10"],
   "discoveryPort": 47833,
+  "udpSecret": "",
   "defaultDisplaySeconds": 60,
   "maxDisplaySeconds": 60,
   "webOverlayOpacity": 0.88,

@@ -465,14 +465,14 @@ function createWebServer({
     if (!settings.configured) {
       sendJson(res, 503, {
         ok: false,
-        error: 'Guest photo booth is not configured — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL in .env (or data/guest-photobooth.json)',
+        error: 'Guest Snaps is not configured — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL in .env (or data/guest-photobooth.json)',
       });
       return;
     }
     // Always all displays (same as the Alexa path).
     handleVoiceQueryPush(
       'guest-photobooth',
-      'guest photobooth',
+      'open guest snaps',
       'web-api',
       { ...(body || {}), targetId: '*' },
       res,

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (guest photobooth dual-QR)
+**Last updated:** 2026-07-26 (LAN UDP AES-GCM)
 
 ---
 
@@ -58,15 +58,16 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/vendor/alexa-cookie-proxy.js` | Patched login proxy (font fixes, static assets, UI CSS injection) |
 | `src/port-utils.js` | Pre-check port 3456 before auth proxy bind |
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
-| `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`) |
+| `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set |
+| `src/lan-crypto.js` | Shared-secret **AES-256-GCM** for bridge↔display UDP (`LAN_UDP_SECRET` / `udpBroadcast.sharedSecret`); protocol v3 envelope `{v,alg,n,c}`; SHA-256 key derive; ±120s timestamp freshness |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth voice queries from history |
-| `src/guest-photobooth.js` | Match "guest photobooth" utterances; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
+| `src/guest-photobooth.js` | Match "open guest snaps" (dual-QR welcome) + "slideshow guest snaps" (Shared Photo Slideshow) + legacy "guest photobooth"; `photosToSlideshowEntries` builds absolute `/qr-images/…` URLs; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
 | `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, mirrors `weather-location.js`) |
 | `src/route-fetch.js` | Free/no-key route data: OSRM driving route (`fetchDrivingRoute`) with great-circle "flight" fallback (`greatCircleEstimate`) when no drivable route exists |
-| `src/music-info.js` | Detect "play \<song\>" commands and "what song is playing" queries (`matchesMusicQuery`/`matchesNowPlayingQuery` — normalizes apostrophe-less ASR like `whats playing`, falls back to spoken now-playing answers when the transcript is empty); fetch/normalize now-playing info (`fetchNowPlaying` retries until Amazon's player-info API reports `PLAYING` + a title); `emptyNowPlaying` for the explicit empty card when retries still find nothing |
+| `src/music-info.js` | Detect "play \<song\>" (`matchesMusicQuery`), "what song is playing" (`matchesNowPlayingQuery` — apostrophe-less ASR + spoken-answer fallback), and "next"/"skip" (`matchesMusicSkipQuery`); `fetchNowPlaying` / `fetchNowPlayingAfterSkip` (prefer title change after skip); `isMusicPlayerContent` gates out flash briefing/news/Audible so bare "next" does not open the song card; `emptyNowPlaying` for failed what's-playing queries |
 | `src/indoor-locations.js` | Thermostat/sensor names + alias resolution (bedroom echo → Room 7, etc.) |
 | `src/indoor-reading-parse.js` | Parse spoken indoor temp/humidity; comfort bands (<68 cold, >74 hot) |
 | `src/indoor-temperature.js` | Indoor vs outdoor routing; location phrase extraction |
@@ -274,6 +275,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `amazonPage` / `acceptLanguage` | Region (e.g. `amazon.com`, `en-US`) |
 | `sessionFile` | Default `data/alexa-session.json` |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP overlays/commands to Windows clients (`:47832`) |
+| `LAN_UDP_SECRET` (`.env`) / `udpBroadcast.sharedSecret` | Shared secret for AES-256-GCM on UDP; must match each client's `udpSecret`. Empty = plaintext (warned at startup) |
 | `udpBroadcast.discoveryPort` | Listen for `display.announce` (default **47833**) |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
 | `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/teslaBatteryQueries/fetchWeather/fetchAirQuality/routeQueries` | Voice capture toggles |
@@ -302,7 +304,11 @@ Secrets and runtime files live under `data/` and are **not committed**.
 
 ---
 
-## UDP payload (v2)
+## UDP payload (v2 inner / v3 wire)
+
+When `LAN_UDP_SECRET` is set, datagrams are a **v3 envelope** (`aes-256-gcm`); the decrypted inner JSON is still the v2 payload below. Without a secret, v2 JSON is sent plaintext (dev only).
+
+## UDP payload types (v2)
 
 All payloads include `version: 2` and a `type` field. **Broadcast payloads keep `message`** so existing clients still work until updated.
 
@@ -327,8 +333,8 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `input.pointer` / `input.key` | Control tab — relative mouse / key; requires unlocked `target.id` + `controlToken` |
 | `input.text` | Control tab "Send Text" card — `text.{value, pressEnter}`; client types the whole string in one shot (`pynput` `Controller.type()`, Unicode-safe) instead of one keystroke per key event; requires unlocked `target.id` + `controlToken` |
 | `qr.display` | Push tab QR generator — `qr.{qrType: "url"\|"wifi", content, label}`; client renders the QR bitmap locally (`qrcode` lib) from `content` (a URL, or a `WIFI:T:...;;` string built by `buildWifiQrContent`) |
-| `guest.photobooth` | Alexa "guest photobooth" — dual-QR welcome on **all displays**: `guestPhotobooth.{wifi,booth}` with Wi‑Fi `WIFI:T:…` content (from `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD`) and the public booth URL (`GUEST_PHOTOBOOTH_URL` or `https://<PROXY_OWN_IP>:47810/`); client `GuestPhotoboothPanel` stacks (portrait) or pairs (landscape) the two scan steps |
-| `photo.slideshow` | Push tab "Shared Photo Slideshow" tile — `slideshow.{photos[], secondsPerPhoto}`; `photos` is every photo in the QR image cache as `{url, uploadedAt}` (photos never expire — see `qr-image-cache.js`), ordered by the bridge per the persisted Settings-tab preference (`recent`\|`oldest`\|`random`); `displaySeconds` = `photos.length * secondsPerPhoto` so the whole set gets shown once. Client plays through the list once (does not loop), shows "Photo x of y" + a "Shared …" date label + a small corner QR linking to that photo, and suppresses the usual "Dismisses in…" countdown text (the underlying auto-dismiss timer still fires when the pass completes) — interrupted immediately if any new UDP payload arrives |
+| `guest.photobooth` | Alexa **"open guest snaps"** (legacy: guest photobooth) — dual-QR **Guest Snaps** welcome on **all displays**: `guestPhotobooth.{wifi,booth}` with Wi‑Fi `WIFI:T:…` + booth URL; client owns chrome (no duplicate shell title), portrait stack with a dedicated "then" band between cards |
+| `photo.slideshow` | Alexa **"slideshow guest snaps"** (also "guest snaps slideshow") **or** Push tab "Shared Photo Slideshow" — `slideshow.{photos[], secondsPerPhoto}`; `photos` is every photo in the QR image cache as `{url, uploadedAt}` (photos never expire — see `qr-image-cache.js`), ordered by the bridge per the persisted Settings-tab preference (`recent`\|`oldest`\|`random`); `displaySeconds` = `photos.length * secondsPerPhoto` so the whole set gets shown once. Voice path fans out to **all displays**. Client plays through the list once (does not loop), shows "Photo x of y" + a "Shared …" date label + a small corner QR linking to that photo, and suppresses the usual "Dismisses in…" countdown text (the underlying auto-dismiss timer still fires when the pass completes) — interrupted immediately if any new UDP payload arrives |
 | `route-planner.query` | "How far is Moab from here" / "distance between X and Y" / "how long to drive to X" / "directions to X" — `origin`/`destination` (`{name,latitude,longitude}`), `mode` (`"driving"` \| `"flight"`), `distanceMiles`, `durationMin`, `route.geometry` (simplified `[[lat,lon],...]` polyline, or just the two endpoints for flight mode). Bridge only geocodes both places + calls OSRM (fast, ~1-2 API calls) — map tiles, place facts and weather are fetched **client-side** afterwards so the fast facts show immediately while the rest fills in |
 
 Optional `target: { id }` or `{ all: true }` on outbound commands for unicast vs broadcast delivery (`display-registry.resolveDelivery`).
@@ -475,7 +481,11 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
-- 2026-07-26: **Alexa "guest photobooth" dual-QR welcome** — voice phrase `guest photobooth` / `guest photo booth` pushes `guest.photobooth` to **all displays** (Wi‑Fi QR + booth URL). Settings from `.env` / mounted `.env` / `data/guest-photobooth.json`; admin smoke via `POST /api/push/guest-photobooth`. Needs bridge `./recreate.sh` after deploy and a client build that includes `GuestPhotoboothPanel` (older portables ignore the new UDP type).
+- 2026-07-26: **LAN UDP AES-GCM encryption** — optional shared secret (`.env` `LAN_UDP_SECRET`, client `udpSecret`) encrypts all bridge↔display UDP (`:47832` / `:47833`) with AES-256-GCM (v3 envelope). No handshake; pointer stays one datagram. Empty secret keeps plaintext for local smoke. Deploy: set the same secret both sides, `./recreate.sh`, rebuild/redeploy portable client (`cryptography` dep).
+- 2026-07-26: **Alexa "slideshow guest snaps"** — voice command pushes Shared Photo Slideshow (`photo.slideshow`) of every stored QR-cache photo to **all displays** (order + seconds-per-photo from Settings). Distinct from **"open guest snaps"** (dual-QR welcome). Needs `PROXY_OWN_IP` (or booth URL host) so photo URLs are absolute. Deploy: bridge `./recreate.sh`.
+- 2026-07-26: **Auto Now Playing after next/skip** — voice `next` / `skip` / `next song` etc. (`music-skip`) fetch player-info (prefer title change), then push `music.playing`. Bare next/skip is gated by `isMusicPlayerContent` so flash briefing/news/Audible advances stay silent; explicit "… song/track" still shows. No empty card on skip failure. Deploy: bridge `./recreate.sh`.
+- 2026-07-26: **Guest Snaps rebrand + layout polish** — primary Alexa phrase is **open guest snaps** (photobooth is legacy; Alexa steals bare "photobooth"). Overlay title once, no nested outer frame, dedicated "then" band so text never overlaps; Smart Home on/off portrait stack redistributes empty space into gaps under the button. Web booth header says Guest Snaps.
+- 2026-07-26: **Alexa Guest Snaps dual-QR welcome** — pushes `guest.photobooth` to **all displays** (Wi‑Fi QR + booth URL). Settings from `.env` / mounted `.env` / `data/guest-photobooth.json`; admin smoke via `POST /api/push/guest-photobooth`. Needs bridge `./recreate.sh` after deploy and a client build that includes `GuestPhotoboothPanel`.
 - 2026-07-26: **Guest photo booth + password-protected `/admin`** — public `/` is a phone photo booth (display picker + camera/upload → photo QR push); the full Signal SPA moved to `/admin/` behind `ADMIN_PASSWORD` (HTTP-only session cookie, login at `/admin/login.html`). Non-photo QR push and all other APIs require admin; photo upload/push + displays + `/qr-images/*` stay public.
 - 2026-07-26: **Slideshow time-per-photo setting** — Settings tab gains a **Time per photo** slider (5–60s) beside Playback order; persisted in `data/slideshow-settings.json` as `secondsPerPhoto` and applied to `photo.slideshow` UDP pushes (`displaySeconds` = count × seconds). `GET`/`POST /api/slideshow/settings` now return/accept both `order` and `secondsPerPhoto`.
 - 2026-07-26: **Route Planner / weather geocode city+state** — Open-Meteo often returns nothing for phrases like "Las Vegas Nevada" / "Saratoga Springs Utah", so voice distance queries aborted silently before UDP. `geocodeLocation` now parses a trailing US state (full name or abbrev), searches the city with `count=10`, and picks the hit whose `admin1` matches (so Utah wins over New York for Saratoga Springs). Placeholder names `Home`/`here`/`local` are never geocoded.
