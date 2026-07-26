@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 .env
 *.log
 
@@ -6,7 +6,7 @@ node_modules/
 config.json
 alexa broadcast client/config.json
 
-# Bridge runtime data — sessions, caches, device inventories, certs, logs.
+# Bridge runtime data â€” sessions, caches, device inventories, certs, logs.
 # Keep the empty directory in git via data/.gitkeep only.
 data/**
 !data/.gitkeep
@@ -14,12 +14,11 @@ broadcast.txt
 
 # Windows broadcast client
 alexa broadcast client/.venv/
-# Keep packaged deploy artifacts in git; ignore the unpacked PyInstaller tree
-# (recreated by build_portable.bat) and any other dist leftovers.
+# Keep Deploy bat / send-test.exe in git; ignore unpacked PyInstaller tree and the portable zip.
+# Portable zip is NOT tracked (built on demand; may embed local config).
 alexa broadcast client/dist/**
 !alexa broadcast client/dist/Deploy Alexa Broadcast Client.bat
 !alexa broadcast client/dist/send-test.exe
-!alexa broadcast client/dist/alexa broadcast client.zip
 alexa broadcast client/build/
 alexa broadcast client/map-tiles/
 alexa broadcast client/map-errors.log
