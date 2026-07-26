@@ -73,6 +73,7 @@ a = Analysis(
         'src.listener',
         'src.main',
         'src.message_scroll',
+        'src.text_marquee',
         'src.overlay',
         'src.paths',
         'src.payload_utils',

@@ -18,7 +18,9 @@ const { createVoiceEventDedup } = require('./voice-event-dedup');
 const { shouldMarkActivityProcessed } = require('./voice-event-gate');
 const { createVoiceQueryParser } = require('./voice-query-parser');
 const { extractWeatherLocation } = require('./weather-location');
-const { fetchWeatherForecast } = require('./weather-fetch');
+const { fetchWeatherForecast, geocodeLocation } = require('./weather-fetch');
+const { extractRouteLocations } = require('./route-query');
+const { fetchDrivingRoute, greatCircleEstimate } = require('./route-fetch');
 const { createEventsLog } = require('./events-log');
 const { createTimerSync } = require('./timer-sync');
 const { createAlarmSync } = require('./alarm-sync');
@@ -36,6 +38,7 @@ const {
   buildNotificationsPayload,
   buildSmartHomePayload,
   buildProcessingAckPayload,
+  buildRoutePlannerPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
 } = require('./udp-payload');
@@ -48,7 +51,7 @@ const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { loadAirQualityCache, saveAirQualityCache } = require('./air-quality-cache');
 const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
 const { buildNotificationsReading, hasNotificationContent } = require('./alexa-notifications');
-const { fetchNowPlaying } = require('./music-info');
+const { fetchNowPlaying, emptyNowPlaying } = require('./music-info');
 const { resolveDeviceType } = require('./smart-home-command');
 const { listSmarthomeEndpoints } = require('./smarthome-devices');
 const { enrichAirQualityReading, enrichAllMonitors } = require('./air-quality-fetch');
@@ -124,6 +127,7 @@ function createListener({ config, log }) {
     teslaDashboardQueries: config.voiceEvents?.teslaDashboardQueries !== false,
     vivintAlarmQueries: config.voiceEvents?.vivintAlarmQueries !== false,
     notificationQueries: config.voiceEvents?.notificationQueries !== false,
+    routeQueries: config.voiceEvents?.routeQueries !== false,
   };
 
   function persistBridgeState() {
@@ -214,6 +218,7 @@ function createListener({ config, log }) {
         if (payload) {
           const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
           sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+          voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
           log.info(`Now-playing query resolved on retry for ${event.device}`);
         }
         return;
@@ -221,6 +226,18 @@ function createListener({ config, log }) {
       if (attempt < 2) {
         scheduleMusicQueryRetry(event, attempt + 1);
       } else {
+        // Don't leave the display blank — previous behavior silently
+        // returned after retries, so "what's playing" with a slow/empty
+        // player-info API looked completely broken. Emit an explicit
+        // empty now-playing card instead.
+        const payload = buildMusicPayload(event, config, {
+          nowPlaying: emptyNowPlaying(event.device),
+        });
+        if (payload) {
+          const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
+          sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+          voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
+        }
         log.info(`Now-playing query gave up after retries for ${event.device}`, { query: event.query });
       }
     }, delayMs);
@@ -349,6 +366,10 @@ function createListener({ config, log }) {
     }
 
     if (event.kind === 'alexa-notifications' && !voiceSettings.notificationQueries) {
+      return;
+    }
+
+    if (event.kind === 'route' && !voiceSettings.routeQueries) {
       return;
     }
 
@@ -672,6 +693,60 @@ function createListener({ config, log }) {
         location: weather?.location || location,
         weather,
       });
+    } else if (event.kind === 'route') {
+      const locations = extractRouteLocations(
+        event.query,
+        config.voiceEvents?.defaultLocation,
+        event.spokenResponse,
+      );
+      if (!locations) {
+        return;
+      }
+      let { origin, destination } = locations;
+      try {
+        if (origin.scope === 'named' && (origin.latitude == null || origin.longitude == null)) {
+          const geocoded = await geocodeLocation(origin.query);
+          if (!geocoded) {
+            log.warn('Route planner could not geocode origin', { query: origin.query });
+            return;
+          }
+          origin = { ...origin, ...geocoded };
+        }
+        if (destination.scope === 'named' && (destination.latitude == null || destination.longitude == null)) {
+          const geocoded = await geocodeLocation(destination.query);
+          if (!geocoded) {
+            log.warn('Route planner could not geocode destination', { query: destination.query });
+            return;
+          }
+          destination = { ...destination, ...geocoded };
+        }
+      } catch (error) {
+        log.warn('Route planner geocoding failed', error.message || error);
+        return;
+      }
+
+      let mode = 'driving';
+      let route;
+      try {
+        route = await fetchDrivingRoute(origin, destination);
+      } catch (error) {
+        route = { ok: false };
+      }
+      if (!route.ok) {
+        mode = 'flight';
+        route = greatCircleEstimate(origin, destination);
+        if (!route) {
+          log.warn('Route planner could not compute a flight fallback', { origin, destination });
+          return;
+        }
+      }
+
+      payload = buildRoutePlannerPayload(event, config, {
+        origin, destination, route, mode,
+      });
+      if (!payload) {
+        return;
+      }
     } else {
       return;
     }
@@ -695,6 +770,12 @@ function createListener({ config, log }) {
     }
     if (event.kind === 'alexa-notifications') {
       logMeta.count = payload?.notifications?.items?.length ?? 0;
+    }
+    if (event.kind === 'route') {
+      logMeta.mode = payload?.mode ?? null;
+      logMeta.distanceMiles = payload?.distanceMiles ?? null;
+      logMeta.origin = payload?.origin?.name ?? null;
+      logMeta.destination = payload?.destination?.name ?? null;
     }
     log.info(`Voice event captured (${payload.type}) from ${event.device}`, logMeta);
   }

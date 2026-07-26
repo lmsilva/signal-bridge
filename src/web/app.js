@@ -510,6 +510,15 @@
   $('btn-push-shopping-list')?.addEventListener('click', (e) => pushSimple('/api/push/shopping-list', 'Shopping list', e.currentTarget));
   $('btn-push-timers')?.addEventListener('click', (e) => pushSimple('/api/push/timers', 'Active timers', e.currentTarget));
 
+  // Resolve cached photos to the enriched {url, uploadedAt} shape the bridge
+  // uses to order the slideshow per the Settings tab's persisted preference.
+  function photosToSlideshowEntries(photos) {
+    return (photos || []).map((p) => ({
+      url: new URL(p.path, document.baseURI).href,
+      uploadedAt: p.createdAt,
+    }));
+  }
+
   $('btn-push-photo-slideshow')?.addEventListener('click', async (e) => {
     const button = e.currentTarget;
     button.classList.add('busy');
@@ -519,9 +528,9 @@
         toast('No shared photos yet — share one via QR Code → Photo first', 'bad');
         return;
       }
-      const absolutePhotos = photos.map((p) => new URL(p.path, document.baseURI).href);
-      await apiPost('/api/push/photo-slideshow', withTarget({ photos: absolutePhotos }));
-      toast(`Slideshow sent (${absolutePhotos.length} photo${absolutePhotos.length === 1 ? '' : 's'})`, 'good');
+      const entries = photosToSlideshowEntries(photos);
+      await apiPost('/api/push/photo-slideshow', withTarget({ photos: entries }));
+      toast(`Slideshow sent (${entries.length} photo${entries.length === 1 ? '' : 's'})`, 'good');
     } catch (error) {
       toast(error.message, 'bad');
     } finally {
@@ -843,8 +852,8 @@
 
   // -------------------------------------------------------- QR generation
 
-  const QR_MODES = ['url', 'wifi', 'image'];
-  let qrGenerateMode = 'url';
+  const QR_MODES = ['image', 'url', 'wifi'];
+  let qrGenerateMode = 'image';
   let qrSelectedPhotoDataUrl = null;
 
   function setQrGenerateMode(mode) {
@@ -978,8 +987,10 @@
       }
       const upload = await apiPost('/api/qr/image-upload', { imageDataUrl: qrSelectedPhotoDataUrl });
       const absoluteUrl = new URL(upload.path, document.baseURI).href;
-      await apiPost('/api/qr/push', withTarget({ mode: 'url', url: absoluteUrl, label: 'Shared photo' }));
-      toast('Photo QR code sent to display', 'good');
+      await apiPost('/api/qr/push', withTarget({
+        mode: 'photo', url: absoluteUrl, label: 'Scan to save this photo',
+      }));
+      toast('Photo sent to display', 'good');
       resetPhotoPicker();
     } catch (error) {
       toast(error.message || 'Could not generate the QR code', 'bad');
@@ -987,6 +998,395 @@
       button.disabled = false;
     }
   });
+
+  // -------------------------------------------------- Slideshow Manager
+
+  let slideshowPhotos = [];
+  let slideshowSelecting = false;
+  const slideshowSelected = new Set();
+  let lightboxToken = null;
+  let lightboxIndex = -1;
+  let pendingDeleteTokens = [];
+
+  function formatUploadedAt(iso) {
+    if (!iso) {
+      return '';
+    }
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  }
+
+  function updateSelectionUi() {
+    document.querySelectorAll('#photo-grid .photo-thumb').forEach((cell) => {
+      cell.classList.toggle('selected', slideshowSelected.has(cell.dataset.token));
+    });
+    $('slideshow-selected-count').textContent = String(slideshowSelected.size);
+    $('btn-slideshow-delete-selected').disabled = slideshowSelected.size === 0;
+    const allSelected = slideshowPhotos.length > 0 && slideshowSelected.size === slideshowPhotos.length;
+    $('btn-slideshow-select-all').textContent = allSelected ? 'Unselect All' : 'Select All';
+  }
+
+  function toggleSelected(token) {
+    if (slideshowSelected.has(token)) {
+      slideshowSelected.delete(token);
+    } else {
+      slideshowSelected.add(token);
+    }
+    updateSelectionUi();
+  }
+
+  function lightboxPhotoAt(index) {
+    if (index < 0 || index >= slideshowPhotos.length) {
+      return null;
+    }
+    return slideshowPhotos[index];
+  }
+
+  function showLightboxPhoto(index) {
+    const photo = lightboxPhotoAt(index);
+    if (!photo) {
+      return;
+    }
+    lightboxIndex = index;
+    lightboxToken = photo.token;
+    $('lightbox-img').src = new URL(photo.path, document.baseURI).href;
+    const uploaded = formatUploadedAt(photo.createdAt);
+    $('lightbox-uploaded-at').textContent = uploaded ? `Uploaded ${uploaded}` : '';
+    const counter = $('lightbox-counter');
+    if (counter) {
+      counter.textContent = slideshowPhotos.length > 1
+        ? `Photo ${index + 1} of ${slideshowPhotos.length}`
+        : '';
+    }
+    const prev = $('btn-lightbox-prev');
+    const next = $('btn-lightbox-next');
+    if (prev) {
+      prev.disabled = index <= 0;
+      prev.hidden = slideshowPhotos.length <= 1;
+    }
+    if (next) {
+      next.disabled = index >= slideshowPhotos.length - 1;
+      next.hidden = slideshowPhotos.length <= 1;
+    }
+  }
+
+  function openLightbox(photo) {
+    const index = slideshowPhotos.findIndex((p) => p.token === photo.token);
+    showLightboxPhoto(index >= 0 ? index : 0);
+    $('photo-lightbox').hidden = false;
+  }
+
+  function closeLightbox() {
+    $('photo-lightbox').hidden = true;
+    lightboxToken = null;
+    lightboxIndex = -1;
+  }
+
+  function stepLightbox(delta) {
+    if ($('photo-lightbox')?.hidden || lightboxIndex < 0) {
+      return;
+    }
+    showLightboxPhoto(lightboxIndex + delta);
+  }
+
+  function renderPhotoGrid() {
+    const grid = $('photo-grid');
+    const empty = $('photo-grid-empty');
+    grid.innerHTML = '';
+    empty.hidden = slideshowPhotos.length > 0;
+    slideshowPhotos.forEach((photo) => {
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'photo-thumb';
+      cell.classList.toggle('selecting', slideshowSelecting);
+      cell.classList.toggle('selected', slideshowSelected.has(photo.token));
+      cell.dataset.token = photo.token;
+      const img = document.createElement('img');
+      img.src = new URL(photo.path, document.baseURI).href;
+      img.loading = 'lazy';
+      img.alt = 'Shared photo';
+      cell.appendChild(img);
+      const check = document.createElement('span');
+      check.className = 'photo-thumb-check';
+      cell.appendChild(check);
+      cell.addEventListener('click', () => {
+        if (slideshowSelecting) {
+          toggleSelected(photo.token);
+        } else {
+          openLightbox(photo);
+        }
+      });
+      grid.appendChild(cell);
+    });
+  }
+
+  // Shared by the initial load, the manual refresh button, and every SSE
+  // push — one place that reconciles the in-flight selection against
+  // whatever photo list just arrived (a photo deleted from another session
+  // must fall out of `slideshowSelected` too, or "Delete (n)" could try to
+  // delete an already-gone token).
+  function applySlideshowPhotos(photos) {
+    slideshowPhotos = photos || [];
+    const tokens = new Set(slideshowPhotos.map((p) => p.token));
+    [...slideshowSelected].forEach((token) => {
+      if (!tokens.has(token)) {
+        slideshowSelected.delete(token);
+      }
+    });
+    renderPhotoGrid();
+    updateSelectionUi();
+    if (!$('photo-lightbox')?.hidden && lightboxToken) {
+      const index = slideshowPhotos.findIndex((p) => p.token === lightboxToken);
+      if (index < 0) {
+        closeLightbox();
+      } else {
+        showLightboxPhoto(index);
+      }
+    }
+  }
+
+  async function loadSlideshowPhotos() {
+    try {
+      const { photos } = await apiGet('/api/photos');
+      applySlideshowPhotos(photos);
+    } catch (error) {
+      toast(error.message || 'Could not load saved photos', 'bad');
+    }
+  }
+
+  // Live updates: any upload/delete on *any* open Slideshow Manager tab (this
+  // one included) pushes a fresh photo list here, so the camera roll never
+  // goes stale while the page is open. Falls back to the manual refresh
+  // button / next tab visit if the browser blocks or drops the connection.
+  let slideshowEvents = null;
+
+  function startSlideshowEvents() {
+    if (slideshowEvents) {
+      return;
+    }
+    try {
+      slideshowEvents = new EventSource(appUrl('/api/photos/events'));
+    } catch {
+      return;
+    }
+    slideshowEvents.addEventListener('photos', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        applySlideshowPhotos(data.photos || []);
+      } catch {
+        // ignore malformed events
+      }
+    });
+    slideshowEvents.onerror = () => {
+      // Browser will retry the connection automatically.
+    };
+  }
+
+  function setSelectingMode(on) {
+    slideshowSelecting = on;
+    if (!on) {
+      slideshowSelected.clear();
+    }
+    $('btn-slideshow-select').hidden = on;
+    $('slideshow-toolbar-selecting').hidden = !on;
+    renderPhotoGrid();
+    updateSelectionUi();
+  }
+
+  function openDeleteConfirm(tokens) {
+    pendingDeleteTokens = tokens;
+    $('photo-delete-title').textContent = tokens.length > 1
+      ? `Delete ${tokens.length} photos?`
+      : 'Delete this photo?';
+    $('photo-delete-sheet').hidden = false;
+  }
+
+  function closeDeleteConfirm() {
+    $('photo-delete-sheet').hidden = true;
+    pendingDeleteTokens = [];
+  }
+
+  $('btn-lightbox-close')?.addEventListener('click', closeLightbox);
+  $('btn-lightbox-cancel')?.addEventListener('click', closeLightbox);
+  $('btn-lightbox-prev')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stepLightbox(-1);
+  });
+  $('btn-lightbox-next')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stepLightbox(1);
+  });
+  $('photo-lightbox')?.addEventListener('click', (e) => {
+    if (e.target === $('photo-lightbox')) {
+      closeLightbox();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if ($('photo-lightbox')?.hidden) {
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      stepLightbox(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      stepLightbox(1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeLightbox();
+    }
+  });
+
+  // Swipe left/right on the lightbox image (mobile touch screens).
+  (() => {
+    const frame = $('lightbox-frame');
+    if (!frame) {
+      return;
+    }
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+    frame.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) {
+        return;
+      }
+      tracking = true;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, { passive: true });
+    frame.addEventListener('touchend', (e) => {
+      if (!tracking) {
+        return;
+      }
+      tracking = false;
+      const touch = e.changedTouches && e.changedTouches[0];
+      if (!touch) {
+        return;
+      }
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) {
+        return;
+      }
+      stepLightbox(dx < 0 ? 1 : -1);
+    }, { passive: true });
+    frame.addEventListener('touchcancel', () => {
+      tracking = false;
+    }, { passive: true });
+  })();
+
+  $('btn-lightbox-delete')?.addEventListener('click', () => {
+    if (lightboxToken) {
+      openDeleteConfirm([lightboxToken]);
+    }
+  });
+
+  $('photo-delete-cancel')?.addEventListener('click', closeDeleteConfirm);
+  $('photo-delete-sheet')?.addEventListener('click', (e) => {
+    if (e.target === $('photo-delete-sheet')) {
+      closeDeleteConfirm();
+    }
+  });
+  $('photo-delete-confirm')?.addEventListener('click', async () => {
+    const tokens = pendingDeleteTokens;
+    closeDeleteConfirm();
+    if (!tokens.length) {
+      return;
+    }
+    try {
+      await apiPost('/api/photos/delete', { tokens });
+      toast(tokens.length > 1 ? `${tokens.length} photos deleted` : 'Photo deleted', 'good');
+      if (lightboxToken && tokens.includes(lightboxToken)) {
+        closeLightbox();
+      }
+      await loadSlideshowPhotos();
+      if (slideshowSelecting && !slideshowSelected.size) {
+        setSelectingMode(false);
+      }
+    } catch (error) {
+      toast(error.message || 'Could not delete photo(s)', 'bad');
+    }
+  });
+
+  $('btn-slideshow-select')?.addEventListener('click', () => setSelectingMode(true));
+  $('btn-slideshow-cancel-select')?.addEventListener('click', () => setSelectingMode(false));
+  $('btn-slideshow-select-all')?.addEventListener('click', () => {
+    const allSelected = slideshowPhotos.length > 0 && slideshowSelected.size === slideshowPhotos.length;
+    if (allSelected) {
+      slideshowSelected.clear();
+    } else {
+      slideshowPhotos.forEach((p) => slideshowSelected.add(p.token));
+    }
+    updateSelectionUi();
+  });
+  $('btn-slideshow-delete-selected')?.addEventListener('click', () => {
+    if (slideshowSelected.size) {
+      openDeleteConfirm([...slideshowSelected]);
+    }
+  });
+
+  // Lazy-load the camera roll the first time the tab is opened, then refresh
+  // on every subsequent visit (cheap GET; photos can change from another device).
+  // The live SSE subscription also starts here (once) so tabs never opened
+  // never pay for an idle connection.
+  document.querySelector('.tab-btn[data-tab="slideshow"]')?.addEventListener('click', () => {
+    loadSlideshowPhotos();
+    startSlideshowEvents();
+  });
+
+  $('btn-slideshow-refresh')?.addEventListener('click', async () => {
+    const btn = $('btn-slideshow-refresh');
+    btn.classList.add('is-loading');
+    btn.disabled = true;
+    try {
+      await loadSlideshowPhotos();
+    } finally {
+      btn.classList.remove('is-loading');
+      btn.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------- Slideshow order setting
+
+  let slideshowOrder = 'recent';
+
+  function setSlideshowOrderUi(order) {
+    slideshowOrder = order;
+    document.querySelectorAll('#slideshow-order-tabs .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.order === order);
+    });
+  }
+
+  document.querySelectorAll('#slideshow-order-tabs .segmented-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const order = btn.dataset.order;
+      if (order === slideshowOrder) {
+        return;
+      }
+      const previous = slideshowOrder;
+      setSlideshowOrderUi(order);
+      try {
+        await apiPost('/api/slideshow/settings', { order });
+      } catch (error) {
+        setSlideshowOrderUi(previous);
+        toast(error.message || 'Could not save slideshow order', 'bad');
+      }
+    });
+  });
+
+  (async () => {
+    try {
+      const result = await apiGet('/api/slideshow/settings');
+      setSlideshowOrderUi(result.order || 'recent');
+    } catch {
+      // Keep the default UI state — a fresh bridge with no settings file yet.
+    }
+  })();
 
   // Banner when opened over plain HTTP (camera QR will not work on iOS).
   if (!isSecureForCamera()) {

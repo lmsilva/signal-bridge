@@ -34,6 +34,7 @@ const {
 const { ALL_TARGET_ID } = require('./display-registry');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
+const { createSlideshowSettings, VALID_ORDERS } = require('./slideshow-settings');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -195,6 +196,7 @@ function createWebServer({
   const staticRoot = webRoot || path.join(__dirname, 'web');
   const controlAuth = createDisplayControlAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
+  const slideshowSettings = createSlideshowSettings(config, log);
   let server = null;
   let redirectServer = null;
 
@@ -665,11 +667,8 @@ function createWebServer({
       sendJson(res, 400, { ok: false, error: result.error });
       return;
     }
-    log.info('QR photo uploaded to cache', {
-      token: result.token,
-      expiresAt: result.expiresAt,
-    });
-    sendJson(res, 200, { ok: true, path: result.path, expiresAt: result.expiresAt });
+    log.info('QR photo uploaded to cache', { token: result.token });
+    sendJson(res, 200, { ok: true, path: result.path, token: result.token, createdAt: result.createdAt });
   }
 
   function handleQrPush(body, res) {
@@ -678,15 +677,19 @@ function createWebServer({
     let content;
     let label;
 
-    if (mode === 'url') {
+    if (mode === 'url' || mode === 'photo') {
       const validation = validatePushUrl(body?.url);
       if (!validation.ok) {
         sendJson(res, 400, { ok: false, error: validation.error });
         return;
       }
-      qrType = 'url';
+      // 'photo' tells the display to hero the image itself and tuck the QR
+      // into the corner (slideshow-style); plain 'url' keeps the classic
+      // full-size QR layout for arbitrary links.
+      qrType = mode === 'photo' ? 'photo' : 'url';
       content = validation.url;
-      label = String(body?.label || '').trim() || validation.url;
+      label = String(body?.label || '').trim()
+        || (mode === 'photo' ? 'Scan to save this photo' : validation.url);
     } else if (mode === 'wifi') {
       const ssid = String(body?.ssid || '').trim();
       if (!ssid) {
@@ -752,10 +755,86 @@ function createWebServer({
     fs.createReadStream(entry.filePath).pipe(res);
   }
 
-  // ---- Shared photo slideshow -----------------------------------------------
+  // ---- Shared photo slideshow / Slideshow Manager ---------------------------
 
   function handlePhotosList(res) {
     sendJson(res, 200, { ok: true, photos: qrImageCache.list() });
+  }
+
+  /** SSE stream so every open Slideshow Manager tab — not just the one that
+   * triggered a change — sees new uploads/deletes live, same pattern as
+   * `handleDisplaysEvents`. Manual refresh (`GET /api/photos`) stays as a
+   * fallback for browsers that drop/block the connection. */
+  function handlePhotoEvents(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    });
+    res.write(': connected\n\n');
+
+    const send = (reason, photos) => {
+      try {
+        res.write(`event: photos\ndata: ${JSON.stringify({ reason, photos })}\n\n`);
+      } catch {
+        // client gone
+      }
+    };
+
+    send('hello', qrImageCache.list());
+
+    const unsubscribe = qrImageCache.onChange
+      ? qrImageCache.onChange((reason, photos) => send(reason, photos))
+      : () => {};
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  }
+
+  function handlePhotoDelete(body, res) {
+    const tokens = Array.isArray(body?.tokens)
+      ? body.tokens
+      : (body?.token ? [body.token] : []);
+    const cleaned = [...new Set(tokens.map((t) => String(t || '').trim()).filter(Boolean))];
+    if (!cleaned.length) {
+      sendJson(res, 400, { ok: false, error: 'No photo(s) specified' });
+      return;
+    }
+    const deleted = [];
+    const failed = [];
+    for (const token of cleaned) {
+      if (qrImageCache.delete(token)) {
+        deleted.push(token);
+      } else {
+        failed.push(token);
+      }
+    }
+    log.info('Photo(s) deleted from Slideshow Manager', { deleted: deleted.length, failed: failed.length });
+    sendJson(res, 200, { ok: true, deleted, failed });
+  }
+
+  function handleSlideshowSettingsGet(res) {
+    sendJson(res, 200, { ok: true, order: slideshowSettings.getOrder(), orders: VALID_ORDERS });
+  }
+
+  function handleSlideshowSettingsUpdate(body, res) {
+    const result = slideshowSettings.setOrder(body?.order);
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    log.info('Slideshow order setting updated', { order: result.order });
+    sendJson(res, 200, { ok: true, order: result.order, orders: VALID_ORDERS });
   }
 
   function handlePhotoSlideshowPush(body, res) {
@@ -765,13 +844,15 @@ function createWebServer({
       secondsPerPhoto: 5,
       device: deviceFrom(body),
       trigger: 'photo-slideshow-api',
+      order: slideshowSettings.getOrder(),
     });
     if (!payload) {
-      sendJson(res, 400, { ok: false, error: 'No shared photos to show — share one via QR Code → Photo first' });
+      sendJson(res, 400, { ok: false, error: 'No shared photos to show — share one via the Slideshow Manager first' });
       return;
     }
     log.info('Photo slideshow pushed to display', {
       count: payload.slideshow.photos.length,
+      order: slideshowSettings.getOrder(),
       targetId: targetIdFrom(body),
     });
     sendCommandPayload(payload, targetIdFrom(body), res, {
@@ -1173,6 +1254,14 @@ function createWebServer({
           handlePhotosList(res);
           return;
         }
+        if (pathname === '/api/photos/events') {
+          handlePhotoEvents(req, res);
+          return;
+        }
+        if (pathname === '/api/slideshow/settings') {
+          handleSlideshowSettingsGet(res);
+          return;
+        }
         if (pathname.startsWith(qrImageCache.routePrefix)) {
           handleQrImageServe(pathname, res);
           return;
@@ -1206,6 +1295,12 @@ function createWebServer({
             return;
           case '/api/push/photo-slideshow':
             handlePhotoSlideshowPush(body, res);
+            return;
+          case '/api/photos/delete':
+            handlePhotoDelete(body, res);
+            return;
+          case '/api/slideshow/settings':
+            handleSlideshowSettingsUpdate(body, res);
             return;
           case '/api/push/url':
             await handleUrlPush(body, res);
@@ -1275,15 +1370,6 @@ function createWebServer({
       log.info('Control web server disabled via config');
       return null;
     }
-
-    // Clean up anything that expired while the bridge was stopped, then keep
-    // sweeping hourly so the cache directory never grows unbounded.
-    try {
-      qrImageCache.sweep();
-    } catch (error) {
-      log.warn('QR image cache startup sweep failed', error?.message || error);
-    }
-    qrImageCache.startSweeper();
 
     const controlServer = await new Promise((resolve, reject) => {
       const listenHttps = settings.https;
@@ -1364,7 +1450,6 @@ function createWebServer({
   }
 
   function stop() {
-    qrImageCache.stopSweeper();
     closeTeslaCallbackServer({ force: true });
     for (const target of [server, redirectServer]) {
       if (!target) {

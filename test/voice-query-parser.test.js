@@ -189,6 +189,40 @@ test('voice query parser detects short add milk command', () => {
   assert.equal(event?.trigger, 'shopping-list-add');
 });
 
+test('voice query parser detects "what is the distance between X and Y"', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    'what is the distance between Saratoga Springs and Moab',
+    "It's roughly 177 miles from Saratoga Springs to Moab",
+  ));
+  assert.equal(event?.kind, 'route');
+  assert.equal(event?.trigger, 'route-query');
+});
+
+test('voice query parser detects "how far is Y from here"', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('how far is moab from here', ''));
+  assert.equal(event?.kind, 'route');
+});
+
+test('voice query parser detects "how long to drive to Y"', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('how long would it take to drive to moab', ''));
+  assert.equal(event?.kind, 'route');
+});
+
+test('voice query parser detects "directions to Y"', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('directions to moab', ''));
+  assert.equal(event?.kind, 'route');
+});
+
+test('voice query parser detects bare "how far is Y"', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('how far is moab', ''));
+  assert.equal(event?.kind, 'route');
+});
+
 test('voice query parser detects music play command', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('play bohemian rhapsody', 'Playing Bohemian Rhapsody'));

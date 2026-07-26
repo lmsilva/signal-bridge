@@ -2,9 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DEFAULT_CACHE_DAYS = 7;
 const DEFAULT_MAX_BYTES = 6 * 1024 * 1024; // raw (decoded) image bytes
-const DEFAULT_SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const ROUTE_PREFIX = '/qr-images/';
 
 const MIME_EXT = {
@@ -56,31 +54,53 @@ function saveIndex(indexPath, index) {
 }
 
 /**
- * Stores photos uploaded through the "QR code → embedded photo" flow so they
- * can be served back from a short-lived, unguessable URL embedded in the QR
- * code. Images live under `config.qrImage.cacheDir` (default
- * `data/qr-image-cache/`) and expire after `config.qrImage.cacheDays`
- * (default 7) — once expired the URL 404s permanently (until re-uploaded).
+ * Stores photos uploaded through the "QR code → embedded photo" flow (and
+ * shared via the Slideshow Manager) so they can be served back from an
+ * unguessable URL embedded in the QR code or the Shared Photo Slideshow.
+ * Images live under `config.qrImage.cacheDir` (default `data/qr-image-cache/`)
+ * and are kept **indefinitely** — there is no automatic expiry; the user
+ * manages what's kept from the web page's Slideshow Manager tab, which calls
+ * `delete()` to remove a photo on request.
  */
 function createQrImageCache(config = {}, log = console) {
-  const cacheDays = Number(config?.qrImage?.cacheDays) > 0
-    ? Number(config.qrImage.cacheDays)
-    : DEFAULT_CACHE_DAYS;
   const maxBytes = Number(config?.qrImage?.maxBytes) > 0
     ? Number(config.qrImage.maxBytes)
     : DEFAULT_MAX_BYTES;
-  const sweepIntervalMs = Number(config?.qrImage?.sweepIntervalMs) > 0
-    ? Number(config.qrImage.sweepIntervalMs)
-    : DEFAULT_SWEEP_INTERVAL_MS;
   const root = config.ROOT || path.resolve(__dirname, '..');
   const cacheDir = config.qrImageCacheDir
     || path.resolve(root, config?.qrImage?.cacheDir || 'data/qr-image-cache');
   const indexPath = path.join(cacheDir, 'index.json');
-
-  let sweepTimer = null;
+  /** @type {Set<(reason: string, photos: object[]) => void>} */
+  const listeners = new Set();
 
   function ensureDir() {
     fs.mkdirSync(cacheDir, { recursive: true });
+  }
+
+  /** Notifies subscribers (the Slideshow Manager's `/api/photos/events` SSE
+   * stream) that a photo was added or removed, so every open browser tab —
+   * not just the one that triggered the change — can refresh its camera
+   * roll without polling. */
+  function notify(reason) {
+    if (!listeners.size) {
+      return;
+    }
+    const photos = list();
+    for (const listener of listeners) {
+      try {
+        listener(reason, photos);
+      } catch (error) {
+        log.warn?.('QR image cache listener failed', error?.message || error);
+      }
+    }
+  }
+
+  function onChange(listener) {
+    if (typeof listener !== 'function') {
+      return () => {};
+    }
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 
   function removeEntry(index, token) {
@@ -117,21 +137,20 @@ function createQrImageCache(config = {}, log = console) {
     fs.writeFileSync(path.join(cacheDir, fileName), parsed.buffer);
 
     const now = Date.now();
-    const expiresAt = new Date(now + cacheDays * 24 * 60 * 60 * 1000).toISOString();
     const index = loadIndex(indexPath);
     index[token] = {
       fileName,
       mimeType: parsed.mimeType,
       createdAt: new Date(now).toISOString(),
-      expiresAt,
     };
     saveIndex(indexPath, index);
+    notify('store');
 
     return {
       ok: true,
       token,
       path: `${ROUTE_PREFIX}${fileName}`,
-      expiresAt,
+      createdAt: index[token].createdAt,
     };
   }
 
@@ -147,89 +166,55 @@ function createQrImageCache(config = {}, log = console) {
     if (!entry || entry.fileName !== fileName) {
       return null;
     }
-    if (Date.parse(entry.expiresAt) <= Date.now()) {
-      // Invalidate immediately on first access past expiry — don't wait for
-      // the hourly sweep to make the URL start 404ing.
-      removeEntry(index, token);
-      return null;
-    }
     const filePath = path.join(cacheDir, entry.fileName);
     if (!fs.existsSync(filePath)) {
       removeEntry(index, token);
       return null;
     }
-    return { filePath, mimeType: entry.mimeType, expiresAt: entry.expiresAt };
+    return { filePath, mimeType: entry.mimeType, createdAt: entry.createdAt };
   }
 
   /**
-   * Non-expired photos currently in the cache, newest first — this is the
-   * "pictures shared in the last `cacheDays` days" pool used by the Shared
-   * Photo Slideshow push tile. Anything uploaded through the QR "Photo" mode
-   * lands here automatically until it expires (or is swept).
+   * Permanently removes a stored photo (file + index entry). Returns `true`
+   * if a photo was found and removed, `false` if the token was unknown.
+   */
+  function deletePhoto(token) {
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) {
+      return false;
+    }
+    const index = loadIndex(indexPath);
+    if (!index[cleanToken]) {
+      return false;
+    }
+    removeEntry(index, cleanToken);
+    notify('delete');
+    return true;
+  }
+
+  /**
+   * All stored photos, newest first — the full "camera roll" the Slideshow
+   * Manager and Shared Photo Slideshow draw from. Nothing expires on its own
+   * any more; photos stay until a user deletes them.
    */
   function list() {
     const index = loadIndex(indexPath);
-    const now = Date.now();
-    return Object.values(index)
-      .filter((entry) => Date.parse(entry.expiresAt) > now)
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-      .map((entry) => ({
+    return Object.entries(index)
+      .sort(([, a], [, b]) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      .map(([token, entry]) => ({
+        token,
         path: `${ROUTE_PREFIX}${entry.fileName}`,
         createdAt: entry.createdAt,
-        expiresAt: entry.expiresAt,
       }));
-  }
-
-  function sweep() {
-    const index = loadIndex(indexPath);
-    const now = Date.now();
-    const removed = [];
-    for (const [token, entry] of Object.entries(index)) {
-      if (Date.parse(entry.expiresAt) <= now) {
-        try {
-          fs.unlinkSync(path.join(cacheDir, entry.fileName));
-        } catch {
-          // already gone
-        }
-        delete index[token];
-        removed.push(token);
-      }
-    }
-    if (removed.length) {
-      saveIndex(indexPath, index);
-      log?.info?.(`QR image cache sweep removed ${removed.length} expired photo(s)`);
-    }
-    return removed;
-  }
-
-  function startSweeper() {
-    stopSweeper();
-    sweepTimer = setInterval(() => {
-      try {
-        sweep();
-      } catch (error) {
-        log?.warn?.('QR image cache sweep failed', error?.message || error);
-      }
-    }, sweepIntervalMs);
-    sweepTimer.unref?.();
-  }
-
-  function stopSweeper() {
-    if (sweepTimer) {
-      clearInterval(sweepTimer);
-      sweepTimer = null;
-    }
   }
 
   return {
     store,
     get,
+    delete: deletePhoto,
     list,
-    sweep,
-    startSweeper,
-    stopSweeper,
+    onChange,
     cacheDir,
-    cacheDays,
     maxBytes,
     routePrefix: ROUTE_PREFIX,
   };

@@ -4,6 +4,7 @@ const { matchesIndoorQuery } = require('./indoor-temperature');
 const { matchesAirQualityQuery } = require('./air-quality');
 const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
 const { matchesMusicQuery, matchesNowPlayingQuery } = require('./music-info');
+const { matchesRouteQuery } = require('./route-query');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
 const { matchesTeslaDashboardQuery } = require('./tesla-dashboard');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
@@ -176,16 +177,29 @@ function createVoiceQueryParser() {
 
     // "what song is playing" etc. — music is already playing, just show
     // what's currently on instead of starting anything new.
-    if (matchesNowPlayingQuery(summary)) {
+    if (matchesNowPlayingQuery(summary, response)) {
       return {
         kind: 'music',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || 'what\'s playing',
         spokenResponse: response || null,
         trigger: 'music-query',
+      };
+    }
+
+    if (matchesRouteQuery(summary, response)) {
+      return {
+        kind: 'route',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'route-query',
       };
     }
 

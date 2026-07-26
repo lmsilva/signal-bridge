@@ -554,7 +554,9 @@ function buildWifiQrContent({ ssid, password, security = 'WPA', hidden = false }
   return `${parts.join(';')};;`;
 }
 
-const QR_TYPES = new Set(['url', 'wifi']);
+// 'photo' = shared image URL (client shows the photo large + a corner QR);
+// 'url' / 'wifi' = classic full-size QR code layouts.
+const QR_TYPES = new Set(['url', 'wifi', 'photo']);
 
 // Bridge never renders the QR bitmap itself — the display client generates
 // it locally from this content string, so the UDP payload stays a small
@@ -650,37 +652,116 @@ function buildAlarmSnapshotPayload({
   };
 }
 
-// Shared photo slideshow: cycles the photos currently in the QR image cache
-// (anything uploaded through "QR Code → Photo" in the last qrImage.cacheDays,
-// 7 by default) at `secondsPerPhoto` each. displaySeconds spans the whole
-// pass through the list so the overlay does not auto-dismiss partway
-// through — a fresh UDP payload (any type) still interrupts it immediately,
-// same as every other overlay.
+// Sorts normalized {url, uploadedAt} photos per the Slideshow Manager's
+// persisted order setting. Ties (equal/missing uploadedAt) keep their
+// incoming relative order — Array#sort is a stable sort in Node, so callers
+// that don't have real timestamps yet (e.g. tests) still see a predictable
+// order rather than one that looks shuffled.
+function applySlideshowOrder(photos, order) {
+  const key = (photo) => Date.parse(photo.uploadedAt) || 0;
+  if (order === 'oldest') {
+    return [...photos].sort((a, b) => key(a) - key(b));
+  }
+  if (order === 'random') {
+    const shuffled = [...photos];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+  // 'recent' (default): newest first.
+  return [...photos].sort((a, b) => key(b) - key(a));
+}
+
+// Shared photo slideshow: cycles every photo currently in the QR image cache
+// (anything shared via "QR Code → Photo" or the Slideshow Manager — photos
+// no longer expire on their own, see qr-image-cache.js) at `secondsPerPhoto`
+// each, ordered per the Slideshow Manager's persisted `order` setting
+// ('recent' | 'oldest' | 'random'). displaySeconds spans the whole pass
+// through the list so the overlay does not auto-dismiss partway through — a
+// fresh UDP payload (any type) still interrupts it immediately, same as
+// every other overlay.
 function buildPhotoSlideshowPayload({
   photos,
   secondsPerPhoto = 5,
   device,
   timestamp,
   trigger,
+  order,
 } = {}) {
-  const list = (Array.isArray(photos) ? photos : [])
-    .map((url) => String(url || '').trim())
-    .filter(Boolean);
-  if (!list.length) {
+  const normalized = (Array.isArray(photos) ? photos : [])
+    .map((entry) => {
+      if (entry && typeof entry === 'object') {
+        return { url: String(entry.url || '').trim(), uploadedAt: entry.uploadedAt || null };
+      }
+      return { url: String(entry || '').trim(), uploadedAt: null };
+    })
+    .filter((photo) => photo.url);
+  if (!normalized.length) {
     return null;
   }
   const perPhoto = Math.max(1, Number(secondsPerPhoto) || 5);
+  const ordered = applySlideshowOrder(normalized, order);
 
   return {
     version: 2,
     type: 'photo.slideshow',
     device: device || 'Signal',
     timestamp: new Date(timestamp || Date.now()).toISOString(),
-    displaySeconds: list.length * perPhoto,
+    displaySeconds: ordered.length * perPhoto,
     trigger: trigger || 'photo-slideshow-api',
     slideshow: {
-      photos: list,
+      photos: ordered,
       secondsPerPhoto: perPhoto,
+    },
+  };
+}
+
+// "Route Planner" — the bridge resolves both places and a driving route (or
+// a great-circle flight fallback) as fast as possible and sends everything
+// it has in one payload; the display client fetches map tiles, place facts
+// and weather independently afterwards (same async-tile pattern already
+// used for album art / Tesla map tiles), so this payload deliberately stays
+// lean: just names, coordinates, the route mode/line, distance and duration.
+function routePlannerDisplaySeconds(config) {
+  return Math.max(displaySeconds(config), 120);
+}
+
+function buildRoutePlannerPayload(event, config, {
+  origin,
+  destination,
+  route,
+  mode,
+} = {}) {
+  if (!origin || !destination || !route) {
+    return null;
+  }
+
+  return {
+    version: 2,
+    type: 'route-planner.query',
+    device: event.device,
+    timestamp: new Date(event.timestamp || Date.now()).toISOString(),
+    displaySeconds: routePlannerDisplaySeconds(config),
+    trigger: event.trigger || 'route-query',
+    query: event.query,
+    spokenResponse: event.spokenResponse || null,
+    mode: mode === 'flight' ? 'flight' : 'driving',
+    origin: {
+      name: origin.resolvedName || origin.query || 'Origin',
+      latitude: origin.latitude,
+      longitude: origin.longitude,
+    },
+    destination: {
+      name: destination.resolvedName || destination.query || 'Destination',
+      latitude: destination.latitude,
+      longitude: destination.longitude,
+    },
+    distanceMiles: route.distanceMiles,
+    durationMin: route.durationMin,
+    route: {
+      geometry: Array.isArray(route.geometry) ? route.geometry : [],
     },
   };
 }
@@ -728,6 +809,7 @@ module.exports = {
   buildInputKeyPayload,
   buildInputTextPayload,
   buildPhotoSlideshowPayload,
+  buildRoutePlannerPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
   buildQrDisplayPayload,

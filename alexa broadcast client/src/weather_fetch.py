@@ -392,6 +392,10 @@ def fetch_weather_forecast(location: dict) -> dict | None:
         },
         "next24Hours": hourly,
         "next7Days": daily,
+        # Raw seconds offset (DST-aware) — lets callers compute "what time is
+        # it there right now" without needing an IANA tzdata database
+        # (Windows doesn't ship one; see Route Planner's time-comparison tile).
+        "utcOffsetSeconds": data.get("utc_offset_seconds") or 0,
         "fetchedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 

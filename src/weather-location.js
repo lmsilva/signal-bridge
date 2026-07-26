@@ -136,4 +136,5 @@ module.exports = {
   extractNamedLocationFromText,
   cleanLocationName,
   isPlausibleLocationName,
+  resolveDefaultLocation,
 };

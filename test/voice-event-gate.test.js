@@ -11,8 +11,12 @@ test('needsSpokenResponseUpgrade for music, vivint, notifications, and shopping 
     false,
   );
   assert.equal(
-    needsSpokenResponseUpgrade({ kind: 'music', spokenResponse: '' }),
+    needsSpokenResponseUpgrade({ kind: 'music', trigger: 'music-play', spokenResponse: '' }),
     true,
+  );
+  assert.equal(
+    needsSpokenResponseUpgrade({ kind: 'music', trigger: 'music-query', spokenResponse: '' }),
+    false,
   );
   assert.equal(
     needsSpokenResponseUpgrade({ kind: 'vivint-alarm', spokenResponse: null }),
@@ -61,10 +65,14 @@ test('indoor query with a known room processes immediately', () => {
   );
 });
 
-test('shouldMarkActivityProcessed still defers music until spoken response arrives', () => {
+test('shouldMarkActivityProcessed still defers music-play until spoken response arrives', () => {
   assert.equal(
-    shouldMarkActivityProcessed({ kind: 'music', spokenResponse: null }),
+    shouldMarkActivityProcessed({ kind: 'music', trigger: 'music-play', spokenResponse: null }),
     false,
+  );
+  assert.equal(
+    shouldMarkActivityProcessed({ kind: 'music', trigger: 'music-query', spokenResponse: null }),
+    true,
   );
   assert.equal(
     shouldMarkActivityProcessed({ kind: 'time', spokenResponse: null }),

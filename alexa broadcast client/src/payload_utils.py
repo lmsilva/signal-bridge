@@ -23,6 +23,7 @@ DISPLAY_TYPES = (
     "display.auth",
     "qr.display",
     "photo.slideshow",
+    "route-planner.query",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -113,6 +114,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "display.auth": ("Unlock", "Enter this PIN on your phone"),
         "qr.display": ("Signal", "QR Code"),
         "photo.slideshow": ("Signal", "Shared Photos"),
+        "route-planner.query": ("Alexa", "Route Planner"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 
@@ -125,6 +127,10 @@ def title_for_payload(payload: dict) -> tuple[str, str]:
         status = str(auth.get("status") or "").strip().lower()
         if status in ("ok", "authenticated", "success"):
             return ("Unlock", "Authenticated")
+    if display_type == "qr.display":
+        qr_type = str(((payload or {}).get("qr") or {}).get("qrType") or "").lower()
+        if qr_type == "photo":
+            return ("Signal", "Shared Photo")
     return title_for_display_type(display_type)
 
 
@@ -246,6 +252,44 @@ def format_duration(seconds: int | float | None) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{secs:02d}"
     return f"{minutes}:{secs:02d}"
+
+
+def format_route_duration(minutes: int | float | None) -> str:
+    """'3h 15m' style duration for the Route Planner tile — distinct from
+    `format_duration`'s H:MM:SS countdown-clock style."""
+    if minutes is None:
+        return "—"
+    try:
+        total_minutes = max(0, round(float(minutes)))
+    except (TypeError, ValueError):
+        return "—"
+    hours, mins = divmod(total_minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins}m"
+    if hours:
+        return f"{hours}h"
+    return f"{mins}m"
+
+
+def format_route_distance(miles: int | float | None) -> str:
+    if miles is None:
+        return "—"
+    try:
+        value = float(miles)
+    except (TypeError, ValueError):
+        return "—"
+    if value < 10:
+        return f"{value:.1f} mi"
+    return f"{round(value)} mi"
+
+
+def format_local_time_at_offset(utc_offset_seconds: int | float | None, extra_minutes: int | float = 0) -> str:
+    """'9:41 AM' style clock reading for a place `utc_offset_seconds` away
+    from UTC, optionally `extra_minutes` in the future (for an ETA)."""
+    offset = utc_offset_seconds or 0
+    extra = extra_minutes or 0
+    local = datetime.now(timezone.utc) + timedelta(seconds=offset) + timedelta(minutes=extra)
+    return local.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
 
 
 def format_timer_clock(seconds: int | float | None) -> str:

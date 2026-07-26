@@ -78,7 +78,7 @@ class DisplayAnnouncer:
                     self.log(f"Display announce to {host}:{self.discovery_port} failed: {exc}")
             self.log(
                 f"Display announced: {payload['display']['name']} "
-                f"({payload['display']['id']}) → {', '.join(sent) or 'nowhere'}"
+                f"({payload['display']['id']}) -> {', '.join(sent) or 'nowhere'}"
             )
         finally:
             sock.close()

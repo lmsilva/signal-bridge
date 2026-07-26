@@ -120,11 +120,19 @@ function loadConfig() {
     ROOT,
     config.airQualityCacheFile || 'data/air-quality-cache.json',
   );
-  // Uploaded "QR code -> embedded photo" images; expire (config.qrImage.cacheDays,
-  // default 7) and are swept hourly by the web server — see src/qr-image-cache.js.
+  // Uploaded "QR code -> embedded photo" images, also the pool the Shared
+  // Photo Slideshow / Slideshow Manager draw from. Kept indefinitely — see
+  // src/qr-image-cache.js — until removed from the web page's Slideshow
+  // Manager tab.
   config.qrImageCacheDir = path.resolve(
     ROOT,
     config.qrImage?.cacheDir || 'data/qr-image-cache',
+  );
+  // Persisted Shared Photo Slideshow playback order ('recent'|'oldest'|'random'),
+  // set from the web page's Settings tab — see src/slideshow-settings.js.
+  config.slideshowSettingsPath = path.resolve(
+    ROOT,
+    config.slideshow?.settingsFile || 'data/slideshow-settings.json',
   );
 
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);

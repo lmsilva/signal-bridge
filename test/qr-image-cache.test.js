@@ -40,7 +40,8 @@ test('store writes a file, returns a route path, and get() serves it back', () =
   const result = cache.store(TINY_PNG_DATA_URL);
   assert.equal(result.ok, true);
   assert.match(result.path, /^\/qr-images\/[0-9a-f]{32}\.png$/);
-  assert.ok(result.expiresAt);
+  assert.ok(result.createdAt);
+  assert.ok(result.token);
 
   const routeTail = result.path.slice(cache.routePrefix.length);
   const entry = cache.get(routeTail);
@@ -56,7 +57,7 @@ test('store rejects images larger than the configured max size', () => {
   assert.match(result.error, /too large/);
 });
 
-test('get() returns null for unknown, tampered, or expired tokens', () => {
+test('get() returns null for unknown or tampered tokens, and never expires on its own', () => {
   const cache = createQrImageCache(makeConfig(), silentLog);
   const result = cache.store(TINY_PNG_DATA_URL);
   const routeTail = result.path.slice(cache.routePrefix.length);
@@ -64,91 +65,82 @@ test('get() returns null for unknown, tampered, or expired tokens', () => {
   assert.equal(cache.get('deadbeef.png'), null);
   assert.equal(cache.get('../../etc/passwd'), null);
 
-  // Expired: manually rewrite the index entry to look already-expired.
+  // No automatic expiry any more — a photo stored long ago is still served.
   const indexPath = path.join(cache.cacheDir, 'index.json');
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
   const token = routeTail.replace(/\.[^.]+$/, '');
-  index[token].expiresAt = new Date(Date.now() - 1000).toISOString();
+  index[token].createdAt = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
 
+  assert.ok(cache.get(routeTail));
+});
+
+test('delete() removes the file and index entry, and is idempotent for unknown tokens', () => {
+  const cache = createQrImageCache(makeConfig(), silentLog);
+  const stored = cache.store(TINY_PNG_DATA_URL);
+  const routeTail = stored.path.slice(cache.routePrefix.length);
+  const token = routeTail.replace(/\.[^.]+$/, '');
+
+  assert.equal(cache.delete(token), true);
   assert.equal(cache.get(routeTail), null);
-  // Lazily invalidated: the file should be gone too, not just index-hidden.
   assert.equal(fs.existsSync(path.join(cache.cacheDir, path.basename(routeTail))), false);
+
+  // Already gone — a second delete (or an unknown token) reports false, not an error.
+  assert.equal(cache.delete(token), false);
+  assert.equal(cache.delete('not-a-real-token'), false);
+  assert.equal(cache.delete(''), false);
 });
 
-test('sweep() removes only expired entries and their files', () => {
-  const cache = createQrImageCache(makeConfig(), silentLog);
-  const fresh = cache.store(TINY_PNG_DATA_URL);
-  const stale = cache.store(TINY_PNG_DATA_URL);
-
-  const indexPath = path.join(cache.cacheDir, 'index.json');
-  const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-  const staleToken = stale.path.slice(cache.routePrefix.length).replace(/\.[^.]+$/, '');
-  index[staleToken].expiresAt = new Date(Date.now() - 1000).toISOString();
-  fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
-
-  const removed = cache.sweep();
-  assert.deepEqual(removed, [staleToken]);
-
-  const freshRouteTail = fresh.path.slice(cache.routePrefix.length);
-  assert.ok(cache.get(freshRouteTail));
-  assert.equal(fs.existsSync(path.join(cache.cacheDir, `${staleToken}.png`)), false);
-});
-
-test('default cache lifetime is 7 days', () => {
-  const cache = createQrImageCache(makeConfig(), silentLog);
-  const result = cache.store(TINY_PNG_DATA_URL);
-  const expiresInMs = Date.parse(result.expiresAt) - Date.now();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-  assert.ok(Math.abs(expiresInMs - sevenDaysMs) < 5000);
-});
-
-test('cache lifetime is configurable', () => {
-  const cache = createQrImageCache(makeConfig({ qrImage: { cacheDir: 'qr-image-cache', cacheDays: 1 } }), silentLog);
-  const result = cache.store(TINY_PNG_DATA_URL);
-  const expiresInMs = Date.parse(result.expiresAt) - Date.now();
-  const oneDayMs = 24 * 60 * 60 * 1000;
-  assert.ok(Math.abs(expiresInMs - oneDayMs) < 5000);
-});
-
-test('list() returns non-expired photos newest-first', () => {
+test('list() returns every stored photo newest-first, with tokens', () => {
   const cache = createQrImageCache(makeConfig(), silentLog);
   const first = cache.store(TINY_PNG_DATA_URL);
   const second = cache.store(TINY_PNG_DATA_URL);
-  const expired = cache.store(TINY_PNG_DATA_URL);
 
   const indexPath = path.join(cache.cacheDir, 'index.json');
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-  const expiredToken = expired.path.slice(cache.routePrefix.length).replace(/\.[^.]+$/, '');
-  index[expiredToken].expiresAt = new Date(Date.now() - 1000).toISOString();
-  // Force distinct createdAt ordering so newest-first sorting is verifiable.
   const secondToken = second.path.slice(cache.routePrefix.length).replace(/\.[^.]+$/, '');
+  // Force distinct createdAt ordering so newest-first sorting is verifiable.
   index[secondToken].createdAt = new Date(Date.now() + 1000).toISOString();
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
 
   const list = cache.list();
   assert.deepEqual(list.map((entry) => entry.path), [second.path, first.path]);
-  assert.ok(list.every((entry) => entry.expiresAt && entry.createdAt));
+  assert.deepEqual(list.map((entry) => entry.token), [second.token, first.token]);
+  assert.ok(list.every((entry) => entry.createdAt));
 });
 
-test('list() is empty when the cache has nothing (or only expired) photos', () => {
+test('onChange notifies subscribers on store and delete, with the current photo list', () => {
+  const cache = createQrImageCache(makeConfig(), silentLog);
+  const events = [];
+  const unsubscribe = cache.onChange((reason, photos) => events.push({ reason, count: photos.length }));
+
+  const stored = cache.store(TINY_PNG_DATA_URL);
+  cache.delete(stored.token);
+
+  assert.deepEqual(events, [
+    { reason: 'store', count: 1 },
+    { reason: 'delete', count: 0 },
+  ]);
+
+  unsubscribe();
+  cache.store(TINY_PNG_DATA_URL);
+  assert.equal(events.length, 2, 'no further notifications after unsubscribe');
+});
+
+test('onChange tolerates a non-function listener and a listener that throws', () => {
+  const cache = createQrImageCache(makeConfig(), silentLog);
+  assert.doesNotThrow(() => cache.onChange(null)());
+  cache.onChange(() => { throw new Error('boom'); });
+  assert.doesNotThrow(() => cache.store(TINY_PNG_DATA_URL));
+});
+
+test('list() is empty for a fresh cache and reflects deletions', () => {
   const cache = createQrImageCache(makeConfig(), silentLog);
   assert.deepEqual(cache.list(), []);
 
-  const stale = cache.store(TINY_PNG_DATA_URL);
-  const indexPath = path.join(cache.cacheDir, 'index.json');
-  const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-  const token = stale.path.slice(cache.routePrefix.length).replace(/\.[^.]+$/, '');
-  index[token].expiresAt = new Date(Date.now() - 1000).toISOString();
-  fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
+  const stored = cache.store(TINY_PNG_DATA_URL);
+  assert.equal(cache.list().length, 1);
 
+  cache.delete(stored.token);
   assert.deepEqual(cache.list(), []);
-});
-
-test('startSweeper/stopSweeper do not keep the process alive', () => {
-  const cache = createQrImageCache(makeConfig({ qrImage: { cacheDir: 'qr-image-cache', sweepIntervalMs: 50 } }), silentLog);
-  cache.startSweeper();
-  cache.stopSweeper();
-  // No assertion needed beyond "this test process exits" (--test-force-exit
-  // covers any regression, but unref() means we shouldn't even need it here).
 });

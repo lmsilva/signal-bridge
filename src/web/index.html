@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal9">
+  <link rel="stylesheet" href="styles.css?v=signal13">
 </head>
 <body>
   <header class="app-header">
@@ -86,7 +86,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
             </span>
             <span class="push-card-title">Shared Photo Slideshow</span>
-            <span class="push-card-sub">Photos shared in the last 7 days</span>
+            <span class="push-card-sub">Play every saved photo</span>
           </button>
           <button class="push-card" id="btn-push-weather">
             <span class="push-icon">
@@ -149,12 +149,24 @@
             <div class="card">
               <label class="field-label">Generate a QR code on the display</label>
               <div class="segmented" id="qr-mode-tabs">
-                <button type="button" class="segmented-btn active" data-qr-mode="url">URL</button>
+                <button type="button" class="segmented-btn active" data-qr-mode="image">Photo</button>
+                <button type="button" class="segmented-btn" data-qr-mode="url">URL</button>
                 <button type="button" class="segmented-btn" data-qr-mode="wifi">Wi-Fi</button>
-                <button type="button" class="segmented-btn" data-qr-mode="image">Photo</button>
               </div>
 
-              <div class="qr-mode-panel" id="qr-panel-url">
+              <div class="qr-mode-panel" id="qr-panel-image">
+                <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose Photo</button>
+                <input type="file" id="qr-image-file" accept="image/*" hidden>
+                <div class="qr-photo-preview" id="qr-photo-preview" hidden>
+                  <img id="qr-photo-preview-img" alt="Selected photo preview">
+                  <button type="button" class="btn btn-outline btn-icon" id="btn-qr-photo-clear" title="Remove photo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <p class="hint">Uploaded to the bridge and shared via a link in the QR code. Manage or delete saved photos anytime from the Slideshow tab.</p>
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-url" hidden>
                 <input type="url" id="qr-generate-url-input" class="field-input" inputmode="url"
                        autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
                        placeholder="https://…">
@@ -173,18 +185,6 @@
                   <input type="checkbox" id="qr-wifi-hidden">
                   Hidden network
                 </label>
-              </div>
-
-              <div class="qr-mode-panel" id="qr-panel-image" hidden>
-                <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose Photo</button>
-                <input type="file" id="qr-image-file" accept="image/*" hidden>
-                <div class="qr-photo-preview" id="qr-photo-preview" hidden>
-                  <img id="qr-photo-preview-img" alt="Selected photo preview">
-                  <button type="button" class="btn btn-outline btn-icon" id="btn-qr-photo-clear" title="Remove photo">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                  </button>
-                </div>
-                <p class="hint">Uploaded to the bridge and shared via a link in the QR code — deleted automatically after 7 days.</p>
               </div>
 
               <button class="btn btn-accent btn-block" id="btn-qr-generate">Generate &amp; Send</button>
@@ -278,9 +278,45 @@
       </div>
     </section>
 
+    <!-- ========================= SLIDESHOW TAB ========================= -->
+    <section class="tab-panel" id="tab-slideshow">
+      <div class="card-grid">
+        <div class="section-label">Camera Roll</div>
+
+        <div class="card slideshow-toolbar-card">
+          <div class="slideshow-toolbar">
+            <button type="button" class="btn btn-outline" id="btn-slideshow-select">Select</button>
+            <div class="slideshow-toolbar-selecting" id="slideshow-toolbar-selecting" hidden>
+              <button type="button" class="btn btn-outline" id="btn-slideshow-select-all">Select All</button>
+              <button type="button" class="btn btn-danger" id="btn-slideshow-delete-selected" disabled>Delete (<span id="slideshow-selected-count">0</span>)</button>
+              <button type="button" class="btn btn-outline" id="btn-slideshow-cancel-select">Cancel</button>
+            </div>
+            <button type="button" class="btn btn-outline btn-icon slideshow-refresh" id="btn-slideshow-refresh" title="Refresh camera roll">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </button>
+          </div>
+          <p class="hint">Photos shared via QR Code → Photo land here and stay until you delete them. The camera roll updates live as photos are added or removed from any device.</p>
+        </div>
+
+        <div class="photo-grid" id="photo-grid"></div>
+        <p class="hint photo-grid-empty" id="photo-grid-empty" hidden>No saved photos yet — share one via QR Code → Photo first.</p>
+      </div>
+    </section>
+
     <!-- ========================== SETTINGS TAB ========================== -->
     <section class="tab-panel" id="tab-settings">
       <div class="card-grid">
+        <div class="section-label">Slideshow</div>
+        <div class="card">
+          <label class="field-label">Playback order</label>
+          <div class="segmented" id="slideshow-order-tabs">
+            <button type="button" class="segmented-btn active" data-order="recent">Newest first</button>
+            <button type="button" class="segmented-btn" data-order="oldest">Oldest first</button>
+            <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
+          </div>
+          <p class="hint">Controls the order photos play in for the Shared Photo Slideshow.</p>
+        </div>
+
         <div class="section-label">Authentication</div>
 
         <div class="card">
@@ -327,6 +363,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/><circle cx="9" cy="11" r="1.2"/><path d="M14 9.5h3M14 12.5h2"/></svg>
       <span>Control</span>
     </button>
+    <button class="tab-btn" data-tab="slideshow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
+      <span>Slideshow</span>
+    </button>
     <button class="tab-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
       <span>Settings</span>
@@ -363,6 +403,42 @@
     </div>
   </div>
 
+  <!-- Photo lightbox -->
+  <div class="sheet-backdrop" id="photo-lightbox" hidden>
+    <div class="sheet sheet-lightbox">
+      <div class="lightbox-frame" id="lightbox-frame">
+        <img class="lightbox-img" id="lightbox-img" alt="Photo preview">
+        <button type="button" class="lightbox-nav lightbox-prev" id="btn-lightbox-prev" aria-label="Previous photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button type="button" class="lightbox-nav lightbox-next" id="btn-lightbox-next" aria-label="Next photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+        <button type="button" class="lightbox-close" id="btn-lightbox-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="lightbox-counter" id="lightbox-counter"></p>
+      <p class="lightbox-uploaded-at" id="lightbox-uploaded-at"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-outline" id="btn-lightbox-cancel">Close</button>
+        <button class="btn btn-danger" id="btn-lightbox-delete">Delete Photo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo delete confirm sheet -->
+  <div class="sheet-backdrop" id="photo-delete-sheet" hidden>
+    <div class="sheet sheet-confirm">
+      <div class="sheet-title" id="photo-delete-title">Delete this photo?</div>
+      <p class="sheet-subtext">This cannot be undone.</p>
+      <div class="sheet-actions sheet-actions-confirm">
+        <button class="btn btn-outline" id="photo-delete-cancel">Cancel</button>
+        <button class="btn btn-danger" id="photo-delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Control PIN unlock sheet -->
   <div class="sheet-backdrop" id="pin-sheet" hidden>
     <div class="sheet">
@@ -385,6 +461,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal9"></script>
+  <script src="app.js?v=signal13"></script>
 </body>
 </html>

@@ -52,3 +52,5 @@ alexa broadcast client/map-errors.log
 Thumbs.db
 .idea/
 .vscode/
+
+data/slideshow-settings.json

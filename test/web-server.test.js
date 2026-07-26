@@ -160,7 +160,7 @@ test('control page JS resolves API routes against the document base', () => {
   assert.match(js, /fetch\(appUrl\(/);
 });
 
-test('control page has a QR generator card with url/wifi/photo modes', () => {
+test('control page has a QR generator card with url/wifi/photo modes, ordered Photo | URL | Wi-Fi', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
   assert.match(html, /id="qr-mode-tabs"/);
   assert.match(html, /data-qr-mode="url"/);
@@ -169,6 +169,27 @@ test('control page has a QR generator card with url/wifi/photo modes', () => {
   assert.match(html, /id="qr-wifi-ssid"/);
   assert.match(html, /id="qr-image-file"/);
   assert.match(html, /id="btn-qr-generate"/);
+
+  const imageIndex = html.indexOf('data-qr-mode="image"');
+  const urlIndex = html.indexOf('data-qr-mode="url"');
+  const wifiIndex = html.indexOf('data-qr-mode="wifi"');
+  assert.ok(imageIndex > -1 && imageIndex < urlIndex && urlIndex < wifiIndex, 'expected Photo | URL | Wi-Fi order');
+});
+
+test('control page has a Slideshow Manager tab with a camera roll grid and delete flow', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  assert.match(html, /data-tab="slideshow"/);
+  assert.match(html, /id="tab-slideshow"/);
+  assert.match(html, /id="photo-grid"/);
+  assert.match(html, /id="btn-slideshow-select"/);
+  assert.match(html, /id="btn-slideshow-select-all"/);
+  assert.match(html, /id="btn-slideshow-delete-selected"/);
+  assert.match(html, /id="photo-lightbox"/);
+  assert.match(html, /id="photo-delete-sheet"/);
+  assert.match(html, /id="slideshow-order-tabs"/);
+  assert.match(html, /data-order="recent"/);
+  assert.match(html, /data-order="oldest"/);
+  assert.match(html, /data-order="random"/);
 });
 
 test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload', () => {
@@ -700,6 +721,28 @@ test('qr push rejects invalid url mode without sending', async () => {
   }
 });
 
+test('qr push sends a qr.display photo payload for photo mode', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const push = await postJson(base, '/api/qr/push', {
+      mode: 'photo',
+      url: 'https://example.com/qr-images/abc.jpg',
+      label: 'Scan to save this photo',
+    });
+    assert.equal(push.status, 200);
+    assert.equal(push.body.ok, true);
+    assert.equal(push.body.qrType, 'photo');
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'qr.display');
+    assert.equal(sent[0].qr.qrType, 'photo');
+    assert.equal(sent[0].qr.content, 'https://example.com/qr-images/abc.jpg');
+    assert.equal(sent[0].qr.label, 'Scan to save this photo');
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('qr push sends a qr.display payload for wifi mode', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -748,16 +791,17 @@ test('qr push rejects an unknown mode', async () => {
   }
 });
 
-test('qr image upload stores a photo and serves it back from a relative URL until expiry', async () => {
+test('qr image upload stores a photo and serves it back from a relative URL', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-qr-image-'));
-  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache', cacheDays: 7 } });
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
   const { webServer, base } = await startTestServer({ config });
   try {
     const upload = await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
     assert.equal(upload.status, 200);
     assert.equal(upload.body.ok, true);
     assert.match(upload.body.path, /^\/qr-images\/[0-9a-f]{32}\.png$/);
-    assert.ok(upload.body.expiresAt);
+    assert.ok(upload.body.token);
+    assert.ok(upload.body.createdAt);
 
     const served = await request(base + upload.body.path);
     assert.equal(served.status, 200);
@@ -888,7 +932,7 @@ test('input text sends a full-string command to a single display', async () => {
 
 test('photo slideshow lists shared photos and pushes a photo.slideshow payload', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-slideshow-'));
-  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache', cacheDays: 7 } });
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
   const { webServer, base, sent } = await startTestServer({ config });
   try {
     const empty = await request(base + '/api/photos');
@@ -905,17 +949,136 @@ test('photo slideshow lists shared photos and pushes a photo.slideshow payload',
     assert.equal(listed.status, 200);
     assert.equal(listed.body.photos.length, 2);
     assert.match(listed.body.photos[0].path, /^\/qr-images\/[0-9a-f]{32}\.png$/);
+    assert.ok(listed.body.photos[0].token);
 
-    const absolutePhotos = listed.body.photos.map((p) => `${base}${p.path}`);
-    const push = await postJson(base, '/api/push/photo-slideshow', { photos: absolutePhotos });
+    const entries = listed.body.photos.map((p) => ({ url: `${base}${p.path}`, uploadedAt: p.createdAt }));
+    const push = await postJson(base, '/api/push/photo-slideshow', { photos: entries });
     assert.equal(push.status, 200);
     assert.equal(push.body.count, 2);
 
     assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'photo.slideshow');
-    assert.deepEqual(sent[0].slideshow.photos, absolutePhotos);
+    assert.deepEqual(sent[0].slideshow.photos.map((p) => p.url).sort(), entries.map((p) => p.url).sort());
     assert.equal(sent[0].slideshow.secondsPerPhoto, 5);
     assert.equal(sent[0].displaySeconds, 10);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('photo delete removes one or more photos from the cache and slideshow', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-photo-delete-'));
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
+  const { webServer, base } = await startTestServer({ config });
+  try {
+    const noTokens = await postJson(base, '/api/photos/delete', {});
+    assert.equal(noTokens.status, 400);
+
+    const first = await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
+    const second = await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
+
+    const single = await postJson(base, '/api/photos/delete', { token: first.body.token });
+    assert.equal(single.status, 200);
+    assert.deepEqual(single.body.deleted, [first.body.token]);
+
+    const afterSingle = await request(base + '/api/photos');
+    assert.equal(afterSingle.body.photos.length, 1);
+
+    const bulk = await postJson(base, '/api/photos/delete', {
+      tokens: [second.body.token, 'not-a-real-token'],
+    });
+    assert.equal(bulk.status, 200);
+    assert.deepEqual(bulk.body.deleted, [second.body.token]);
+    assert.deepEqual(bulk.body.failed, ['not-a-real-token']);
+
+    const afterBulk = await request(base + '/api/photos');
+    assert.deepEqual(afterBulk.body.photos, []);
+
+    const gone = await request(base + first.body.path);
+    assert.equal(gone.status, 404);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('photo events SSE pushes hello then live updates on upload/delete', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-photo-events-'));
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
+  const { webServer, base } = await startTestServer({ config });
+  try {
+    const events = await new Promise((resolve, reject) => {
+      const url = new URL(base + '/api/photos/events');
+      const lib = url.protocol === 'https:' ? require('https') : require('http');
+      const chunks = [];
+      const req = lib.get(url, { rejectUnauthorized: false }, (res) => {
+        assert.equal(res.statusCode, 200);
+        res.on('data', (c) => chunks.push(c.toString('utf8')));
+        setTimeout(async () => {
+          const upload = await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
+          setTimeout(async () => {
+            await postJson(base, '/api/photos/delete', { token: upload.body.token });
+            setTimeout(() => {
+              req.destroy();
+              resolve(chunks.join(''));
+            }, 80);
+          }, 80);
+        }, 40);
+      });
+      req.on('error', (err) => {
+        if (err?.code === 'ECONNRESET') {
+          resolve(chunks.join(''));
+          return;
+        }
+        reject(err);
+      });
+      setTimeout(() => reject(new Error('SSE timeout')), 2000);
+    });
+    assert.match(events, /event: photos/);
+    assert.match(events, /"reason":"hello"/);
+    assert.match(events, /"reason":"store"/);
+    assert.match(events, /"reason":"delete"/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('slideshow order setting persists and validates the requested value', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-slideshow-settings-'));
+  const config = makeConfig({ ROOT: dataDir });
+  const { webServer, base } = await startTestServer({ config });
+  try {
+    const initial = await request(base + '/api/slideshow/settings');
+    assert.equal(initial.status, 200);
+    assert.equal(initial.body.order, 'recent');
+
+    const bad = await postJson(base, '/api/slideshow/settings', { order: 'sideways' });
+    assert.equal(bad.status, 400);
+
+    const update = await postJson(base, '/api/slideshow/settings', { order: 'oldest' });
+    assert.equal(update.status, 200);
+    assert.equal(update.body.order, 'oldest');
+
+    const after = await request(base + '/api/slideshow/settings');
+    assert.equal(after.body.order, 'oldest');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('slideshow order setting is applied when pushing the photo slideshow', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-slideshow-order-push-'));
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    await postJson(base, '/api/slideshow/settings', { order: 'oldest' });
+
+    const entries = [
+      { url: 'https://nas/a.jpg', uploadedAt: '2026-01-03T00:00:00.000Z' },
+      { url: 'https://nas/b.jpg', uploadedAt: '2026-01-01T00:00:00.000Z' },
+    ];
+    await postJson(base, '/api/push/photo-slideshow', { photos: entries });
+
+    assert.deepEqual(sent[0].slideshow.photos.map((p) => p.url), ['https://nas/b.jpg', 'https://nas/a.jpg']);
   } finally {
     webServer.stop();
   }

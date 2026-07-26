@@ -17,8 +17,12 @@ function needsSpokenResponseUpgrade(event, config = {}) {
     return false;
   }
 
+  // "play …" waits for Alexa's "Playing…" confirmation; a now-playing
+  // query ("what's playing" / "what's this song") already has everything
+  // it needs from the query text + the player-info API, so don't stall
+  // the activity waiting on a spoken upgrade that may never re-arrive.
   if (event.kind === 'music') {
-    return true;
+    return event.trigger !== 'music-query';
   }
 
   if (event.kind === 'vivint-alarm' || event.kind === 'alexa-notifications') {

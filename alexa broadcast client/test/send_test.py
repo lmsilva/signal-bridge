@@ -827,10 +827,20 @@ def build_payload(args) -> dict:
         }
 
     if args.type == "photo-slideshow":
+        now = datetime.now(timezone.utc)
         photos = [
-            "https://picsum.photos/seed/signal1/1200/1600",
-            "https://picsum.photos/seed/signal2/1200/1600",
-            "https://picsum.photos/seed/signal3/1600/1200",
+            {
+                "url": "https://picsum.photos/seed/signal1/1200/1600",
+                "uploadedAt": (now - timedelta(hours=2)).isoformat().replace("+00:00", "Z"),
+            },
+            {
+                "url": "https://picsum.photos/seed/signal2/1200/1600",
+                "uploadedAt": (now - timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+            },
+            {
+                "url": "https://picsum.photos/seed/signal3/1600/1200",
+                "uploadedAt": (now - timedelta(days=3)).isoformat().replace("+00:00", "Z"),
+            },
         ]
         seconds_per_photo = 5
         return {
@@ -867,6 +877,36 @@ def build_payload(args) -> dict:
             "themeAccent": "#FF9900",
         }
 
+    if args.type in ("route-planner", "route-planner-flight"):
+        is_flight = args.type == "route-planner-flight"
+        origin = {"name": "Home, US", "latitude": 40.0, "longitude": -111.0}
+        destination = {"name": "Moab, UT, US", "latitude": 38.5733, "longitude": -109.5498}
+        if is_flight:
+            geometry = [[origin["latitude"], origin["longitude"]], [destination["latitude"], destination["longitude"]]]
+            distance_miles, duration_min = 175.6, 66
+        else:
+            # Rough simplified driving polyline (real payloads carry many more points from OSRM).
+            geometry = [
+                [40.0, -111.0], [40.05, -111.3], [39.6, -110.6], [39.2, -110.0], [38.5733, -109.5498],
+            ]
+            distance_miles, duration_min = 177.1, 180
+        return {
+            "version": 2,
+            "type": "route-planner.query",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": max(display_seconds, 120),
+            "trigger": "route-query",
+            "query": "what is the distance between Saratoga Springs and Moab",
+            "spokenResponse": "it's roughly 177 miles from Saratoga Springs to Moab",
+            "mode": "flight" if is_flight else "driving",
+            "origin": origin,
+            "destination": destination,
+            "distanceMiles": distance_miles,
+            "durationMin": duration_min,
+            "route": {"geometry": geometry},
+        }
+
     raise ValueError(f"Unknown type: {args.type}")
 
 
@@ -894,7 +934,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "input-text", "photo-slideshow", "music"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "input-text", "photo-slideshow", "music", "route-planner", "route-planner-flight"],
         default="broadcast",
         help="Payload type to send",
     )

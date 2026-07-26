@@ -26,6 +26,13 @@
       "sessionMinutes": 30
     }
   },
+  "qrImage": {
+    "cacheDir": "data/qr-image-cache",
+    "maxBytes": 6291456
+  },
+  "slideshow": {
+    "settingsFile": "data/slideshow-settings.json"
+  },
   "voiceEvents": {
     "enabled": true,
     "timeQueries": true,
@@ -42,6 +49,7 @@
     "teslaDashboardQueries": true,
     "vivintAlarmQueries": true,
     "notificationQueries": true,
+    "routeQueries": true,
     "eventsLogFile": "data/voice-events.jsonl",
     "defaultLocation": {
       "name": "Home",

@@ -6,13 +6,29 @@ const MUSIC_BLOCKLIST_RE = /\b(?:timer|alarm|announcement|game|jeopardy|question
 const SPOKEN_PLAYING_RE = /\bplaying\b/i;
 
 // "what song is playing", "which song is playing", "what is this song",
-// "what's playing", "what song is this/on", "who sings this (song)",
-// "name this/that song" — asking about music that's *already* playing,
+// "what's playing", "whats playing" (no apostrophe — common ASR),
+// "what song is this/on", "who sings this (song)", "name this/that song",
+// "identify this song" — asking about music that's *already* playing,
 // as opposed to PLAY_MUSIC_RE which starts new playback.
-const NOW_PLAYING_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:this\s+)?song(?:\s+is\s+(?:this|playing|on))?|which\s+song\s+is\s+playing|what(?:'s|\s+is)?\s+(?:currently\s+)?playing|who\s+sings?\s+this(?:\s+song)?|name\s+(?:this|that)\s+song)\b/i;
+const NOW_PLAYING_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:this\s+)?song(?:\s+is\s+(?:this|playing|on))?|which\s+song\s+is\s+playing|what(?:'s|\s+is)?\s+(?:currently\s+)?playing|who\s+sings?\s+this(?:\s+song)?|name\s+(?:this|that)\s+song|identify\s+(?:this|that)\s+song|tell\s+me\s+what\s+song\s+this\s+is)\b/i;
+
+// When the activity transcript is empty but Alexa already answered with a
+// now-playing line ("Currently playing …", "This is X by Y"), still treat
+// it as a now-playing query so we don't silently drop the display.
+const NOW_PLAYING_ANSWER_RE = /\b(?:currently\s+playing|now\s+playing|you'?re\s+listening\s+to|this\s+is\s+.+\s+by\s+)\b/i;
+
+function normalizeQueryText(value) {
+  return String(value || '')
+    .replace(/[\u2018\u2019\u2032`´]/g, "'")
+    // Amazon ASR often drops the apostrophe ("whats playing" / "whats this song").
+    .replace(/\bwhats\b/gi, "what's")
+    .replace(/\bwhos\b/gi, "who's")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function matchesMusicQuery(summary, response) {
-  const text = String(summary || '').trim();
+  const text = normalizeQueryText(summary);
   if (!text || MUSIC_BLOCKLIST_RE.test(text)) {
     return false;
   }
@@ -23,12 +39,31 @@ function matchesMusicQuery(summary, response) {
     && SPOKEN_PLAYING_RE.test(String(response || ''));
 }
 
-function matchesNowPlayingQuery(summary) {
-  const text = String(summary || '').trim();
-  if (!text || MUSIC_BLOCKLIST_RE.test(text)) {
-    return false;
+function matchesNowPlayingQuery(summary, response) {
+  const text = normalizeQueryText(summary);
+  if (text && !MUSIC_BLOCKLIST_RE.test(text) && NOW_PLAYING_QUERY_RE.test(text)) {
+    return true;
   }
-  return NOW_PLAYING_QUERY_RE.test(text);
+  // Empty transcript + Alexa already answering with a now-playing line
+  // (history sometimes omits description.summary on the first poll).
+  const spoken = normalizeQueryText(response);
+  if (!text && spoken && !MUSIC_BLOCKLIST_RE.test(spoken) && NOW_PLAYING_ANSWER_RE.test(spoken)) {
+    return true;
+  }
+  return false;
+}
+
+function emptyNowPlaying(device) {
+  return {
+    song: null,
+    artist: null,
+    album: null,
+    artUrl: null,
+    provider: null,
+    state: 'IDLE',
+    device: device || null,
+    empty: true,
+  };
 }
 
 function getPlayerInfoOnce(alexa, serialOrName) {
@@ -92,6 +127,8 @@ module.exports = {
   matchesNowPlayingQuery,
   fetchNowPlaying,
   normalizePlayerInfo,
+  emptyNowPlaying,
+  normalizeQueryText,
   PLAY_MUSIC_RE,
   NOW_PLAYING_QUERY_RE,
 };

@@ -45,6 +45,7 @@ class BroadcastClientApp:
             "display.auth",
             "qr.display",
             "photo.slideshow",
+            "route-planner.query",
         }
     )
 
@@ -275,7 +276,25 @@ class BroadcastClientApp:
             self.root.after(0, self.root.destroy)
 
 
+def _make_console_streams_unicode_safe():
+    """On Windows the console/log stream often defaults to cp1252, which
+    raises UnicodeEncodeError (and silently kills whichever background
+    thread was mid-``print()``) the moment a log message contains an
+    arrow or other non-Latin-1 character. Reconfigure to UTF-8 with a
+    forgiving error handler so a stray character never takes down a
+    thread — this is a no-op on streams that don't support reconfigure
+    (e.g. already UTF-8, or redirected to a file opened elsewhere)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="backslashreplace")
+            except (ValueError, OSError):
+                pass
+
+
 def main():
+    _make_console_streams_unicode_safe()
     try:
         app = BroadcastClientApp()
         app.start()

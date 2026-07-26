@@ -16,6 +16,16 @@ test('matchesNowPlayingQuery detects "what song is playing" style queries', () =
   assert.equal(matchesNowPlayingQuery('what song is this'), true);
   assert.equal(matchesNowPlayingQuery("what's playing"), true);
   assert.equal(matchesNowPlayingQuery('name this song'), true);
+  // Amazon ASR often drops the apostrophe.
+  assert.equal(matchesNowPlayingQuery('whats playing'), true);
+  assert.equal(matchesNowPlayingQuery('whats this song'), true);
+  assert.equal(matchesNowPlayingQuery('identify this song'), true);
+});
+
+test('matchesNowPlayingQuery falls back to spoken now-playing answers when transcript is empty', () => {
+  assert.equal(matchesNowPlayingQuery('', 'Currently playing Bohemian Rhapsody by Queen'), true);
+  assert.equal(matchesNowPlayingQuery(null, "This is Tennessee by Arrested Development"), true);
+  assert.equal(matchesNowPlayingQuery('', 'The weather is sunny'), false);
 });
 
 test('matchesNowPlayingQuery ignores unrelated and blocklisted phrases', () => {

@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from tkinter import font as tkfont
@@ -15,14 +16,19 @@ except ImportError:  # Pillow ships with the client, but degrade gracefully.
     Image = None
     ImageTk = None
 
+from src import map_tiles, place_facts, weather_fetch
 from src.message_scroll import MessageScrollController
 from src.paths import asset_path
+from src.text_marquee import MarqueeLine
 from src.payload_utils import (
     battery_level_color,
     format_battery_percent,
     format_chip_timestamp,
     format_duration,
     format_indoor_location,
+    format_local_time_at_offset,
+    format_route_distance,
+    format_route_duration,
     format_timer_clock,
     format_timer_set_label,
     format_alarm_time,
@@ -111,6 +117,94 @@ class BasePanel:
     def _place_widget(self, widget: tk.Widget, **kwargs):
         widget.place(**kwargs)
         self._widgets.append(widget)
+
+    # Shared photo + corner-QR layout (slideshow and single shared-photo push).
+    # Landscape reserves a right gutter so a tall photo doesn't crowd the QR;
+    # portrait keeps the photo full-width and tucks the QR into the bottom-right
+    # of the content frame. Never position against raw screen edges — those can
+    # clip under window chrome / mismatched screen metrics.
+    _SCAN_QR_SIZE_PORTRAIT = 112
+    _SCAN_QR_SIZE_LANDSCAPE = 128
+    _SCAN_QR_GUTTER_LANDSCAPE = 168
+    _SCAN_QR_MARGIN = 18
+
+    def _photo_stage_geometry(self):
+        """`(photo_cx, photo_cy, max_w, max_h, layout)` for a hero photo with
+        optional landscape QR gutter reserved on the right."""
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        top = layout.message_area_top
+        bottom = layout.message_area_bottom
+        gutter = 0 if layout.portrait else self._SCAN_QR_GUTTER_LANDSCAPE
+        max_w = max(1, width - 40 - gutter)
+        max_h = max(120, bottom - top - 24)
+        photo_cx = x + (width - gutter) // 2
+        photo_cy = top + (bottom - top) // 2
+        return photo_cx, photo_cy, max_w, max_h, layout
+
+    def _draw_scan_qr_badge(self, url: str, caption: str):
+        """Draw a fully on-canvas scan QR + right-aligned caption.
+
+        Returns the ``PhotoImage`` (caller must keep a reference) or ``None``.
+        Landscape: right content gutter, vertically centered. Portrait:
+        bottom-right of the content area. Caption uses ``anchor="se"`` so it
+        grows left into free space instead of spilling off the right edge.
+        """
+        if ImageTk is None or not url:
+            return None
+        layout = self.shell.layout
+        muted = self.config["mutedTextColor"]
+        target = (
+            self._SCAN_QR_SIZE_PORTRAIT if layout.portrait else self._SCAN_QR_SIZE_LANDSCAPE
+        )
+        qr_image = QrPanel._build_qr_image(url, target)
+        if qr_image is None:
+            return None
+
+        margin = self._SCAN_QR_MARGIN
+        right = layout.content_x + layout.content_width - margin
+        top = layout.message_area_top
+        bottom = layout.message_area_bottom - margin
+        caption_font = self.shell.chip_value_font
+        caption_h = caption_font.metrics("linespace")
+        gap = 8
+        block_h = caption_h + gap + qr_image.height
+
+        if layout.portrait:
+            # Bottom-right of the content frame.
+            qr_right = right
+            qr_bottom = bottom
+        else:
+            # Right gutter, vertically centered in the message area so it
+            # sits in the empty space beside a tall portrait photo.
+            qr_right = right
+            mid = top + (bottom - top) // 2
+            qr_bottom = min(bottom, mid + block_h // 2)
+            qr_bottom = max(top + block_h, qr_bottom)
+
+        # Keep the full block inside the content frame.
+        qr_bottom = min(qr_bottom, bottom)
+        qr_top = qr_bottom - qr_image.height
+        if qr_top - gap - caption_h < top:
+            qr_top = top + caption_h + gap
+            qr_bottom = qr_top + qr_image.height
+
+        qx = qr_right - qr_image.width / 2
+        qy = qr_top + qr_image.height / 2
+        photo = ImageTk.PhotoImage(qr_image)
+        self._track(self.canvas.create_image(qx, qy, image=photo))
+        self._track(
+            self.canvas.create_text(
+                qr_right,
+                qr_top - gap,
+                anchor="se",
+                text=caption,
+                fill=muted,
+                font=caption_font,
+            )
+        )
+        return photo
 
     def _round_rect(self, x0, y0, x1, y1, *, radius=14, fill="", outline="", width=1, dash=None):
         radius = max(2, min(int(radius), int(x1 - x0) // 2, int(y1 - y0) // 2))
@@ -2569,10 +2663,47 @@ class MusicPanel(BasePanel):
         self._art_image = None  # keep a reference or Tk garbage-collects it
         self._art_request = 0
         self._art_placeholder_ids: list[int] = []
+        self._marquees: list[MarqueeLine] = []
+
+    def hide(self):
+        for marquee in self._marquees:
+            marquee.stop()
+        self._marquees = []
+        super().hide()
+
+    def _draw_marquee_line(self, center_x, y, text, font, fill, width) -> int:
+        """Draws one line of Now Playing text (song/artist/album/detail)
+        as a single line — long titles that don't fit scroll horizontally
+        on a loop instead of wrapping, which could otherwise blow past the
+        fixed vertical space reserved for these stacked lines."""
+        marquee = MarqueeLine(self.root)
+        self._marquees.append(marquee)
+        height = font.metrics("linespace")
+        viewport = marquee.build(
+            parent=self.root,
+            text=text,
+            font=font,
+            fill=fill,
+            width=width,
+            height=height,
+            bg=self.config["overlayBackground"],
+            center=True,
+        )
+        self._place_widget(viewport, x=center_x - width // 2, y=y)
+        return height
 
     def _render(self, payload: dict):
         layout = self.shell.layout
         music = payload.get("music") or {}
+        # Bridge emits `empty: true` (song null) when a "what's playing"
+        # query couldn't resolve a track after retries — show a clear
+        # empty state instead of the old "Unknown track" placeholder
+        # that looked like a bug.
+        if music.get("empty") or (
+            not music.get("song") and payload.get("trigger") == "music-query"
+        ):
+            self._render_empty(layout, music.get("device") or payload.get("device"))
+            return
         song = music.get("song") or "Unknown track"
         artist = music.get("artist")
         album = music.get("album")
@@ -2584,6 +2715,31 @@ class MusicPanel(BasePanel):
             self._render_stack(layout, song, artist, album, provider, device, art_url)
         else:
             self._render_landscape(layout, song, artist, album, provider, device, art_url)
+
+    def _render_empty(self, layout, device):
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+        center_x = x + width // 2
+        cy = y + max(80, (bottom - y) // 2)
+        self._draw_art_placeholder(center_x, cy - 40, 180, accent, False)
+        self._track(
+            self.canvas.create_text(
+                center_x, cy + 80, anchor="n", text="Nothing playing",
+                fill=text, font=self.shell.section_title_font,
+            )
+        )
+        subtitle = f"Asked on {device}" if device else "No track is playing right now"
+        self._track(
+            self.canvas.create_text(
+                center_x, cy + 80 + self.shell.section_title_font.metrics("linespace") + 10,
+                anchor="n", text=subtitle, fill=muted, font=self.shell.body_font,
+            )
+        )
 
     def _draw_art_placeholder(self, cx, cy, size, accent, loading_art):
         self._art_placeholder_ids = []
@@ -2631,47 +2787,17 @@ class MusicPanel(BasePanel):
             self._load_art_async(art_url, center_x, art_y, art_size)
 
         cursor = art_y + art_size // 2 + 28
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text=song,
-                fill=text,
-                font=self.shell.section_title_font,
-                width=width - 40,
-                justify=tk.CENTER,
-            )
-        )
-        cursor += self.shell.section_title_font.metrics("linespace") + 10
+        cursor += self._draw_marquee_line(
+            center_x, cursor, song, self.shell.section_title_font, text, width - 40,
+        ) + 10
         if artist:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cursor,
-                    anchor="n",
-                    text=artist,
-                    fill=accent,
-                    font=self.shell.body_font,
-                    width=width - 40,
-                    justify=tk.CENTER,
-                )
-            )
-            cursor += self.shell.body_font.metrics("linespace") + 8
+            cursor += self._draw_marquee_line(
+                center_x, cursor, artist, self.shell.body_font, accent, width - 40,
+            ) + 8
         if album:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cursor,
-                    anchor="n",
-                    text=album,
-                    fill=muted,
-                    font=self.shell.body_font,
-                    width=width - 40,
-                    justify=tk.CENTER,
-                )
-            )
-            cursor += self.shell.body_font.metrics("linespace") + 12
+            cursor += self._draw_marquee_line(
+                center_x, cursor, album, self.shell.body_font, muted, width - 40,
+            ) + 12
 
         detail_parts = []
         if provider:
@@ -2679,17 +2805,13 @@ class MusicPanel(BasePanel):
         if device:
             detail_parts.append(f"on {device}")
         if detail_parts:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cursor,
-                    anchor="n",
-                    text=" · ".join(detail_parts),
-                    fill=muted,
-                    font=self.shell.chip_value_font,
-                    width=width - 40,
-                    justify=tk.CENTER,
-                )
+            self._draw_marquee_line(
+                center_x,
+                cursor,
+                " · ".join(detail_parts),
+                self.shell.chip_value_font,
+                muted,
+                width - 40,
             )
 
     def _render_landscape(self, layout, song, artist, album, provider, device, art_url):
@@ -2740,59 +2862,25 @@ class MusicPanel(BasePanel):
         text_center_x = x + art_col_width + gap + text_col_width // 2
         cursor = art_cy - text_h // 2
 
-        self._track(
-            self.canvas.create_text(
+        cursor += self._draw_marquee_line(
+            text_center_x, cursor, song, title_font, text, text_col_width,
+        ) + 10
+        if artist:
+            cursor += self._draw_marquee_line(
+                text_center_x, cursor, artist, body_font, accent, text_col_width,
+            ) + 10
+        if album:
+            cursor += self._draw_marquee_line(
+                text_center_x, cursor, album, body_font, muted, text_col_width,
+            ) + 14
+        if detail_parts:
+            self._draw_marquee_line(
                 text_center_x,
                 cursor,
-                anchor="n",
-                text=song,
-                fill=text,
-                font=title_font,
-                width=text_col_width,
-                justify=tk.CENTER,
-            )
-        )
-        cursor += title_font.metrics("linespace") + 10
-        if artist:
-            self._track(
-                self.canvas.create_text(
-                    text_center_x,
-                    cursor,
-                    anchor="n",
-                    text=artist,
-                    fill=accent,
-                    font=body_font,
-                    width=text_col_width,
-                    justify=tk.CENTER,
-                )
-            )
-            cursor += body_font.metrics("linespace") + 10
-        if album:
-            self._track(
-                self.canvas.create_text(
-                    text_center_x,
-                    cursor,
-                    anchor="n",
-                    text=album,
-                    fill=muted,
-                    font=body_font,
-                    width=text_col_width,
-                    justify=tk.CENTER,
-                )
-            )
-            cursor += body_font.metrics("linespace") + 14
-        if detail_parts:
-            self._track(
-                self.canvas.create_text(
-                    text_center_x,
-                    cursor,
-                    anchor="n",
-                    text=" · ".join(detail_parts),
-                    fill=muted,
-                    font=detail_font,
-                    width=text_col_width,
-                    justify=tk.CENTER,
-                )
+                " · ".join(detail_parts),
+                detail_font,
+                muted,
+                text_col_width,
             )
 
     def _load_art_async(self, url: str, cx: float, cy: float, size: int):
@@ -3436,150 +3524,6 @@ class TeslaDashboardPanel(BasePanel):
         image.thumbnail((size, size), Image.LANCZOS)
         return image
 
-    @staticmethod
-    def _latlon_to_global_px(lat: float, lon: float, zoom: int):
-        scale = 256 * (1 << zoom)
-        x = (lon + 180.0) / 360.0 * scale
-        lat = max(-85.05112878, min(85.05112878, float(lat)))
-        siny = math.sin(math.radians(lat))
-        y = (0.5 - math.log((1 + siny) / (1 - siny)) / (4 * math.pi)) * scale
-        return x, y
-
-    _MAP_UNVERIFIED_SSL = False
-
-    @staticmethod
-    def _is_ssl_failure(error) -> bool:
-        import ssl
-
-        seen = set()
-        current = error
-        while current is not None and id(current) not in seen:
-            seen.add(id(current))
-            if isinstance(current, ssl.SSLError):
-                return True
-            current = getattr(current, "reason", None) or getattr(current, "__cause__", None)
-        return "CERTIFICATE_VERIFY_FAILED" in str(error) or "SSL" in str(error)
-
-    @classmethod
-    def _map_tile_cache_dir(cls):
-        from src.paths import app_root
-
-        return app_root() / "map-tiles"
-
-    def _log_map_error(self, message: str):
-        from src.paths import app_root
-
-        line = f"{datetime.now().isoformat(timespec='seconds')} {message}"
-        print(line, file=sys.stderr)
-        try:
-            log_path = app_root() / "map-errors.log"
-            if log_path.exists() and log_path.stat().st_size > 200_000:
-                log_path.unlink()
-            with open(log_path, "a", encoding="utf-8") as handle:
-                handle.write(line + "\n")
-        except OSError:
-            pass
-
-    def _fetch_map_tile(self, zoom: int, tx: int, ty: int):
-        import ssl
-
-        cache_dir = self._map_tile_cache_dir()
-        cache_file = cache_dir / f"{zoom}_{tx}_{ty}.png"
-        if cache_file.exists():
-            try:
-                return Image.open(cache_file).convert("RGB")
-            except OSError:
-                pass
-
-        url = f"https://tile.openstreetmap.org/{zoom}/{tx}/{ty}.png"
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "alexa-broadcast-client/1.0 (personal home display)"},
-        )
-
-        def download(context):
-            with urllib.request.urlopen(request, timeout=8, context=context) as response:
-                return response.read()
-
-        last_error = None
-        for attempt in range(2):
-            context = (
-                ssl._create_unverified_context()
-                if TeslaDashboardPanel._MAP_UNVERIFIED_SSL
-                else ssl.create_default_context()
-            )
-            try:
-                data = download(context)
-            except Exception as error:
-                # urllib wraps cert failures in URLError; unwrap before deciding.
-                if not TeslaDashboardPanel._MAP_UNVERIFIED_SSL and self._is_ssl_failure(error):
-                    try:
-                        data = download(ssl._create_unverified_context())
-                        # Frozen builds without a CA bundle: remember the fallback.
-                        TeslaDashboardPanel._MAP_UNVERIFIED_SSL = True
-                    except Exception as fallback_error:
-                        last_error = fallback_error
-                        time.sleep(0.4)
-                        continue
-                else:
-                    last_error = error
-                    time.sleep(0.4)
-                    continue
-            try:
-                cache_dir.mkdir(parents=True, exist_ok=True)
-                cache_file.write_bytes(data)
-            except OSError:
-                pass
-            return Image.open(io.BytesIO(data)).convert("RGB")
-        raise last_error if last_error else RuntimeError("tile fetch failed")
-
-    def _fetch_map_tiles(self, lat: float, lon: float, zoom: int, w: int, h: int):
-        from concurrent.futures import ThreadPoolExecutor
-
-        from PIL import ImageEnhance
-
-        center_x, center_y = self._latlon_to_global_px(lat, lon, zoom)
-        left = int(center_x - w / 2)
-        top = int(center_y - h / 2)
-        tile_x0, tile_y0 = left // 256, top // 256
-        tile_x1, tile_y1 = (left + w) // 256, (top + h) // 256
-        stitched = Image.new(
-            "RGB",
-            ((tile_x1 - tile_x0 + 1) * 256, (tile_y1 - tile_y0 + 1) * 256),
-            (10, 17, 30),
-        )
-        max_tile = (1 << zoom) - 1
-        coords = [
-            (tx, ty)
-            for tx in range(tile_x0, tile_x1 + 1)
-            for ty in range(tile_y0, tile_y1 + 1)
-            if 0 <= tx <= max_tile and 0 <= ty <= max_tile
-        ]
-        fetched = 0
-        last_error = None
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {pool.submit(self._fetch_map_tile, zoom, tx, ty): (tx, ty) for tx, ty in coords}
-            for future, (tx, ty) in futures.items():
-                try:
-                    tile = future.result()
-                except Exception as error:
-                    last_error = error
-                    self._log_map_error(f"map tile {zoom}/{tx}/{ty} failed: {error!r}")
-                    continue
-                stitched.paste(tile, ((tx - tile_x0) * 256, (ty - tile_y0) * 256))
-                fetched += 1
-        if not fetched:
-            raise RuntimeError(f"no map tiles could be downloaded ({last_error!r})")
-        crop_left = left - tile_x0 * 256
-        crop_top = top - tile_y0 * 256
-        image = stitched.crop((crop_left, crop_top, crop_left + w, crop_top + h))
-        # Tone the map toward the dark theme while keeping streets clearly readable.
-        image = ImageEnhance.Color(image).enhance(0.75)
-        image = ImageEnhance.Contrast(image).enhance(1.12)
-        image = ImageEnhance.Brightness(image).enhance(0.88)
-        navy = Image.new("RGB", image.size, (16, 27, 48))
-        return Image.blend(image, navy, 0.12)
-
     def _start_map_fetch(self, lat: float, lon: float, box, *, retry: bool = True):
         if Image is None or ImageTk is None:
             return
@@ -3596,9 +3540,9 @@ class TeslaDashboardPanel(BasePanel):
 
         def fetch():
             try:
-                image = self._fetch_map_tiles(lat, lon, self.MAP_ZOOM, w, h)
+                image = map_tiles.fetch_map_tiles(lat, lon, self.MAP_ZOOM, w, h)
             except Exception as error:
-                self._log_map_error(f"map fetch failed for {lat:.4f},{lon:.4f}: {error!r}")
+                map_tiles.log_map_error(f"map fetch failed for {lat:.4f},{lon:.4f}: {error!r}")
                 if retry:
                     # One delayed retry — transient network hiccups are common
                     # right after the display wakes.
@@ -5261,16 +5205,28 @@ class QrPanel(BasePanel):
     vary a lot. This panel sizes the code to fit whatever room is left below
     the shared title, keeping a plain white quiet zone (the `qrcode` library
     bakes this into the image itself) so phone cameras can still lock on.
+
+    Shared-photo pushes (`qrType: "photo"`, or a URL under `/qr-images/`)
+    render like the slideshow: the photo itself is the hero, with a small
+    corner QR so viewers can still scan it onto their phone.
     """
 
     _HEADINGS = {
         "url": "Scan to open",
         "wifi": "Scan to join Wi-Fi",
+        "photo": "Shared photo",
     }
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
         self._qr_image = None  # keep a reference or Tk garbage-collects it
+        self._photo_image = None
+        self._fetch_token = 0
+
+    def hide(self):
+        self._fetch_token += 1
+        self._photo_image = None
+        super().hide()
 
     @staticmethod
     def _build_qr_image(content: str, target_size: int):
@@ -5292,21 +5248,39 @@ class QrPanel(BasePanel):
             print(f"QR code generation failed: {error}", file=sys.stderr)
             return None
 
+    @staticmethod
+    def _is_shared_photo_url(content: str) -> bool:
+        """Bridge serves uploaded photos at `/qr-images/<token>.<ext>`."""
+        try:
+            path = urllib.parse.urlparse(str(content or "")).path or ""
+        except Exception:
+            return False
+        return "/qr-images/" in path
+
     def _render(self, payload: dict):
         for item_id in list(self._item_ids):
             self.canvas.delete(item_id)
         self._item_ids.clear()
         self._qr_image = None
-
-        layout = self.shell.layout
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
+        self._photo_image = None
+        self._fetch_token += 1
 
         qr = payload.get("qr") or {}
         qr_type = str(qr.get("qrType") or "url").lower()
         content = str(qr.get("content") or "")
         label = str(qr.get("label") or "").strip()
+
+        if qr_type == "photo" or self._is_shared_photo_url(content):
+            self._render_photo_with_corner_qr(content, label)
+            return
+
+        self._render_code_only(qr_type, content, label)
+
+    def _render_code_only(self, qr_type: str, content: str, label: str):
+        layout = self.shell.layout
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
         heading = self._HEADINGS.get(qr_type, "Scan this code")
 
         x = layout.content_x
@@ -5377,16 +5351,79 @@ class QrPanel(BasePanel):
                 )
             )
 
+    def _render_photo_with_corner_qr(self, url: str, label: str):
+        """Hero photo + small corner QR — same composition as the slideshow."""
+        muted = self.config["mutedTextColor"]
+        photo_cx, photo_cy, max_w, max_h, layout = self._photo_stage_geometry()
+
+        self._track(
+            self.canvas.create_text(
+                photo_cx,
+                photo_cy,
+                anchor="center",
+                text="Loading photo…",
+                fill=muted,
+                font=self.shell.body_font,
+            )
+        )
+        self._qr_image = self._draw_scan_qr_badge(
+            url, label or "Scan to save this photo",
+        )
+
+        token = self._fetch_token
+
+        def worker():
+            image = PhotoSlideshowPanel._fetch_photo(url, max_w, max_h)
+            self.root.after(0, lambda: self._apply_photo_preview(token, image, url, label))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_photo_preview(self, token: int, image, url: str, label: str):
+        if token != self._fetch_token or not self.visible:
+            return
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+
+        muted = self.config["mutedTextColor"]
+        photo_cx, photo_cy, _max_w, _max_h, layout = self._photo_stage_geometry()
+
+        if image is None:
+            self._track(
+                self.canvas.create_text(
+                    photo_cx,
+                    photo_cy,
+                    anchor="center",
+                    text="Could not load this photo",
+                    fill=muted,
+                    font=self.shell.body_font,
+                    width=layout.content_width - 60,
+                    justify=tk.CENTER,
+                )
+            )
+        else:
+            self._photo_image = ImageTk.PhotoImage(image)
+            self._track(self.canvas.create_image(photo_cx, photo_cy, image=self._photo_image))
+
+        self._qr_image = self._draw_scan_qr_badge(
+            url, label or "Scan to save this photo",
+        )
+
 
 class PhotoSlideshowPanel(BasePanel):
-    """Cycles through photos shared via "QR Code → Photo" in the last 7 days.
+    """Cycles once through every photo in the bridge's Slideshow Manager.
 
-    The bridge sends a list of already-resolved photo URLs (its own control
-    page host, self-signed TLS) plus `secondsPerPhoto` — this panel owns the
-    per-photo timer internally (like ShoppingListPanel's page rotation) and
-    keeps advancing until a new UDP payload of any kind replaces the overlay.
-    Each photo is fetched off the Tk main thread so a slow LAN fetch never
-    stalls the UI, and centered so it looks good in portrait or landscape.
+    The bridge sends a list of `{url, uploadedAt}` entries (its own control
+    page host, self-signed TLS), already ordered per the Settings tab's
+    playback-order preference, plus `secondsPerPhoto` — this panel owns the
+    per-photo timer internally (like ShoppingListPanel's page rotation),
+    stops after the last photo (the overlay's own display-seconds timer then
+    dismisses it — see overlay.py suppressing the "Dismisses in…" countdown
+    text for this panel), and is interrupted immediately by any new UDP
+    payload, same as every other overlay. Each photo is fetched off the Tk
+    main thread so a slow LAN fetch never stalls the UI, and centered so it
+    looks good in portrait or landscape. A small QR code in the corner links
+    straight to that photo so a viewer can open it on their own phone.
     """
 
     # The bridge's control page uses a self-signed cert by design (LAN-only,
@@ -5398,19 +5435,28 @@ class PhotoSlideshowPanel(BasePanel):
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
         self._tick_job = None
-        self._photos: list[str] = []
+        self._photos: list[dict] = []
         self._index = 0
         self._seconds_per_photo = 5
         self._photo_image = None  # keep a reference or Tk garbage-collects it
+        self._corner_qr_image = None
         self._fetch_token = 0
 
     def show(self, payload: dict):
         self.hide()
         self.visible = True
         slideshow = payload.get("slideshow") or {}
-        self._photos = [
-            str(p).strip() for p in (slideshow.get("photos") or []) if str(p or "").strip()
-        ]
+        photos = []
+        for entry in slideshow.get("photos") or []:
+            if isinstance(entry, dict):
+                url = str(entry.get("url") or "").strip()
+                uploaded_at = entry.get("uploadedAt")
+            else:
+                url = str(entry or "").strip()
+                uploaded_at = None
+            if url:
+                photos.append({"url": url, "uploadedAt": uploaded_at})
+        self._photos = photos
         try:
             self._seconds_per_photo = max(1, int(slideshow.get("secondsPerPhoto") or 5))
         except (TypeError, ValueError):
@@ -5423,6 +5469,7 @@ class PhotoSlideshowPanel(BasePanel):
         self._photos = []
         self._index = 0
         self._photo_image = None
+        self._corner_qr_image = None
         # Invalidate any fetch still in flight for a photo we've moved away from.
         self._fetch_token += 1
 
@@ -5433,64 +5480,69 @@ class PhotoSlideshowPanel(BasePanel):
         self._tick_job = None
         if not self.visible or not self._photos:
             return
-        self._index = (self._index + 1) % len(self._photos)
+        if self._index + 1 >= len(self._photos):
+            # Played every photo once — hold on the last one; the overlay's
+            # own display-seconds timer (sized to exactly this pass) dismisses it.
+            return
+        self._index += 1
         self._render_current()
-
-    def _center(self):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        top = layout.message_area_top
-        bottom = layout.message_area_bottom
-        return x + width // 2, top + (bottom - top) // 2, width, top, bottom
 
     def _render_current(self):
         for item_id in list(self._item_ids):
             self.canvas.delete(item_id)
         self._item_ids.clear()
         self._photo_image = None
+        self._corner_qr_image = None
 
-        center_x, center_y, width, top, bottom = self._center()
+        photo_cx, photo_cy, max_w, max_h, layout = self._photo_stage_geometry()
         muted = self.config["mutedTextColor"]
 
         if not self._photos:
             self._track(
                 self.canvas.create_text(
-                    center_x,
-                    center_y,
+                    photo_cx,
+                    photo_cy,
                     anchor="center",
-                    text="No shared photos in the last 7 days",
+                    text="No saved photos yet — share one via QR Code → Photo first",
                     fill=muted,
                     font=self.shell.body_font,
-                    width=width - 60,
+                    width=layout.content_width - 60,
                     justify=tk.CENTER,
                 )
             )
             return
 
-        url = self._photos[self._index]
+        current = self._photos[self._index]
+        url = current["url"]
+        token = self._fetch_token
+
+        # Kick off the fetch *before* drawing chrome — a chrome glitch must
+        # never strand us on "Loading photo…" with no worker running.
+        def worker():
+            image = self._fetch_photo(url, max_w, max_h)
+            self.root.after(0, lambda: self._apply_fetched(token, image))
+
+        threading.Thread(target=worker, daemon=True).start()
+
         self._track(
             self.canvas.create_text(
-                center_x,
-                center_y,
+                photo_cx,
+                photo_cy,
                 anchor="center",
                 text="Loading photo…",
                 fill=muted,
                 font=self.shell.body_font,
             )
         )
+        try:
+            self._draw_chrome()
+        except Exception as error:
+            print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
 
-        available_w = max(1, width - 40)
-        available_h = max(120, bottom - top - 20)
-        token = self._fetch_token
-
-        def worker():
-            image = self._fetch_photo(url, available_w, available_h)
-            self.root.after(0, lambda: self._apply_fetched(token, image))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-        if len(self._photos) > 1:
+        if self._tick_job:
+            self.root.after_cancel(self._tick_job)
+            self._tick_job = None
+        if self._index + 1 < len(self._photos):
             self._tick_job = self.root.after(self._seconds_per_photo * 1000, self._advance)
 
     def _apply_fetched(self, token: int, image):
@@ -5499,27 +5551,71 @@ class PhotoSlideshowPanel(BasePanel):
         for item_id in list(self._item_ids):
             self.canvas.delete(item_id)
         self._item_ids.clear()
+        self._corner_qr_image = None
 
-        center_x, center_y, width, _top, _bottom = self._center()
+        photo_cx, photo_cy, _max_w, _max_h, layout = self._photo_stage_geometry()
         muted = self.config["mutedTextColor"]
 
         if image is None:
             self._track(
                 self.canvas.create_text(
-                    center_x,
-                    center_y,
+                    photo_cx,
+                    photo_cy,
                     anchor="center",
                     text="Could not load this photo",
                     fill=muted,
                     font=self.shell.body_font,
-                    width=width - 60,
+                    width=layout.content_width - 60,
                     justify=tk.CENTER,
                 )
             )
-            return
+        else:
+            self._photo_image = ImageTk.PhotoImage(image)
+            self._track(self.canvas.create_image(photo_cx, photo_cy, image=self._photo_image))
 
-        self._photo_image = ImageTk.PhotoImage(image)
-        self._track(self.canvas.create_image(center_x, center_y, image=self._photo_image))
+        try:
+            self._draw_chrome()
+        except Exception as error:
+            print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
+
+    def _draw_chrome(self):
+        """Draws the "Photo x of y" / shared-date / scan-QR chrome that
+        overlays the current photo regardless of load state."""
+        if not self._photos:
+            return
+        layout = self.shell.layout
+        muted = self.config["mutedTextColor"]
+        current = self._photos[self._index]
+        total = len(self._photos)
+
+        line_h = self.shell.chip_value_font.metrics("linespace")
+        corner_x = layout.content_x
+        corner_y = max(16, layout.message_area_top - line_h * 2 - 12)
+        self._track(
+            self.canvas.create_text(
+                corner_x,
+                corner_y,
+                anchor="nw",
+                text=f"Photo {self._index + 1} of {total}",
+                fill=muted,
+                font=self.shell.chip_value_font,
+            )
+        )
+        if current.get("uploadedAt"):
+            self._track(
+                self.canvas.create_text(
+                    corner_x,
+                    corner_y + line_h + 4,
+                    anchor="nw",
+                    text=f"Shared {format_chip_timestamp(current['uploadedAt'])}",
+                    fill=muted,
+                    font=self.shell.chip_value_font,
+                )
+            )
+
+        self._corner_qr_image = self._draw_scan_qr_badge(
+            current["url"], "Scan for this photo",
+        )
 
     @staticmethod
     def _is_ssl_failure(error) -> bool:
@@ -5568,3 +5664,477 @@ class PhotoSlideshowPanel(BasePanel):
         except Exception as error:
             print(f"Photo slideshow fetch failed: {error}", file=sys.stderr, flush=True)
             return None
+
+
+class RoutePlannerPanel(BasePanel):
+    """Route Planner — renders the bridge's lean `route-planner.query`
+    payload (names/coords/mode/distance/duration/route-line) instantly, then
+    independently fetches five slower tiles (map, two place-facts, two
+    weather) off the Tk thread, each swapping its own spinner for real
+    content the moment it lands — mirrors `TeslaDashboardPanel`'s async map
+    fetch and `MusicPanel`'s async album-art fetch (request-id fenced so a
+    stale fetch from a previous query can't render over a newer one).
+    """
+
+    TICK_MS = 90
+    PIN_RADIUS = 8
+    # Reuse WeatherPanel's condition palette/labels so the mini weather tiles
+    # match the main WeatherPanel look (see `_apply_weather` below, which
+    # borrows `WeatherPanel._draw_condition_icon` directly).
+    CONDITION_COLORS = WeatherPanel.CONDITION_COLORS
+    CONDITION_LABELS = WeatherPanel.CONDITION_LABELS
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._tick_job = None
+        self._request_id = 0
+        self._pending_tiles: set[str] = set()
+        self._spinner_items: dict[str, tuple[int, int]] = {}
+        self._tile_item_ids: dict[str, list[int]] = {}
+        self._tile_boxes: dict[str, tuple[float, float, float, float]] = {}
+        self._weather_snapshots: dict[str, dict | None] = {}
+        self._weather_done: dict[str, bool] = {}
+        self._spinner_angle = 0.0
+        self._map_photo = None
+        self._duration_min = None
+        # Facts tiles get their own nested viewport + scroller (reusing the
+        # broadcast message's pause/scroll/pause controller) so long facts
+        # scroll in place instead of overflowing the card and overlapping
+        # the tile below — see `_apply_facts`.
+        self._fact_scrollers: dict[str, MessageScrollController] = {}
+        self._fact_widgets: dict[str, tk.Canvas] = {}
+
+    def hide(self):
+        self._request_id += 1
+        self._pending_tiles = set()
+        self._spinner_items = {}
+        self._tile_item_ids = {}
+        self._tile_boxes = {}
+        self._weather_snapshots = {}
+        self._weather_done = {}
+        self._map_photo = None
+        for scroller in self._fact_scrollers.values():
+            scroller.stop()
+        self._fact_scrollers = {}
+        self._fact_widgets = {}
+        super().hide()
+
+    # -- per-tile bookkeeping -------------------------------------------------
+
+    def _track_tile(self, key: str, item_id: int) -> int:
+        self._track(item_id)
+        self._tile_item_ids.setdefault(key, []).append(item_id)
+        return item_id
+
+    def _clear_tile(self, key: str):
+        for item_id in self._tile_item_ids.get(key, []):
+            self.canvas.delete(item_id)
+            if item_id in self._item_ids:
+                self._item_ids.remove(item_id)
+        self._tile_item_ids[key] = []
+        self._spinner_items.pop(key, None)
+        self._pending_tiles.discard(key)
+        scroller = self._fact_scrollers.pop(key, None)
+        if scroller is not None:
+            scroller.stop()
+        widget = self._fact_widgets.pop(key, None)
+        if widget is not None:
+            widget.place_forget()
+            if widget in self._widgets:
+                self._widgets.remove(widget)
+
+    def _draw_tile_placeholder(self, key: str, box, label: str):
+        x0, y0, x1, y1 = box
+        self._panel_card(x0, y0, x1 - x0, y1 - y0)
+        muted = self.config["mutedTextColor"]
+        label_id = self.canvas.create_text(
+            x0 + 14, y0 + 12, anchor="nw", text=label, fill=muted,
+            font=self.shell.chip_label_font, width=max(40, (x1 - x0) - 28),
+        )
+        self._track_tile(key, label_id)
+        cx = (x0 + x1) / 2
+        cy = (y0 + y1) / 2 + 8
+        radius = max(14, min(24, (y1 - y0) / 4, (x1 - x0) / 6))
+        self._start_tile_spinner(key, cx, cy, radius)
+
+    def _start_tile_spinner(self, key: str, cx: float, cy: float, radius: float):
+        accent = self.config.get("accentColor", "#38bdf8")
+        arc1 = self.canvas.create_arc(
+            cx - radius, cy - radius, cx + radius, cy + radius,
+            start=self._spinner_angle, extent=100, style=tk.ARC, outline=accent, width=4,
+        )
+        arc2 = self.canvas.create_arc(
+            cx - radius, cy - radius, cx + radius, cy + radius,
+            start=self._spinner_angle + 180, extent=60, style=tk.ARC, outline=accent, width=3,
+        )
+        self._track_tile(key, arc1)
+        self._track_tile(key, arc2)
+        self._spinner_items[key] = (arc1, arc2)
+        self._pending_tiles.add(key)
+
+    def _schedule_tick(self):
+        self._stop_tick()
+        self._tick_job = self.root.after(self.TICK_MS, self._tick)
+
+    def _tick(self):
+        self._tick_job = None
+        if not self.visible or not self._pending_tiles:
+            return
+        self._spinner_angle = (self._spinner_angle - 9) % 360
+        for arc1, arc2 in self._spinner_items.values():
+            self.canvas.itemconfigure(arc1, start=self._spinner_angle)
+            self.canvas.itemconfigure(arc2, start=self._spinner_angle + 180)
+        self._schedule_tick()
+
+    def _show_tile_error(self, request_id: int, key: str, box, message: str):
+        if not self.visible or request_id != self._request_id:
+            return
+        self._clear_tile(key)
+        x0, y0, x1, y1 = box
+        muted = self.config["mutedTextColor"]
+        text_id = self.canvas.create_text(
+            (x0 + x1) / 2, (y0 + y1) / 2, anchor="center", text=message, fill=muted,
+            font=self.shell.forecast_label_font, width=max(60, (x1 - x0) - 24), justify=tk.CENTER,
+        )
+        self._track_tile(key, text_id)
+
+    # -- layout ---------------------------------------------------------------
+
+    def _compute_tile_boxes(self, x: float, width: float, top: float, bottom: float, portrait: bool):
+        # Weather and the local-times strip only ever hold a couple of
+        # short, fixed-size lines, so they get compact fixed-ish shares of
+        # the budget; the facts tiles get whatever's left over since their
+        # prose is the thing most likely to need room (and now scrolls in
+        # place — see `_apply_facts` — instead of overflowing onto the tile
+        # below it, which is what caused the old overlap bug).
+        gap = 14
+        boxes = {}
+        if portrait:
+            available_h = max(1, bottom - top)
+            map_h = max(160, int(available_h * 0.32))
+            weather_h = max(84, int(available_h * 0.15))
+            time_h = max(70, int(available_h * 0.13))
+            facts_h = max(130, available_h - map_h - weather_h - time_h - gap * 3)
+            y = top
+            boxes["map"] = (x, y, x + width, y + map_h)
+            y += map_h + gap
+            col_w = (width - gap) / 2
+            boxes["facts_origin"] = (x, y, x + col_w, y + facts_h)
+            boxes["facts_destination"] = (x + col_w + gap, y, x + width, y + facts_h)
+            y += facts_h + gap
+            boxes["weather_origin"] = (x, y, x + col_w, y + weather_h)
+            boxes["weather_destination"] = (x + col_w + gap, y, x + width, y + weather_h)
+            y += weather_h + gap
+            boxes["time"] = (x, y, x + width, y + time_h)
+        else:
+            left_w = int(width * 0.52)
+            right_x = x + left_w + gap
+            right_w = width - left_w - gap
+            boxes["map"] = (x, top, x + left_w, bottom)
+            available_h = max(1, bottom - top)
+            weather_h = max(84, int(available_h * 0.20))
+            time_h = max(70, int(available_h * 0.18))
+            facts_h = max(130, available_h - weather_h - time_h - gap * 2)
+            y = top
+            col_w = (right_w - gap) / 2
+            boxes["facts_origin"] = (right_x, y, right_x + col_w, y + facts_h)
+            boxes["facts_destination"] = (right_x + col_w + gap, y, right_x + right_w, y + facts_h)
+            y += facts_h + gap
+            boxes["weather_origin"] = (right_x, y, right_x + col_w, y + weather_h)
+            boxes["weather_destination"] = (right_x + col_w + gap, y, right_x + right_w, y + weather_h)
+            y += weather_h + gap
+            boxes["time"] = (right_x, y, right_x + right_w, y + time_h)
+        return boxes
+
+    # -- render -----------------------------------------------------------------
+
+    def _render(self, payload: dict):
+        request_id = self._request_id
+        self._weather_done = {"origin": False, "destination": False}
+
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        top = int(self.shell.overlay.screen_h * (0.035 if layout.portrait else 0.05))
+        bottom = layout.message_area_bottom
+        self._container_frame(x, top, width, bottom - top)
+
+        mode = payload.get("mode") if payload.get("mode") in ("driving", "flight") else "driving"
+        origin = payload.get("origin") or {}
+        destination = payload.get("destination") or {}
+        distance_miles = payload.get("distanceMiles")
+        duration_min = payload.get("durationMin")
+        geometry = (payload.get("route") or {}).get("geometry") or []
+        self._duration_min = duration_min
+
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+
+        badge_label = "Flight-Path Estimate" if mode == "flight" else "Driving Estimate"
+        badge_fill = self.AMBER_BG if mode == "flight" else self.GREEN_BG
+        badge_fg = self.AMBER if mode == "flight" else self.GREEN
+        pill_h = self._pill(x, top, badge_label, fill=badge_fill, fg=badge_fg)
+
+        origin_name = origin.get("name") or "Origin"
+        dest_name = destination.get("name") or "Destination"
+        title_y = top + pill_h + 14
+        self._track(
+            self.canvas.create_text(
+                x, title_y, anchor="nw", text=f"{origin_name}  \u2192  {dest_name}",
+                fill=text, font=self.shell.section_title_font, width=width,
+            )
+        )
+
+        stat_y = title_y + self.shell.section_title_font.metrics("linespace") + 6
+        distance_label = format_route_distance(distance_miles)
+        duration_label = format_route_duration(duration_min)
+        stat_text = (
+            f"{distance_label}  \u00b7  about {duration_label}"
+            if duration_min is not None
+            else distance_label
+        )
+        self._track(
+            self.canvas.create_text(
+                x, stat_y, anchor="nw", text=stat_text, fill=accent, font=self.shell.body_font,
+            )
+        )
+
+        tiles_top = stat_y + self.shell.body_font.metrics("linespace") + 18
+        tiles_bottom = bottom - 6
+        boxes = self._compute_tile_boxes(x, width, tiles_top, tiles_bottom, layout.portrait)
+        self._tile_boxes = boxes
+
+        for key, label in (
+            ("map", "Route Map"),
+            ("facts_origin", origin_name),
+            ("facts_destination", dest_name),
+            ("weather_origin", f"Weather \u00b7 {origin_name}"),
+            ("weather_destination", f"Weather \u00b7 {dest_name}"),
+            ("time", "Local Times"),
+        ):
+            self._draw_tile_placeholder(key, boxes[key], label)
+
+        self._schedule_tick()
+
+        self._start_map_fetch(origin, destination, geometry, mode, boxes["map"], request_id)
+        self._start_facts_fetch("facts_origin", origin_name, boxes["facts_origin"], request_id)
+        self._start_facts_fetch("facts_destination", dest_name, boxes["facts_destination"], request_id)
+        self._start_weather_fetch("origin", origin, boxes["weather_origin"], request_id)
+        self._start_weather_fetch("destination", destination, boxes["weather_destination"], request_id)
+
+    # -- map tile -----------------------------------------------------------------
+
+    def _start_map_fetch(self, origin: dict, destination: dict, geometry, mode: str, box, request_id: int):
+        if Image is None or ImageTk is None:
+            self._show_tile_error(request_id, "map", box, "Map unavailable")
+            return
+
+        lat1, lon1 = origin.get("latitude"), origin.get("longitude")
+        lat2, lon2 = destination.get("latitude"), destination.get("longitude")
+        if None in (lat1, lon1, lat2, lon2):
+            self._show_tile_error(request_id, "map", box, "Map unavailable")
+            return
+
+        w = max(64, int(box[2] - box[0]) - 4)
+        h = max(64, int(box[3] - box[1]) - 4)
+
+        def fetch():
+            try:
+                zoom, center_lat, center_lon = map_tiles.zoom_to_fit(lat1, lon1, lat2, lon2, w, h)
+                image = map_tiles.fetch_map_tiles(center_lat, center_lon, zoom, w, h)
+                points = geometry if len(geometry) >= 2 else [[lat1, lon1], [lat2, lon2]]
+                pixels = map_tiles.project_points_to_pixels(points, center_lat, center_lon, zoom, w, h)
+            except Exception as error:
+                map_tiles.log_map_error(f"route map fetch failed: {error!r}")
+                self.root.after(0, lambda: self._show_tile_error(request_id, "map", box, "Map offline"))
+                return
+            self.root.after(0, lambda: self._apply_map(request_id, image, pixels, mode, box))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _apply_map(self, request_id: int, image, pixels, mode: str, box):
+        if not self.visible or request_id != self._request_id:
+            return
+        self._clear_tile("map")
+        x0, y0, x1, y1 = box
+        photo = ImageTk.PhotoImage(image)
+        self._map_photo = photo
+        img_id = self.canvas.create_image((x0 + x1) / 2, (y0 + y1) / 2, image=photo)
+        self._track_tile("map", img_id)
+
+        accent = self.config.get("accentColor", "#38bdf8")
+        flat = []
+        for px, py in pixels:
+            flat.extend([x0 + px, y0 + py])
+        if len(flat) >= 4:
+            line_kwargs = {"fill": accent, "width": 4, "capstyle": tk.ROUND, "joinstyle": tk.ROUND}
+            if mode == "flight":
+                line_kwargs["dash"] = (8, 6)
+            else:
+                line_kwargs["smooth"] = True
+            line_id = self.canvas.create_line(*flat, **line_kwargs)
+            self._track_tile("map", line_id)
+
+            for index, color in ((0, self.GREEN), (len(pixels) - 1, self.RED)):
+                px, py = pixels[index]
+                cx, cy = x0 + px, y0 + py
+                pin_id = self.canvas.create_oval(
+                    cx - self.PIN_RADIUS, cy - self.PIN_RADIUS, cx + self.PIN_RADIUS, cy + self.PIN_RADIUS,
+                    fill=color, outline="#0d1524", width=2,
+                )
+                self._track_tile("map", pin_id)
+
+    # -- place facts -----------------------------------------------------------
+
+    def _start_facts_fetch(self, key: str, name: str, box, request_id: int):
+        def fetch():
+            result = place_facts.fetch_place_summary(name)
+            self.root.after(0, lambda: self._apply_facts(request_id, key, name, result, box))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _apply_facts(self, request_id: int, key: str, name: str, result: dict | None, box):
+        if not self.visible or request_id != self._request_id:
+            return
+        self._clear_tile(key)
+        x0, y0, x1, y1 = box
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+
+        header_id = self.canvas.create_text(
+            x0 + 14, y0 + 12, anchor="nw", text=name, fill=muted,
+            font=self.shell.chip_label_font, width=max(40, (x1 - x0) - 28),
+        )
+        self._track_tile(key, header_id)
+        body_top = y0 + 12 + self.shell.chip_label_font.metrics("linespace") + 8
+        body_left = x0 + 14
+        body_width = max(60, (x1 - x0) - 28)
+        body_height = max(30, (y1 - 10) - body_top)
+
+        if not result or not result.get("extract"):
+            text_id = self.canvas.create_text(
+                body_left + body_width / 2, body_top + body_height / 2, anchor="center",
+                text="No facts available", fill=muted, font=self.shell.forecast_label_font,
+                width=body_width, justify=tk.CENTER,
+            )
+            self._track_tile(key, text_id)
+            return
+
+        # Clipped nested-canvas viewport so long facts scroll in place
+        # (pause / scroll / pause, looping indefinitely) instead of
+        # overflowing the card and overlapping the tile below it.
+        viewport = tk.Canvas(
+            self.root, width=max(1, int(body_width)), height=max(1, int(body_height)),
+            highlightthickness=0, bd=0, bg=self.CARD,
+        )
+        text_id = viewport.create_text(
+            body_width / 2, 0, anchor="n", text="", fill=text,
+            font=self.shell.body_font, width=body_width, justify=tk.CENTER,
+        )
+        scroller = MessageScrollController(viewport, text_id, self.config, self.root, on_finish=lambda: None)
+        needs_scroll = scroller.configure(
+            result["extract"], center_x=body_width / 2, viewport_height=body_height,
+        )
+        if needs_scroll:
+            scroller.start()
+        self._fact_scrollers[key] = scroller
+        self._fact_widgets[key] = viewport
+        self._place_widget(viewport, x=body_left, y=body_top)
+
+    # -- weather + local times ---------------------------------------------------
+
+    def _start_weather_fetch(self, key: str, location: dict, box, request_id: int):
+        lat, lon = location.get("latitude"), location.get("longitude")
+
+        def fetch():
+            weather = None
+            if lat is not None and lon is not None:
+                try:
+                    weather = weather_fetch.fetch_weather_forecast({"latitude": lat, "longitude": lon})
+                except Exception as error:
+                    print(f"Route planner weather fetch failed: {error}", file=sys.stderr, flush=True)
+            self.root.after(0, lambda: self._apply_weather(request_id, key, weather, box))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _apply_weather(self, request_id: int, key: str, weather: dict | None, box):
+        if not self.visible or request_id != self._request_id:
+            return
+        self._weather_snapshots[key] = weather
+        self._weather_done[key] = True
+
+        tile_key = f"weather_{key}"
+        self._clear_tile(tile_key)
+        x0, y0, x1, y1 = box
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        current = (weather or {}).get("current") or {}
+        temp_f = current.get("temperatureF")
+
+        if temp_f is None:
+            text_id = self.canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2, anchor="center", text="Weather unavailable", fill=muted,
+                font=self.shell.forecast_label_font, width=max(60, (x1 - x0) - 24), justify=tk.CENTER,
+            )
+            self._track_tile(tile_key, text_id)
+        else:
+            condition = normalize_condition(current.get("condition"))
+            icon_cx = x0 + 34
+            icon_cy = (y0 + y1) / 2 + 8
+            WeatherPanel._draw_condition_icon(self, icon_cx, icon_cy, 40, condition)
+            temp_id = self.canvas.create_text(
+                x0 + 64, icon_cy - 12, anchor="w", text=f"{round(temp_f)}\u00b0F",
+                fill=text, font=self.shell.chip_value_font,
+            )
+            self._track_tile(tile_key, temp_id)
+            label = WeatherPanel.CONDITION_LABELS.get(condition, condition.title())
+            label_id = self.canvas.create_text(
+                x0 + 64, icon_cy + 16, anchor="w", text=label, fill=muted, font=self.shell.forecast_label_font,
+            )
+            self._track_tile(tile_key, label_id)
+
+        if self._weather_done.get("origin") and self._weather_done.get("destination"):
+            self._render_time_strip(request_id)
+
+    def _render_time_strip(self, request_id: int):
+        if not self.visible or request_id != self._request_id:
+            return
+        box = self._tile_boxes.get("time")
+        if not box:
+            return
+        self._clear_tile("time")
+        x0, y0, x1, y1 = box
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+
+        origin_offset = (self._weather_snapshots.get("origin") or {}).get("utcOffsetSeconds")
+        dest_offset = (self._weather_snapshots.get("destination") or {}).get("utcOffsetSeconds")
+
+        if origin_offset is None or dest_offset is None:
+            text_id = self.canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2, anchor="center", text="Local times unavailable", fill=muted,
+                font=self.shell.forecast_label_font,
+            )
+            self._track_tile("time", text_id)
+            return
+
+        entries = (
+            ("Now (origin)", format_local_time_at_offset(origin_offset)),
+            ("Now (destination)", format_local_time_at_offset(dest_offset)),
+            ("Est. arrival", format_local_time_at_offset(dest_offset, self._duration_min)),
+        )
+        col_w = (x1 - x0) / 3
+        label_h = self.shell.chip_label_font.metrics("linespace")
+        value_h = self.shell.chip_value_font.metrics("linespace")
+        block_top = (y0 + y1) / 2 - (label_h + value_h + 6) / 2
+        for index, (label, value) in enumerate(entries):
+            cx = x0 + col_w * index + col_w / 2
+            label_id = self.canvas.create_text(
+                cx, block_top, anchor="n", text=label, fill=muted, font=self.shell.chip_label_font,
+            )
+            value_id = self.canvas.create_text(
+                cx, block_top + label_h + 6, anchor="n", text=value, fill=text, font=self.shell.chip_value_font,
+            )
+            self._track_tile("time", label_id)
+            self._track_tile("time", value_id)

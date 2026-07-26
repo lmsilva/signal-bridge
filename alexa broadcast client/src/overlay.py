@@ -17,6 +17,7 @@ from src.display_panels import (
     ShoppingListPanel,
     NotificationsPanel,
     PhotoSlideshowPanel,
+    RoutePlannerPanel,
     SmartHomePanel,
     TeslaBatteryPanel,
     TeslaDashboardPanel,
@@ -135,6 +136,7 @@ class OverlayWindow:
             "display.auth": AuthPinPanel(self.root, self.shell, self.config),
             "qr.display": QrPanel(self.root, self.shell, self.config),
             "photo.slideshow": PhotoSlideshowPanel(self.root, self.shell, self.config),
+            "route-planner.query": RoutePlannerPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
@@ -390,11 +392,11 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
-        if display_type == "tesla-dashboard.query":
+        if display_type in ("tesla-dashboard.query", "route-planner.query"):
             self.canvas.itemconfigure(self.title_primary_id, text="")
             self.canvas.itemconfigure(self.title_accent_id, text="")
-            # The dashboard draws its own full-size container, so hide the shared
-            # backdrop frame to avoid a double-box outline.
+            # Both panels draw their own full-size container/header, so hide the
+            # shared backdrop frame + generic title to avoid double-drawing.
             self.canvas.itemconfigure(self.backdrop_frame_id, state="hidden")
         else:
             self.canvas.itemconfigure(self.backdrop_frame_id, state="normal")
@@ -409,7 +411,12 @@ class OverlayWindow:
         self._active_panel_key = display_type
         panel.show(payload)
         self.canvas.tag_raise("overlay_chrome")
-        if self.countdown_label.cget("text"):
+        # Blank the dismiss clock immediately for photo slideshow (don't wait
+        # for the first countdown tick — and clear any leftover text from the
+        # previous overlay if panel.show raised mid-render).
+        if display_type == "photo.slideshow":
+            self._set_countdown_text("")
+        elif self.countdown_label.cget("text"):
             self.countdown_label.lift()
 
         if display_type == "broadcast" and panel.message_viewport:
@@ -432,7 +439,14 @@ class OverlayWindow:
     def _update_countdown(self):
         remaining = max(0, int(math.ceil(self._expires_at - time.time())))
         finishing = remaining <= 0 and self._needs_scroll()
-        self._set_countdown_text(self._format_remaining(remaining, finishing=finishing))
+        # The photo slideshow must stay up until it has played through every
+        # photo once (or a new command interrupts it) rather than showing a
+        # ticking "Dismisses in…" clock — the timer below still runs (sized
+        # to exactly one pass through the photos) so auto-dismiss still fires.
+        if self._active_panel_key == "photo.slideshow":
+            self._set_countdown_text("")
+        else:
+            self._set_countdown_text(self._format_remaining(remaining, finishing=finishing))
         self._raise_overlay_chrome()
 
         if remaining <= 0:
@@ -476,6 +490,10 @@ class OverlayWindow:
             self.root.after_cancel(self._fade_job)
             self._fade_job = None
         self._cancel_countdown()
+        # Cancelling the job alone leaves the previous "Dismisses in Xs"
+        # label on screen — clear it so a failed/partial panel switch can't
+        # strand a stale countdown under the new content.
+        self._set_countdown_text("")
         scroller = self._scroller
         if scroller:
             scroller.stop()
