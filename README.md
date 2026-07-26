@@ -88,7 +88,7 @@ Accept the self-signed certificate once. Optional HTTP redirect: `:47811` → HT
 | `https://<NAS_IP>:47810/` | Guests | Photo booth — pick a display and share a photo (saved to the party slideshow) |
 | `https://<NAS_IP>:47810/admin/` | Host | Full control UI (password from `ADMIN_PASSWORD` in `.env`) |
 
-**Alexa “Guest Snaps”:** say *Alexa, open guest snaps* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Say *Alexa, slideshow guest snaps* to play every stored guest photo on all displays. Prefer these over “photobooth” — Alexa reserves that word. Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/`).
+**Alexa “Guest Snaps”:** say *Alexa, open guest snaps* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Say *Alexa, open guest snaps slideshow* to play every stored guest photo on all displays. Prefer these over “photobooth” — Alexa reserves that word. Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/`).
 
 Admin tabs after login:
 

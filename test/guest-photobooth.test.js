@@ -20,13 +20,20 @@ test('matches guest snaps and legacy photobooth voice phrases', () => {
 });
 
 test('matches guest snaps slideshow phrases and not the dual-QR welcome', () => {
-  assert.equal(matchesGuestSnapsSlideshowQuery('slideshow guest snaps', ''), true);
+  // Preferred Alexa phrasing.
+  assert.equal(matchesGuestSnapsSlideshowQuery('open guest snaps slideshow', ''), true);
   assert.equal(matchesGuestSnapsSlideshowQuery('guest snaps slideshow', ''), true);
   assert.equal(matchesGuestSnapsSlideshowQuery('show guest snaps slideshow', ''), true);
+  // ASR often splits "slideshow" / singular "snap".
+  assert.equal(matchesGuestSnapsSlideshowQuery('open guest snap slide show', ''), true);
+  assert.equal(matchesGuestSnapsSlideshowQuery('guest snap slideshow', ''), true);
+  // Legacy order still works.
+  assert.equal(matchesGuestSnapsSlideshowQuery('slideshow guest snaps', ''), true);
   assert.equal(matchesGuestSnapsSlideshowQuery('slideshow of the guest snaps', ''), true);
   assert.equal(matchesGuestSnapsSlideshowQuery('open guest snaps', ''), false);
   assert.equal(matchesGuestSnapsSlideshowQuery("what's the weather", ''), false);
   // Must not route slideshow phrasing to the dual-QR welcome.
+  assert.equal(matchesGuestPhotoboothQuery('open guest snaps slideshow', ''), false);
   assert.equal(matchesGuestPhotoboothQuery('slideshow guest snaps', ''), false);
   assert.equal(matchesGuestPhotoboothQuery('guest snaps slideshow', ''), false);
 });
@@ -69,12 +76,12 @@ test('voice query parser returns guest-photobooth with all-displays target', () 
   assert.equal(event?.targetId, '*');
 });
 
-test('voice query parser returns photo-slideshow for slideshow guest snaps', () => {
+test('voice query parser returns photo-slideshow for open guest snaps slideshow', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse({
     creationTimestamp: Date.now(),
     name: 'Kitchen Echo',
-    description: { summary: 'slideshow guest snaps' },
+    description: { summary: 'open guest snaps slideshow' },
     alexaResponse: '',
     data: { recordKey: 'guest-slides-1' },
   });

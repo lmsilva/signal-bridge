@@ -132,6 +132,7 @@ async function startTestServer(options = {}) {
   const sent = [];
   const recorded = [];
   const timerPolls = [];
+  const alarmPolls = [];
   const config = options.config || makeConfig();
   const webServer = createWebServer({
     config,
@@ -143,6 +144,8 @@ async function startTestServer(options = {}) {
     deliverTargetedPayload: options.deliverTargetedPayload || null,
     requestTimerPoll: options.requestTimerPoll
       || ((device) => timerPolls.push(device)),
+    requestAlarmPoll: options.requestAlarmPoll
+      || ((device) => alarmPolls.push(device)),
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
@@ -162,6 +165,7 @@ async function startTestServer(options = {}) {
     sent,
     recorded,
     timerPolls,
+    alarmPolls,
     cookie,
   };
 }
@@ -948,6 +952,75 @@ test('weather and shopping-list quick-push tiles feed synthetic events into the 
   }
 });
 
+test('control page Quick Push includes Guest Snaps and companion tiles', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  assert.match(html, /id="btn-push-guest-snaps"/);
+  assert.match(html, /id="btn-push-air-quality"/);
+  assert.match(html, /id="btn-push-indoor-temperature"/);
+  assert.match(html, /id="btn-push-alarms"/);
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(js, /\/api\/push\/guest-photobooth/);
+  assert.match(js, /\/api\/push\/air-quality/);
+  assert.match(js, /\/api\/push\/indoor-temperature/);
+  assert.match(js, /\/api\/push\/alarms/);
+});
+
+test('air-quality and indoor-temperature quick-push tiles feed synthetic events', async () => {
+  const { webServer, base, recorded } = await startTestServer({
+    config: makeConfig({
+      indoorTemperature: {
+        locations: [{ id: 'office', label: 'Office', entity: 'office', aliases: ['office'] }],
+      },
+    }),
+  });
+  try {
+    const air = await postJson(base, '/api/push/air-quality');
+    assert.equal(air.status, 202);
+    assert.equal(air.body.kind, 'air-quality');
+
+    const indoor = await postJson(base, '/api/push/indoor-temperature', { device: 'iPhone' });
+    assert.equal(indoor.status, 202);
+    assert.equal(indoor.body.kind, 'indoor-temperature');
+
+    assert.equal(recorded.length, 2);
+    assert.equal(recorded[0].kind, 'air-quality');
+    assert.equal(recorded[0].query, 'show indoor air quality');
+    assert.equal(recorded[1].kind, 'indoor-temperature');
+    assert.equal(recorded[1].device, 'iPhone');
+    assert.match(recorded[1].query, /office/i);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('guest snaps quick-push feeds synthetic guest-photobooth event to all displays', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-guest-'));
+  const { webServer, base, recorded } = await startTestServer({
+    config: makeConfig({
+      ROOT: dataDir,
+      guestPhotoboothPath: path.join(dataDir, 'missing-guest.json'),
+      guestPhotobooth: {
+        wifiSsid: 'PartyNet',
+        wifiPassword: 'secret',
+        boothUrl: 'https://192.168.1.50:47810/',
+      },
+    }),
+  });
+  try {
+    const push = await postJson(base, '/api/push/guest-photobooth');
+    assert.equal(push.status, 202);
+    assert.equal(push.body.ok, true);
+    assert.equal(push.body.kind, 'guest-photobooth');
+    assert.equal(push.body.targetId, '*');
+    assert.equal(recorded.length, 1);
+    assert.equal(recorded[0].kind, 'guest-photobooth');
+    assert.equal(recorded[0].targetId, '*');
+    assert.equal(recorded[0].query, 'open guest snaps');
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('timers quick-push tile requests an immediate timer poll', async () => {
   const { webServer, base, timerPolls } = await startTestServer();
   try {
@@ -955,6 +1028,19 @@ test('timers quick-push tile requests an immediate timer poll', async () => {
     assert.equal(push.status, 202);
     assert.equal(push.body.ok, true);
     assert.deepEqual(timerPolls, ['iPhone']);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('alarms quick-push tile requests an immediate alarm poll', async () => {
+  const { webServer, base, alarmPolls } = await startTestServer();
+  try {
+    const push = await postJson(base, '/api/push/alarms', { device: 'iPhone' });
+    assert.equal(push.status, 202);
+    assert.equal(push.body.ok, true);
+    assert.equal(push.body.kind, 'alarms');
+    assert.deepEqual(alarmPolls, ['iPhone']);
   } finally {
     webServer.stop();
   }
@@ -976,6 +1062,30 @@ test('timers quick-push tile 503s when the timer sync hook is not wired up', asy
     const cookie = await loginAdmin(base);
     baseCookies.set(base, cookie);
     const push = await postJson(base, '/api/push/timers');
+    assert.equal(push.status, 503);
+    assert.equal(push.body.ok, false);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('alarms quick-push tile 503s when the alarm sync hook is not wired up', async () => {
+  const config = makeConfig();
+  const webServer = createWebServer({
+    config,
+    log: silentLog,
+    sendUdpPayload: () => {},
+    recordVoiceEvent: async () => {},
+    requestTimerPoll: () => {},
+    webRoot: makeTempWebRoot(),
+  });
+  const server = await webServer.start();
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const cookie = await loginAdmin(base);
+    baseCookies.set(base, cookie);
+    const push = await postJson(base, '/api/push/alarms');
     assert.equal(push.status, 503);
     assert.equal(push.body.ok, false);
   } finally {

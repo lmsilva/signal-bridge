@@ -1,7 +1,7 @@
 /**
  * Voice match + config helpers for Guest Snaps:
  *   - dual-QR welcome ("open guest snaps")
- *   - Shared Photo Slideshow ("slideshow guest snaps")
+ *   - Shared Photo Slideshow ("open guest snaps slideshow")
  *
  * Prefer "open guest snaps" — Alexa reserves "photobooth" and tries to run its
  * own feature. Legacy "guest photobooth" phrases still match as a fallback.
@@ -13,18 +13,20 @@
 const fs = require('fs');
 const path = require('path');
 
-// Primary brand phrase — "Alexa, open guest snaps"
+// Primary brand phrase — "Alexa, open guest snaps" (welcome / how to connect)
 const GUEST_SNAPS_RE = /\b(?:open|show|start|launch|display)?\s*(?:the\s+)?guest\s*snaps?\b/i;
 // Legacy aliases (Alexa often hijacks bare "photobooth")
 const GUEST_PHOTOBOOTH_RE = /\b(?:show|open|start|launch|display)?\s*(?:the\s+)?guest\s*photo\s*-?\s*booths?\b|\bguest\s*photo\s*-?\s*booth\b|\bguest\s*photo\s*boot\b/i;
 
-// "Alexa, slideshow guest snaps" / "guest snaps slideshow" — Shared Photo
-// Slideshow of every stored guest photo (not the dual-QR welcome).
-const GUEST_SNAPS_SLIDESHOW_RE = /\b(?:(?:show|start|play|open|launch|display)\s+)?(?:(?:the\s+)?(?:guest\s*snaps?\s+slideshow|slideshow\s+(?:of\s+)?(?:the\s+)?guest\s*snaps?)|(?:the\s+)?slideshow\s+guest\s*snaps?)\b/i;
+// Preferred: "Alexa, open guest snaps slideshow"
+// Also: "guest snaps slideshow", spaced ASR "slide show", legacy "slideshow guest snaps"
+const GUEST_SNAPS_SLIDESHOW_RE = /\b(?:(?:open|show|start|play|launch|display)\s+(?:the\s+)?)?(?:guest\s*snaps?\s+slideshow|slideshow\s+(?:of\s+)?(?:the\s+)?guest\s*snaps?)\b/i;
 
 function normalizeText(value) {
   return String(value || '')
     .replace(/[\u2018\u2019\u2032`´']/g, "'")
+    // Alexa often says "slide show" as two words.
+    .replace(/\bslide\s*shows?\b/gi, 'slideshow')
     .replace(/\s+/g, ' ')
     .trim();
 }

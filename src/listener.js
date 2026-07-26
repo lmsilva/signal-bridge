@@ -1395,6 +1395,9 @@ function createListener({ config, log }) {
     // Timers" push tile needs its own hook straight into timerSync so a web
     // push re-polls Amazon and always emits a snapshot, same as "show timers".
     requestTimerPoll: (device) => timerSync?.requestImmediatePoll('show-timers', device),
+    // Same pattern as timers — alarm-list never builds a payload inside
+    // handleVoiceEvent; the "Show Alarms" Quick Push tile polls Amazon.
+    requestAlarmPoll: (device) => alarmSync?.requestImmediatePoll('show-alarms', device),
   };
 }
 

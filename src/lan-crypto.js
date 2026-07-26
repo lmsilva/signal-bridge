@@ -27,16 +27,17 @@ function deriveKey(secret) {
   return crypto.createHash('sha256').update(normalizeSecret(secret), 'utf8').digest();
 }
 
-function ensureTimestamp(payload) {
+function ensureTimestamp(payload, now = Date.now()) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return payload;
   }
-  if (payload.timestamp) {
-    return payload;
-  }
+  const nowIso = new Date(now).toISOString();
+  // Always stamp sentAt at seal time. Activity timestamps from Alexa history
+  // can be minutes old by the time we UDP — freshness must not use those.
   return {
     ...payload,
-    timestamp: new Date().toISOString(),
+    timestamp: payload.timestamp || nowIso,
+    sentAt: nowIso,
   };
 }
 
@@ -46,7 +47,8 @@ function parseTimestampMs(value) {
 }
 
 function isFresh(payload, now = Date.now()) {
-  const ms = parseTimestampMs(payload?.timestamp);
+  // Prefer wire send time; fall back to payload timestamp for older clients.
+  const ms = parseTimestampMs(payload?.sentAt) ?? parseTimestampMs(payload?.timestamp);
   if (ms == null) {
     return false;
   }
@@ -56,13 +58,13 @@ function isFresh(payload, now = Date.now()) {
 /**
  * @param {object} payload
  * @param {string} secret
- * @param {{ nonce?: Buffer }} [options] - fixed nonce for deterministic tests only
+ * @param {{ nonce?: Buffer, now?: number }} [options] - nonce/now for deterministic tests only
  */
 function sealJson(payload, secret, options = {}) {
   if (!isEnabled(secret)) {
     throw new Error('LAN UDP secret is not configured');
   }
-  const plain = ensureTimestamp(payload);
+  const plain = ensureTimestamp(payload, options.now);
   const plaintext = Buffer.from(JSON.stringify(plain), 'utf8');
   const nonce = options.nonce && Buffer.isBuffer(options.nonce) && options.nonce.length === NONCE_LEN
     ? options.nonce

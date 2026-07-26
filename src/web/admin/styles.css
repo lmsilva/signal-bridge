@@ -323,8 +323,8 @@ body {
 .push-card-title { font-size: 1rem; font-weight: 700; }
 .push-card-sub { font-size: 0.78rem; color: var(--text-dim); }
 
-/* Quick Push row — same tile as Tesla, wraps 2x2 on phones and opens up on
-   wide screens (matches .push-columns' desktop breakpoint below). */
+/* Quick Push grid — same tile as Tesla; 2 columns on phones (wraps to
+   multiple rows), 4 columns on wide screens so two full rows of four. */
 .card-row-quad { grid-template-columns: 1fr 1fr; }
 
 /* Shared Photo Slideshow gets a little extra shine — it is the "showcase"

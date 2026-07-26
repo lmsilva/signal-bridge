@@ -129,8 +129,8 @@ function createVoiceQueryParser() {
       };
     }
 
-    // Slideshow before dual-QR welcome — "slideshow guest snaps" also
-    // contains the "guest snaps" brand phrase.
+    // Slideshow before dual-QR welcome — "open guest snaps slideshow"
+    // also contains the "guest snaps" brand phrase.
     if (matchesGuestSnapsSlideshowQuery(summary, response)) {
       return {
         kind: 'photo-slideshow',

@@ -66,6 +66,7 @@ async function main() {
       displayRegistry: listener.displayRegistry,
       deliverTargetedPayload: listener.deliverTargetedPayload,
       requestTimerPoll: listener.requestTimerPoll,
+      requestAlarmPoll: listener.requestAlarmPoll,
     });
     webServer.start().catch((error) => {
       // The control page is a convenience — never take the listener down

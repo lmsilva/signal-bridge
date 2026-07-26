@@ -530,6 +530,10 @@
   $('btn-push-weather')?.addEventListener('click', (e) => pushSimple('/api/push/weather', 'Weather forecast', e.currentTarget));
   $('btn-push-shopping-list')?.addEventListener('click', (e) => pushSimple('/api/push/shopping-list', 'Shopping list', e.currentTarget));
   $('btn-push-timers')?.addEventListener('click', (e) => pushSimple('/api/push/timers', 'Active timers', e.currentTarget));
+  $('btn-push-guest-snaps')?.addEventListener('click', (e) => pushSimple('/api/push/guest-photobooth', 'Guest Snaps', e.currentTarget));
+  $('btn-push-air-quality')?.addEventListener('click', (e) => pushSimple('/api/push/air-quality', 'Indoor air quality', e.currentTarget));
+  $('btn-push-indoor-temperature')?.addEventListener('click', (e) => pushSimple('/api/push/indoor-temperature', 'Indoor temperature', e.currentTarget));
+  $('btn-push-alarms')?.addEventListener('click', (e) => pushSimple('/api/push/alarms', 'Alarms', e.currentTarget));
 
   // Resolve cached photos to the enriched {url, uploadedAt} shape the bridge
   // uses to order the slideshow per the Settings tab's persisted preference.

@@ -29,6 +29,14 @@ test('deriveKey is SHA-256 of the secret utf8 bytes', () => {
   );
 });
 
+function withoutSentAt(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+  const { sentAt, ...rest } = payload;
+  return rest;
+}
+
 test('sealJson / openEnvelope round-trip', () => {
   const payload = {
     version: 2,
@@ -42,10 +50,11 @@ test('sealJson / openEnvelope round-trip', () => {
   assert.ok(envelope.n);
   assert.ok(envelope.c);
   const opened = openEnvelope(envelope, SECRET);
-  assert.deepEqual(opened, payload);
+  assert.ok(opened.sentAt);
+  assert.deepEqual(withoutSentAt(opened), payload);
 });
 
-test('openEnvelope rejects wrong key, tamper, and stale timestamps', () => {
+test('openEnvelope rejects wrong key, tamper, and stale sentAt', () => {
   const payload = { version: 2, type: 'broadcast', timestamp: FRESH_TS, message: 'hi' };
   const envelope = sealJson(payload, SECRET);
   assert.equal(openEnvelope(envelope, 'other-secret'), null);
@@ -56,10 +65,24 @@ test('openEnvelope rejects wrong key, tamper, and stale timestamps', () => {
   const stale = sealJson({
     version: 2,
     type: 'broadcast',
-    timestamp: new Date(Date.now() - MAX_SKEW_MS - 5_000).toISOString(),
+    timestamp: FRESH_TS,
     message: 'old',
-  }, SECRET);
+  }, SECRET, { now: Date.now() - MAX_SKEW_MS - 5_000 });
   assert.equal(openEnvelope(stale, SECRET), null);
+});
+
+test('openEnvelope accepts old activity timestamp when sentAt is fresh', () => {
+  const oldActivity = new Date(Date.now() - MAX_SKEW_MS - 60_000).toISOString();
+  const envelope = sealJson({
+    version: 2,
+    type: 'weather.query',
+    timestamp: oldActivity,
+    query: 'weather',
+  }, SECRET);
+  const opened = openEnvelope(envelope, SECRET);
+  assert.ok(opened);
+  assert.equal(opened.timestamp, oldActivity);
+  assert.ok(opened.sentAt);
 });
 
 test('encodeOutbound / decodeInbound honor secret-on vs secret-off modes', () => {
@@ -67,12 +90,12 @@ test('encodeOutbound / decodeInbound honor secret-on vs secret-off modes', () =>
 
   const plainWire = encodeOutbound(payload, '');
   assert.equal(plainWire.type, 'display.announce');
-  assert.deepEqual(decodeInbound(JSON.stringify(plainWire), ''), payload);
+  assert.deepEqual(withoutSentAt(decodeInbound(JSON.stringify(plainWire), '')), payload);
   assert.equal(decodeInbound(JSON.stringify(plainWire), SECRET), null);
 
   const encWire = encodeOutbound(payload, SECRET);
   assert.equal(encWire.v, 3);
-  assert.deepEqual(decodeInbound(JSON.stringify(encWire), SECRET), payload);
+  assert.deepEqual(withoutSentAt(decodeInbound(JSON.stringify(encWire), SECRET)), payload);
   assert.equal(decodeInbound(JSON.stringify(encWire), ''), null);
 });
 
@@ -127,5 +150,7 @@ test('python lan_crypto opens a Node-sealed envelope (cross-compat)', () => {
     }
     assert.fail(`python open failed: ${errText.trim() || `exit ${result.status}`}`);
   }
-  assert.deepEqual(JSON.parse(result.stdout), payload);
+  const opened = JSON.parse(result.stdout);
+  assert.ok(opened.sentAt);
+  assert.deepEqual(withoutSentAt(opened), payload);
 });

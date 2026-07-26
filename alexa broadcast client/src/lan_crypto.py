@@ -36,17 +36,23 @@ def derive_key(secret: str | None) -> bytes:
     return hashlib.sha256(normalize_secret(secret).encode("utf-8")).digest()
 
 
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+def _iso_from_ms(now_ms: int | None = None) -> str:
+    if now_ms is None:
+        dt = datetime.now(timezone.utc)
+    else:
+        dt = datetime.fromtimestamp(now_ms / 1000.0, tz=timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
 
 
-def ensure_timestamp(payload: dict) -> dict:
+def ensure_timestamp(payload: dict, now_ms: int | None = None) -> dict:
     if not isinstance(payload, dict):
         return payload
-    if payload.get("timestamp"):
-        return payload
+    now_iso = _iso_from_ms(now_ms)
+    # Always stamp sentAt at seal time. Activity timestamps from Alexa history
+    # can be minutes old by the time we UDP — freshness must not use those.
     out = dict(payload)
-    out["timestamp"] = _iso_now()
+    out["timestamp"] = payload.get("timestamp") or now_iso
+    out["sentAt"] = now_iso
     return out
 
 
@@ -66,7 +72,12 @@ def parse_timestamp_ms(value: Any) -> int | None:
 
 
 def is_fresh(payload: dict, now_ms: int | None = None) -> bool:
-    ms = parse_timestamp_ms(payload.get("timestamp") if isinstance(payload, dict) else None)
+    if not isinstance(payload, dict):
+        return False
+    # Prefer wire send time; fall back to payload timestamp for older peers.
+    ms = parse_timestamp_ms(payload.get("sentAt"))
+    if ms is None:
+        ms = parse_timestamp_ms(payload.get("timestamp"))
     if ms is None:
         return False
     if now_ms is None:
@@ -74,10 +85,16 @@ def is_fresh(payload: dict, now_ms: int | None = None) -> bool:
     return abs(now_ms - ms) <= MAX_SKEW_MS
 
 
-def seal_json(payload: dict, secret: str, *, nonce: bytes | None = None) -> dict:
+def seal_json(
+    payload: dict,
+    secret: str,
+    *,
+    nonce: bytes | None = None,
+    now_ms: int | None = None,
+) -> dict:
     if not is_enabled(secret):
         raise ValueError("LAN UDP secret is not configured")
-    plain = ensure_timestamp(payload)
+    plain = ensure_timestamp(payload, now_ms)
     plaintext = json.dumps(plain, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if nonce is None:
         nonce = os.urandom(NONCE_LEN)

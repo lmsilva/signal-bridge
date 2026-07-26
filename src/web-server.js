@@ -32,6 +32,7 @@ const {
   buildPhotoSlideshowPayload,
 } = require('./udp-payload');
 const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
+const { getIndoorLocations } = require('./indoor-locations');
 const { ALL_TARGET_ID } = require('./display-registry');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
@@ -194,6 +195,16 @@ function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   });
 }
 
+function indoorTemperatureQuickPushQuery(config = {}) {
+  const locations = getIndoorLocations(config.indoorTemperature || {});
+  const primary = locations[0];
+  const name = String(primary?.entity || primary?.label || '').trim();
+  if (name) {
+    return `what's the temperature on the ${name}`;
+  }
+  return "what's the temperature inside";
+}
+
 function createWebServer({
   config,
   log,
@@ -202,6 +213,7 @@ function createWebServer({
   displayRegistry = null,
   deliverTargetedPayload = null,
   requestTimerPoll = null,
+  requestAlarmPoll = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -454,6 +466,17 @@ function createWebServer({
     requestTimerPoll(device);
     log.info('Web push accepted (timers)', { device });
     sendJson(res, 202, { ok: true, kind: 'timers' });
+  }
+
+  function handleAlarmsPush(body, res) {
+    if (typeof requestAlarmPoll !== 'function') {
+      sendJson(res, 503, { ok: false, error: 'Alarms push unavailable — listener not ready' });
+      return;
+    }
+    const device = deviceFrom(body);
+    requestAlarmPoll(device);
+    log.info('Web push accepted (alarms)', { device });
+    sendJson(res, 202, { ok: true, kind: 'alarms' });
   }
 
   function handleGuestPhotoboothPush(body, res) {
@@ -1500,6 +1523,21 @@ function createWebServer({
           case '/api/push/timers':
             handleTimersPush(body, res);
             return;
+          case '/api/push/alarms':
+            handleAlarmsPush(body, res);
+            return;
+          case '/api/push/air-quality':
+            handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res);
+            return;
+          case '/api/push/indoor-temperature':
+            handleVoiceQueryPush(
+              'indoor-temperature',
+              indoorTemperatureQuickPushQuery(config),
+              'indoor-temperature-query',
+              body,
+              res,
+            );
+            return;
           case '/api/push/photo-slideshow':
             handlePhotoSlideshowPush(body, res);
             return;
@@ -1680,6 +1718,7 @@ function createWebServer({
 
 module.exports = {
   createWebServer,
+  indoorTemperatureQuickPushQuery,
   validatePushUrl,
   resolveStaticPath,
   computeWebBasePath,

@@ -38,6 +38,14 @@ class LanCryptoTests(unittest.TestCase):
             hashlib.sha256(SECRET.encode("utf-8")).digest(),
         )
 
+    @staticmethod
+    def _without_sent_at(payload):
+        if not isinstance(payload, dict):
+            return payload
+        out = dict(payload)
+        out.pop("sentAt", None)
+        return out
+
     def test_seal_open_round_trip(self):
         payload = {
             "version": 2,
@@ -48,7 +56,9 @@ class LanCryptoTests(unittest.TestCase):
         envelope = seal_json(payload, SECRET)
         self.assertEqual(envelope["v"], 3)
         self.assertEqual(envelope["alg"], "aes-256-gcm")
-        self.assertEqual(open_envelope(envelope, SECRET), payload)
+        opened = open_envelope(envelope, SECRET)
+        self.assertIn("sentAt", opened)
+        self.assertEqual(self._without_sent_at(opened), payload)
 
     def test_rejects_wrong_key_tamper_and_stale(self):
         payload = {"version": 2, "type": "broadcast", "timestamp": _fresh_ts(), "message": "hi"}
@@ -58,14 +68,34 @@ class LanCryptoTests(unittest.TestCase):
         tampered["c"] = tampered["c"][:-4] + "AAAA"
         self.assertIsNone(open_envelope(tampered, SECRET))
 
-        stale_ts = (
-            datetime.now(timezone.utc) - timedelta(milliseconds=MAX_SKEW_MS + 5000)
-        ).isoformat().replace("+00:00", "Z")
+        stale_now = int(
+            (datetime.now(timezone.utc) - timedelta(milliseconds=MAX_SKEW_MS + 5000)).timestamp()
+            * 1000
+        )
         stale = seal_json(
-            {"version": 2, "type": "broadcast", "timestamp": stale_ts, "message": "old"},
+            {"version": 2, "type": "broadcast", "timestamp": _fresh_ts(), "message": "old"},
             SECRET,
+            now_ms=stale_now,
         )
         self.assertIsNone(open_envelope(stale, SECRET))
+
+    def test_accepts_old_activity_timestamp_when_sent_at_fresh(self):
+        old_activity = (
+            datetime.now(timezone.utc) - timedelta(milliseconds=MAX_SKEW_MS + 60_000)
+        ).isoformat().replace("+00:00", "Z")
+        envelope = seal_json(
+            {
+                "version": 2,
+                "type": "weather.query",
+                "timestamp": old_activity,
+                "query": "weather",
+            },
+            SECRET,
+        )
+        opened = open_envelope(envelope, SECRET)
+        self.assertIsNotNone(opened)
+        self.assertEqual(opened["timestamp"], old_activity)
+        self.assertIn("sentAt", opened)
 
     def test_encode_decode_modes(self):
         payload = {
@@ -76,12 +106,12 @@ class LanCryptoTests(unittest.TestCase):
         }
         plain = encode_outbound(payload, "")
         self.assertEqual(plain["type"], "display.announce")
-        self.assertEqual(decode_inbound(json.dumps(plain), ""), payload)
+        self.assertEqual(self._without_sent_at(decode_inbound(json.dumps(plain), "")), payload)
         self.assertIsNone(decode_inbound(json.dumps(plain), SECRET))
 
         enc = encode_outbound(payload, SECRET)
         self.assertEqual(enc["v"], 3)
-        self.assertEqual(decode_inbound(json.dumps(enc), SECRET), payload)
+        self.assertEqual(self._without_sent_at(decode_inbound(json.dumps(enc), SECRET)), payload)
         self.assertIsNone(decode_inbound(json.dumps(enc), ""))
 
     def test_node_opens_python_sealed_envelope(self):
@@ -108,7 +138,9 @@ class LanCryptoTests(unittest.TestCase):
         )
         if result.returncode != 0:
             self.fail(f"node open failed: {result.stderr or result.stdout}")
-        self.assertEqual(json.loads(result.stdout), payload)
+        opened = json.loads(result.stdout)
+        self.assertIn("sentAt", opened)
+        self.assertEqual(self._without_sent_at(opened), payload)
 
 
 if __name__ == "__main__":
