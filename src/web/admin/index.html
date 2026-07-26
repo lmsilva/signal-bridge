@@ -394,6 +394,29 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">Steam</div>
+            <span class="status-pill" id="steam-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="steam-status-detail">Checking session…</p>
+          <button class="btn btn-accent btn-block" id="btn-steam-auth">Authenticate Steam</button>
+          <div class="auth-followup" id="steam-auth-followup" hidden>
+            <a class="btn btn-outline btn-block" id="steam-auth-link" href="#" target="_blank" rel="noopener">Open Steam Login</a>
+            <p class="hint" id="steam-auth-hint">Sign in with Steam. You'll return here when linking completes.</p>
+          </div>
+          <button class="btn btn-outline btn-block" id="btn-steam-test-push" style="margin-top:12px">
+            Now Playing / Last Played
+          </button>
+          <p class="hint" id="steam-test-hint">Pushes whatever is playing now (skips the theater PC check). If idle, shows last played — dismissible.</p>
+          <div class="url-row" style="margin-top:12px">
+            <input type="password" id="steam-api-key-input" autocomplete="off" spellcheck="false"
+                   placeholder="Only if .env has no STEAM_API_KEY">
+            <button class="btn btn-outline" id="btn-steam-api-key">Save key</button>
+          </div>
+          <p class="hint" id="steam-api-key-hint">Prefer <code>STEAM_API_KEY</code> in <code>.env</code> (Docker). Save key writes <code>data/steam-session.json</code> only — never updates <code>.env</code>. If both exist, <code>.env</code> wins.</p>
+        </div>
+
         <p class="hint" id="bridge-meta"></p>
       </div>
     </section>

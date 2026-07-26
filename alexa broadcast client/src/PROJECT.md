@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (UDP sentAt freshness)
+**Last updated:** 2026-07-26 (Steam Now Playing panel)
 
 ---
 
@@ -37,6 +37,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop; timer in-place updates + local fire handler; reconfigures `stdout`/`stderr` to UTF-8 (`errors="backslashreplace"`) at startup so a stray non-ASCII character in any `print()`/log call can't silently kill a background thread (Windows consoles often default to `cp1252`) |
 | `src/listener.py` | `UdpListener` — background thread; decrypts v3 AES-GCM envelopes when `udpSecret` set, then JSON decode / `on_message` |
 | `src/lan_crypto.py` | Shared-secret AES-256-GCM seal/open for UDP (`udpSecret` must match bridge `LAN_UDP_SECRET`); stamps `sentAt` at seal; ±120s freshness on `sentAt` |
+| `src/steam_now_playing_panel.py` | Persistent Steam Now Playing overlay (portrait-first mockup layout); `steam.now-playing` / close |
 | `src/overlay.py` | Fullscreen shell: fade, dismiss countdown label (bottom), routes payloads to panels; rounded backdrop frame behind all panels |
 | `src/display_panels.py` | All overlay panels; `BasePanel` has shared dark palette + `_round_rect`/`_pill`/`_panel_card` helpers; `TeslaDashboardPanel` fetches live OSM map tiles (via `map_tiles.py`); `QrPanel` renders a QR code locally via `qrcode` from the bridge's `qr.content` string (URL or Wi-Fi); `GuestPhotoboothPanel` dual-QR party welcome (`guest.photobooth`) — Wi‑Fi join + booth URL, portrait stack / landscape pair; `PhotoSlideshowPanel` plays through every stored photo once, newest-first (fetched off-thread, SSL-tolerant, centered for portrait/landscape), stopping on the last photo instead of looping, with a "Photo x of y" counter, a "Shared <date>" label, and a small corner QR code (via `QrPanel._build_qr_image`) linking to the current photo for viewing on a phone; `RoutePlannerPanel` renders `route-planner.query` instantly (header/distance/duration/mode badge) then independently fetches 5 tiles (map, 2× place facts, 2× weather) off-thread, each swapping its own spinner for content as it lands, plus a local-times strip once both weather fetches land; `MusicPanel`'s song/artist/album/detail lines are single-line only — each renders via `text_marquee.MarqueeLine`, so a title too wide for its column scrolls horizontally instead of wrapping (which could overflow the fixed vertical space reserved for the stacked lines) |
 | `src/map_tiles.py` | Shared OSM tile fetch/stitch/cache/SSL-fallback + Web Mercator pixel math (`latlon_to_global_px`/`global_px_to_latlon`); `zoom_to_fit` picks the tightest zoom that fits two points in a box (Route Planner); `project_points_to_pixels` maps a route polyline onto the stitched tile image. Extracted from `TeslaDashboardPanel` (still its only single-point caller) so `RoutePlannerPanel` can reuse the same plumbing for a two-point map |
@@ -256,6 +257,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-26: **Steam last-played / dismissible preview** — `persistent: false` uses display countdown; `steam.mode=last-played` shows LAST PLAYED chrome (amber badge, last-played time, playtime). Auto sessions stay persistent. Portable rebuild required.
+- 2026-07-26: **Steam Now Playing panel** — persistent `steam.now-playing` overlay (no auto-dismiss); closes on `steam.now-playing.close` or any replacing display payload. Smoke: `send_test.py --type steam-now-playing`. Portable rebuild required.
 - 2026-07-26: **UDP freshness uses `sentAt`** — decrypt accepts seal-time `sentAt` so delayed Alexa activity timestamps no longer drop overlays (±120s still applies to send time). Portable rebuild required with matching bridge.
 - 2026-07-26: **LAN UDP AES-GCM** — `lan_crypto.py` + `udpSecret` encrypts overlays/commands and `display.announce` when set (must match bridge `LAN_UDP_SECRET`). Adds `cryptography` runtime dep. Smoke: `send_test.py --secret …`. Portable rebuild required after deploy.
 - 2026-07-26: **Tesla battery bar fits percent** — charge pill height follows `section_title_font` linespace (`battery_bar_height`, ~52–56px floor) so in-bar labels like `80%` are not clipped. Unit: `test_tesla_battery_panel.py`.
