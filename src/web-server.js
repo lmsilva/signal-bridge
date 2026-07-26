@@ -31,6 +31,7 @@ const {
   buildWifiQrContent,
   buildPhotoSlideshowPayload,
 } = require('./udp-payload');
+const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
 const { ALL_TARGET_ID } = require('./display-registry');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
@@ -453,6 +454,29 @@ function createWebServer({
     requestTimerPoll(device);
     log.info('Web push accepted (timers)', { device });
     sendJson(res, 202, { ok: true, kind: 'timers' });
+  }
+
+  function handleGuestPhotoboothPush(body, res) {
+    if (typeof recordVoiceEvent !== 'function') {
+      sendJson(res, 503, { ok: false, error: 'Push unavailable — listener not ready' });
+      return;
+    }
+    const settings = resolveGuestPhotoboothSettings(config);
+    if (!settings.configured) {
+      sendJson(res, 503, {
+        ok: false,
+        error: 'Guest photo booth is not configured — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL in .env (or data/guest-photobooth.json)',
+      });
+      return;
+    }
+    // Always all displays (same as the Alexa path).
+    handleVoiceQueryPush(
+      'guest-photobooth',
+      'guest photobooth',
+      'web-api',
+      { ...(body || {}), targetId: '*' },
+      res,
+    );
   }
 
   async function handleUrlPush(body, res) {
@@ -1478,6 +1502,9 @@ function createWebServer({
             return;
           case '/api/push/photo-slideshow':
             handlePhotoSlideshowPush(body, res);
+            return;
+          case '/api/push/guest-photobooth':
+            handleGuestPhotoboothPush(body, res);
             return;
           case '/api/photos/delete':
             handlePhotoDelete(body, res);

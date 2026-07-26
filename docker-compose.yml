@@ -19,9 +19,19 @@ services:
       TESLA_FLEET_REGION: ${TESLA_FLEET_REGION:-na}
       TESLA_VIN: ${TESLA_VIN:-}
       TESLA_REDIRECT_URI: ${TESLA_REDIRECT_URI:-http://localhost:4381/callback}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GUEST_WIFI_SSID: ${GUEST_WIFI_SSID:-}
+      GUEST_WIFI_PASSWORD: ${GUEST_WIFI_PASSWORD:-}
+      GUEST_WIFI_SECURITY: ${GUEST_WIFI_SECURITY:-}
+      GUEST_WIFI_HIDDEN: ${GUEST_WIFI_HIDDEN:-}
+      GUEST_PHOTOBOOTH_URL: ${GUEST_PHOTOBOOTH_URL:-}
+      GUEST_PHOTOBOOTH_DISPLAY_SECONDS: ${GUEST_PHOTOBOOTH_DISPLAY_SECONDS:-}
     volumes:
       - ./data:/app/data
       - ./src:/app/src:ro
+      # So loadDotEnv / guest-photobooth can read newly edited secrets after a
+      # process restart (compose env_file alone only injects at container create).
+      - ./.env:/app/.env:ro
     network_mode: host
     logging:
       driver: json-file

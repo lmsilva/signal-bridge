@@ -757,21 +757,31 @@ function createListener({ config, log }) {
     } else if (event.kind === 'guest-photobooth') {
       const settings = resolveGuestPhotoboothSettings(config);
       if (!settings.configured) {
-        log.warn('Guest photo booth voice query skipped — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL (or PROXY_OWN_IP)', {
+        log.warn('Guest photo booth voice query skipped — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL (or data/guest-photobooth.json)', {
           hasSsid: Boolean(settings.ssid),
           hasBoothUrl: Boolean(settings.boothUrl),
           query: event.query,
         });
         return;
       }
-      payload = buildGuestPhotoboothPayload(
-        { ...event, targetId: '*' },
-        config,
-        settings,
-      );
+      // Party welcome always fans out to every display, ignoring any single-target
+      // selection from the admin quick-push picker.
+      event = { ...event, targetId: '*' };
+      payload = buildGuestPhotoboothPayload(event, config, settings);
       if (!payload) {
+        log.warn('Guest photo booth payload build failed', { query: event.query });
         return;
       }
+      const allDelivery = displayRegistry.resolveDelivery('*');
+      sendUdpPayload(attachTarget(payload, allDelivery.target), allDelivery.sendOptions);
+      voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
+      lastCaptureAt = Date.now();
+      log.info(`Voice event sent (guest-photobooth) for ${event.device}`, {
+        query: event.query,
+        ssid: settings.ssid,
+        boothUrl: settings.boothUrl,
+      });
+      return;
     } else {
       return;
     }
