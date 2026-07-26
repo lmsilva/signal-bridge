@@ -315,6 +315,24 @@
             <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
           </div>
           <p class="hint">Controls the order photos play in for the Shared Photo Slideshow.</p>
+
+          <label class="field-label field-label-spaced" for="slideshow-seconds-slider">Time per photo</label>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="slideshow-seconds-slider"
+              min="5"
+              max="60"
+              step="1"
+              value="5"
+              aria-valuemin="5"
+              aria-valuemax="60"
+              aria-valuenow="5"
+              aria-label="Seconds per slideshow photo"
+            >
+            <span class="slider-value" id="slideshow-seconds-value">5s</span>
+          </div>
+          <p class="hint">How long each photo stays on screen (5–60 seconds).</p>
         </div>
 
         <div class="section-label">Authentication</div>

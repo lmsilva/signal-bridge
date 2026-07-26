@@ -10,6 +10,34 @@ GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 SSL_CONTEXT = ssl.create_default_context()
 
+# Mirror bridge weather-fetch.js: Open-Meteo often misses "City State" phrases,
+# and bare city names can resolve to the wrong state.
+_US_ADMIN1_PAIRS = (
+    ("alabama", "al"), ("alaska", "ak"), ("arizona", "az"), ("arkansas", "ar"),
+    ("california", "ca"), ("colorado", "co"), ("connecticut", "ct"), ("delaware", "de"),
+    ("district of columbia", "dc"), ("florida", "fl"), ("georgia", "ga"), ("hawaii", "hi"),
+    ("idaho", "id"), ("illinois", "il"), ("indiana", "in"), ("iowa", "ia"),
+    ("kansas", "ks"), ("kentucky", "ky"), ("louisiana", "la"), ("maine", "me"),
+    ("maryland", "md"), ("massachusetts", "ma"), ("michigan", "mi"), ("minnesota", "mn"),
+    ("mississippi", "ms"), ("missouri", "mo"), ("montana", "mt"), ("nebraska", "ne"),
+    ("nevada", "nv"), ("new hampshire", "nh"), ("new jersey", "nj"), ("new mexico", "nm"),
+    ("new york", "ny"), ("north carolina", "nc"), ("north dakota", "nd"), ("ohio", "oh"),
+    ("oklahoma", "ok"), ("oregon", "or"), ("pennsylvania", "pa"), ("rhode island", "ri"),
+    ("south carolina", "sc"), ("south dakota", "sd"), ("tennessee", "tn"), ("texas", "tx"),
+    ("utah", "ut"), ("vermont", "vt"), ("virginia", "va"), ("washington", "wa"),
+    ("west virginia", "wv"), ("wisconsin", "wi"), ("wyoming", "wy"),
+)
+_US_ADMIN1_BY_KEY = {}
+for _full, _abbr in _US_ADMIN1_PAIRS:
+    _proper = " ".join(part.capitalize() for part in _full.split())
+    _US_ADMIN1_BY_KEY[_full] = _proper
+    _US_ADMIN1_BY_KEY[_abbr] = _proper
+_US_ADMIN1_MULTIWORD = sorted(
+    (key for key in _US_ADMIN1_BY_KEY if " " in key),
+    key=len,
+    reverse=True,
+)
+
 WEATHER_CODE_LABELS = {
     0: "clear",
     1: "mainly_clear",
@@ -146,19 +174,41 @@ def _fetch_json(url: str) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def geocode_location(name: str | None) -> dict | None:
-    query = (name or "").strip()
-    if not query:
-        return None
+def parse_geocode_query(name: str | None) -> dict:
+    text = re.sub(r"\s+", " ", (name or "").replace(",", " ").strip())
+    if not text:
+        return {"city": "", "admin1": None}
+    lower = text.lower()
+    for key in _US_ADMIN1_MULTIWORD:
+        if lower == key:
+            return {"city": text, "admin1": _US_ADMIN1_BY_KEY[key]}
+        suffix = f" {key}"
+        if lower.endswith(suffix):
+            city = text[: len(text) - len(suffix)].strip()
+            return {"city": city or text, "admin1": _US_ADMIN1_BY_KEY[key]}
+    parts = text.split(" ")
+    if len(parts) >= 2:
+        last = parts[-1].lower()
+        if last in _US_ADMIN1_BY_KEY:
+            return {"city": " ".join(parts[:-1]), "admin1": _US_ADMIN1_BY_KEY[last]}
+    return {"city": text, "admin1": None}
 
-    params = urllib.parse.urlencode(
-        {"name": query, "count": 1, "language": "en", "format": "json"}
-    )
-    data = _fetch_json(f"{GEOCODE_URL}?{params}")
-    hit = (data.get("results") or [None])[0]
-    if not hit:
-        return None
 
+def pick_geocode_hit(results: list | None, admin1: str | None):
+    if not results:
+        return None
+    if admin1:
+        want = admin1.lower()
+        for hit in results:
+            if str(hit.get("admin1") or "").lower() == want:
+                return hit
+    for hit in results:
+        if str(hit.get("country_code") or "").upper() == "US":
+            return hit
+    return results[0]
+
+
+def _geocode_result(hit: dict) -> dict:
     return {
         "resolvedName": ", ".join(
             part for part in (hit.get("name"), hit.get("admin1"), hit.get("country_code")) if part
@@ -167,6 +217,34 @@ def geocode_location(name: str | None) -> dict | None:
         "longitude": hit.get("longitude"),
         "timezone": hit.get("timezone"),
     }
+
+
+def geocode_location(name: str | None) -> dict | None:
+    raw = (name or "").strip()
+    if not raw:
+        return None
+    if re.fullmatch(r"(home|local|here)", raw, flags=re.I):
+        return None
+
+    parsed = parse_geocode_query(raw)
+    search_name = parsed["city"] or raw
+    params = urllib.parse.urlencode(
+        {"name": search_name, "count": 10, "language": "en", "format": "json"}
+    )
+    data = _fetch_json(f"{GEOCODE_URL}?{params}")
+    hit = pick_geocode_hit(data.get("results"), parsed["admin1"])
+    if hit:
+        return _geocode_result(hit)
+
+    if search_name != raw:
+        params = urllib.parse.urlencode(
+            {"name": raw, "count": 10, "language": "en", "format": "json"}
+        )
+        data = _fetch_json(f"{GEOCODE_URL}?{params}")
+        hit = pick_geocode_hit(data.get("results"), parsed["admin1"])
+        if hit:
+            return _geocode_result(hit)
+    return None
 
 
 def resolve_location_for_fetch(

@@ -1,6 +1,85 @@
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 
+// Open-Meteo often returns nothing for "City State" / "City, State" phrases,
+// and bare city names can resolve to the wrong state (Saratoga Springs → NY).
+// Parse a trailing US state (full name or abbrev) and match against admin1.
+const US_ADMIN1_BY_KEY = (() => {
+  const pairs = [
+    ['alabama', 'al'], ['alaska', 'ak'], ['arizona', 'az'], ['arkansas', 'ar'],
+    ['california', 'ca'], ['colorado', 'co'], ['connecticut', 'ct'], ['delaware', 'de'],
+    ['district of columbia', 'dc'], ['florida', 'fl'], ['georgia', 'ga'], ['hawaii', 'hi'],
+    ['idaho', 'id'], ['illinois', 'il'], ['indiana', 'in'], ['iowa', 'ia'],
+    ['kansas', 'ks'], ['kentucky', 'ky'], ['louisiana', 'la'], ['maine', 'me'],
+    ['maryland', 'md'], ['massachusetts', 'ma'], ['michigan', 'mi'], ['minnesota', 'mn'],
+    ['mississippi', 'ms'], ['missouri', 'mo'], ['montana', 'mt'], ['nebraska', 'ne'],
+    ['nevada', 'nv'], ['new hampshire', 'nh'], ['new jersey', 'nj'], ['new mexico', 'nm'],
+    ['new york', 'ny'], ['north carolina', 'nc'], ['north dakota', 'nd'], ['ohio', 'oh'],
+    ['oklahoma', 'ok'], ['oregon', 'or'], ['pennsylvania', 'pa'], ['rhode island', 'ri'],
+    ['south carolina', 'sc'], ['south dakota', 'sd'], ['tennessee', 'tn'], ['texas', 'tx'],
+    ['utah', 'ut'], ['vermont', 'vt'], ['virginia', 'va'], ['washington', 'wa'],
+    ['west virginia', 'wv'], ['wisconsin', 'wi'], ['wyoming', 'wy'],
+  ];
+  const map = new Map();
+  for (const [full, abbr] of pairs) {
+    const proper = full.replace(/\b\w/g, (ch) => ch.toUpperCase());
+    map.set(full, proper);
+    map.set(abbr, proper);
+  }
+  return map;
+})();
+
+const US_ADMIN1_MULTIWORD = [...US_ADMIN1_BY_KEY.keys()]
+  .filter((key) => key.includes(' '))
+  .sort((a, b) => b.length - a.length);
+
+function parseGeocodeQuery(name) {
+  const text = String(name || '')
+    .trim()
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ');
+  if (!text) {
+    return { city: '', admin1: null };
+  }
+  const lower = text.toLowerCase();
+  for (const key of US_ADMIN1_MULTIWORD) {
+    if (lower === key) {
+      return { city: text, admin1: US_ADMIN1_BY_KEY.get(key) };
+    }
+    const suffix = ` ${key}`;
+    if (lower.endsWith(suffix)) {
+      const city = text.slice(0, text.length - suffix.length).trim();
+      return { city: city || text, admin1: US_ADMIN1_BY_KEY.get(key) };
+    }
+  }
+  const parts = text.split(' ');
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1].toLowerCase();
+    if (US_ADMIN1_BY_KEY.has(last)) {
+      return {
+        city: parts.slice(0, -1).join(' '),
+        admin1: US_ADMIN1_BY_KEY.get(last),
+      };
+    }
+  }
+  return { city: text, admin1: null };
+}
+
+function pickGeocodeHit(results, admin1) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return null;
+  }
+  if (admin1) {
+    const want = admin1.toLowerCase();
+    const match = results.find((hit) => String(hit.admin1 || '').toLowerCase() === want);
+    if (match) {
+      return match;
+    }
+  }
+  const usHit = results.find((hit) => String(hit.country_code || '').toUpperCase() === 'US');
+  return usHit || results[0];
+}
+
 const WEATHER_CODE_LABELS = {
   0: 'clear',
   1: 'mainly_clear',
@@ -61,14 +140,45 @@ async function fetchJson(url) {
 }
 
 async function geocodeLocation(name) {
-  const query = encodeURIComponent(String(name || '').trim());
+  const raw = String(name || '').trim();
+  if (!raw) {
+    return null;
+  }
+  // Privacy placeholder / voice "here" — never resolve via geocode (Home → Belarus).
+  if (/^(home|local|here)$/i.test(raw)) {
+    return null;
+  }
+
+  const parsed = parseGeocodeQuery(raw);
+  const searchName = parsed.city || raw;
+  const query = encodeURIComponent(searchName);
   if (!query) {
     return null;
   }
 
-  const data = await fetchJson(`${GEOCODE_URL}?name=${query}&count=1&language=en&format=json`);
-  const hit = data?.results?.[0];
+  const data = await fetchJson(
+    `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json`,
+  );
+  const hit = pickGeocodeHit(data?.results, parsed.admin1);
   if (!hit) {
+    // Last resort: try the original phrase in case Open-Meteo accepts it.
+    if (searchName !== raw) {
+      const fallback = await fetchJson(
+        `${GEOCODE_URL}?name=${encodeURIComponent(raw)}&count=10&language=en&format=json`,
+      );
+      const fallbackHit = pickGeocodeHit(fallback?.results, parsed.admin1);
+      if (!fallbackHit) {
+        return null;
+      }
+      return {
+        resolvedName: [fallbackHit.name, fallbackHit.admin1, fallbackHit.country_code]
+          .filter(Boolean)
+          .join(', '),
+        latitude: fallbackHit.latitude,
+        longitude: fallbackHit.longitude,
+        timezone: fallbackHit.timezone,
+      };
+    }
     return null;
   }
 
@@ -232,6 +342,8 @@ async function fetchWeatherForecast(location) {
 module.exports = {
   fetchWeatherForecast,
   geocodeLocation,
+  parseGeocodeQuery,
+  pickGeocodeHit,
   resolveLocation,
   weatherCodeToCondition,
   celsiusToFahrenheit,

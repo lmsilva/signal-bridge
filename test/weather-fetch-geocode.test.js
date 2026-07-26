@@ -1,0 +1,143 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  parseGeocodeQuery,
+  pickGeocodeHit,
+  geocodeLocation,
+} = require('../src/weather-fetch');
+
+test('parseGeocodeQuery strips trailing US state names and abbreviations', () => {
+  assert.deepEqual(parseGeocodeQuery('Las Vegas Nevada'), {
+    city: 'Las Vegas',
+    admin1: 'Nevada',
+  });
+  assert.deepEqual(parseGeocodeQuery('Las Vegas, NV'), {
+    city: 'Las Vegas',
+    admin1: 'Nevada',
+  });
+  assert.deepEqual(parseGeocodeQuery('Saratoga Springs Utah'), {
+    city: 'Saratoga Springs',
+    admin1: 'Utah',
+  });
+  assert.deepEqual(parseGeocodeQuery('Moab, Utah'), {
+    city: 'Moab',
+    admin1: 'Utah',
+  });
+  assert.deepEqual(parseGeocodeQuery('Buffalo New York'), {
+    city: 'Buffalo',
+    admin1: 'New York',
+  });
+});
+
+test('parseGeocodeQuery treats bare state-named cities as city+admin1', () => {
+  assert.deepEqual(parseGeocodeQuery('New York'), {
+    city: 'New York',
+    admin1: 'New York',
+  });
+});
+
+test('parseGeocodeQuery leaves plain city names alone', () => {
+  assert.deepEqual(parseGeocodeQuery('Moab'), {
+    city: 'Moab',
+    admin1: null,
+  });
+});
+
+test('pickGeocodeHit prefers matching admin1 over the first result', () => {
+  const results = [
+    { name: 'Saratoga Springs', admin1: 'New York', country_code: 'US', latitude: 1, longitude: 2 },
+    { name: 'Saratoga Springs', admin1: 'Utah', country_code: 'US', latitude: 40.35, longitude: -111.9 },
+  ];
+  const hit = pickGeocodeHit(results, 'Utah');
+  assert.equal(hit.admin1, 'Utah');
+  assert.equal(hit.latitude, 40.35);
+});
+
+test('pickGeocodeHit falls back to first US hit then first hit', () => {
+  const mixed = [
+    { name: 'Paris', admin1: 'Île-de-France', country_code: 'FR', latitude: 1, longitude: 2 },
+    { name: 'Paris', admin1: 'Texas', country_code: 'US', latitude: 3, longitude: 4 },
+  ];
+  assert.equal(pickGeocodeHit(mixed, null).country_code, 'US');
+  assert.equal(pickGeocodeHit(mixed.slice(0, 1), null).country_code, 'FR');
+});
+
+test('geocodeLocation refuses privacy placeholder names', async () => {
+  assert.equal(await geocodeLocation('Home'), null);
+  assert.equal(await geocodeLocation('here'), null);
+  assert.equal(await geocodeLocation('local'), null);
+});
+
+test('geocodeLocation searches city-only and selects admin1 match', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    calls.push(String(url));
+    assert.match(String(url), /name=Saratoga%20Springs/);
+    assert.match(String(url), /count=10/);
+    return {
+      ok: true,
+      async json() {
+        return {
+          results: [
+            {
+              name: 'Saratoga Springs',
+              admin1: 'New York',
+              country_code: 'US',
+              latitude: 43.08,
+              longitude: -73.78,
+              timezone: 'America/New_York',
+            },
+            {
+              name: 'Saratoga Springs',
+              admin1: 'Utah',
+              country_code: 'US',
+              latitude: 40.35,
+              longitude: -111.9,
+              timezone: 'America/Denver',
+            },
+          ],
+        };
+      },
+    };
+  };
+  try {
+    const result = await geocodeLocation('Saratoga Springs Utah');
+    assert.equal(result.latitude, 40.35);
+    assert.match(result.resolvedName, /Utah/);
+    assert.equal(calls.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('geocodeLocation resolves Las Vegas Nevada via city+state parse', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    assert.match(String(url), /name=Las%20Vegas/);
+    return {
+      ok: true,
+      async json() {
+        return {
+          results: [
+            {
+              name: 'Las Vegas',
+              admin1: 'Nevada',
+              country_code: 'US',
+              latitude: 36.17,
+              longitude: -115.14,
+              timezone: 'America/Los_Angeles',
+            },
+          ],
+        };
+      },
+    };
+  };
+  try {
+    const result = await geocodeLocation('Las Vegas Nevada');
+    assert.equal(result.latitude, 36.17);
+    assert.match(result.resolvedName, /Nevada/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

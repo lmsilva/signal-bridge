@@ -1351,15 +1351,30 @@
     }
   });
 
-  // ---------------------------------------------- Slideshow order setting
+  // ---------------------------------------------- Slideshow settings
 
   let slideshowOrder = 'recent';
+  let slideshowSecondsPerPhoto = 5;
 
   function setSlideshowOrderUi(order) {
     slideshowOrder = order;
     document.querySelectorAll('#slideshow-order-tabs .segmented-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.order === order);
     });
+  }
+
+  function setSlideshowSecondsUi(seconds) {
+    const value = Math.max(5, Math.min(60, Math.round(Number(seconds) || 5)));
+    slideshowSecondsPerPhoto = value;
+    const slider = $('slideshow-seconds-slider');
+    const label = $('slideshow-seconds-value');
+    if (slider) {
+      slider.value = String(value);
+      slider.setAttribute('aria-valuenow', String(value));
+    }
+    if (label) {
+      label.textContent = `${value}s`;
+    }
   }
 
   document.querySelectorAll('#slideshow-order-tabs .segmented-btn').forEach((btn) => {
@@ -1379,10 +1394,30 @@
     });
   });
 
+  const slideshowSecondsSlider = $('slideshow-seconds-slider');
+  if (slideshowSecondsSlider) {
+    slideshowSecondsSlider.addEventListener('input', () => {
+      setSlideshowSecondsUi(slideshowSecondsSlider.value);
+    });
+    slideshowSecondsSlider.addEventListener('change', async () => {
+      const previous = slideshowSecondsPerPhoto;
+      const secondsPerPhoto = Math.max(5, Math.min(60, Math.round(Number(slideshowSecondsSlider.value) || 5)));
+      setSlideshowSecondsUi(secondsPerPhoto);
+      try {
+        const result = await apiPost('/api/slideshow/settings', { secondsPerPhoto });
+        setSlideshowSecondsUi(result.secondsPerPhoto ?? secondsPerPhoto);
+      } catch (error) {
+        setSlideshowSecondsUi(previous);
+        toast(error.message || 'Could not save time per photo', 'bad');
+      }
+    });
+  }
+
   (async () => {
     try {
       const result = await apiGet('/api/slideshow/settings');
       setSlideshowOrderUi(result.order || 'recent');
+      setSlideshowSecondsUi(result.secondsPerPhoto ?? 5);
     } catch {
       // Keep the default UI state — a fresh bridge with no settings file yet.
     }

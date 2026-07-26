@@ -190,6 +190,10 @@ test('control page has a Slideshow Manager tab with a camera roll grid and delet
   assert.match(html, /data-order="recent"/);
   assert.match(html, /data-order="oldest"/);
   assert.match(html, /data-order="random"/);
+  assert.match(html, /id="slideshow-seconds-slider"/);
+  assert.match(html, /id="slideshow-seconds-value"/);
+  assert.match(html, /min="5"/);
+  assert.match(html, /max="60"/);
 });
 
 test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload', () => {
@@ -1050,6 +1054,9 @@ test('slideshow order setting persists and validates the requested value', async
     const initial = await request(base + '/api/slideshow/settings');
     assert.equal(initial.status, 200);
     assert.equal(initial.body.order, 'recent');
+    assert.equal(initial.body.secondsPerPhoto, 5);
+    assert.equal(initial.body.secondsPerPhotoMin, 5);
+    assert.equal(initial.body.secondsPerPhotoMax, 60);
 
     const bad = await postJson(base, '/api/slideshow/settings', { order: 'sideways' });
     assert.equal(bad.status, 400);
@@ -1057,9 +1064,38 @@ test('slideshow order setting persists and validates the requested value', async
     const update = await postJson(base, '/api/slideshow/settings', { order: 'oldest' });
     assert.equal(update.status, 200);
     assert.equal(update.body.order, 'oldest');
+    assert.equal(update.body.secondsPerPhoto, 5);
 
     const after = await request(base + '/api/slideshow/settings');
     assert.equal(after.body.order, 'oldest');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('slideshow seconds-per-photo setting persists and clamps to 5–60', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-slideshow-seconds-'));
+  const config = makeConfig({ ROOT: dataDir });
+  const { webServer, base } = await startTestServer({ config });
+  try {
+    const update = await postJson(base, '/api/slideshow/settings', { secondsPerPhoto: 18 });
+    assert.equal(update.status, 200);
+    assert.equal(update.body.secondsPerPhoto, 18);
+    assert.equal(update.body.order, 'recent');
+
+    const after = await request(base + '/api/slideshow/settings');
+    assert.equal(after.body.secondsPerPhoto, 18);
+
+    const clampedHigh = await postJson(base, '/api/slideshow/settings', { secondsPerPhoto: 99 });
+    assert.equal(clampedHigh.status, 200);
+    assert.equal(clampedHigh.body.secondsPerPhoto, 60);
+
+    const clampedLow = await postJson(base, '/api/slideshow/settings', { secondsPerPhoto: 1 });
+    assert.equal(clampedLow.status, 200);
+    assert.equal(clampedLow.body.secondsPerPhoto, 5);
+
+    const bad = await postJson(base, '/api/slideshow/settings', { secondsPerPhoto: 'slow' });
+    assert.equal(bad.status, 400);
   } finally {
     webServer.stop();
   }
@@ -1079,6 +1115,26 @@ test('slideshow order setting is applied when pushing the photo slideshow', asyn
     await postJson(base, '/api/push/photo-slideshow', { photos: entries });
 
     assert.deepEqual(sent[0].slideshow.photos.map((p) => p.url), ['https://nas/b.jpg', 'https://nas/a.jpg']);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('slideshow seconds-per-photo setting is applied when pushing the photo slideshow', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-slideshow-seconds-push-'));
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    await postJson(base, '/api/slideshow/settings', { secondsPerPhoto: 12 });
+
+    const entries = [
+      { url: 'https://nas/a.jpg', uploadedAt: '2026-01-03T00:00:00.000Z' },
+      { url: 'https://nas/b.jpg', uploadedAt: '2026-01-01T00:00:00.000Z' },
+    ];
+    await postJson(base, '/api/push/photo-slideshow', { photos: entries });
+
+    assert.equal(sent[0].slideshow.secondsPerPhoto, 12);
+    assert.equal(sent[0].displaySeconds, 24);
   } finally {
     webServer.stop();
   }

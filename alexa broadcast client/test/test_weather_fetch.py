@@ -6,12 +6,31 @@ from src.weather_fetch import (
     extract_named_location,
     has_forecast_data,
     normalize_transcript,
+    parse_geocode_query,
+    pick_geocode_hit,
     resolve_location_for_fetch,
     weather_code_to_condition,
 )
 
 
 class WeatherFetchTests(unittest.TestCase):
+    def test_parse_geocode_query_strips_trailing_state(self):
+        self.assertEqual(
+            parse_geocode_query("Las Vegas Nevada"),
+            {"city": "Las Vegas", "admin1": "Nevada"},
+        )
+        self.assertEqual(
+            parse_geocode_query("Saratoga Springs Utah"),
+            {"city": "Saratoga Springs", "admin1": "Utah"},
+        )
+
+    def test_pick_geocode_hit_prefers_matching_admin1(self):
+        results = [
+            {"name": "Saratoga Springs", "admin1": "New York", "country_code": "US", "latitude": 1},
+            {"name": "Saratoga Springs", "admin1": "Utah", "country_code": "US", "latitude": 40.35},
+        ]
+        self.assertEqual(pick_geocode_hit(results, "Utah")["latitude"], 40.35)
+
     def test_normalize_transcript_handles_curly_apostrophe(self):
         self.assertEqual(normalize_transcript("what\u2019s the weather"), "what's the weather")
 

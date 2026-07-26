@@ -34,7 +34,13 @@ const {
 const { ALL_TARGET_ID } = require('./display-registry');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
-const { createSlideshowSettings, VALID_ORDERS } = require('./slideshow-settings');
+const {
+  createSlideshowSettings,
+  VALID_ORDERS,
+  MIN_SECONDS_PER_PHOTO,
+  MAX_SECONDS_PER_PHOTO,
+  clampSecondsPerPhoto,
+} = require('./slideshow-settings');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -824,24 +830,52 @@ function createWebServer({
   }
 
   function handleSlideshowSettingsGet(res) {
-    sendJson(res, 200, { ok: true, order: slideshowSettings.getOrder(), orders: VALID_ORDERS });
+    const settings = slideshowSettings.get();
+    sendJson(res, 200, {
+      ok: true,
+      order: settings.order,
+      orders: VALID_ORDERS,
+      secondsPerPhoto: settings.secondsPerPhoto,
+      secondsPerPhotoMin: MIN_SECONDS_PER_PHOTO,
+      secondsPerPhotoMax: MAX_SECONDS_PER_PHOTO,
+    });
   }
 
   function handleSlideshowSettingsUpdate(body, res) {
-    const result = slideshowSettings.setOrder(body?.order);
+    const patch = {};
+    if (body && Object.prototype.hasOwnProperty.call(body, 'order')) {
+      patch.order = body.order;
+    }
+    if (body && Object.prototype.hasOwnProperty.call(body, 'secondsPerPhoto')) {
+      patch.secondsPerPhoto = body.secondsPerPhoto;
+    }
+    const result = slideshowSettings.update(patch);
     if (!result.ok) {
       sendJson(res, 400, result);
       return;
     }
-    log.info('Slideshow order setting updated', { order: result.order });
-    sendJson(res, 200, { ok: true, order: result.order, orders: VALID_ORDERS });
+    log.info('Slideshow settings updated', {
+      order: result.order,
+      secondsPerPhoto: result.secondsPerPhoto,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      order: result.order,
+      orders: VALID_ORDERS,
+      secondsPerPhoto: result.secondsPerPhoto,
+      secondsPerPhotoMin: MIN_SECONDS_PER_PHOTO,
+      secondsPerPhotoMax: MAX_SECONDS_PER_PHOTO,
+    });
   }
 
   function handlePhotoSlideshowPush(body, res) {
     const photos = Array.isArray(body?.photos) ? body.photos : [];
+    const secondsPerPhoto = body?.secondsPerPhoto != null
+      ? clampSecondsPerPhoto(body.secondsPerPhoto)
+      : slideshowSettings.getSecondsPerPhoto();
     const payload = buildPhotoSlideshowPayload({
       photos,
-      secondsPerPhoto: 5,
+      secondsPerPhoto,
       device: deviceFrom(body),
       trigger: 'photo-slideshow-api',
       order: slideshowSettings.getOrder(),
@@ -853,6 +887,7 @@ function createWebServer({
     log.info('Photo slideshow pushed to display', {
       count: payload.slideshow.photos.length,
       order: slideshowSettings.getOrder(),
+      secondsPerPhoto: payload.slideshow.secondsPerPhoto,
       targetId: targetIdFrom(body),
     });
     sendCommandPayload(payload, targetIdFrom(body), res, {

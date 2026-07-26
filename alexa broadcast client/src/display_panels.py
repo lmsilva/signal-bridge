@@ -118,26 +118,51 @@ class BasePanel:
         widget.place(**kwargs)
         self._widgets.append(widget)
 
-    # Shared photo + corner-QR layout (slideshow and single shared-photo push).
-    # The scan QR sits *inside* the hero photo's lower-right corner (both
-    # orientations) with a caption sized to the code's width. Never anchor to
-    # raw screen edges — those can clip under window chrome / mismatched metrics.
-    _SCAN_QR_SIZE_PORTRAIT = 168
-    _SCAN_QR_SIZE_LANDSCAPE = 188
+    # Shared photo + scan-QR layout (slideshow and single shared-photo push).
+    # The QR never overlays the photo: landscape uses a right gutter beside it;
+    # portrait reserves a band below it. Photo meta sits under the title stack
+    # (never beside "Shared Photos"). Caption width is fitted to the QR.
+    _SCAN_QR_SIZE_PORTRAIT = 148
+    _SCAN_QR_SIZE_LANDSCAPE = 168
+    _SCAN_QR_GUTTER_LANDSCAPE = 220
+    _SCAN_QR_GAP = 18
     _SCAN_QR_MARGIN = 16
     _SCAN_QR_CAPTION = "Scan for photo"
+    _PHOTO_META_TOP_PAD = 8
+    _PHOTO_META_BOTTOM_PAD = 18
+
+    def _photo_meta_block_height(self) -> int:
+        """Vertical space reserved above the photo for counter + shared date.
+
+        Slideshow overrides this; single photo-push leaves it at 0.
+        """
+        return 0
+
+    def _scan_qr_block_height(self, portrait: bool) -> int:
+        """Caption + gap + QR — used to reserve a non-overlapping portrait band."""
+        qr = self._SCAN_QR_SIZE_PORTRAIT if portrait else self._SCAN_QR_SIZE_LANDSCAPE
+        # Caption ~18–22px; keep a stable reserve so geometry doesn't depend on font fit.
+        return 22 + 8 + qr + self._SCAN_QR_MARGIN
 
     def _photo_stage_geometry(self):
-        """`(photo_cx, photo_cy, max_w, max_h, layout)` for a full-width hero photo."""
+        """`(photo_cx, photo_cy, max_w, max_h, layout)` with QR gutter/band reserved."""
         layout = self.shell.layout
         x = layout.content_x
         width = layout.content_width
-        top = layout.message_area_top
+        top = layout.message_area_top + self._photo_meta_block_height()
         bottom = layout.message_area_bottom
-        max_w = max(1, width - 40)
-        max_h = max(120, bottom - top - 24)
-        photo_cx = x + width // 2
-        photo_cy = top + (bottom - top) // 2
+        if layout.portrait:
+            qr_band = self._scan_qr_block_height(True) + self._SCAN_QR_GAP
+            max_w = max(1, width - 40)
+            max_h = max(120, bottom - top - qr_band)
+            photo_cx = x + width // 2
+            photo_cy = top + max_h // 2
+        else:
+            gutter = self._SCAN_QR_GUTTER_LANDSCAPE
+            max_w = max(1, width - 40 - gutter)
+            max_h = max(120, bottom - top - 24)
+            photo_cx = x + (width - gutter) // 2
+            photo_cy = top + (bottom - top) // 2
         return photo_cx, photo_cy, max_w, max_h, layout
 
     def _fit_scan_qr_caption_font(self, caption: str, target_width: int):
@@ -149,7 +174,6 @@ class BasePanel:
             pass
 
         try:
-            # Start near QR width / char count, then grow/shrink to fit flush.
             size = max(11, min(28, int(target_width / max(1, len(caption) * 0.55))))
             font = tkfont.Font(family=family, size=size, weight="bold")
             while font.measure(caption) > target_width and size > 9:
@@ -162,7 +186,6 @@ class BasePanel:
                     size -= 1
                     font.configure(size=size)
                     break
-            # Keep a strong reference so Tk doesn't GC the dynamic font.
             self._scan_qr_caption_font = font
             return font
         except Exception:
@@ -178,17 +201,16 @@ class BasePanel:
         photo_w: int | None = None,
         photo_h: int | None = None,
     ):
-        """Draw a scan QR in the lower-right of the hero photo (or content frame).
+        """Draw a scan QR beside (landscape) or below (portrait) the hero photo.
 
-        Returns the ``PhotoImage`` (caller must keep a reference) or ``None``.
-        Caption is bold, bright, centered above the code, and font-fitted so its
-        width matches the QR (not wider, not narrower).
+        Never overlaps the photo. Returns the ``PhotoImage`` (caller must keep
+        a reference) or ``None``. Caption is bold and font-fitted to the QR width.
         """
         if ImageTk is None or not url:
             return None
         layout = self.shell.layout
         caption = (caption or self._SCAN_QR_CAPTION).strip() or self._SCAN_QR_CAPTION
-        fill = self.config.get("textColor") or "#f8fafc"
+        muted = self.config.get("mutedTextColor") or self.config.get("textColor") or "#f8fafc"
         target = (
             self._SCAN_QR_SIZE_PORTRAIT if layout.portrait else self._SCAN_QR_SIZE_LANDSCAPE
         )
@@ -197,66 +219,75 @@ class BasePanel:
             return None
 
         margin = self._SCAN_QR_MARGIN
+        gap = 8
+        photo_gap = self._SCAN_QR_GAP
         caption_font = self._fit_scan_qr_caption_font(caption, qr_image.width)
         caption_h = caption_font.metrics("linespace")
-        gap = 8
-        block_h = caption_h + gap + qr_image.height
 
-        # Prefer the rendered photo's bounds so the badge sits inside the frame.
-        if (
+        content_left = layout.content_x + margin
+        content_right = layout.content_x + layout.content_width - margin
+        content_bottom = layout.message_area_bottom - margin
+        meta_bottom = layout.message_area_top + self._photo_meta_block_height()
+
+        has_photo = (
             photo_cx is not None
             and photo_cy is not None
             and photo_w
             and photo_h
             and photo_w > 0
             and photo_h > 0
-        ):
-            right = photo_cx + photo_w / 2 - margin
-            bottom = photo_cy + photo_h / 2 - margin
-            top = photo_cy - photo_h / 2 + margin
-            left = photo_cx - photo_w / 2 + margin
+        )
+
+        if has_photo and layout.portrait:
+            # Below the photo, right-aligned to the photo's right edge.
+            photo_right = photo_cx + photo_w / 2
+            photo_bottom = photo_cy + photo_h / 2
+            qx = min(photo_right - qr_image.width / 2, content_right - qr_image.width / 2)
+            qx = max(qx, content_left + qr_image.width / 2)
+            qr_top = photo_bottom + photo_gap + caption_h + gap
+            if qr_top + qr_image.height > content_bottom:
+                qr_top = content_bottom - qr_image.height
+            qy = qr_top + qr_image.height / 2
+        elif has_photo:
+            # Right gutter beside the photo, vertically centered on the photo.
+            photo_right = photo_cx + photo_w / 2
+            gutter_left = photo_right + photo_gap
+            gutter_center = (gutter_left + content_right) / 2
+            qx = min(
+                max(gutter_center, gutter_left + qr_image.width / 2),
+                content_right - qr_image.width / 2,
+            )
+            qy = photo_cy
+            qr_top = qy - qr_image.height / 2
+            # Keep caption above the QR and inside the stage (below meta).
+            if qr_top - gap - caption_h < meta_bottom:
+                qr_top = meta_bottom + caption_h + gap
+                qy = qr_top + qr_image.height / 2
+            if qy + qr_image.height / 2 > content_bottom:
+                qy = content_bottom - qr_image.height / 2
+                qr_top = qy - qr_image.height / 2
+        elif layout.portrait:
+            qx = content_right - qr_image.width / 2
+            qr_top = content_bottom - qr_image.height
+            qy = qr_top + qr_image.height / 2
         else:
-            right = layout.content_x + layout.content_width - margin
-            bottom = layout.message_area_bottom - margin
-            top = layout.message_area_top + margin
-            left = layout.content_x + margin
+            qx = content_right - qr_image.width / 2
+            mid = meta_bottom + (content_bottom - meta_bottom) / 2
+            qy = mid
+            qr_top = qy - qr_image.height / 2
+            if qr_top - gap - caption_h < meta_bottom:
+                qr_top = meta_bottom + caption_h + gap
+                qy = qr_top + qr_image.height / 2
 
-        qr_right = right
-        qr_bottom = bottom
-        qr_top = qr_bottom - qr_image.height
-        if qr_top - gap - caption_h < top:
-            qr_top = top + caption_h + gap
-            qr_bottom = qr_top + qr_image.height
-        if qr_right - qr_image.width < left:
-            qr_right = left + qr_image.width
-
-        # Keep the full caption+QR block inside the target rect.
-        if block_h > (bottom - top) and (bottom - top) > qr_image.height:
-            qr_bottom = bottom
-            qr_top = qr_bottom - qr_image.height
-
-        qx = qr_right - qr_image.width / 2
-        qy = qr_top + qr_image.height / 2
         photo = ImageTk.PhotoImage(qr_image)
         self._track(self.canvas.create_image(qx, qy, image=photo))
-        # Soft shadow so the caption stays readable over bright photo regions.
-        self._track(
-            self.canvas.create_text(
-                qx + 1,
-                qr_top - gap + 1,
-                anchor="s",
-                text=caption,
-                fill="#0f172a",
-                font=caption_font,
-            )
-        )
         self._track(
             self.canvas.create_text(
                 qx,
                 qr_top - gap,
                 anchor="s",
                 text=caption,
-                fill=fill,
+                fill=muted,
                 font=caption_font,
             )
         )
@@ -5480,8 +5511,8 @@ class PhotoSlideshowPanel(BasePanel):
     text for this panel), and is interrupted immediately by any new UDP
     payload, same as every other overlay. Each photo is fetched off the Tk
     main thread so a slow LAN fetch never stalls the UI, and centered so it
-    looks good in portrait or landscape. A small QR code in the corner links
-    straight to that photo so a viewer can open it on their own phone.
+    looks good in portrait or landscape. A scan QR beside (landscape) or
+    below (portrait) the photo links straight to that image on a phone.
     """
 
     # The bridge's control page uses a self-signed cert by design (LAN-only,
@@ -5499,6 +5530,17 @@ class PhotoSlideshowPanel(BasePanel):
         self._photo_image = None  # keep a reference or Tk garbage-collects it
         self._corner_qr_image = None
         self._fetch_token = 0
+
+    def _photo_meta_block_height(self) -> int:
+        """Reserve room under the title for "Photo x of y" + shared date."""
+        line_h = self.shell.chip_value_font.metrics("linespace")
+        return (
+            self._PHOTO_META_TOP_PAD
+            + line_h
+            + 4
+            + line_h
+            + self._PHOTO_META_BOTTOM_PAD
+        )
 
     def show(self, payload: dict):
         self.hide()
@@ -5637,8 +5679,7 @@ class PhotoSlideshowPanel(BasePanel):
             print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
 
     def _draw_chrome(self, *, include_scan_qr: bool = True):
-        """Draws the "Photo x of y" / shared-date / scan-QR chrome that
-        overlays the current photo regardless of load state."""
+        """Draws photo meta under the title stack + a non-overlapping scan QR."""
         if not self._photos:
             return
         layout = self.shell.layout
@@ -5646,14 +5687,15 @@ class PhotoSlideshowPanel(BasePanel):
         current = self._photos[self._index]
         total = len(self._photos)
 
+        # Centered under "Shared Photos" — never pulled up beside the title.
         line_h = self.shell.chip_value_font.metrics("linespace")
-        corner_x = layout.content_x
-        corner_y = max(16, layout.message_area_top - line_h * 2 - 12)
+        center_x = layout.content_x + layout.content_width // 2
+        meta_y = layout.message_area_top + self._PHOTO_META_TOP_PAD
         self._track(
             self.canvas.create_text(
-                corner_x,
-                corner_y,
-                anchor="nw",
+                center_x,
+                meta_y,
+                anchor="n",
                 text=f"Photo {self._index + 1} of {total}",
                 fill=muted,
                 font=self.shell.chip_value_font,
@@ -5662,9 +5704,9 @@ class PhotoSlideshowPanel(BasePanel):
         if current.get("uploadedAt"):
             self._track(
                 self.canvas.create_text(
-                    corner_x,
-                    corner_y + line_h + 4,
-                    anchor="nw",
+                    center_x,
+                    meta_y + line_h + 4,
+                    anchor="n",
                     text=f"Shared {format_chip_timestamp(current['uploadedAt'])}",
                     fill=muted,
                     font=self.shell.chip_value_font,

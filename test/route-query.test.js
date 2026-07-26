@@ -54,6 +54,25 @@ test('extractRouteLocations parses "distance between X and Y"', () => {
   assert.equal(result.destination.query, 'Moab');
 });
 
+test('extractRouteLocations parses "distance from here to City State"', () => {
+  const result = extractRouteLocations(
+    'what is the distance from here to Las Vegas Nevada',
+    DEFAULT_LOCATION,
+  );
+  assert.equal(result.origin.scope, 'local');
+  assert.equal(result.origin.latitude, DEFAULT_LOCATION.latitude);
+  assert.equal(result.destination.query, 'Las Vegas Nevada');
+});
+
+test('extractRouteLocations parses "distance from City State to City"', () => {
+  const result = extractRouteLocations(
+    'what is the distance from Saratoga Springs Utah to New York',
+    DEFAULT_LOCATION,
+  );
+  assert.equal(result.origin.query, 'Saratoga Springs Utah');
+  assert.equal(result.destination.query, 'New York');
+});
+
 test('extractRouteLocations parses "how far is Y from X"', () => {
   const result = extractRouteLocations('how far is moab from saratoga springs', DEFAULT_LOCATION);
   assert.equal(result.destination.query, 'moab');
