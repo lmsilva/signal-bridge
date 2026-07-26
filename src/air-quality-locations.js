@@ -1,25 +1,24 @@
 const { normalizeText, resolveIndoorLocation } = require('./indoor-locations');
 
+// Generic sample monitors (no household entity IDs). Override via
+// airQuality.monitors in local data/config.json for real devices.
 const DEFAULT_AIR_QUALITY_MONITORS = [
   {
     id: 'main-floor',
     label: 'Main Floor',
     entity: 'main floor air quality monitor',
-    entityId: '00000000-0000-0000-0000-000000000002',
     aliases: ['main floor', 'main floor air quality', 'main floor airquality'],
   },
   {
     id: 'machine-room',
     label: 'Machine Room',
     entity: 'machine room air quality monitor',
-    entityId: '00000000-0000-0000-0000-000000000003',
     aliases: ['machine room', 'machine room air quality', 'machine room airquality'],
   },
   {
     id: 'dome',
     label: 'Dome',
     entity: 'dome air quality monitor',
-    entityId: '00000000-0000-0000-0000-000000000004',
     aliases: ['dome', 'dome air quality', 'dome airquality'],
   },
   {

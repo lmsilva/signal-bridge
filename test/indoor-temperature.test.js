@@ -33,14 +33,14 @@ test('generic temperature query is not treated as indoor', () => {
   assert.equal(isIndoorTemperatureQuery("what's the temperature outside"), false);
 });
 
-test('resolveIndoorLocation maps bedroom echo and Room 14', () => {
+test('resolveIndoorLocation maps bedroom echo and guest bedroom', () => {
   const master = resolveIndoorLocation('bedroom echo');
   assert.equal(master.entity, 'Bedroom 4');
   assert.equal(master.matched, true);
 
-  const Room 16 = resolveIndoorLocation('Room 14');
-  assert.equal(Room 16.entity, 'Room 10');
-  assert.equal(Room 16.matched, true);
+  const guest = resolveIndoorLocation('guest bedroom');
+  assert.equal(guest.entity, 'guest bedroom ecobee sensor');
+  assert.equal(guest.matched, true);
 });
 
 test('parseIndoorReading extracts temperature and humidity from Alexa responses', () => {
@@ -52,40 +52,40 @@ test('parseIndoorReading extracts temperature and humidity from Alexa responses'
   assert.equal(bedroom.temperatureF, 72);
   assert.equal(bedroom.comfort, 'comfortable');
 
-  const decimal = parseIndoorReading("oh it's 72.5 degrees on Room 16's room");
+  const decimal = parseIndoorReading("oh it's 72.5 degrees on guest's room");
   assert.equal(decimal.temperatureF, 72.5);
-  assert.equal(decimal.locationPhrase, "Room 16's room");
+  assert.equal(decimal.locationPhrase, "guest's room");
   assert.equal(decimal.comfort, 'comfortable');
 
   const humidity = parseIndoorReading('The humidity of top floor is 16%');
   assert.equal(humidity.humidity, 16);
 });
 
-test('resolveIndoorLocation maps Room 16 room aliases', () => {
-  const Room 16 = resolveIndoorLocation("Room 16's room");
-  assert.equal(Room 16.entity, 'Room 10');
-  assert.equal(Room 16.matched, true);
+test('resolveIndoorLocation maps guest room aliases', () => {
+  const guest = resolveIndoorLocation("guest's room");
+  assert.equal(guest.entity, 'guest bedroom ecobee sensor');
+  assert.equal(guest.matched, true);
 
-  const echo = resolveIndoorLocation("Room 16's bedroom echo");
-  assert.equal(echo.entity, 'Room 10');
+  const echo = resolveIndoorLocation('guest bedroom echo');
+  assert.equal(echo.entity, 'guest bedroom ecobee sensor');
 });
 
 test('resolveIndoorQueryLocation prefers spoken location phrase', () => {
   const location = resolveIndoorQueryLocation(
-    "what's the temperature in Room 16's bedroom echo",
-    "oh it's 72.5 degrees on Room 16's room",
+    "what's the temperature in guest bedroom echo",
+    "oh it's 72.5 degrees on guest's room",
   );
-  assert.equal(location.entity, 'Room 10');
+  assert.equal(location.entity, 'guest bedroom ecobee sensor');
 });
 
 test('resolveIndoorQueryLocation lets a matched spoken room override a misheard query', () => {
-  // A second Echo transcribed "Room 14" as "palmyra"; Alexa's answer
+  // A second Echo transcribed "guest bedroom" as "palmyra"; Alexa's answer
   // names the real room, which should win over the unmatched transcript.
   const location = resolveIndoorQueryLocation(
     "what's the temperature in palmyra",
-    "It's 72 degrees in Room 14",
+    "It's 72 degrees in guest bedroom",
   );
-  assert.equal(location.entity, 'Room 10');
+  assert.equal(location.entity, 'guest bedroom ecobee sensor');
   assert.equal(location.matched, true);
 });
 
@@ -147,11 +147,11 @@ test('matchesIndoorQuery rejects outdoor weather phrasing', () => {
 
 test('matchesIndoorQuery ignores spoken room hints when query is generic', () => {
   assert.equal(
-    matchesIndoorQuery("what's the temperature", "It'Bedroom 4's room"),
+    matchesIndoorQuery("what's the temperature", "It's 75 degrees in guest's room"),
     false,
   );
   assert.equal(
-    matchesIndoorQuery("what's the temperature in Room 16's bedroom echo", "oh it's 72.5 degrees on Room 16's room"),
+    matchesIndoorQuery("what's the temperature in guest bedroom echo", "oh it's 72.5 degrees on guest's room"),
     true,
   );
 });

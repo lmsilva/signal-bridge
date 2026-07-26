@@ -31,8 +31,12 @@ def ensure_config_file() -> Path:
     if config_path.exists():
         return config_path
 
-    default_path = bundled_resource("config.json")
-    if default_path.exists() and default_path.resolve() != config_path.resolve():
-        shutil.copy2(default_path, config_path)
+    # Prefer the sanitized example template (checked into git). Fall back to a
+    # bundled config.json for older portable builds that only shipped that file.
+    for name in ("config.example.json", "config.json"):
+        default_path = bundled_resource(name)
+        if default_path.exists() and default_path.resolve() != config_path.resolve():
+            shutil.copy2(default_path, config_path)
+            break
 
     return config_path

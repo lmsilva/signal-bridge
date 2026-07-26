@@ -21,7 +21,16 @@ const DEFAULT_INDOOR_LOCATIONS = [
     id: 'guest-bedroom',
     label: 'Guest Bedroom',
     entity: 'guest bedroom ecobee sensor',
-    aliases: ['guest bedroom ecobee sensor', 'guest bedroom ecobee', 'guest bedroom sensor', 'guest bedroom', 'guest room'],
+    aliases: [
+      'guest bedroom ecobee sensor',
+      'guest bedroom ecobee',
+      'guest bedroom sensor',
+      'guest bedroom',
+      'guest room',
+      "guest's room",
+      'guest bedroom echo',
+      "guest's bedroom echo",
+    ],
   },
   {
     id: 'living-room',
@@ -55,29 +64,6 @@ const DEFAULT_INDOOR_LOCATIONS = [
       'primary bedroom',
       'main bedroom',
     ],
-  },
-  {
-    id: 'Room 8',
-    label: 'Room 9',
-    entity: 'Room 10',
-    entityId: '00000000-0000-0000-0000-000000000001',
-    aliases: [
-      'Room 10',
-      'Room 12',
-      'Room 13',
-      'Room 14',
-      'Room 14 echo',
-      "Room 16's bedroom",
-      "Room 16's bedroom echo",
-      "Room 16's room",
-      'Room 16 room',
-    ],
-  },
-  {
-    id: 'Room 12',
-    label: 'Room 9',
-    entity: 'Bedroom 2',
-    aliases: ['Bedroom 2', 'Guest Room', 'Office', 'Room 11', 'Room 15'],
   },
 ];
 
@@ -120,6 +106,19 @@ function buildAliasIndex(locations) {
   return entries.sort((left, right) => right.alias.length - left.alias.length);
 }
 
+function matchedLocationResult(phrase, entry) {
+  return {
+    query: phrase,
+    label: entry.location.label,
+    entity: entry.location.entity,
+    id: entry.location.id,
+    entityId: entry.location.entityId || null,
+    scope: 'indoor',
+    matched: true,
+    matchedAlias: entry.alias,
+  };
+}
+
 function resolveIndoorLocation(query, config = {}) {
   const locations = getIndoorLocations(config);
   const phrase = cleanupLocationPhrase(query);
@@ -139,15 +138,7 @@ function resolveIndoorLocation(query, config = {}) {
 
   for (const entry of aliasIndex) {
     if (normalizedPhrase === entry.alias) {
-      return {
-        query: phrase,
-        label: entry.location.label,
-        entity: entry.location.entity,
-        id: entry.location.id,
-        scope: 'indoor',
-        matched: true,
-        matchedAlias: entry.alias,
-      };
+      return matchedLocationResult(phrase, entry);
     }
   }
 
@@ -156,15 +147,7 @@ function resolveIndoorLocation(query, config = {}) {
       normalizedPhrase.includes(entry.alias)
       || entry.alias.includes(normalizedPhrase)
     ) {
-      return {
-        query: phrase,
-        label: entry.location.label,
-        entity: entry.location.entity,
-        id: entry.location.id,
-        scope: 'indoor',
-        matched: true,
-        matchedAlias: entry.alias,
-      };
+      return matchedLocationResult(phrase, entry);
     }
   }
 

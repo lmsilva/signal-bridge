@@ -248,13 +248,14 @@ function endpointHaystack(endpoint) {
   ].filter(Boolean).join(' '));
 }
 
-function findMatchingDevice(endpoints, location) {
-  const monitors = getAirQualityMonitors({});
+function findMatchingDevice(endpoints, location, config = {}) {
+  const monitors = getAirQualityMonitors(config);
   const monitor = monitors.find((entry) => entry.id === location?.id)
     || monitors.find((entry) => normalizeText(entry.entity) === normalizeText(location?.entity));
 
-  if (monitor?.entityId) {
-    const byEntity = endpoints.find((entry) => entry.entityId === monitor.entityId);
+  const entityId = location?.entityId || monitor?.entityId;
+  if (entityId) {
+    const byEntity = endpoints.find((entry) => entry.entityId === entityId);
     if (byEntity) {
       return byEntity;
     }
@@ -323,7 +324,7 @@ async function fetchAirQualityReading(alexa, location, config = {}) {
 
   try {
     const endpoints = await listCachedEndpoints(alexa);
-    const match = findMatchingDevice(endpoints, location);
+    const match = findMatchingDevice(endpoints, location, config);
     if (!match) {
       return null;
     }
@@ -357,7 +358,7 @@ async function enrichAllMonitors(alexa, config = {}) {
 
   for (const monitor of monitors) {
     const location = resolveAirQualityLocation(monitor.label, config);
-    const match = findMatchingDevice(endpoints, location);
+    const match = findMatchingDevice(endpoints, location, config);
     if (!match) {
       continue;
     }

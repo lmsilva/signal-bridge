@@ -1,0 +1,15 @@
+{
+  "listenPort": 47832,
+  "listenAddress": "0.0.0.0",
+  "displayName": "Living Room Display",
+  "bridgeHosts": ["192.168.1.10"],
+  "discoveryPort": 47833,
+  "defaultDisplaySeconds": 60,
+  "maxDisplaySeconds": 60,
+  "webOverlayOpacity": 0.88,
+  "defaultLocation": {
+    "name": "Home",
+    "latitude": 40.0,
+    "longitude": -111.0
+  }
+}

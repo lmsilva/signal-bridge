@@ -20,15 +20,15 @@ test('stateResponseQuality ignores empty error-only responses', () => {
 
 test('buildStateQueries prefers appliance and entity identifiers', () => {
   const queries = buildStateQueries({
-    entityId: '00000000-0000-0000-0000-000000000002',
+    entityId: '00000000-1111-2222-3333-444444444444',
     applianceId: 'AAA_SonarCloudService_example',
     endpointId: 'amzn1.alexa.endpoint.example',
   });
 
   assert.deepEqual(queries, [
     { entityId: 'AAA_SonarCloudService_example', entityType: 'APPLIANCE' },
-    { entityId: '00000000-0000-0000-0000-000000000002', entityType: 'ENTITY' },
-    { entityId: '00000000-0000-0000-0000-000000000002', entityType: 'APPLIANCE' },
+    { entityId: '00000000-1111-2222-3333-444444444444', entityType: 'ENTITY' },
+    { entityId: '00000000-1111-2222-3333-444444444444', entityType: 'APPLIANCE' },
     { entityId: 'amzn1.alexa.endpoint.example', entityType: 'ENTITY' },
   ]);
 });

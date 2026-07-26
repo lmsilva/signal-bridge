@@ -111,7 +111,7 @@ Build extras: `requirements-build.txt` (adds PyInstaller).
 | `fadeInMs` / `fadeOutMs` | 400 / 600 | Fade animation |
 | `webOverlayOpacity` | 0.88 | WebView2 window opacity |
 
-Example for a poster PC talking to NAS `192.168.1.10`:
+Copy `config.example.json` to `config.json` and set your bridge IP / display name. Example:
 
 ```json
 {

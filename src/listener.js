@@ -604,7 +604,7 @@ function createListener({ config, log }) {
       }
       // A location that matches no configured sensor with nothing to show is
       // almost always a misheard transcript from a second Echo (e.g. "palmyra"
-      // for "Room 14") — displaying it just flashes a wrong room name.
+      // for a known room) — displaying it just flashes a wrong room name.
       if (!location?.matched && reading?.temperatureF == null && reading?.humidity == null) {
         log.info('Indoor query skipped (unknown location, no reading yet)', {
           query: event.query,

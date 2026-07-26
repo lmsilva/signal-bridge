@@ -58,7 +58,7 @@ test('indoor query with a known room processes immediately', () => {
   assert.equal(
     needsSpokenResponseUpgrade({
       kind: 'indoor-temperature',
-      query: "what's the temperature in Room 14",
+      query: "what's the temperature in guest bedroom",
       spokenResponse: null,
     }),
     false,

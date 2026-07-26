@@ -2,34 +2,14 @@ node_modules/
 .env
 *.log
 
-# Local config (use config.example.json as template)
+# Local config (use *.example.json as templates)
 config.json
+alexa broadcast client/config.json
 
-# Bridge runtime data (sessions, logs, local config)
-data/alexa-session.json
-data/bridge-state.json
-data/broadcast.txt
-data/formerDataStore.json
-data/auth-status.json
-data/session-auth-journal.jsonl
-data/voice-events.jsonl
-data/timer-mirror.json
-data/tesla-session.json
-data/tesla-auth-status.json
-data/tesla-rate-limit.json
-data/tesla-dashboard-cache.json
-data/tesla-battery-cache.json
-data/weather-cache.json
-data/air-quality-cache.json
-data/shopping-list-cache.json
-data/tesla-private-key.pem
-data/tesla-public-key.pem
-data/diagnostics/
-data/config.json
-data/data/
-data/web-certs/
-data/displays-registry.json
-data/qr-image-cache/
+# Bridge runtime data — sessions, caches, device inventories, certs, logs.
+# Keep the empty directory in git via data/.gitkeep only.
+data/**
+!data/.gitkeep
 broadcast.txt
 
 # Windows broadcast client
@@ -52,5 +32,3 @@ alexa broadcast client/map-errors.log
 Thumbs.db
 .idea/
 .vscode/
-
-data/slideshow-settings.json

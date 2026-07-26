@@ -70,13 +70,14 @@ function isIndoorSensorEndpoint(endpoint) {
   return false;
 }
 
-function findIndoorSensor(endpoints, location) {
-  const locations = getIndoorLocations({});
+function findIndoorSensor(endpoints, location, config = {}) {
+  const locations = getIndoorLocations(config);
   const configured = locations.find((entry) => entry.id === location?.id)
     || locations.find((entry) => normalizeText(entry.entity) === normalizeText(location?.entity));
 
-  if (configured?.entityId) {
-    const byEntity = endpoints.find((entry) => entry.entityId === configured.entityId);
+  const entityId = location?.entityId || configured?.entityId;
+  if (entityId) {
+    const byEntity = endpoints.find((entry) => entry.entityId === entityId);
     if (byEntity) {
       return byEntity;
     }
@@ -130,14 +131,14 @@ async function listCachedEndpoints(alexa) {
   return endpoints;
 }
 
-async function fetchIndoorSensorReading(alexa, location) {
+async function fetchIndoorSensorReading(alexa, location, config = {}) {
   if (!alexa) {
     return null;
   }
 
   try {
     const endpoints = await listCachedEndpoints(alexa);
-    const match = findIndoorSensor(endpoints, location);
+    const match = findIndoorSensor(endpoints, location, config);
     if (!match) {
       return null;
     }
@@ -151,7 +152,7 @@ async function fetchIndoorSensorReading(alexa, location) {
 
 async function enrichIndoorReading(alexa, location, spokenResponse, config = {}) {
   const spokenReading = parseIndoorReading(spokenResponse, config);
-  const sensorReading = await fetchIndoorSensorReading(alexa, location);
+  const sensorReading = await fetchIndoorSensorReading(alexa, location, config);
   if (!sensorReading) {
     return spokenReading;
   }

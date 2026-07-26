@@ -115,7 +115,7 @@ View logs in Container Station → your container → **Logs**.
 
 Use this if the session expired or refresh fails.
 
-**Your NAS IP:** `192.168.1.10` (use this as `PROXY_OWN_IP`)
+**Your NAS IP:** replace `192.168.1.10` below with your NAS LAN IP (use it as `PROXY_OWN_IP`)
 
 1. Stop the listener and free port 3456:
 

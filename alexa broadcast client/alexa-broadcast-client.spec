@@ -48,7 +48,9 @@ a = Analysis(
     ['src/main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('config.json', '.'), ('assets', 'assets')],
+    # Ship the sanitized example as the portable template (copied to
+    # config.json on first run). Never bundle a machine-specific config.json.
+    datas=[('config.example.json', '.'), ('assets', 'assets')],
     hiddenimports=[
         'pystray',
         'pystray._win32',
