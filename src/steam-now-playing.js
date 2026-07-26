@@ -18,6 +18,22 @@ const {
   buildSteamNowPlayingClosePayload,
 } = require('./udp-payload');
 
+/**
+ * Steam Web API gameid often lags a local launch by tens of seconds.
+ * When the theater-PC reporter has a fresh appId, trust that until Steam catches up.
+ */
+function resolveEffectiveSteamAppId(accountAppId, presenceEntry) {
+  const fromAccount = Number(accountAppId);
+  if (Number.isFinite(fromAccount) && fromAccount > 0) {
+    return fromAccount;
+  }
+  const fromPresence = Number(presenceEntry?.appId);
+  if (Number.isFinite(fromPresence) && fromPresence > 0) {
+    return fromPresence;
+  }
+  return null;
+}
+
 function createSteamNowPlaying({
   config,
   log,
@@ -28,6 +44,7 @@ function createSteamNowPlaying({
   const presence = createSteamPresenceStore(steamConfig, { now });
 
   let timer = null;
+  let tickSoonTimer = null;
   let running = false;
   /** @type {null | {
    *   appId: number,
@@ -154,8 +171,33 @@ function createSteamNowPlaying({
     return true;
   }
 
+  function scheduleImmediateTick(reason = 'presence') {
+    if (tickSoonTimer) {
+      clearTimeout(tickSoonTimer);
+    }
+    tickSoonTimer = setTimeout(() => {
+      tickSoonTimer = null;
+      tick().catch((error) => {
+        lastError = error?.message || String(error);
+        log?.warn?.('Steam Now Playing immediate tick failed', {
+          reason,
+          error: lastError,
+        });
+      });
+    }, 200);
+    if (typeof tickSoonTimer.unref === 'function') {
+      tickSoonTimer.unref();
+    }
+  }
+
   function recordPresence(body) {
-    return presence.upsert(body || {});
+    const result = presence.upsert(body || {});
+    // Closest thing to a "push": theater-PC heartbeat → poll Steam + open overlay
+    // without waiting for the next interval.
+    if (result?.ok) {
+      scheduleImmediateTick('presence');
+    }
+    return result;
   }
 
   async function tick() {
@@ -194,46 +236,52 @@ function createSteamNowPlaying({
     }
 
     const accountAppId = summary.gameId;
-    const matchedPresence = presence.matchForApp(accountAppId);
+    const presenceHint = presence.matchForApp(accountAppId) || presence.matchForApp(null);
+    const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint);
+    const matchedPresence = effectiveAppId
+      ? presence.matchForApp(effectiveAppId)
+      : null;
+    const presenceLed = Boolean(effectiveAppId && !accountAppId && matchedPresence);
 
     // Detect session end / restart boundaries.
-    if (!accountAppId) {
+    if (!effectiveAppId) {
       if (session) {
         endSession('game-ended');
       }
       lastAccountAppId = null;
-      lastStatus = matchedPresence ? 'reporter_only' : 'idle';
+      lastStatus = 'idle';
       return;
     }
 
     const host = matchedPresence?.hostname || null;
-    const onAllowedHost = Boolean(matchedPresence && matchedPresence.appId === accountAppId);
+    const onAllowedHost = Boolean(matchedPresence && matchedPresence.appId === effectiveAppId);
 
     if (!onAllowedHost) {
-      if (session && session.appId === accountAppId) {
+      if (session && session.appId === effectiveAppId) {
         // Still the same account game, but reporter went stale → close if shown.
         endSession('host-stale');
-      } else if (session && session.appId !== accountAppId) {
+      } else if (session && session.appId !== effectiveAppId) {
         endSession('game-changed');
       }
-      lastAccountAppId = accountAppId;
+      lastAccountAppId = effectiveAppId;
       lastStatus = 'playing_elsewhere';
-      lastError = `Playing app ${accountAppId} but not on an allowed host (${steamConfig.allowedHosts.join(', ')})`;
+      lastError = `Playing app ${effectiveAppId} but not on an allowed host (${steamConfig.allowedHosts.join(', ')})`
+        + ' — is steam-presence-reporter running on that PC?';
       return;
     }
 
     // New game or restart after gap.
-    if (!session || session.appId !== accountAppId) {
+    if (!session || session.appId !== effectiveAppId) {
       if (session) {
         endSession('game-changed');
       }
-      beginSession({ appId: accountAppId, host });
-    } else if (lastAccountAppId == null && accountAppId) {
+      beginSession({ appId: effectiveAppId, host });
+    } else if (lastAccountAppId == null && effectiveAppId) {
       // Restart after idle gap while session object somehow lingered — treat as new.
-      beginSession({ appId: accountAppId, host });
+      beginSession({ appId: effectiveAppId, host });
     }
 
-    lastAccountAppId = accountAppId;
+    lastAccountAppId = effectiveAppId;
 
     if (session.suppressed) {
       lastStatus = 'suppressed';
@@ -245,7 +293,7 @@ function createSteamNowPlaying({
     let reading = session.details;
     if (needsDetails) {
       try {
-        reading = await enrichGame(creds.apiKey, creds.steamId, accountAppId);
+        reading = await enrichGame(creds.apiKey, creds.steamId, effectiveAppId);
       } catch (error) {
         lastError = error?.message || String(error);
         log?.warn?.('Steam game enrich failed', lastError);
@@ -271,8 +319,10 @@ function createSteamNowPlaying({
     } else {
       session.details = reading;
     }
-    lastStatus = 'playing';
-    lastError = null;
+    lastStatus = presenceLed ? 'playing_presence' : 'playing';
+    lastError = presenceLed
+      ? 'Showing from theater-PC reporter (Steam profile gameid still catching up)'
+      : null;
   }
 
   /**
@@ -394,6 +444,10 @@ function createSteamNowPlaying({
       clearInterval(timer);
       timer = null;
     }
+    if (tickSoonTimer) {
+      clearTimeout(tickSoonTimer);
+      tickSoonTimer = null;
+    }
   }
 
   return {
@@ -413,4 +467,5 @@ function createSteamNowPlaying({
 
 module.exports = {
   createSteamNowPlaying,
+  resolveEffectiveSteamAppId,
 };

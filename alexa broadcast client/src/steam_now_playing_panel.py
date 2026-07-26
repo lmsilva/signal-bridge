@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import ssl
 import threading
+import tkinter as tk
 import urllib.request
 from datetime import datetime, timezone
 
@@ -15,6 +16,7 @@ except ImportError:
     ImageTk = None
 
 from src.display_panels import BasePanel
+from src.message_scroll import MessageScrollController
 from src.payload_utils import parse_iso_timestamp
 
 
@@ -24,9 +26,12 @@ class SteamNowPlayingPanel(BasePanel):
     ACCENT = "#38bdf8"
     PILL_BG = "#1a2740"
     FOOTER_LINE = "#243147"
+    DESC_BG = "#070b14"
 
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
+        self.needs_scroll = False
+        self.scroller = None
         self._fetch_token = 0
         self._photo_refs = []
         self._tick_job = None
@@ -40,6 +45,10 @@ class SteamNowPlayingPanel(BasePanel):
     def hide(self):
         self._fetch_token += 1
         self._stop_elapsed_tick()
+        if self.scroller:
+            self.scroller.stop()
+        self.scroller = None
+        self.needs_scroll = False
         self._photo_refs = []
         super().hide()
 
@@ -51,21 +60,56 @@ class SteamNowPlayingPanel(BasePanel):
                 pass
             self._tick_job = None
 
+    def _content_rect(self):
+        """Use OverlayShell layout / screen size — never canvas.winfo_* (often 1 pre-map)."""
+        layout = self.shell.layout
+        screen_w = int(getattr(self.shell.overlay, "screen_w", 0) or 0)
+        screen_h = int(getattr(self.shell.overlay, "screen_h", 0) or 0)
+        if screen_w < 64:
+            screen_w = int(self.root.winfo_screenwidth() or 1920)
+        if screen_h < 64:
+            screen_h = int(self.root.winfo_screenheight() or 1080)
+        x0 = int(layout.content_x)
+        width = int(layout.content_width)
+        top = int(screen_h * (0.03 if layout.portrait else 0.05))
+        # Sit close to the dismiss clock so portrait doesn't strand empty band.
+        countdown_y = int(getattr(layout, "countdown_y", 0) or 0)
+        if countdown_y > 0:
+            bottom = countdown_y - 24
+        else:
+            bottom = int(layout.message_area_bottom)
+        if width < 64:
+            width = int(screen_w * (0.82 if layout.portrait else 0.68))
+            x0 = (screen_w - width) // 2
+        if bottom <= top + 120:
+            bottom = screen_h - 64
+        return {
+            "screen_w": screen_w,
+            "screen_h": screen_h,
+            "x0": x0,
+            "y0": top,
+            "x1": x0 + width,
+            "y1": bottom,
+            "portrait": bool(layout.portrait),
+        }
+
     def _render(self, payload: dict):
         steam = payload.get("steam") or {}
         self._steam = steam
         started = steam.get("startedAt")
         self._started_at = parse_iso_timestamp(started) if started else None
 
-        w = self.canvas.winfo_width() or self.root.winfo_screenwidth()
-        h = self.canvas.winfo_height() or self.root.winfo_screenheight()
-        portrait = h >= w
-        margin = max(18, int(min(w, h) * 0.035))
-        self._draw_background(0, 0, w, h)
-        if portrait:
-            self._layout_boxes = self._compute_portrait_boxes(margin, w, h)
+        rect = self._content_rect()
+        margin = max(12, int(min(rect["x1"] - rect["x0"], rect["y1"] - rect["y0"]) * 0.02))
+        self._draw_background(0, 0, rect["screen_w"], rect["screen_h"])
+        if rect["portrait"]:
+            self._layout_boxes = self._compute_portrait_boxes(
+                margin, rect["x0"], rect["y0"], rect["x1"], rect["y1"],
+            )
         else:
-            self._layout_boxes = self._compute_landscape_boxes(margin, w, h)
+            self._layout_boxes = self._compute_landscape_boxes(
+                margin, rect["x0"], rect["y0"], rect["x1"], rect["y1"],
+            )
         self._draw_chrome(self._layout_boxes)
         self._draw_meta(self._layout_boxes, steam)
         self._draw_footer(self._layout_boxes, steam)
@@ -77,44 +121,87 @@ class SteamNowPlayingPanel(BasePanel):
             x0, y0, x1, y1, fill="#070b14", outline="",
         ))
 
-    def _compute_portrait_boxes(self, margin, w, h):
-        header_h = int(h * 0.08)
-        footer_h = int(h * 0.11)
-        tags_h = int(h * 0.055)
-        meta_h = int(h * 0.22)
-        hero_top = margin + header_h + 8
-        hero_bottom = h - margin - footer_h - meta_h - tags_h - 16
-        if hero_bottom < hero_top + 120:
-            hero_bottom = hero_top + 120
+    def _compute_portrait_boxes(self, margin, x0, y0, x1, y1):
+        """Stack chrome → capped hero → tags → roomy meta → footer at the bottom."""
+        height = max(200, y1 - y0)
+        width = max(200, x1 - x0)
+        header_h = max(56, int(height * 0.085))
+        footer_h = max(70, int(height * 0.095))
+        tags_h = max(34, int(height * 0.045))
+        gap = 8
+        # Cap the poster so title / description / screenshots get real space.
+        usable = height - margin * 2 - header_h - footer_h - tags_h - gap * 4
+        hero_h = min(
+            int(height * 0.36),
+            int(width * 0.92),
+            max(160, int(usable * 0.48)),
+        )
+        hero_top = y0 + margin + header_h + gap
+        hero_bottom = hero_top + hero_h
+        tags_top = hero_bottom + gap
+        tags_bottom = tags_top + tags_h
+        meta_top = tags_bottom + gap
+        meta_bottom = y1 - margin - footer_h - gap
+        if meta_bottom < meta_top + 120:
+            # Steal from hero when the screen is short.
+            shrink = (meta_top + 120) - meta_bottom
+            hero_bottom = max(hero_top + 140, hero_bottom - shrink)
+            tags_top = hero_bottom + gap
+            tags_bottom = tags_top + tags_h
+            meta_top = tags_bottom + gap
+            meta_bottom = y1 - margin - footer_h - gap
         return {
-            "header": (margin, margin, w - margin, margin + header_h),
-            "hero": (margin, hero_top, w - margin, hero_bottom),
-            "tags": (margin, hero_bottom + 8, w - margin, hero_bottom + 8 + tags_h),
-            "meta": (margin, hero_bottom + 8 + tags_h + 4, w - margin, h - margin - footer_h - 8),
-            "footer": (margin, h - margin - footer_h, w - margin, h - margin),
+            "header": (x0 + margin, y0 + margin, x1 - margin, y0 + margin + header_h),
+            "hero": (x0 + margin, hero_top, x1 - margin, hero_bottom),
+            "tags": (x0 + margin, tags_top, x1 - margin, tags_bottom),
+            "meta": (x0 + margin, meta_top, x1 - margin, meta_bottom),
+            "footer": (x0 + margin, y1 - margin - footer_h, x1 - margin, y1 - margin),
+            "_width": width,
+            "_height": height,
         }
 
-    def _compute_landscape_boxes(self, margin, w, h):
-        header_h = int(h * 0.12)
-        footer_h = int(h * 0.16)
-        left_w = int((w - margin * 3) * 0.42)
+    def _compute_landscape_boxes(self, margin, x0, y0, x1, y1):
+        height = max(200, y1 - y0)
+        width = max(200, x1 - x0)
+        header_h = int(height * 0.14)
+        footer_h = int(height * 0.16)
+        left_w = int((width - margin * 3) * 0.42)
         return {
-            "header": (margin, margin, w - margin, margin + header_h),
-            "hero": (margin, margin + header_h + 10, margin + left_w, h - margin - footer_h - 10),
+            "header": (x0 + margin, y0 + margin, x1 - margin, y0 + margin + header_h),
+            "hero": (
+                x0 + margin,
+                y0 + margin + header_h + 10,
+                x0 + margin + left_w,
+                y1 - margin - footer_h - 10,
+            ),
             "tags": (
-                margin + left_w + margin,
-                margin + header_h + 10,
-                w - margin,
-                margin + header_h + 10 + int(h * 0.08),
+                x0 + margin + left_w + margin,
+                y0 + margin + header_h + 10,
+                x1 - margin,
+                y0 + margin + header_h + 10 + int(height * 0.08),
             ),
             "meta": (
-                margin + left_w + margin,
-                margin + header_h + 10 + int(h * 0.08) + 6,
-                w - margin,
-                h - margin - footer_h - 10,
+                x0 + margin + left_w + margin,
+                y0 + margin + header_h + 10 + int(height * 0.08) + 6,
+                x1 - margin,
+                y1 - margin - footer_h - 10,
             ),
-            "footer": (margin, h - margin - footer_h, w - margin, h - margin),
+            "footer": (x0 + margin, y1 - margin - footer_h, x1 - margin, y1 - margin),
+            "_width": width,
+            "_height": height,
         }
+
+    @staticmethod
+    def _meta_band_heights(meta_box, has_shots: bool):
+        """Split meta into title/credit, clipped description, and screenshot row."""
+        _mx0, my0, _mx1, my1 = meta_box
+        meta_h = max(0, my1 - my0)
+        shot_h = 0
+        if has_shots:
+            shot_h = min(130, max(72, int(meta_h * 0.28)))
+        title_band = min(96, max(56, int(meta_h * 0.22)))
+        desc_h = max(0, meta_h - title_band - shot_h - (10 if has_shots else 0))
+        return title_band, desc_h, shot_h
 
     def _fmt_clock(self, dt):
         if not dt:
@@ -163,13 +250,29 @@ class SteamNowPlayingPanel(BasePanel):
         if last_played:
             last_raw = self._steam.get("lastPlayedAt") or self._steam.get("startedAt")
             start_dt = parse_iso_timestamp(last_raw) if last_raw else start_dt
-        left_label = "LAST PLAYED" if last_played else "START TIME"
+        # Avoid duplicating "LAST PLAYED" on both the left chip and center badge.
+        left_label = "WHEN" if last_played else "START TIME"
         left_value = self._fmt_last_played_date(start_dt) if last_played else self._fmt_clock(start_dt)
         badge = "LAST PLAYED" if last_played else "NOW PLAYING"
-        badge_w = 168 if last_played else 160
-        badge_outline = "#fbbf24" if last_played else "#e2e8f0"
-        badge_fill = "#1c1408" if last_played else "#0b1220"
-        badge_text = "#fde68a" if last_played else text
+        # Same cool slate/cyan language as tags + chrome (not amber).
+        badge_outline = self.ACCENT if last_played else "#e2e8f0"
+        badge_fill = "#0b1220"
+        badge_text = self.ACCENT if last_played else text
+        badge_font = (
+            getattr(self.shell, "section_label_font", None)
+            or getattr(self.shell, "body_font", None)
+            or self.shell.chip_value_font
+        )
+        pad_x = 28
+        pad_y = 16
+        try:
+            text_w = int(badge_font.measure(badge))
+            text_h = int(badge_font.metrics("linespace"))
+        except Exception:
+            text_w = 200 if last_played else 180
+            text_h = 28
+        badge_w = text_w + pad_x * 2
+        badge_h = max(48, text_h + pad_y * 2)
         self._item_ids.append(self.canvas.create_text(
             hx0, cy - 10, anchor="w", text=left_label, fill=self.ACCENT,
             font=self.shell.chip_label_font,
@@ -178,14 +281,13 @@ class SteamNowPlayingPanel(BasePanel):
             hx0, cy + 12, anchor="w", text=left_value, fill=text,
             font=self.shell.chip_value_font,
         ))
-        badge_h = 36
         self._round_rect(
             mid_x - badge_w / 2, cy - badge_h / 2, mid_x + badge_w / 2, cy + badge_h / 2,
-            8, outline=badge_outline, fill=badge_fill,
+            12, outline=badge_outline, fill=badge_fill,
         )
         self._item_ids.append(self.canvas.create_text(
             mid_x, cy, anchor="center", text=badge, fill=badge_text,
-            font=self.shell.chip_value_font,
+            font=badge_font,
         ))
         right_label = "PLAYTIME" if last_played else "ELAPSED"
         right_value = (self._steam.get("playtimeLabel") or "—") if last_played else self._fmt_elapsed()
@@ -203,10 +305,31 @@ class SteamNowPlayingPanel(BasePanel):
         self._round_rect(x0, y0, x1, y1, 18, fill="#0d1524", outline="#1d2a40")
         self._hero_image_id = self.canvas.create_image((x0 + x1) / 2, (y0 + y1) / 2, anchor="center")
         self._item_ids.append(self._hero_image_id)
-        self._round_rect(x0 + 14, y0 + 14, x0 + 100, y0 + 42, 14, fill="#111827", outline="#334155")
+        self._draw_steam_chip(x0, y0, x1, y1)
+
+    def _draw_steam_chip(self, x0, y0, x1, y1):
+        """Tiny corner badge — must not dominate the poster."""
+        steam_font = (
+            getattr(self.shell, "forecast_label_font", None)
+            or self.shell.chip_label_font
+        )
+        label = "STEAM"
+        pad_x, pad_y = 7, 2
+        try:
+            text_w = int(steam_font.measure(label))
+            text_h = int(steam_font.metrics("linespace"))
+        except Exception:
+            text_w, text_h = 36, 11
+        chip_w = min(text_w + pad_x * 2, max(40, int((x1 - x0) * 0.14)))
+        chip_h = min(text_h + pad_y * 2, 18)
+        inset = 8
+        self._round_rect(
+            x0 + inset, y0 + inset, x0 + inset + chip_w, y0 + inset + chip_h,
+            6, fill="#0b1220", outline="#334155",
+        )
         self._item_ids.append(self.canvas.create_text(
-            x0 + 57, y0 + 28, anchor="center", text="STEAM", fill="#e2e8f0",
-            font=self.shell.chip_label_font,
+            x0 + inset + chip_w / 2, y0 + inset + chip_h / 2,
+            anchor="center", text=label, fill="#94a3b8", font=steam_font,
         ))
 
     def _draw_meta(self, boxes, steam):
@@ -214,7 +337,7 @@ class SteamNowPlayingPanel(BasePanel):
         muted = self.config.get("mutedTextColor", "#94a3b8")
         tags = list(steam.get("tags") or [])[:4]
         tx0, ty0, tx1, ty1 = boxes["tags"]
-        if tags:
+        if tags and ty1 > ty0 + 8:
             pill_gap = 8
             x = tx0
             for tag in tags:
@@ -239,39 +362,67 @@ class SteamNowPlayingPanel(BasePanel):
         if year:
             credit_bits.append(str(year))
         credit = " · ".join(credit_bits)
-        title_font = getattr(self.shell, "title_accent_font", None) or self.shell.chip_value_font
+        shots = list(steam.get("screenshots") or [])[:3]
+        title_band, desc_h, shot_h = self._meta_band_heights(boxes["meta"], bool(shots))
+
+        title_font = getattr(self.shell, "section_title_font", None) or self.shell.chip_value_font
         self._item_ids.append(self.canvas.create_text(
-            mx0, my0 + 4, anchor="nw", text=title, fill=text,
-            font=title_font, width=int(mx1 - mx0),
+            mx0, my0 + 2, anchor="nw", text=title, fill=text,
+            font=title_font, width=max(40, int(mx1 - mx0)),
         ))
-        title_h = 32
+        title_h = title_font.metrics("linespace") + 6
+        credit_bottom = my0 + title_h
         if credit:
             self._item_ids.append(self.canvas.create_text(
                 mx0, my0 + title_h, anchor="nw", text=credit, fill=muted,
                 font=self.shell.chip_label_font,
             ))
-            desc_top = my0 + title_h + 22
+            credit_bottom = my0 + title_h + self.shell.chip_label_font.metrics("linespace") + 8
         else:
-            desc_top = my0 + title_h + 8
+            credit_bottom = my0 + title_h + 6
+
+        # Description viewport is clipped so long copy never paints over shots.
+        desc_top = min(credit_bottom, my0 + title_band)
+        shot_top = my1 - shot_h if shot_h else my1
+        desc_bottom = shot_top - (10 if shot_h else 0)
+        desc_h = max(0, desc_bottom - desc_top)
         desc = str(steam.get("shortDescription") or "")
-        shots = list(steam.get("screenshots") or [])[:3]
-        shot_h = int((my1 - desc_top) * 0.42) if shots else 0
-        desc_bottom = my1 - shot_h - (12 if shots else 0)
-        desc_font = getattr(self.shell, "forecast_label_font", None) or self.shell.chip_label_font
-        if desc and desc_bottom > desc_top + 20:
-            self._item_ids.append(self.canvas.create_text(
-                mx0, desc_top, anchor="nw", text=desc, fill=muted,
-                font=desc_font, width=int(mx1 - mx0),
-            ))
+        desc_font = getattr(self.shell, "body_font", None) or self.shell.chip_label_font
+        self.needs_scroll = False
+        self.scroller = None
+        if desc and desc_h >= 24:
+            body_width = max(40, int(mx1 - mx0))
+            viewport = tk.Canvas(
+                self.root,
+                width=body_width,
+                height=max(1, int(desc_h)),
+                highlightthickness=0,
+                bd=0,
+                bg=self.DESC_BG,
+            )
+            text_id = viewport.create_text(
+                body_width / 2, 0, anchor="n", text="",
+                fill=muted, font=desc_font, width=body_width, justify=tk.LEFT,
+            )
+            scroller = MessageScrollController(
+                viewport, text_id, self.config, self.root, on_finish=lambda: None,
+            )
+            needs = scroller.configure(
+                desc, center_x=body_width / 2, viewport_height=desc_h,
+            )
+            self.scroller = scroller
+            self.needs_scroll = needs
+            self._place_widget(viewport, x=int(mx0), y=int(desc_top))
+
         self._shot_ids = []
-        if shots and shot_h > 40:
+        if shots and shot_h >= 40:
             gap = 10
             count = len(shots)
             cell_w = (mx1 - mx0 - gap * (count - 1)) / count
             for i in range(count):
                 sx0 = mx0 + i * (cell_w + gap)
                 sx1 = sx0 + cell_w
-                sy0 = my1 - shot_h
+                sy0 = shot_top
                 sy1 = my1
                 self._round_rect(sx0, sy0, sx1, sy1, 10, fill="#101b2d", outline="#1d2a40")
                 img_id = self.canvas.create_image((sx0 + sx1) / 2, (sy0 + sy1) / 2, anchor="center")

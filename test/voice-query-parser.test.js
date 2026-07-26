@@ -273,3 +273,40 @@ test('voice query parser deduplicates processed activity ids', () => {
   parser.markProcessed(item.data.recordKey);
   assert.equal(parser.shouldProcess(item.data.recordKey), false);
 });
+
+test('voice query parser matches app-launched rows via conversionDetails misc text', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Theater Echo',
+    description: { summary: '' },
+    alexaResponse: '',
+    data: { recordKey: 'app-guest-1', utteranceType: 'SERVICE' },
+    conversionDetails: {
+      SOME_ROUTINE_TEXT: [{ transcriptText: 'open guest snaps' }],
+    },
+  });
+  assert.equal(event?.kind, 'guest-photobooth');
+  assert.equal(event?.targetId, '*');
+});
+
+test('voice query parser uses routine index for empty-summary Sent to Display', () => {
+  const { createRoutineIndex } = require('../src/routine-index');
+  const routineIndex = createRoutineIndex({ log: { info() {}, warn() {} } });
+  routineIndex.loadFromAutomations([
+    {
+      name: 'Tesla Battery',
+      triggers: [{ payload: { utterance: 'show tesla battery' } }],
+    },
+  ]);
+  const parser = createVoiceQueryParser({ routineIndex });
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Theater Echo',
+    description: { summary: '' },
+    alexaResponse: 'Sent to Display',
+    data: { recordKey: 'app-tesla-1' },
+  });
+  assert.equal(event?.kind, 'tesla-battery');
+  assert.match(String(event?.trigger || ''), /sent-to-display|routine-index/);
+});

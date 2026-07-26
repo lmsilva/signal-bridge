@@ -26,7 +26,9 @@ function resolveSteamConfig(config, fileConfig = {}) {
     apiKey: String(process.env.STEAM_API_KEY || steam.apiKey || '').trim(),
     steamId: String(process.env.STEAM_STEAM_ID || steam.steamId || '').trim(),
     allowedHosts: allowedHosts.length ? allowedHosts : [...DEFAULT_ALLOWED_HOSTS],
-    pollIntervalSeconds: Math.max(15, Number(steam.pollIntervalSeconds) || 30),
+    // Default 15s — Steam's GetPlayerSummaries gameid often lags a launch;
+    // presence heartbeats also trigger an immediate tick (see steam-now-playing).
+    pollIntervalSeconds: Math.max(10, Number(steam.pollIntervalSeconds) || 15),
     presenceStaleSeconds: Math.max(30, Number(steam.presenceStaleSeconds) || 90),
     // Shared secret for the Windows presence reporter (optional; falls back to API key).
     presenceSecret: String(
