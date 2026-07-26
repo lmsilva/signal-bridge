@@ -956,38 +956,34 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="btn-push-guest-snaps"/);
   assert.match(html, /id="btn-push-air-quality"/);
-  assert.match(html, /id="btn-push-indoor-temperature"/);
+  assert.match(html, /id="btn-push-now-playing"/);
   assert.match(html, /id="btn-push-alarms"/);
+  assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   assert.match(js, /\/api\/push\/guest-photobooth/);
   assert.match(js, /\/api\/push\/air-quality/);
-  assert.match(js, /\/api\/push\/indoor-temperature/);
+  assert.match(js, /\/api\/push\/now-playing/);
   assert.match(js, /\/api\/push\/alarms/);
 });
 
-test('air-quality and indoor-temperature quick-push tiles feed synthetic events', async () => {
-  const { webServer, base, recorded } = await startTestServer({
-    config: makeConfig({
-      indoorTemperature: {
-        locations: [{ id: 'office', label: 'Office', entity: 'office', aliases: ['office'] }],
-      },
-    }),
-  });
+test('air-quality and now-playing quick-push tiles feed synthetic events', async () => {
+  const { webServer, base, recorded } = await startTestServer();
   try {
     const air = await postJson(base, '/api/push/air-quality');
     assert.equal(air.status, 202);
     assert.equal(air.body.kind, 'air-quality');
 
-    const indoor = await postJson(base, '/api/push/indoor-temperature', { device: 'iPhone' });
-    assert.equal(indoor.status, 202);
-    assert.equal(indoor.body.kind, 'indoor-temperature');
+    const music = await postJson(base, '/api/push/now-playing', { device: 'iPhone' });
+    assert.equal(music.status, 202);
+    assert.equal(music.body.kind, 'music');
 
     assert.equal(recorded.length, 2);
     assert.equal(recorded[0].kind, 'air-quality');
     assert.equal(recorded[0].query, 'show indoor air quality');
-    assert.equal(recorded[1].kind, 'indoor-temperature');
+    assert.equal(recorded[1].kind, 'music');
+    assert.equal(recorded[1].trigger, 'music-query');
     assert.equal(recorded[1].device, 'iPhone');
-    assert.match(recorded[1].query, /office/i);
+    assert.match(recorded[1].query, /playing/i);
   } finally {
     webServer.stop();
   }

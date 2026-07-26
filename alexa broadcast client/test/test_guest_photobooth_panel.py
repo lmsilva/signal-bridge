@@ -22,6 +22,9 @@ class GuestPhotoboothLayoutTests(unittest.TestCase):
         self.assertGreater(connector_y, geo["cards"][0]["y"] + geo["card_h"])
         self.assertLess(connector_y, geo["cards"][1]["y"])
         self.assertGreaterEqual(geo["qr_size"], 140)
+        # Portrait spreads title/QR/footer inside each card (landscape does not).
+        self.assertTrue(geo["spread_content"])
+        self.assertFalse(geo["vcenter_content"])
 
     def test_landscape_places_cards_side_by_side(self):
         geo = GuestPhotoboothPanel.compute_card_geometry(1400, 700, False, header_h=96)
@@ -30,6 +33,7 @@ class GuestPhotoboothLayoutTests(unittest.TestCase):
         self.assertGreater(geo["cards"][1]["x"], geo["cards"][0]["x"])
         self.assertGreaterEqual(geo["qr_size"], 140)
         self.assertTrue(geo["vcenter_content"])
+        self.assertFalse(geo["spread_content"])
         # Wide gutter so "then" never sits on clipped subtitle text.
         self.assertGreaterEqual(geo["gap"], 48)
         # Cards sized to content and vertically centered — not stretched full-height.

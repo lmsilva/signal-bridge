@@ -125,8 +125,9 @@
   },
   "steam": {
     "enabled": true,
+    "requirePresence": false,
     "allowedHosts": ["MOVIETHEATERPC"],
-    "pollIntervalSeconds": 30,
+    "pollIntervalSeconds": 15,
     "presenceStaleSeconds": 90,
     "sessionFile": "data/steam-session.json",
     "authStatusFile": "data/steam-auth-status.json"

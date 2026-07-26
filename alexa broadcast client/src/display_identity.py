@@ -64,19 +64,36 @@ def resolve_display_short_id(config: dict) -> str:
     return raw[-4:] if len(raw) >= 4 else raw
 
 
-def build_announce_payload(config: dict) -> dict:
+def build_announce_payload(config: dict, *, steam_app_id: int | None = None) -> dict:
+    """Build display.announce — includes hostname + Steam RunningAppID when present.
+
+    The bridge uses hostname + steamAppId as presence (no separate reporter) so
+    Steam Now Playing only fires for allowlisted theater PCs that already run
+    this client.
+    """
+    from src.steam_local import read_steam_running_app_id
+
     display_id = resolve_display_id(config)
     short_id = resolve_display_short_id(config)
+    hostname = machine_hostname().upper()
+    if steam_app_id is None:
+        steam_app_id = read_steam_running_app_id()
+    else:
+        steam_app_id = int(steam_app_id) if int(steam_app_id) > 0 else 0
+    display = {
+        "id": display_id,
+        "shortId": short_id,
+        "name": resolve_display_name(config),
+        "port": int(config.get("listenPort") or 47832),
+        "hostname": hostname,
+    }
+    if steam_app_id > 0:
+        display["steamAppId"] = steam_app_id
     return {
         "version": 2,
         "type": "display.announce",
         "timestamp": __import__("datetime").datetime.now(
             __import__("datetime").timezone.utc
         ).isoformat().replace("+00:00", "Z"),
-        "display": {
-            "id": display_id,
-            "shortId": short_id,
-            "name": resolve_display_name(config),
-            "port": int(config.get("listenPort") or 47832),
-        },
+        "display": display,
     }

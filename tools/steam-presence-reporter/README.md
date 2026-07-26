@@ -1,25 +1,15 @@
-# Steam presence reporter
+# Steam presence reporter (optional)
 
-Tiny Windows helper for **MOVIETHEATERPC** (or any host in `steam.allowedHosts`).
+**Not required for normal use.** By default the bridge shows Now Playing whenever
+your linked Steam account is in-game on **any** PC (`STEAM_REQUIRE_PRESENCE=0`).
 
-Steam’s public Web API does **not** say which PC is playing, and `gameid` in GetPlayerSummaries often **lags** a launch. This reporter heartbeats the local computer name + running Steam `appid` to the bridge so Now Playing only lights up for allowed machines — each heartbeat also **wakes an immediate bridge poll** (closest thing to a push; Steam has no launch webhook).
+Use this helper (or display-client `steamAppId` announce) only if you set
+`STEAM_REQUIRE_PRESENCE=1` and want to limit the overlay to specific hostnames.
 
-## Setup
+## Setup (only if host-gating)
 
-1. On the gaming PC, copy this folder somewhere local (e.g. `C:\Signal\steam-presence-reporter`).
-2. Copy `config.example.json` → `config.json` and fill in:
-   - `bridgeUrl` — `https://<NAS>:47810`
-   - `secret` — same as bridge `STEAM_PRESENCE_SECRET` or `STEAM_API_KEY`
-3. Test once:
+1. Copy this folder to the gaming PC.
+2. Copy `config.example.json` → `config.json` (`bridgeUrl` + `secret`).
+3. `powershell -ExecutionPolicy Bypass -File report-loop.ps1`
 
-```bat
-powershell -ExecutionPolicy Bypass -File report.ps1
-```
-
-4. Schedule it every 30 seconds (Task Scheduler → Create Task → trigger repeating, action = the same powershell command), or drop a shortcut into Startup that runs a loop:
-
-```bat
-powershell -ExecutionPolicy Bypass -File report-loop.ps1
-```
-
-Hostname must match an entry in bridge `steam.allowedHosts` (default `MOVIETHEATERPC`). Check with `echo %COMPUTERNAME%`.
+Hostname must match `STEAM_ALLOWED_HOSTS`.

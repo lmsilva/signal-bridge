@@ -74,6 +74,8 @@ function createSteamNowPlaying({
       apiKeySource: creds.apiKeySource || null,
       personaName: creds.personaName,
       steamId: creds.steamId || null,
+      requirePresence: Boolean(steamConfig.requirePresence),
+      allowedHosts: steamConfig.allowedHosts || [],
       status: lastStatus,
       message: lastError,
       session: session
@@ -237,11 +239,13 @@ function createSteamNowPlaying({
 
     const accountAppId = summary.gameId;
     const presenceHint = presence.matchForApp(accountAppId) || presence.matchForApp(null);
+    // Optional presence can still unstick Steam's laggy gameid, but is not required.
     const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint);
     const matchedPresence = effectiveAppId
       ? presence.matchForApp(effectiveAppId)
       : null;
     const presenceLed = Boolean(effectiveAppId && !accountAppId && matchedPresence);
+    const requirePresence = Boolean(steamConfig.requirePresence);
 
     // Detect session end / restart boundaries.
     if (!effectiveAppId) {
@@ -256,9 +260,9 @@ function createSteamNowPlaying({
     const host = matchedPresence?.hostname || null;
     const onAllowedHost = Boolean(matchedPresence && matchedPresence.appId === effectiveAppId);
 
-    if (!onAllowedHost) {
+    // Default: any PC on this Steam account. Opt-in host gate via requirePresence.
+    if (requirePresence && !onAllowedHost) {
       if (session && session.appId === effectiveAppId) {
-        // Still the same account game, but reporter went stale → close if shown.
         endSession('host-stale');
       } else if (session && session.appId !== effectiveAppId) {
         endSession('game-changed');
@@ -266,7 +270,7 @@ function createSteamNowPlaying({
       lastAccountAppId = effectiveAppId;
       lastStatus = 'playing_elsewhere';
       lastError = `Playing app ${effectiveAppId} but not on an allowed host (${steamConfig.allowedHosts.join(', ')})`
-        + ' — is steam-presence-reporter running on that PC?';
+        + ' — set STEAM_REQUIRE_PRESENCE=0 to show for any PC, or announce from an allowlisted display';
       return;
     }
 
@@ -275,10 +279,10 @@ function createSteamNowPlaying({
       if (session) {
         endSession('game-changed');
       }
-      beginSession({ appId: effectiveAppId, host });
+      beginSession({ appId: effectiveAppId, host: host || (requirePresence ? null : 'any') });
     } else if (lastAccountAppId == null && effectiveAppId) {
       // Restart after idle gap while session object somehow lingered — treat as new.
-      beginSession({ appId: effectiveAppId, host });
+      beginSession({ appId: effectiveAppId, host: host || (requirePresence ? null : 'any') });
     }
 
     lastAccountAppId = effectiveAppId;
@@ -321,8 +325,8 @@ function createSteamNowPlaying({
     }
     lastStatus = presenceLed ? 'playing_presence' : 'playing';
     lastError = presenceLed
-      ? 'Showing from theater-PC reporter (Steam profile gameid still catching up)'
-      : null;
+      ? 'Showing from local presence hint (Steam profile gameid still catching up)'
+      : (requirePresence ? null : 'Showing for any PC (Steam account in-game)');
   }
 
   /**

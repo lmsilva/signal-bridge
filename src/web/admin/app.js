@@ -473,7 +473,7 @@
       $('steam-status-detail').textContent = steamAuth.error || steam.message || 'Steam login failed.';
     } else if (!steam.hasApiKey) {
       pillState(steamPill, 'warn', 'Need API key');
-      $('steam-status-detail').textContent = 'Set STEAM_API_KEY in .env (preferred), or paste below if .env has none.';
+      $('steam-status-detail').textContent = 'Set STEAM_API_KEY in the bridge .env, then recreate the container.';
     } else if (!steam.hasSteamId) {
       pillState(steamPill, 'warn', 'Link account');
       const keySrc = steam.apiKeySource === 'env' ? 'from .env' : 'saved in session';
@@ -482,14 +482,15 @@
       pillState(steamPill, 'ok', 'Now playing');
       const host = steam.session?.host || 'allowed PC';
       const lagNote = steam.status === 'playing_presence'
-        ? ' (from theater PC reporter — Steam profile catching up)'
+        ? ' (presence hint — Steam profile catching up)'
         : '';
-      $('steam-status-detail').textContent = `Playing on ${host}${lagNote}`
+      const hostLabel = host && host !== 'any' ? host : 'any PC';
+      $('steam-status-detail').textContent = `Playing on ${hostLabel}${lagNote}`
         + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');
     } else if (steam.status === 'playing_elsewhere') {
       pillState(steamPill, 'warn', 'Other PC');
       $('steam-status-detail').textContent = steam.message
-        || 'Steam shows a game, but not on an allowed host (presence reporter).';
+        || 'Steam shows a game, but host filtering is on and no allowlisted presence was seen.';
     } else if (steam.status === 'suppressed') {
       pillState(steamPill, 'warn', 'Suppressed');
       $('steam-status-detail').textContent = 'Game still running — overlay hidden until a new Steam session.';
@@ -498,8 +499,10 @@
       $('steam-status-detail').textContent = steam.message || 'Steam API request failed.';
     } else {
       pillState(steamPill, 'ok', 'Ready');
-      const hosts = (steam.allowedHosts || []).join(', ') || 'MOVIETHEATERPC';
-      $('steam-status-detail').textContent = `Linked${steam.personaName ? ` as ${steam.personaName}` : ''}. Watching ${hosts}.`;
+      const watch = steam.requirePresence
+        ? `Watching ${(steam.allowedHosts || []).join(', ') || 'allowlisted hosts'} only.`
+        : 'Watching any PC (Steam account in-game).';
+      $('steam-status-detail').textContent = `Linked${steam.personaName ? ` as ${steam.personaName}` : ''}. ${watch}`;
     }
 
     if (steamAuth.status === 'success' && !$('steam-auth-followup').hidden) {
@@ -578,7 +581,7 @@
   $('btn-push-timers')?.addEventListener('click', (e) => pushSimple('/api/push/timers', 'Active timers', e.currentTarget));
   $('btn-push-guest-snaps')?.addEventListener('click', (e) => pushSimple('/api/push/guest-photobooth', 'Guest Snaps', e.currentTarget));
   $('btn-push-air-quality')?.addEventListener('click', (e) => pushSimple('/api/push/air-quality', 'Indoor air quality', e.currentTarget));
-  $('btn-push-indoor-temperature')?.addEventListener('click', (e) => pushSimple('/api/push/indoor-temperature', 'Indoor temperature', e.currentTarget));
+  $('btn-push-now-playing')?.addEventListener('click', (e) => pushSimple('/api/push/now-playing', 'Now playing', e.currentTarget));
   $('btn-push-alarms')?.addEventListener('click', (e) => pushSimple('/api/push/alarms', 'Alarms', e.currentTarget));
 
   // Resolve cached photos to the enriched {url, uploadedAt} shape the bridge
@@ -1810,23 +1813,6 @@
       toast(error.message, 'bad');
     } finally {
       button.disabled = false;
-    }
-  });
-
-  $('btn-steam-api-key')?.addEventListener('click', async () => {
-    const input = $('steam-api-key-input');
-    const apiKey = String(input?.value || '').trim();
-    if (!apiKey) {
-      toast('Paste a Steam Web API key first', 'bad');
-      return;
-    }
-    try {
-      await apiPost('/api/auth/steam/api-key', { apiKey });
-      if (input) input.value = '';
-      toast('Steam API key saved to session (not .env)', 'good');
-      pollStatus();
-    } catch (error) {
-      toast(error.message, 'bad');
     }
   });
 

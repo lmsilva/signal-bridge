@@ -5602,7 +5602,8 @@ class GuestPhotoboothPanel(BasePanel):
             usable_h = max(240, content_h - header_h - connector_h)
             card_w = content_w
             card_h = max(200, usable_h // 2)
-            qr_budget = min(card_w - 64, card_h - 100)
+            # Reserve more chrome so the QR doesn't crowd the step title.
+            qr_budget = min(card_w - 64, card_h - 140)
             qr_size = int(max(150, min(300, qr_budget)))
             y0 = header_h
             y1 = header_h + card_h + connector_h
@@ -5616,6 +5617,7 @@ class GuestPhotoboothPanel(BasePanel):
                 "card_h": card_h,
                 "qr_size": qr_size,
                 "vcenter_content": False,
+                "spread_content": True,
                 "cards": (
                     {"x": 0, "y": y0},
                     {"x": 0, "y": y1},
@@ -5647,6 +5649,7 @@ class GuestPhotoboothPanel(BasePanel):
             "card_h": card_h,
             "qr_size": qr_size,
             "vcenter_content": True,
+            "spread_content": False,
             "cards": (
                 {"x": 0, "y": origin_y + header_h},
                 {"x": card_w + gap, "y": origin_y + header_h},
@@ -5675,7 +5678,9 @@ class GuestPhotoboothPanel(BasePanel):
         width = layout.content_width
         # Own the top of the screen (shell title/backdrop are hidden).
         top = int(self.shell.overlay.screen_h * (0.045 if layout.portrait else 0.05))
-        bottom = layout.message_area_bottom
+        # Sit close to the dismiss clock so portrait doesn't strand empty band.
+        countdown_y = int(getattr(layout, "countdown_y", 0) or 0)
+        bottom = (countdown_y - 24) if countdown_y > 0 else layout.message_area_bottom
         height = max(360, bottom - top)
         title_h = self.shell.section_title_font.metrics("linespace")
         sub_h = self.shell.body_font.metrics("linespace") if subtitle else 0
@@ -5725,6 +5730,7 @@ class GuestPhotoboothPanel(BasePanel):
             qr_attr="_wifi_qr_image",
             detail=str(wifi.get("ssid") or "").strip(),
             vcenter=geo.get("vcenter_content", False),
+            spread=geo.get("spread_content", False),
         )
         self._draw_step_card(
             x0 + booth_card["x"],
@@ -5737,6 +5743,7 @@ class GuestPhotoboothPanel(BasePanel):
             qr_attr="_booth_qr_image",
             detail="",
             vcenter=geo.get("vcenter_content", False),
+            spread=geo.get("spread_content", False),
         )
 
         connector = geo["connector"]
@@ -5765,6 +5772,7 @@ class GuestPhotoboothPanel(BasePanel):
         qr_attr: str,
         detail: str,
         vcenter: bool = False,
+        spread: bool = False,
     ):
         muted = self.config["mutedTextColor"]
         text = self.config["textColor"]
@@ -5785,11 +5793,27 @@ class GuestPhotoboothPanel(BasePanel):
         header_row_h = max(34, self.shell.body_font.metrics("linespace") + 14)
         footer_reserve = 12 + (line_h + 4 if detail else 0) + (line_h if hint else 0)
         frame_pad = 10
-        draw_size = min(qr_size, max(120, h - header_row_h - footer_reserve - 24))
-        content_h = header_row_h + (draw_size + frame_pad * 2) + footer_reserve
-        cursor = y + 12
-        if vcenter and content_h < h - 8:
-            cursor = y + max(12, (h - content_h) // 2)
+        # Portrait needs air between the step title and the white QR frame.
+        min_header_gap = 22 if spread else 10
+        draw_size = min(
+            qr_size,
+            max(120, h - header_row_h - footer_reserve - min_header_gap - 28),
+        )
+        frame_h = draw_size + frame_pad * 2
+        content_h = header_row_h + min_header_gap + frame_h + footer_reserve
+        slack = max(0, h - 24 - content_h)
+        if spread:
+            # Keep the step title near the top; spend leftover height as
+            # breathing room above the QR and above the footer labels.
+            header_gap = min_header_gap + int(slack * 0.55)
+            after_qr_gap = 10 + int(slack * 0.45)
+            cursor = y + 12
+        else:
+            header_gap = min_header_gap
+            after_qr_gap = 8
+            cursor = y + 12
+            if vcenter and content_h < h - 8:
+                cursor = y + max(12, (h - content_h) // 2)
 
         self._pill(
             x + pad,
@@ -5812,7 +5836,7 @@ class GuestPhotoboothPanel(BasePanel):
                 width=max(80, w - pad * 2 - chip_w - 10),
             )
         )
-        cursor += header_row_h
+        cursor += header_row_h + header_gap
 
         qr_x = x + (w - draw_size) // 2
         self._round_rect(
@@ -5849,7 +5873,7 @@ class GuestPhotoboothPanel(BasePanel):
                 )
             )
 
-        footer_y = cursor + draw_size + frame_pad + 8
+        footer_y = cursor + draw_size + frame_pad + after_qr_gap
         # Never draw past the card bottom (avoids overlap with the "then" band).
         footer_limit = y + h - 8
         if detail and footer_y + line_h <= footer_limit:

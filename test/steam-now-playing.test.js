@@ -17,13 +17,36 @@ test('resolveEffectiveSteamAppId prefers Steam gameid, else presence', () => {
   assert.equal(resolveEffectiveSteamAppId(null, null), null);
 });
 
-test('resolveSteamConfig defaults allowed host to MOVIETHEATERPC', () => {
-  const steam = resolveSteamConfig({ ROOT: os.tmpdir() }, {});
-  assert.deepEqual(steam.allowedHosts, ['MOVIETHEATERPC']);
-  assert.equal(isAllowedHost(steam, 'movietheaterpc'), true);
-  assert.equal(isAllowedHost(steam, 'LAPTOP'), false);
-  assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
-  assert.equal(steam.pollIntervalSeconds, 15);
+test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
+  const prevHosts = process.env.STEAM_ALLOWED_HOSTS;
+  const prevReq = process.env.STEAM_REQUIRE_PRESENCE;
+  delete process.env.STEAM_ALLOWED_HOSTS;
+  delete process.env.STEAM_REQUIRE_PRESENCE;
+  try {
+    const steam = resolveSteamConfig({ ROOT: os.tmpdir() }, {});
+    assert.equal(steam.requirePresence, false);
+    assert.deepEqual(steam.allowedHosts, ['MOVIETHEATERPC']);
+    assert.equal(isAllowedHost(steam, 'movietheaterpc'), true);
+    assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
+    assert.equal(steam.pollIntervalSeconds, 15);
+  } finally {
+    if (prevHosts === undefined) delete process.env.STEAM_ALLOWED_HOSTS;
+    else process.env.STEAM_ALLOWED_HOSTS = prevHosts;
+    if (prevReq === undefined) delete process.env.STEAM_REQUIRE_PRESENCE;
+    else process.env.STEAM_REQUIRE_PRESENCE = prevReq;
+  }
+});
+
+test('STEAM_REQUIRE_PRESENCE=1 enables host gate', () => {
+  const prev = process.env.STEAM_REQUIRE_PRESENCE;
+  process.env.STEAM_REQUIRE_PRESENCE = '1';
+  try {
+    const steam = resolveSteamConfig({ ROOT: os.tmpdir() }, {});
+    assert.equal(steam.requirePresence, true);
+  } finally {
+    if (prev === undefined) delete process.env.STEAM_REQUIRE_PRESENCE;
+    else process.env.STEAM_REQUIRE_PRESENCE = prev;
+  }
 });
 
 test('extractSteamIdFromClaimedId parses OpenID claimed id', () => {
@@ -48,8 +71,11 @@ test('presence store allowlists hosts and prunes stale entries', () => {
   });
   const store = createSteamPresenceStore(steam, { now: () => now });
   assert.equal(store.upsert({ hostname: 'evil', appId: 1 }).ok, false);
+  assert.equal(store.snapshot().lastAttempt?.hostname, 'EVIL');
+  assert.equal(store.snapshot().lastAttempt?.allowed, false);
   assert.equal(store.upsert({ hostname: 'MOVIETHEATERPC', appId: 570 }).ok, true);
   assert.equal(store.matchForApp(570)?.hostname, 'MOVIETHEATERPC');
+  assert.equal(store.snapshot().lastAttempt?.allowed, true);
   now += 120_000;
   assert.equal(store.matchForApp(570), null);
 });

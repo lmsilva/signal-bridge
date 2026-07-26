@@ -12,6 +12,14 @@ function parseHostList(value) {
     .filter(Boolean);
 }
 
+function envFlag(name, fallback = false) {
+  const raw = process.env[name];
+  if (raw == null || String(raw).trim() === '') {
+    return fallback;
+  }
+  return !['0', 'false', 'no', 'off'].includes(String(raw).trim().toLowerCase());
+}
+
 function resolveSteamConfig(config, fileConfig = {}) {
   const steam = fileConfig.steam || config.steam || {};
   const root = config.ROOT || path.resolve(__dirname, '..');
@@ -20,17 +28,24 @@ function resolveSteamConfig(config, fileConfig = {}) {
   const allowedHosts = parseHostList(
     process.env.STEAM_ALLOWED_HOSTS || steam.allowedHosts || DEFAULT_ALLOWED_HOSTS,
   );
+  // Steam Web API cannot see which PC is playing. Default: show whenever the
+  // linked account is in-game (no software on the gaming PC). Set
+  // STEAM_REQUIRE_PRESENCE=1 only if a theater display announce / reporter
+  // should gate the overlay to specific hostnames.
+  const requirePresence = process.env.STEAM_REQUIRE_PRESENCE != null
+    ? envFlag('STEAM_REQUIRE_PRESENCE', false)
+    : steam.requirePresence === true;
 
   return {
     enabled: steam.enabled !== false && process.env.STEAM_ENABLED !== '0',
     apiKey: String(process.env.STEAM_API_KEY || steam.apiKey || '').trim(),
     steamId: String(process.env.STEAM_STEAM_ID || steam.steamId || '').trim(),
+    requirePresence,
     allowedHosts: allowedHosts.length ? allowedHosts : [...DEFAULT_ALLOWED_HOSTS],
-    // Default 15s — Steam's GetPlayerSummaries gameid often lags a launch;
-    // presence heartbeats also trigger an immediate tick (see steam-now-playing).
+    // Default 15s — Steam's GetPlayerSummaries gameid often lags a launch.
     pollIntervalSeconds: Math.max(10, Number(steam.pollIntervalSeconds) || 15),
     presenceStaleSeconds: Math.max(30, Number(steam.presenceStaleSeconds) || 90),
-    // Shared secret for the Windows presence reporter (optional; falls back to API key).
+    // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(
       process.env.STEAM_PRESENCE_SECRET
       || steam.presenceSecret

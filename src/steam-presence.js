@@ -3,6 +3,8 @@ const { normalizeHostname, isAllowedHost } = require('./steam-config');
 function createSteamPresenceStore(steamConfig, { now = () => Date.now() } = {}) {
   /** @type {Map<string, { hostname: string, appId: number, updatedAt: number }>} */
   const byHost = new Map();
+  /** Last heartbeat seen (including rejected hosts) — for admin diagnostics. */
+  let lastAttempt = null;
 
   function upsert({ hostname, appId }) {
     const host = normalizeHostname(hostname);
@@ -10,7 +12,13 @@ function createSteamPresenceStore(steamConfig, { now = () => Date.now() } = {}) 
     if (!host || !Number.isFinite(id) || id <= 0) {
       return { ok: false, error: 'hostname and appId are required' };
     }
-    if (!isAllowedHost(steamConfig, host)) {
+    lastAttempt = {
+      hostname: host,
+      appId: id,
+      allowed: isAllowedHost(steamConfig, host),
+      at: now(),
+    };
+    if (!lastAttempt.allowed) {
       return { ok: false, error: `Host ${host} is not in steam.allowedHosts` };
     }
     const entry = {
@@ -63,6 +71,14 @@ function createSteamPresenceStore(steamConfig, { now = () => Date.now() } = {}) 
         appId: entry.appId,
         ageSec: Math.round((now() - entry.updatedAt) / 1000),
       })),
+      lastAttempt: lastAttempt
+        ? {
+          hostname: lastAttempt.hostname,
+          appId: lastAttempt.appId,
+          allowed: lastAttempt.allowed,
+          ageSec: Math.round((now() - lastAttempt.at) / 1000),
+        }
+        : null,
       staleSeconds: steamConfig.presenceStaleSeconds,
       allowedHosts: steamConfig.allowedHosts,
     };

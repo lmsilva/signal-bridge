@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam portrait layout + desc scroll)
+**Last updated:** 2026-07-26 (Steam presence on display.announce)
 
 ---
 
@@ -49,8 +49,9 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/tray_app.py` | pystray icon; exit triggers shutdown |
 | `src/web_overlay.py` | `WebOverlayManager` — pre-flights pushed URLs, spawns/kills the WebView2 host; `build_web_error_payload` for the friendly failure message |
 | `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top; persistent profile (`private_mode=False`) for saved passwords |
-| `src/display_identity.py` | Stable `display.id` + `displayName` (hostname fallback) for bridge registration |
-| `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); encrypts when `udpSecret` set; responds to `display.discover`; log messages are ASCII-only (no `→`) so they can't raise `UnicodeEncodeError` on a `cp1252` console and silently kill the background announce thread |
+| `src/display_identity.py` | Stable `display.id` + `displayName`; announce includes `hostname` + optional `steamAppId` |
+| `src/steam_local.py` | Read Windows Steam `RunningAppID` for announce presence (no separate reporter) |
+| `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); encrypts when `udpSecret` set; responds to `display.discover`; while a Steam game is running, announces every ~20s (else 5 min); ASCII-only logs |
 | `src/input_control.py` | Apply `input.pointer` / `input.key` / `input.text` — absolute Win32 `SendInput` (tracked tip); clicks aimed at tip; `pynput` for keys; `handle_text()` types a whole string in one call (`Controller.type()`, Unicode-safe) instead of one keystroke per key, with optional trailing Enter. Keeps the process DPI-*unaware* so Tk overlay layouts match font metrics. |
 | `src/remote_cursor.py` | Click-through software arrow at the remote tip; blanks system cursors while active; restores on idle or physical (non-injected) mouse move |
 | `src/config.py` | Load `config.json`; `effective_display_seconds` (timers and `photo.slideshow` use the payload's full requested duration, bypassing `maxDisplaySeconds`) |
@@ -257,6 +258,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-26: **Steam fields on display.announce (optional)** — announce can carry `hostname` + `steamAppId`; unused for default any-PC Now Playing (games on MOVIETHEATERPC, overlays on MOVIETHEATERPOSTER).
+- 2026-07-26: **Guest Snaps portrait QR spacing** — more air under “Join Wi‑Fi” / “Open Guest Snaps”; portrait cards spread leftover height between title, QR, and footer; landscape unchanged (`vcenter_content`). Portable rebuild required.
 - 2026-07-26: **Steam portrait layout + description scroll** — cap poster height so meta/footer use the bottom; screenshots sit in a reserved band (no text overlap); long `shortDescription` scrolls in a clipped viewport (pause/scroll/loop); smaller STEAM corner chip. Portable rebuild required.
 - 2026-07-26: **Steam badge prominence** — larger NOW PLAYING / LAST PLAYED pill with more padding. Portable rebuild required.
 - 2026-07-26: **Steam panel layout fix** — size from `OverlayShell` screen/layout (not `canvas.winfo_*`, which is often `1` pre-map and collapsed the poster + text into the top-left). Portable rebuild required.
