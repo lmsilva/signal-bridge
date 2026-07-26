@@ -119,42 +119,76 @@ class BasePanel:
         self._widgets.append(widget)
 
     # Shared photo + corner-QR layout (slideshow and single shared-photo push).
-    # Landscape reserves a right gutter so a tall photo doesn't crowd the QR;
-    # portrait keeps the photo full-width and tucks the QR into the bottom-right
-    # of the content frame. Never position against raw screen edges — those can
-    # clip under window chrome / mismatched screen metrics.
-    _SCAN_QR_SIZE_PORTRAIT = 112
-    _SCAN_QR_SIZE_LANDSCAPE = 128
-    _SCAN_QR_GUTTER_LANDSCAPE = 168
-    _SCAN_QR_MARGIN = 18
+    # The scan QR sits *inside* the hero photo's lower-right corner (both
+    # orientations) with a caption sized to the code's width. Never anchor to
+    # raw screen edges — those can clip under window chrome / mismatched metrics.
+    _SCAN_QR_SIZE_PORTRAIT = 168
+    _SCAN_QR_SIZE_LANDSCAPE = 188
+    _SCAN_QR_MARGIN = 16
+    _SCAN_QR_CAPTION = "Scan for photo"
 
     def _photo_stage_geometry(self):
-        """`(photo_cx, photo_cy, max_w, max_h, layout)` for a hero photo with
-        optional landscape QR gutter reserved on the right."""
+        """`(photo_cx, photo_cy, max_w, max_h, layout)` for a full-width hero photo."""
         layout = self.shell.layout
         x = layout.content_x
         width = layout.content_width
         top = layout.message_area_top
         bottom = layout.message_area_bottom
-        gutter = 0 if layout.portrait else self._SCAN_QR_GUTTER_LANDSCAPE
-        max_w = max(1, width - 40 - gutter)
+        max_w = max(1, width - 40)
         max_h = max(120, bottom - top - 24)
-        photo_cx = x + (width - gutter) // 2
+        photo_cx = x + width // 2
         photo_cy = top + (bottom - top) // 2
         return photo_cx, photo_cy, max_w, max_h, layout
 
-    def _draw_scan_qr_badge(self, url: str, caption: str):
-        """Draw a fully on-canvas scan QR + right-aligned caption.
+    def _fit_scan_qr_caption_font(self, caption: str, target_width: int):
+        """Bold caption font sized so text width matches the QR (not wider/narrower)."""
+        family = "Segoe UI"
+        try:
+            family = self.shell.chip_label_font.actual("family") or family
+        except Exception:
+            pass
+
+        try:
+            # Start near QR width / char count, then grow/shrink to fit flush.
+            size = max(11, min(28, int(target_width / max(1, len(caption) * 0.55))))
+            font = tkfont.Font(family=family, size=size, weight="bold")
+            while font.measure(caption) > target_width and size > 9:
+                size -= 1
+                font.configure(size=size)
+            while font.measure(caption) < target_width and size < 32:
+                size += 1
+                font.configure(size=size)
+                if font.measure(caption) > target_width:
+                    size -= 1
+                    font.configure(size=size)
+                    break
+            # Keep a strong reference so Tk doesn't GC the dynamic font.
+            self._scan_qr_caption_font = font
+            return font
+        except Exception:
+            return self.shell.chip_label_font
+
+    def _draw_scan_qr_badge(
+        self,
+        url: str,
+        caption: str | None = None,
+        *,
+        photo_cx: float | None = None,
+        photo_cy: float | None = None,
+        photo_w: int | None = None,
+        photo_h: int | None = None,
+    ):
+        """Draw a scan QR in the lower-right of the hero photo (or content frame).
 
         Returns the ``PhotoImage`` (caller must keep a reference) or ``None``.
-        Landscape: right content gutter, vertically centered. Portrait:
-        bottom-right of the content area. Caption uses ``anchor="se"`` so it
-        grows left into free space instead of spilling off the right edge.
+        Caption is bold, bright, centered above the code, and font-fitted so its
+        width matches the QR (not wider, not narrower).
         """
         if ImageTk is None or not url:
             return None
         layout = self.shell.layout
-        muted = self.config["mutedTextColor"]
+        caption = (caption or self._SCAN_QR_CAPTION).strip() or self._SCAN_QR_CAPTION
+        fill = self.config.get("textColor") or "#f8fafc"
         target = (
             self._SCAN_QR_SIZE_PORTRAIT if layout.portrait else self._SCAN_QR_SIZE_LANDSCAPE
         )
@@ -163,44 +197,66 @@ class BasePanel:
             return None
 
         margin = self._SCAN_QR_MARGIN
-        right = layout.content_x + layout.content_width - margin
-        top = layout.message_area_top
-        bottom = layout.message_area_bottom - margin
-        caption_font = self.shell.chip_value_font
+        caption_font = self._fit_scan_qr_caption_font(caption, qr_image.width)
         caption_h = caption_font.metrics("linespace")
         gap = 8
         block_h = caption_h + gap + qr_image.height
 
-        if layout.portrait:
-            # Bottom-right of the content frame.
-            qr_right = right
-            qr_bottom = bottom
+        # Prefer the rendered photo's bounds so the badge sits inside the frame.
+        if (
+            photo_cx is not None
+            and photo_cy is not None
+            and photo_w
+            and photo_h
+            and photo_w > 0
+            and photo_h > 0
+        ):
+            right = photo_cx + photo_w / 2 - margin
+            bottom = photo_cy + photo_h / 2 - margin
+            top = photo_cy - photo_h / 2 + margin
+            left = photo_cx - photo_w / 2 + margin
         else:
-            # Right gutter, vertically centered in the message area so it
-            # sits in the empty space beside a tall portrait photo.
-            qr_right = right
-            mid = top + (bottom - top) // 2
-            qr_bottom = min(bottom, mid + block_h // 2)
-            qr_bottom = max(top + block_h, qr_bottom)
+            right = layout.content_x + layout.content_width - margin
+            bottom = layout.message_area_bottom - margin
+            top = layout.message_area_top + margin
+            left = layout.content_x + margin
 
-        # Keep the full block inside the content frame.
-        qr_bottom = min(qr_bottom, bottom)
+        qr_right = right
+        qr_bottom = bottom
         qr_top = qr_bottom - qr_image.height
         if qr_top - gap - caption_h < top:
             qr_top = top + caption_h + gap
             qr_bottom = qr_top + qr_image.height
+        if qr_right - qr_image.width < left:
+            qr_right = left + qr_image.width
+
+        # Keep the full caption+QR block inside the target rect.
+        if block_h > (bottom - top) and (bottom - top) > qr_image.height:
+            qr_bottom = bottom
+            qr_top = qr_bottom - qr_image.height
 
         qx = qr_right - qr_image.width / 2
         qy = qr_top + qr_image.height / 2
         photo = ImageTk.PhotoImage(qr_image)
         self._track(self.canvas.create_image(qx, qy, image=photo))
+        # Soft shadow so the caption stays readable over bright photo regions.
         self._track(
             self.canvas.create_text(
-                qr_right,
-                qr_top - gap,
-                anchor="se",
+                qx + 1,
+                qr_top - gap + 1,
+                anchor="s",
                 text=caption,
-                fill=muted,
+                fill="#0f172a",
+                font=caption_font,
+            )
+        )
+        self._track(
+            self.canvas.create_text(
+                qx,
+                qr_top - gap,
+                anchor="s",
+                text=caption,
+                fill=fill,
                 font=caption_font,
             )
         )
@@ -5354,7 +5410,7 @@ class QrPanel(BasePanel):
     def _render_photo_with_corner_qr(self, url: str, label: str):
         """Hero photo + small corner QR — same composition as the slideshow."""
         muted = self.config["mutedTextColor"]
-        photo_cx, photo_cy, max_w, max_h, layout = self._photo_stage_geometry()
+        photo_cx, photo_cy, max_w, max_h, _layout = self._photo_stage_geometry()
 
         self._track(
             self.canvas.create_text(
@@ -5366,10 +5422,7 @@ class QrPanel(BasePanel):
                 font=self.shell.body_font,
             )
         )
-        self._qr_image = self._draw_scan_qr_badge(
-            url, label or "Scan to save this photo",
-        )
-
+        # Corner QR waits until the photo lands so it can sit inside the frame.
         token = self._fetch_token
 
         def worker():
@@ -5401,13 +5454,18 @@ class QrPanel(BasePanel):
                     justify=tk.CENTER,
                 )
             )
+            self._qr_image = self._draw_scan_qr_badge(url, self._SCAN_QR_CAPTION)
         else:
             self._photo_image = ImageTk.PhotoImage(image)
             self._track(self.canvas.create_image(photo_cx, photo_cy, image=self._photo_image))
-
-        self._qr_image = self._draw_scan_qr_badge(
-            url, label or "Scan to save this photo",
-        )
+            self._qr_image = self._draw_scan_qr_badge(
+                url,
+                self._SCAN_QR_CAPTION,
+                photo_cx=photo_cx,
+                photo_cy=photo_cy,
+                photo_w=self._photo_image.width(),
+                photo_h=self._photo_image.height(),
+            )
 
 
 class PhotoSlideshowPanel(BasePanel):
@@ -5535,7 +5593,7 @@ class PhotoSlideshowPanel(BasePanel):
             )
         )
         try:
-            self._draw_chrome()
+            self._draw_chrome(include_scan_qr=False)
         except Exception as error:
             print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
 
@@ -5574,11 +5632,11 @@ class PhotoSlideshowPanel(BasePanel):
             self._track(self.canvas.create_image(photo_cx, photo_cy, image=self._photo_image))
 
         try:
-            self._draw_chrome()
+            self._draw_chrome(include_scan_qr=True)
         except Exception as error:
             print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
 
-    def _draw_chrome(self):
+    def _draw_chrome(self, *, include_scan_qr: bool = True):
         """Draws the "Photo x of y" / shared-date / scan-QR chrome that
         overlays the current photo regardless of load state."""
         if not self._photos:
@@ -5613,9 +5671,23 @@ class PhotoSlideshowPanel(BasePanel):
                 )
             )
 
-        self._corner_qr_image = self._draw_scan_qr_badge(
-            current["url"], "Scan for this photo",
-        )
+        if not include_scan_qr:
+            return
+
+        photo_cx, photo_cy, *_rest = self._photo_stage_geometry()
+        if self._photo_image is not None:
+            self._corner_qr_image = self._draw_scan_qr_badge(
+                current["url"],
+                self._SCAN_QR_CAPTION,
+                photo_cx=photo_cx,
+                photo_cy=photo_cy,
+                photo_w=self._photo_image.width(),
+                photo_h=self._photo_image.height(),
+            )
+        else:
+            self._corner_qr_image = self._draw_scan_qr_badge(
+                current["url"], self._SCAN_QR_CAPTION,
+            )
 
     @staticmethod
     def _is_ssl_failure(error) -> bool:
