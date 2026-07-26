@@ -10,16 +10,27 @@ class DisplayIdentityTests(unittest.TestCase):
         self.assertEqual(resolve_display_name({"displayName": "Poster"}), "Poster")
 
     def test_build_announce_payload(self):
-        payload = build_announce_payload({
-            "displayName": "Kitchen TV",
-            "displayId": "disp-fixedabcd",
-            "listenPort": 47832,
-        })
+        with mock.patch("src.steam_local.read_steam_running_app_id", return_value=686200):
+            payload = build_announce_payload({
+                "displayName": "Kitchen TV",
+                "displayId": "disp-fixedabcd",
+                "listenPort": 47832,
+            })
         self.assertEqual(payload["type"], "display.announce")
         self.assertEqual(payload["display"]["id"], "disp-fixedabcd")
         self.assertEqual(payload["display"]["shortId"], "abcd")
         self.assertEqual(payload["display"]["name"], "Kitchen TV")
         self.assertEqual(payload["display"]["port"], 47832)
+        self.assertTrue(payload["display"]["hostname"])
+        self.assertEqual(payload["display"]["steamAppId"], 686200)
+
+    def test_build_announce_payload_omits_steam_when_idle(self):
+        payload = build_announce_payload({
+            "displayName": "Kitchen TV",
+            "displayId": "disp-fixedabcd",
+            "listenPort": 47832,
+        }, steam_app_id=0)
+        self.assertNotIn("steamAppId", payload["display"])
 
     def test_display_id_ignores_name_so_duplicates_stay_unique(self):
         from src.display_identity import resolve_display_id

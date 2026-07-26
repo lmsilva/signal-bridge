@@ -134,6 +134,7 @@ function createListener({ config, log }) {
     fingerprintFn: fingerprint,
   });
   const displayRegistry = createDisplayRegistry(config, log);
+  let steamNowPlaying = null;
   const udpBroadcaster = createUdpBroadcaster(config, log, {
     onMessage: (payload, rinfo) => {
       if (payload?.type !== 'display.announce') {
@@ -141,7 +142,17 @@ function createListener({ config, log }) {
       }
       const entry = displayRegistry.upsertFromAnnounce(payload, rinfo);
       if (entry) {
-        log.info(`Display announced: ${entry.name} (${entry.id}) @ ${entry.host || '?'}`);
+        const hostname = String(payload?.display?.hostname || '').trim();
+        const steamAppId = Number(payload?.display?.steamAppId || 0);
+        log.info(
+          `Display announced: ${entry.name} (${entry.id}) @ ${entry.host || '?'}`
+          + (hostname ? ` hostname=${hostname}` : '')
+          + (steamAppId > 0 ? ` steamAppId=${steamAppId}` : ''),
+        );
+        // Presence via the already-running display client (no separate reporter).
+        if (hostname && steamAppId > 0) {
+          steamNowPlaying?.recordPresence({ hostname, appId: steamAppId });
+        }
       }
     },
   });
@@ -189,7 +200,6 @@ function createListener({ config, log }) {
   let alarmSync = null;
   let teslaKeepAlive = null;
   let backgroundCacheRefresh = null;
-  let steamNowPlaying = null;
   let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;

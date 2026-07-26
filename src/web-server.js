@@ -1547,7 +1547,10 @@ function createWebServer({
         apiKeySource: steamCreds.apiKeySource || steamLive.apiKeySource || null,
         steamId: steamCreds.steamId || null,
         personaName: steamCreds.personaName || steamLive.personaName || null,
-        allowedHosts: config.steam?.allowedHosts || [],
+        requirePresence: Boolean(
+          steamLive.requirePresence ?? config.steam?.requirePresence,
+        ),
+        allowedHosts: steamLive.allowedHosts || config.steam?.allowedHosts || [],
         status: steamLive.status || steamFileStatus?.status || (
           !steamCreds.apiKey ? 'missing_api_key'
             : !steamCreds.steamId ? 'not_linked'
@@ -1748,7 +1751,17 @@ function createWebServer({
           case '/api/push/air-quality':
             handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res);
             return;
+          case '/api/push/now-playing':
+            handleVoiceQueryPush(
+              'music',
+              "what's playing",
+              'music-query',
+              body,
+              res,
+            );
+            return;
           case '/api/push/indoor-temperature':
+            // Kept for older clients / bookmarks; Quick Push UI uses now-playing.
             handleVoiceQueryPush(
               'indoor-temperature',
               indoorTemperatureQuickPushQuery(config),
