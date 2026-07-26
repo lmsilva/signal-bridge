@@ -6,7 +6,7 @@ const {
   haversineMiles,
 } = require('../src/route-fetch');
 
-const SARATOGA_SPRINGS = { latitude: 40.0, longitude: -111.0 };
+const EXAMPLE_ORIGIN = { latitude: 40.39, longitude: -111.85 }; // public placeholder near Lehi, UT
 const MOAB = { latitude: 38.5733, longitude: -109.5498 };
 
 function withMockedFetch(implementation, fn) {
@@ -19,8 +19,8 @@ function withMockedFetch(implementation, fn) {
 
 test('haversineMiles computes a plausible great-circle distance', () => {
   const miles = haversineMiles(
-    SARATOGA_SPRINGS.latitude,
-    SARATOGA_SPRINGS.longitude,
+    EXAMPLE_ORIGIN.latitude,
+    EXAMPLE_ORIGIN.longitude,
     MOAB.latitude,
     MOAB.longitude,
   );
@@ -29,11 +29,11 @@ test('haversineMiles computes a plausible great-circle distance', () => {
 });
 
 test('greatCircleEstimate returns distance, duration and a two-point line', () => {
-  const result = greatCircleEstimate(SARATOGA_SPRINGS, MOAB);
+  const result = greatCircleEstimate(EXAMPLE_ORIGIN, MOAB);
   assert.ok(result.distanceMiles > 160 && result.distanceMiles < 185);
   assert.ok(result.durationMin > 0);
   assert.deepEqual(result.geometry, [
-    [SARATOGA_SPRINGS.latitude, SARATOGA_SPRINGS.longitude],
+    [EXAMPLE_ORIGIN.latitude, EXAMPLE_ORIGIN.longitude],
     [MOAB.latitude, MOAB.longitude],
   ]);
 });
@@ -69,7 +69,7 @@ test('fetchDrivingRoute parses a successful OSRM response', async () => {
         }),
       };
     },
-    () => fetchDrivingRoute(SARATOGA_SPRINGS, MOAB),
+    () => fetchDrivingRoute(EXAMPLE_ORIGIN, MOAB),
   );
 
   assert.equal(result.ok, true);
@@ -81,7 +81,7 @@ test('fetchDrivingRoute parses a successful OSRM response', async () => {
 test('fetchDrivingRoute returns ok:false when OSRM reports NoRoute', async () => {
   const result = await withMockedFetch(
     async () => ({ ok: true, json: async () => ({ code: 'NoRoute', routes: [] }) }),
-    () => fetchDrivingRoute(SARATOGA_SPRINGS, MOAB),
+    () => fetchDrivingRoute(EXAMPLE_ORIGIN, MOAB),
   );
   assert.equal(result.ok, false);
 });
@@ -89,7 +89,7 @@ test('fetchDrivingRoute returns ok:false when OSRM reports NoRoute', async () =>
 test('fetchDrivingRoute returns ok:false on an HTTP error', async () => {
   const result = await withMockedFetch(
     async () => ({ ok: false, status: 500 }),
-    () => fetchDrivingRoute(SARATOGA_SPRINGS, MOAB),
+    () => fetchDrivingRoute(EXAMPLE_ORIGIN, MOAB),
   );
   assert.equal(result.ok, false);
 });
@@ -99,7 +99,7 @@ test('fetchDrivingRoute returns ok:false when the request throws', async () => {
     async () => {
       throw new Error('network down');
     },
-    () => fetchDrivingRoute(SARATOGA_SPRINGS, MOAB),
+    () => fetchDrivingRoute(EXAMPLE_ORIGIN, MOAB),
   );
   assert.equal(result.ok, false);
   assert.match(result.error, /network down/);
