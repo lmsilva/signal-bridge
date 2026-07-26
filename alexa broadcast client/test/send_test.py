@@ -890,6 +890,58 @@ def build_payload(args) -> dict:
             "slideshow": {"photos": photos, "secondsPerPhoto": seconds_per_photo},
         }
 
+    if args.type == "steam-now-playing":
+        started = datetime.now(timezone.utc) - timedelta(minutes=74)
+        return {
+            "version": 2,
+            "type": "steam.now-playing",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 0,
+            "persistent": True,
+            "trigger": "test",
+            "steam": {
+                "appId": 1139970,
+                "name": "Boomerang Fu",
+                "shortDescription": (
+                    "A frantic local multiplayer battle game where everyone is a sticky note "
+                    "warrior armed with a deadly boomerang."
+                ),
+                "developers": ["Cranky Watermelon"],
+                "publishers": ["Cranky Watermelon"],
+                "releaseYear": "2020",
+                "tags": ["Split Screen", "PvP", "Co-op", "Full Controller"],
+                "posterCandidates": [
+                    "https://cdn.cloudflare.steamstatic.com/steam/apps/1139970/library_600x900.jpg",
+                    "https://cdn.cloudflare.steamstatic.com/steam/apps/1139970/header.jpg",
+                ],
+                "headerImage": "https://cdn.cloudflare.steamstatic.com/steam/apps/1139970/header.jpg",
+                "screenshots": [
+                    "https://cdn.cloudflare.steamstatic.com/steam/apps/1139970/ss_1.jpg",
+                    "https://cdn.cloudflare.steamstatic.com/steam/apps/1139970/ss_2.jpg",
+                    "https://cdn.cloudflare.steamstatic.com/steam/apps/1139970/ss_3.jpg",
+                ],
+                "playtimeLabel": "8.4 hrs",
+                "playtimeForeverMin": 504,
+                "achievements": {"earned": 14, "total": 32, "available": True},
+                "currentPlayers": 312,
+                "host": "MOVIETHEATERPC",
+                "startedAt": started.isoformat().replace("+00:00", "Z"),
+                "elapsedSec": 74 * 60,
+                "personaName": "Tester",
+            },
+        }
+
+    if args.type == "steam-now-playing-close":
+        return {
+            "version": 2,
+            "type": "steam.now-playing.close",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 0,
+            "trigger": "test",
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -971,7 +1023,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "music", "route-planner", "route-planner-flight"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "music", "route-planner", "route-planner-flight"],
         default="broadcast",
         help="Payload type to send",
     )

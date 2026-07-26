@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveTeslaFleetConfig } = require('./tesla-config');
+const { resolveSteamConfig } = require('./steam-config');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -136,6 +137,7 @@ function loadConfig() {
   );
 
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);
+  config.steam = resolveSteamConfig({ ...config, ROOT }, fileConfig);
 
   // Admin UI password (/admin). Prefer env; optional config.webServer.adminPassword.
   config.webServer = {

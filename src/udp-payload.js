@@ -833,6 +833,79 @@ function buildTimerSnapshotPayload({
   };
 }
 
+function buildSteamNowPlayingPayload(reading, config, {
+  device = 'Signal',
+  trigger = 'steam-now-playing',
+  timestamp = Date.now(),
+  mode = 'playing',
+  dismissible = false,
+} = {}) {
+  if (!reading?.appId || !reading?.name) {
+    return null;
+  }
+  const achievements = reading.achievements || {};
+  const playMode = mode === 'last-played' ? 'last-played' : 'playing';
+  const isDismissible = Boolean(dismissible) || playMode === 'last-played';
+  const startedMs = reading.startedAt
+    || reading.lastPlayedAt
+    || timestamp;
+  return {
+    version: 2,
+    type: 'steam.now-playing',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    // Auto sessions stay until game ends / interrupt. Manual preview + last-played auto-dismiss.
+    displaySeconds: isDismissible ? displaySeconds(config) : 0,
+    persistent: !isDismissible,
+    trigger,
+    steam: {
+      appId: Number(reading.appId),
+      name: reading.name,
+      mode: playMode,
+      shortDescription: reading.shortDescription || '',
+      developers: reading.developers || [],
+      publishers: reading.publishers || [],
+      releaseYear: reading.releaseYear || null,
+      tags: Array.isArray(reading.tags) ? reading.tags.slice(0, 6) : [],
+      posterCandidates: Array.isArray(reading.posterCandidates)
+        ? reading.posterCandidates.slice(0, 12)
+        : [],
+      headerImage: reading.headerImage || null,
+      screenshots: Array.isArray(reading.screenshots) ? reading.screenshots.slice(0, 3) : [],
+      playtimeLabel: reading.playtimeLabel || null,
+      playtimeForeverMin: reading.playtimeForeverMin ?? null,
+      achievements: {
+        earned: achievements.earned ?? null,
+        total: achievements.total ?? null,
+        available: Boolean(achievements.available),
+      },
+      currentPlayers: reading.currentPlayers ?? null,
+      host: reading.host || null,
+      startedAt: new Date(startedMs).toISOString(),
+      lastPlayedAt: reading.lastPlayedAt
+        ? new Date(reading.lastPlayedAt).toISOString()
+        : (playMode === 'last-played' ? new Date(startedMs).toISOString() : null),
+      elapsedSec: Number(reading.elapsedSec) || 0,
+      personaName: reading.personaName || null,
+    },
+  };
+}
+
+function buildSteamNowPlayingClosePayload({
+  device = 'Signal',
+  trigger = 'steam-now-playing-close',
+  timestamp = Date.now(),
+} = {}, _config) {
+  return {
+    version: 2,
+    type: 'steam.now-playing.close',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: 0,
+    trigger,
+  };
+}
+
 module.exports = {
   buildBroadcastPayload,
   buildTimeQueryPayload,
@@ -862,6 +935,8 @@ module.exports = {
   buildAlarmSnapshotPayload,
   buildQrDisplayPayload,
   buildGuestPhotoboothPayload,
+  buildSteamNowPlayingPayload,
+  buildSteamNowPlayingClosePayload,
   buildWifiQrContent,
   displaySeconds,
   timerDisplaySeconds,

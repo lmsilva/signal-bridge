@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Quick Push Guest Snaps + indoor/alarms)
+**Last updated:** 2026-07-26 (Steam key precedence + manual preview)
 
 ---
 
@@ -60,6 +60,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set |
 | `src/lan-crypto.js` | Shared-secret **AES-256-GCM** for bridge↔display UDP (`LAN_UDP_SECRET` / `udpBroadcast.sharedSecret`); protocol v3 envelope `{v,alg,n,c}`; SHA-256 key derive; stamps `sentAt` at seal; ±120s freshness on `sentAt` (not Alexa activity `timestamp`) |
+| `src/steam-*.js` | Steam Now Playing: config/session/OpenID auth, Web API + store appdetails, presence allowlist, poller with interrupt-suppress, UDP builders |
+| `tools/steam-presence-reporter/` | Windows heartbeat script — posts hostname + RunningAppID to `POST /api/steam/presence` |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
@@ -335,6 +337,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `qr.display` | Push tab QR generator — `qr.{qrType: "url"\|"wifi", content, label}`; client renders the QR bitmap locally (`qrcode` lib) from `content` (a URL, or a `WIFI:T:...;;` string built by `buildWifiQrContent`) |
 | `guest.photobooth` | Alexa **"open guest snaps"** (legacy: guest photobooth) — dual-QR **Guest Snaps** welcome on **all displays**: `guestPhotobooth.{wifi,booth}` with Wi‑Fi `WIFI:T:…` + booth URL; client owns chrome (no duplicate shell title), portrait stack with a dedicated "then" band between cards |
 | `photo.slideshow` | Alexa **"open guest snaps slideshow"** (also "guest snaps slideshow" / legacy "slideshow guest snaps") **or** Push tab "Shared Photo Slideshow" — `slideshow.{photos[], secondsPerPhoto}`; `photos` is every photo in the QR image cache as `{url, uploadedAt}` (photos never expire — see `qr-image-cache.js`), ordered by the bridge per the persisted Settings-tab preference (`recent`\|`oldest`\|`random`); `displaySeconds` = `photos.length * secondsPerPhoto` so the whole set gets shown once. Voice path fans out to **all displays**. Client plays through the list once (does not loop), shows "Photo x of y" + a "Shared …" date label + a small corner QR linking to that photo, and suppresses the usual "Dismisses in…" countdown text (the underlying auto-dismiss timer still fires when the pass completes) — interrupted immediately if any new UDP payload arrives |
+| `steam.now-playing` | Auto: persistent game card while an allowed host (default `MOVIETHEATERPC`) reports presence matching `GetPlayerSummaries` `gameid`. Manual admin test (`POST /api/push/steam-now-playing`) skips host allowlist, is dismissible, and falls back to last-played (`steam.mode=last-played`). Payload `steam.{appId,name,mode,shortDescription,tags,posterCandidates,screenshots,playtimeLabel,achievements,currentPlayers,host,startedAt,lastPlayedAt,…}`. API key: `.env` `STEAM_API_KEY` wins over admin Save key (`data/steam-session.json` only; never writes `.env`). Interrupted by any other display UDP → session suppressed until game stops/restarts. Close via `steam.now-playing.close` |
 | `route-planner.query` | "How far is Moab from here" / "distance between X and Y" / "how long to drive to X" / "directions to X" — `origin`/`destination` (`{name,latitude,longitude}`), `mode` (`"driving"` \| `"flight"`), `distanceMiles`, `durationMin`, `route.geometry` (simplified `[[lat,lon],...]` polyline, or just the two endpoints for flight mode). Bridge only geocodes both places + calls OSRM (fast, ~1-2 API calls) — map tiles, place facts and weather are fetched **client-side** afterwards so the fast facts show immediately while the rest fills in |
 
 Optional `target: { id }` or `{ all: true }` on outbound commands for unicast vs broadcast delivery (`display-registry.resolveDelivery`).
@@ -485,6 +488,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Steam auth test push + key precedence** — `.env` `STEAM_API_KEY` always wins; admin Save key only writes `data/steam-session.json` (blocked with 409 when `.env` is set). Auth card **Test: push Now Playing** → `POST /api/push/steam-now-playing` (skips presence allowlist; last-played fallback, dismissible). Deploy: `./recreate.sh` + portable client rebuild for last-played chrome.
+- 2026-07-26: **Steam Now Playing** — poller + OpenID/API-key auth card; presence reporter allowlist (default `MOVIETHEATERPC`); persistent `steam.now-playing` overlay suppressed on other Alexa/display pushes until a new Steam session. Deploy: set `STEAM_API_KEY`, link Steam in admin, install `tools/steam-presence-reporter` on the theater PC, `./recreate.sh` + portable client rebuild.
 - 2026-07-26: **Quick Push second row** — admin Push tab adds **Guest Snaps**, **Indoor Air Quality**, **Indoor Temperature**, and **Show Alarms** (8 tiles / two rows of four). APIs: existing `POST /api/push/guest-photobooth` plus `air-quality`, `indoor-temperature`, `alarms` (`requestAlarmPoll` → `show-alarms`). Deploy: bridge `./recreate.sh` (static admin UI is volume-mounted).
 - 2026-07-26: **Guest snaps slideshow phrase + UDP `sentAt`** — preferred Alexa command is **"open guest snaps slideshow"** (welcome remains **"open guest snaps"**); ASR normalizes "slide show". LAN crypto freshness uses seal-time `sentAt` so delayed Alexa history timestamps no longer drop overlays. Deploy: bridge `./recreate.sh` + redeploy portable client.
 - 2026-07-26: **LAN UDP AES-GCM encryption** — optional shared secret (`.env` `LAN_UDP_SECRET`, client `udpSecret`) encrypts all bridge↔display UDP (`:47832` / `:47833`) with AES-256-GCM (v3 envelope). No handshake; pointer stays one datagram. Empty secret keeps plaintext for local smoke. Deploy: set the same secret both sides, `./recreate.sh`, rebuild/redeploy portable client (`cryptography` dep).

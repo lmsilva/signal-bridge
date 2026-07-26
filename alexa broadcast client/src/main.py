@@ -47,6 +47,7 @@ class BroadcastClientApp:
             "guest.photobooth",
             "photo.slideshow",
             "route-planner.query",
+            "steam.now-playing",
         }
     )
 
@@ -184,6 +185,9 @@ class BroadcastClientApp:
             )
         elif command_type == "web.close":
             self.web_overlay.close()
+        elif command_type == "steam.now-playing.close":
+            if self.overlay and self.overlay.active_display_type == "steam.now-playing":
+                self.overlay.dismiss_immediately()
         elif command_type == "system.command":
             self._run_system_command((payload.get("system") or {}).get("action"))
 

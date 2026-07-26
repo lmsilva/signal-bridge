@@ -85,8 +85,29 @@ const {
   buildIndoorReading,
   resolveIndoorQueryLocation,
 } = require('./indoor-temperature');
+const { createSteamNowPlaying } = require('./steam-now-playing');
 
 const VOLUME_POLL_DELAY_MS = 2000;
+
+function shouldSuppressSteamForPayload(payload) {
+  const type = String(payload?.type || '');
+  if (!type) {
+    return false;
+  }
+  if (type === 'steam.now-playing' || type === 'steam.now-playing.close') {
+    return false;
+  }
+  // Control / meta traffic must not kill the game card.
+  if (
+    type.startsWith('input.')
+    || type.startsWith('display.')
+    || type === 'system.command'
+    || type === 'web.close'
+  ) {
+    return false;
+  }
+  return true;
+}
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
 const PERIODIC_LOOKBACK_MS = 15 * 60 * 1000;
 const PERIODIC_POLL_MS = 60 * 1000;
@@ -163,6 +184,7 @@ function createListener({ config, log }) {
   let alarmSync = null;
   let teslaKeepAlive = null;
   let backgroundCacheRefresh = null;
+  let steamNowPlaying = null;
   let activeSession = null;
   let lastPollAt = null;
   let lastPollCount = 0;
@@ -182,6 +204,9 @@ function createListener({ config, log }) {
   }
 
   function sendUdpPayload(payload, options = {}) {
+    if (shouldSuppressSteamForPayload(payload)) {
+      steamNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
+    }
     return udpBroadcaster.send(payload, options);
   }
 
@@ -1374,6 +1399,13 @@ function createListener({ config, log }) {
         });
         backgroundCacheRefresh.start();
 
+        steamNowPlaying = createSteamNowPlaying({
+          config,
+          log,
+          sendUdpPayload,
+        });
+        steamNowPlaying.start();
+
         resolve(alexa);
       });
     });
@@ -1398,6 +1430,9 @@ function createListener({ config, log }) {
     // Same pattern as timers — alarm-list never builds a payload inside
     // handleVoiceEvent; the "Show Alarms" Quick Push tile polls Amazon.
     requestAlarmPoll: (device) => alarmSync?.requestImmediatePoll('show-alarms', device),
+    steamNowPlaying: () => steamNowPlaying,
+    recordSteamPresence: (body) => steamNowPlaying?.recordPresence(body),
+    getSteamStatus: () => steamNowPlaying?.statusSnapshot?.() || null,
   };
 }
 

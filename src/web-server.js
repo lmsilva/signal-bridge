@@ -34,6 +34,18 @@ const {
 const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
 const { getIndoorLocations } = require('./indoor-locations');
 const { ALL_TARGET_ID } = require('./display-registry');
+const {
+  buildSteamAuthorizeUrl,
+  publicOriginFromRequest,
+  verifySteamOpenIdCallback,
+  completeSteamLink,
+  saveSteamApiKey,
+} = require('./steam-auth');
+const {
+  resolveSteamCredentials,
+  readSteamAuthStatus,
+} = require('./steam-session');
+const { fetchPlayerSummary } = require('./steam-api');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
@@ -214,6 +226,9 @@ function createWebServer({
   deliverTargetedPayload = null,
   requestTimerPoll = null,
   requestAlarmPoll = null,
+  recordSteamPresence = null,
+  getSteamStatus = null,
+  steamNowPlaying = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -255,6 +270,170 @@ function createWebServer({
     // so the proxy never sees "connection refused" between login attempts.
     persistent: false,
   };
+
+  const steamAuth = {
+    running: false,
+    status: null,
+    authorizeUrl: null,
+    error: null,
+    startedAt: null,
+  };
+
+  function presenceSecretOk(provided) {
+    const steam = config.steam || {};
+    const expected = String(
+      steam.presenceSecret
+      || steam.apiKey
+      || resolveSteamCredentials(steam).apiKey
+      || '',
+    ).trim();
+    if (!expected) {
+      return false;
+    }
+    return String(provided || '').trim() === expected;
+  }
+
+  function handleSteamPresence(req, body, res) {
+    if (typeof recordSteamPresence !== 'function') {
+      sendJson(res, 503, { ok: false, error: 'Steam presence unavailable — listener not ready' });
+      return;
+    }
+    const secret = body?.secret
+      || req.headers['x-steam-presence-secret']
+      || req.headers['x-presence-secret'];
+    const adminOk = adminAuth.assertAuthorized(req).ok;
+    if (!adminOk && !presenceSecretOk(secret)) {
+      sendJson(res, 401, { ok: false, error: 'Unauthorized presence heartbeat' });
+      return;
+    }
+    const result = recordSteamPresence({
+      hostname: body?.hostname || body?.host,
+      appId: body?.appId || body?.appid || body?.gameId,
+    });
+    if (!result?.ok) {
+      sendJson(res, 400, { ok: false, error: result?.error || 'Invalid presence' });
+      return;
+    }
+    sendJson(res, 202, { ok: true, presence: result.entry });
+  }
+
+  async function handleSteamAuthStart(req, res) {
+    const steam = config.steam || {};
+    try {
+      const publicOrigin = publicOriginFromRequest(req, config);
+      const authorizeUrl = buildSteamAuthorizeUrl(config, steam, publicOrigin);
+      steamAuth.running = true;
+      steamAuth.status = 'waiting';
+      steamAuth.error = null;
+      steamAuth.authorizeUrl = authorizeUrl;
+      steamAuth.startedAt = new Date().toISOString();
+      sendJson(res, 200, { ok: true, authorizeUrl });
+    } catch (error) {
+      steamAuth.status = 'error';
+      steamAuth.error = error?.message || String(error);
+      sendJson(res, 500, { ok: false, error: steamAuth.error });
+    }
+  }
+
+  async function handleSteamAuthCallback(reqUrl, res) {
+    const query = Object.fromEntries(reqUrl.searchParams.entries());
+    try {
+      const verified = await verifySteamOpenIdCallback(query);
+      if (!verified.ok) {
+        steamAuth.status = 'error';
+        steamAuth.error = verified.error;
+        steamAuth.running = false;
+        res.writeHead(302, { Location: '/admin/?steam=error' });
+        res.end();
+        return;
+      }
+      let personaName = null;
+      try {
+        const creds = resolveSteamCredentials(config.steam || {});
+        if (creds.apiKey) {
+          const summary = await fetchPlayerSummary(creds.apiKey, verified.steamId);
+          personaName = summary?.personaName || null;
+        }
+      } catch {
+        // optional enrichment
+      }
+      completeSteamLink(config.steam, {
+        steamId: verified.steamId,
+        personaName,
+      });
+      steamAuth.status = 'success';
+      steamAuth.running = false;
+      steamAuth.error = null;
+      // Kick an immediate poll if the poller is up.
+      try {
+        const controller = typeof steamNowPlaying === 'function' ? steamNowPlaying() : steamNowPlaying;
+        controller?.tick?.();
+      } catch {
+        // ignore
+      }
+      res.writeHead(302, { Location: '/admin/?steam=ok' });
+      res.end();
+    } catch (error) {
+      steamAuth.status = 'error';
+      steamAuth.error = error?.message || String(error);
+      steamAuth.running = false;
+      res.writeHead(302, { Location: '/admin/?steam=error' });
+      res.end();
+    }
+  }
+
+  function handleSteamApiKeySave(body, res) {
+    const apiKey = String(body?.apiKey || '').trim();
+    if (apiKey.length < 8) {
+      sendJson(res, 400, { ok: false, error: 'API key looks too short' });
+      return;
+    }
+    const envKey = String(process.env.STEAM_API_KEY || '').trim();
+    if (envKey) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'STEAM_API_KEY is already set in .env and takes precedence. '
+          + 'Update or remove it in .env — this screen does not rewrite .env.',
+        source: 'env',
+      });
+      return;
+    }
+    // Session file only (data/steam-session.json) — never writes .env.
+    saveSteamApiKey(config.steam, apiKey);
+    sendJson(res, 200, { ok: true, source: 'session' });
+  }
+
+  async function handleSteamNowPlayingPush(body, res) {
+    const controller = typeof steamNowPlaying === 'function' ? steamNowPlaying() : steamNowPlaying;
+    if (!controller?.pushManualPreview) {
+      sendJson(res, 503, { ok: false, error: 'Steam Now Playing is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    try {
+      const result = await controller.pushManualPreview({ device: deviceFrom(body) });
+      if (!result?.ok) {
+        sendJson(res, 400, { ok: false, error: result?.error || 'Steam preview failed' });
+        return;
+      }
+      log.info('Steam Now Playing manual preview', {
+        mode: result.mode,
+        appId: result.appId,
+        name: result.name,
+        targetId,
+      });
+      sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
 
   const alexaAuth = {
     running: false,
@@ -1324,6 +1503,15 @@ function createWebServer({
       teslaHasSession = false;
     }
 
+    const steamLive = (typeof getSteamStatus === 'function' ? getSteamStatus() : null) || {};
+    const steamCreds = resolveSteamCredentials(config.steam || {});
+    let steamFileStatus = null;
+    try {
+      steamFileStatus = readSteamAuthStatus(config.steam);
+    } catch {
+      steamFileStatus = null;
+    }
+
     return {
       ok: true,
       time: new Date().toISOString(),
@@ -1350,6 +1538,29 @@ function createWebServer({
           running: teslaAuth.running,
           status: teslaAuth.status,
           error: teslaAuth.error,
+        },
+      },
+      steam: {
+        enabled: config.steam?.enabled !== false,
+        hasApiKey: Boolean(steamCreds.apiKey),
+        hasSteamId: Boolean(steamCreds.steamId),
+        apiKeySource: steamCreds.apiKeySource || steamLive.apiKeySource || null,
+        steamId: steamCreds.steamId || null,
+        personaName: steamCreds.personaName || steamLive.personaName || null,
+        allowedHosts: config.steam?.allowedHosts || [],
+        status: steamLive.status || steamFileStatus?.status || (
+          !steamCreds.apiKey ? 'missing_api_key'
+            : !steamCreds.steamId ? 'not_linked'
+              : 'idle'
+        ),
+        message: steamLive.message || steamFileStatus?.message || null,
+        session: steamLive.session || null,
+        presence: steamLive.presence || null,
+        auth: {
+          running: steamAuth.running,
+          status: steamAuth.status,
+          authorizeUrl: steamAuth.authorizeUrl,
+          error: steamAuth.error,
         },
       },
       displays: {
@@ -1431,6 +1642,10 @@ function createWebServer({
 
     try {
       if (req.method === 'GET') {
+        if (pathname === '/api/auth/steam/callback') {
+          await handleSteamAuthCallback(reqUrl, res);
+          return;
+        }
         if (pathname === '/api/admin/session') {
           handleAdminSession(req, res);
           return;
@@ -1499,6 +1714,10 @@ function createWebServer({
         }
         if (pathname === '/api/qr/push') {
           handleQrPush(req, body, res);
+          return;
+        }
+        if (pathname === '/api/steam/presence') {
+          handleSteamPresence(req, body, res);
           return;
         }
 
@@ -1588,6 +1807,15 @@ function createWebServer({
             return;
           case '/api/auth/alexa/start':
             await handleAlexaAuthStart(req, res);
+            return;
+          case '/api/auth/steam/start':
+            await handleSteamAuthStart(req, res);
+            return;
+          case '/api/auth/steam/api-key':
+            handleSteamApiKeySave(body, res);
+            return;
+          case '/api/push/steam-now-playing':
+            await handleSteamNowPlayingPush(body, res);
             return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });

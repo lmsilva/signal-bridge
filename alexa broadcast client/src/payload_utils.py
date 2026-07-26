@@ -25,6 +25,7 @@ DISPLAY_TYPES = (
     "guest.photobooth",
     "photo.slideshow",
     "route-planner.query",
+    "steam.now-playing",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -37,6 +38,7 @@ COMMAND_TYPES = (
     "input.key",
     "input.text",
     "display.discover",
+    "steam.now-playing.close",
 )
 
 # Bridge discovery / heartbeats — never shown as overlays.
@@ -117,6 +119,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "guest.photobooth": ("Signal", "Guest Snaps"),
         "photo.slideshow": ("Signal", "Shared Photos"),
         "route-planner.query": ("Alexa", "Route Planner"),
+        "steam.now-playing": ("Steam", "Now Playing"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 

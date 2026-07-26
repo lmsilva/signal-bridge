@@ -28,6 +28,7 @@ from src.display_panels import (
     WeatherPanel,
 )
 from src.payload_utils import resolve_display_type, title_for_display_type, title_for_payload
+from src.steam_now_playing_panel import SteamNowPlayingPanel
 from src.weather_fetch import enrich_weather_payload
 
 
@@ -139,6 +140,7 @@ class OverlayWindow:
             "guest.photobooth": GuestPhotoboothPanel(self.root, self.shell, self.config),
             "photo.slideshow": PhotoSlideshowPanel(self.root, self.shell, self.config),
             "route-planner.query": RoutePlannerPanel(self.root, self.shell, self.config),
+            "steam.now-playing": SteamNowPlayingPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
@@ -394,7 +396,12 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
-        if display_type in ("tesla-dashboard.query", "route-planner.query", "guest.photobooth"):
+        if display_type in (
+            "tesla-dashboard.query",
+            "route-planner.query",
+            "guest.photobooth",
+            "steam.now-playing",
+        ):
             self.canvas.itemconfigure(self.title_primary_id, text="")
             self.canvas.itemconfigure(self.title_accent_id, text="")
             # These panels draw their own header — hide the shared backdrop +
@@ -416,7 +423,9 @@ class OverlayWindow:
         # Blank the dismiss clock immediately for photo slideshow (don't wait
         # for the first countdown tick — and clear any leftover text from the
         # previous overlay if panel.show raised mid-render).
-        if display_type == "photo.slideshow":
+        if display_type == "photo.slideshow" or (
+            display_type == "steam.now-playing" and self._display_seconds <= 0
+        ):
             self._set_countdown_text("")
         elif self.countdown_label.cget("text"):
             self.countdown_label.lift()
@@ -445,11 +454,18 @@ class OverlayWindow:
         # photo once (or a new command interrupts it) rather than showing a
         # ticking "Dismisses in…" clock — the timer below still runs (sized
         # to exactly one pass through the photos) so auto-dismiss still fires.
-        if self._active_panel_key == "photo.slideshow":
+        if self._active_panel_key == "photo.slideshow" or (
+            self._active_panel_key == "steam.now-playing" and self._display_seconds <= 0
+        ):
             self._set_countdown_text("")
         else:
             self._set_countdown_text(self._format_remaining(remaining, finishing=finishing))
         self._raise_overlay_chrome()
+
+        if self._display_seconds <= 0:
+            # Persistent overlays (auto Steam Now Playing) — no auto-dismiss clock.
+            self._countdown_job = None
+            return
 
         if remaining <= 0:
             self._on_display_timer_expired()
@@ -473,6 +489,10 @@ class OverlayWindow:
 
     def _start_countdown(self, display_seconds: int):
         self._cancel_countdown()
+        if display_seconds <= 0:
+            self._expires_at = 0
+            self._set_countdown_text("")
+            return
         self._expires_at = time.time() + display_seconds
         self._update_countdown()
 
@@ -480,6 +500,9 @@ class OverlayWindow:
         scroller = self._scroller
         if scroller and scroller.needs_scroll:
             scroller.start()
+            return
+
+        if self._display_seconds <= 0:
             return
 
         self._hide_job = self.root.after(self._display_seconds * 1000, self._on_display_timer_expired)

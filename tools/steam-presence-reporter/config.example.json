@@ -1,0 +1,6 @@
+{
+  "bridgeUrl": "https://192.168.1.10:47810",
+  "secret": "same-as-STEAM_PRESENCE_SECRET-or-STEAM_API_KEY",
+  "hostname": "",
+  "insecureSkipTlsVerify": true
+}

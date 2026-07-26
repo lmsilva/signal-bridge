@@ -67,6 +67,9 @@ async function main() {
       deliverTargetedPayload: listener.deliverTargetedPayload,
       requestTimerPoll: listener.requestTimerPoll,
       requestAlarmPoll: listener.requestAlarmPoll,
+      recordSteamPresence: listener.recordSteamPresence,
+      getSteamStatus: listener.getSteamStatus,
+      steamNowPlaying: listener.steamNowPlaying,
     });
     webServer.start().catch((error) => {
       // The control page is a convenience — never take the listener down

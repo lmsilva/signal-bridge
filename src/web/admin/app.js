@@ -460,6 +460,49 @@
       $('tesla-auth-followup').hidden = true;
       toast('Tesla authentication complete', 'good');
     }
+
+    // Steam auth status
+    const steamPill = $('steam-status-pill');
+    const steam = status.steam || {};
+    const steamAuth = steam.auth || {};
+    if (steamAuth.status === 'success') {
+      pillState(steamPill, 'ok', 'Linked');
+      $('steam-status-detail').textContent = 'Steam account linked.';
+    } else if (steamAuth.status === 'error') {
+      pillState(steamPill, 'bad', 'Auth failed');
+      $('steam-status-detail').textContent = steamAuth.error || steam.message || 'Steam login failed.';
+    } else if (!steam.hasApiKey) {
+      pillState(steamPill, 'warn', 'Need API key');
+      $('steam-status-detail').textContent = 'Set STEAM_API_KEY in .env (preferred), or paste below if .env has none.';
+    } else if (!steam.hasSteamId) {
+      pillState(steamPill, 'warn', 'Link account');
+      const keySrc = steam.apiKeySource === 'env' ? 'from .env' : 'saved in session';
+      $('steam-status-detail').textContent = `API key ready (${keySrc}) — authenticate with Steam to link your SteamID.`;
+    } else if (steam.status === 'playing') {
+      pillState(steamPill, 'ok', 'Now playing');
+      const host = steam.session?.host || 'allowed PC';
+      $('steam-status-detail').textContent = `Playing on ${host}`
+        + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');
+    } else if (steam.status === 'playing_elsewhere') {
+      pillState(steamPill, 'warn', 'Other PC');
+      $('steam-status-detail').textContent = steam.message
+        || 'Steam shows a game, but not on an allowed host (presence reporter).';
+    } else if (steam.status === 'suppressed') {
+      pillState(steamPill, 'warn', 'Suppressed');
+      $('steam-status-detail').textContent = 'Game still running — overlay hidden until a new Steam session.';
+    } else if (steam.status === 'api_error') {
+      pillState(steamPill, 'bad', 'API error');
+      $('steam-status-detail').textContent = steam.message || 'Steam API request failed.';
+    } else {
+      pillState(steamPill, 'ok', 'Ready');
+      const hosts = (steam.allowedHosts || []).join(', ') || 'MOVIETHEATERPC';
+      $('steam-status-detail').textContent = `Linked${steam.personaName ? ` as ${steam.personaName}` : ''}. Watching ${hosts}.`;
+    }
+
+    if (steamAuth.status === 'success' && !$('steam-auth-followup').hidden) {
+      $('steam-auth-followup').hidden = true;
+      toast('Steam account linked', 'good');
+    }
   }
 
   function renderOffline() {
@@ -1703,6 +1746,52 @@
         $('tesla-auth-hint').textContent =
           "Sign in with your Tesla account. You'll be sent back here automatically when it completes.";
       }
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-steam-auth')?.addEventListener('click', async () => {
+    const button = $('btn-steam-auth');
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/auth/steam/start');
+      $('steam-auth-link').href = result.authorizeUrl;
+      $('steam-auth-followup').hidden = false;
+      toast('Open Steam login to link your account', 'good');
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-steam-api-key')?.addEventListener('click', async () => {
+    const input = $('steam-api-key-input');
+    const apiKey = String(input?.value || '').trim();
+    if (!apiKey) {
+      toast('Paste a Steam Web API key first', 'bad');
+      return;
+    }
+    try {
+      await apiPost('/api/auth/steam/api-key', { apiKey });
+      if (input) input.value = '';
+      toast('Steam API key saved to session (not .env)', 'good');
+      pollStatus();
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  });
+
+  $('btn-steam-test-push')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/steam-now-playing', withTarget());
+      const label = result.mode === 'last-played' ? 'Last played' : 'Now playing';
+      toast(`${label}: ${result.name || 'Steam'} (dismisses automatically)`, 'good');
     } catch (error) {
       toast(error.message, 'bad');
     } finally {

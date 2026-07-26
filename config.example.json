@@ -122,5 +122,13 @@
       "refreshWithinMs": 60000,
       "proactiveRefreshAfterMs": 21600000
     }
+  },
+  "steam": {
+    "enabled": true,
+    "allowedHosts": ["MOVIETHEATERPC"],
+    "pollIntervalSeconds": 30,
+    "presenceStaleSeconds": 90,
+    "sessionFile": "data/steam-session.json",
+    "authStatusFile": "data/steam-auth-status.json"
   }
 }
