@@ -34,6 +34,7 @@ const {
 const { ALL_TARGET_ID } = require('./display-registry');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
+const { createWebAdminAuth } = require('./web-admin-auth');
 const {
   createSlideshowSettings,
   VALID_ORDERS,
@@ -95,12 +96,28 @@ function resolveStaticPath(webRoot, urlPathname) {
   }
   if (pathname === '/' || pathname === '') {
     pathname = '/index.html';
+  } else if (pathname === '/admin' || pathname === '/admin/') {
+    pathname = '/admin/index.html';
+  } else if (pathname === '/admin/login' || pathname === '/admin/login/') {
+    pathname = '/admin/login.html';
   }
   const resolved = path.normalize(path.join(webRoot, pathname));
   if (resolved !== webRoot && !resolved.startsWith(webRoot + path.sep)) {
     return null;
   }
   return resolved;
+}
+
+function isAdminHtmlPath(pathname) {
+  return pathname === '/admin'
+    || pathname === '/admin/'
+    || pathname === '/admin/index.html';
+}
+
+function isAdminLoginPath(pathname) {
+  return pathname === '/admin/login'
+    || pathname === '/admin/login/'
+    || pathname === '/admin/login.html';
 }
 
 /**
@@ -201,6 +218,7 @@ function createWebServer({
   };
   const staticRoot = webRoot || path.join(__dirname, 'web');
   const controlAuth = createDisplayControlAuth(config, log);
+  const adminAuth = createWebAdminAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
   const slideshowSettings = createSlideshowSettings(config, log);
   let server = null;
@@ -280,6 +298,69 @@ function createWebServer({
       return null;
     }
     return targetId;
+  }
+
+  function requireAdminSession(req, res) {
+    const gate = adminAuth.assertAuthorized(req);
+    if (!gate.ok) {
+      sendJson(res, gate.status || 401, {
+        ok: false,
+        error: gate.error,
+        code: gate.code,
+      });
+      return false;
+    }
+    return true;
+  }
+
+  function handleAdminLogin(body, req, res) {
+    const result = adminAuth.login(body?.password, req);
+    if (!result.ok) {
+      sendJson(res, result.status || 401, {
+        ok: false,
+        error: result.error,
+        code: result.code,
+      });
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': result.setCookie,
+    });
+    res.end(JSON.stringify({
+      ok: true,
+      expiresAt: new Date(result.expiresAt).toISOString(),
+    }));
+  }
+
+  function handleAdminLogout(req, res) {
+    const result = adminAuth.logout(req);
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': result.setCookie,
+    });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  function handleAdminSession(req, res) {
+    const session = adminAuth.sessionFromRequest(req);
+    if (!session.ok) {
+      sendJson(res, 200, {
+        ok: true,
+        authenticated: false,
+        configured: adminAuth.isConfigured(),
+        code: session.code,
+      });
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      authenticated: true,
+      configured: true,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+    });
   }
 
   function sendCommandPayload(payload, targetId, res, okBody = {}) {
@@ -677,8 +758,17 @@ function createWebServer({
     sendJson(res, 200, { ok: true, path: result.path, token: result.token, createdAt: result.createdAt });
   }
 
-  function handleQrPush(body, res) {
+  function handleQrPush(req, body, res) {
     const mode = String(body?.mode || '').trim().toLowerCase();
+    // Guests may only push photo QRs; URL/Wi-Fi require an admin session.
+    if (mode !== 'photo' && !adminAuth.assertAuthorized(req).ok) {
+      sendJson(res, 401, {
+        ok: false,
+        error: 'Admin login required to push URL or Wi-Fi QR codes',
+        code: 'unauthorized',
+      });
+      return;
+    }
     let qrType;
     let content;
     let label;
@@ -1228,12 +1318,21 @@ function createWebServer({
 
   // ---- Static + routing ------------------------------------------------------
 
-  function assetVersion(fileName) {
+  function assetVersionBeside(htmlFilePath, fileName) {
     try {
-      return String(fs.statSync(path.join(staticRoot, fileName)).mtimeMs);
+      return String(fs.statSync(path.join(path.dirname(htmlFilePath), fileName)).mtimeMs);
     } catch {
       return String(Date.now());
     }
+  }
+
+  function redirectToAdminLogin(res, pathname) {
+    const next = encodeURIComponent(pathname || '/admin/');
+    res.writeHead(302, {
+      Location: `/admin/login.html?next=${next}`,
+      'Cache-Control': 'no-store',
+    });
+    res.end();
   }
 
   function serveStatic(pathname, res) {
@@ -1248,11 +1347,15 @@ function createWebServer({
     const noStore = ext === '.html' || ext === '.js' || ext === '.css';
     if (ext === '.html') {
       let html = fs.readFileSync(filePath, 'utf8');
-      const vJs = assetVersion('app.js');
-      const vCss = assetVersion('styles.css');
+      const vApp = assetVersionBeside(filePath, 'app.js');
+      const vStyles = assetVersionBeside(filePath, 'styles.css');
+      const vBoothJs = assetVersionBeside(filePath, 'booth.js');
+      const vBoothCss = assetVersionBeside(filePath, 'booth.css');
       html = html
-        .replace(/(href="(?:\.\/)?styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vCss}$2`)
-        .replace(/(src="(?:\.\/)?app\.js)(?:\?[^"]*)?(")/, `$1?v=${vJs}$2`);
+        .replace(/(href="(?:\.\/)?styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vStyles}$2`)
+        .replace(/(src="(?:\.\/)?app\.js)(?:\?[^"]*)?(")/, `$1?v=${vApp}$2`)
+        .replace(/(href="(?:\.\/)?booth\.css)(?:\?[^"]*)?(")/, `$1?v=${vBoothCss}$2`)
+        .replace(/(src="(?:\.\/)?booth\.js)(?:\?[^"]*)?(")/, `$1?v=${vBoothJs}$2`);
       res.writeHead(200, {
         'Content-Type': MIME_TYPES[ext] || 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -1267,14 +1370,22 @@ function createWebServer({
     fs.createReadStream(filePath).pipe(res);
   }
 
+  function serveStaticForRequest(req, pathname, res) {
+    if (isAdminHtmlPath(pathname) && !adminAuth.assertAuthorized(req).ok) {
+      redirectToAdminLogin(res, pathname === '/admin/index.html' ? '/admin/' : pathname);
+      return;
+    }
+    serveStatic(pathname, res);
+  }
+
   async function handleRequest(req, res) {
     const reqUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const { pathname } = reqUrl;
 
     try {
       if (req.method === 'GET') {
-        if (pathname === '/api/status') {
-          sendJson(res, 200, buildStatus());
+        if (pathname === '/api/admin/session') {
+          handleAdminSession(req, res);
           return;
         }
         if (pathname === '/api/displays') {
@@ -1285,23 +1396,37 @@ function createWebServer({
           handleDisplaysEvents(req, res);
           return;
         }
-        if (pathname === '/api/photos') {
-          handlePhotosList(res);
-          return;
-        }
-        if (pathname === '/api/photos/events') {
-          handlePhotoEvents(req, res);
-          return;
-        }
-        if (pathname === '/api/slideshow/settings') {
-          handleSlideshowSettingsGet(res);
-          return;
-        }
         if (pathname.startsWith(qrImageCache.routePrefix)) {
           handleQrImageServe(pathname, res);
           return;
         }
-        serveStatic(pathname, res);
+        // Admin-only JSON APIs
+        if (pathname === '/api/status') {
+          if (!requireAdminSession(req, res)) return;
+          sendJson(res, 200, buildStatus());
+          return;
+        }
+        if (pathname === '/api/photos') {
+          if (!requireAdminSession(req, res)) return;
+          handlePhotosList(res);
+          return;
+        }
+        if (pathname === '/api/photos/events') {
+          if (!requireAdminSession(req, res)) return;
+          handlePhotoEvents(req, res);
+          return;
+        }
+        if (pathname === '/api/slideshow/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleSlideshowSettingsGet(res);
+          return;
+        }
+        // Login page + guest booth + shared logos are public; admin shell needs a session.
+        if (isAdminLoginPath(pathname) || !pathname.startsWith('/admin')) {
+          serveStatic(pathname, res);
+          return;
+        }
+        serveStaticForRequest(req, pathname, res);
         return;
       }
 
@@ -1312,6 +1437,29 @@ function createWebServer({
           ? Math.ceil(qrImageCache.maxBytes * QR_IMAGE_BODY_OVERHEAD_FACTOR) + QR_IMAGE_BODY_PADDING_BYTES
           : MAX_BODY_BYTES;
         const body = await readJsonBody(req, bodyLimit);
+
+        if (pathname === '/api/admin/login') {
+          handleAdminLogin(body, req, res);
+          return;
+        }
+        if (pathname === '/api/admin/logout') {
+          handleAdminLogout(req, res);
+          return;
+        }
+        if (pathname === '/api/qr/image-upload') {
+          handleQrImageUpload(body, res);
+          return;
+        }
+        if (pathname === '/api/qr/push') {
+          handleQrPush(req, body, res);
+          return;
+        }
+
+        // Everything else requires an admin session.
+        if (!requireAdminSession(req, res)) {
+          return;
+        }
+
         switch (pathname) {
           case '/api/push/tesla-dashboard':
             handleTeslaPush('tesla-dashboard', body, res);
@@ -1369,12 +1517,6 @@ function createWebServer({
             return;
           case '/api/input/text':
             handleInputText(req, body, res);
-            return;
-          case '/api/qr/push':
-            handleQrPush(body, res);
-            return;
-          case '/api/qr/image-upload':
-            handleQrImageUpload(body, res);
             return;
           case '/api/auth/tesla/start':
             await handleTeslaAuthStart(res);
@@ -1515,4 +1657,6 @@ module.exports = {
   resolveStaticPath,
   computeWebBasePath,
   checkUrlReachable,
+  isAdminHtmlPath,
+  isAdminLoginPath,
 };

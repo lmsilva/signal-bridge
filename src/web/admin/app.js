@@ -10,19 +10,29 @@
   const STORAGE_TARGET_KEY = 'displayControl.targetId';
   const STORAGE_TOKEN_PREFIX = 'displayControl.token.';
 
-  // Root-absolute paths ("/api/...") ignore <base href>, so strip the leading
-  // slash and let fetch/EventSource resolve against the page mount prefix.
+  // APIs live at the server root (`/api/...`). Root-absolute URLs ignore
+  // <base href="/admin/"> so admin pages can sit under /admin/ safely.
+  // Relative asset URLs (styles, jsqr) still resolve via <base>.
   function appUrl(route) {
     const path = String(route || '');
     if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('//')) {
       return path;
     }
+    if (path.startsWith('/api/') || path.startsWith('/qr-images/')) {
+      return path;
+    }
     return path.replace(/^\//, '');
+  }
+
+  function redirectToAdminLogin() {
+    const next = encodeURIComponent(location.pathname + location.search);
+    location.href = `/admin/login.html?next=${next}`;
   }
 
   async function apiPost(route, body = {}) {
     const response = await fetch(appUrl(route), {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -31,6 +41,10 @@
       data = await response.json();
     } catch {
       data = null;
+    }
+    if (response.status === 401 && data?.code !== 'bad_password') {
+      redirectToAdminLogin();
+      throw new Error(data?.error || 'Admin login required');
     }
     if (!response.ok) {
       const err = new Error(data?.error || `Request failed (${response.status})`);
@@ -42,7 +56,14 @@
   }
 
   async function apiGet(route) {
-    const response = await fetch(appUrl(route), { cache: 'no-store' });
+    const response = await fetch(appUrl(route), {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    if (response.status === 401) {
+      redirectToAdminLogin();
+      throw new Error('Admin login required');
+    }
     if (!response.ok) {
       throw new Error(`Request failed (${response.status})`);
     }
@@ -2168,6 +2189,17 @@
 
     refreshKeyboard();
   })();
+
+  // -------------------------------------------------------------- Admin session
+
+  $('btn-admin-logout')?.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/admin/logout', {});
+    } catch {
+      // still leave the UI even if the network call failed
+    }
+    location.href = '/admin/login.html';
+  });
 
   // -------------------------------------------------------------- Start up
 

@@ -48,6 +48,8 @@ test('https control server serves status over TLS', async () => {
       https: true,
       httpRedirectPort: 0,
       certDir: 'certs',
+      adminPassword: 'tls-test-password',
+      adminSessionHours: 1,
     },
     teslaFleet: {
       enabled: false,
@@ -67,10 +69,36 @@ test('https control server serves status over TLS', async () => {
   const server = await webServer.start();
   try {
     const { port } = server.address();
+    const cookie = await new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: '/api/admin/login',
+          method: 'POST',
+          rejectUnauthorized: false,
+          headers: { 'Content-Type': 'application/json' },
+        },
+        (res) => {
+          let text = '';
+          res.on('data', (chunk) => { text += chunk; });
+          res.on('end', () => {
+            assert.equal(res.statusCode, 200);
+            const setCookie = res.headers['set-cookie'];
+            const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+            resolve(String(raw || '').split(';')[0]);
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(JSON.stringify({ password: 'tls-test-password' }));
+      req.end();
+    });
+
     const body = await new Promise((resolve, reject) => {
       https.get(
         `https://127.0.0.1:${port}/api/status`,
-        { rejectUnauthorized: false },
+        { rejectUnauthorized: false, headers: { Cookie: cookie } },
         (res) => {
           let text = '';
           res.on('data', (chunk) => { text += chunk; });

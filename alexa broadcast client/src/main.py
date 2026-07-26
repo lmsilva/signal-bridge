@@ -44,6 +44,7 @@ class BroadcastClientApp:
             "request.processing",
             "display.auth",
             "qr.display",
+            "guest.photobooth",
             "photo.slideshow",
             "route-planner.query",
         }

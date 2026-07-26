@@ -70,4 +70,9 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         # before it finishes going through all the pictures once.
         return max(requested, 1)
 
+    if payload.get("type") == "guest.photobooth":
+        # Guests need time to scan Wi-Fi then the booth URL — don't clamp
+        # the bridge's longer default (often 180s) down to maxDisplaySeconds.
+        return max(requested, 1)
+
     return min(max(requested, 1), config["maxDisplaySeconds"])

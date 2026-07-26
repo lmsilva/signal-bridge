@@ -794,6 +794,33 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "guest-photobooth":
+        return {
+            "version": 2,
+            "type": "guest.photobooth",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": max(display_seconds, 180),
+            "trigger": "test",
+            "guestPhotobooth": {
+                "title": "Guest Photo Booth",
+                "subtitle": "Two quick scans to share a photo",
+                "wifi": {
+                    "content": "WIFI:T:WPA;S:Home Network;P:letmein123;;",
+                    "ssid": "Home Network",
+                    "stepLabel": "Step 1",
+                    "heading": "Connect to Wi‑Fi",
+                    "hint": "Scan to join our home network",
+                },
+                "booth": {
+                    "content": args.url if args.url != "https://example.com" else "https://192.168.1.10:47810/",
+                    "stepLabel": "Step 2",
+                    "heading": "Open the photo booth",
+                    "hint": "Already connected to home Wi‑Fi? Scan to access the guest photo booth",
+                },
+            },
+        }
+
     if args.type == "music":
         return {
             "version": 2,
@@ -934,7 +961,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "input-text", "photo-slideshow", "music", "route-planner", "route-planner-flight"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "music", "route-planner", "route-planner-flight"],
         default="broadcast",
         help="Payload type to send",
     )

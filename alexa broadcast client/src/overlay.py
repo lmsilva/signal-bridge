@@ -13,6 +13,7 @@ from src.display_panels import (
     IndoorTemperaturePanel,
     MusicPanel,
     ProcessingPanel,
+    GuestPhotoboothPanel,
     QrPanel,
     ShoppingListPanel,
     NotificationsPanel,
@@ -135,6 +136,7 @@ class OverlayWindow:
             "request.processing": ProcessingPanel(self.root, self.shell, self.config),
             "display.auth": AuthPinPanel(self.root, self.shell, self.config),
             "qr.display": QrPanel(self.root, self.shell, self.config),
+            "guest.photobooth": GuestPhotoboothPanel(self.root, self.shell, self.config),
             "photo.slideshow": PhotoSlideshowPanel(self.root, self.shell, self.config),
             "route-planner.query": RoutePlannerPanel(self.root, self.shell, self.config),
         }

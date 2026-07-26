@@ -7,6 +7,7 @@ const { matchesMusicQuery, matchesNowPlayingQuery } = require('./music-info');
 const { matchesRouteQuery } = require('./route-query');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
 const { matchesTeslaDashboardQuery } = require('./tesla-dashboard');
+const { matchesGuestPhotoboothQuery } = require('./guest-photobooth');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
 const {
@@ -118,6 +119,21 @@ function createVoiceQueryParser() {
         query: summary,
         spokenResponse: response || null,
         trigger: 'tesla-battery-query',
+      };
+    }
+
+    if (matchesGuestPhotoboothQuery(summary, response)) {
+      return {
+        kind: 'guest-photobooth',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'guest-photobooth-query',
+        // Always fan out to every known display (party welcome screen).
+        targetId: '*',
       };
     }
 

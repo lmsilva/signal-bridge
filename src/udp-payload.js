@@ -595,6 +595,54 @@ function buildQrDisplayPayload({
   };
 }
 
+/**
+ * Dual-QR guest welcome page: Wi-Fi join + public photo booth URL.
+ * Client renders both codes; bridge only ships content strings.
+ */
+function buildGuestPhotoboothPayload(event, config, settings) {
+  const wifiContent = buildWifiQrContent({
+    ssid: settings?.ssid,
+    password: settings?.password,
+    security: settings?.security,
+    hidden: settings?.hidden,
+  });
+  const boothUrl = String(settings?.boothUrl || '').trim();
+  if (!wifiContent || !boothUrl) {
+    return null;
+  }
+
+  const seconds = Number(settings?.displaySeconds)
+    || Number(config?.guestPhotobooth?.defaultDisplaySeconds)
+    || 180;
+
+  return {
+    version: 2,
+    type: 'guest.photobooth',
+    device: event?.device || 'Signal',
+    timestamp: new Date(event?.timestamp || Date.now()).toISOString(),
+    displaySeconds: Math.max(30, seconds),
+    trigger: event?.trigger || 'guest-photobooth-query',
+    query: event?.query || null,
+    guestPhotobooth: {
+      title: 'Guest Photo Booth',
+      subtitle: 'Two quick scans to share a photo',
+      wifi: {
+        content: wifiContent,
+        ssid: String(settings.ssid || '').trim(),
+        stepLabel: 'Step 1',
+        heading: 'Connect to Wi‑Fi',
+        hint: 'Scan to join our home network',
+      },
+      booth: {
+        content: boothUrl,
+        stepLabel: 'Step 2',
+        heading: 'Open the photo booth',
+        hint: 'Already connected to home Wi‑Fi? Scan to access the guest photo booth',
+      },
+    },
+  };
+}
+
 function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
   const spokenTarget = event.command?.target || null;
   return {
@@ -813,6 +861,7 @@ module.exports = {
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
   buildQrDisplayPayload,
+  buildGuestPhotoboothPayload,
   buildWifiQrContent,
   displaySeconds,
   timerDisplaySeconds,

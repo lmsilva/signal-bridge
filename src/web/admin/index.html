@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Signal Bridge">
+  <title>Signal Bridge</title>
+  <script>
+    // Resolve relative assets/API under the current mount path (e.g. / or /signal/).
+    (function () {
+      var path = location.pathname || '/';
+      if (/\/index\.html$/i.test(path)) {
+        path = path.slice(0, -'index.html'.length);
+      } else if (path.charAt(path.length - 1) !== '/') {
+        path += '/';
+      }
+      if (path.charAt(path.length - 1) !== '/') path += '/';
+      var base = document.createElement('base');
+      base.href = path;
+      document.head.insertBefore(base, document.head.firstChild);
+    })();
+  </script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="styles.css?v=signal13">
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-title">
+      <img class="app-logo" src="/logo.png" width="28" height="28" alt="">
+      Signal Bridge
+    </div>
+    <div class="header-actions">
+      <div class="header-status" id="header-status" title="Signal Bridge status">
+        <span class="pulse" id="bridge-pulse"></span>
+        <span id="bridge-status-text">connecting…</span>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" id="btn-admin-logout" title="Sign out of admin">Log out</button>
+    </div>
+  </header>
+
+  <div class="display-bar" id="display-bar">
+    <label class="display-bar-label" for="display-select">Display</label>
+    <div class="display-bar-row">
+      <select id="display-select" class="display-select" aria-label="Target display">
+        <option value="">Looking for displays…</option>
+      </select>
+      <button type="button" class="btn btn-outline btn-icon" id="btn-display-unlock" title="Unlock remote control with on-screen PIN" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+      </button>
+      <button type="button" class="btn btn-outline btn-icon" id="btn-display-refresh" title="Ask displays to announce">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
+    <p class="display-bar-hint" id="display-bar-hint">Select a display for push and remote control. New displays appear automatically.</p>
+  </div>
+
+  <main class="content" id="content">
+
+    <!-- ============================ PUSH TAB ============================ -->
+    <section class="tab-panel active" id="tab-push">
+      <div class="card-grid">
+
+        <div class="section-label">Tesla</div>
+        <div class="card-row">
+          <button class="push-card" id="btn-tesla-dashboard">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6.5 10.5 9 8l3 3 3.5-3.5L18 10"/></svg>
+            </span>
+            <span class="push-card-title">Tesla Dashboard</span>
+            <span class="push-card-sub">Map, climate, tires &amp; more</span>
+          </button>
+          <button class="push-card" id="btn-tesla-battery">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="17" height="9" rx="2"/><path d="M21.5 10.5v3"/><path d="M6 10.5v3M9.5 10.5v3M13 10.5v3"/></svg>
+            </span>
+            <span class="push-card-title">Tesla Battery</span>
+            <span class="push-card-sub">Charge level &amp; status</span>
+          </button>
+        </div>
+
+        <div class="section-label">Quick Push</div>
+        <div class="card-row card-row-quad">
+          <button class="push-card push-card-photo" id="btn-push-photo-slideshow">
+            <span class="push-icon push-icon-photo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
+            </span>
+            <span class="push-card-title">Shared Photo Slideshow</span>
+            <span class="push-card-sub">Play every saved photo</span>
+          </button>
+          <button class="push-card" id="btn-push-weather">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 12.1 3.5 3.5 0 0 0 7.5 18Z"/></svg>
+            </span>
+            <span class="push-card-title">Weather Forecast</span>
+            <span class="push-card-sub">Current conditions &amp; outlook</span>
+          </button>
+          <button class="push-card" id="btn-push-shopping-list">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h14l-1.5 9h-11z"/><path d="M6 6 5 3H3"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="16.5" cy="19" r="1.5"/></svg>
+            </span>
+            <span class="push-card-title">Shopping List</span>
+            <span class="push-card-sub">Everything on the list now</span>
+          </button>
+          <button class="push-card" id="btn-push-timers">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
+            </span>
+            <span class="push-card-title">Active Timers</span>
+            <span class="push-card-sub">Everything running now</span>
+          </button>
+        </div>
+
+        <div class="push-columns">
+          <div class="push-column">
+            <div class="section-label">Web Browser</div>
+
+            <div class="card" id="browser-active-card" hidden>
+              <div class="active-url-row">
+                <span class="active-dot"></span>
+                <div class="active-url-text">
+                  <div class="active-url-label">Now on display</div>
+                  <div class="active-url" id="active-url">—</div>
+                </div>
+              </div>
+              <button class="btn btn-danger btn-block" id="btn-close-browser">Close Browser</button>
+            </div>
+
+            <div class="card">
+              <label class="field-label" for="url-input">Push a web page</label>
+              <div class="url-row">
+                <input type="url" id="url-input" inputmode="url" autocapitalize="off"
+                       autocomplete="off" autocorrect="off" spellcheck="false"
+                       placeholder="https://…">
+                <button class="btn btn-accent" id="btn-push-url">Push</button>
+              </div>
+              <div class="or-divider"><span>or</span></div>
+              <button class="btn btn-outline btn-block" id="btn-scan-qr">
+                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+                Scan QR Code
+              </button>
+              <input type="file" id="qr-file" accept="image/*" capture="environment" hidden>
+              <p class="hint" id="qr-hint">Point your camera at a QR code (autodarts, karaoke queue, …). Uses the live camera over HTTPS — open this page as <strong>https://</strong> and accept the certificate warning once on your iPhone.</p>
+            </div>
+          </div>
+
+          <div class="push-column">
+            <div class="section-label">QR Code</div>
+            <div class="card">
+              <label class="field-label">Generate a QR code on the display</label>
+              <div class="segmented" id="qr-mode-tabs">
+                <button type="button" class="segmented-btn active" data-qr-mode="image">Photo</button>
+                <button type="button" class="segmented-btn" data-qr-mode="url">URL</button>
+                <button type="button" class="segmented-btn" data-qr-mode="wifi">Wi-Fi</button>
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-image">
+                <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose Photo</button>
+                <input type="file" id="qr-image-file" accept="image/*" hidden>
+                <div class="qr-photo-preview" id="qr-photo-preview" hidden>
+                  <img id="qr-photo-preview-img" alt="Selected photo preview">
+                  <button type="button" class="btn btn-outline btn-icon" id="btn-qr-photo-clear" title="Remove photo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <p class="hint">Uploaded to the bridge and shared via a link in the QR code. Manage or delete saved photos anytime from the Slideshow tab.</p>
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-url" hidden>
+                <input type="url" id="qr-generate-url-input" class="field-input" inputmode="url"
+                       autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+                       placeholder="https://…">
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-wifi" hidden>
+                <input type="text" id="qr-wifi-ssid" class="field-input" placeholder="Network name (SSID)"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <input type="text" id="qr-wifi-password" class="field-input" placeholder="Password"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <label class="check-row">
+                  <input type="checkbox" id="qr-wifi-open">
+                  Open network (no password)
+                </label>
+                <label class="check-row">
+                  <input type="checkbox" id="qr-wifi-hidden">
+                  Hidden network
+                </label>
+              </div>
+
+              <button class="btn btn-accent btn-block" id="btn-qr-generate">Generate &amp; Send</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =========================== REMOTE TAB =========================== -->
+    <section class="tab-panel" id="tab-remote">
+      <div class="control-lock" id="remote-lock" hidden>
+        <p class="control-lock-title">Display locked</p>
+        <p class="control-lock-text">A PIN will appear on the display. Enter it here to unlock power actions.</p>
+        <button type="button" class="btn btn-accent" id="btn-remote-unlock">Show PIN &amp; Unlock</button>
+      </div>
+      <div class="card-grid" id="remote-grid">
+        <div class="section-label">Display PC</div>
+
+        <div class="card">
+          <div class="remote-row">
+            <span class="remote-icon accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </span>
+            <div class="remote-text">
+              <div class="remote-title">Restart</div>
+              <div class="remote-sub">Reboot the display PC</div>
+            </div>
+            <button class="btn btn-outline confirm-btn" id="btn-reboot" data-action="reboot" data-label="Restart">Restart</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="remote-row">
+            <span class="remote-icon danger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+            </span>
+            <div class="remote-text">
+              <div class="remote-title">Power Off</div>
+              <div class="remote-sub">Shut down the display PC</div>
+            </div>
+            <button class="btn btn-outline confirm-btn danger" id="btn-poweroff" data-action="poweroff" data-label="Power Off">Power Off</button>
+          </div>
+        </div>
+
+        <p class="hint">A confirmation tap is required for power actions.</p>
+      </div>
+    </section>
+
+    <!-- ========================== CONTROL TAB ========================== -->
+    <section class="tab-panel" id="tab-control">
+      <div class="control-lock" id="control-lock" hidden>
+        <p class="control-lock-title">Display locked</p>
+        <p class="control-lock-text">A PIN will appear on the display. Enter it here to unlock mouse and keyboard.</p>
+        <button type="button" class="btn btn-accent" id="btn-control-unlock">Show PIN &amp; Unlock</button>
+      </div>
+      <div class="card-grid control-grid" id="control-grid">
+        <div class="section-label">Touchpad</div>
+        <div class="card touchpad-card">
+          <div class="touchpad" id="touchpad" role="application" aria-label="Remote touchpad">
+            <div class="touchpad-glow"></div>
+            <div class="touchpad-label">TOUCHPAD</div>
+            <div class="touchpad-hint">Drag to move cursor · Tap to click · Two-finger tap to right-click · Two-finger slide to scroll</div>
+          </div>
+          <div class="touchpad-actions">
+            <button type="button" class="btn btn-outline" id="btn-mouse-left">Left click</button>
+            <button type="button" class="btn btn-outline" id="btn-mouse-right">Right click</button>
+          </div>
+        </div>
+
+        <div class="section-label">Keyboard</div>
+        <div class="card keyboard-card">
+          <div class="keyboard" id="keyboard"></div>
+          <p class="hint keyboard-hint">Shift applies to the next key only. Caps stays on for letters until you tap it again. Ctrl / Alt / Win stay sticky.</p>
+        </div>
+
+        <div class="section-label">Send Text</div>
+        <div class="card">
+          <label class="field-label" for="text-input-value">Type once, send the whole thing</label>
+          <textarea id="text-input-value" class="field-input text-input-area" rows="2"
+                    autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+                    placeholder="Paste or type a login, password, or URL…"></textarea>
+          <label class="check-row">
+            <input type="checkbox" id="text-input-enter">
+            Press Enter after sending
+          </label>
+          <button class="btn btn-accent btn-block" id="btn-text-input-send">Send Text</button>
+          <p class="hint">Types into whatever field is focused on the display — much faster than tapping the on-screen keyboard one key at a time.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= SLIDESHOW TAB ========================= -->
+    <section class="tab-panel" id="tab-slideshow">
+      <div class="card-grid">
+        <div class="section-label">Camera Roll</div>
+
+        <div class="card slideshow-toolbar-card">
+          <div class="slideshow-toolbar">
+            <button type="button" class="btn btn-outline" id="btn-slideshow-select">Select</button>
+            <div class="slideshow-toolbar-selecting" id="slideshow-toolbar-selecting" hidden>
+              <button type="button" class="btn btn-outline" id="btn-slideshow-select-all">Select All</button>
+              <button type="button" class="btn btn-danger" id="btn-slideshow-delete-selected" disabled>Delete (<span id="slideshow-selected-count">0</span>)</button>
+              <button type="button" class="btn btn-outline" id="btn-slideshow-cancel-select">Cancel</button>
+            </div>
+            <button type="button" class="btn btn-outline btn-icon slideshow-refresh" id="btn-slideshow-refresh" title="Refresh camera roll">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </button>
+          </div>
+          <p class="hint">Photos shared via QR Code → Photo land here and stay until you delete them. The camera roll updates live as photos are added or removed from any device.</p>
+        </div>
+
+        <div class="photo-grid" id="photo-grid"></div>
+        <p class="hint photo-grid-empty" id="photo-grid-empty" hidden>No saved photos yet — share one via QR Code → Photo first.</p>
+      </div>
+    </section>
+
+    <!-- ========================== SETTINGS TAB ========================== -->
+    <section class="tab-panel" id="tab-settings">
+      <div class="card-grid">
+        <div class="section-label">Slideshow</div>
+        <div class="card">
+          <label class="field-label">Playback order</label>
+          <div class="segmented" id="slideshow-order-tabs">
+            <button type="button" class="segmented-btn active" data-order="recent">Newest first</button>
+            <button type="button" class="segmented-btn" data-order="oldest">Oldest first</button>
+            <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
+          </div>
+          <p class="hint">Controls the order photos play in for the Shared Photo Slideshow.</p>
+
+          <label class="field-label field-label-spaced" for="slideshow-seconds-slider">Time per photo</label>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="slideshow-seconds-slider"
+              min="5"
+              max="60"
+              step="1"
+              value="5"
+              aria-valuemin="5"
+              aria-valuemax="60"
+              aria-valuenow="5"
+              aria-label="Seconds per slideshow photo"
+            >
+            <span class="slider-value" id="slideshow-seconds-value">5s</span>
+          </div>
+          <p class="hint">How long each photo stays on screen (5–60 seconds).</p>
+        </div>
+
+        <div class="section-label">Authentication</div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">Amazon Alexa</div>
+            <span class="status-pill" id="alexa-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="alexa-status-detail">Checking session…</p>
+          <button class="btn btn-accent btn-block" id="btn-alexa-auth">Re-authenticate Amazon</button>
+          <div class="auth-followup" id="alexa-auth-followup" hidden>
+            <a class="btn btn-outline btn-block" id="alexa-proxy-link" href="#" target="_blank" rel="noopener">Open Amazon Login</a>
+            <p class="hint">Log in with your Amazon account. When it completes, the bridge restarts itself with the new session (about 30 seconds).</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">Tesla</div>
+            <span class="status-pill" id="tesla-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="tesla-status-detail">Checking session…</p>
+          <button class="btn btn-accent btn-block" id="btn-tesla-auth">Authenticate Tesla</button>
+          <div class="auth-followup" id="tesla-auth-followup" hidden>
+            <a class="btn btn-outline btn-block" id="tesla-auth-link" href="#" target="_blank" rel="noopener">Open Tesla Login</a>
+            <p class="hint" id="tesla-auth-hint">Sign in with your Tesla account. You'll be sent back here automatically when it completes.</p>
+          </div>
+        </div>
+
+        <p class="hint" id="bridge-meta"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="push">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 8v5M9.5 10.5 12 8l2.5 2.5"/></svg>
+      <span>Push</span>
+    </button>
+    <button class="tab-btn" data-tab="remote">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+      <span>Remote</span>
+    </button>
+    <button class="tab-btn" data-tab="control" id="tab-btn-control" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/><circle cx="9" cy="11" r="1.2"/><path d="M14 9.5h3M14 12.5h2"/></svg>
+      <span>Control</span>
+    </button>
+    <button class="tab-btn" data-tab="slideshow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
+      <span>Slideshow</span>
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <!-- Live QR camera scanner -->
+  <div class="sheet-backdrop" id="qr-scanner-sheet" hidden>
+    <div class="sheet sheet-scanner">
+      <div class="sheet-title">Scan QR code</div>
+      <div class="scanner-frame">
+        <video id="qr-video" playsinline muted autoplay></video>
+        <div class="scanner-reticle"></div>
+      </div>
+      <p class="hint" id="qr-scanner-status">Starting camera…</p>
+      <div class="sheet-actions sheet-actions-stack">
+        <button class="btn btn-outline btn-block" id="qr-scanner-photo">Use photo instead</button>
+        <button class="btn btn-outline btn-block" id="qr-scanner-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR confirm sheet -->
+  <div class="sheet-backdrop" id="qr-sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-title">Push this link?</div>
+      <div class="sheet-url" id="qr-sheet-url"></div>
+      <div class="sheet-actions">
+        <button class="btn btn-outline" id="qr-sheet-cancel">Cancel</button>
+        <button class="btn btn-accent" id="qr-sheet-push">Push to Display</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo lightbox -->
+  <div class="sheet-backdrop" id="photo-lightbox" hidden>
+    <div class="sheet sheet-lightbox">
+      <div class="lightbox-frame" id="lightbox-frame">
+        <img class="lightbox-img" id="lightbox-img" alt="Photo preview">
+        <button type="button" class="lightbox-nav lightbox-prev" id="btn-lightbox-prev" aria-label="Previous photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button type="button" class="lightbox-nav lightbox-next" id="btn-lightbox-next" aria-label="Next photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+        <button type="button" class="lightbox-close" id="btn-lightbox-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="lightbox-counter" id="lightbox-counter"></p>
+      <p class="lightbox-uploaded-at" id="lightbox-uploaded-at"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-outline" id="btn-lightbox-cancel">Close</button>
+        <button class="btn btn-danger" id="btn-lightbox-delete">Delete Photo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Photo delete confirm sheet -->
+  <div class="sheet-backdrop" id="photo-delete-sheet" hidden>
+    <div class="sheet sheet-confirm">
+      <div class="sheet-title" id="photo-delete-title">Delete this photo?</div>
+      <p class="sheet-subtext">This cannot be undone.</p>
+      <div class="sheet-actions sheet-actions-confirm">
+        <button class="btn btn-outline" id="photo-delete-cancel">Cancel</button>
+        <button class="btn btn-danger" id="photo-delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Control PIN unlock sheet -->
+  <div class="sheet-backdrop" id="pin-sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-title">Enter display PIN</div>
+      <p class="hint" id="pin-sheet-hint">Look at the display for a 4-digit code.</p>
+      <input id="pin-sheet-input" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="••••" aria-label="PIN code">
+      <p class="pin-sheet-error" id="pin-sheet-error" hidden role="alert"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-outline" id="pin-sheet-cancel">Cancel</button>
+        <button class="btn btn-accent" id="pin-sheet-verify">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="jsqr.min.js"></script>
+  <script>
+    // Fallback: if the vendored copy is missing on the bridge, load from CDN
+    // (the phone has internet even though the bridge page is LAN-hosted).
+    if (typeof jsQR !== 'function') {
+      document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
+    }
+  </script>
+  <script src="app.js?v=signal13"></script>
+</body>
+</html>

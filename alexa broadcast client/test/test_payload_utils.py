@@ -247,6 +247,15 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "qr.display"}), "qr.display")
         self.assertEqual(title_for_display_type("qr.display"), ("Signal", "QR Code"))
 
+    def test_guest_photobooth_is_a_recognized_display_type(self):
+        self.assertIn("guest.photobooth", DISPLAY_TYPES)
+        self.assertTrue(is_display_payload({"type": "guest.photobooth"}))
+        self.assertEqual(resolve_display_type({"type": "guest.photobooth"}), "guest.photobooth")
+        self.assertEqual(
+            title_for_display_type("guest.photobooth"),
+            ("Signal", "Guest Photo Booth"),
+        )
+
     def test_photo_slideshow_is_a_recognized_display_type(self):
         self.assertIn("photo.slideshow", DISPLAY_TYPES)
         self.assertTrue(is_display_payload({"type": "photo.slideshow", "slideshow": {"photos": []}}))

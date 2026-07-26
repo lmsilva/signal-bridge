@@ -137,6 +137,23 @@ function loadConfig() {
 
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);
 
+  // Admin UI password (/admin). Prefer env; optional config.webServer.adminPassword.
+  config.webServer = {
+    ...(config.webServer || {}),
+    adminPassword: process.env.ADMIN_PASSWORD
+      || config.webServer?.adminPassword
+      || '',
+    adminSessionHours: Number(process.env.ADMIN_SESSION_HOURS)
+      || Number(config.webServer?.adminSessionHours)
+      || 12,
+  };
+
+  // Guest Photo Booth dual-QR overlay (Alexa "guest photobooth").
+  // Secrets live in .env; see resolveGuestPhotoboothSettings().
+  config.guestPhotobooth = {
+    ...(config.guestPhotobooth || {}),
+  };
+
   return config;
 }
 

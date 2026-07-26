@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26
+**Last updated:** 2026-07-26 (guest photobooth dual-QR)
 
 ---
 
@@ -61,8 +61,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`) |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
-| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `input.text`, `photo.slideshow`, `route-planner.query`) |
-| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route voice queries from history |
+| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
+| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth voice queries from history |
+| `src/guest-photobooth.js` | Match "guest photobooth" utterances; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
 | `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, mirrors `weather-location.js`) |
 | `src/route-fetch.js` | Free/no-key route data: OSRM driving route (`fetchDrivingRoute`) with great-circle "flight" fallback (`greatCircleEstimate`) when no drivable route exists |
 | `src/music-info.js` | Detect "play \<song\>" commands and "what song is playing" queries (`matchesMusicQuery`/`matchesNowPlayingQuery` — normalizes apostrophe-less ASR like `whats playing`, falls back to spoken now-playing answers when the transcript is empty); fetch/normalize now-playing info (`fetchNowPlaying` retries until Amazon's player-info API reports `PLAYING` + a title); `emptyNowPlaying` for the explicit empty card when retries still find nothing |
@@ -96,7 +97,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-auth.js` | One-shot OAuth (`npm run tesla-auth`, `tesla-auth-pc.bat`) |
 | `src/tesla-register.js` | Partner domain register + `--verify-only` |
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
-| `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (display picker, push Tesla/URL/weather/shopping-list/timers/photo-slideshow, QR code generate + photo upload, Slideshow Manager list/delete + order setting, full-string text input, close browser, reboot/poweroff, mouse/keyboard input, phone auth); self-signed TLS via `web-tls.js` |
+| `src/web-server.js` | **HTTPS web UI**: guest photo booth at `/`, password-gated admin SPA at `/admin/` (`ADMIN_PASSWORD`); JSON API (public: displays + photo upload/push + `/qr-images/*`; admin: status, Tesla/URL/weather/shopping/timers/slideshow, QR URL/Wi‑Fi, Slideshow Manager, remote input, auth); self-signed TLS via `web-tls.js` |
+| `src/web-admin-auth.js` | Admin login sessions (HTTP-only cookie) for `/admin` + protected APIs |
 | `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
 | `src/qr-image-cache.js` | Stores "QR code → embedded photo" uploads under `data/qr-image-cache/` **indefinitely** (no automatic expiry) — serves them back at `/qr-images/<token>.<ext>`; `list()` returns every stored photo newest-first (with its `token`) for the Slideshow Manager tab / Shared Photo Slideshow tile; `delete(token)` removes a photo (file + index entry) on request; `onChange(listener)` fires on every `store()`/`delete()` (with the fresh `list()`) so `GET /api/photos/events` (SSE) can push live camera-roll updates to every open browser tab |
 | `src/slideshow-settings.js` | Persists Shared Photo Slideshow prefs — playback order (`recent` \| `oldest` \| `random`, default `recent`) and seconds per photo (5–60, default 5) — to `data/slideshow-settings.json`, set from the web Settings tab |
@@ -325,6 +327,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `input.pointer` / `input.key` | Control tab — relative mouse / key; requires unlocked `target.id` + `controlToken` |
 | `input.text` | Control tab "Send Text" card — `text.{value, pressEnter}`; client types the whole string in one shot (`pynput` `Controller.type()`, Unicode-safe) instead of one keystroke per key event; requires unlocked `target.id` + `controlToken` |
 | `qr.display` | Push tab QR generator — `qr.{qrType: "url"\|"wifi", content, label}`; client renders the QR bitmap locally (`qrcode` lib) from `content` (a URL, or a `WIFI:T:...;;` string built by `buildWifiQrContent`) |
+| `guest.photobooth` | Alexa "guest photobooth" — dual-QR welcome on **all displays**: `guestPhotobooth.{wifi,booth}` with Wi‑Fi `WIFI:T:…` content (from `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD`) and the public booth URL (`GUEST_PHOTOBOOTH_URL` or `https://<PROXY_OWN_IP>:47810/`); client `GuestPhotoboothPanel` stacks (portrait) or pairs (landscape) the two scan steps |
 | `photo.slideshow` | Push tab "Shared Photo Slideshow" tile — `slideshow.{photos[], secondsPerPhoto}`; `photos` is every photo in the QR image cache as `{url, uploadedAt}` (photos never expire — see `qr-image-cache.js`), ordered by the bridge per the persisted Settings-tab preference (`recent`\|`oldest`\|`random`); `displaySeconds` = `photos.length * secondsPerPhoto` so the whole set gets shown once. Client plays through the list once (does not loop), shows "Photo x of y" + a "Shared …" date label + a small corner QR linking to that photo, and suppresses the usual "Dismisses in…" countdown text (the underlying auto-dismiss timer still fires when the pass completes) — interrupted immediately if any new UDP payload arrives |
 | `route-planner.query` | "How far is Moab from here" / "distance between X and Y" / "how long to drive to X" / "directions to X" — `origin`/`destination` (`{name,latitude,longitude}`), `mode` (`"driving"` \| `"flight"`), `distanceMiles`, `durationMin`, `route.geometry` (simplified `[[lat,lon],...]` polyline, or just the two endpoints for flight mode). Bridge only geocodes both places + calls OSRM (fast, ~1-2 API calls) — map tiles, place facts and weather are fetched **client-side** afterwards so the fast facts show immediately while the rest fills in |
 
@@ -417,7 +420,15 @@ Client tests in `alexa broadcast client/test/test_*.py` — includes `format_lim
 
 ## Control web page (`src/web-server.js` + `src/web/`)
 
-Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`** (config `webServer.{enabled,port,https}`; zero new npm deps — plain `node:https` + auto self-signed cert in `data/web-certs/`, lives under the mounted `./src` volume so no Docker rebuild). Optional HTTP→HTTPS redirect on port **47811**. Tabs: **Push** / **Remote** / **Control** (hidden until a display is selected) / **Slideshow** (camera-roll manager for shared photos) / **Settings**. Trusted-LAN, no page auth; destructive actions need an in-page confirm tap.
+Served by the listener at **`https://<NAS_IP>:47810/`** (config `webServer.{enabled,port,https}`; self-signed TLS in `data/web-certs/`). Optional HTTP→HTTPS redirect on **47811**.
+
+| URL | Who | What |
+|-----|-----|------|
+| `/` | Guests | Photo booth — pick a display (or all), take/choose a photo, push `qr.display` photo mode; upload also saves to the shared photo cache |
+| `/admin/` | Host | Full SPA (Push / Remote / Control / Slideshow / Settings), gated by `ADMIN_PASSWORD` (.env) via login form + HTTP-only session cookie |
+| `/admin/login.html` | Host | Admin password form |
+
+Public APIs: `GET /api/displays` (+ events SSE), `POST /api/qr/image-upload`, `POST /api/qr/push` (**photo mode only**), `GET /qr-images/*`. Everything else requires an admin session. If `ADMIN_PASSWORD` is unset, admin APIs fail closed (503).
 
 **Reverse-proxy subpaths:** the SPA uses a dynamic `<base href>` (from `location.pathname`) plus relative asset/API URLs, so a path-stripping proxy (e.g. public `/signal/` → bridge `/`) works without hardcoding a prefix. Prefer a trailing slash on the public mount URL.
 
@@ -464,6 +475,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Alexa "guest photobooth" dual-QR welcome** — voice phrase `guest photobooth` / `guest photo booth` (via `guest-photobooth.js` + `voice-query-parser`) pushes `guest.photobooth` to **all displays**: Step 1 Wi‑Fi QR from `.env` (`GUEST_WIFI_SSID`/`GUEST_WIFI_PASSWORD`) and Step 2 booth URL QR (`GUEST_PHOTOBOOTH_URL` or `https://<PROXY_OWN_IP>:47810/`). Client `GuestPhotoboothPanel` lays out portrait stack / landscape side-by-side with clear "then" cue. Skips with a warn log when Wi‑Fi/URL aren't configured.
+- 2026-07-26: **Guest photo booth + password-protected `/admin`** — public `/` is a phone photo booth (display picker + camera/upload → photo QR push); the full Signal SPA moved to `/admin/` behind `ADMIN_PASSWORD` (HTTP-only session cookie, login at `/admin/login.html`). Non-photo QR push and all other APIs require admin; photo upload/push + displays + `/qr-images/*` stay public.
 - 2026-07-26: **Slideshow time-per-photo setting** — Settings tab gains a **Time per photo** slider (5–60s) beside Playback order; persisted in `data/slideshow-settings.json` as `secondsPerPhoto` and applied to `photo.slideshow` UDP pushes (`displaySeconds` = count × seconds). `GET`/`POST /api/slideshow/settings` now return/accept both `order` and `secondsPerPhoto`.
 - 2026-07-26: **Route Planner / weather geocode city+state** — Open-Meteo often returns nothing for phrases like "Las Vegas Nevada" / "Saratoga Springs Utah", so voice distance queries aborted silently before UDP. `geocodeLocation` now parses a trailing US state (full name or abbrev), searches the city with `count=10`, and picks the hit whose `admin1` matches (so Utah wins over New York for Saratoga Springs). Placeholder names `Home`/`here`/`local` are never geocoded.
 - Privacy history rewrite: example LAN IP/fleet domain placeholders; portable zip untracked; household dumps/config removed from git history.

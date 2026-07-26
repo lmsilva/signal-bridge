@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Signal Bridge — Admin login</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="styles.css?v=signal14">
+  <style>
+    .login-shell {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+    }
+    .login-card {
+      width: min(100%, 400px);
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 28px 22px 22px;
+    }
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .login-brand img { width: 36px; height: 36px; border-radius: 8px; }
+    .login-brand h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+    .login-card .hint { margin-top: 0; margin-bottom: 18px; }
+    .login-error {
+      color: var(--danger);
+      font-size: 0.85rem;
+      margin: 0 0 12px;
+      min-height: 1.2em;
+    }
+    .login-card .field-input { margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <div class="login-shell">
+    <form class="login-card" id="login-form" autocomplete="on">
+      <div class="login-brand">
+        <img src="/logo.png" width="36" height="36" alt="">
+        <h1>Signal Admin</h1>
+      </div>
+      <p class="hint" id="login-hint">Enter the admin password.</p>
+      <p class="login-error" id="login-error" role="alert"></p>
+      <label class="field-label" for="admin-password">Password</label>
+      <input
+        id="admin-password"
+        class="field-input"
+        type="password"
+        name="password"
+        autocomplete="current-password"
+        required
+        autofocus
+      >
+      <button class="btn btn-accent btn-block" type="submit" id="login-submit">Sign in</button>
+      <p class="hint" style="margin-top:16px;text-align:center;">
+        Guests share photos at <a href="/" style="color:var(--accent)">the photo booth</a>.
+      </p>
+    </form>
+  </div>
+  <script>
+    (() => {
+      const form = document.getElementById('login-form');
+      const input = document.getElementById('admin-password');
+      const errorEl = document.getElementById('login-error');
+      const hintEl = document.getElementById('login-hint');
+      const submit = document.getElementById('login-submit');
+      const params = new URLSearchParams(location.search);
+      const next = params.get('next') || '/admin/';
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.textContent = '';
+        submit.disabled = true;
+        try {
+          const response = await fetch('/api/admin/login', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: input.value }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            if (data.code === 'admin_password_unset') {
+              hintEl.textContent = 'Set ADMIN_PASSWORD in the bridge .env file and restart the container, then try again.';
+            }
+            throw new Error(data.error || 'Login failed');
+          }
+          location.href = next.startsWith('/admin') ? next : '/admin/';
+        } catch (error) {
+          errorEl.textContent = error.message || 'Login failed';
+          input.focus();
+          input.select();
+        } finally {
+          submit.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

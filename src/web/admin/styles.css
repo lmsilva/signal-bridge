@@ -54,11 +54,27 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 8px;
   position: sticky;
   top: 0;
   background: var(--bg);
   z-index: 6;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 /* ---------- Display picker ---------- */

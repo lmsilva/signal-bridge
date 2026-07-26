@@ -41,7 +41,9 @@ const {
   buildRoutePlannerPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
+  buildGuestPhotoboothPayload,
 } = require('./udp-payload');
+const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
 const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
 const { buildTeslaBatteryReading } = require('./tesla-battery');
 const { fetchTeslaBattery, fetchTeslaDashboard, isFleetConfigured, buildErrorReading } = require('./tesla-fleet-client');
@@ -128,6 +130,7 @@ function createListener({ config, log }) {
     vivintAlarmQueries: config.voiceEvents?.vivintAlarmQueries !== false,
     notificationQueries: config.voiceEvents?.notificationQueries !== false,
     routeQueries: config.voiceEvents?.routeQueries !== false,
+    guestPhotoboothQueries: config.voiceEvents?.guestPhotoboothQueries !== false,
   };
 
   function persistBridgeState() {
@@ -370,6 +373,10 @@ function createListener({ config, log }) {
     }
 
     if (event.kind === 'route' && !voiceSettings.routeQueries) {
+      return;
+    }
+
+    if (event.kind === 'guest-photobooth' && !voiceSettings.guestPhotoboothQueries) {
       return;
     }
 
@@ -744,6 +751,24 @@ function createListener({ config, log }) {
       payload = buildRoutePlannerPayload(event, config, {
         origin, destination, route, mode,
       });
+      if (!payload) {
+        return;
+      }
+    } else if (event.kind === 'guest-photobooth') {
+      const settings = resolveGuestPhotoboothSettings(config);
+      if (!settings.configured) {
+        log.warn('Guest photo booth voice query skipped — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL (or PROXY_OWN_IP)', {
+          hasSsid: Boolean(settings.ssid),
+          hasBoothUrl: Boolean(settings.boothUrl),
+          query: event.query,
+        });
+        return;
+      }
+      payload = buildGuestPhotoboothPayload(
+        { ...event, targetId: '*' },
+        config,
+        settings,
+      );
       if (!payload) {
         return;
       }

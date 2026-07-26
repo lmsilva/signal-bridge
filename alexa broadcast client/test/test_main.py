@@ -73,6 +73,11 @@ class MainDisplayRoutingTests(unittest.TestCase):
             app._should_show({"type": "qr.display", "qr": {"qrType": "url", "content": "https://example.com"}})
         )
 
+    def test_guest_photobooth_is_shown(self):
+        self.assertIn("guest.photobooth", BroadcastClientApp.DISPLAY_TYPES)
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        self.assertTrue(app._should_show({"type": "guest.photobooth"}))
+
     def test_photo_slideshow_is_shown(self):
         self.assertIn("photo.slideshow", BroadcastClientApp.DISPLAY_TYPES)
         app = BroadcastClientApp.__new__(BroadcastClientApp)

@@ -15,18 +15,26 @@ const {
 // Plain non-pooled requests: global fetch keeps pooled keep-alive sockets per
 // origin, and Windows can hand a later test server the same ephemeral port a
 // previous server used, making fetch reuse a dead socket (ECONNRESET).
-function request(url, { method = 'GET', body = null } = {}) {
+const TEST_ADMIN_PASSWORD = 'test-admin-secret';
+
+function request(url, { method = 'GET', body = null, cookie = null } = {}) {
   return new Promise((resolve, reject) => {
     const data = body != null ? JSON.stringify(body) : null;
     const isHttps = String(url).startsWith('https:');
     const transport = isHttps ? httpsMod : httpMod;
+    const headers = {};
+    if (data) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(data);
+    }
+    if (cookie) {
+      headers.Cookie = cookie;
+    }
     const req = transport.request(url, {
       method,
       agent: false,
       rejectUnauthorized: false,
-      headers: data
-        ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-        : {},
+      headers,
     }, (res) => {
       let text = '';
       res.on('data', (chunk) => { text += chunk; });
@@ -50,14 +58,19 @@ function request(url, { method = 'GET', body = null } = {}) {
 
 function makeTempWebRoot() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-root-'));
-  fs.writeFileSync(path.join(dir, 'index.html'), '<html><body>control page</body></html>');
-  fs.writeFileSync(path.join(dir, 'app.js'), 'console.log("app");');
+  fs.writeFileSync(path.join(dir, 'index.html'), '<html><body>guest booth</body></html>');
+  fs.writeFileSync(path.join(dir, 'booth.js'), 'console.log("booth");');
+  fs.mkdirSync(path.join(dir, 'admin'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'admin', 'index.html'), '<html><body>admin</body></html>');
+  fs.writeFileSync(path.join(dir, 'admin', 'login.html'), '<html><body>login</body></html>');
+  fs.writeFileSync(path.join(dir, 'admin', 'app.js'), 'console.log("app");');
+  fs.writeFileSync(path.join(dir, 'admin', 'styles.css'), 'body{}');
   return dir;
 }
 
 function makeConfig(overrides = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-data-'));
-  return {
+  const base = {
     ROOT: dataDir,
     sessionPath: path.join(dataDir, 'alexa-session.json'),
     proxyPort: 3456,
@@ -71,14 +84,41 @@ function makeConfig(overrides = {}) {
       certDir: 'certs',
       // Existing route tests disable PIN unlock; dedicated tests cover controlAuth.
       controlAuth: { enabled: false },
+      adminPassword: TEST_ADMIN_PASSWORD,
+      adminSessionHours: 12,
     },
     teslaFleet: {
       enabled: false,
       sessionPath: path.join(dataDir, 'tesla-session.json'),
       authStatusPath: path.join(dataDir, 'tesla-auth-status.json'),
     },
-    ...overrides,
   };
+  const merged = {
+    ...base,
+    ...overrides,
+    webServer: {
+      ...base.webServer,
+      ...(overrides.webServer || {}),
+    },
+    teslaFleet: {
+      ...base.teslaFleet,
+      ...(overrides.teslaFleet || {}),
+    },
+  };
+  return merged;
+}
+
+async function loginAdmin(base, password = TEST_ADMIN_PASSWORD) {
+  const res = await request(`${base}/api/admin/login`, {
+    method: 'POST',
+    body: { password },
+  });
+  if (res.status !== 200) {
+    throw new Error(`admin login failed: ${res.status} ${res.text}`);
+  }
+  const setCookie = res.headers['set-cookie'];
+  const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+  return String(raw || '').split(';')[0];
 }
 
 const silentLog = {
@@ -92,8 +132,9 @@ async function startTestServer(options = {}) {
   const sent = [];
   const recorded = [];
   const timerPolls = [];
+  const config = options.config || makeConfig();
   const webServer = createWebServer({
-    config: options.config || makeConfig(),
+    config,
     log: silentLog,
     sendUdpPayload: (payload) => sent.push(payload),
     recordVoiceEvent: options.recordVoiceEvent
@@ -108,11 +149,34 @@ async function startTestServer(options = {}) {
   const server = await webServer.start();
   const { port } = server.address();
   const base = `http://127.0.0.1:${port}`;
-  return { webServer, server, base, sent, recorded, timerPolls };
+  let cookie = null;
+  if (options.autoLogin !== false && config.webServer?.adminPassword) {
+    cookie = await loginAdmin(base, config.webServer.adminPassword);
+  }
+  // Remember cookie for postJson(base, ...) calls in this test's server.
+  baseCookies.set(base, cookie);
+  return {
+    webServer,
+    server,
+    base,
+    sent,
+    recorded,
+    timerPolls,
+    cookie,
+  };
 }
 
-function postJson(base, route, body = {}) {
-  return request(`${base}${route}`, { method: 'POST', body });
+/** base URL → admin session cookie from the matching startTestServer() */
+const baseCookies = new Map();
+
+function postJson(base, route, body = {}, cookie) {
+  const auth = cookie !== undefined ? cookie : baseCookies.get(base);
+  return request(`${base}${route}`, { method: 'POST', body, cookie: auth || null });
+}
+
+function getJson(base, route, cookie) {
+  const auth = cookie !== undefined ? cookie : baseCookies.get(base);
+  return request(`${base}${route}`, { cookie: auth || null });
 }
 
 test('validatePushUrl accepts http/https and rejects everything else', () => {
@@ -130,6 +194,8 @@ test('resolveStaticPath blocks path traversal', () => {
   assert.equal(resolveStaticPath(root, '/%2e%2e/%2e%2e/etc/passwd'), null);
   assert.equal(resolveStaticPath(root, '/index.html'), path.join(root, 'index.html'));
   assert.equal(resolveStaticPath(root, '/'), path.join(root, 'index.html'));
+  assert.equal(resolveStaticPath(root, '/admin'), path.join(root, 'admin', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/admin/login'), path.join(root, 'admin', 'login.html'));
 });
 
 test('computeWebBasePath preserves reverse-proxy mount directories', () => {
@@ -142,26 +208,27 @@ test('computeWebBasePath preserves reverse-proxy mount directories', () => {
 });
 
 test('control page HTML uses relative asset URLs for subpath proxies', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /createElement\('base'\)/);
   assert.match(html, /href="styles\.css/);
   assert.match(html, /src="app\.js/);
-  assert.match(html, /src="logo\.png"/);
-  assert.match(html, /href="favicon\.svg"/);
+  assert.match(html, /src="\/logo.png"/);
+  assert.match(html, /href="\/favicon.svg"/);
   assert.doesNotMatch(html, /href="\/styles\.css/);
   assert.doesNotMatch(html, /src="\/app\.js/);
-  assert.doesNotMatch(html, /src="\/logo\.png"/);
 });
 
-test('control page JS resolves API routes against the document base', () => {
-  const js = fs.readFileSync(path.join(__dirname, '../src/web/app.js'), 'utf8');
+test('control page JS keeps /api routes root-absolute under /admin/', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   assert.match(js, /function appUrl\(/);
+  assert.match(js, /path\.startsWith\('\/api\/'\)/);
   assert.match(js, /EventSource\(appUrl\(/);
   assert.match(js, /fetch\(appUrl\(/);
+  assert.match(js, /credentials:\s*'same-origin'/);
 });
 
 test('control page has a QR generator card with url/wifi/photo modes, ordered Photo | URL | Wi-Fi', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="qr-mode-tabs"/);
   assert.match(html, /data-qr-mode="url"/);
   assert.match(html, /data-qr-mode="wifi"/);
@@ -177,7 +244,7 @@ test('control page has a QR generator card with url/wifi/photo modes, ordered Ph
 });
 
 test('control page has a Slideshow Manager tab with a camera roll grid and delete flow', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /data-tab="slideshow"/);
   assert.match(html, /id="tab-slideshow"/);
   assert.match(html, /id="photo-grid"/);
@@ -197,7 +264,7 @@ test('control page has a Slideshow Manager tab with a camera roll grid and delet
 });
 
 test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload', () => {
-  const js = fs.readFileSync(path.join(__dirname, '../src/web/app.js'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   assert.match(js, /apiPost\('\/api\/qr\/push'/);
   assert.match(js, /apiPost\('\/api\/qr\/image-upload'/);
   // Photo mode resolves the uploaded relative path against the page's own
@@ -206,7 +273,7 @@ test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload'
 });
 
 test('Web Browser and QR Code sections share a .push-columns wrapper for wide-screen side-by-side layout', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const wrapperMatch = html.match(/<div class="push-columns">([\s\S]*?)<\/section>/);
   assert.ok(wrapperMatch, 'expected a .push-columns wrapper inside the Push tab');
   const wrapper = wrapperMatch[1];
@@ -215,14 +282,14 @@ test('Web Browser and QR Code sections share a .push-columns wrapper for wide-sc
   assert.ok(webBrowserIndex >= 0 && qrCodeIndex >= 0 && webBrowserIndex < qrCodeIndex);
   assert.match(wrapper, /class="push-column"/);
 
-  const css = fs.readFileSync(path.join(__dirname, '../src/web/styles.css'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
   assert.match(css, /\.push-columns\s*\{/);
   // Row layout must be gated behind a min-width query, not applied unconditionally.
   assert.match(css, /@media \(min-width: \d+px\)\s*\{[\s\S]*?\.push-columns\s*\{\s*flex-direction:\s*row/);
 });
 
 test('control-lock card has top spacing so it does not crowd the sticky display bar', () => {
-  const css = fs.readFileSync(path.join(__dirname, '../src/web/styles.css'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
   const match = css.match(/\.control-lock\s*\{([^}]*)\}/);
   assert.ok(match, 'expected a .control-lock rule');
   const margin = /margin:\s*(\d+)px/.exec(match[1]);
@@ -230,16 +297,20 @@ test('control-lock card has top spacing so it does not crowd the sticky display 
   assert.ok(Number(margin[1]) >= 20, 'expected at least 20px of breathing room above the lock card');
 });
 
-test('serves the control page and static assets', async () => {
+test('serves the guest booth and admin static assets', async () => {
   const { webServer, base } = await startTestServer();
   try {
     const index = await request(base + '/');
     assert.equal(index.status, 200);
-    assert.match(index.text, /control page/);
+    assert.match(index.text, /guest booth/);
 
-    const js = await request(base + '/app.js');
-    assert.equal(js.status, 200);
-    assert.match(js.headers['content-type'], /javascript/);
+    const boothJs = await request(base + '/booth.js');
+    assert.equal(boothJs.status, 200);
+    assert.match(boothJs.headers['content-type'], /javascript/);
+
+    const adminJs = await request(base + '/admin/app.js');
+    assert.equal(adminJs.status, 200);
+    assert.match(adminJs.headers['content-type'], /javascript/);
 
     const missing = await request(base + '/nope.css');
     assert.equal(missing.status, 404);
@@ -248,17 +319,22 @@ test('serves the control page and static assets', async () => {
   }
 });
 
-test('serves real SPA shell with cache-busted relative assets', async () => {
+test('serves real guest booth and admin SPA with cache-busted assets', async () => {
   const realWebRoot = path.join(__dirname, '../src/web');
-  const { webServer, base } = await startTestServer({ webRoot: realWebRoot });
+  const { webServer, base, cookie } = await startTestServer({ webRoot: realWebRoot });
   try {
-    const index = await request(base + '/');
-    assert.equal(index.status, 200);
-    assert.match(index.text, /href="styles\.css\?v=\d+(?:\.\d+)?"/);
-    assert.match(index.text, /src="app\.js\?v=\d+(?:\.\d+)?"/);
-    assert.doesNotMatch(index.text, /href="\/styles\.css/);
+    const booth = await request(base + '/');
+    assert.equal(booth.status, 200);
+    assert.match(booth.text, /href="booth\.css\?v=\d+(?:\.\d+)?"/);
+    assert.match(booth.text, /src="booth\.js\?v=\d+(?:\.\d+)?"/);
 
-    const css = await request(base + '/styles.css');
+    const admin = await request(base + '/admin/', { cookie });
+    assert.equal(admin.status, 200);
+    assert.match(admin.text, /href="styles\.css\?v=\d+(?:\.\d+)?"/);
+    assert.match(admin.text, /src="app\.js\?v=\d+(?:\.\d+)?"/);
+    assert.doesNotMatch(admin.text, /href="\/styles\.css/);
+
+    const css = await request(base + '/admin/styles.css');
     assert.equal(css.status, 200);
     assert.match(css.headers['content-type'], /css/);
   } finally {
@@ -301,14 +377,14 @@ test('url push sends web.open payload and tracks browser state', async () => {
     assert.equal(sent[0].persistent, true);
     assert.equal(sent[0].web.url, 'http://127.0.0.1:1/board');
 
-    const status = (await request(base + '/api/status')).body;
+    const status = (await getJson(base, '/api/status')).body;
     assert.equal(status.web.activeUrl, 'http://127.0.0.1:1/board');
 
     const close = await postJson(base, '/api/push/close-browser');
     assert.equal(close.status, 200);
     assert.equal(sent[1].type, 'web.close');
 
-    const statusAfter = (await request(base + '/api/status')).body;
+    const statusAfter = (await getJson(base, '/api/status')).body;
     assert.equal(statusAfter.web.activeUrl, null);
   } finally {
     webServer.stop();
@@ -346,7 +422,7 @@ test('system endpoints send reboot and poweroff commands', async () => {
 test('status reports alexa and tesla auth state', async () => {
   const { webServer, base } = await startTestServer();
   try {
-    const status = (await request(base + '/api/status')).body;
+    const status = (await getJson(base, '/api/status')).body;
     assert.equal(status.ok, true);
     assert.equal(status.alexa.status, 'ok');
     assert.equal(status.tesla.configured, false);
@@ -439,7 +515,7 @@ test('tesla phone oauth flow exchanges callback code and saves session', async (
     assert.equal(session.accessToken, 'test-access');
     assert.equal(session.refreshToken, 'test-refresh');
 
-    const status = (await request(base + '/api/status')).body;
+    const status = (await getJson(base, '/api/status')).body;
     assert.equal(status.tesla.auth.status, 'success');
     assert.equal(status.tesla.auth.running, false);
   } finally {
@@ -508,7 +584,7 @@ test('tesla callback rejects state mismatch', async () => {
     assert.equal(callback.status, 400);
     assert.match(callback.text, /State mismatch/);
 
-    const status = (await request(base + '/api/status')).body;
+    const status = (await getJson(base, '/api/status')).body;
     assert.equal(status.tesla.auth.status, 'error');
   } finally {
     webServer.stop();
@@ -624,7 +700,7 @@ test('displays list and discover endpoints', async () => {
     },
   });
   try {
-    const list = await request(base + '/api/displays');
+    const list = await getJson(base, '/api/displays');
     assert.equal(list.status, 200);
     assert.equal(list.body.displays.length, 2);
 
@@ -886,6 +962,8 @@ test('timers quick-push tile 503s when the timer sync hook is not wired up', asy
   const { port } = server.address();
   const base = `http://127.0.0.1:${port}`;
   try {
+    const cookie = await loginAdmin(base);
+    baseCookies.set(base, cookie);
     const push = await postJson(base, '/api/push/timers');
     assert.equal(push.status, 503);
     assert.equal(push.body.ok, false);
@@ -939,7 +1017,7 @@ test('photo slideshow lists shared photos and pushes a photo.slideshow payload',
   const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
   const { webServer, base, sent } = await startTestServer({ config });
   try {
-    const empty = await request(base + '/api/photos');
+    const empty = await getJson(base, '/api/photos');
     assert.equal(empty.status, 200);
     assert.deepEqual(empty.body.photos, []);
 
@@ -949,7 +1027,7 @@ test('photo slideshow lists shared photos and pushes a photo.slideshow payload',
     await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
     await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
 
-    const listed = await request(base + '/api/photos');
+    const listed = await getJson(base, '/api/photos');
     assert.equal(listed.status, 200);
     assert.equal(listed.body.photos.length, 2);
     assert.match(listed.body.photos[0].path, /^\/qr-images\/[0-9a-f]{32}\.png$/);
@@ -985,7 +1063,7 @@ test('photo delete removes one or more photos from the cache and slideshow', asy
     assert.equal(single.status, 200);
     assert.deepEqual(single.body.deleted, [first.body.token]);
 
-    const afterSingle = await request(base + '/api/photos');
+    const afterSingle = await getJson(base, '/api/photos');
     assert.equal(afterSingle.body.photos.length, 1);
 
     const bulk = await postJson(base, '/api/photos/delete', {
@@ -995,7 +1073,7 @@ test('photo delete removes one or more photos from the cache and slideshow', asy
     assert.deepEqual(bulk.body.deleted, [second.body.token]);
     assert.deepEqual(bulk.body.failed, ['not-a-real-token']);
 
-    const afterBulk = await request(base + '/api/photos');
+    const afterBulk = await getJson(base, '/api/photos');
     assert.deepEqual(afterBulk.body.photos, []);
 
     const gone = await request(base + first.body.path);
@@ -1008,13 +1086,16 @@ test('photo delete removes one or more photos from the cache and slideshow', asy
 test('photo events SSE pushes hello then live updates on upload/delete', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-photo-events-'));
   const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache' } });
-  const { webServer, base } = await startTestServer({ config });
+  const { webServer, base, cookie } = await startTestServer({ config });
   try {
     const events = await new Promise((resolve, reject) => {
       const url = new URL(base + '/api/photos/events');
       const lib = url.protocol === 'https:' ? require('https') : require('http');
       const chunks = [];
-      const req = lib.get(url, { rejectUnauthorized: false }, (res) => {
+      const req = lib.get(url, {
+        rejectUnauthorized: false,
+        headers: cookie ? { Cookie: cookie } : {},
+      }, (res) => {
         assert.equal(res.statusCode, 200);
         res.on('data', (c) => chunks.push(c.toString('utf8')));
         setTimeout(async () => {
@@ -1051,7 +1132,7 @@ test('slideshow order setting persists and validates the requested value', async
   const config = makeConfig({ ROOT: dataDir });
   const { webServer, base } = await startTestServer({ config });
   try {
-    const initial = await request(base + '/api/slideshow/settings');
+    const initial = await getJson(base, '/api/slideshow/settings');
     assert.equal(initial.status, 200);
     assert.equal(initial.body.order, 'recent');
     assert.equal(initial.body.secondsPerPhoto, 5);
@@ -1066,7 +1147,7 @@ test('slideshow order setting persists and validates the requested value', async
     assert.equal(update.body.order, 'oldest');
     assert.equal(update.body.secondsPerPhoto, 5);
 
-    const after = await request(base + '/api/slideshow/settings');
+    const after = await getJson(base, '/api/slideshow/settings');
     assert.equal(after.body.order, 'oldest');
   } finally {
     webServer.stop();
@@ -1083,7 +1164,7 @@ test('slideshow seconds-per-photo setting persists and clamps to 5–60', async 
     assert.equal(update.body.secondsPerPhoto, 18);
     assert.equal(update.body.order, 'recent');
 
-    const after = await request(base + '/api/slideshow/settings');
+    const after = await getJson(base, '/api/slideshow/settings');
     assert.equal(after.body.secondsPerPhoto, 18);
 
     const clampedHigh = await postJson(base, '/api/slideshow/settings', { secondsPerPhoto: 99 });
@@ -1161,4 +1242,86 @@ test('web server can be disabled via config', async () => {
   });
   const server = await webServer.start();
   assert.equal(server, null);
+});
+
+test('guest booth is served at / and admin shell redirects without a session', async () => {
+  const realWebRoot = path.join(__dirname, '../src/web');
+  const { webServer, base } = await startTestServer({
+    webRoot: realWebRoot,
+    autoLogin: false,
+  });
+  try {
+    const booth = await request(`${base}/`);
+    assert.equal(booth.status, 200);
+    assert.match(booth.text, /Share a photo/i);
+    assert.match(booth.text, /booth\.js/);
+
+    const admin = await request(`${base}/admin/`);
+    assert.equal(admin.status, 302);
+    assert.match(String(admin.headers.location || ''), /\/admin\/login/);
+
+    const login = await request(`${base}/admin/login.html`);
+    assert.equal(login.status, 200);
+    assert.match(login.text, /Sign in/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('admin login cookie unlocks protected APIs; guests can still push photos', async () => {
+  const { webServer, base, sent } = await startTestServer({ autoLogin: false });
+  try {
+    const denied = await request(`${base}/api/status`);
+    assert.equal(denied.status, 401);
+
+    const badLogin = await postJson(base, '/api/admin/login', { password: 'wrong' }, null);
+    assert.equal(badLogin.status, 401);
+
+    const cookie = await loginAdmin(base);
+    const status = await request(`${base}/api/status`, { cookie });
+    assert.equal(status.status, 200);
+    assert.equal(status.body.ok, true);
+
+    // Photo push stays public (no admin cookie).
+    const push = await postJson(base, '/api/qr/push', {
+      mode: 'photo',
+      url: 'https://example.com/party.jpg',
+    }, null);
+    assert.equal(push.status, 200);
+    assert.equal(sent.at(-1)?.qr?.qrType, 'photo');
+
+    // URL QR requires admin.
+    const urlDenied = await postJson(base, '/api/qr/push', {
+      mode: 'url',
+      url: 'https://example.com',
+    }, null);
+    assert.equal(urlDenied.status, 401);
+
+    const urlOk = await postJson(base, '/api/qr/push', {
+      mode: 'url',
+      url: 'https://example.com',
+    }, cookie);
+    assert.equal(urlOk.status, 200);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('guest booth HTML/JS exist at the web root', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/booth.js'), 'utf8');
+  assert.match(html, /id="display-select"/);
+  assert.match(html, /id="btn-send"/);
+  assert.match(html, /booth\.js/);
+  assert.match(js, /\/api\/qr\/image-upload/);
+  assert.match(js, /mode:\s*'photo'/);
+  // Same friendly label fields as the admin picker (not displayName / raw id).
+  assert.match(js, /display\.label\s*\|\|\s*display\.name/);
+});
+
+test('admin login page and logout control exist', () => {
+  const login = fs.readFileSync(path.join(__dirname, '../src/web/admin/login.html'), 'utf8');
+  const admin = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  assert.match(login, /\/api\/admin\/login/);
+  assert.match(admin, /id="btn-admin-logout"/);
 });

@@ -15,7 +15,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | Area | What you get |
 |------|----------------|
 | **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
-| **Signal (control UI)** | Phone/tablet UI at `https://<NAS_IP>:47810/` — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth |
+| **Signal (web UI)** | Guest photo booth at `https://<NAS_IP>:47810/` — party guests share photos to a display. Full admin UI at `https://<NAS_IP>:47810/admin/` (password from `ADMIN_PASSWORD` in `.env`) — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth, Slideshow Manager |
 | **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); Signal lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
 | **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 4-digit PIN appears on that screen; enter it on the phone to unlock for ~1 hour |
@@ -79,20 +79,30 @@ On startup, the bridge rebuilds broadcast dedup fingerprints from **`data/voice-
 
 ---
 
-## Signal (control UI)
+## Signal (web UI)
 
-Open **`https://<NAS_IP>:47810/`** on your phone (accept the self-signed certificate once). Optional HTTP redirect: `:47811` → HTTPS.
+Accept the self-signed certificate once. Optional HTTP redirect: `:47811` → HTTPS.
+
+| URL | Who | What |
+|-----|-----|------|
+| `https://<NAS_IP>:47810/` | Guests | Photo booth — pick a display and share a photo (saved to the party slideshow) |
+| `https://<NAS_IP>:47810/admin/` | Host | Full control UI (password from `ADMIN_PASSWORD` in `.env`) |
+
+**Alexa “guest photobooth”:** say *Alexa, guest photobooth* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/`).
+
+Admin tabs after login:
 
 | Tab | Actions |
 |-----|---------|
-| **Push** | Tesla dashboard / battery, open URL (type or scan QR), close browser |
+| **Push** | Tesla dashboard / battery, open URL (type or scan QR), close browser, Shared Photo Slideshow |
 | **Remote** | Reboot / power off the selected display PC |
 | **Control** | Touchpad + on-screen keyboard (single display only) |
-| **Settings** | Re-authenticate Amazon Alexa / Tesla Fleet |
+| **Slideshow** | Manage shared photos |
+| **Settings** | Slideshow order/timing, re-authenticate Amazon Alexa / Tesla Fleet |
 
-**Display picker** (sticky at the top): lists clients that have announced. Default is the first display; **All Displays** is last. Refresh asks every client to re-announce. New displays appear without reloading the page.
+**Display picker** (admin, sticky at the top): lists clients that have announced. Default is the first display; **All Displays** is last. Refresh asks every client to re-announce. New displays appear without reloading the page.
 
-**Requirements:** Bridge `webServer.enabled` (default on), Docker `network_mode: host`, and at least one display client with `bridgeHosts` pointing at the NAS (see [Display discovery](#display-discovery)).
+**Requirements:** Bridge `webServer.enabled` (default on), `ADMIN_PASSWORD` set for `/admin`, Docker `network_mode: host`, and at least one display client with `bridgeHosts` pointing at the NAS (see [Display discovery](#display-discovery)).
 
 iPhone camera QR needs HTTPS + accepting the cert. Put your NAS LAN IP in `webServer.certHosts` (or `PROXY_OWN_IP`) before the first cert is generated, or delete `data/web-certs/` and restart after updating hosts.
 
