@@ -351,6 +351,7 @@ If auth breaks after an Amazon change, run `npm run auth` (or `./reauth.sh` on t
 
 - Uses the unofficial [`alexa-remote2`](https://www.npmjs.com/package/alexa-remote2) library (same approach as Home Assistant / Node-RED integrations).
 - Announcements sent **only** from the Alexa app may not always appear in voice history.
+- Routines **Run from the Alexa app** (pick a device) are best-effort: the bridge has no Amazon “routine executed” webhook. Capture uses richer history fields, more push poll hints, and your automation catalog (`getAutomationRoutines`). If a Run still does nothing, check `data/unmatched-activities.jsonl` after the attempt.
 - Generic "what's the temperature" routes to **outdoor weather**; location-specific phrases ("top floor", "bedroom echo") route to **indoor temperature**.
 - Indoor locations, air monitor names, and device aliases can be customized in `config.json` — see `src/PROJECT.md`.
 - The Signal UI is intended for a **trusted LAN** (no login gate on the page itself).

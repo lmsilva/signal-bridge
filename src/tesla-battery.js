@@ -4,6 +4,8 @@ const YOUR_BATTERY_RE = /\b(?:your|the)\s+battery\s+is\s+(?:at\s+)?(\d{1,3})\s*(
 const BATTERY_PERCENT_RE = /\b(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])/i;
 const BATTERY_LEVEL_RE = /\bbattery(?:\s+level)?\s+(?:is\s+)?(?:at\s+)?(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])/i;
 const BATTERY_CHARGED_RE = /\b(?:charged|charging|level)\s+(?:to\s+)?(?:at\s+)?(\d{1,3})\s*(?:%|percent)(?:\b|$|[.!,])/i;
+// App-launched Tesla routines often speak only this (no customer transcript).
+const SENT_TO_DISPLAY_RE = /\bsent\s+to\s+(?:your\s+)?display\b/i;
 
 function normalizeText(value) {
   return String(value || '')
@@ -24,7 +26,7 @@ function matchesTeslaBatteryQuery(summary, response) {
   const text = normalizeText(summary);
   const spoken = normalizeText(response);
 
-  if (TESLA_BATTERY_QUERY_RE.test(text)) {
+  if (TESLA_BATTERY_QUERY_RE.test(text) || TESLA_BATTERY_QUERY_RE.test(spoken)) {
     return true;
   }
 
@@ -32,8 +34,23 @@ function matchesTeslaBatteryQuery(summary, response) {
     return true;
   }
 
+  if (/\btesla\b/i.test(spoken) && /\bbattery\b/i.test(spoken)) {
+    return true;
+  }
+
   if (/\btesla\b/i.test(spoken) && BATTERY_PERCENT_RE.test(spoken)) {
-    return TESLA_BATTERY_QUERY_RE.test(text) || /\btesla\s+battery\b/i.test(text);
+    return true;
+  }
+
+  // Empty summary + spoken percent (app/TextClient often omits the utterance).
+  if (!text && BATTERY_PERCENT_RE.test(spoken) && /\bbattery\b/i.test(spoken)) {
+    return true;
+  }
+
+  // Bare "Sent to Display" is resolved by routine-index (battery vs dashboard).
+  // Only claim it here when the surrounding text clearly mentions battery.
+  if (SENT_TO_DISPLAY_RE.test(spoken) && /\bbattery\b/i.test(`${text} ${spoken}`)) {
+    return true;
   }
 
   return false;

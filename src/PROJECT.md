@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam key precedence + manual preview)
+**Last updated:** 2026-07-26 (Steam presence-led launch)
 
 ---
 
@@ -61,6 +61,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set |
 | `src/lan-crypto.js` | Shared-secret **AES-256-GCM** for bridge↔display UDP (`LAN_UDP_SECRET` / `udpBroadcast.sharedSecret`); protocol v3 envelope `{v,alg,n,c}`; SHA-256 key derive; stamps `sentAt` at seal; ±120s freshness on `sentAt` (not Alexa activity `timestamp`) |
 | `src/steam-*.js` | Steam Now Playing: config/session/OpenID auth, Web API + store appdetails, presence allowlist, poller with interrupt-suppress, UDP builders |
+| `src/activity-fields.js` | Harvest summary/response/allText from all `voiceHistoryRecordItems` types (app routines often skip ASR) |
+| `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
+| `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
 | `tools/steam-presence-reporter/` | Windows heartbeat script — posts hostname + RunningAppID to `POST /api/steam/presence` |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
@@ -130,7 +133,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 
 ## Tesla Fleet API (battery)
 
-**Voice trigger:** custom routine **"Alexa, show Tesla battery"** (Alexa may reply "Sent to Display"). Bridge matches on **user utterance** (`tesla-battery.js`), not Alexa speech. Optional `my` / `the` still match.
+**Voice trigger:** custom routine **"Alexa, show Tesla battery"** (Alexa may reply "Sent to Display"). Matches utterance text and battery-flavored speech; bare app-run “Sent to Display” is resolved via `routine-index` (battery vs dashboard). Optional `my` / `the` still match.
 
 **Dashboard trigger:** **"Alexa, show Tesla dashboard"** → `tesla-dashboard.query` with full Fleet `vehicle_data` (map, security, battery, climate, TPMS, software, media). Requires Fleet API credentials (no speech fallback).
 
@@ -488,6 +491,9 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Steam Now Playing launch snappiness** — presence heartbeat triggers an immediate tick (not wait for poll); trust theater-PC `RunningAppID` when Steam `gameid` lags; default poll 15s. Larger NOW PLAYING / LAST PLAYED badge on client. Deploy: `./recreate.sh` + presence reporter on the gaming PC + portable client rebuild for badge.
+- 2026-07-26: **App-launched Alexa Routines** — best-effort capture when Run-from-app leaves no ASR transcript: harvest all history item types (`activity-fields`), poll on `ws-notification-change` + raw `command`, map automations via `getAutomationRoutines` (`routine-index`), resolve bare “Sent to Display”, sample misses to `data/unmatched-activities.jsonl`. Deploy: `./recreate.sh`.
+- 2026-07-26: **Slideshow camera-roll thumbs** — opening the tab no longer races `GET /api/photos` against SSE `hello` (identical lists skip re-render so in-flight `<img>` fetches aren't aborted); thumbs load eagerly with a one-shot cache-bust retry. Deploy: refresh admin UI / `./recreate.sh` if static files aren't volume-mounted.
 - 2026-07-26: **Steam auth test push + key precedence** — `.env` `STEAM_API_KEY` always wins; admin Save key only writes `data/steam-session.json` (blocked with 409 when `.env` is set). Auth card **Test: push Now Playing** → `POST /api/push/steam-now-playing` (skips presence allowlist; last-played fallback, dismissible). Deploy: `./recreate.sh` + portable client rebuild for last-played chrome.
 - 2026-07-26: **Steam Now Playing** — poller + OpenID/API-key auth card; presence reporter allowlist (default `MOVIETHEATERPC`); persistent `steam.now-playing` overlay suppressed on other Alexa/display pushes until a new Steam session. Deploy: set `STEAM_API_KEY`, link Steam in admin, install `tools/steam-presence-reporter` on the theater PC, `./recreate.sh` + portable client rebuild.
 - 2026-07-26: **Quick Push second row** — admin Push tab adds **Guest Snaps**, **Indoor Air Quality**, **Indoor Temperature**, and **Show Alarms** (8 tiles / two rows of four). APIs: existing `POST /api/push/guest-photobooth` plus `air-quality`, `indoor-temperature`, `alarms` (`requestAlarmPoll` → `show-alarms`). Deploy: bridge `./recreate.sh` (static admin UI is volume-mounted).

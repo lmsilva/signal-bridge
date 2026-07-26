@@ -18,6 +18,7 @@ const {
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
 } = require('./broadcast-parse');
+const { extractActivityFields } = require('./activity-fields');
 
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -192,10 +193,11 @@ class BroadcastParser {
       return null;
     }
 
-    const summary = normalizeText(activity?.description?.summary);
-    const response = normalizeText(activity?.alexaResponse);
+    const fields = extractActivityFields(activity);
+    const summary = fields.summary || fields.allText;
+    const response = fields.response;
     const device = getDeviceName(activity);
-    const utteranceType = activity?.data?.utteranceType;
+    const utteranceType = fields.utteranceType || activity?.data?.utteranceType;
 
     if (!summary && !response) {
       return null;

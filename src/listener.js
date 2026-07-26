@@ -5,6 +5,9 @@ const { buildAlexaInitOptions, persistFromAlexa, loadSession } = require('./sess
 const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-state');
 const { getActivityId, getDeviceName } = require('./parser');
 const { extractSpokenResponse } = require('./activity-response');
+const { extractActivityFields } = require('./activity-fields');
+const { createRoutineIndex } = require('./routine-index');
+const { createUnmatchedActivityLog } = require('./unmatched-activity-log');
 const { createPendingVoiceResponses } = require('./pending-voice-responses');
 const { createUdpBroadcaster } = require('./broadcast-udp');
 const { createDisplayRegistry, attachTarget } = require('./display-registry');
@@ -142,7 +145,9 @@ function createListener({ config, log }) {
       }
     },
   });
-  const voiceQueryParser = createVoiceQueryParser();
+  const routineIndex = createRoutineIndex({ log });
+  const unmatchedActivityLog = createUnmatchedActivityLog(config);
+  const voiceQueryParser = createVoiceQueryParser({ routineIndex });
   const voiceEventDedup = createVoiceEventDedup();
   const pendingVoiceResponses = createPendingVoiceResponses();
   const voiceEventsLog = createEventsLog(config.voiceEventsLogPath);
@@ -1018,10 +1023,24 @@ function createListener({ config, log }) {
     const voiceEvent = voiceQueryParser.parse(activity);
     if (!voiceEvent) {
       voiceQueryParser.markProcessed(activityId);
+      const fields = extractActivityFields(activity);
+      if (fields.summary || fields.response || fields.allText || fields.itemTypes.length) {
+        unmatchedActivityLog.record({
+          trigger,
+          device: getDeviceName(activity),
+          utteranceType: fields.utteranceType,
+          summary: fields.summary || null,
+          response: fields.response || null,
+          allText: fields.allText || null,
+          itemTypes: fields.itemTypes,
+        });
+      }
       if (config.debug) {
         log.debug('Activity ignored (not a tracked voice query)', {
           trigger,
-          summary: activity?.description?.summary,
+          summary: fields.summary || activity?.description?.summary,
+          response: fields.response || null,
+          itemTypes: fields.itemTypes,
         });
       }
       return;
@@ -1259,6 +1278,19 @@ function createListener({ config, log }) {
       scheduleHistoryPoll('media-change');
     });
 
+    // App-launched routines / timers often surface as notification pushes
+    // without a PUSH_ACTIVITY — poll history so empty-transcript rows still
+    // get a chance at response / routine-index matching.
+    alexa.on('ws-notification-change', (payload) => {
+      log.debug('Notification change detected', payload);
+      scheduleHistoryPoll('notification-change');
+    });
+
+    alexa.on('command', (command, payload) => {
+      log.debug('Raw Alexa push command', { command, payload });
+      scheduleHistoryPoll('raw-command');
+    });
+
     alexa.on('ws-unknown-command', (command, payload) => {
       log.debug('Unknown push command', { command, payload });
       scheduleHistoryPoll('push-command');
@@ -1303,8 +1335,10 @@ function createListener({ config, log }) {
           eventsLog: voiceEventsLog.path,
           amazonPage: initOptions.amazonPage,
         });
+        routineIndex.start(alexa);
         log.info('Listening for broadcast/announcement activity. Press Ctrl+C to stop.');
         log.info('Captures voice commands like: "Alexa, announce ..." or "Alexa, broadcast ..."');
+        log.info('Also best-effort captures app-launched routines (history + routine catalog)');
         if (voiceSettings.enabled) {
           log.info('Voice event capture enabled', {
             timeQueries: voiceSettings.timeQueries,

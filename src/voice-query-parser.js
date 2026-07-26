@@ -1,5 +1,5 @@
 const { getActivityId, getDeviceName } = require('./parser');
-const { extractSpokenResponse } = require('./activity-response');
+const { extractActivityFields } = require('./activity-fields');
 const { matchesIndoorQuery } = require('./indoor-temperature');
 const { matchesAirQualityQuery } = require('./air-quality');
 const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
@@ -62,7 +62,7 @@ function matchesWeatherQuery(summary, response) {
   return false;
 }
 
-function createVoiceQueryParser() {
+function createVoiceQueryParser({ routineIndex = null } = {}) {
   const processedIds = new Set();
 
   function shouldProcess(activityId) {
@@ -78,52 +78,67 @@ function createVoiceQueryParser() {
     }
   }
 
+  function eventBase(activity, fields, query) {
+    return {
+      activityId: getActivityId(activity),
+      device: getDeviceName(activity),
+      deviceSerial: activity?.deviceSerialNumber || activity?.serialNumber || null,
+      timestamp: activity?.creationTimestamp || Date.now(),
+      query: query || fields.summary || fields.allText || '',
+      spokenResponse: fields.response || null,
+    };
+  }
+
   function parse(activity) {
-    const summary = normalizeText(activity?.description?.summary);
-    const response = extractSpokenResponse(activity);
+    const fields = extractActivityFields(activity);
+    const summary = fields.summary;
+    const response = fields.response;
+    // Customer/misc phrase for matchers — never the TTS-only allText blob
+    // (that would break empty-summary + spoken-answer fallbacks).
+    const matchSummary = summary || fields.miscText || '';
     const device = getDeviceName(activity);
     const deviceSerial = activity?.deviceSerialNumber || activity?.serialNumber || null;
     const activityId = getActivityId(activity);
     const timestamp = activity?.creationTimestamp || Date.now();
 
-    if (!summary && !response) {
+    if (!summary && !response && !fields.allText) {
       return null;
     }
 
-    if (matchesShoppingListQuery(summary, response)) {
+    if (matchesShoppingListQuery(matchSummary, response)) {
       return {
         kind: 'shopping-list',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
-        trigger: shoppingListTrigger(summary, response),
+        trigger: shoppingListTrigger(matchSummary, response),
       };
     }
 
-    if (matchesTeslaDashboardQuery(summary, response)) {
+    if (matchesTeslaDashboardQuery(matchSummary, response)) {
       return {
         kind: 'tesla-dashboard',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'tesla-dashboard-query',
       };
     }
 
-    if (matchesTeslaBatteryQuery(summary, response)) {
+    if (matchesTeslaBatteryQuery(matchSummary, response)) {
       return {
         kind: 'tesla-battery',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'tesla-battery-query',
       };
@@ -131,14 +146,14 @@ function createVoiceQueryParser() {
 
     // Slideshow before dual-QR welcome — "open guest snaps slideshow"
     // also contains the "guest snaps" brand phrase.
-    if (matchesGuestSnapsSlideshowQuery(summary, response)) {
+    if (matchesGuestSnapsSlideshowQuery(matchSummary, response)) {
       return {
         kind: 'photo-slideshow',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'guest-snaps-slideshow-query',
         // Party slideshow fans out to every known display.
@@ -146,14 +161,14 @@ function createVoiceQueryParser() {
       };
     }
 
-    if (matchesGuestPhotoboothQuery(summary, response)) {
+    if (matchesGuestPhotoboothQuery(matchSummary, response)) {
       return {
         kind: 'guest-photobooth',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'guest-photobooth-query',
         // Always fan out to every known display (party welcome screen).
@@ -161,33 +176,33 @@ function createVoiceQueryParser() {
       };
     }
 
-    if (matchesVivintAlarmQuery(summary, response)) {
+    if (matchesVivintAlarmQuery(matchSummary, response)) {
       return {
         kind: 'vivint-alarm',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'vivint-alarm-query',
       };
     }
 
-    if (matchesNotificationsQuery(summary, response)) {
+    if (matchesNotificationsQuery(matchSummary, response)) {
       return {
         kind: 'alexa-notifications',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'alexa-notifications-query',
       };
     }
 
-    const smartHomeCommand = parseSmartHomeCommand(summary);
+    const smartHomeCommand = parseSmartHomeCommand(matchSummary);
     if (smartHomeCommand) {
       return {
         kind: 'smart-home',
@@ -195,21 +210,21 @@ function createVoiceQueryParser() {
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'smart-home-command',
         command: smartHomeCommand,
       };
     }
 
-    if (matchesMusicQuery(summary, response)) {
+    if (matchesMusicQuery(matchSummary, response)) {
       return {
         kind: 'music',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'music-play',
       };
@@ -217,14 +232,14 @@ function createVoiceQueryParser() {
 
     // "next" / "skip" — advance track, then show the new song (listener
     // gates out news/flash-briefing via player-info).
-    if (matchesMusicSkipQuery(summary)) {
+    if (matchesMusicSkipQuery(matchSummary)) {
       return {
         kind: 'music',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'music-skip',
       };
@@ -232,149 +247,177 @@ function createVoiceQueryParser() {
 
     // "what song is playing" etc. — music is already playing, just show
     // what's currently on instead of starting anything new.
-    if (matchesNowPlayingQuery(summary, response)) {
+    if (matchesNowPlayingQuery(matchSummary, response)) {
       return {
         kind: 'music',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary || 'what\'s playing',
+        query: summary || matchSummary || 'what\'s playing',
         spokenResponse: response || null,
         trigger: 'music-query',
       };
     }
 
-    if (matchesRouteQuery(summary, response)) {
+    if (matchesRouteQuery(matchSummary, response)) {
       return {
         kind: 'route',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'route-query',
       };
     }
 
-    if (matchesAirQualityQuery(summary, response)) {
+    if (matchesAirQualityQuery(matchSummary, response)) {
       return {
         kind: 'air-quality',
         activityId,
         device,
         timestamp,
-        query: summary || 'air quality query',
+        query: summary || matchSummary || 'air quality query',
         spokenResponse: response || null,
         trigger: 'air-quality-query',
       };
     }
 
-    if (matchesIndoorQuery(summary, response)) {
+    if (matchesIndoorQuery(matchSummary, response)) {
       return {
         kind: 'indoor-temperature',
         activityId,
         device,
         timestamp,
-        query: summary || 'indoor temperature query',
+        query: summary || matchSummary || 'indoor temperature query',
         spokenResponse: response || null,
         trigger: 'indoor-temperature-query',
       };
     }
 
-    if (matchesWeatherQuery(summary, response)) {
+    if (matchesWeatherQuery(matchSummary, response)) {
       return {
         kind: 'weather',
         activityId,
         device,
         timestamp,
-        query: summary || 'weather query',
+        query: summary || matchSummary || 'weather query',
         spokenResponse: response || null,
         trigger: 'weather-query',
       };
     }
 
-    if (SHOW_TIMERS_RE.test(summary)) {
+    if (SHOW_TIMERS_RE.test(matchSummary)) {
       return {
         kind: 'timer-list',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'show-timers',
       };
     }
 
-    if (matchesShowAlarmsQuery(summary)) {
+    if (matchesShowAlarmsQuery(matchSummary)) {
       return {
         kind: 'alarm-list',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'show-alarms',
       };
     }
 
-    if (matchesAlarmCancelQuery(summary)) {
+    if (matchesAlarmCancelQuery(matchSummary)) {
       return {
         kind: 'alarm-hint',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'alarm-cancel-voice',
       };
     }
 
-    if (TIMER_CANCEL_RE.test(summary) || TIMER_CANCEL_RESPONSE_RE.test(response)) {
+    if (TIMER_CANCEL_RE.test(matchSummary) || TIMER_CANCEL_RESPONSE_RE.test(response)) {
       return {
         kind: 'timer-hint',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'timer-cancel-voice',
       };
     }
 
-    if (matchesAlarmSetQuery(summary, response)) {
+    if (matchesAlarmSetQuery(matchSummary, response)) {
       return {
         kind: 'alarm-hint',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'alarm-set-voice',
       };
     }
 
-    if (TIMER_SET_RE.test(summary) || (/\b(?:timer|countdown|alarm)\b/i.test(summary) && TIMER_SET_SPOKEN_RE.test(response))) {
+    if (
+      TIMER_SET_RE.test(matchSummary)
+      || (/\b(?:timer|countdown|alarm)\b/i.test(matchSummary) && TIMER_SET_SPOKEN_RE.test(response))
+    ) {
       return {
         kind: 'timer-hint',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'timer-set-voice',
       };
     }
 
-    if (TIME_QUERY_RE.test(summary)) {
+    if (TIME_QUERY_RE.test(matchSummary)) {
       return {
         kind: 'time',
         activityId,
         device,
         timestamp,
-        query: summary,
+        query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'time-query',
+      };
+    }
+
+    // App-launched routines: match catalog phrases / Sent to Display fallback.
+    const routineHit = routineIndex?.resolve?.(fields);
+    if (routineHit?.kind) {
+      const base = eventBase(activity, fields, routineHit.matchedPhrase || summary);
+      const trigger = routineHit.source || 'routine-index';
+      if (routineHit.kind === 'photo-slideshow') {
+        return { ...base, kind: 'photo-slideshow', trigger, targetId: '*' };
+      }
+      if (routineHit.kind === 'guest-photobooth') {
+        return { ...base, kind: 'guest-photobooth', trigger, targetId: '*' };
+      }
+      if (routineHit.kind === 'shopping-list') {
+        return {
+          ...base,
+          kind: 'shopping-list',
+          trigger: shoppingListTrigger(base.query, response) || trigger,
+        };
+      }
+      return {
+        ...base,
+        kind: routineHit.kind,
+        trigger,
       };
     }
 

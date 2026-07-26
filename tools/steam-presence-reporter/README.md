@@ -2,7 +2,7 @@
 
 Tiny Windows helper for **MOVIETHEATERPC** (or any host in `steam.allowedHosts`).
 
-Steam’s public Web API does **not** say which PC is playing. This reporter heartbeats the local computer name + running Steam `appid` to the bridge so Now Playing only lights up for allowed machines.
+Steam’s public Web API does **not** say which PC is playing, and `gameid` in GetPlayerSummaries often **lags** a launch. This reporter heartbeats the local computer name + running Steam `appid` to the bridge so Now Playing only lights up for allowed machines — each heartbeat also **wakes an immediate bridge poll** (closest thing to a push; Steam has no launch webhook).
 
 ## Setup
 

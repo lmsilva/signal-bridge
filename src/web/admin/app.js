@@ -478,10 +478,13 @@
       pillState(steamPill, 'warn', 'Link account');
       const keySrc = steam.apiKeySource === 'env' ? 'from .env' : 'saved in session';
       $('steam-status-detail').textContent = `API key ready (${keySrc}) — authenticate with Steam to link your SteamID.`;
-    } else if (steam.status === 'playing') {
+    } else if (steam.status === 'playing' || steam.status === 'playing_presence') {
       pillState(steamPill, 'ok', 'Now playing');
       const host = steam.session?.host || 'allowed PC';
-      $('steam-status-detail').textContent = `Playing on ${host}`
+      const lagNote = steam.status === 'playing_presence'
+        ? ' (from theater PC reporter — Steam profile catching up)'
+        : '';
+      $('steam-status-detail').textContent = `Playing on ${host}${lagNote}`
         + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');
     } else if (steam.status === 'playing_elsewhere') {
       pillState(steamPill, 'warn', 'Other PC');
@@ -1070,6 +1073,7 @@
   // -------------------------------------------------- Slideshow Manager
 
   let slideshowPhotos = [];
+  let slideshowPhotosSig = '';
   let slideshowSelecting = false;
   const slideshowSelected = new Set();
   let lightboxToken = null;
@@ -1087,6 +1091,26 @@
     } catch {
       return '';
     }
+  }
+
+  /** Stable fingerprint so GET + SSE hello don't wipe in-flight thumbnails. */
+  function photosSignature(photos) {
+    return (photos || [])
+      .map((p) => `${p.token || ''}\0${p.path || ''}\0${p.createdAt || ''}`)
+      .join('\n');
+  }
+
+  /** Root-absolute `/qr-images/…` URL (ignores <base href="/admin/">). */
+  function photoImageUrl(photo, { bust = false } = {}) {
+    const path = appUrl(photo?.path || '');
+    if (!path) {
+      return '';
+    }
+    if (!bust) {
+      return path;
+    }
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}_=${Date.now()}`;
   }
 
   function updateSelectionUi() {
@@ -1122,7 +1146,7 @@
     }
     lightboxIndex = index;
     lightboxToken = photo.token;
-    $('lightbox-img').src = new URL(photo.path, document.baseURI).href;
+    $('lightbox-img').src = photoImageUrl(photo);
     const uploaded = formatUploadedAt(photo.createdAt);
     $('lightbox-uploaded-at').textContent = uploaded ? `Uploaded ${uploaded}` : '';
     const counter = $('lightbox-counter');
@@ -1162,6 +1186,21 @@
     showLightboxPhoto(lightboxIndex + delta);
   }
 
+  function bindThumbImage(img, photo) {
+    // Eager load: lazy + display:none tab panels leave some thumbs stuck broken.
+    img.loading = 'eager';
+    img.decoding = 'async';
+    img.alt = 'Shared photo';
+    img.src = photoImageUrl(photo);
+    img.addEventListener('error', () => {
+      if (img.dataset.retried === '1') {
+        return;
+      }
+      img.dataset.retried = '1';
+      img.src = photoImageUrl(photo, { bust: true });
+    });
+  }
+
   function renderPhotoGrid() {
     const grid = $('photo-grid');
     const empty = $('photo-grid-empty');
@@ -1175,9 +1214,7 @@
       cell.classList.toggle('selected', slideshowSelected.has(photo.token));
       cell.dataset.token = photo.token;
       const img = document.createElement('img');
-      img.src = new URL(photo.path, document.baseURI).href;
-      img.loading = 'lazy';
-      img.alt = 'Shared photo';
+      bindThumbImage(img, photo);
       cell.appendChild(img);
       const check = document.createElement('span');
       check.className = 'photo-thumb-check';
@@ -1198,8 +1235,17 @@
   // whatever photo list just arrived (a photo deleted from another session
   // must fall out of `slideshowSelected` too, or "Delete (n)" could try to
   // delete an already-gone token).
-  function applySlideshowPhotos(photos) {
-    slideshowPhotos = photos || [];
+  function applySlideshowPhotos(photos, { force = false } = {}) {
+    const next = photos || [];
+    const sig = photosSignature(next);
+    // Opening the tab fires GET and SSE `hello` with the same list. Rebuilding
+    // the grid aborts half-finished <img> fetches and leaves broken thumbs
+    // until a manual refresh — skip identical updates.
+    if (!force && sig === slideshowPhotosSig && $('photo-grid')?.children?.length === next.length) {
+      return;
+    }
+    slideshowPhotosSig = sig;
+    slideshowPhotos = next;
     const tokens = new Set(slideshowPhotos.map((p) => p.token));
     [...slideshowSelected].forEach((token) => {
       if (!tokens.has(token)) {
@@ -1218,10 +1264,10 @@
     }
   }
 
-  async function loadSlideshowPhotos() {
+  async function loadSlideshowPhotos({ force = false } = {}) {
     try {
       const { photos } = await apiGet('/api/photos');
-      applySlideshowPhotos(photos);
+      applySlideshowPhotos(photos, { force });
     } catch (error) {
       toast(error.message || 'Could not load saved photos', 'bad');
     }
@@ -1398,12 +1444,11 @@
     }
   });
 
-  // Lazy-load the camera roll the first time the tab is opened, then refresh
-  // on every subsequent visit (cheap GET; photos can change from another device).
-  // The live SSE subscription also starts here (once) so tabs never opened
-  // never pay for an idle connection.
-  document.querySelector('.tab-btn[data-tab="slideshow"]')?.addEventListener('click', () => {
-    loadSlideshowPhotos();
+  // Load the camera roll when the tab opens, then refresh on later visits.
+  // Await GET before opening SSE so the initial `hello` snapshot doesn't race
+  // the first grid render and abort thumbnail requests.
+  document.querySelector('.tab-btn[data-tab="slideshow"]')?.addEventListener('click', async () => {
+    await loadSlideshowPhotos();
     startSlideshowEvents();
   });
 
@@ -1412,7 +1457,7 @@
     btn.classList.add('is-loading');
     btn.disabled = true;
     try {
-      await loadSlideshowPhotos();
+      await loadSlideshowPhotos({ force: true });
     } finally {
       btn.classList.remove('is-loading');
       btn.disabled = false;

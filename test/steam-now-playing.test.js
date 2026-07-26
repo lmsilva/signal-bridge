@@ -8,7 +8,14 @@ const { createSteamPresenceStore } = require('../src/steam-presence');
 const { extractSteamIdFromClaimedId } = require('../src/steam-auth');
 const { stripHtml, libraryCapsuleUrls, formatPlaytimeHours } = require('../src/steam-api');
 const { buildSteamNowPlayingPayload, buildSteamNowPlayingClosePayload } = require('../src/udp-payload');
-const { createSteamNowPlaying } = require('../src/steam-now-playing');
+const { createSteamNowPlaying, resolveEffectiveSteamAppId } = require('../src/steam-now-playing');
+
+test('resolveEffectiveSteamAppId prefers Steam gameid, else presence', () => {
+  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }), 570);
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }), 440);
+  assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }), 440);
+  assert.equal(resolveEffectiveSteamAppId(null, null), null);
+});
 
 test('resolveSteamConfig defaults allowed host to MOVIETHEATERPC', () => {
   const steam = resolveSteamConfig({ ROOT: os.tmpdir() }, {});
@@ -16,6 +23,7 @@ test('resolveSteamConfig defaults allowed host to MOVIETHEATERPC', () => {
   assert.equal(isAllowedHost(steam, 'movietheaterpc'), true);
   assert.equal(isAllowedHost(steam, 'LAPTOP'), false);
   assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
+  assert.equal(steam.pollIntervalSeconds, 15);
 });
 
 test('extractSteamIdFromClaimedId parses OpenID claimed id', () => {

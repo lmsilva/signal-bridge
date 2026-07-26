@@ -12,6 +12,9 @@ test('matchesTeslaBatteryQuery detects show tesla battery', () => {
   assert.equal(matchesTeslaBatteryQuery('show my tesla battery'), true);
   assert.equal(matchesTeslaBatteryQuery('show the tesla battery'), true);
   assert.equal(matchesTeslaBatteryQuery('what is the weather'), false);
+  assert.equal(matchesTeslaBatteryQuery('', 'Your Tesla battery is at 80 percent'), true);
+  assert.equal(matchesTeslaBatteryQuery('', 'Sent to Display'), false);
+  assert.equal(matchesTeslaBatteryQuery('battery', 'Sent to your display'), true);
 });
 
 test('parseBatteryPercentFromSpeech reads common Alexa battery answers', () => {
