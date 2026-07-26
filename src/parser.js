@@ -6,6 +6,13 @@ const BROADCAST_PROMPT_RE = /(?:what(?:'s| is|'d)? (?:the |your )?(?:announcemen
 
 const WAKE_WORD_ONLY_RE = /^(alexa|echo|computer|amazon|ziggy)$/i;
 
+// How long an identical message+device fingerprint is treated as a duplicate.
+// This only needs to bridge the gap between a push event and the later
+// history-poll record of the *same* utterance (usually seconds); it must
+// NOT be permanent or a deliberately repeated broadcast (e.g. "this is a
+// test", sent again minutes/hours later) would never display again.
+const DUPLICATE_CONTENT_WINDOW_MS = 2 * 60 * 1000;
+
 const {
   parseBroadcastUtterance,
   extractInlineBroadcastMessage,
@@ -67,7 +74,17 @@ class BroadcastParser {
     this.seenActivityIds = new Set(seenActivityIds);
     this.seenOrder = [...seenActivityIds];
     this.lastRecordedTimestamp = lastRecordedTimestamp || 0;
-    this.recordedFingerprints = new Set(recordedFingerprints);
+    // Map<fingerprint, lastSeenAtMs> — see DUPLICATE_CONTENT_WINDOW_MS.
+    this.recordedFingerprints = new Map();
+    for (const entry of recordedFingerprints) {
+      if (typeof entry === 'string') {
+        // Legacy persisted shape (no per-fingerprint timestamp) — treat as
+        // already-expired rather than guessing a recent time.
+        this.recordedFingerprints.set(entry, 0);
+      } else if (entry?.fp) {
+        this.recordedFingerprints.set(entry.fp, entry.ts || 0);
+      }
+    }
     this.fingerprintFn = fingerprintFn;
   }
 
@@ -75,15 +92,19 @@ class BroadcastParser {
     return {
       seenActivityIds: [...this.seenOrder],
       lastRecordedTimestamp: this.lastRecordedTimestamp,
-      recordedFingerprints: [...this.recordedFingerprints],
+      recordedFingerprints: [...this.recordedFingerprints.entries()].map(([fp, ts]) => ({ fp, ts })),
     };
   }
 
-  isDuplicateContent(message, device) {
+  isDuplicateContent(message, device, timestamp = Date.now()) {
     if (!this.fingerprintFn) {
       return false;
     }
-    return this.recordedFingerprints.has(this.fingerprintFn(message, device));
+    const lastSeenAt = this.recordedFingerprints.get(this.fingerprintFn(message, device));
+    if (lastSeenAt === undefined) {
+      return false;
+    }
+    return Math.abs(timestamp - lastSeenAt) < DUPLICATE_CONTENT_WINDOW_MS;
   }
 
   markRecorded(activityId, record) {
@@ -94,7 +115,10 @@ class BroadcastParser {
       this.lastRecordedTimestamp = record.timestamp;
     }
     if (this.fingerprintFn && record?.message) {
-      this.recordedFingerprints.add(this.fingerprintFn(record.message, record.device));
+      this.recordedFingerprints.set(
+        this.fingerprintFn(record.message, record.device),
+        record.timestamp || Date.now(),
+      );
     }
   }
 
@@ -137,7 +161,7 @@ class BroadcastParser {
     rawResponse,
     activityId,
   }) {
-    if (this.isDuplicateContent(message, device)) {
+    if (this.isDuplicateContent(message, device, timestamp)) {
       this.rememberActivity(activityId);
       return null;
     }

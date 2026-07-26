@@ -133,7 +133,10 @@ body {
   border-radius: var(--radius);
   padding: 28px 18px;
   text-align: center;
-  margin-bottom: 12px;
+  /* Extra top margin so this card doesn't crowd the sticky display-bar
+     divider above it — it has no section-label to supply that breathing
+     room the way every other tab's first card does. */
+  margin: 22px 0 12px;
 }
 
 .control-lock-title {
@@ -259,6 +262,13 @@ body {
 
 .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+/* Web Browser + QR Code sections sit stacked on mobile, side-by-side on
+   wide desktop viewports (see the min-width media query near the bottom) —
+   each column keeps its own label directly above its card(s). */
+.push-columns { display: flex; flex-direction: column; gap: 12px; }
+.push-column { display: flex; flex-direction: column; gap: 12px; }
+.push-column .section-label { margin-top: 0; }
+
 /* ---------- Push cards ---------- */
 
 .push-card {
@@ -294,6 +304,22 @@ body {
 
 .push-card-title { font-size: 1rem; font-weight: 700; }
 .push-card-sub { font-size: 0.78rem; color: var(--text-dim); }
+
+/* Quick Push row — same tile as Tesla, wraps 2x2 on phones and opens up on
+   wide screens (matches .push-columns' desktop breakpoint below). */
+.card-row-quad { grid-template-columns: 1fr 1fr; }
+
+/* Shared Photo Slideshow gets a little extra shine — it is the "showcase"
+   tile among the plain data pushes. */
+.push-card-photo {
+  background: linear-gradient(155deg, rgba(56, 189, 248, 0.14), var(--bg-elev) 60%);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.push-icon-photo {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.32), rgba(129, 140, 248, 0.28));
+  color: #7dd3fc;
+}
 
 /* ---------- Buttons ---------- */
 
@@ -403,6 +429,99 @@ body {
   color: var(--text-dim);
   line-height: 1.5;
   margin: 12px 4px 0;
+}
+
+/* ---------- QR code generator ---------- */
+
+.segmented {
+  display: flex;
+  gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 14px;
+}
+
+.segmented-btn {
+  flex: 1;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 9px 6px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 90ms ease, color 90ms ease;
+}
+
+.segmented-btn.active { background: var(--accent); color: var(--accent-ink); }
+
+.qr-mode-panel { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+
+.field-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.field-input:focus { border-color: var(--accent); }
+.field-input:disabled { opacity: 0.5; }
+
+textarea.field-input.text-input-area {
+  resize: vertical;
+  min-height: 64px;
+  font-family: inherit;
+  margin-bottom: 10px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.check-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.qr-photo-preview {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.qr-photo-preview img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+.qr-photo-preview .btn-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(4, 8, 18, 0.65);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
 }
 
 /* ---------- Active browser ---------- */
@@ -759,13 +878,13 @@ body {
 .keyboard {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 7px;
   width: 100%;
 }
 
 .key-row {
   display: grid;
-  gap: 3px;
+  gap: 4px;
   width: 100%;
 }
 
@@ -777,13 +896,13 @@ body {
 
 .key {
   min-width: 0;
-  min-height: 42px;
-  padding: 3px 2px;
-  border-radius: 7px;
+  min-height: 52px;
+  padding: 4px 3px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--bg-elev-2);
   color: var(--text);
-  font-size: clamp(0.62rem, 2.7vw, 0.82rem);
+  font-size: clamp(0.72rem, 3.2vw, 0.94rem);
   font-weight: 600;
   line-height: 1.05;
   white-space: nowrap;
@@ -832,7 +951,7 @@ body {
 .key-action,
 .key-mod {
   background: #121c31;
-  font-size: clamp(0.58rem, 2.4vw, 0.74rem);
+  font-size: clamp(0.66rem, 2.8vw, 0.84rem);
 }
 
 .key-backspace,
@@ -842,7 +961,7 @@ body {
 }
 
 .key-space {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -864,8 +983,8 @@ body {
 
 @media (max-width: 420px) {
   .key {
-    min-height: 40px;
-    border-radius: 6px;
+    min-height: 48px;
+    border-radius: 7px;
   }
 
   .keyboard-card {
@@ -873,7 +992,7 @@ body {
     padding-right: 6px;
   }
 
-  .key-row { gap: 2px; }
+  .key-row { gap: 3px; }
 }
 
 /* ---------- Landscape / wide layouts ---------- */
@@ -882,22 +1001,27 @@ body {
   .content { max-width: 900px; }
   .card-row { grid-template-columns: 1fr 1fr; }
 
-  #tab-push .card-grid,
   #tab-settings .card-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     align-items: start;
   }
 
-  #tab-push .section-label,
-  #tab-push .hint,
   #tab-settings .section-label,
   #tab-settings .hint {
     grid-column: 1 / -1;
   }
 
-  #tab-push .card-row { grid-column: 1 / -1; }
-
   .sheet-backdrop { align-items: center; }
   .sheet { border-radius: 20px; border-bottom: 1px solid var(--line); }
+}
+
+/* Wide desktop browser window (width-based, independent of orientation) —
+   put the Web Browser and QR Code cards side by side instead of stacking
+   two half-empty rows down the middle of the page. */
+@media (min-width: 860px) {
+  .content { max-width: 980px; }
+  .push-columns { flex-direction: row; align-items: flex-start; }
+  .push-column { flex: 1; min-width: 0; }
+  .card-row-quad { grid-template-columns: repeat(4, 1fr); }
 }

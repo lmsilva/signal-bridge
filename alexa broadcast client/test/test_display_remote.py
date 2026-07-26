@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 from src.display_identity import build_announce_payload, resolve_display_name
-from src.input_control import handle_input_payload, handle_key, handle_pointer
+from src.input_control import handle_input_payload, handle_key, handle_pointer, handle_text
 
 
 class DisplayIdentityTests(unittest.TestCase):
@@ -69,11 +69,14 @@ class InputControlTests(unittest.TestCase):
     def test_handle_input_payload_types(self):
         with mock.patch("src.input_control.handle_pointer") as pointer:
             with mock.patch("src.input_control.handle_key") as key:
-                self.assertTrue(handle_input_payload({"type": "input.pointer", "pointer": {"dx": 1}}))
-                pointer.assert_called_once()
-                self.assertTrue(handle_input_payload({"type": "input.key", "key": {"key": "a"}}))
-                key.assert_called_once()
-                self.assertFalse(handle_input_payload({"type": "web.close"}))
+                with mock.patch("src.input_control.handle_text") as text:
+                    self.assertTrue(handle_input_payload({"type": "input.pointer", "pointer": {"dx": 1}}))
+                    pointer.assert_called_once()
+                    self.assertTrue(handle_input_payload({"type": "input.key", "key": {"key": "a"}}))
+                    key.assert_called_once()
+                    self.assertTrue(handle_input_payload({"type": "input.text", "text": {"value": "hi"}}))
+                    text.assert_called_once()
+                    self.assertFalse(handle_input_payload({"type": "web.close"}))
 
     def test_move_uses_absolute_sendinput_and_notifies_overlay(self):
         from src import input_control as ic
@@ -194,6 +197,40 @@ class InputControlTests(unittest.TestCase):
                     keyboard.press.assert_any_call("F4")
                     keyboard.release.assert_any_call("F4")
                     keyboard.release.assert_any_call("ALT")
+
+    def test_handle_text_types_the_whole_string_in_one_shot(self):
+        keyboard = mock.Mock()
+        with mock.patch("src.input_control._ensure_pynput"):
+            with mock.patch("src.input_control._keyboard", keyboard):
+                handle_text({"value": "correct-horse-battery-staple"})
+        keyboard.type.assert_called_once_with("correct-horse-battery-staple")
+        keyboard.press.assert_not_called()
+
+    def test_handle_text_presses_enter_when_requested(self):
+        keyboard = mock.Mock()
+        with mock.patch("src.input_control._ensure_pynput"):
+            with mock.patch("src.input_control._keyboard", keyboard):
+                with mock.patch("src.input_control._Key") as Key:
+                    Key.enter = "ENTER"
+                    handle_text({"value": "https://example.com", "pressEnter": True})
+        keyboard.type.assert_called_once_with("https://example.com")
+        keyboard.press.assert_called_once_with("ENTER")
+        keyboard.release.assert_called_once_with("ENTER")
+
+    def test_handle_text_ignores_empty_value(self):
+        keyboard = mock.Mock()
+        with mock.patch("src.input_control._ensure_pynput"):
+            with mock.patch("src.input_control._keyboard", keyboard):
+                handle_text({"value": ""})
+                handle_text(None)
+        keyboard.type.assert_not_called()
+
+    def test_handle_text_survives_broken_pynput(self):
+        with mock.patch(
+            "src.input_control._ensure_pynput",
+            side_effect=ImportError("no pynput"),
+        ):
+            handle_text({"value": "hello"})
 
 
 class RemoteCursorOverlayTests(unittest.TestCase):

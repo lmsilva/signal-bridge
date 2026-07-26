@@ -2149,17 +2149,17 @@ class TimerPanel(BasePanel):
 
             label = timer_label_name(timer)
             device = self._format_device_name(timer.get("device"))
-            duration_sec = timer.get("durationSec")
             status = timer.get("status", "ON")
             row_center_y = row_y + row_height // 2
 
             title = timer_title(timer)
             title_font = self.shell.section_label_font if label else self.shell.body_font
+            # Subtitle already reads "{device} · {duration} timer" (timer_detail_line),
+            # so the countdown side doesn't repeat the set duration above it.
             subtitle = timer_detail_line(timer, device, finished=self._is_fired)
             if status == "PAUSED" and not self._is_fired:
                 subtitle = f"{subtitle} · Paused"
 
-            set_time = format_timer_clock(duration_sec) if duration_sec is not None else None
             deadline = self._deadline_for_timer(timer)
             if self._is_fired:
                 deadline = time.time()
@@ -2169,6 +2169,7 @@ class TimerPanel(BasePanel):
             self._deadlines.append(deadline)
             remaining_font = self.shell.timer_alert_font if self._is_fired else self.shell.timer_remaining_font
             remaining_color = alert if self._is_fired else accent
+            suffix_font = self.shell.timer_meta_font
 
             self._track(
                 self.canvas.create_text(
@@ -2191,22 +2192,21 @@ class TimerPanel(BasePanel):
                 )
             )
 
-            if set_time and not self._is_fired:
-                self._track(
-                    self.canvas.create_text(
-                        x + width - 24,
-                        row_center_y - 22,
-                        anchor="e",
-                        text=set_time,
-                        fill=muted,
-                        font=self.shell.timer_meta_font,
-                    )
-                )
+            # Center the big countdown + its "left"/"Finished!" caption as one
+            # block, with a real gap between them (measured from font metrics
+            # so portrait/landscape font sizes never end up touching).
+            countdown_gap = 10
+            remaining_line_h = remaining_font.metrics("linespace")
+            suffix_line_h = suffix_font.metrics("linespace")
+            block_h = remaining_line_h + countdown_gap + suffix_line_h
+            block_top = row_center_y - block_h / 2
+            remaining_y = block_top + remaining_line_h / 2
+            suffix_y = block_top + remaining_line_h + countdown_gap + suffix_line_h / 2
 
             remaining_id = self._track(
                 self.canvas.create_text(
                     x + width - 24,
-                    row_center_y + (6 if self._is_fired else 2),
+                    remaining_y,
                     anchor="e",
                     text=remaining_text,
                     fill=remaining_color,
@@ -2216,11 +2216,11 @@ class TimerPanel(BasePanel):
             suffix_id = self._track(
                 self.canvas.create_text(
                     x + width - 24,
-                    row_center_y + (38 if self._is_fired else 28),
+                    suffix_y,
                     anchor="e",
                     text="Finished!" if self._is_fired else "left",
                     fill=alert if self._is_fired else muted,
-                    font=self.shell.timer_meta_font if self._is_fired else self.shell.forecast_label_font,
+                    font=suffix_font,
                 )
             )
             self._countdown_items.append(remaining_id)
@@ -2559,7 +2559,10 @@ class ShoppingListPanel(BasePanel):
 
 
 class MusicPanel(BasePanel):
-    ART_SIZE = 510
+    # Soft cap only — actual size is driven by available space (see
+    # _render_stack/_render_landscape) so the art fills the screen instead of
+    # sitting at a fixed size with hundreds of unused pixels around it.
+    ART_SIZE = 900
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
@@ -2569,6 +2572,39 @@ class MusicPanel(BasePanel):
 
     def _render(self, payload: dict):
         layout = self.shell.layout
+        music = payload.get("music") or {}
+        song = music.get("song") or "Unknown track"
+        artist = music.get("artist")
+        album = music.get("album")
+        provider = music.get("provider")
+        device = music.get("device") or payload.get("device")
+        art_url = music.get("artUrl")
+
+        if layout.portrait:
+            self._render_stack(layout, song, artist, album, provider, device, art_url)
+        else:
+            self._render_landscape(layout, song, artist, album, provider, device, art_url)
+
+    def _draw_art_placeholder(self, cx, cy, size, accent, loading_art):
+        self._art_placeholder_ids = []
+        rect_id = self._round_rect(
+            cx - size // 2,
+            cy - size // 2,
+            cx + size // 2,
+            cy + size // 2,
+            radius=26,
+            fill=self.CARD,
+            outline=accent if not loading_art else self.CARD_EDGE,
+            width=2 if not loading_art else 1,
+        )
+        note_id = self._track(
+            self.canvas.create_text(
+                cx, cy, anchor="center", text="♪", fill=accent, font=self.shell.hero_font,
+            )
+        )
+        self._art_placeholder_ids.extend((rect_id, note_id))
+
+    def _render_stack(self, layout, song, artist, album, provider, device, art_url):
         x = layout.content_x
         width = layout.content_width
         y = layout.message_area_top
@@ -2576,15 +2612,7 @@ class MusicPanel(BasePanel):
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
         accent = self.config.get("accentColor", "#38bdf8")
-        chip = self.config.get("chipBackground", "#141a24")
         center_x = x + width // 2
-
-        music = payload.get("music") or {}
-        song = music.get("song") or "Unknown track"
-        artist = music.get("artist")
-        album = music.get("album")
-        provider = music.get("provider")
-        device = music.get("device") or payload.get("device")
 
         text_block = self.shell.section_title_font.metrics("linespace")
         if artist:
@@ -2594,34 +2622,11 @@ class MusicPanel(BasePanel):
         text_block += self.shell.chip_value_font.metrics("linespace") + 24
 
         available = bottom - y - text_block
-        art_size = min(self.ART_SIZE, max(330, min(width - 80, available - 20)))
+        art_size = min(self.ART_SIZE, max(330, min(width - 48, available - 16)))
         art_y = y + art_size // 2 + 8
 
-        art_url = music.get("artUrl")
         loading_art = bool(art_url and Image is not None)
-        self._art_placeholder_ids = []
-        rect_id = self._round_rect(
-            center_x - art_size // 2,
-            art_y - art_size // 2,
-            center_x + art_size // 2,
-            art_y + art_size // 2,
-            radius=22,
-            fill=self.CARD,
-            outline=accent if not loading_art else self.CARD_EDGE,
-            width=2 if not loading_art else 1,
-        )
-        note_id = self._track(
-            self.canvas.create_text(
-                center_x,
-                art_y,
-                anchor="center",
-                text="♪",
-                fill=accent,
-                font=self.shell.hero_font,
-            )
-        )
-        self._art_placeholder_ids.extend((rect_id, note_id))
-
+        self._draw_art_placeholder(center_x, art_y, art_size, accent, loading_art)
         if loading_art:
             self._load_art_async(art_url, center_x, art_y, art_size)
 
@@ -2635,6 +2640,7 @@ class MusicPanel(BasePanel):
                 fill=text,
                 font=self.shell.section_title_font,
                 width=width - 40,
+                justify=tk.CENTER,
             )
         )
         cursor += self.shell.section_title_font.metrics("linespace") + 10
@@ -2648,6 +2654,7 @@ class MusicPanel(BasePanel):
                     fill=accent,
                     font=self.shell.body_font,
                     width=width - 40,
+                    justify=tk.CENTER,
                 )
             )
             cursor += self.shell.body_font.metrics("linespace") + 8
@@ -2661,6 +2668,7 @@ class MusicPanel(BasePanel):
                     fill=muted,
                     font=self.shell.body_font,
                     width=width - 40,
+                    justify=tk.CENTER,
                 )
             )
             cursor += self.shell.body_font.metrics("linespace") + 12
@@ -2680,6 +2688,110 @@ class MusicPanel(BasePanel):
                     fill=muted,
                     font=self.shell.chip_value_font,
                     width=width - 40,
+                    justify=tk.CENTER,
+                )
+            )
+
+    def _render_landscape(self, layout, song, artist, album, provider, device, art_url):
+        # Landscape had the same single centered column as portrait, wasting
+        # roughly half the screen's width. Split into art (left) + track info
+        # (right), each vertically centered in the message area, so the art
+        # can grow with the full available height instead of being squeezed
+        # by the text stacked underneath it.
+        x = layout.content_x
+        width = layout.content_width
+        y = layout.message_area_top
+        bottom = layout.message_area_bottom
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+
+        title_font = self.shell.section_title_font
+        body_font = self.shell.body_font
+        detail_font = self.shell.chip_value_font
+
+        detail_parts = []
+        if provider:
+            detail_parts.append(provider)
+        if device:
+            detail_parts.append(f"on {device}")
+
+        text_h = title_font.metrics("linespace")
+        if artist:
+            text_h += body_font.metrics("linespace") + 10
+        if album:
+            text_h += body_font.metrics("linespace") + 10
+        if detail_parts:
+            text_h += detail_font.metrics("linespace") + 14
+
+        gap = 56
+        text_col_width = max(300, int(width * 0.36))
+        art_col_width = width - text_col_width - gap
+        available_h = bottom - y
+        art_size = min(self.ART_SIZE, max(280, min(art_col_width, available_h - 16)))
+        art_cx = x + art_col_width // 2
+        art_cy = y + available_h // 2
+
+        loading_art = bool(art_url and Image is not None)
+        self._draw_art_placeholder(art_cx, art_cy, art_size, accent, loading_art)
+        if loading_art:
+            self._load_art_async(art_url, art_cx, art_cy, art_size)
+
+        text_center_x = x + art_col_width + gap + text_col_width // 2
+        cursor = art_cy - text_h // 2
+
+        self._track(
+            self.canvas.create_text(
+                text_center_x,
+                cursor,
+                anchor="n",
+                text=song,
+                fill=text,
+                font=title_font,
+                width=text_col_width,
+                justify=tk.CENTER,
+            )
+        )
+        cursor += title_font.metrics("linespace") + 10
+        if artist:
+            self._track(
+                self.canvas.create_text(
+                    text_center_x,
+                    cursor,
+                    anchor="n",
+                    text=artist,
+                    fill=accent,
+                    font=body_font,
+                    width=text_col_width,
+                    justify=tk.CENTER,
+                )
+            )
+            cursor += body_font.metrics("linespace") + 10
+        if album:
+            self._track(
+                self.canvas.create_text(
+                    text_center_x,
+                    cursor,
+                    anchor="n",
+                    text=album,
+                    fill=muted,
+                    font=body_font,
+                    width=text_col_width,
+                    justify=tk.CENTER,
+                )
+            )
+            cursor += body_font.metrics("linespace") + 14
+        if detail_parts:
+            self._track(
+                self.canvas.create_text(
+                    text_center_x,
+                    cursor,
+                    anchor="n",
+                    text=" · ".join(detail_parts),
+                    fill=muted,
+                    font=detail_font,
+                    width=text_col_width,
+                    justify=tk.CENTER,
                 )
             )
 
@@ -2724,7 +2836,7 @@ class MusicPanel(BasePanel):
         if not self.visible or request_id != self._art_request:
             return
         self._clear_art_placeholder()
-        self._art_image = ImageTk.PhotoImage(self._round_image_corners(image, 22))
+        self._art_image = ImageTk.PhotoImage(self._round_image_corners(image, 26))
         self._track(self.canvas.create_image(cx, cy, image=self._art_image))
 
 
@@ -5139,3 +5251,320 @@ class AuthPinPanel(BasePanel):
                 justify=tk.CENTER,
             )
         )
+
+
+class QrPanel(BasePanel):
+    """Renders a QR code generated locally from the bridge's `qr.content` string.
+
+    The bridge never renders a bitmap — it only sends a small content string
+    (a URL, or a `WIFI:T:...;;` string), so the QR density/aspect ratio can
+    vary a lot. This panel sizes the code to fit whatever room is left below
+    the shared title, keeping a plain white quiet zone (the `qrcode` library
+    bakes this into the image itself) so phone cameras can still lock on.
+    """
+
+    _HEADINGS = {
+        "url": "Scan to open",
+        "wifi": "Scan to join Wi-Fi",
+    }
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._qr_image = None  # keep a reference or Tk garbage-collects it
+
+    @staticmethod
+    def _build_qr_image(content: str, target_size: int):
+        if Image is None or not content:
+            return None
+        try:
+            import qrcode
+            from qrcode.constants import ERROR_CORRECT_M
+        except ImportError:
+            return None
+        try:
+            qr = qrcode.QRCode(error_correction=ERROR_CORRECT_M, border=3, box_size=10)
+            qr.add_data(content)
+            qr.make(fit=True)
+            modules = qr.modules_count + qr.border * 2
+            qr.box_size = max(1, target_size // modules)
+            return qr.make_image(fill_color="black", back_color="white").convert("RGB")
+        except Exception as error:
+            print(f"QR code generation failed: {error}", file=sys.stderr)
+            return None
+
+    def _render(self, payload: dict):
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+        self._qr_image = None
+
+        layout = self.shell.layout
+        text = self.config["textColor"]
+        muted = self.config["mutedTextColor"]
+        accent = self.config.get("accentColor", "#38bdf8")
+
+        qr = payload.get("qr") or {}
+        qr_type = str(qr.get("qrType") or "url").lower()
+        content = str(qr.get("content") or "")
+        label = str(qr.get("label") or "").strip()
+        heading = self._HEADINGS.get(qr_type, "Scan this code")
+
+        x = layout.content_x
+        width = layout.content_width
+        top = layout.message_area_top
+        bottom = layout.message_area_bottom
+        center_x = x + width // 2
+
+        heading_h = self.shell.section_title_font.metrics("linespace")
+        caption_h = self.shell.body_font.metrics("linespace") if label else 0
+        gaps = 16 + (16 if label else 0)
+        available_h = max(120, (bottom - top) - heading_h - caption_h - gaps)
+        available_w = width - 80
+        qr_size = int(max(160, min(520, available_w, available_h)))
+
+        cursor = top
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                cursor,
+                anchor="n",
+                text=heading,
+                fill=accent,
+                font=self.shell.section_title_font,
+            )
+        )
+        cursor += heading_h + 16
+
+        qr_top = cursor
+        image = self._build_qr_image(content, qr_size)
+        if image is not None:
+            self._qr_image = ImageTk.PhotoImage(image)
+            self._track(
+                self.canvas.create_image(
+                    center_x, qr_top + image.height // 2, image=self._qr_image,
+                )
+            )
+            cursor = qr_top + image.height + 20
+        else:
+            # Pillow/qrcode unavailable (or empty content) — still say
+            # something useful instead of an empty panel.
+            self._panel_card(center_x - qr_size // 2, qr_top, qr_size, qr_size)
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    qr_top + qr_size // 2,
+                    anchor="center",
+                    text="QR code unavailable",
+                    fill=muted,
+                    font=self.shell.body_font,
+                    width=qr_size - 40,
+                    justify=tk.CENTER,
+                )
+            )
+            cursor = qr_top + qr_size + 20
+
+        if label:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    cursor,
+                    anchor="n",
+                    text=label,
+                    fill=text,
+                    font=self.shell.body_font,
+                    width=width - 40,
+                    justify=tk.CENTER,
+                )
+            )
+
+
+class PhotoSlideshowPanel(BasePanel):
+    """Cycles through photos shared via "QR Code → Photo" in the last 7 days.
+
+    The bridge sends a list of already-resolved photo URLs (its own control
+    page host, self-signed TLS) plus `secondsPerPhoto` — this panel owns the
+    per-photo timer internally (like ShoppingListPanel's page rotation) and
+    keeps advancing until a new UDP payload of any kind replaces the overlay.
+    Each photo is fetched off the Tk main thread so a slow LAN fetch never
+    stalls the UI, and centered so it looks good in portrait or landscape.
+    """
+
+    # The bridge's control page uses a self-signed cert by design (LAN-only,
+    # same trust model phones accept manually) — remember the very first
+    # verification failure so later fetches skip straight to the unverified
+    # context instead of re-discovering it every time.
+    _UNVERIFIED_SSL = False
+
+    def __init__(self, root: tk.Tk, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._tick_job = None
+        self._photos: list[str] = []
+        self._index = 0
+        self._seconds_per_photo = 5
+        self._photo_image = None  # keep a reference or Tk garbage-collects it
+        self._fetch_token = 0
+
+    def show(self, payload: dict):
+        self.hide()
+        self.visible = True
+        slideshow = payload.get("slideshow") or {}
+        self._photos = [
+            str(p).strip() for p in (slideshow.get("photos") or []) if str(p or "").strip()
+        ]
+        try:
+            self._seconds_per_photo = max(1, int(slideshow.get("secondsPerPhoto") or 5))
+        except (TypeError, ValueError):
+            self._seconds_per_photo = 5
+        self._index = 0
+        self._render_current()
+
+    def hide(self):
+        super().hide()
+        self._photos = []
+        self._index = 0
+        self._photo_image = None
+        # Invalidate any fetch still in flight for a photo we've moved away from.
+        self._fetch_token += 1
+
+    def _render(self, payload: dict):  # pragma: no cover - show() drives rendering
+        self._render_current()
+
+    def _advance(self):
+        self._tick_job = None
+        if not self.visible or not self._photos:
+            return
+        self._index = (self._index + 1) % len(self._photos)
+        self._render_current()
+
+    def _center(self):
+        layout = self.shell.layout
+        x = layout.content_x
+        width = layout.content_width
+        top = layout.message_area_top
+        bottom = layout.message_area_bottom
+        return x + width // 2, top + (bottom - top) // 2, width, top, bottom
+
+    def _render_current(self):
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+        self._photo_image = None
+
+        center_x, center_y, width, top, bottom = self._center()
+        muted = self.config["mutedTextColor"]
+
+        if not self._photos:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    center_y,
+                    anchor="center",
+                    text="No shared photos in the last 7 days",
+                    fill=muted,
+                    font=self.shell.body_font,
+                    width=width - 60,
+                    justify=tk.CENTER,
+                )
+            )
+            return
+
+        url = self._photos[self._index]
+        self._track(
+            self.canvas.create_text(
+                center_x,
+                center_y,
+                anchor="center",
+                text="Loading photo…",
+                fill=muted,
+                font=self.shell.body_font,
+            )
+        )
+
+        available_w = max(1, width - 40)
+        available_h = max(120, bottom - top - 20)
+        token = self._fetch_token
+
+        def worker():
+            image = self._fetch_photo(url, available_w, available_h)
+            self.root.after(0, lambda: self._apply_fetched(token, image))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        if len(self._photos) > 1:
+            self._tick_job = self.root.after(self._seconds_per_photo * 1000, self._advance)
+
+    def _apply_fetched(self, token: int, image):
+        if token != self._fetch_token or not self.visible:
+            return
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+
+        center_x, center_y, width, _top, _bottom = self._center()
+        muted = self.config["mutedTextColor"]
+
+        if image is None:
+            self._track(
+                self.canvas.create_text(
+                    center_x,
+                    center_y,
+                    anchor="center",
+                    text="Could not load this photo",
+                    fill=muted,
+                    font=self.shell.body_font,
+                    width=width - 60,
+                    justify=tk.CENTER,
+                )
+            )
+            return
+
+        self._photo_image = ImageTk.PhotoImage(image)
+        self._track(self.canvas.create_image(center_x, center_y, image=self._photo_image))
+
+    @staticmethod
+    def _is_ssl_failure(error) -> bool:
+        import ssl
+
+        seen = set()
+        current = error
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            if isinstance(current, ssl.SSLError):
+                return True
+            current = getattr(current, "reason", None) or getattr(current, "__cause__", None)
+        return "CERTIFICATE_VERIFY_FAILED" in str(error) or "SSL" in str(error)
+
+    @classmethod
+    def _fetch_photo(cls, url: str, max_w: int, max_h: int):
+        if Image is None or not url:
+            return None
+        import ssl
+
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "alexa-broadcast-client/1.0 (personal home display)"},
+        )
+
+        def download(context):
+            with urllib.request.urlopen(request, timeout=10, context=context) as response:
+                return response.read()
+
+        try:
+            context = (
+                ssl._create_unverified_context()
+                if cls._UNVERIFIED_SSL
+                else ssl.create_default_context()
+            )
+            try:
+                data = download(context)
+            except Exception as error:
+                if not cls._UNVERIFIED_SSL and cls._is_ssl_failure(error):
+                    data = download(ssl._create_unverified_context())
+                    cls._UNVERIFIED_SSL = True
+                else:
+                    raise
+            image = Image.open(io.BytesIO(data)).convert("RGB")
+            image.thumbnail((max_w, max_h), Image.LANCZOS)
+            return image
+        except Exception as error:
+            print(f"Photo slideshow fetch failed: {error}", file=sys.stderr, flush=True)
+            return None

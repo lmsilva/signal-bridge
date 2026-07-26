@@ -3,7 +3,7 @@ const { extractSpokenResponse } = require('./activity-response');
 const { matchesIndoorQuery } = require('./indoor-temperature');
 const { matchesAirQualityQuery } = require('./air-quality');
 const { matchesShoppingListQuery, shoppingListTrigger } = require('./shopping-list');
-const { matchesMusicQuery } = require('./music-info');
+const { matchesMusicQuery, matchesNowPlayingQuery } = require('./music-info');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
 const { matchesTeslaDashboardQuery } = require('./tesla-dashboard');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
@@ -22,6 +22,12 @@ const SHOW_TIMERS_RE = /\b(?:show|list)\s+(?:me\s+)?(?:all\s+|my\s+)*timers?\b|\
 const TIMER_SET_RE = /\b(?:set|start|create|add)\b(?:(?!\btime\b).)*\b(?:timer|countdown)\b|\b(?:timer|countdown)\s+(?:for|to)\s+(?:\d|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+(?:timer|countdown)\b|\b(?:set|start)\s+(?:a\s+)?(?:timer|countdown)\s+(?:for\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+|\b(?:set|start|create|add)\s+(?:a\s+)?(?:(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:hour|minute|second|min|sec|hr)s?\s*)+alarm\b/i;
 const TIMER_SET_SPOKEN_RE = /\b(?:(?:starting|counting)\s+(?:now|down)|(?:timer|countdown|alarm)\s+(?:is\s+)?(?:set|started|on)|starting\s+(?:a|your)\s+\d|\d\s+(?:minute|min|hour|hr|second|sec)s?\s+(?:timer|countdown|alarm)\s+((?:starting|set)))\b/i;
 const TIMER_CANCEL_RE = /\b(?:cancel|stop|delete|clear|remove)(?:\s+(?:the|my|all|a|an))?(?:\s+\S+){0,3}\s+(?:timers?|countdowns?)\b|\bcancel\s+all\b/i;
+// Some Alexa activity records leave description.summary empty for bare
+// command utterances and only populate the spoken confirmation (e.g.
+// "Cancelling your 5 minute timer." / "Your timer has been cancelled.").
+// Match either word order so a cancel command isn't silently dropped just
+// because the transcript itself never made it into the activity record.
+const TIMER_CANCEL_RESPONSE_RE = /\b(?:cancel(?:l?ed|ling)?|stopp?(?:ed|ing)?|clear(?:ed|ing)?|remov(?:ed|ing))\b(?:(?![.!?]).){0,40}\btimers?\b|\btimers?\b(?:(?!\.).){0,40}\b(?:cancel(?:l?ed)?|stopped|cleared|removed)\b/i;
 
 function normalizeText(value) {
   return String(value || '')
@@ -168,6 +174,21 @@ function createVoiceQueryParser() {
       };
     }
 
+    // "what song is playing" etc. — music is already playing, just show
+    // what's currently on instead of starting anything new.
+    if (matchesNowPlayingQuery(summary)) {
+      return {
+        kind: 'music',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary,
+        spokenResponse: response || null,
+        trigger: 'music-query',
+      };
+    }
+
     if (matchesAirQualityQuery(summary, response)) {
       return {
         kind: 'air-quality',
@@ -240,7 +261,7 @@ function createVoiceQueryParser() {
       };
     }
 
-    if (TIMER_CANCEL_RE.test(summary)) {
+    if (TIMER_CANCEL_RE.test(summary) || TIMER_CANCEL_RESPONSE_RE.test(response)) {
       return {
         kind: 'timer-hint',
         activityId,

@@ -13,8 +13,10 @@ from src.display_panels import (
     IndoorTemperaturePanel,
     MusicPanel,
     ProcessingPanel,
+    QrPanel,
     ShoppingListPanel,
     NotificationsPanel,
+    PhotoSlideshowPanel,
     SmartHomePanel,
     TeslaBatteryPanel,
     TeslaDashboardPanel,
@@ -131,6 +133,8 @@ class OverlayWindow:
             "alexa-notifications.query": NotificationsPanel(self.root, self.shell, self.config),
             "request.processing": ProcessingPanel(self.root, self.shell, self.config),
             "display.auth": AuthPinPanel(self.root, self.shell, self.config),
+            "qr.display": QrPanel(self.root, self.shell, self.config),
+            "photo.slideshow": PhotoSlideshowPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 

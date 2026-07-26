@@ -120,6 +120,12 @@ function loadConfig() {
     ROOT,
     config.airQualityCacheFile || 'data/air-quality-cache.json',
   );
+  // Uploaded "QR code -> embedded photo" images; expire (config.qrImage.cacheDays,
+  // default 7) and are swept hourly by the web server — see src/qr-image-cache.js.
+  config.qrImageCacheDir = path.resolve(
+    ROOT,
+    config.qrImage?.cacheDir || 'data/qr-image-cache',
+  );
 
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);
 

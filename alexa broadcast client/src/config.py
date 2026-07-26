@@ -64,4 +64,10 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         if event_kind == "fired":
             requested = max(requested, 25)
 
+    if payload.get("type") == "photo.slideshow":
+        # Duration is data-driven (number of shared photos * secondsPerPhoto)
+        # — clamping it to maxDisplaySeconds would cut the slideshow short
+        # before it finishes going through all the pictures once.
+        return max(requested, 1)
+
     return min(max(requested, 1), config["maxDisplaySeconds"])

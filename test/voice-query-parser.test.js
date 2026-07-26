@@ -118,6 +118,22 @@ test('voice query parser detects named timer cancel hint', () => {
   assert.equal(event.trigger, 'timer-cancel-voice');
 });
 
+test('voice query parser detects timer cancel from Alexa response when summary is empty', () => {
+  // Some Alexa activity records leave description.summary blank for bare
+  // command utterances; the cancel confirmation should still be detected.
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('', 'Cancelling your 5 minute timer.'));
+  assert.equal(event?.kind, 'timer-hint');
+  assert.equal(event?.trigger, 'timer-cancel-voice');
+});
+
+test('voice query parser detects reversed-order timer cancel confirmation', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('', 'Your timer has been cancelled.'));
+  assert.equal(event?.kind, 'timer-hint');
+  assert.equal(event?.trigger, 'timer-cancel-voice');
+});
+
 test('voice query parser detects show alarms command', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('show my alarms', 'You have 2 alarms'));
@@ -177,6 +193,25 @@ test('voice query parser detects music play command', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('play bohemian rhapsody', 'Playing Bohemian Rhapsody'));
   assert.equal(event?.kind, 'music');
+  assert.equal(event?.trigger, 'music-play');
+});
+
+test('voice query parser detects "what song is playing" as a music query', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('what song is playing', 'This is Bohemian Rhapsody by Queen'));
+  assert.equal(event?.kind, 'music');
+  assert.equal(event?.trigger, 'music-query');
+});
+
+test('voice query parser detects "which song is playing" and "what is this song"', () => {
+  const parser = createVoiceQueryParser();
+  const first = parser.parse(activity('which song is playing', 'Bohemian Rhapsody by Queen'));
+  assert.equal(first?.kind, 'music');
+  assert.equal(first?.trigger, 'music-query');
+
+  const second = parser.parse(activity('what is this song', 'Bohemian Rhapsody by Queen'));
+  assert.equal(second?.kind, 'music');
+  assert.equal(second?.trigger, 'music-query');
 });
 
 test('voice query parser detects smart home command', () => {

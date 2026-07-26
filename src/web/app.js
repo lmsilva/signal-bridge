@@ -492,6 +492,43 @@
   $('btn-tesla-dashboard').addEventListener('click', (e) => pushTesla('dashboard', e.currentTarget));
   $('btn-tesla-battery').addEventListener('click', (e) => pushTesla('battery', e.currentTarget));
 
+  // ------------------------------------------------------- Quick push tiles
+
+  async function pushSimple(route, label, button) {
+    button.classList.add('busy');
+    try {
+      await apiPost(route, withTarget());
+      toast(`${label} sent`, 'good');
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      setTimeout(() => button.classList.remove('busy'), 900);
+    }
+  }
+
+  $('btn-push-weather')?.addEventListener('click', (e) => pushSimple('/api/push/weather', 'Weather forecast', e.currentTarget));
+  $('btn-push-shopping-list')?.addEventListener('click', (e) => pushSimple('/api/push/shopping-list', 'Shopping list', e.currentTarget));
+  $('btn-push-timers')?.addEventListener('click', (e) => pushSimple('/api/push/timers', 'Active timers', e.currentTarget));
+
+  $('btn-push-photo-slideshow')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.classList.add('busy');
+    try {
+      const { photos } = await apiGet('/api/photos');
+      if (!photos || !photos.length) {
+        toast('No shared photos yet — share one via QR Code → Photo first', 'bad');
+        return;
+      }
+      const absolutePhotos = photos.map((p) => new URL(p.path, document.baseURI).href);
+      await apiPost('/api/push/photo-slideshow', withTarget({ photos: absolutePhotos }));
+      toast(`Slideshow sent (${absolutePhotos.length} photo${absolutePhotos.length === 1 ? '' : 's'})`, 'good');
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      setTimeout(() => button.classList.remove('busy'), 900);
+    }
+  });
+
   // -------------------------------------------------------------- URL push
 
   function normalizeUrlInput(raw) {
@@ -801,6 +838,153 @@
     if (url) {
       $('url-input').value = url;
       pushUrl(url);
+    }
+  });
+
+  // -------------------------------------------------------- QR generation
+
+  const QR_MODES = ['url', 'wifi', 'image'];
+  let qrGenerateMode = 'url';
+  let qrSelectedPhotoDataUrl = null;
+
+  function setQrGenerateMode(mode) {
+    if (!QR_MODES.includes(mode)) {
+      return;
+    }
+    qrGenerateMode = mode;
+    QR_MODES.forEach((m) => {
+      const panel = $(`qr-panel-${m}`);
+      if (panel) {
+        panel.hidden = m !== mode;
+      }
+    });
+    document.querySelectorAll('#qr-mode-tabs .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.qrMode === mode);
+    });
+  }
+
+  document.querySelectorAll('#qr-mode-tabs .segmented-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setQrGenerateMode(btn.dataset.qrMode));
+  });
+
+  $('qr-generate-url-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('btn-qr-generate').click();
+    }
+  });
+
+  $('qr-wifi-open').addEventListener('change', () => {
+    const open = $('qr-wifi-open').checked;
+    $('qr-wifi-password').disabled = open;
+    if (open) {
+      $('qr-wifi-password').value = '';
+    }
+  });
+
+  function resetPhotoPicker() {
+    qrSelectedPhotoDataUrl = null;
+    $('qr-photo-preview').hidden = true;
+    $('btn-qr-pick-photo').hidden = false;
+    $('qr-image-file').value = '';
+  }
+
+  $('btn-qr-pick-photo').addEventListener('click', () => {
+    $('qr-image-file').value = '';
+    $('qr-image-file').click();
+  });
+
+  $('qr-image-file').addEventListener('change', () => {
+    const file = $('qr-image-file').files && $('qr-image-file').files[0];
+    if (!file) {
+      return;
+    }
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      // Downscale + re-encode as JPEG client-side so the upload stays small
+      // and fast over LAN regardless of the phone's original photo size.
+      const maxSide = 1600;
+      const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const width = Math.max(1, Math.round(img.naturalWidth * ratio));
+      const height = Math.max(1, Math.round(img.naturalHeight * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      qrSelectedPhotoDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      $('qr-photo-preview-img').src = qrSelectedPhotoDataUrl;
+      $('qr-photo-preview').hidden = false;
+      $('btn-qr-pick-photo').hidden = true;
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      toast('Could not read that photo', 'bad');
+    };
+    img.src = objectUrl;
+  });
+
+  $('btn-qr-photo-clear').addEventListener('click', resetPhotoPicker);
+
+  $('btn-qr-generate').addEventListener('click', async () => {
+    const button = $('btn-qr-generate');
+    button.disabled = true;
+    try {
+      if (qrGenerateMode === 'url') {
+        const url = normalizeUrlInput($('qr-generate-url-input').value);
+        if (!url) {
+          toast('Enter a valid web address first', 'bad');
+          $('qr-generate-url-input').focus();
+          return;
+        }
+        $('qr-generate-url-input').value = url;
+        await apiPost('/api/qr/push', withTarget({ mode: 'url', url }));
+        toast('QR code sent to display', 'good');
+        return;
+      }
+
+      if (qrGenerateMode === 'wifi') {
+        const ssid = $('qr-wifi-ssid').value.trim();
+        if (!ssid) {
+          toast('Enter the Wi-Fi network name', 'bad');
+          $('qr-wifi-ssid').focus();
+          return;
+        }
+        const isOpen = $('qr-wifi-open').checked;
+        const password = $('qr-wifi-password').value;
+        if (!isOpen && !password.trim()) {
+          toast('Enter the Wi-Fi password (or mark it as open)', 'bad');
+          $('qr-wifi-password').focus();
+          return;
+        }
+        await apiPost('/api/qr/push', withTarget({
+          mode: 'wifi',
+          ssid,
+          password,
+          security: isOpen ? 'nopass' : 'WPA',
+          hidden: $('qr-wifi-hidden').checked,
+        }));
+        toast('Wi-Fi QR code sent to display', 'good');
+        return;
+      }
+
+      // Photo mode: upload first (bridge hosts it + returns a relative path),
+      // then push that resolved URL through the same 'url' QR path — a photo
+      // QR is just a URL QR once the upload step has happened.
+      if (!qrSelectedPhotoDataUrl) {
+        toast('Choose a photo first', 'bad');
+        return;
+      }
+      const upload = await apiPost('/api/qr/image-upload', { imageDataUrl: qrSelectedPhotoDataUrl });
+      const absoluteUrl = new URL(upload.path, document.baseURI).href;
+      await apiPost('/api/qr/push', withTarget({ mode: 'url', url: absoluteUrl, label: 'Shared photo' }));
+      toast('Photo QR code sent to display', 'good');
+      resetPhotoPicker();
+    } catch (error) {
+      toast(error.message || 'Could not generate the QR code', 'bad');
+    } finally {
+      button.disabled = false;
     }
   });
 
@@ -1279,6 +1463,38 @@
 
   $('btn-mouse-left')?.addEventListener('click', () => sendPointerButtons({ left: 'click' }));
   $('btn-mouse-right')?.addEventListener('click', () => sendPointerButtons({ right: 'click' }));
+
+  $('btn-text-input-send')?.addEventListener('click', async () => {
+    const field = $('text-input-value');
+    const value = field.value;
+    if (!value) {
+      toast('Type something to send first', 'bad');
+      field.focus();
+      return;
+    }
+    if (!(await ensureControlUnlocked())) {
+      return;
+    }
+    const button = $('btn-text-input-send');
+    button.disabled = true;
+    try {
+      await apiPost('/api/input/text', withTarget({
+        value,
+        pressEnter: Boolean($('text-input-enter')?.checked),
+      }));
+      toast('Text sent to display', 'good');
+      field.value = '';
+      field.focus();
+    } catch (error) {
+      if (error.code === 'control_auth_required') {
+        setControlToken(selectedTargetId(), '');
+        updateControlLockUi();
+      }
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   (function buildKeyboard() {
     const root = $('keyboard');

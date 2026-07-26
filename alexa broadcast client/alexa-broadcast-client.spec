@@ -55,6 +55,15 @@ a = Analysis(
         'PIL',
         'PIL.Image',
         'PIL.ImageDraw',
+        # qrcode's PIL image factory is imported lazily inside make_image();
+        # list it explicitly (same reasoning as the pynput backends below).
+        'qrcode',
+        'qrcode.main',
+        'qrcode.constants',
+        'qrcode.util',
+        'qrcode.image.base',
+        'qrcode.image.pil',
+        'qrcode.image.pure',
         *pynput_hiddenimports,
         'src.config',
         'src.display_announce',

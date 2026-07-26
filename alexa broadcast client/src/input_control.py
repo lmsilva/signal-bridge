@@ -523,6 +523,37 @@ def handle_key(key_block: dict[str, Any] | None) -> None:
             _keyboard.release(mod)
 
 
+def handle_text(text_block: dict[str, Any] | None) -> None:
+    """Type a whole string in one shot (login/password/URL entry from the phone).
+
+    Uses pynput's ``Controller.type`` — it injects Unicode keystrokes directly
+    (SendInput with KEYEVENTF_UNICODE on Windows) rather than mapping each
+    character to a key + Shift combo, so it works for any character the phone
+    can type regardless of the display PC's keyboard layout.
+    """
+    if not isinstance(text_block, dict):
+        return
+    try:
+        _ensure_pynput()
+    except Exception as exc:
+        print(f"Keyboard input unavailable (pynput failed to load): {exc}", file=sys.stderr, flush=True)
+        return
+    value = str(text_block.get("value") or "")
+    if not value:
+        return
+    try:
+        _keyboard.type(value)
+    except Exception as exc:
+        print(f"Text input failed: {exc}", file=sys.stderr, flush=True)
+        return
+    if text_block.get("pressEnter"):
+        try:
+            _keyboard.press(_Key.enter)
+            _keyboard.release(_Key.enter)
+        except Exception as exc:
+            print(f"Text input Enter press failed: {exc}", file=sys.stderr, flush=True)
+
+
 def handle_input_payload(payload: dict) -> bool:
     """Return True if the payload was an input command (handled or skipped)."""
     ptype = payload.get("type")
@@ -531,5 +562,8 @@ def handle_input_payload(payload: dict) -> bool:
         return True
     if ptype == "input.key":
         handle_key(payload.get("key"))
+        return True
+    if ptype == "input.text":
+        handle_text(payload.get("text"))
         return True
     return False

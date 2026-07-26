@@ -8,6 +8,7 @@ const {
   loadBridgeState,
   readBroadcastLog,
   readVoiceEventsLog,
+  saveBridgeState,
 } = require('../src/bridge-state');
 
 function tempDir() {
@@ -37,7 +38,9 @@ test('readVoiceEventsLog rebuilds fingerprints from broadcast JSONL entries', ()
 
   const result = readVoiceEventsLog(logPath);
   assert.equal(result.lastRecordedTimestamp, Date.parse('2026-07-06T12:01:00.000Z'));
-  assert.deepEqual(result.recordedFingerprints, [fingerprint('Dinner is ready', 'Kitchen Echo')]);
+  assert.deepEqual(result.recordedFingerprints, [
+    { fp: fingerprint('Dinner is ready', 'Kitchen Echo'), ts: Date.parse('2026-07-06T12:01:00.000Z') },
+  ]);
 });
 
 test('loadBridgeState merges voice-events log and legacy broadcast.txt', () => {
@@ -66,8 +69,9 @@ test('loadBridgeState merges voice-events log and legacy broadcast.txt', () => {
     legacyBroadcastLogPaths: [legacyPath],
   });
 
-  assert.ok(state.recordedFingerprints.includes(fingerprint('Movie time', 'Office Echo')));
-  assert.ok(state.recordedFingerprints.includes(fingerprint('Legacy message', 'Kitchen Echo')));
+  const fps = state.recordedFingerprints.map((entry) => entry.fp);
+  assert.ok(fps.includes(fingerprint('Movie time', 'Office Echo')));
+  assert.ok(fps.includes(fingerprint('Legacy message', 'Kitchen Echo')));
   assert.equal(state.lastRecordedTimestamp, Date.parse('2026-07-06T12:00:00.000Z'));
 });
 
@@ -82,5 +86,46 @@ test('readBroadcastLog still parses tab-separated legacy lines', () => {
 
   const result = readBroadcastLog(legacyPath);
   assert.equal(result.lastRecordedTimestamp, Date.parse('2026-07-05T10:00:00.000Z'));
-  assert.deepEqual(result.recordedFingerprints, [fingerprint('Hello', 'Kitchen Echo')]);
+  assert.deepEqual(result.recordedFingerprints, [
+    { fp: fingerprint('Hello', 'Kitchen Echo'), ts: Date.parse('2026-07-05T10:00:00.000Z') },
+  ]);
+});
+
+test('saveBridgeState keeps the most recent fingerprints (sorted, capped) with their timestamps', () => {
+  const dir = tempDir();
+  const statePath = path.join(dir, 'bridge-state.json');
+  const now = Date.now();
+
+  saveBridgeState(statePath, {
+    lastRecordedTimestamp: now,
+    seenActivityIds: ['a', 'b'],
+    recordedFingerprints: [
+      { fp: 'old|message', ts: now - 100000 },
+      { fp: 'new|message', ts: now },
+    ],
+  });
+
+  const saved = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  assert.deepEqual(saved.recordedFingerprints, [
+    { fp: 'new|message', ts: now },
+    { fp: 'old|message', ts: now - 100000 },
+  ]);
+});
+
+test('loadBridgeState round-trips fingerprint timestamps written by saveBridgeState', () => {
+  const dir = tempDir();
+  const statePath = path.join(dir, 'bridge-state.json');
+  const eventsPath = path.join(dir, 'voice-events.jsonl');
+  const now = Date.now();
+
+  saveBridgeState(statePath, {
+    lastRecordedTimestamp: now,
+    seenActivityIds: [],
+    recordedFingerprints: [{ fp: fingerprint('this is a test', 'Office Echo'), ts: now }],
+  });
+
+  const state = loadBridgeState(statePath, eventsPath, {});
+  const entry = state.recordedFingerprints.find((e) => e.fp === fingerprint('this is a test', 'Office Echo'));
+  assert.ok(entry);
+  assert.equal(entry.ts, now);
 });

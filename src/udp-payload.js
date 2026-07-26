@@ -497,6 +497,102 @@ function buildInputKeyPayload({
   };
 }
 
+// Full-string keyboard entry: the client types the whole value in one shot
+// (pynput Controller.type, which injects Unicode keystrokes directly) instead
+// of the phone sending one input.key payload per character.
+function buildInputTextPayload({
+  value,
+  pressEnter = false,
+  device,
+  timestamp,
+  trigger,
+} = {}) {
+  const normalizedValue = String(value ?? '');
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return {
+    version: 2,
+    type: 'input.text',
+    device: device || 'Signal',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: 0,
+    trigger: trigger || 'web-api',
+    text: {
+      value: normalizedValue,
+      pressEnter: Boolean(pressEnter),
+    },
+  };
+}
+
+// Escapes the special characters reserved by the Wi-Fi QR payload format
+// (RFC-ish convention used by iOS/Android QR scanners): backslash, semicolon,
+// comma and colon must be backslash-escaped inside each field.
+function escapeWifiField(value) {
+  return String(value ?? '').replace(/([\\;,:])/g, '\\$1');
+}
+
+// Builds the standard "WIFI:T:<type>;S:<ssid>;P:<password>;H:<hidden>;;"
+// QR payload string that iOS/Android camera apps recognize as a network
+// join prompt. `security` is 'WPA' (covers WPA/WPA2/WPA3 personal) or
+// 'nopass' for open networks (password omitted).
+function buildWifiQrContent({ ssid, password, security = 'WPA', hidden = false } = {}) {
+  const normalizedSsid = String(ssid || '').trim();
+  if (!normalizedSsid) {
+    return null;
+  }
+  const isOpen = String(security).toLowerCase() === 'nopass';
+  const type = isOpen ? 'nopass' : 'WPA';
+  const parts = [`WIFI:T:${type}`, `S:${escapeWifiField(normalizedSsid)}`];
+  if (!isOpen) {
+    parts.push(`P:${escapeWifiField(password || '')}`);
+  }
+  if (hidden) {
+    parts.push('H:true');
+  }
+  return `${parts.join(';')};;`;
+}
+
+const QR_TYPES = new Set(['url', 'wifi']);
+
+// Bridge never renders the QR bitmap itself — the display client generates
+// it locally from this content string, so the UDP payload stays a small
+// piece of text regardless of QR density.
+function buildQrDisplayPayload({
+  qrType,
+  content,
+  label,
+  device,
+  timestamp,
+  trigger,
+  displaySeconds: displaySecondsOverride,
+} = {}, config) {
+  const normalizedType = String(qrType || '').trim().toLowerCase();
+  const normalizedContent = String(content || '').trim();
+  if (!QR_TYPES.has(normalizedType) || !normalizedContent) {
+    return null;
+  }
+
+  const seconds = Number(displaySecondsOverride)
+    || Number(config?.qrImage?.defaultDisplaySeconds)
+    || 60;
+
+  return {
+    version: 2,
+    type: 'qr.display',
+    device: device || 'Signal',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: Math.max(15, seconds),
+    trigger: trigger || 'qr-api',
+    qr: {
+      qrType: normalizedType,
+      content: normalizedContent,
+      label: label || null,
+    },
+  };
+}
+
 function buildSmartHomePayload(event, config, { deviceType, matchedName } = {}) {
   const spokenTarget = event.command?.target || null;
   return {
@@ -554,6 +650,41 @@ function buildAlarmSnapshotPayload({
   };
 }
 
+// Shared photo slideshow: cycles the photos currently in the QR image cache
+// (anything uploaded through "QR Code → Photo" in the last qrImage.cacheDays,
+// 7 by default) at `secondsPerPhoto` each. displaySeconds spans the whole
+// pass through the list so the overlay does not auto-dismiss partway
+// through — a fresh UDP payload (any type) still interrupts it immediately,
+// same as every other overlay.
+function buildPhotoSlideshowPayload({
+  photos,
+  secondsPerPhoto = 5,
+  device,
+  timestamp,
+  trigger,
+} = {}) {
+  const list = (Array.isArray(photos) ? photos : [])
+    .map((url) => String(url || '').trim())
+    .filter(Boolean);
+  if (!list.length) {
+    return null;
+  }
+  const perPhoto = Math.max(1, Number(secondsPerPhoto) || 5);
+
+  return {
+    version: 2,
+    type: 'photo.slideshow',
+    device: device || 'Signal',
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: list.length * perPhoto,
+    trigger: trigger || 'photo-slideshow-api',
+    slideshow: {
+      photos: list,
+      secondsPerPhoto: perPhoto,
+    },
+  };
+}
+
 function buildTimerSnapshotPayload({
   timers,
   device,
@@ -595,8 +726,12 @@ module.exports = {
   buildDisplayAuthOkPayload,
   buildInputPointerPayload,
   buildInputKeyPayload,
+  buildInputTextPayload,
+  buildPhotoSlideshowPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
+  buildQrDisplayPayload,
+  buildWifiQrContent,
   displaySeconds,
   timerDisplaySeconds,
   alarmDisplaySeconds,

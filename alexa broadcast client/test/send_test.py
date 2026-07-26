@@ -764,6 +764,85 @@ def build_payload(args) -> dict:
             "key": {"key": "Tab", "modifiers": [], "action": "press"},
         }
 
+    if args.type == "qr-url":
+        return {
+            "version": 2,
+            "type": "qr.display",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "qr": {
+                "qrType": "url",
+                "content": args.url,
+                "label": args.url,
+            },
+        }
+
+    if args.type == "qr-wifi":
+        return {
+            "version": 2,
+            "type": "qr.display",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "qr": {
+                "qrType": "wifi",
+                "content": "WIFI:T:WPA;S:Home Network;P:letmein123;;",
+                "label": "Wi-Fi: Home Network",
+            },
+        }
+
+    if args.type == "music":
+        return {
+            "version": 2,
+            "type": "music.playing",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": display_seconds,
+            "trigger": "test",
+            "query": "what's playing",
+            "spokenResponse": "This is Blinding Lights by The Weeknd",
+            "music": {
+                "song": "Blinding Lights",
+                "artist": "The Weeknd",
+                "album": "After Hours",
+                "artUrl": "https://picsum.photos/seed/signal-music/800/800",
+                "provider": "Amazon Music",
+                "state": "PLAYING",
+                "device": args.sender,
+            },
+        }
+
+    if args.type == "input-text":
+        return {
+            "version": 2,
+            "type": "input.text",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 0,
+            "trigger": "test",
+            "text": {"value": args.text, "pressEnter": args.press_enter},
+        }
+
+    if args.type == "photo-slideshow":
+        photos = [
+            "https://picsum.photos/seed/signal1/1200/1600",
+            "https://picsum.photos/seed/signal2/1200/1600",
+            "https://picsum.photos/seed/signal3/1600/1200",
+        ]
+        seconds_per_photo = 5
+        return {
+            "version": 2,
+            "type": "photo.slideshow",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": len(photos) * seconds_per_photo,
+            "trigger": "test",
+            "slideshow": {"photos": photos, "secondsPerPhoto": seconds_per_photo},
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -815,7 +894,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "input-text", "photo-slideshow", "music"],
         default="broadcast",
         help="Payload type to send",
     )
@@ -823,6 +902,12 @@ def main():
     parser.add_argument("--url", default="https://example.com", help="Page for --type web-open")
     parser.add_argument("--pin", default="1234", help="PIN for --type display-auth")
     parser.add_argument("--message", default="This is a test broadcast message", help="Broadcast message body")
+    parser.add_argument("--text", default="hunter2", help="Full string for --type input-text")
+    parser.add_argument(
+        "--press-enter",
+        action="store_true",
+        help="Also press Enter after typing, for --type input-text",
+    )
     parser.add_argument("--sender", default="Kitchen Echo", help="Sender/device label")
     parser.add_argument("--destination", default="All devices", help="Broadcast destination label")
     parser.add_argument("--seconds", type=int, default=30, help="Requested display duration")

@@ -37,7 +37,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop; timer in-place updates + local fire handler |
 | `src/listener.py` | `UdpListener` — background thread, JSON decode, `on_message` callback |
 | `src/overlay.py` | Fullscreen shell: fade, dismiss countdown label (bottom), routes payloads to panels; rounded backdrop frame behind all panels |
-| `src/display_panels.py` | All overlay panels; `BasePanel` has shared dark palette + `_round_rect`/`_pill`/`_panel_card` helpers; `TeslaDashboardPanel` fetches live OSM map tiles |
+| `src/display_panels.py` | All overlay panels; `BasePanel` has shared dark palette + `_round_rect`/`_pill`/`_panel_card` helpers; `TeslaDashboardPanel` fetches live OSM map tiles; `QrPanel` renders a QR code locally via `qrcode` from the bridge's `qr.content` string (URL or Wi-Fi); `PhotoSlideshowPanel` cycles shared photos (fetched off-thread, SSL-tolerant, centered for portrait/landscape) with its own per-photo timer |
 | `src/payload_utils.py` | Type detection; timer helpers; `format_limit_reset_time` for Tesla rate limits |
 | `src/weather_fetch.py` | Client geocode + Open-Meteo fetch; spoken-response location extraction |
 | `src/message_scroll.py` | Long broadcast message scroll animation |
@@ -46,18 +46,18 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/webview_host.py` | Standalone WebView2 (pywebview) host: frameless fullscreen always-on-top; persistent profile (`private_mode=False`) for saved passwords |
 | `src/display_identity.py` | Stable `display.id` + `displayName` (hostname fallback) for bridge registration |
 | `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); responds to `display.discover` |
-| `src/input_control.py` | Apply `input.pointer` / `input.key` — absolute Win32 `SendInput` (tracked tip); clicks aimed at tip; `pynput` for keys. Keeps the process DPI-*unaware* so Tk overlay layouts match font metrics. |
+| `src/input_control.py` | Apply `input.pointer` / `input.key` / `input.text` — absolute Win32 `SendInput` (tracked tip); clicks aimed at tip; `pynput` for keys; `handle_text()` types a whole string in one call (`Controller.type()`, Unicode-safe) instead of one keystroke per key, with optional trailing Enter. Keeps the process DPI-*unaware* so Tk overlay layouts match font metrics. |
 | `src/remote_cursor.py` | Click-through software arrow at the remote tip; blanks system cursors while active; restores on idle or physical (non-injected) mouse move |
-| `src/config.py` | Load `config.json`; `effective_display_seconds` (timers use full duration) |
+| `src/config.py` | Load `config.json`; `effective_display_seconds` (timers and `photo.slideshow` use the payload's full requested duration, bypassing `maxDisplaySeconds`) |
 | `src/paths.py` | Resolve config path for dev vs portable build |
 | `config.json` | User settings (port, fade, display caps, colors) |
 | `run.bat` | Dev: venv + `python src/main.py` |
 | `build_portable.bat` | PyInstaller → `dist/alexa broadcast client/` (uses `%LOCALAPPDATA%` venv on NAS shares) |
 | `alexa-broadcast-client.spec` | PyInstaller spec + hidden imports |
 | `requirements-build.txt` | PyInstaller + runtime deps for portable build |
-| `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor …`) |
+| `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor|input-text|photo-slideshow …`) |
 | `test/run_tests.bat` | Python `unittest` for `test_*.py` |
-| `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing |
+| `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing, `QrPanel`, `PhotoSlideshowPanel`, `input_control`/display remote |
 | `README.md` | User-facing setup / portable build guide |
 
 ---
@@ -92,7 +92,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `timer.snapshot` | Active timers with **names**, device, remaining, duration; fired alert names timer + device |
 | `alarm.snapshot` | Active wake alarms across devices — time, location, optional label; highlights newly set alarm |
 | `shopping-list.snapshot` | Shopping list items with paging |
-| `music.playing` | Large centered album art + track info |
+| `music.playing` | Large album art + track info — sized from available space (not a fixed cap) so it fills portrait; two-column art-left/text-right layout in landscape |
 | `smart-home.command` | Device on/off panel |
 | `tesla-battery.query` | Model Y image + battery % bar; Fleet API data with error/rate-limit states; **stale cache** shows last known % with amber legend |
 | `tesla-dashboard.query` | Mission-control dashboard — live OSM map (from `map.latitude`/`longitude`, dark-tinted tiles, pulsing pin + heading arrow), car render with security pills, battery bar, climate/TPMS/odo/software 2×2 grid, media strip |
@@ -105,6 +105,9 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `display.discover` | **Command:** remember bridge host from packet `_rinfo` + re-announce |
 | `display.auth` | Overlay: unlock PIN, or green **Authenticated** for ~1s when `auth.status` is `ok` |
 | `input.pointer` / `input.key` | **Command:** remote mouse — move/click/wheel all via Win32 `SendInput` (`pynput` only as fallback) / keyboard (`pynput`) |
+| `input.text` | **Command:** full-string keyboard input — `text.{value, pressEnter}` typed in one shot via `pynput` `Controller.type()` (Unicode-safe), optional trailing Enter key |
+| `qr.display` | `QrPanel` — renders a QR code (locally generated with `qrcode`, no bitmap sent over UDP) from `qr.{qrType: "url"\|"wifi", content, label}`; heading changes for URL vs Wi-Fi |
+| `photo.slideshow` | `PhotoSlideshowPanel` — cycles `slideshow.photos[]` (bridge's shared-photo cache, last 7 days) at `slideshow.secondsPerPhoto` (default 5) each; each photo fetched off the Tk thread and centered to fit portrait or landscape; immediately replaced/interrupted like any other overlay when a new UDP payload of any kind arrives |
 
 
 `event.kind` on timers: `started`, `list`, `fired`. Empty timer lists (`event.kind: list`, `timers: []`) are ignored.
@@ -133,6 +136,11 @@ python test/send_test.py --type web-open --url https://example.com
 python test/send_test.py --type web-open-bad          # friendly error path
 python test/send_test.py --type web-close
 python test/send_test.py --type system-reboot         # careful: actually reboots
+python test/send_test.py --type qr-url --url https://example.com
+python test/send_test.py --type qr-wifi
+python test/send_test.py --type input-text --text "hunter2" --press-enter
+python test/send_test.py --type photo-slideshow
+python test/send_test.py --type music              # check bigger album art, portrait + landscape
 ```
 
 ---
@@ -174,7 +182,7 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 
 **Portable build:** run `build_portable.bat` only when the user asks — do not build automatically after display edits. Do not launch the portable exe unless asked to test locally. Success exits immediately; `--pause` keeps the window open.
 
-**Requirements:** Python 3.10+, `pystray`, `Pillow`, `pywebview` (see `requirements.txt`). The web display mode needs the **Edge WebView2 runtime** on the poster PC (preinstalled on Win10/11); if missing, the client shows the friendly error instead.
+**Requirements:** Python 3.10+, `pystray`, `Pillow`, `pywebview`, `qrcode` (pure Python, uses Pillow — see `requirements.txt`). The web display mode needs the **Edge WebView2 runtime** on the poster PC (preinstalled on Win10/11); if missing, the client shows the friendly error instead.
 
 **Multi-exe layout:** `alexa-broadcast-client.exe` + `webview-host.exe` share the `dist/alexa broadcast client/` folder (one `COLLECT`); `send-test.exe` stays a separate onefile helper.
 
@@ -183,16 +191,16 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only (78 tests)
+test\run_tests.bat              # client unit tests only (118 tests)
 ```
 
 From repo root (bridge + client):
 
 ```powershell
-..\run_all_tests.bat            # 280 bridge + 78 client
+..\run_all_tests.bat            # 357 bridge + 118 client
 ```
 
-**Unit tests:** `test/test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`), `test_config.py`, `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds), `test_web_overlay.py` (URL pre-flight, host command build, web/system command routing, friendly error payload).
+**Unit tests:** `test/test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`, `qr.display`/`photo.slideshow` display types, `input.text` command type), `test_config.py` (incl. `photo.slideshow` bypassing `maxDisplaySeconds`), `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds, `qr.display`/`photo.slideshow` visibility), `test_web_overlay.py` (URL pre-flight, host command build, web/system command routing, friendly error payload), `test_qr_panel.py` (`QrPanel._build_qr_image` sizing vs target, empty-content fallback — skipped if `qrcode` isn't installed), `test_photo_slideshow_panel.py` (`PhotoSlideshowPanel._fetch_photo` download/thumbnail sizing, SSL-verify-failure fallback + memoization, `_is_ssl_failure`), `test_display_remote.py` (incl. `handle_text` full-string typing, optional Enter, broken-pynput survival).
 
 **Manual smoke:** `test/send_test.py` with client running; Windows Firewall must allow UDP on the listen port.
 
@@ -237,6 +245,10 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-25: **Bigger, better-laid-out album art** — `MusicPanel`'s art was capped at a flat `ART_SIZE = 510` px regardless of screen size, leaving 600-800+ px of unused space on most portrait screens and roughly half the screen unused in landscape (single centered column both orientations). Portrait now sizes the art from actual available width/height (soft cap raised to 900) instead of the old fixed cap, so it fills the screen; landscape (`_render_landscape`) is now a genuine two-column layout — art on the left sized from the full message-area height, track info vertically centered in the remaining column on the right — instead of the same cramped centered-stack used for portrait.
+- 2026-07-25: **Full-string text input + Shared Photo Slideshow** — `input_control.py` gained `handle_text()` for the new `input.text` UDP command: types an entire string in one `pynput` `Controller.type()` call (Unicode-safe) instead of one keystroke per key event, with an optional trailing Enter — makes pushing logins/passwords/URLs from the phone's own keyboard far faster than the on-screen remote keyboard. New `PhotoSlideshowPanel` (`display_panels.py`) handles the `photo.slideshow` UDP payload: cycles every photo in `slideshow.photos[]` (the bridge's last-7-days shared-photo cache) at `slideshow.secondsPerPhoto` (5s default) each, fetching each photo off the Tk main thread (SSL-verify failures against the bridge's self-signed cert fall back to an unverified context and that fallback is remembered for the session) and centering it to fit both portrait and landscape. `config.py::effective_display_seconds` now lets `photo.slideshow` bypass `maxDisplaySeconds` so a long slideshow isn't cut short — like the existing timer exception, the whole point of `displaySeconds` here is "however long it takes to show everything." Like every other overlay, any new incoming UDP payload immediately replaces/interrupts the slideshow. Registered in `overlay.py` + `DISPLAY_TYPES`/`COMMAND_TYPES` (`main.py`, `payload_utils.py`).
+- 2026-07-25: **QR code overlay** — new `QrPanel` (`display_panels.py`) renders a locally-generated QR code (via new `qrcode` dependency) for the bridge's `qr.display` payload; bridge sends only a content string (`qr.{qrType,content,label}` — a URL or a `WIFI:T:...;;` string), never a bitmap. Registered in `overlay.py` + `DISPLAY_TYPES` (`main.py`, `payload_utils.py`); PyInstaller spec bundles `qrcode`'s hidden imports (lazy PIL image factory).
+- 2026-07-25: **Timer panel spacing** — the active-timer row showed the set duration ("5:00") right above the live countdown with almost no gap, plus a cramped "left" caption below it — the subtitle line already reads "{device} · {duration} timer" so the duplicate top label was dropped, and the countdown + "left"/"Finished!" caption are now centered as one block sized from real font metrics (`countdown_gap`) so they never touch regardless of portrait/landscape font sizing (`display_panels.py::TimerPanel._render`).
 - 2026-07-25: **Fix broadcast message covering FROM/TO/TIME chips** — `overlay.py`'s shared `message_area_top` starts right under the title for panels without chips, but `BroadcastPanel` still draws the chip row and was placing its scrolling message viewport at that same y, drawing over the chips in both orientations. `BroadcastPanel` now computes its own content top (`chip_y + chip_height + gap`) and viewport height from those same layout fields, so the message area always starts below the chips. Smoke: `test/send_test.py --type broadcast` (check portrait and landscape).
 - 2026-07-23: **Tesla battery landscape layout** — landscape uses a car | status two-column layout; portrait still stacks but reserves height for cache/rate-limit blocks so "Tesla" / "Tesla Battery" are never clipped.
 - 2026-07-23: **Portable build quiet on Windows** — PyInstaller spec freezes only Windows `webview`/`pynput` backends (no android ModuleNotFoundError), overrides stale `pycparser.lextab` hooks, and `build_portable.bat` exits immediately on success (`--pause` to keep the window open).

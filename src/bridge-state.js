@@ -16,6 +16,27 @@ function fingerprint(message, device) {
   return `${normalizePart(device)}|${normalizePart(message)}`;
 }
 
+// `recordedFingerprints` entries carry the timestamp of the most recent
+// occurrence (`{ fp, ts }`) so `BroadcastParser` can treat identical
+// message+device content as a duplicate only within a short window (catches
+// the same utterance being reported twice via push event + history poll)
+// instead of forever — otherwise a deliberately repeated broadcast (e.g. a
+// common test message like "this is a test") would never display again.
+function addFingerprint(map, message, device, timestampMs) {
+  if (!message || !device || Number.isNaN(timestampMs)) {
+    return;
+  }
+  const fp = fingerprint(message, device);
+  const existing = map.get(fp);
+  if (existing === undefined || timestampMs > existing) {
+    map.set(fp, timestampMs);
+  }
+}
+
+function toFingerprintEntries(map) {
+  return [...map.entries()].map(([fp, ts]) => ({ fp, ts }));
+}
+
 function readBroadcastLog(broadcastLogPath) {
   const result = {
     lastRecordedTimestamp: 0,
@@ -36,7 +57,7 @@ function readBroadcastLog(broadcastLogPath) {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const fingerprints = new Set();
+  const fingerprints = new Map();
 
   for (const line of lines) {
     const parts = line.split('\t');
@@ -52,10 +73,10 @@ function readBroadcastLog(broadcastLogPath) {
       result.lastRecordedTimestamp = Math.max(result.lastRecordedTimestamp, timestamp);
     }
 
-    fingerprints.add(fingerprint(message, device));
+    addFingerprint(fingerprints, message, device, Number.isNaN(timestamp) ? 0 : timestamp);
   }
 
-  result.recordedFingerprints = [...fingerprints];
+  result.recordedFingerprints = toFingerprintEntries(fingerprints);
   return result;
 }
 
@@ -74,7 +95,7 @@ function readVoiceEventsLog(voiceEventsLogPath) {
     return result;
   }
 
-  const fingerprints = new Set();
+  const fingerprints = new Map();
   const lines = fs.readFileSync(voiceEventsLogPath, 'utf8')
     .split('\n')
     .map((line) => line.trim())
@@ -93,24 +114,20 @@ function readVoiceEventsLog(voiceEventsLogPath) {
     }
 
     const timestamp = Date.parse(entry.ts || entry.timestamp || '');
-    const message = entry.message;
-    const device = entry.device;
 
     if (!Number.isNaN(timestamp)) {
       result.lastRecordedTimestamp = Math.max(result.lastRecordedTimestamp, timestamp);
     }
 
-    if (message && device) {
-      fingerprints.add(fingerprint(message, device));
-    }
+    addFingerprint(fingerprints, entry.message, entry.device, Number.isNaN(timestamp) ? 0 : timestamp);
   }
 
-  result.recordedFingerprints = [...fingerprints];
+  result.recordedFingerprints = toFingerprintEntries(fingerprints);
   return result;
 }
 
 function mergeLogState(...sources) {
-  const mergedFingerprints = new Set();
+  const mergedFingerprints = new Map();
   let lastRecordedTimestamp = 0;
 
   for (const source of sources) {
@@ -118,14 +135,22 @@ function mergeLogState(...sources) {
       continue;
     }
     lastRecordedTimestamp = Math.max(lastRecordedTimestamp, source.lastRecordedTimestamp || 0);
-    for (const fp of source.recordedFingerprints || []) {
-      mergedFingerprints.add(fp);
+    for (const entry of source.recordedFingerprints || []) {
+      const fp = typeof entry === 'string' ? entry : entry?.fp;
+      const ts = typeof entry === 'string' ? 0 : (entry?.ts || 0);
+      if (!fp) {
+        continue;
+      }
+      const existing = mergedFingerprints.get(fp);
+      if (existing === undefined || ts > existing) {
+        mergedFingerprints.set(fp, ts);
+      }
     }
   }
 
   return {
     lastRecordedTimestamp,
-    recordedFingerprints: [...mergedFingerprints],
+    recordedFingerprints: toFingerprintEntries(mergedFingerprints),
   };
 }
 
@@ -147,25 +172,33 @@ function loadBridgeState(statePath, voiceEventsLogPath, { legacyBroadcastLogPath
   const fromEventsLog = readVoiceEventsLog(voiceEventsLogPath);
   const legacySources = legacyBroadcastLogPaths.map((logPath) => readBroadcastLog(logPath));
   const fromLogs = mergeLogState(fromEventsLog, ...legacySources);
-  const mergedFingerprints = new Set([
-    ...(saved.recordedFingerprints || []),
-    ...fromLogs.recordedFingerprints,
-  ]);
+  const merged = mergeLogState(
+    { recordedFingerprints: saved.recordedFingerprints || [] },
+    fromLogs,
+  );
 
   return {
     seenActivityIds: Array.isArray(saved.seenActivityIds) ? saved.seenActivityIds : [],
     lastRecordedTimestamp: Math.max(saved.lastRecordedTimestamp || 0, fromLogs.lastRecordedTimestamp),
-    recordedFingerprints: [...mergedFingerprints],
+    recordedFingerprints: merged.recordedFingerprints,
   };
 }
 
 function saveBridgeState(statePath, state) {
   ensureParentDir(statePath);
 
+  // Keep only the most recently-seen fingerprints — with a short dedup
+  // window (see parser.js) anything older is already inert, but capping
+  // here still bounds file growth over the bridge's lifetime.
+  const trimmedFingerprints = (state.recordedFingerprints || [])
+    .slice()
+    .sort((a, b) => (b?.ts || 0) - (a?.ts || 0))
+    .slice(0, MAX_FINGERPRINTS);
+
   const payload = {
     lastRecordedTimestamp: state.lastRecordedTimestamp || 0,
     seenActivityIds: (state.seenActivityIds || []).slice(-MAX_SEEN_IDS),
-    recordedFingerprints: (state.recordedFingerprints || []).slice(-MAX_FINGERPRINTS),
+    recordedFingerprints: trimmedFingerprints,
     savedAt: new Date().toISOString(),
   };
 

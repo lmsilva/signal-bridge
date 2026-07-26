@@ -43,6 +43,8 @@ class BroadcastClientApp:
             "alexa-notifications.query",
             "request.processing",
             "display.auth",
+            "qr.display",
+            "photo.slideshow",
         }
     )
 

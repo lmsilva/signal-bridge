@@ -43,6 +43,18 @@ class ConfigTests(unittest.TestCase):
         }
         self.assertTrue(BroadcastClientApp._timer_payload_has_content(payload))
 
+    def test_photo_slideshow_bypasses_max_display_seconds(self):
+        # 20 photos * 5s = 100s, well past a tight 60s maxDisplaySeconds — the
+        # slideshow must not get cut off partway through.
+        config = {"defaultDisplaySeconds": 60, "maxDisplaySeconds": 60}
+        payload = {"type": "photo.slideshow", "displaySeconds": 100}
+        self.assertEqual(effective_display_seconds(payload, config), 100)
+
+    def test_photo_slideshow_still_has_a_floor(self):
+        config = {"defaultDisplaySeconds": 60, "maxDisplaySeconds": 60}
+        payload = {"type": "photo.slideshow", "displaySeconds": 0}
+        self.assertEqual(effective_display_seconds(payload, config), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

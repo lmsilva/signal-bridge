@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-24
+**Last updated:** 2026-07-25
 
 ---
 
@@ -61,8 +61,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`) |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
-| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer) |
-| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer voice queries from history |
+| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `input.text`, `photo.slideshow`) |
+| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music voice queries from history |
+| `src/music-info.js` | Detect "play \<song\>" commands and "what song is playing" queries (`matchesMusicQuery`/`matchesNowPlayingQuery`); fetch/normalize now-playing info (`fetchNowPlaying` retries until Amazon's player-info API reports `PLAYING` + a title) |
 | `src/indoor-locations.js` | Thermostat/sensor names + alias resolution (bedroom echo → Room 7, etc.) |
 | `src/indoor-reading-parse.js` | Parse spoken indoor temp/humidity; comfort bands (<68 cold, >74 hot) |
 | `src/indoor-temperature.js` | Indoor vs outdoor routing; location phrase extraction |
@@ -93,8 +94,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-auth.js` | One-shot OAuth (`npm run tesla-auth`, `tesla-auth-pc.bat`) |
 | `src/tesla-register.js` | Partner domain register + `--verify-only` |
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
-| `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (display picker, push Tesla/URL, close browser, reboot/poweroff, mouse/keyboard input, phone auth); self-signed TLS via `web-tls.js` |
+| `src/web-server.js` | **Control web page** (`https://<NAS_IP>:47810/`): static SPA + JSON API (display picker, push Tesla/URL/weather/shopping-list/timers/photo-slideshow, QR code generate + photo upload, full-string text input, close browser, reboot/poweroff, mouse/keyboard input, phone auth); self-signed TLS via `web-tls.js` |
 | `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
+| `src/qr-image-cache.js` | Stores "QR code → embedded photo" uploads under `data/qr-image-cache/` with a per-image expiry (`qrImage.cacheDays`, default 7); serves them back at `/qr-images/<token>.<ext>`, hourly sweep deletes expired files; `list()` returns non-expired photos newest-first for the "Shared Photo Slideshow" tile |
 | `src/web/` | **Signal** UI assets: `index.html`, `app.js`, `styles.css`, `logo.svg` / `favicon.svg` / `logo.png`, vendored `jsqr.min.js` |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
 | `test/*.test.js` | Node built-in test suite (`npm test`) |
@@ -284,6 +286,11 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `webServer.httpRedirectPort` | Optional plain HTTP redirect to HTTPS (default `47811`; set `0` to disable) |
 | `webServer.certDir` / `certHosts` | Cert folder (`data/web-certs`) and extra SAN hostnames/IPs (include your NAS LAN IP) |
 | `webServer.controlAuth.*` | PIN unlock for mouse/keyboard/power (`enabled`, `pinDigits`, `pinDisplaySeconds` null→`defaultDisplaySeconds`, `sessionMinutes` default 60 — mirrors the 1h client-side lock) |
+| `qrImage.cacheDir` | Folder for "QR → embedded photo" uploads (default `data/qr-image-cache`) |
+| `qrImage.cacheDays` | Days before an uploaded photo (and its URL) expires (default **7**) |
+| `qrImage.maxBytes` | Max decoded photo size accepted by `/api/qr/image-upload` (default 6MB) |
+| `qrImage.defaultDisplaySeconds` | Fallback `displaySeconds` for `qr.display` payloads (default 60) |
+| *(none)* | Shared Photo Slideshow reuses `qrImage.*` cache config — any photo uploaded via QR "Photo" mode is eligible, filtered to the last 7 days by `qrImage.cacheDays` |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
 
 Secrets and runtime files live under `data/` and are **not committed**.
@@ -313,6 +320,9 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `display.announce` | **Inbound** on `:47833` — client registration (`display.{id,shortId,name,port}`); id is per-machine, not name |
 | `display.auth` | Control unlock PIN overlay — `auth.pin` + `displaySeconds`; after verify, `auth.status: "ok"` for ~1s green Authenticated flash |
 | `input.pointer` / `input.key` | Control tab — relative mouse / key; requires unlocked `target.id` + `controlToken` |
+| `input.text` | Control tab "Send Text" card — `text.{value, pressEnter}`; client types the whole string in one shot (`pynput` `Controller.type()`, Unicode-safe) instead of one keystroke per key event; requires unlocked `target.id` + `controlToken` |
+| `qr.display` | Push tab QR generator — `qr.{qrType: "url"\|"wifi", content, label}`; client renders the QR bitmap locally (`qrcode` lib) from `content` (a URL, or a `WIFI:T:...;;` string built by `buildWifiQrContent`) |
+| `photo.slideshow` | Push tab "Shared Photo Slideshow" tile — `slideshow.{photos[], secondsPerPhoto}`; `photos` is every non-expired QR-cache photo from the last 7 days (newest-first), `displaySeconds` = `photos.length * secondsPerPhoto` so the whole set gets shown; client cycles through them (5s each by default) and centers each photo for portrait or landscape, interrupting immediately if any new UDP payload arrives |
 
 Optional `target: { id }` or `{ all: true }` on outbound commands for unicast vs broadcast delivery (`display-registry.resolveDelivery`).
 
@@ -352,13 +362,13 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (280 tests)
-run_all_tests.bat           # repo root — bridge + Windows client (280 + 78)
+npm test                    # bridge only (357 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (357 + 118)
 ```
 
-Bridge tests in `test/*.test.js` — includes `tesla-fleet.test.js`, `tesla-udp-payload.test.js`, `tesla-auth-status.test.js`, `tesla-battery.test.js`, `tesla-battery-cache.test.js`, `tesla-dashboard.test.js`, `tesla-dashboard-data.test.js`, `tesla-dashboard-cache.test.js`, voice-event gate/dedup for Fleet API flow, `web-command-payloads.test.js` (web.open/web.close/system.command builders), and `web-server.test.js` (static + API routes, URL validation, Tesla phone-OAuth callback flow with mocked token endpoint).
+Bridge tests in `test/*.test.js` — includes `tesla-fleet.test.js`, `tesla-udp-payload.test.js`, `tesla-auth-status.test.js`, `tesla-battery.test.js`, `tesla-battery-cache.test.js`, `tesla-dashboard.test.js`, `tesla-dashboard-data.test.js`, `tesla-dashboard-cache.test.js`, voice-event gate/dedup for Fleet API flow, `web-command-payloads.test.js` (web.open/web.close/system.command builders + `buildWifiQrContent`/`buildQrDisplayPayload`/`buildInputTextPayload`/`buildPhotoSlideshowPayload`), `qr-image-cache.test.js` (store/get/sweep, expiry, oversized/invalid rejection, `list()` newest-first), and `web-server.test.js` (static + API routes, URL validation, Tesla phone-OAuth callback flow with mocked token endpoint, QR push + photo upload/serve/expiry, weather/shopping-list/timers quick-push tiles, full-string text input, photo-slideshow list + push).
 
-Client tests in `alexa broadcast client/test/test_*.py` — includes `format_limit_reset_time`, Tesla fleet battery payload routing, and `test_web_overlay.py` (pre-flight, host command, command routing, error payload).
+Client tests in `alexa broadcast client/test/test_*.py` — includes `format_limit_reset_time`, Tesla fleet battery payload routing, `test_web_overlay.py` (pre-flight, host command, command routing, error payload), `test_qr_panel.py` (`QrPanel._build_qr_image` sizing, empty-content fallback), `test_photo_slideshow_panel.py` (`PhotoSlideshowPanel._fetch_photo` download/thumbnail/SSL-fallback, `_is_ssl_failure`), and `test_display_remote.py` (`handle_text` full-string typing, optional Enter press, broken-pynput survival).
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 
@@ -420,20 +430,36 @@ Mobile-first SPA served by the listener process at **`https://<NAS_IP>:47810/`**
 | `POST /api/displays/auth/verify` | `{targetId,pin}` → `controlToken` session for that display |
 | `POST /api/displays/auth/status` | Unlock / challenge status for a display |
 | `POST /api/push/tesla-dashboard` / `tesla-battery` | Synthetic event (`trigger: "web-api"`) through `listener.recordVoiceEvent`; body may include `targetId` |
+| `POST /api/push/weather` / `shopping-list` | Synthetic voice-query event (`trigger: "web-api"`) through `listener.recordVoiceEvent`, same as if Alexa had been asked — cached weather/shopping data is served immediately |
+| `POST /api/push/timers` | Calls `listener.requestTimerPoll()` for an immediate Amazon notifications poll → UDP `timer.snapshot`; **503** if the hook isn't wired (older listener) |
 | `POST /api/push/url` `{url,targetId?}` | Validate → UDP `web.open` (unicast when one display selected) |
 | `POST /api/push/close-browser` | UDP `web.close` |
+| `POST /api/qr/push` `{mode:"url"\|"wifi", url\|(ssid,password,security,hidden), label?, targetId?}` | Build content string → UDP `qr.display` |
+| `POST /api/qr/image-upload` `{imageDataUrl}` | Store a base64 photo (`qr-image-cache.js`) → `{path,expiresAt}`; resolve `path` against `document.baseURI` client-side, then push it through `/api/qr/push` (`mode:"url"`) |
+| `GET /qr-images/<token>.<ext>` | Serves an uploaded photo until it expires (default 7 days), then 404s permanently |
+| `GET /api/photos` | Lists non-expired QR-cache photos (newest-first) with resolved URLs, for the "Shared Photo Slideshow" tile preview/count |
+| `POST /api/push/photo-slideshow` `{secondsPerPhoto?,targetId?}` | Builds the photo list from the QR image cache → UDP `photo.slideshow`; 404s with a friendly message when there are no shared photos |
 | `POST /api/system/reboot` / `poweroff` | UDP `system.command` |
 | `POST /api/input/pointer` / `key` | Relative mouse / key injection — **requires** a single `targetId` (not All) |
+| `POST /api/input/text` `{value,pressEnter?,targetId?}` | Full-string keyboard input (logins/passwords/URLs) — UDP `input.text`; same PIN/`controlToken` gate as pointer/key |
 | `POST /api/auth/tesla/start` | Returns Tesla authorize URL + opens one-shot local callback (default `http://0.0.0.0:4381`, 10-min timeout) → `saveTokensFromCode`. Public `TESLA_REDIRECT_URI` (e.g. `https://fleetapi…/callback`) must be proxied from the Fleet domain host to that listen port |
 | `POST /api/auth/alexa/start` | Runs vendored login proxy in-process (`runAuth({exitOnComplete:false, overrides:{proxyOwnIp}})`, port 3456; `proxyOwnIp` derived from request Host); on success the bridge saves the session and **exits 0** so Docker `restart: unless-stopped` brings it back fresh |
 | `GET /api/status` | Alexa/Tesla auth state, active pushed URL, uptime |
 
-QR scanning is client-side: `<input type="file" capture>` photo → jsQR decode → confirm sheet → `POST /api/push/url`. `installAuthProxyPatch()` now runs at the top of `index.js` (before `alexa-remote2` loads) so the in-process login proxy works in listener mode.
+QR scanning (reading a code with the phone) is client-side: `<input type="file" capture>` photo → jsQR decode → confirm sheet → `POST /api/push/url`. `installAuthProxyPatch()` now runs at the top of `index.js` (before `alexa-remote2` loads) so the in-process login proxy works in listener mode.
+
+**QR generator** (Push tab, separate from scanning above) lets the phone display a QR code on the target screen: **URL** (plain link), **Wi-Fi** (SSID/password → standard `WIFI:T:...;;` string, escaped via `buildWifiQrContent`), or **Photo** (client resizes/re-encodes to JPEG via canvas, uploads to `/api/qr/image-upload`, then pushes the resolved URL through `mode:"url"`). The bridge never renders a bitmap — it only ships the content string in `qr.display`; the display client generates the QR image locally.
 
 ---
 
 ## Recent changes
 
+- 2026-07-25: **Fix first "what's playing" ask after "next"/"skip" not displaying** — `fetchNowPlaying`'s `music-query` fetch budget (`{attempts: 2, delayMs: 800}`) was too tight: right after "Alexa, next" the player-info API can stay mid-transition (old track fading, new one not yet reporting `PLAYING` + title) for a couple seconds, so the fetch gave up and `listener.js`'s music branch just `return`ed with no fallback — unlike every other kind (Tesla battery, shopping list, Vivint, notifications) which schedule a follow-up. Bumped the initial budget to `{attempts: 3, delayMs: 900}` and added `scheduleMusicQueryRetry()` (`listener.js`): when the first attempt still comes up empty, it retries the live player-info fetch directly (not a history re-poll — the activity/response are already complete, only Amazon's separate player API hadn't settled) at +2.5s and +4s, sending the `music.playing` payload the moment a track shows up. Previously the user had to manually ask "what's playing" a second time to get a fresh attempt at a moment the track had stabilized.
+- 2026-07-25: **Larger keyboard, full-string text input, Shared Photo Slideshow + 3 more Quick Push tiles** — Control tab's on-screen keyboard keys are bigger (taller, more padding/gap, larger font) and easier to hit on a phone. Added a "Send Text" card (Control tab) that types a whole string in one shot via new `input.text` UDP payload (`buildInputTextPayload`) → `POST /api/input/text` → client `handle_text()` (`pynput` `Controller.type()`, optional Enter press) — makes pushing logins/passwords/URLs far faster than the on-screen keyboard. Push tab gained a "Quick Push" row of 4 tiles under the Tesla cards: **Shared Photo Slideshow** (new `photo.slideshow` UDP payload/`PhotoSlideshowPanel` — cycles every non-expired QR-cache photo from the last 7 days, 5s each by default, sized/centered for portrait or landscape, and is immediately interrupted by any other incoming payload since the panel owns no exclusive lock), **Weather Forecast**, **Shopping List**, and **Active Timers** (weather/shopping-list synthesize a voice-query event through the existing pipeline; timers call a new `listener.requestTimerPoll()` for an immediate Amazon notifications poll). New endpoints: `GET /api/photos`, `POST /api/push/photo-slideshow`, `POST /api/push/weather`, `POST /api/push/shopping-list`, `POST /api/push/timers`, `POST /api/input/text`.
+- 2026-07-25: **Fix permanently-blocked repeat broadcasts + "what song is playing" display** — `BroadcastParser`'s content dedup (`parser.js`/`bridge-state.js`) fingerprinted `device|message` in a plain `Set` with **no expiry**, persisted forever via `data/bridge-state.json` and rebuilt from the entire `data/voice-events.jsonl` history on every restart. A common test phrase like "this is a test" broadcast once would silently never display again — the whole point of the fingerprint check is only to catch the *same* utterance being reported twice (push event + history poll, normally seconds apart), not to block a deliberate repeat sent later. `recordedFingerprints` now stores `{fp, ts}` (last-seen timestamp) and `BroadcastParser.isDuplicateContent()` only treats it as a duplicate within `DUPLICATE_CONTENT_WINDOW_MS` (2 min); legacy plain-string entries from old state files migrate as already-expired so previously-stuck messages unblock immediately on upgrade. Also added `matchesNowPlayingQuery` (`music-info.js`) so asking **"what song is playing"** / "which song is playing" / "what is this song" / "what's playing" now surfaces the existing `music.playing` overlay (album art + track info) via a new `music-query` trigger — same payload/panel as the "play \<song\>" flow, just without waiting ~6s for playback to start (`fetchNowPlaying` uses fewer/faster retries for this trigger since the track is presumably already playing).
+- 2026-07-25: **Desktop-width Push tab layout + lock-screen spacing** — Web Browser and QR Code cards were each their own grid "section" (label + card), so on a wide desktop browser window the 2-column grid gave each section its own full-width row with the second column sitting empty. Wrapped both in `.push-columns`/`.push-column` (flex) so they sit side-by-side above `min-width: 860px` (width-based, not orientation-gated, so it also engages on wide portrait/tablet windows) while staying stacked on mobile. `.control-lock` ("Display locked" on the Remote/Control tabs) gained a 22px top margin so it no longer crowds the sticky display-bar divider — it had no section-label above it to supply that gap like every other tab's first card does.
+- 2026-07-25: **QR code generator (Push tab)** — new `qr.display` UDP payload (`udp-payload.js`: `buildQrDisplayPayload`, `buildWifiQrContent`); phone UI adds a mode-tabbed card (URL / Wi-Fi / Photo). Photo mode uploads a client-resized JPEG to `POST /api/qr/image-upload`, stored by new `src/qr-image-cache.js` under `data/qr-image-cache/` and served at `/qr-images/<token>.<ext>` until it expires (`qrImage.cacheDays`, default 7 — hourly sweep + immediate on-access expiry); the resolved URL is then pushed like any other URL QR via `POST /api/qr/push`. The bridge only ever ships a content string — the display client renders the QR bitmap locally with the new `qrcode` Python dependency (`QrPanel` in `display_panels.py`).
+- 2026-07-25: **Timer cancel voice detection hardened** — `TIMER_CANCEL_RE` in `voice-query-parser.js` only tested `description.summary`; some Alexa activity records leave that blank for bare command utterances and only populate the spoken confirmation, so cancel commands could be silently dropped. Added `TIMER_CANCEL_RESPONSE_RE` to also match the confirmation text ("Cancelling your timer." / "Your timer has been cancelled.", either word order) as a fallback. Also extended `timer-sync.js`'s post-voice-hint followup polls from 5 tries (up to 15s) to 7 tries (up to 25s, `VOICE_HINT_FOLLOWUP_DELAYS_MS`) so a slow-to-propagate Amazon cancellation is still caught before the next routine 30s background poll.
 - 2026-07-24: **Control UI works under reverse-proxy prefixes** — `index.html` sets `<base href>` from the browser path and loads CSS/JS/logo relatively; `app.js` resolves `/api/...` via `appUrl()` so fetch/SSE stay under the mount (path-stripping proxies to `:47810`).
 - 2026-07-23: **Discover refresh prunes offline displays** — `POST /api/displays/discover` waits ~2.5s for re-announces then removes anyone who stayed silent (`scheduleDiscoverSweep` in `display-registry.js`); Signal UI Refresh uses the pruned list and toasts when offline displays were dropped.
 - 2026-07-23: **Signal-only Docker containers** — listener is `signal-bridge`; one-shot auth is `signal-alexa-auth` / `signal-tesla-auth`. `recreate.sh` restarts the listener with `--remove-orphans` and removes any leftover auth/pre-rename containers (they are never needed again).

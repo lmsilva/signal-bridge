@@ -8,6 +8,8 @@ const {
   parseRemainingSeconds,
   parseDurationSeconds,
   shouldEmitSnapshot,
+  VOICE_HINT_FOLLOWUP_DELAYS_MS,
+  DEFAULTS,
 } = require('../src/timer-sync');
 
 test('normalizeTimerNotification maps Amazon timer notification', () => {
@@ -338,4 +340,61 @@ test('mergeTimerMaps drops expired ghost timers', () => {
 
   const merged = mergeTimerMaps(previous, {});
   assert.equal(Object.keys(merged).length, 0);
+});
+
+test('voice-hint followup delays keep polling until close to the next background poll', () => {
+  // A slow-to-propagate Amazon cancellation should not have to wait for the
+  // 30s background poll loop before the display catches up.
+  assert.ok(VOICE_HINT_FOLLOWUP_DELAYS_MS.length >= 5);
+  const last = VOICE_HINT_FOLLOWUP_DELAYS_MS[VOICE_HINT_FOLLOWUP_DELAYS_MS.length - 1];
+  assert.ok(last >= 20000 && last < DEFAULTS.pollIntervalMs);
+  for (let i = 1; i < VOICE_HINT_FOLLOWUP_DELAYS_MS.length; i += 1) {
+    assert.ok(VOICE_HINT_FOLLOWUP_DELAYS_MS[i] > VOICE_HINT_FOLLOWUP_DELAYS_MS[i - 1]);
+  }
+});
+
+test('requestImmediatePoll schedules a followup poll for every configured delay on cancel', () => {
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const { createTimerSync } = require('../src/timer-sync');
+  const mirrorPath = path.join(os.tmpdir(), `timer-mirror-followups-${Date.now()}.json`);
+  const scheduledDelays = [];
+
+  const originalSetTimeout = global.setTimeout;
+  global.setTimeout = (fn, delayMs, ...args) => {
+    scheduledDelays.push(delayMs);
+    // Run the callback synchronously so we can assert on total poll count
+    // without waiting for real (or mocked) timers to elapse.
+    fn(...args);
+    return 0;
+  };
+
+  let callCount = 0;
+  try {
+    const sync = createTimerSync({
+      alexa: {
+        getNotifications(_all, callback) {
+          callCount += 1;
+          callback(null, { notifications: [] });
+        },
+      },
+      config: {
+        sessionPath: path.join(os.tmpdir(), 'alexa-session-test.json'),
+        timerMirrorPath: mirrorPath,
+        timerSync: { enabled: true },
+      },
+      log: { info() {}, warn() {}, debug() {} },
+      onSnapshot: () => {},
+    });
+
+    sync.requestImmediatePoll('timer-cancel-voice');
+  } finally {
+    global.setTimeout = originalSetTimeout;
+    fs.rmSync(mirrorPath, { force: true });
+  }
+
+  assert.deepEqual(scheduledDelays, VOICE_HINT_FOLLOWUP_DELAYS_MS);
+  // Immediate poll + one per configured followup delay.
+  assert.equal(callCount, VOICE_HINT_FOLLOWUP_DELAYS_MS.length + 1);
 });

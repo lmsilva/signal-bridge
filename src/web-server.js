@@ -26,13 +26,23 @@ const {
   buildDisplayAuthOkPayload,
   buildInputPointerPayload,
   buildInputKeyPayload,
+  buildInputTextPayload,
+  buildQrDisplayPayload,
+  buildWifiQrContent,
+  buildPhotoSlideshowPayload,
 } = require('./udp-payload');
 const { ALL_TARGET_ID } = require('./display-registry');
 const { createDisplayControlAuth } = require('./display-control-auth');
+const { createQrImageCache } = require('./qr-image-cache');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
 const MAX_BODY_BYTES = 64 * 1024;
+// Uploaded photos travel as base64 JSON (~1.4x raw size) — cap the request
+// body generously above qrImageCache.maxBytes so legitimate uploads never
+// get rejected by the body-size guard before the cache's own size check runs.
+const QR_IMAGE_BODY_OVERHEAD_FACTOR = 1.4;
+const QR_IMAGE_BODY_PADDING_BYTES = 16 * 1024;
 const URL_CHECK_TIMEOUT_MS = 5000;
 // Tesla's OAuth callback server is opened on demand and must not hold the
 // port forever when the user abandons the login.
@@ -166,6 +176,7 @@ function createWebServer({
   recordVoiceEvent,
   displayRegistry = null,
   deliverTargetedPayload = null,
+  requestTimerPoll = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -183,6 +194,7 @@ function createWebServer({
   };
   const staticRoot = webRoot || path.join(__dirname, 'web');
   const controlAuth = createDisplayControlAuth(config, log);
+  const qrImageCache = createQrImageCache(config, log);
   let server = null;
   let redirectServer = null;
 
@@ -308,6 +320,50 @@ function createWebServer({
     });
     log.info(`Web push accepted (${kind})`, { device: event.device, targetId });
     sendJson(res, 202, { ok: true, kind, targetId });
+  }
+
+  // Weather / shopping list pushes reuse the same synthetic-event pipeline as
+  // Tesla ("web push" trigger), just with a kind/query/trigger tailored to
+  // what the voice-query path would have produced for "what's the weather"
+  // or "show my shopping list".
+  function handleVoiceQueryPush(kind, query, trigger, body, res) {
+    if (typeof recordVoiceEvent !== 'function') {
+      sendJson(res, 503, { ok: false, error: 'Push unavailable — listener not ready' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    const event = {
+      kind,
+      device: deviceFrom(body),
+      query,
+      trigger,
+      timestamp: Date.now(),
+      spokenResponse: null,
+      targetId,
+    };
+    recordVoiceEvent(event).catch((error) => {
+      log.error(`Web push ${kind} failed`, error?.message || error);
+    });
+    log.info(`Web push accepted (${kind})`, { device: event.device, targetId });
+    sendJson(res, 202, { ok: true, kind, targetId });
+  }
+
+  function handleTimersPush(body, res) {
+    if (typeof requestTimerPoll !== 'function') {
+      sendJson(res, 503, { ok: false, error: 'Timers push unavailable — listener not ready' });
+      return;
+    }
+    const device = deviceFrom(body);
+    requestTimerPoll(device);
+    log.info('Web push accepted (timers)', { device });
+    sendJson(res, 202, { ok: true, kind: 'timers' });
   }
 
   async function handleUrlPush(body, res) {
@@ -574,6 +630,153 @@ function createWebServer({
       return;
     }
     sendCommandPayload(payload, targetId, res);
+  }
+
+  function handleInputText(req, body, res) {
+    const targetId = requireControlAuth(req, body, res);
+    if (targetId == null) {
+      return;
+    }
+    if (!targetId || targetId === ALL_TARGET_ID || targetId.toLowerCase() === 'all') {
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Keyboard control requires a single display — select one display first',
+      });
+      return;
+    }
+    const payload = buildInputTextPayload({
+      value: body?.value,
+      pressEnter: body?.pressEnter,
+      device: deviceFrom(body),
+      trigger: 'web-api',
+    });
+    if (!payload) {
+      sendJson(res, 400, { ok: false, error: 'Missing text to send' });
+      return;
+    }
+    sendCommandPayload(payload, targetId, res);
+  }
+
+  // ---- QR code generation ---------------------------------------------------
+
+  function handleQrImageUpload(body, res) {
+    const result = qrImageCache.store(body?.imageDataUrl);
+    if (!result.ok) {
+      sendJson(res, 400, { ok: false, error: result.error });
+      return;
+    }
+    log.info('QR photo uploaded to cache', {
+      token: result.token,
+      expiresAt: result.expiresAt,
+    });
+    sendJson(res, 200, { ok: true, path: result.path, expiresAt: result.expiresAt });
+  }
+
+  function handleQrPush(body, res) {
+    const mode = String(body?.mode || '').trim().toLowerCase();
+    let qrType;
+    let content;
+    let label;
+
+    if (mode === 'url') {
+      const validation = validatePushUrl(body?.url);
+      if (!validation.ok) {
+        sendJson(res, 400, { ok: false, error: validation.error });
+        return;
+      }
+      qrType = 'url';
+      content = validation.url;
+      label = String(body?.label || '').trim() || validation.url;
+    } else if (mode === 'wifi') {
+      const ssid = String(body?.ssid || '').trim();
+      if (!ssid) {
+        sendJson(res, 400, { ok: false, error: 'Wi-Fi network name is required' });
+        return;
+      }
+      const security = String(body?.security || 'WPA').trim();
+      const isOpen = security.toLowerCase() === 'nopass';
+      if (!isOpen && !String(body?.password || '').trim()) {
+        sendJson(res, 400, {
+          ok: false,
+          error: 'Wi-Fi password is required (or mark the network as open)',
+        });
+        return;
+      }
+      content = buildWifiQrContent({
+        ssid,
+        password: body?.password,
+        security,
+        hidden: Boolean(body?.hidden),
+      });
+      if (!content) {
+        sendJson(res, 400, { ok: false, error: 'Could not build the Wi-Fi QR code' });
+        return;
+      }
+      qrType = 'wifi';
+      label = `Wi-Fi: ${ssid}`;
+    } else {
+      sendJson(res, 400, { ok: false, error: `Unknown QR mode: ${mode || '(none)'}` });
+      return;
+    }
+
+    const payload = buildQrDisplayPayload({
+      qrType,
+      content,
+      label,
+      device: deviceFrom(body),
+      trigger: 'qr-api',
+    }, config);
+    if (!payload) {
+      sendJson(res, 400, { ok: false, error: 'Could not build the QR code' });
+      return;
+    }
+
+    log.info('QR code pushed to display', { qrType, label, targetId: targetIdFrom(body) });
+    sendCommandPayload(payload, targetIdFrom(body), res, { qrType, label });
+  }
+
+  function handleQrImageServe(pathname, res) {
+    const routeTail = pathname.slice(qrImageCache.routePrefix.length);
+    const entry = qrImageCache.get(routeTail);
+    if (!entry) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found or expired');
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': entry.mimeType,
+      // Never cache client/proxy-side: once the token expires the URL must
+      // 404 immediately for anyone who still has it.
+      'Cache-Control': 'no-store',
+    });
+    fs.createReadStream(entry.filePath).pipe(res);
+  }
+
+  // ---- Shared photo slideshow -----------------------------------------------
+
+  function handlePhotosList(res) {
+    sendJson(res, 200, { ok: true, photos: qrImageCache.list() });
+  }
+
+  function handlePhotoSlideshowPush(body, res) {
+    const photos = Array.isArray(body?.photos) ? body.photos : [];
+    const payload = buildPhotoSlideshowPayload({
+      photos,
+      secondsPerPhoto: 5,
+      device: deviceFrom(body),
+      trigger: 'photo-slideshow-api',
+    });
+    if (!payload) {
+      sendJson(res, 400, { ok: false, error: 'No shared photos to show — share one via QR Code → Photo first' });
+      return;
+    }
+    log.info('Photo slideshow pushed to display', {
+      count: payload.slideshow.photos.length,
+      targetId: targetIdFrom(body),
+    });
+    sendCommandPayload(payload, targetIdFrom(body), res, {
+      count: payload.slideshow.photos.length,
+    });
   }
 
   // ---- Tesla OAuth (phone flow) --------------------------------------------
@@ -966,18 +1169,43 @@ function createWebServer({
           handleDisplaysEvents(req, res);
           return;
         }
+        if (pathname === '/api/photos') {
+          handlePhotosList(res);
+          return;
+        }
+        if (pathname.startsWith(qrImageCache.routePrefix)) {
+          handleQrImageServe(pathname, res);
+          return;
+        }
         serveStatic(pathname, res);
         return;
       }
 
       if (req.method === 'POST') {
-        const body = await readJsonBody(req);
+        // Uploaded photos are the one POST body that can legitimately exceed
+        // the default JSON body cap (base64-encoded image data).
+        const bodyLimit = pathname === '/api/qr/image-upload'
+          ? Math.ceil(qrImageCache.maxBytes * QR_IMAGE_BODY_OVERHEAD_FACTOR) + QR_IMAGE_BODY_PADDING_BYTES
+          : MAX_BODY_BYTES;
+        const body = await readJsonBody(req, bodyLimit);
         switch (pathname) {
           case '/api/push/tesla-dashboard':
             handleTeslaPush('tesla-dashboard', body, res);
             return;
           case '/api/push/tesla-battery':
             handleTeslaPush('tesla-battery', body, res);
+            return;
+          case '/api/push/weather':
+            handleVoiceQueryPush('weather', 'what is the weather', 'weather-query', body, res);
+            return;
+          case '/api/push/shopping-list':
+            handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res);
+            return;
+          case '/api/push/timers':
+            handleTimersPush(body, res);
+            return;
+          case '/api/push/photo-slideshow':
+            handlePhotoSlideshowPush(body, res);
             return;
           case '/api/push/url':
             await handleUrlPush(body, res);
@@ -1009,6 +1237,15 @@ function createWebServer({
           case '/api/input/key':
             handleInputKey(req, body, res);
             return;
+          case '/api/input/text':
+            handleInputText(req, body, res);
+            return;
+          case '/api/qr/push':
+            handleQrPush(body, res);
+            return;
+          case '/api/qr/image-upload':
+            handleQrImageUpload(body, res);
+            return;
           case '/api/auth/tesla/start':
             await handleTeslaAuthStart(res);
             return;
@@ -1038,6 +1275,15 @@ function createWebServer({
       log.info('Control web server disabled via config');
       return null;
     }
+
+    // Clean up anything that expired while the bridge was stopped, then keep
+    // sweeping hourly so the cache directory never grows unbounded.
+    try {
+      qrImageCache.sweep();
+    } catch (error) {
+      log.warn('QR image cache startup sweep failed', error?.message || error);
+    }
+    qrImageCache.startSweeper();
 
     const controlServer = await new Promise((resolve, reject) => {
       const listenHttps = settings.https;
@@ -1118,6 +1364,7 @@ function createWebServer({
   }
 
   function stop() {
+    qrImageCache.stopSweeper();
     closeTeslaCallbackServer({ force: true });
     for (const target of [server, redirectServer]) {
       if (!target) {

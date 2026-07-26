@@ -21,6 +21,8 @@ DISPLAY_TYPES = (
     "alexa-notifications.query",
     "request.processing",
     "display.auth",
+    "qr.display",
+    "photo.slideshow",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -31,6 +33,7 @@ COMMAND_TYPES = (
     "system.command",
     "input.pointer",
     "input.key",
+    "input.text",
     "display.discover",
 )
 
@@ -108,6 +111,8 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "alexa-notifications.query": ("Alexa", "Notifications"),
         "request.processing": ("Alexa", "Working on it"),
         "display.auth": ("Unlock", "Enter this PIN on your phone"),
+        "qr.display": ("Signal", "QR Code"),
+        "photo.slideshow": ("Signal", "Shared Photos"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 

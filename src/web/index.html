@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal7">
+  <link rel="stylesheet" href="styles.css?v=signal9">
 </head>
 <body>
   <header class="app-header">
@@ -79,34 +79,117 @@
           </button>
         </div>
 
-        <div class="section-label">Web Browser</div>
-
-        <div class="card" id="browser-active-card" hidden>
-          <div class="active-url-row">
-            <span class="active-dot"></span>
-            <div class="active-url-text">
-              <div class="active-url-label">Now on display</div>
-              <div class="active-url" id="active-url">—</div>
-            </div>
-          </div>
-          <button class="btn btn-danger btn-block" id="btn-close-browser">Close Browser</button>
+        <div class="section-label">Quick Push</div>
+        <div class="card-row card-row-quad">
+          <button class="push-card push-card-photo" id="btn-push-photo-slideshow">
+            <span class="push-icon push-icon-photo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
+            </span>
+            <span class="push-card-title">Shared Photo Slideshow</span>
+            <span class="push-card-sub">Photos shared in the last 7 days</span>
+          </button>
+          <button class="push-card" id="btn-push-weather">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 12.1 3.5 3.5 0 0 0 7.5 18Z"/></svg>
+            </span>
+            <span class="push-card-title">Weather Forecast</span>
+            <span class="push-card-sub">Current conditions &amp; outlook</span>
+          </button>
+          <button class="push-card" id="btn-push-shopping-list">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h14l-1.5 9h-11z"/><path d="M6 6 5 3H3"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="16.5" cy="19" r="1.5"/></svg>
+            </span>
+            <span class="push-card-title">Shopping List</span>
+            <span class="push-card-sub">Everything on the list now</span>
+          </button>
+          <button class="push-card" id="btn-push-timers">
+            <span class="push-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
+            </span>
+            <span class="push-card-title">Active Timers</span>
+            <span class="push-card-sub">Everything running now</span>
+          </button>
         </div>
 
-        <div class="card">
-          <label class="field-label" for="url-input">Push a web page</label>
-          <div class="url-row">
-            <input type="url" id="url-input" inputmode="url" autocapitalize="off"
-                   autocomplete="off" autocorrect="off" spellcheck="false"
-                   placeholder="https://…">
-            <button class="btn btn-accent" id="btn-push-url">Push</button>
+        <div class="push-columns">
+          <div class="push-column">
+            <div class="section-label">Web Browser</div>
+
+            <div class="card" id="browser-active-card" hidden>
+              <div class="active-url-row">
+                <span class="active-dot"></span>
+                <div class="active-url-text">
+                  <div class="active-url-label">Now on display</div>
+                  <div class="active-url" id="active-url">—</div>
+                </div>
+              </div>
+              <button class="btn btn-danger btn-block" id="btn-close-browser">Close Browser</button>
+            </div>
+
+            <div class="card">
+              <label class="field-label" for="url-input">Push a web page</label>
+              <div class="url-row">
+                <input type="url" id="url-input" inputmode="url" autocapitalize="off"
+                       autocomplete="off" autocorrect="off" spellcheck="false"
+                       placeholder="https://…">
+                <button class="btn btn-accent" id="btn-push-url">Push</button>
+              </div>
+              <div class="or-divider"><span>or</span></div>
+              <button class="btn btn-outline btn-block" id="btn-scan-qr">
+                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+                Scan QR Code
+              </button>
+              <input type="file" id="qr-file" accept="image/*" capture="environment" hidden>
+              <p class="hint" id="qr-hint">Point your camera at a QR code (autodarts, karaoke queue, …). Uses the live camera over HTTPS — open this page as <strong>https://</strong> and accept the certificate warning once on your iPhone.</p>
+            </div>
           </div>
-          <div class="or-divider"><span>or</span></div>
-          <button class="btn btn-outline btn-block" id="btn-scan-qr">
-            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
-            Scan QR Code
-          </button>
-          <input type="file" id="qr-file" accept="image/*" capture="environment" hidden>
-          <p class="hint" id="qr-hint">Point your camera at a QR code (autodarts, karaoke queue, …). Uses the live camera over HTTPS — open this page as <strong>https://</strong> and accept the certificate warning once on your iPhone.</p>
+
+          <div class="push-column">
+            <div class="section-label">QR Code</div>
+            <div class="card">
+              <label class="field-label">Generate a QR code on the display</label>
+              <div class="segmented" id="qr-mode-tabs">
+                <button type="button" class="segmented-btn active" data-qr-mode="url">URL</button>
+                <button type="button" class="segmented-btn" data-qr-mode="wifi">Wi-Fi</button>
+                <button type="button" class="segmented-btn" data-qr-mode="image">Photo</button>
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-url">
+                <input type="url" id="qr-generate-url-input" class="field-input" inputmode="url"
+                       autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+                       placeholder="https://…">
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-wifi" hidden>
+                <input type="text" id="qr-wifi-ssid" class="field-input" placeholder="Network name (SSID)"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <input type="text" id="qr-wifi-password" class="field-input" placeholder="Password"
+                       autocapitalize="off" autocorrect="off" spellcheck="false">
+                <label class="check-row">
+                  <input type="checkbox" id="qr-wifi-open">
+                  Open network (no password)
+                </label>
+                <label class="check-row">
+                  <input type="checkbox" id="qr-wifi-hidden">
+                  Hidden network
+                </label>
+              </div>
+
+              <div class="qr-mode-panel" id="qr-panel-image" hidden>
+                <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose Photo</button>
+                <input type="file" id="qr-image-file" accept="image/*" hidden>
+                <div class="qr-photo-preview" id="qr-photo-preview" hidden>
+                  <img id="qr-photo-preview-img" alt="Selected photo preview">
+                  <button type="button" class="btn btn-outline btn-icon" id="btn-qr-photo-clear" title="Remove photo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <p class="hint">Uploaded to the bridge and shared via a link in the QR code — deleted automatically after 7 days.</p>
+              </div>
+
+              <button class="btn btn-accent btn-block" id="btn-qr-generate">Generate &amp; Send</button>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -177,6 +260,20 @@
         <div class="card keyboard-card">
           <div class="keyboard" id="keyboard"></div>
           <p class="hint keyboard-hint">Shift applies to the next key only. Caps stays on for letters until you tap it again. Ctrl / Alt / Win stay sticky.</p>
+        </div>
+
+        <div class="section-label">Send Text</div>
+        <div class="card">
+          <label class="field-label" for="text-input-value">Type once, send the whole thing</label>
+          <textarea id="text-input-value" class="field-input text-input-area" rows="2"
+                    autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+                    placeholder="Paste or type a login, password, or URL…"></textarea>
+          <label class="check-row">
+            <input type="checkbox" id="text-input-enter">
+            Press Enter after sending
+          </label>
+          <button class="btn btn-accent btn-block" id="btn-text-input-send">Send Text</button>
+          <p class="hint">Types into whatever field is focused on the display — much faster than tapping the on-screen keyboard one key at a time.</p>
         </div>
       </div>
     </section>
@@ -288,6 +385,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal7"></script>
+  <script src="app.js?v=signal9"></script>
 </body>
 </html>

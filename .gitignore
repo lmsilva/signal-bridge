@@ -29,6 +29,7 @@ data/config.json
 data/data/
 data/web-certs/
 data/displays-registry.json
+data/qr-image-cache/
 broadcast.txt
 
 # Windows broadcast client

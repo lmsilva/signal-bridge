@@ -91,6 +91,7 @@ const silentLog = {
 async function startTestServer(options = {}) {
   const sent = [];
   const recorded = [];
+  const timerPolls = [];
   const webServer = createWebServer({
     config: options.config || makeConfig(),
     log: silentLog,
@@ -99,13 +100,15 @@ async function startTestServer(options = {}) {
       || (async (event) => { recorded.push(event); }),
     displayRegistry: options.displayRegistry || null,
     deliverTargetedPayload: options.deliverTargetedPayload || null,
+    requestTimerPoll: options.requestTimerPoll
+      || ((device) => timerPolls.push(device)),
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
   const server = await webServer.start();
   const { port } = server.address();
   const base = `http://127.0.0.1:${port}`;
-  return { webServer, server, base, sent, recorded };
+  return { webServer, server, base, sent, recorded, timerPolls };
 }
 
 function postJson(base, route, body = {}) {
@@ -155,6 +158,51 @@ test('control page JS resolves API routes against the document base', () => {
   assert.match(js, /function appUrl\(/);
   assert.match(js, /EventSource\(appUrl\(/);
   assert.match(js, /fetch\(appUrl\(/);
+});
+
+test('control page has a QR generator card with url/wifi/photo modes', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  assert.match(html, /id="qr-mode-tabs"/);
+  assert.match(html, /data-qr-mode="url"/);
+  assert.match(html, /data-qr-mode="wifi"/);
+  assert.match(html, /data-qr-mode="image"/);
+  assert.match(html, /id="qr-wifi-ssid"/);
+  assert.match(html, /id="qr-image-file"/);
+  assert.match(html, /id="btn-qr-generate"/);
+});
+
+test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/app.js'), 'utf8');
+  assert.match(js, /apiPost\('\/api\/qr\/push'/);
+  assert.match(js, /apiPost\('\/api\/qr\/image-upload'/);
+  // Photo mode resolves the uploaded relative path against the page's own
+  // base so the embedded QR URL still works behind a reverse-proxy prefix.
+  assert.match(js, /new URL\(upload\.path, document\.baseURI\)/);
+});
+
+test('Web Browser and QR Code sections share a .push-columns wrapper for wide-screen side-by-side layout', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const wrapperMatch = html.match(/<div class="push-columns">([\s\S]*?)<\/section>/);
+  assert.ok(wrapperMatch, 'expected a .push-columns wrapper inside the Push tab');
+  const wrapper = wrapperMatch[1];
+  const webBrowserIndex = wrapper.indexOf('Web Browser');
+  const qrCodeIndex = wrapper.indexOf('QR Code');
+  assert.ok(webBrowserIndex >= 0 && qrCodeIndex >= 0 && webBrowserIndex < qrCodeIndex);
+  assert.match(wrapper, /class="push-column"/);
+
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/styles.css'), 'utf8');
+  assert.match(css, /\.push-columns\s*\{/);
+  // Row layout must be gated behind a min-width query, not applied unconditionally.
+  assert.match(css, /@media \(min-width: \d+px\)\s*\{[\s\S]*?\.push-columns\s*\{\s*flex-direction:\s*row/);
+});
+
+test('control-lock card has top spacing so it does not crowd the sticky display bar', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/styles.css'), 'utf8');
+  const match = css.match(/\.control-lock\s*\{([^}]*)\}/);
+  assert.ok(match, 'expected a .control-lock rule');
+  const margin = /margin:\s*(\d+)px/.exec(match[1]);
+  assert.ok(margin, 'expected .control-lock to set an explicit top margin');
+  assert.ok(Number(margin[1]) >= 20, 'expected at least 20px of breathing room above the lock card');
 });
 
 test('serves the control page and static assets', async () => {
@@ -618,6 +666,258 @@ test('displays list and discover endpoints', async () => {
   } finally {
     webServer.stop();
     registry.stop();
+  }
+});
+
+const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const TINY_PNG_DATA_URL = `data:image/png;base64,${TINY_PNG_BASE64}`;
+
+test('qr push sends a qr.display payload for url mode', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const push = await postJson(base, '/api/qr/push', { mode: 'url', url: 'https://example.com/party' });
+    assert.equal(push.status, 200);
+    assert.equal(push.body.ok, true);
+    assert.equal(push.body.qrType, 'url');
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'qr.display');
+    assert.equal(sent[0].qr.qrType, 'url');
+    assert.equal(sent[0].qr.content, 'https://example.com/party');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr push rejects invalid url mode without sending', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const bad = await postJson(base, '/api/qr/push', { mode: 'url', url: 'notaurl' });
+    assert.equal(bad.status, 400);
+    assert.equal(sent.length, 0);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr push sends a qr.display payload for wifi mode', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const push = await postJson(base, '/api/qr/push', {
+      mode: 'wifi',
+      ssid: 'Home Network',
+      password: 'letmein123',
+    });
+    assert.equal(push.status, 200);
+    assert.equal(push.body.qrType, 'wifi');
+
+    assert.equal(sent[0].type, 'qr.display');
+    assert.equal(sent[0].qr.qrType, 'wifi');
+    assert.match(sent[0].qr.content, /^WIFI:T:WPA;S:Home Network;P:letmein123;;$/);
+    assert.equal(sent[0].qr.label, 'Wi-Fi: Home Network');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr push wifi mode requires a password unless the network is open', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const missingPassword = await postJson(base, '/api/qr/push', { mode: 'wifi', ssid: 'Home' });
+    assert.equal(missingPassword.status, 400);
+
+    const open = await postJson(base, '/api/qr/push', {
+      mode: 'wifi',
+      ssid: 'Free Wifi',
+      security: 'nopass',
+    });
+    assert.equal(open.status, 200);
+    assert.match(sent[0].qr.content, /^WIFI:T:nopass;S:Free Wifi;;$/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr push rejects an unknown mode', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const result = await postJson(base, '/api/qr/push', { mode: 'carrier-pigeon' });
+    assert.equal(result.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr image upload stores a photo and serves it back from a relative URL until expiry', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-qr-image-'));
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache', cacheDays: 7 } });
+  const { webServer, base } = await startTestServer({ config });
+  try {
+    const upload = await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
+    assert.equal(upload.status, 200);
+    assert.equal(upload.body.ok, true);
+    assert.match(upload.body.path, /^\/qr-images\/[0-9a-f]{32}\.png$/);
+    assert.ok(upload.body.expiresAt);
+
+    const served = await request(base + upload.body.path);
+    assert.equal(served.status, 200);
+    assert.match(served.headers['content-type'], /image\/png/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr image upload rejects missing/invalid image data', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const bad = await postJson(base, '/api/qr/image-upload', { imageDataUrl: 'not-a-data-url' });
+    assert.equal(bad.status, 400);
+
+    const missing = await postJson(base, '/api/qr/image-upload', {});
+    assert.equal(missing.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr image route 404s for unknown or expired tokens', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const missing = await request(base + '/qr-images/0000000000000000000000000000000000.png');
+    assert.equal(missing.status, 404);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('weather and shopping-list quick-push tiles feed synthetic events into the voice pipeline', async () => {
+  const { webServer, base, recorded } = await startTestServer();
+  try {
+    const weather = await postJson(base, '/api/push/weather');
+    assert.equal(weather.status, 202);
+    assert.equal(weather.body.ok, true);
+    assert.equal(weather.body.kind, 'weather');
+
+    const shopping = await postJson(base, '/api/push/shopping-list', { device: 'iPhone' });
+    assert.equal(shopping.status, 202);
+
+    assert.equal(recorded.length, 2);
+    assert.equal(recorded[0].kind, 'weather');
+    assert.equal(recorded[0].trigger, 'weather-query');
+    assert.equal(recorded[0].device, 'Signal');
+    assert.equal(recorded[1].kind, 'shopping-list');
+    assert.equal(recorded[1].trigger, 'shopping-list-show');
+    assert.equal(recorded[1].device, 'iPhone');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('timers quick-push tile requests an immediate timer poll', async () => {
+  const { webServer, base, timerPolls } = await startTestServer();
+  try {
+    const push = await postJson(base, '/api/push/timers', { device: 'iPhone' });
+    assert.equal(push.status, 202);
+    assert.equal(push.body.ok, true);
+    assert.deepEqual(timerPolls, ['iPhone']);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('timers quick-push tile 503s when the timer sync hook is not wired up', async () => {
+  const config = makeConfig();
+  const webServer = createWebServer({
+    config,
+    log: silentLog,
+    sendUdpPayload: () => {},
+    recordVoiceEvent: async () => {},
+    webRoot: makeTempWebRoot(),
+  });
+  const server = await webServer.start();
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const push = await postJson(base, '/api/push/timers');
+    assert.equal(push.status, 503);
+    assert.equal(push.body.ok, false);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('input text sends a full-string command to a single display', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-text-'));
+  const { createDisplayRegistry } = require('../src/display-registry');
+  const registry = createDisplayRegistry({ ROOT: dataDir }, { warn() {}, info() {} });
+  registry.upsertFromAnnounce({
+    display: { id: 'disp-x', name: 'Living Room' },
+  }, { address: '192.168.0.9' });
+
+  const targeted = [];
+  const { webServer, base } = await startTestServer({
+    config: makeConfig({ ROOT: dataDir }),
+    displayRegistry: registry,
+    deliverTargetedPayload: (payload, targetId) => {
+      const delivery = registry.resolveDelivery(targetId);
+      targeted.push({ payload, delivery });
+      return delivery;
+    },
+  });
+  try {
+    const push = await postJson(base, '/api/input/text', {
+      targetId: 'disp-x',
+      value: 'correct-horse-battery-staple',
+      pressEnter: true,
+    });
+    assert.equal(push.status, 200);
+    assert.equal(targeted.at(-1).payload.type, 'input.text');
+    assert.equal(targeted.at(-1).payload.text.value, 'correct-horse-battery-staple');
+    assert.equal(targeted.at(-1).payload.text.pressEnter, true);
+
+    const missing = await postJson(base, '/api/input/text', { targetId: 'disp-x', value: '' });
+    assert.equal(missing.status, 400);
+
+    const allDisplays = await postJson(base, '/api/input/text', { targetId: '*', value: 'hello' });
+    assert.equal(allDisplays.status, 400);
+  } finally {
+    webServer.stop();
+    registry.stop();
+  }
+});
+
+test('photo slideshow lists shared photos and pushes a photo.slideshow payload', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-slideshow-'));
+  const config = makeConfig({ ROOT: dataDir, qrImage: { cacheDir: 'qr-cache', cacheDays: 7 } });
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const empty = await request(base + '/api/photos');
+    assert.equal(empty.status, 200);
+    assert.deepEqual(empty.body.photos, []);
+
+    const noPhotos = await postJson(base, '/api/push/photo-slideshow', { photos: [] });
+    assert.equal(noPhotos.status, 400);
+
+    await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
+    await postJson(base, '/api/qr/image-upload', { imageDataUrl: TINY_PNG_DATA_URL });
+
+    const listed = await request(base + '/api/photos');
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.photos.length, 2);
+    assert.match(listed.body.photos[0].path, /^\/qr-images\/[0-9a-f]{32}\.png$/);
+
+    const absolutePhotos = listed.body.photos.map((p) => `${base}${p.path}`);
+    const push = await postJson(base, '/api/push/photo-slideshow', { photos: absolutePhotos });
+    assert.equal(push.status, 200);
+    assert.equal(push.body.count, 2);
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'photo.slideshow');
+    assert.deepEqual(sent[0].slideshow.photos, absolutePhotos);
+    assert.equal(sent[0].slideshow.secondsPerPhoto, 5);
+    assert.equal(sent[0].displaySeconds, 10);
+  } finally {
+    webServer.stop();
   }
 });
 

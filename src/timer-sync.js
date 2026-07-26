@@ -10,6 +10,12 @@ const DEFAULTS = {
   mirrorFile: 'data/timer-mirror.json',
 };
 
+// Extra polls fired after a timer-set/cancel/show voice hint, in addition to
+// the immediate poll. Spans out to ~25s so a slow-to-propagate Amazon
+// notification (e.g. a cancellation) is still caught well before the next
+// routine background poll (up to pollIntervalMs later).
+const VOICE_HINT_FOLLOWUP_DELAYS_MS = [1000, 2000, 4000, 8000, 12000, 18000, 25000];
+
 function ensureParentDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
@@ -504,7 +510,11 @@ function createTimerSync({
       || reason === 'show-timers'
       || reason === 'timer-cancel-voice'
     ) {
-      for (const delayMs of [1000, 2000, 4000, 8000, 15000]) {
+      // Amazon's notifications endpoint can lag noticeably behind a
+      // just-spoken cancel/set command. Keep polling for ~25s (past the
+      // point most confirmations show up) so the display doesn't have to
+      // wait for the next 30s background poll to catch up.
+      for (const delayMs of VOICE_HINT_FOLLOWUP_DELAYS_MS) {
         setTimeout(() => pollNotifications(`${reason}-followup-${delayMs}ms`, device), delayMs);
       }
     }
@@ -589,4 +599,5 @@ module.exports = {
   toEpochMs,
   isActiveTimer,
   DEFAULTS,
+  VOICE_HINT_FOLLOWUP_DELAYS_MS,
 };

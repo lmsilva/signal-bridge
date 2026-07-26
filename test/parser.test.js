@@ -11,6 +11,7 @@ const {
 } = require('../src/parser');
 const { parseMessageDetails } = require('../src/message-details');
 const { buildBroadcastPayload } = require('../src/udp-payload');
+const { fingerprint } = require('../src/bridge-state');
 
 function activity(summary, response = '', overrides = {}) {
   return {
@@ -137,6 +138,56 @@ test('BroadcastParser deduplicates by activity id', () => {
   };
   assert.ok(parser.parseActivity(item));
   assert.equal(parser.parseActivity(item), null);
+});
+
+test('BroadcastParser content dedup suppresses only within the short window, not forever', () => {
+  const parser = new BroadcastParser({ fingerprintFn: fingerprint });
+  const now = Date.now();
+
+  const first = parser.parseActivity({
+    creationTimestamp: now,
+    name: 'Office Echo',
+    description: { summary: 'broadcast this is a test' },
+    alexaResponse: 'OK',
+    data: { recordKey: 'repeat-1' },
+  });
+  assert.ok(first);
+  parser.markRecorded('repeat-1', first);
+
+  // A near-immediate re-report of the *same* utterance (e.g. push event +
+  // history poll both surfacing it with different activity ids) is deduped.
+  const nearDuplicate = parser.parseActivity({
+    creationTimestamp: now + 5000,
+    name: 'Office Echo',
+    description: { summary: 'broadcast this is a test' },
+    alexaResponse: 'OK',
+    data: { recordKey: 'repeat-2' },
+  });
+  assert.equal(nearDuplicate, null);
+
+  // The exact same message from the same device, said again well after the
+  // dedup window, must still display — it's a deliberate repeat, not an
+  // artifact of duplicate reporting.
+  const laterRepeat = parser.parseActivity({
+    creationTimestamp: now + 3 * 60 * 1000,
+    name: 'Office Echo',
+    description: { summary: 'broadcast this is a test' },
+    alexaResponse: 'OK',
+    data: { recordKey: 'repeat-3' },
+  });
+  assert.ok(laterRepeat);
+  assert.equal(laterRepeat.message, 'this is a test');
+});
+
+test('BroadcastParser restores fingerprint timestamps from getState() for later dedup checks', () => {
+  const now = Date.now();
+  const parser = new BroadcastParser({
+    fingerprintFn: fingerprint,
+    recordedFingerprints: [{ fp: fingerprint('this is a test', 'Office Echo'), ts: now }],
+  });
+
+  assert.equal(parser.isDuplicateContent('this is a test', 'Office Echo', now + 5000), true);
+  assert.equal(parser.isDuplicateContent('this is a test', 'Office Echo', now + 3 * 60 * 1000), false);
 });
 
 test('isBroadcastCommandOnly and isBroadcastPrompt helpers', () => {

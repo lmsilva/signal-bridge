@@ -197,6 +197,35 @@ function createListener({ config, log }) {
     setTimeout(() => pollRecentHistory(`${reason}-followup-5s`), 5000);
   }
 
+  function scheduleMusicQueryRetry(event, attempt = 1) {
+    const delayMs = attempt === 1 ? 2500 : 4000;
+    setTimeout(async () => {
+      let nowPlaying = null;
+      try {
+        nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device, {
+          attempts: 2,
+          delayMs: 900,
+        });
+      } catch (error) {
+        log.warn('Player info retry fetch failed', error.message || error);
+      }
+      if (nowPlaying) {
+        const payload = buildMusicPayload(event, config, { nowPlaying });
+        if (payload) {
+          const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
+          sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+          log.info(`Now-playing query resolved on retry for ${event.device}`);
+        }
+        return;
+      }
+      if (attempt < 2) {
+        scheduleMusicQueryRetry(event, attempt + 1);
+      } else {
+        log.info(`Now-playing query gave up after retries for ${event.device}`, { query: event.query });
+      }
+    }, delayMs);
+  }
+
   function handleVoiceEvent(voiceEvent, activityId, trigger) {
     if (voiceEvent?.kind === 'timer-hint' || voiceEvent?.kind === 'timer-list') {
       voiceQueryParser.markProcessed(activityId);
@@ -398,11 +427,31 @@ function createListener({ config, log }) {
     } else if (event.kind === 'music') {
       let nowPlaying = null;
       try {
-        nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device);
+        // "music-play" waits longer for playback to actually start; a
+        // "what song is playing" query is asking about something already
+        // playing (or not), so a shorter budget is usually enough. But right
+        // after "Alexa, next"/"skip" the player-info API can still be mid
+        // transition (old track fading out, new one not yet reporting
+        // PLAYING+title) for a couple of seconds, so give it a bit more room
+        // than a single quick check before falling back to the retry below.
+        const fetchOptions = event.trigger === 'music-query'
+          ? { attempts: 3, delayMs: 900 }
+          : undefined;
+        nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device, fetchOptions);
       } catch (error) {
         log.warn('Player info fetch failed', error.message || error);
       }
       if (!nowPlaying) {
+        // Unlike other kinds, there's no later history re-poll that helps
+        // here — the activity/spoken-response is already complete, the only
+        // thing not ready yet is Amazon's separate player-info API. Retry
+        // that directly a couple more times so a query asked right after
+        // "next"/"skip" doesn't silently go nowhere (previously the user had
+        // to ask again to get a fresh attempt at a moment the track had
+        // settled).
+        if (event.trigger === 'music-query') {
+          scheduleMusicQueryRetry(event);
+        }
         return;
       }
       payload = buildMusicPayload(event, config, { nowPlaying });
@@ -1126,6 +1175,11 @@ function createListener({ config, log }) {
     // including cached previews, processing acks, and cache fallbacks.
     recordVoiceEvent,
     sendUdpPayload,
+    // Timers bypass recordVoiceEvent entirely (handleVoiceEvent intercepts
+    // timer-hint/timer-list before it ever builds a payload) — the "Active
+    // Timers" push tile needs its own hook straight into timerSync so a web
+    // push re-polls Amazon and always emits a snapshot, same as "show timers".
+    requestTimerPoll: (device) => timerSync?.requestImmediatePoll('show-timers', device),
   };
 }
 

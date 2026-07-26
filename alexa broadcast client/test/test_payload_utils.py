@@ -38,6 +38,7 @@ from src.payload_utils import (
     title_for_display_type,
     title_for_payload,
     voc_band_label,
+    DISPLAY_TYPES,
 )
 
 
@@ -239,6 +240,22 @@ class PayloadUtilsTests(unittest.TestCase):
             title_for_payload({"type": "display.auth", "auth": {"pin": "1234"}}),
             ("Unlock", "Enter this PIN on your phone"),
         )
+
+    def test_qr_display_is_a_recognized_display_type(self):
+        self.assertIn("qr.display", DISPLAY_TYPES)
+        self.assertTrue(is_display_payload({"type": "qr.display", "qr": {"content": "https://example.com"}}))
+        self.assertEqual(resolve_display_type({"type": "qr.display"}), "qr.display")
+        self.assertEqual(title_for_display_type("qr.display"), ("Signal", "QR Code"))
+
+    def test_photo_slideshow_is_a_recognized_display_type(self):
+        self.assertIn("photo.slideshow", DISPLAY_TYPES)
+        self.assertTrue(is_display_payload({"type": "photo.slideshow", "slideshow": {"photos": []}}))
+        self.assertEqual(resolve_display_type({"type": "photo.slideshow"}), "photo.slideshow")
+        self.assertEqual(title_for_display_type("photo.slideshow"), ("Signal", "Shared Photos"))
+
+    def test_input_text_is_a_recognized_command_type(self):
+        self.assertTrue(is_command_payload({"type": "input.text", "text": {"value": "hi"}}))
+        self.assertFalse(is_display_payload({"type": "input.text"}))
 
     def test_air_quality_helpers(self):
         self.assertEqual(format_air_quality_location({"label": "Main Floor"}), "Main Floor")

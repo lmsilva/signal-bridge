@@ -66,6 +66,24 @@ class MainDisplayRoutingTests(unittest.TestCase):
         }
         self.assertTrue(BroadcastClientApp._alarm_payload_has_content(payload))
 
+    def test_qr_display_is_shown(self):
+        self.assertIn("qr.display", BroadcastClientApp.DISPLAY_TYPES)
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        self.assertTrue(
+            app._should_show({"type": "qr.display", "qr": {"qrType": "url", "content": "https://example.com"}})
+        )
+
+    def test_photo_slideshow_is_shown(self):
+        self.assertIn("photo.slideshow", BroadcastClientApp.DISPLAY_TYPES)
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        self.assertTrue(
+            app._should_show({"type": "photo.slideshow", "slideshow": {"photos": ["https://nas/a.jpg"]}})
+        )
+
+    def test_input_text_is_a_command_not_a_display_type(self):
+        self.assertIn("input.text", BroadcastClientApp.COMMAND_TYPES)
+        self.assertNotIn("input.text", BroadcastClientApp.DISPLAY_TYPES)
+
     def test_new_payload_replaces_active_display(self):
         app = BroadcastClientApp.__new__(BroadcastClientApp)
         app.display_active = True

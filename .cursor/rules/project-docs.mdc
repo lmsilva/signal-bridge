@@ -34,9 +34,9 @@ If unsure whether a change warrants an update, update anyway when behavior or fi
 
 Bridge tests: `test/*.test.js` — parser, UDP payloads, voice queries, weather, timer sync, **Tesla Fleet** (`tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`), **control web page** (`web-command-payloads`, `web-server`, `web-tls`), **display registry** (`display-registry`).
 
-Client tests: `alexa broadcast client/test/test_*.py` — payload utils (incl. `format_limit_reset_time`), config, weather fetch, main timer routing, web overlay (`test_web_overlay`), display remote (`test_display_remote`).
+Client tests: `alexa broadcast client/test/test_*.py` — payload utils (incl. `format_limit_reset_time`), config (incl. photo-slideshow display-seconds bypass), weather fetch, main timer routing, web overlay (`test_web_overlay`), display remote (`test_display_remote`, incl. `handle_text` full-string input), QR panel (`test_qr_panel`), photo slideshow panel (`test_photo_slideshow_panel`).
 
-Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired,tesla-battery,tesla-battery-limited,web-open,web-open-bad,web-close,system-reboot,system-poweroff,display-discover,input-click,input-key}`.
+Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired,tesla-battery,tesla-battery-limited,web-open,web-open-bad,web-close,system-reboot,system-poweroff,display-discover,input-click,input-key,qr-url,qr-wifi,input-text,photo-slideshow,music}`.
 
 Portable build smoke: after `build_portable.bat`, confirm `dist/alexa broadcast client/Run Alexa Broadcast Client.bat` exists and `dist/alexa broadcast client.zip` was created.
 
