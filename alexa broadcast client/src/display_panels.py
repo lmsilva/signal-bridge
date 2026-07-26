@@ -211,19 +211,30 @@ class BasePanel:
 
 
 class BroadcastPanel(BasePanel):
+    # Vertical gap between the bottom of the FROM/TO/TIME chip row and the
+    # scrolling message text below it.
+    CHIP_MESSAGE_GAP = 24
+
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
         self.needs_scroll = False
         self.scroller = None
         self.chip_value_ids = []
+        self._message_top = 0
+        self._message_viewport_height = 0
         self._build_viewport()
 
     def _build_viewport(self):
         layout = self.shell.layout
+        # This panel is the only one that still renders the chip row, so its
+        # message area must start below the chips (other panels start their
+        # content at layout.message_area_top, right under the title).
+        self._message_top = layout.chip_y + layout.chip_height + self.CHIP_MESSAGE_GAP
+        self._message_viewport_height = max(80, layout.message_area_bottom - self._message_top)
         self.message_viewport = tk.Canvas(
             self.root,
             width=layout.message_content_width,
-            height=layout.message_viewport_height,
+            height=self._message_viewport_height,
             highlightthickness=0,
             bd=0,
             bg=self.config["overlayBackground"],
@@ -312,12 +323,12 @@ class BroadcastPanel(BasePanel):
         self.needs_scroll = self.scroller.configure(
             message,
             center_x=layout.message_center_x,
-            viewport_height=layout.message_viewport_height,
+            viewport_height=self._message_viewport_height,
         )
         self._place_widget(
             self.message_viewport,
             x=layout.content_x + 24,
-            y=layout.message_area_top,
+            y=self._message_top,
         )
 
 

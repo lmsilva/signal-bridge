@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-07-25
 
 ---
 
@@ -237,6 +237,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-25: **Fix broadcast message covering FROM/TO/TIME chips** — `overlay.py`'s shared `message_area_top` starts right under the title for panels without chips, but `BroadcastPanel` still draws the chip row and was placing its scrolling message viewport at that same y, drawing over the chips in both orientations. `BroadcastPanel` now computes its own content top (`chip_y + chip_height + gap`) and viewport height from those same layout fields, so the message area always starts below the chips. Smoke: `test/send_test.py --type broadcast` (check portrait and landscape).
 - 2026-07-23: **Tesla battery landscape layout** — landscape uses a car | status two-column layout; portrait still stacks but reserves height for cache/rate-limit blocks so "Tesla" / "Tesla Battery" are never clipped.
 - 2026-07-23: **Portable build quiet on Windows** — PyInstaller spec freezes only Windows `webview`/`pynput` backends (no android ModuleNotFoundError), overrides stale `pycparser.lextab` hooks, and `build_portable.bat` exits immediately on success (`--pause` to keep the window open).
 - 2026-07-23: **Fix overlay stacking / bleed** — removed process-wide `SetProcessDpiAwareness` (it inflated Tk font pixels while cards used fixed offsets, stacking Tesla dashboard sections). All display overlays force full opacity so movie posters no longer show through; shell message area no longer reserves unused chip rows; battery card + media strip lay out from font metrics; portrait dashboard packs media under the stat grid with section floors.

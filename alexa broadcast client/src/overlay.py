@@ -170,9 +170,11 @@ class OverlayWindow:
         top_y = int(self.screen_h * (0.12 if self.portrait else 0.14))
         accent_line_height = self.title_accent_font.metrics("linespace")
         received_y = top_y + self.title_primary_font.metrics("linespace") + 6
-        # Chips were removed from the shell; keep chip_* fields for panels that
-        # still size cards from them, but start the message area right under the
-        # title stack so content is not crushed into the lower third.
+        # message_area_top starts right under the title stack (not after the
+        # chip row) since most panels don't render chips. BroadcastPanel is the
+        # exception — it still shows the FROM/TO/TIME chip row and computes its
+        # own message top (chip_y + chip_height + gap) from these chip_* fields
+        # so its scrolling text never overlaps the chips.
         chip_gap = 16
         chip_count = 3
         chip_width = (content_width - chip_gap * (chip_count - 1)) // chip_count
