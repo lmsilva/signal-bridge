@@ -50,11 +50,24 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
     if (event.kind === 'route') {
       pending.set(pendingKey(event.device, 'route'), { event, at: now });
       prune(now);
+      return;
+    }
+
+    // Keep a short window after an AQ ask so empty-summary temperature TTS
+    // from the same Echo (sensor side-channel) does not flash outdoor weather.
+    if (event.kind === 'air-quality') {
+      pending.set(pendingKey(event.device, 'air-quality'), { event, at: now });
+      prune(now);
     }
   }
 
   function forget(device, kind) {
     pending.delete(pendingKey(device, kind));
+  }
+
+  function hasPending(device, kind, now = Date.now()) {
+    prune(now);
+    return pending.has(pendingKey(device, kind));
   }
 
   function tryComplete(activity, spokenResponse, helpers, now = Date.now()) {
@@ -135,6 +148,7 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
   return {
     remember,
     forget,
+    hasPending,
     tryComplete,
     pendingKey,
   };

@@ -2,7 +2,7 @@ const { cleanupLocationPhrase, normalizeText, resolveIndoorLocation } = require(
 const { parseIndoorReading } = require('./indoor-reading-parse');
 
 const OUTDOOR_MARKERS_RE = /\b(?:outside|outdoors|out\s+there|weather)\b/i;
-const INDOOR_MARKERS_RE = /\b(?:inside|indoors|in\s+here|in\s+the\s+house)\b/i;
+const INDOOR_MARKERS_RE = /\b(?:inside|indoors|indoor|in\s+here|in\s+the\s+house)\b/i;
 const INDOOR_TEMPERATURE_PREP_RE = /\b(?:temperature|temp)\s+(?:on|in|at|of|for)\s+(?:the\s+)?/i;
 const INDOOR_HUMIDITY_PREP_RE = /\bhumidity\s+(?:on|in|at|of|for)\s+(?:the\s+)?/i;
 const INDOOR_LOCATION_PREP_RE = /\b(?:on|in|at)\s+(?:the\s+)?(.+?)(?:\?|[.!]|$)/i;
@@ -29,6 +29,22 @@ function extractIndoorLocationPhrase(text) {
   if (tempPrep) {
     const phrase = cleanupLocationPhrase(tempPrep[1]);
     if (phrase && !/^(?:outside|outdoors|out\s+there)$/i.test(phrase)) {
+      return phrase;
+    }
+  }
+
+  // "what's the main floor temperature" / "tell me the living room humidity"
+  // (location before the metric — common Alexa phrasing). Require "the" so
+  // bare "what's the temperature" does not treat "the" as a room name.
+  const locationBeforeMetric = normalized.match(
+    /\b(?:what(?:'s|\s+is)|tell\s+me|how(?:'s|\s+is)|check)\s+the\s+(.+?)\s+(?:temperature|temp|humidity)\b/i,
+  );
+  if (locationBeforeMetric) {
+    const phrase = cleanupLocationPhrase(locationBeforeMetric[1]);
+    if (
+      phrase
+      && !/^(?:the|a|an|outside|outdoors|out\s+there|indoor|inside|indoors)$/i.test(phrase)
+    ) {
       return phrase;
     }
   }

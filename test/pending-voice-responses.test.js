@@ -25,6 +25,20 @@ test('tesla battery queries are not tracked as pending responses', () => {
   assert.equal(completed, null);
 });
 
+test('air-quality asks stay pending so companion weather TTS can be suppressed', () => {
+  const pending = createPendingVoiceResponses();
+  assert.equal(pending.hasPending('Office Echo', 'air-quality'), false);
+  pending.remember({
+    kind: 'air-quality',
+    device: 'Office Echo',
+    query: "what's the indoor air quality",
+    trigger: 'air-quality-query',
+  });
+  assert.equal(pending.hasPending('Office Echo', 'air-quality'), true);
+  pending.forget('Office Echo', 'air-quality');
+  assert.equal(pending.hasPending('Office Echo', 'air-quality'), false);
+});
+
 test('tryComplete attaches orphan Vivint arm response to pending query', () => {
   const pending = createPendingVoiceResponses();
   pending.remember({

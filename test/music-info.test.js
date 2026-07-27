@@ -52,7 +52,12 @@ test('matchesMusicSkipQuery detects next/skip and rejects calendar/shopping phra
   assert.equal(matchesMusicSkipQuery('skip'), true);
   assert.equal(matchesMusicSkipQuery('skip this song'), true);
   assert.equal(matchesMusicSkipQuery('skip the track'), true);
+  // History joins wake-word + repeated ASR: "alexa next, next"
+  assert.equal(matchesMusicSkipQuery('alexa next, next'), true);
+  assert.equal(matchesMusicSkipQuery('next | next'), true);
+  assert.equal(matchesMusicSkipQuery('alexa next song, next song'), true);
   assert.equal(matchesMusicSkipQuery("what's next"), false);
+  assert.equal(matchesMusicSkipQuery("what's next, next"), false);
   assert.equal(matchesMusicSkipQuery('say next'), false);
   assert.equal(matchesMusicSkipQuery('next on my calendar'), false);
   assert.equal(matchesMusicSkipQuery('set a timer'), false);
