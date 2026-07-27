@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Route display seconds)
+**Last updated:** 2026-07-26 (Portable src package freeze)
 
 ---
 
@@ -258,6 +258,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-26: **Portable boot `ModuleNotFoundError: src.config`** — added `src/__init__.py`, PyInstaller now `collect_submodules('src')` (so panels aren’t omitted from the freeze), and `main.py` adds the client root to `sys.path` for non-frozen launches. Rebuild portable zip and redeploy to the poster PC.
 - 2026-07-26: **Route Planner bypasses `maxDisplaySeconds`** — `route-planner.query` keeps the bridge's requested duration (≥120s) so map/facts tiles are not cut off by a tight client cap. Restart the display client (or rebuild portable) to pick up.
 - 2026-07-26: **Route Planner header overlap** — long "City, State, US → City, State, US" titles wrap, but stats used a single linespace and painted over the destination line. Stats/tiles now use the real title bbox; place names drop trailing `, US`. Restart the display client (or rebuild portable) to pick up.
 - 2026-07-26: **Steam footer players** — **PLAYING NOW** value shows `N players` (worldwide concurrent). Portable rebuild required.

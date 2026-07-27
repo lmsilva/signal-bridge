@@ -44,6 +44,10 @@ webview_datas = (
 # and the import fails silently at runtime (remote keyboard breaks).
 pynput_hiddenimports = collect_submodules('pynput', filter=_windows_only)
 
+# Collect the whole client package so new panels (steam, map_tiles, …) are not
+# omitted from the freeze when only listed piecemeal in hiddenimports.
+src_hiddenimports = collect_submodules('src')
+
 a = Analysis(
     ['src/main.py'],
     pathex=['.'],
@@ -67,23 +71,7 @@ a = Analysis(
         'qrcode.image.pil',
         'qrcode.image.pure',
         *pynput_hiddenimports,
-        'src.config',
-        'src.display_announce',
-        'src.display_identity',
-        'src.display_panels',
-        'src.input_control',
-        'src.lan_crypto',
-        'src.listener',
-        'src.main',
-        'src.message_scroll',
-        'src.text_marquee',
-        'src.overlay',
-        'src.paths',
-        'src.payload_utils',
-        'src.remote_cursor',
-        'src.tray_app',
-        'src.weather_fetch',
-        'src.web_overlay',
+        *src_hiddenimports,
         'cryptography',
         'ssl',
         'urllib.request',

@@ -2,7 +2,15 @@ import queue
 import subprocess
 import sys
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox
+
+# Dev launches (`python src/main.py`) need the client root on sys.path.
+# Frozen builds already bundle the `src.*` package via the PyInstaller spec.
+if not getattr(sys, "frozen", False):
+    _client_root = Path(__file__).resolve().parent.parent
+    if str(_client_root) not in sys.path:
+        sys.path.insert(0, str(_client_root))
 
 from src.config import effective_display_seconds, load_config
 from src.display_announce import DisplayAnnouncer
