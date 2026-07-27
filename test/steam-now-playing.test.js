@@ -8,13 +8,61 @@ const { createSteamPresenceStore } = require('../src/steam-presence');
 const { extractSteamIdFromClaimedId } = require('../src/steam-auth');
 const { stripHtml, libraryCapsuleUrls, formatPlaytimeHours } = require('../src/steam-api');
 const { buildSteamNowPlayingPayload, buildSteamNowPlayingClosePayload } = require('../src/udp-payload');
-const { createSteamNowPlaying, resolveEffectiveSteamAppId } = require('../src/steam-now-playing');
+const {
+  createSteamNowPlaying,
+  resolveEffectiveSteamAppId,
+  pickRecentPlayAppId,
+} = require('../src/steam-now-playing');
 
-test('resolveEffectiveSteamAppId prefers Steam gameid, else presence', () => {
-  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }), 570);
-  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }), 440);
-  assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }), 440);
-  assert.equal(resolveEffectiveSteamAppId(null, null), null);
+test('resolveEffectiveSteamAppId prefers Steam gameid, else presence, else recent', () => {
+  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }, 2524850), 570);
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, 2524850), 440);
+  assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }, 2524850), 440);
+  assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), 2524850);
+  assert.equal(resolveEffectiveSteamAppId(null, null, null), null);
+});
+
+test('pickRecentPlayAppId infers fresh OwnedGames launches and holds active session', () => {
+  const nowMs = 1_000_000_000;
+  const fresh = { appId: 2524850, lastPlayedAt: nowMs - 45_000 };
+  assert.equal(pickRecentPlayAppId({
+    recentGame: fresh,
+    nowMs,
+    inferSeconds: 300,
+    holdSeconds: 900,
+    personaOnline: true,
+  }), 2524850);
+  assert.equal(pickRecentPlayAppId({
+    recentGame: fresh,
+    nowMs,
+    personaOnline: false,
+  }), null);
+
+  const aging = { appId: 2524850, lastPlayedAt: nowMs - 600_000 };
+  assert.equal(pickRecentPlayAppId({
+    recentGame: aging,
+    sessionAppId: null,
+    nowMs,
+    inferSeconds: 300,
+    holdSeconds: 900,
+    personaOnline: true,
+  }), null);
+  assert.equal(pickRecentPlayAppId({
+    recentGame: aging,
+    sessionAppId: 2524850,
+    nowMs,
+    inferSeconds: 300,
+    holdSeconds: 900,
+    personaOnline: true,
+  }), 2524850);
+  assert.equal(pickRecentPlayAppId({
+    recentGame: { appId: 2524850, lastPlayedAt: nowMs - 1_000_000 },
+    sessionAppId: 2524850,
+    nowMs,
+    inferSeconds: 300,
+    holdSeconds: 900,
+    personaOnline: true,
+  }), null);
 });
 
 test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
@@ -30,6 +78,8 @@ test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
     assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
     assert.equal(steam.pollIntervalSeconds, 15);
     assert.equal(steam.restoreAfterInterruptSeconds, 75);
+    assert.equal(steam.inferFromRecentSeconds, 300);
+    assert.equal(steam.recentPlayHoldSeconds, 900);
   } finally {
     if (prevHosts === undefined) delete process.env.STEAM_ALLOWED_HOSTS;
     else process.env.STEAM_ALLOWED_HOSTS = prevHosts;

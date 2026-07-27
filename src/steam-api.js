@@ -207,6 +207,47 @@ async function fetchRecentlyPlayedGames(apiKey, steamId, { count = 5 } = {}) {
   })).filter((game) => Number.isFinite(game.appId) && game.appId > 0);
 }
 
+/**
+ * Most recently played owned title by rtime_last_played.
+ * GetPlayerSummaries gameid is often missing even while this timestamp is fresh
+ * (privacy lag, brand-new launches, some titles). GetRecentlyPlayedGames also
+ * omits rtime and sorts by 2-week playtime — OwnedGames is the reliable signal.
+ */
+async function fetchMostRecentlyPlayedOwnedGame(apiKey, steamId) {
+  const url = `${API_HOST}/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}`
+    + `&steamid=${encodeURIComponent(steamId)}`
+    + '&include_played_free_games=1&include_appinfo=1';
+  const json = await httpsGetJson(url);
+  const games = Array.isArray(json?.response?.games) ? json.response.games : [];
+  let best = null;
+  for (const game of games) {
+    const appId = Number(game.appid);
+    const rtime = Number(game.rtime_last_played);
+    if (!Number.isFinite(appId) || appId <= 0 || !Number.isFinite(rtime) || rtime <= 0) {
+      continue;
+    }
+    if (!best || rtime > best.rtime) {
+      best = {
+        appId,
+        name: game.name || `App ${appId}`,
+        rtime,
+        playtimeForeverMin: Number.isFinite(Number(game.playtime_forever))
+          ? Number(game.playtime_forever)
+          : null,
+      };
+    }
+  }
+  if (!best) {
+    return null;
+  }
+  return {
+    appId: best.appId,
+    name: best.name,
+    playtimeForeverMin: best.playtimeForeverMin,
+    lastPlayedAt: best.rtime * 1000,
+  };
+}
+
 async function fetchOwnedGamePlaytime(apiKey, steamId, appId) {
   // Prefer recently-played (small payload); fall back to full owned list scan.
   // GetRecentlyPlayedGames often omits rtime_last_played — GetOwnedGames
@@ -312,6 +353,7 @@ module.exports = {
   libraryCapsuleUrls,
   fetchPlayerSummary,
   fetchRecentlyPlayedGames,
+  fetchMostRecentlyPlayedOwnedGame,
   fetchAppDetails,
   fetchOwnedGamePlaytime,
   fetchAchievementProgress,
