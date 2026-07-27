@@ -53,7 +53,7 @@
     "routeQueries": true,
     "eventsLogFile": "data/voice-events.jsonl",
     "defaultLocation": {
-      "name": "Home",
+      "name": "Saratoga Springs, UT",
       "latitude": 40.0,
       "longitude": -111.0
     }

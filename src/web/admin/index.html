@@ -25,37 +25,39 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal14">
+  <link rel="stylesheet" href="styles.css?v=signal16">
 </head>
 <body>
-  <header class="app-header">
-    <div class="app-title">
-      <img class="app-logo" src="/logo.png" width="28" height="28" alt="">
-      Signal Bridge
-    </div>
-    <div class="header-actions">
-      <div class="header-status" id="header-status" title="Signal Bridge status">
-        <span class="pulse" id="bridge-pulse"></span>
-        <span id="bridge-status-text">connecting…</span>
+  <div class="sticky-chrome">
+    <header class="app-header">
+      <div class="app-title">
+        <img class="app-logo" src="/logo.png" width="28" height="28" alt="">
+        Signal Bridge
       </div>
-      <button type="button" class="btn btn-outline btn-sm" id="btn-admin-logout" title="Sign out of admin">Log out</button>
-    </div>
-  </header>
+      <div class="header-actions">
+        <div class="header-status" id="header-status" title="Signal Bridge status">
+          <span class="pulse" id="bridge-pulse"></span>
+          <span id="bridge-status-text">connecting…</span>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-admin-logout" title="Sign out of admin">Log out</button>
+      </div>
+    </header>
 
-  <div class="display-bar" id="display-bar">
-    <label class="display-bar-label" for="display-select">Display</label>
-    <div class="display-bar-row">
-      <select id="display-select" class="display-select" aria-label="Target display">
-        <option value="">Looking for displays…</option>
-      </select>
-      <button type="button" class="btn btn-outline btn-icon" id="btn-display-unlock" title="Unlock remote control with on-screen PIN" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
-      </button>
-      <button type="button" class="btn btn-outline btn-icon" id="btn-display-refresh" title="Ask displays to announce">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
-      </button>
+    <div class="display-bar" id="display-bar">
+      <label class="display-bar-label" for="display-select">Display</label>
+      <div class="display-bar-row">
+        <select id="display-select" class="display-select" aria-label="Target display">
+          <option value="">Looking for displays…</option>
+        </select>
+        <button type="button" class="btn btn-outline btn-icon" id="btn-display-unlock" title="Unlock remote control with on-screen PIN" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
+        </button>
+        <button type="button" class="btn btn-outline btn-icon" id="btn-display-refresh" title="Ask displays to announce">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+        </button>
+      </div>
+      <p class="display-bar-hint" id="display-bar-hint">Select a display for push and remote control. New displays appear automatically.</p>
     </div>
-    <p class="display-bar-hint" id="display-bar-hint">Select a display for push and remote control. New displays appear automatically.</p>
   </div>
 
   <main class="content" id="content">
@@ -528,6 +530,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal14"></script>
+  <script src="app.js?v=signal16"></script>
 </body>
 </html>

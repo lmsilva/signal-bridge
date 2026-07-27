@@ -1,4 +1,9 @@
 const { resolveIndoorQueryLocation } = require('./indoor-temperature');
+const {
+  extractRouteLocations,
+  looksLikeRouteQuery,
+  matchesRouteQuery,
+} = require('./route-query');
 
 function hasSpokenResponse(event) {
   return Boolean(String(event?.spokenResponse || '').trim());
@@ -39,6 +44,23 @@ function needsSpokenResponseUpgrade(event, config = {}) {
   if (event.kind === 'indoor-temperature') {
     const location = resolveIndoorQueryLocation(event.query, null, config?.indoorTemperature || {});
     return !location?.matched;
+  }
+
+  // Incomplete distance ASR ("distance from Saratoga Springs Utah" with no
+  // "to …") must wait for Alexa's miles TTS — even when defaultLocation is set.
+  // Inventing home→PLACE would flash a useless near-zero route and skip the
+  // pending pairing with the orphan TTS activity id.
+  if (event.kind === 'route') {
+    const query = event.query || '';
+    if (looksLikeRouteQuery(query) && !matchesRouteQuery(query, '')) {
+      return true;
+    }
+    const locations = extractRouteLocations(
+      query,
+      config?.voiceEvents?.defaultLocation || null,
+      null,
+    );
+    return !locations;
   }
 
   return false;

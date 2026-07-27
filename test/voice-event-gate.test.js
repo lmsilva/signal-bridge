@@ -69,6 +69,63 @@ test('indoor query with a known room processes immediately', () => {
   );
 });
 
+test('incomplete distance ASR waits for spoken miles answer', () => {
+  assert.equal(
+    needsSpokenResponseUpgrade({
+      kind: 'route',
+      query: "what's the distance from saratoga springs utah",
+      spokenResponse: null,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldMarkActivityProcessed({
+      kind: 'route',
+      query: "what's the distance from saratoga springs utah",
+      spokenResponse: null,
+    }),
+    false,
+  );
+});
+
+test('incomplete distance ASR still waits when defaultLocation is configured', () => {
+  const config = {
+    voiceEvents: {
+      defaultLocation: { name: 'Saratoga Springs, UT', latitude: 40.0, longitude: -111.0 },
+    },
+  };
+  assert.equal(
+    needsSpokenResponseUpgrade({
+      kind: 'route',
+      query: "what's the distance from saratoga springs utah",
+      spokenResponse: null,
+    }, config),
+    true,
+  );
+});
+
+test('route with spoken miles answer that cannot be parsed does not wait forever', () => {
+  assert.equal(
+    needsSpokenResponseUpgrade({
+      kind: 'route',
+      query: "what's the distance from saratoga springs utah",
+      spokenResponse: 'sorry, I had trouble answering that',
+    }),
+    false,
+  );
+});
+
+test('complete distance query processes immediately without spoken response', () => {
+  assert.equal(
+    needsSpokenResponseUpgrade({
+      kind: 'route',
+      query: 'what is the distance between Saratoga Springs and Moab',
+      spokenResponse: null,
+    }),
+    false,
+  );
+});
+
 test('shouldMarkActivityProcessed still defers music-play until spoken response arrives', () => {
   assert.equal(
     shouldMarkActivityProcessed({ kind: 'music', trigger: 'music-play', spokenResponse: null }),

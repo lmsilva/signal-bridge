@@ -288,6 +288,19 @@ def format_route_distance(miles: int | float | None) -> str:
     return f"{round(value)} mi"
 
 
+def shorten_route_place_name(name: str | None) -> str:
+    """Drop redundant country suffixes so long geocoded names wrap less
+    in the Route Planner header ("Saratoga Springs, Utah, US" → "…, Utah")."""
+    text = str(name or "").strip()
+    if not text:
+        return "—"
+    text = re.sub(r",\s*United States of America\s*$", "", text, flags=re.I)
+    text = re.sub(r",\s*United States\s*$", "", text, flags=re.I)
+    text = re.sub(r",\s*USA\s*$", "", text, flags=re.I)
+    text = re.sub(r",\s*US\s*$", "", text, flags=re.I)
+    return text.strip(" ,") or str(name).strip()
+
+
 def format_local_time_at_offset(utc_offset_seconds: int | float | None, extra_minutes: int | float = 0) -> str:
     """'9:41 AM' style clock reading for a place `utc_offset_seconds` away
     from UTC, optionally `extra_minutes` in the future (for an ETA)."""

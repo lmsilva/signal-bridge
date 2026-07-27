@@ -141,6 +141,29 @@ test('createVoiceEventDedup allows upgrade when spoken response arrives later', 
   );
 });
 
+test('route incomplete ASR then miles TTS upgrades on the same activity id', () => {
+  const dedup = createVoiceEventDedup({ dedupMs: 60000 });
+  const base = {
+    activityId: 'route-1',
+    kind: 'route',
+    device: 'Kitchen Echo',
+    query: "what's the distance from saratoga springs utah",
+    timestamp: 1000,
+  };
+
+  assert.equal(dedup.shouldEmit({ ...base, spokenResponse: null }, 1000), true);
+  // Same activity re-read still waiting for TTS — suppressed.
+  assert.equal(dedup.shouldEmit({ ...base, spokenResponse: null }, 4000), false);
+  // Miles answer lands on the same record — must emit so Route Planner can open.
+  assert.equal(
+    dedup.shouldEmit({
+      ...base,
+      spokenResponse: 'Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies.',
+    }, 8000),
+    true,
+  );
+});
+
 test('vivint events fingerprint by content across different activity ids', () => {
   const dedup = createVoiceEventDedup({ dedupMs: 60000 });
   const base = {

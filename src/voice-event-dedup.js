@@ -67,6 +67,12 @@ function contentSignature(event) {
     return String(parsed?.items?.length ?? '') + '|' + String(parsed?.empty ?? '');
   }
 
+  // Route panels key off Alexa's spoken miles line when ASR is incomplete.
+  // Including speech lets the same activityId upgrade after TTS lands.
+  if (event?.kind === 'route') {
+    return normalizePart(event?.spokenResponse);
+  }
+
   return '';
 }
 
@@ -134,13 +140,17 @@ function createVoiceEventDedup({ dedupMs = DEFAULT_DEDUP_MS } = {}) {
     // again — a genuine repeat produces a new record with a new timestamp.
     // Never re-display re-reads, however long ago the original was shown.
     // The only exception: a spoken-response upgrade shortly after the first
-    // display, when Alexa's answer changes what's on screen.
+    // sighting, when Alexa's answer changes what's on screen (or when the
+    // first sighting had no speech and no content signature yet — e.g. an
+    // incomplete distance ASR waiting for the miles TTS).
     const priorSighting = instantKey ? seenInstants.get(instantKey) : null;
     if (priorSighting && now - priorSighting.at <= INSTANT_RETENTION_MS) {
+      const signatureChanged = signature !== priorSighting.signature;
+      const emptyToSpoken = !priorSighting.signature && !signature && spoken;
       const upgrade = !priorSighting.hadResponse
         && spoken
         && now - priorSighting.at <= dedupMs
-        && signature !== priorSighting.signature;
+        && (signatureChanged || emptyToSpoken);
       if (!upgrade) {
         return false;
       }
