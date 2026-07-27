@@ -29,6 +29,7 @@ test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
     assert.equal(isAllowedHost(steam, 'movietheaterpc'), true);
     assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
     assert.equal(steam.pollIntervalSeconds, 15);
+    assert.equal(steam.restoreAfterInterruptSeconds, 75);
   } finally {
     if (prevHosts === undefined) delete process.env.STEAM_ALLOWED_HOSTS;
     else process.env.STEAM_ALLOWED_HOSTS = prevHosts;
@@ -160,7 +161,7 @@ test('resolveSteamCredentials prefers STEAM_API_KEY from env over session', () =
   }
 });
 
-test('session suppress blocks re-push until game restarts', async () => {
+test('session suppress blocks re-push until restore window elapses', async () => {
   const sent = [];
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-np-'));
   const steam = resolveSteamConfig({ ROOT: root }, {
@@ -169,6 +170,7 @@ test('session suppress blocks re-push until game restarts', async () => {
       steamId: '76561198000000000',
       allowedHosts: ['MOVIETHEATERPC'],
       enabled: true,
+      restoreAfterInterruptSeconds: 30,
     },
   });
   const config = { ROOT: root, steam, udpBroadcast: { defaultDisplaySeconds: 120 } };
@@ -187,14 +189,24 @@ test('session suppress blocks re-push until game restarts', async () => {
     host: 'MOVIETHEATERPC',
     startedAt: now,
     suppressed: false,
+    suppressedAt: null,
+    suppressReason: null,
     pushed: true,
     lastPushAt: now,
     details: { appId: 570, name: 'Dota 2', host: 'MOVIETHEATERPC' },
   });
   assert.equal(controller.suppressActiveSession('weather.query'), true);
   assert.equal(controller._getSession().suppressed, true);
-
-  // Still suppressed — tick with mocked internals would skip push; verify flag.
-  assert.equal(controller._getSession().suppressed, true);
+  assert.equal(controller._getSession().suppressReason, 'weather.query');
   assert.equal(sent.length, 0);
+
+  // Still inside the restore window.
+  now += 10_000;
+  assert.equal(controller.statusSnapshot().session.restoreInSec > 0, true);
+
+  // After the restore window, suppress clears and a re-push is forced.
+  now += 25_000;
+  assert.equal(controller._maybeClearSuppressForRestore(), true);
+  assert.equal(controller._getSession().suppressed, false);
+  assert.equal(controller._getSession().pushed, false);
 });

@@ -128,6 +128,69 @@ function emptyNowPlaying(device) {
   };
 }
 
+/**
+ * Parse Alexa's spoken now-playing answer when player-info on the asked
+ * device is idle (common: song is playing on another Echo).
+ */
+function parseSpokenNowPlaying(spoken, device = null) {
+  const text = normalizeQueryText(spoken);
+  if (!text || /\b(?:nothing|not)\s+(?:is\s+)?playing\b/i.test(text)) {
+    return null;
+  }
+
+  const patterns = [
+    /\b(?:currently\s+playing|now\s+playing|you'?re\s+listening\s+to)\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+(.+))?[.!]?$/i,
+    /\bthis\s+is\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+(.+))?[.!]?$/i,
+    /\bplaying\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+(.+))?[.!]?$/i,
+    /^(.+?)\s+by\s+(.+?)\s+is\s+playing(?:\s+on\s+(.+))?[.!]?$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) {
+      continue;
+    }
+    const song = String(match[1] || '').replace(/[?.!]+$/, '').trim();
+    const artist = String(match[2] || '').replace(/[?.!]+$/, '').trim();
+    const playingOn = String(match[3] || '').replace(/[?.!]+$/, '').trim() || null;
+    if (!song || !artist || song.length > 120 || artist.length > 80) {
+      continue;
+    }
+    if (/^(?:the|a|an|it|this|that)$/i.test(song)) {
+      continue;
+    }
+    return {
+      song,
+      artist,
+      album: null,
+      artUrl: null,
+      provider: null,
+      state: 'PLAYING',
+      device: playingOn || device || null,
+      source: 'spoken',
+    };
+  }
+
+  return null;
+}
+
+function listAlexaMediaDevices(alexa) {
+  const devices = [];
+  const seen = new Set();
+  for (const device of Object.values(alexa?.serialNumbers || {})) {
+    const serial = String(device?.serialNumber || '').trim();
+    if (!serial || seen.has(serial)) {
+      continue;
+    }
+    seen.add(serial);
+    devices.push({
+      serial,
+      name: device.accountName || device._name || serial,
+    });
+  }
+  return devices;
+}
+
 function getPlayerInfoOnce(alexa, serialOrName) {
   return new Promise((resolve) => {
     try {
@@ -185,6 +248,74 @@ async function fetchNowPlaying(alexa, serialOrName, device, { attempts = 4, dela
 }
 
 /**
+ * "What's playing?" often targets an idle Echo while music plays elsewhere.
+ * Prefer the asked device, then scan other household devices for PLAYING music.
+ */
+async function fetchNowPlayingHousehold(
+  alexa,
+  preferredSerial,
+  preferredDevice,
+  { attempts = 3, delayMs = 900, scanAttempts = 1 } = {},
+) {
+  const preferred = await fetchNowPlaying(alexa, preferredSerial, preferredDevice, {
+    attempts,
+    delayMs,
+  });
+  if (preferred && preferred.state === 'PLAYING' && isMusicPlayerContent(preferred)) {
+    return preferred;
+  }
+  if (preferred && isMusicPlayerContent(preferred)) {
+    return preferred;
+  }
+
+  const preferredKey = String(preferredSerial || '').trim().toLowerCase();
+  const preferredName = String(preferredDevice || '').trim().toLowerCase();
+  for (const entry of listAlexaMediaDevices(alexa)) {
+    const serialKey = String(entry.serial || '').trim().toLowerCase();
+    const nameKey = String(entry.name || '').trim().toLowerCase();
+    if (preferredKey && serialKey === preferredKey) {
+      continue;
+    }
+    if (preferredName && nameKey === preferredName) {
+      continue;
+    }
+    const info = await fetchNowPlaying(alexa, entry.serial, entry.name, {
+      attempts: scanAttempts,
+      delayMs: 0,
+    });
+    if (info && info.state === 'PLAYING' && isMusicPlayerContent(info)) {
+      return info;
+    }
+  }
+
+  return preferred || null;
+}
+
+/**
+ * Resolve a music-query ("what's playing") to a card: local player, other
+ * household Echo that is PLAYING, or Alexa's spoken song/artist answer.
+ */
+async function resolveMusicQueryNowPlaying(alexa, event, fetchOptions = {}) {
+  const serialOrName = event?.deviceSerial || event?.device;
+  let nowPlaying = await fetchNowPlayingHousehold(
+    alexa,
+    serialOrName,
+    event?.device,
+    fetchOptions,
+  );
+  if (nowPlaying && isMusicPlayerContent(nowPlaying)) {
+    return nowPlaying;
+  }
+
+  const fromSpeech = parseSpokenNowPlaying(event?.spokenResponse, event?.device);
+  if (fromSpeech && isMusicPlayerContent(fromSpeech)) {
+    return fromSpeech;
+  }
+
+  return null;
+}
+
+/**
  * After "next"/"skip", player-info often still reports the old track as
  * PLAYING for a beat. Prefer a title that differs from the first poll; if
  * the skip already finished before we looked (title never changes across
@@ -228,7 +359,11 @@ module.exports = {
   isExplicitSongSkipQuery,
   isMusicPlayerContent,
   fetchNowPlaying,
+  fetchNowPlayingHousehold,
   fetchNowPlayingAfterSkip,
+  resolveMusicQueryNowPlaying,
+  parseSpokenNowPlaying,
+  listAlexaMediaDevices,
   normalizePlayerInfo,
   emptyNowPlaying,
   normalizeQueryText,
