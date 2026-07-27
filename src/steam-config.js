@@ -45,6 +45,16 @@ function resolveSteamConfig(config, fileConfig = {}) {
     // Default 15s — Steam's GetPlayerSummaries gameid often lags a launch.
     pollIntervalSeconds: Math.max(10, Number(steam.pollIntervalSeconds) || 15),
     presenceStaleSeconds: Math.max(30, Number(steam.presenceStaleSeconds) || 90),
+    // After Alexa/other overlays interrupt Steam, restore the game card once
+    // the interrupt overlay has had time to finish (default ~75s).
+    restoreAfterInterruptSeconds: Math.max(
+      15,
+      Number(
+        process.env.STEAM_RESTORE_AFTER_INTERRUPT_SEC
+        || steam.restoreAfterInterruptSeconds
+        || 75,
+      ) || 75,
+    ),
     // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(
       process.env.STEAM_PRESENCE_SECRET

@@ -51,6 +51,8 @@ function createSteamNowPlaying({
    *   host: string,
    *   startedAt: number,
    *   suppressed: boolean,
+   *   suppressedAt: number | null,
+   *   suppressReason: string | null,
    *   pushed: boolean,
    *   lastPushAt: number,
    *   details: object | null,
@@ -59,13 +61,22 @@ function createSteamNowPlaying({
   let lastAccountAppId = null;
   let lastError = null;
   let lastStatus = 'idle';
+  let restoreTimer = null;
 
   function getCredentials() {
     return resolveSteamCredentials(steamConfig);
   }
 
+  function restoreAfterInterruptMs() {
+    return Math.max(15, Number(steamConfig.restoreAfterInterruptSeconds) || 75) * 1000;
+  }
+
   function statusSnapshot() {
     const creds = getCredentials();
+    const restoreMs = restoreAfterInterruptMs();
+    const suppressedAgeMs = session?.suppressed && session.suppressedAt
+      ? Math.max(0, now() - session.suppressedAt)
+      : null;
     return {
       enabled: steamConfig.enabled !== false,
       configured: Boolean(creds.apiKey && creds.steamId),
@@ -76,6 +87,7 @@ function createSteamNowPlaying({
       steamId: creds.steamId || null,
       requirePresence: Boolean(steamConfig.requirePresence),
       allowedHosts: steamConfig.allowedHosts || [],
+      restoreAfterInterruptSeconds: Math.round(restoreMs / 1000),
       status: lastStatus,
       message: lastError,
       session: session
@@ -84,6 +96,13 @@ function createSteamNowPlaying({
           host: session.host,
           startedAt: new Date(session.startedAt).toISOString(),
           suppressed: session.suppressed,
+          suppressReason: session.suppressReason || null,
+          suppressedAt: session.suppressedAt
+            ? new Date(session.suppressedAt).toISOString()
+            : null,
+          restoreInSec: session.suppressed && suppressedAgeMs != null
+            ? Math.max(0, Math.ceil((restoreMs - suppressedAgeMs) / 1000))
+            : null,
           pushed: session.pushed,
           elapsedSec: Math.max(0, Math.round((now() - session.startedAt) / 1000)),
         }
@@ -141,11 +160,14 @@ function createSteamNowPlaying({
   }
 
   function beginSession({ appId, host }) {
+    clearRestoreTimer();
     session = {
       appId: Number(appId),
       host: String(host),
       startedAt: now(),
       suppressed: false,
+      suppressedAt: null,
+      suppressReason: null,
       pushed: false,
       lastPushAt: 0,
       details: null,
@@ -153,6 +175,7 @@ function createSteamNowPlaying({
   }
 
   function endSession(reason) {
+    clearRestoreTimer();
     const wasPushed = Boolean(session?.pushed && !session?.suppressed);
     session = null;
     if (wasPushed) {
@@ -160,14 +183,72 @@ function createSteamNowPlaying({
     }
   }
 
-  /** Called when any other display overlay is sent. */
+  function clearRestoreTimer() {
+    if (restoreTimer) {
+      clearTimeout(restoreTimer);
+      restoreTimer = null;
+    }
+  }
+
+  function scheduleRestoreTick(delayMs) {
+    clearRestoreTimer();
+    restoreTimer = setTimeout(() => {
+      restoreTimer = null;
+      tick().catch((error) => {
+        lastError = error?.message || String(error);
+        log?.warn?.('Steam Now Playing restore tick failed', lastError);
+      });
+    }, Math.max(0, delayMs));
+    if (typeof restoreTimer.unref === 'function') {
+      restoreTimer.unref();
+    }
+  }
+
+  /**
+   * Called when any other display overlay is sent. Steam yields the screen,
+   * then automatically restores after restoreAfterInterruptSeconds while the
+   * same game is still running (previously stayed suppressed until quit).
+   */
   function suppressActiveSession(reason = 'interrupted') {
     if (!session || session.suppressed) {
       return false;
     }
     session.suppressed = true;
+    session.suppressedAt = now();
+    session.suppressReason = String(reason || 'interrupted');
     lastStatus = 'suppressed';
+    const restoreMs = restoreAfterInterruptMs();
+    scheduleRestoreTick(restoreMs);
     log?.info?.('Steam Now Playing suppressed', {
+      appId: session.appId,
+      reason: session.suppressReason,
+      restoreAfterSec: Math.round(restoreMs / 1000),
+    });
+    return true;
+  }
+
+  function maybeClearSuppressForRestore() {
+    if (!session?.suppressed) {
+      return false;
+    }
+    const suppressedAt = Number(session.suppressedAt || 0);
+    if (!suppressedAt) {
+      // Legacy / test sessions without a timestamp — restore on next tick.
+      session.suppressed = false;
+      session.suppressReason = null;
+      session.pushed = false;
+      return true;
+    }
+    if (now() - suppressedAt < restoreAfterInterruptMs()) {
+      return false;
+    }
+    session.suppressed = false;
+    session.suppressedAt = null;
+    const reason = session.suppressReason;
+    session.suppressReason = null;
+    session.pushed = false;
+    clearRestoreTimer();
+    log?.info?.('Steam Now Playing restoring after interrupt', {
       appId: session.appId,
       reason,
     });
@@ -288,8 +369,11 @@ function createSteamNowPlaying({
 
     lastAccountAppId = effectiveAppId;
 
-    if (session.suppressed) {
+    if (session.suppressed && !maybeClearSuppressForRestore()) {
+      const remainingMs = restoreAfterInterruptMs() - (now() - (session.suppressedAt || now()));
       lastStatus = 'suppressed';
+      lastError = `Interrupted by ${session.suppressReason || 'another overlay'}; `
+        + `restores in ~${Math.max(1, Math.ceil(remainingMs / 1000))}s if still in-game`;
       return;
     }
 
@@ -442,6 +526,8 @@ function createSteamNowPlaying({
     }
     log?.info?.('Steam Now Playing poller started', {
       pollIntervalSeconds: steamConfig.pollIntervalSeconds,
+      requirePresence: Boolean(steamConfig.requirePresence),
+      restoreAfterInterruptSeconds: steamConfig.restoreAfterInterruptSeconds,
       allowedHosts: steamConfig.allowedHosts,
     });
   }
@@ -456,6 +542,7 @@ function createSteamNowPlaying({
       clearTimeout(tickSoonTimer);
       tickSoonTimer = null;
     }
+    clearRestoreTimer();
   }
 
   return {
@@ -470,6 +557,7 @@ function createSteamNowPlaying({
     // test helpers
     _getSession: () => session,
     _setSession: (value) => { session = value; },
+    _maybeClearSuppressForRestore: () => maybeClearSuppressForRestore(),
   };
 }
 

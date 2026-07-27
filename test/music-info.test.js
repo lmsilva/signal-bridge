@@ -8,6 +8,9 @@ const {
   isMusicPlayerContent,
   normalizePlayerInfo,
   fetchNowPlayingAfterSkip,
+  fetchNowPlayingHousehold,
+  parseSpokenNowPlaying,
+  resolveMusicQueryNowPlaying,
 } = require('../src/music-info');
 
 test('matchesMusicQuery detects play commands', () => {
@@ -198,4 +201,74 @@ test('fetchNowPlayingAfterSkip falls back to settled lastSeen when title never c
     delayMs: 1,
   });
   assert.equal(result.song, 'Same Song');
+});
+
+test('parseSpokenNowPlaying extracts song and artist from Alexa answers', () => {
+  const current = parseSpokenNowPlaying('Currently playing Bohemian Rhapsody by Queen');
+  assert.equal(current.song, 'Bohemian Rhapsody');
+  assert.equal(current.artist, 'Queen');
+  assert.equal(current.source, 'spoken');
+
+  const onDevice = parseSpokenNowPlaying(
+    'This is Tennessee by Arrested Development on Office Echo',
+    'Basement Echo Dot',
+  );
+  assert.equal(onDevice.song, 'Tennessee');
+  assert.equal(onDevice.artist, 'Arrested Development');
+  assert.equal(onDevice.device, 'Office Echo');
+
+  assert.equal(parseSpokenNowPlaying('Nothing is playing right now'), null);
+  assert.equal(parseSpokenNowPlaying('The weather is sunny'), null);
+});
+
+test('fetchNowPlayingHousehold finds PLAYING music on another Echo', async () => {
+  const alexa = {
+    serialNumbers: {
+      a: { serialNumber: 'idle-serial', accountName: 'Basement Echo Dot' },
+      b: { serialNumber: 'office-serial', accountName: 'Office Echo' },
+    },
+    getPlayerInfo(id, cb) {
+      if (id === 'idle-serial' || id === 'Basement Echo Dot') {
+        cb(null, { playerInfo: { state: 'IDLE', infoText: {} } });
+        return;
+      }
+      cb(null, {
+        playerInfo: {
+          infoText: { title: 'Tennessee', subText1: 'Arrested Development' },
+          state: 'PLAYING',
+          provider: { providerDisplayName: 'Amazon Music' },
+        },
+      });
+    },
+  };
+
+  const result = await fetchNowPlayingHousehold(alexa, 'idle-serial', 'Basement Echo Dot', {
+    attempts: 1,
+    delayMs: 1,
+    scanAttempts: 1,
+  });
+  assert.equal(result.song, 'Tennessee');
+  assert.equal(result.device, 'Office Echo');
+});
+
+test('resolveMusicQueryNowPlaying falls back to spoken answer when all devices idle', async () => {
+  const alexa = {
+    serialNumbers: {
+      a: { serialNumber: 'idle-serial', accountName: 'Basement Echo Dot' },
+    },
+    getPlayerInfo(_id, cb) {
+      cb(null, { playerInfo: { state: 'IDLE', infoText: {} } });
+    },
+  };
+
+  const result = await resolveMusicQueryNowPlaying(alexa, {
+    device: 'Basement Echo Dot',
+    deviceSerial: 'idle-serial',
+    spokenResponse: 'Currently playing Tennessee by Arrested Development on Office Echo',
+  }, { attempts: 1, delayMs: 1, scanAttempts: 1 });
+
+  assert.equal(result.song, 'Tennessee');
+  assert.equal(result.artist, 'Arrested Development');
+  assert.equal(result.source, 'spoken');
+  assert.equal(result.device, 'Office Echo');
 });

@@ -65,6 +65,7 @@ const { buildNotificationsReading, hasNotificationContent } = require('./alexa-n
 const {
   fetchNowPlaying,
   fetchNowPlayingAfterSkip,
+  resolveMusicQueryNowPlaying,
   emptyNowPlaying,
   isMusicPlayerContent,
   isExplicitSongSkipQuery,
@@ -285,7 +286,9 @@ function createListener({ config, log }) {
             return;
           }
         } else {
-          nowPlaying = await fetchNowPlaying(alexa, event.deviceSerial || event.device, event.device, {
+          // Household scan + spoken-answer fallback — idle Echo asking
+          // "what's playing" often names a track on another device.
+          nowPlaying = await resolveMusicQueryNowPlaying(alexa, event, {
             attempts: 2,
             delayMs: 900,
           });
@@ -299,7 +302,10 @@ function createListener({ config, log }) {
           const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
           sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
           voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
-          log.info(`Now-playing query resolved on retry for ${event.device}`);
+          log.info(`Now-playing query resolved on retry for ${event.device}`, {
+            playingDevice: nowPlaying.device || null,
+            source: nowPlaying.source || 'player-info',
+          });
         }
         return;
       }
@@ -587,21 +593,20 @@ function createListener({ config, log }) {
             });
             return;
           }
+        } else if (event.trigger === 'music-query') {
+          // Ask may land on an idle Echo while Alexa names a track playing
+          // elsewhere — scan the household and fall back to spoken answer.
+          nowPlaying = await resolveMusicQueryNowPlaying(alexa, event, {
+            attempts: 3,
+            delayMs: 900,
+          });
         } else {
-          // "music-play" waits longer for playback to actually start; a
-          // "what song is playing" query is asking about something already
-          // playing (or not), so a shorter budget is usually enough. But right
-          // after someone said "next"/"skip" and then asks what's playing, the
-          // player-info API can still be mid transition — give music-query a
-          // bit more room before falling back to the retry below.
-          const fetchOptions = event.trigger === 'music-query'
-            ? { attempts: 3, delayMs: 900 }
-            : undefined;
+          // "music-play" waits longer for playback to actually start on the
+          // device that took the command.
           nowPlaying = await fetchNowPlaying(
             alexa,
             event.deviceSerial || event.device,
             event.device,
-            fetchOptions,
           );
         }
       } catch (error) {
