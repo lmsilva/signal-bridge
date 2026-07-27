@@ -531,12 +531,15 @@
     } else if (
       steam.status === 'playing'
       || steam.status === 'playing_presence'
+      || steam.status === 'playing_recent'
     ) {
       pillState(steamPill, 'ok', 'Now playing');
       const host = steam.session?.host || 'allowed PC';
       const lagNote = steam.status === 'playing_presence'
         ? ' (presence hint — Steam profile catching up)'
-        : '';
+        : steam.status === 'playing_recent'
+          ? ' (OwnedGames beyond idle baseline)'
+          : '';
       const hostLabel = host && host !== 'any' ? host : 'any PC';
       $('steam-status-detail').textContent = `Playing on ${hostLabel}${lagNote}`
         + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');

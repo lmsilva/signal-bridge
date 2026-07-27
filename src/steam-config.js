@@ -55,6 +55,26 @@ function resolveSteamConfig(config, fileConfig = {}) {
         || 75,
       ) || 75,
     ),
+    // OwnedGames launch window: lastPlayedAt must be this fresh AND advanced
+    // beyond the idle baseline (default 3 min).
+    inferFromRecentSeconds: Math.max(
+      60,
+      Number(
+        process.env.STEAM_INFER_FROM_RECENT_SEC
+        || steam.inferFromRecentSeconds
+        || 180,
+      ) || 180,
+    ),
+    // Recent-led sessions end if playtime/rtime stop moving this long (default
+    // 150s — playtime often ticks once per minute).
+    recentPlayStagnantSeconds: Math.max(
+      60,
+      Number(
+        process.env.STEAM_RECENT_PLAY_STAGNANT_SEC
+        || steam.recentPlayStagnantSeconds
+        || 150,
+      ) || 150,
+    ),
     // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(
       process.env.STEAM_PRESENCE_SECRET

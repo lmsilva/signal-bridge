@@ -11,15 +11,103 @@ const { buildSteamNowPlayingPayload, buildSteamNowPlayingClosePayload } = requir
 const {
   createSteamNowPlaying,
   resolveEffectiveSteamAppId,
+  absorbGamesIntoBaseline,
+  gameAdvancedBeyondBaseline,
+  pickRecentPlayLaunch,
+  isRecentSessionStillActive,
 } = require('../src/steam-now-playing');
 
-test('resolveEffectiveSteamAppId prefers Steam gameid, else presence — never OwnedGames', () => {
-  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }), 570);
-  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }), 440);
-  assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }), 440);
-  assert.equal(resolveEffectiveSteamAppId(null, null), null);
-  // Third arg must not invent a session (API is gameid + presence only).
-  assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), null);
+test('resolveEffectiveSteamAppId prefers gameid, then presence, then recent', () => {
+  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }, 2524850), 570);
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, 2524850), 440);
+  assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), 2524850);
+  assert.equal(resolveEffectiveSteamAppId(null, null, null), null);
+});
+
+test('idle baseline absorbs quit stamps so they are not treated as launches', () => {
+  const baseline = new Map();
+  const nowMs = 1_000_000_000;
+  absorbGamesIntoBaseline(baseline, [{
+    appId: 965680,
+    lastPlayedAt: nowMs - 60_000,
+    playtimeForeverMin: 100,
+  }]);
+
+  // Same quit stamp / no advancement → not a launch.
+  assert.equal(gameAdvancedBeyondBaseline({
+    appId: 965680,
+    lastPlayedAt: nowMs - 60_000,
+    playtimeForeverMin: 100,
+  }, baseline.get(965680)), false);
+
+  assert.equal(pickRecentPlayLaunch({
+    games: [{
+      appId: 965680,
+      lastPlayedAt: nowMs - 60_000,
+      playtimeForeverMin: 100,
+    }],
+    baseline,
+    nowMs,
+    inferSeconds: 180,
+    personaOnline: true,
+  }), null);
+
+  // Real relaunch: rtime moved forward past baseline.
+  const launch = pickRecentPlayLaunch({
+    games: [{
+      appId: 965680,
+      lastPlayedAt: nowMs - 20_000,
+      playtimeForeverMin: 100,
+    }],
+    baseline,
+    nowMs,
+    inferSeconds: 180,
+    personaOnline: true,
+  });
+  assert.equal(launch.appId, 965680);
+
+  // Playtime bump also counts as advancement.
+  assert.equal(gameAdvancedBeyondBaseline({
+    appId: 965680,
+    lastPlayedAt: nowMs - 60_000,
+    playtimeForeverMin: 101,
+  }, baseline.get(965680)), true);
+});
+
+test('isRecentSessionStillActive ends after stagnant grace without growth', () => {
+  const nowMs = 1_000_000_000;
+  const game = {
+    appId: 965680,
+    lastPlayedAt: nowMs - 60_000,
+    playtimeForeverMin: 100,
+  };
+  assert.equal(isRecentSessionStillActive({
+    game,
+    sessionAppId: 965680,
+    sessionLastPlaytime: 100,
+    sessionLastRtime: nowMs - 60_000,
+    sessionLastActivityAt: nowMs - 30_000,
+    nowMs,
+    stagnantSeconds: 150,
+  }), true);
+  assert.equal(isRecentSessionStillActive({
+    game,
+    sessionAppId: 965680,
+    sessionLastPlaytime: 100,
+    sessionLastRtime: nowMs - 60_000,
+    sessionLastActivityAt: nowMs - 200_000,
+    nowMs,
+    stagnantSeconds: 150,
+  }), false);
+  assert.equal(isRecentSessionStillActive({
+    game: { ...game, playtimeForeverMin: 101 },
+    sessionAppId: 965680,
+    sessionLastPlaytime: 100,
+    sessionLastRtime: nowMs - 60_000,
+    sessionLastActivityAt: nowMs - 200_000,
+    nowMs,
+    stagnantSeconds: 150,
+  }), true);
 });
 
 test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
@@ -35,8 +123,8 @@ test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
     assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
     assert.equal(steam.pollIntervalSeconds, 15);
     assert.equal(steam.restoreAfterInterruptSeconds, 75);
-    assert.equal(steam.inferFromRecentSeconds, undefined);
-    assert.equal(steam.quitCooldownSeconds, undefined);
+    assert.equal(steam.inferFromRecentSeconds, 180);
+    assert.equal(steam.recentPlayStagnantSeconds, 150);
   } finally {
     if (prevHosts === undefined) delete process.env.STEAM_ALLOWED_HOSTS;
     else process.env.STEAM_ALLOWED_HOSTS = prevHosts;
