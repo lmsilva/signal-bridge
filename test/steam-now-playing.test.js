@@ -11,124 +11,15 @@ const { buildSteamNowPlayingPayload, buildSteamNowPlayingClosePayload } = requir
 const {
   createSteamNowPlaying,
   resolveEffectiveSteamAppId,
-  pickRecentPlayAppId,
-  isRecentBlockedByQuitSuppress,
-  applyCachedArtworkUrls,
-  isUsableArtworkOrigin,
 } = require('../src/steam-now-playing');
 
-test('resolveEffectiveSteamAppId prefers Steam gameid, else presence, else recent', () => {
-  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }, 2524850), 570);
-  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, 2524850), 440);
-  assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }, 2524850), 440);
-  assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), 2524850);
-  assert.equal(resolveEffectiveSteamAppId(null, null, null), null);
-});
-
-test('isRecentBlockedByQuitSuppress blocks just-quit titles until relaunch', () => {
-  const quitSuppress = { appId: 111, playtime: 10, rtime: 1_000 };
-  assert.equal(isRecentBlockedByQuitSuppress({
-    appId: 111,
-    playtimeForeverMin: 10,
-    lastPlayedAt: 1_000,
-  }, quitSuppress), true);
-  assert.equal(isRecentBlockedByQuitSuppress({
-    appId: 222,
-    playtimeForeverMin: 1,
-    lastPlayedAt: 2_000,
-  }, quitSuppress), false);
-  assert.equal(isRecentBlockedByQuitSuppress({
-    appId: 111,
-    playtimeForeverMin: 11,
-    lastPlayedAt: 1_000,
-  }, quitSuppress), false);
-});
-
-test('applyCachedArtworkUrls keeps CDN fallbacks and ignores loopback origins', () => {
-  const reading = {
-    appId: 570,
-    posterCandidates: ['https://cdn.example/poster.jpg'],
-    screenshots: ['https://cdn.example/s1.jpg'],
-    headerImage: 'https://cdn.example/header.jpg',
-  };
-  assert.equal(isUsableArtworkOrigin('https://127.0.0.1:47810'), false);
-  assert.equal(isUsableArtworkOrigin('https://192.168.1.10:47810'), true);
-  assert.deepEqual(
-    applyCachedArtworkUrls(reading, null, 'https://192.168.1.10:47810'),
-    reading,
-  );
-});
-
-test('pickRecentPlayAppId infers fresh launches and ends after stagnant grace', () => {
-  const nowMs = 1_000_000_000;
-  const fresh = {
-    appId: 2524850,
-    lastPlayedAt: nowMs - 45_000,
-    playtimeForeverMin: 2,
-  };
-  assert.equal(pickRecentPlayAppId({
-    recentGame: fresh,
-    nowMs,
-    inferSeconds: 300,
-    stagnantSeconds: 120,
-    personaOnline: true,
-  }), 2524850);
-  assert.equal(pickRecentPlayAppId({
-    recentGame: fresh,
-    nowMs,
-    personaOnline: false,
-  }), null);
-
-  // Active session: no playtime/rtime growth and past stagnant grace → quit.
-  assert.equal(pickRecentPlayAppId({
-    recentGame: {
-      appId: 2524850,
-      lastPlayedAt: nowMs - 60_000,
-      playtimeForeverMin: 2,
-    },
-    sessionAppId: 2524850,
-    sessionLastPlaytime: 2,
-    sessionLastRtime: nowMs - 60_000,
-    sessionLastActivityAt: nowMs - 180_000,
-    nowMs,
-    inferSeconds: 300,
-    stagnantSeconds: 120,
-    personaOnline: true,
-  }), null);
-
-  // Still within stagnant grace after last activity → keep showing.
-  assert.equal(pickRecentPlayAppId({
-    recentGame: {
-      appId: 2524850,
-      lastPlayedAt: nowMs - 60_000,
-      playtimeForeverMin: 2,
-    },
-    sessionAppId: 2524850,
-    sessionLastPlaytime: 2,
-    sessionLastRtime: nowMs - 60_000,
-    sessionLastActivityAt: nowMs - 30_000,
-    nowMs,
-    inferSeconds: 300,
-    stagnantSeconds: 120,
-    personaOnline: true,
-  }), 2524850);
-
-  // Playtime bump keeps the session even when lastPlayedAt is older than infer.
-  assert.equal(pickRecentPlayAppId({
-    recentGame: {
-      appId: 2524850,
-      lastPlayedAt: nowMs - 600_000,
-      playtimeForeverMin: 5,
-    },
-    sessionAppId: 2524850,
-    sessionLastPlaytime: 4,
-    sessionLastRtime: nowMs - 600_000,
-    sessionLastActivityAt: nowMs - 600_000,
-    nowMs,
-    inferSeconds: 300,
-    stagnantSeconds: 120,
-    personaOnline: true,
-  }), 2524850);
+test('resolveEffectiveSteamAppId prefers Steam gameid, else presence — never OwnedGames', () => {
+  assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }), 570);
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }), 440);
+  assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }), 440);
+  assert.equal(resolveEffectiveSteamAppId(null, null), null);
+  // Third arg must not invent a session (API is gameid + presence only).
+  assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), null);
 });
 
 test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
@@ -144,8 +35,8 @@ test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
     assert.equal(normalizeHostname('MovieTheaterPC'), 'MOVIETHEATERPC');
     assert.equal(steam.pollIntervalSeconds, 15);
     assert.equal(steam.restoreAfterInterruptSeconds, 75);
-    assert.equal(steam.inferFromRecentSeconds, 300);
-    assert.equal(steam.recentPlayStagnantSeconds, 120);
+    assert.equal(steam.inferFromRecentSeconds, undefined);
+    assert.equal(steam.quitCooldownSeconds, undefined);
   } finally {
     if (prevHosts === undefined) delete process.env.STEAM_ALLOWED_HOSTS;
     else process.env.STEAM_ALLOWED_HOSTS = prevHosts;
@@ -298,7 +189,6 @@ test('session suppress blocks re-push until restore window elapses', async () =>
     now: () => now,
   });
 
-  // Manually drive session state (avoid live Steam HTTP).
   controller.recordPresence({ hostname: 'MOVIETHEATERPC', appId: 570 });
   controller._setSession({
     appId: 570,
@@ -316,11 +206,9 @@ test('session suppress blocks re-push until restore window elapses', async () =>
   assert.equal(controller._getSession().suppressReason, 'weather.query');
   assert.equal(sent.length, 0);
 
-  // Still inside the restore window.
   now += 10_000;
   assert.equal(controller.statusSnapshot().session.restoreInSec > 0, true);
 
-  // After the restore window, suppress clears and a re-push is forced.
   now += 25_000;
   assert.equal(controller._maybeClearSuppressForRestore(), true);
   assert.equal(controller._getSession().suppressed, false);

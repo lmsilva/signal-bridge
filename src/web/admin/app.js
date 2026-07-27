@@ -531,15 +531,12 @@
     } else if (
       steam.status === 'playing'
       || steam.status === 'playing_presence'
-      || steam.status === 'playing_recent'
     ) {
       pillState(steamPill, 'ok', 'Now playing');
       const host = steam.session?.host || 'allowed PC';
       const lagNote = steam.status === 'playing_presence'
         ? ' (presence hint — Steam profile catching up)'
-        : steam.status === 'playing_recent'
-          ? ' (recent play inference)'
-          : '';
+        : '';
       const hostLabel = host && host !== 'any' ? host : 'any PC';
       $('steam-status-detail').textContent = `Playing on ${hostLabel}${lagNote}`
         + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');
@@ -564,16 +561,6 @@
     if (steamAuth.status === 'success' && !$('steam-auth-followup').hidden) {
       $('steam-auth-followup').hidden = true;
       toast('Steam account linked', 'good');
-    }
-
-    const art = steam.artworkCache || {};
-    const artHint = $('steam-artwork-cache-hint');
-    if (artHint) {
-      const apps = Number(art.apps) || 0;
-      const mb = ((Number(art.bytes) || 0) / (1024 * 1024)).toFixed(1);
-      artHint.textContent = apps > 0
-        ? `Cached artwork for ${apps} game${apps === 1 ? '' : 's'} (${mb} MB). Clearing forces a fresh download next time.`
-        : 'Cached posters and screenshots for faster Now Playing loads. Clearing forces a fresh download next time.';
     }
   }
 
@@ -1877,21 +1864,6 @@
       toast('Open Steam login to link your account', 'good');
     } catch (error) {
       toast(error.message, 'bad');
-    } finally {
-      button.disabled = false;
-    }
-  });
-
-  $('btn-steam-artwork-clear')?.addEventListener('click', async () => {
-    const button = $('btn-steam-artwork-clear');
-    button.disabled = true;
-    try {
-      const result = await apiPost('/api/steam/artwork-cache/clear', {});
-      const removed = Number(result.removedApps) || 0;
-      toast(removed ? `Cleared Steam artwork (${removed} games)` : 'Steam artwork cache already empty', 'good');
-      pollStatus();
-    } catch (error) {
-      toast(error?.message || 'Could not clear Steam artwork cache', 'bad');
     } finally {
       button.disabled = false;
     }

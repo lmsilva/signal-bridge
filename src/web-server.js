@@ -46,7 +46,6 @@ const {
   readSteamAuthStatus,
 } = require('./steam-session');
 const { fetchPlayerSummary } = require('./steam-api');
-const { createSteamArtworkCache } = require('./steam-artwork-cache');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
@@ -249,7 +248,6 @@ function createWebServer({
   const controlAuth = createDisplayControlAuth(config, log);
   const adminAuth = createWebAdminAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
-  const steamArtworkCache = createSteamArtworkCache(config, log);
   const slideshowSettings = createSlideshowSettings(config, log);
   let server = null;
   let redirectServer = null;
@@ -1079,35 +1077,6 @@ function createWebServer({
     fs.createReadStream(entry.filePath).pipe(res);
   }
 
-  function handleSteamArtworkServe(pathname, res) {
-    const entry = steamArtworkCache.resolveServePath(pathname);
-    if (!entry) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Not found');
-      return;
-    }
-    res.writeHead(200, {
-      'Content-Type': entry.mimeType,
-      'Cache-Control': 'public, max-age=86400',
-    });
-    fs.createReadStream(entry.filePath).pipe(res);
-  }
-
-  function handleSteamArtworkCacheClear(res) {
-    const controller = typeof steamNowPlaying === 'function' ? steamNowPlaying() : steamNowPlaying;
-    // Both the poller and web server point at the same on-disk directory.
-    const result = controller?.clearArtworkCache?.() || steamArtworkCache.clear();
-    const stats = (controller?.artworkCache?.stats?.() || steamArtworkCache.stats());
-    log.info('Steam artwork cache cleared', result);
-    sendJson(res, 200, { ok: true, ...result, stats });
-  }
-
-  function handleSteamArtworkCacheStats(res) {
-    const controller = typeof steamNowPlaying === 'function' ? steamNowPlaying() : steamNowPlaying;
-    const stats = controller?.artworkCache?.stats?.() || steamArtworkCache.stats();
-    sendJson(res, 200, { ok: true, ...stats });
-  }
-
   // ---- Shared photo slideshow / Slideshow Manager ---------------------------
 
   function handlePhotosList(res) {
@@ -1590,7 +1559,6 @@ function createWebServer({
         message: steamLive.message || steamFileStatus?.message || null,
         session: steamLive.session || null,
         presence: steamLive.presence || null,
-        artworkCache: steamLive.artworkCache || steamArtworkCache.stats(),
         auth: {
           running: steamAuth.running,
           status: steamAuth.status,
@@ -1697,19 +1665,10 @@ function createWebServer({
           handleQrImageServe(pathname, res);
           return;
         }
-        if (pathname.startsWith(steamArtworkCache.routePrefix)) {
-          handleSteamArtworkServe(pathname, res);
-          return;
-        }
         // Admin-only JSON APIs
         if (pathname === '/api/status') {
           if (!requireAdminSession(req, res)) return;
           sendJson(res, 200, buildStatus());
-          return;
-        }
-        if (pathname === '/api/steam/artwork-cache') {
-          if (!requireAdminSession(req, res)) return;
-          handleSteamArtworkCacheStats(res);
           return;
         }
         if (pathname === '/api/photos') {
@@ -1870,9 +1829,6 @@ function createWebServer({
             return;
           case '/api/push/steam-now-playing':
             await handleSteamNowPlayingPush(body, res);
-            return;
-          case '/api/steam/artwork-cache/clear':
-            handleSteamArtworkCacheClear(res);
             return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
