@@ -882,9 +882,11 @@ function buildSteamNowPlayingPayload(reading, config, {
       currentPlayers: reading.currentPlayers ?? null,
       host: reading.host || null,
       startedAt: new Date(startedMs).toISOString(),
+      // Never invent "now" as lastPlayedAt — that made AGO read "just now"
+      // when Steam omitted rtime_last_played on the recently-played list.
       lastPlayedAt: reading.lastPlayedAt
         ? new Date(reading.lastPlayedAt).toISOString()
-        : (playMode === 'last-played' ? new Date(startedMs).toISOString() : null),
+        : null,
       elapsedSec: Number(reading.elapsedSec) || 0,
       personaName: reading.personaName || null,
     },

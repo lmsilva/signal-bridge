@@ -111,6 +111,7 @@ function createSteamNowPlaying({
       ...details,
       playtimeForeverMin: playtime?.playtimeForeverMin ?? null,
       playtimeLabel: formatPlaytimeHours(playtime?.playtimeForeverMin),
+      lastPlayedAt: playtime?.lastPlayedAt ?? null,
       achievements,
       currentPlayers: players,
     };
@@ -385,11 +386,14 @@ function createSteamNowPlaying({
       return { ok: false, error: `Could not load Steam store details for app ${appId}` };
     }
 
-    const startedAt = mode === 'playing' ? now() : (lastPlayedAt || now());
+    // GetRecentlyPlayedGames often omits rtime_last_played; OwnedGames (via
+    // enrichGame) usually has it for the API-key owner's own account.
+    lastPlayedAt = lastPlayedAt || reading.lastPlayedAt || null;
+    const startedAt = mode === 'playing' ? now() : (lastPlayedAt || null);
     reading = {
       ...reading,
       host: null,
-      startedAt,
+      startedAt: startedAt || now(),
       lastPlayedAt,
       elapsedSec: mode === 'playing' ? 0 : 0,
       personaName: summary.personaName,

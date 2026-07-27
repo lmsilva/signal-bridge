@@ -160,13 +160,13 @@
       lock.hidden = !single || unlocked;
       grid.hidden = single && !unlocked;
     }
-    // Remote tab (power actions) mirrors the Control tab: no controls until
-    // the display is unlocked with the on-screen PIN.
+    // Remote tab (power actions) mirrors the Control tab: only for a single
+    // selected display, and only after the on-screen PIN unlock.
     const remoteLock = $('remote-lock');
     const remoteGrid = $('remote-grid');
     if (remoteLock && remoteGrid) {
-      remoteLock.hidden = unlocked;
-      remoteGrid.hidden = !unlocked;
+      remoteLock.hidden = !single || unlocked;
+      remoteGrid.hidden = !(single && unlocked);
     }
   }
 
@@ -174,19 +174,30 @@
   setInterval(updateControlLockUi, 60_000);
 
   function updateControlTabVisibility() {
-    const controlBtn = $('tab-btn-control');
     const single = isSingleDisplaySelected();
+    const remoteBtn = $('tab-btn-remote');
+    const controlBtn = $('tab-btn-control');
+    if (remoteBtn) {
+      remoteBtn.hidden = !single;
+    }
     if (controlBtn) {
       controlBtn.hidden = !single;
     }
     if (!single) {
-      const controlPanel = $('tab-control');
-      const activeControl = document.querySelector('.tab-btn.active')?.dataset?.tab === 'control';
-      if (activeControl) {
+      const activeTab = document.querySelector('.tab-btn.active')?.dataset?.tab;
+      if (activeTab === 'remote' || activeTab === 'control') {
         document.querySelector('.tab-btn[data-tab="push"]')?.click();
-      } else if (controlPanel) {
-        controlPanel.classList.remove('active');
-        controlPanel.hidden = true;
+      } else {
+        const remotePanel = $('tab-remote');
+        const controlPanel = $('tab-control');
+        if (remotePanel) {
+          remotePanel.classList.remove('active');
+          remotePanel.hidden = true;
+        }
+        if (controlPanel) {
+          controlPanel.classList.remove('active');
+          controlPanel.hidden = true;
+        }
       }
     }
     updateControlLockUi();
@@ -219,6 +230,15 @@
 
   let lastDisplaysFingerprint = '';
 
+  function pickNewestDisplay(entries) {
+    const list = Array.isArray(entries) ? [...entries] : [];
+    if (!list.length) {
+      return null;
+    }
+    list.sort((a, b) => String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')));
+    return list.find((d) => !d.stale) || list[0];
+  }
+
   function renderDisplaySelect(displays, { quiet = false } = {}) {
     const next = Array.isArray(displays) ? displays : [];
     const fingerprint = displaysFingerprint(next);
@@ -233,6 +253,7 @@
       return;
     }
 
+    const previousIds = new Set(knownDisplays.map((d) => d.id));
     const previousCount = knownDisplays.length;
     knownDisplays = next;
     lastDisplaysFingerprint = fingerprint;
@@ -253,7 +274,20 @@
     select.appendChild(allOpt);
 
     const ids = new Set(knownDisplays.map((d) => d.id));
-    if (previous && previous !== ALL_DISPLAYS && ids.has(previous)) {
+    const added = knownDisplays.filter((d) => !previousIds.has(d.id));
+    const previousMissing = Boolean(previous)
+      && previous !== ALL_DISPLAYS
+      && !ids.has(previous);
+    // Auto-select a newly announced display when we're on All Displays (or the
+    // previously selected display was pruned). Don't yank selection away from
+    // a still-valid single display if a second client appears.
+    if (
+      added.length
+      && (previous === ALL_DISPLAYS || !previous || previousMissing)
+    ) {
+      const newest = pickNewestDisplay(added);
+      select.value = newest?.id || ALL_DISPLAYS;
+    } else if (previous && previous !== ALL_DISPLAYS && ids.has(previous)) {
       select.value = previous;
     } else if (previous === ALL_DISPLAYS) {
       select.value = ALL_DISPLAYS;
@@ -266,9 +300,9 @@
     updateControlTabVisibility();
 
     if (!quiet && knownDisplays.length > previousCount) {
-      const newest = knownDisplays.find((d) => !d.stale) || knownDisplays[0];
+      const newest = pickNewestDisplay(added.length ? added : knownDisplays);
       if (newest) {
-        toast(`Display online: ${newest.name}`, 'good');
+        toast(`Display online: ${newest.name || newest.label || newest.id}`, 'good');
       }
     } else if (!quiet && knownDisplays.length < previousCount) {
       toast('Removed offline display(s)', 'bad');

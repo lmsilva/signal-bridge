@@ -26,6 +26,10 @@ function clampSecondsPerPhoto(value) {
  * Persists Shared Photo Slideshow preferences — playback order and seconds
  * per photo — to a small JSON file (mirrors `tesla-session.js`'s load/save
  * pattern) so they survive bridge restarts without touching `config.json`.
+ *
+ * Readers always reload from disk so the admin UI instance and the Alexa
+ * voice listener instance stay in sync (they historically each called
+ * createSlideshowSettings() and only the writer's in-memory copy updated).
  */
 function createSlideshowSettings(config = {}, log = console) {
   const settingsPath = config.slideshowSettingsPath
@@ -33,8 +37,12 @@ function createSlideshowSettings(config = {}, log = console) {
 
   let order = DEFAULT_ORDER;
   let secondsPerPhoto = DEFAULT_SECONDS_PER_PHOTO;
-  try {
-    if (fs.existsSync(settingsPath)) {
+
+  function loadFromDisk() {
+    try {
+      if (!fs.existsSync(settingsPath)) {
+        return;
+      }
       const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
       if (VALID_ORDERS.includes(data?.order)) {
         order = data.order;
@@ -42,10 +50,12 @@ function createSlideshowSettings(config = {}, log = console) {
       if (data?.secondsPerPhoto != null) {
         secondsPerPhoto = clampSecondsPerPhoto(data.secondsPerPhoto);
       }
+    } catch (error) {
+      log?.warn?.('Could not read slideshow settings — using defaults', error?.message || error);
     }
-  } catch (error) {
-    log?.warn?.('Could not read slideshow settings — using defaults', error?.message || error);
   }
+
+  loadFromDisk();
 
   function persist() {
     try {
@@ -61,14 +71,17 @@ function createSlideshowSettings(config = {}, log = console) {
   }
 
   function get() {
+    loadFromDisk();
     return { order, secondsPerPhoto };
   }
 
   function getOrder() {
+    loadFromDisk();
     return order;
   }
 
   function getSecondsPerPhoto() {
+    loadFromDisk();
     return secondsPerPhoto;
   }
 
@@ -81,6 +94,10 @@ function createSlideshowSettings(config = {}, log = console) {
   }
 
   function update(patch = {}) {
+    // Merge against the latest on-disk values so a second in-process instance
+    // cannot clobber an order/seconds change made by the other.
+    loadFromDisk();
+
     let nextOrder = order;
     let nextSeconds = secondsPerPhoto;
     let touched = false;
@@ -120,6 +137,7 @@ function createSlideshowSettings(config = {}, log = console) {
     setOrder,
     setSecondsPerPhoto,
     update,
+    settingsPath,
   };
 }
 

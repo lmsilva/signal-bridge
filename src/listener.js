@@ -182,8 +182,9 @@ function createListener({ config, log }) {
     guestPhotoboothQueries: config.voiceEvents?.guestPhotoboothQueries !== false,
     photoSlideshowQueries: config.voiceEvents?.photoSlideshowQueries !== false,
   };
-  // Same on-disk photo index / slideshow prefs the web UI uses — list() always
-  // reloads from disk, so a second instance here stays in sync with uploads.
+  // Photo list reloads from disk on each list(); slideshow prefs reload on
+  // each getOrder()/getSecondsPerPhoto() so admin UI changes apply to voice
+  // ("open guest snaps slideshow") without a bridge restart.
   const qrImageCache = createQrImageCache(config, log);
   const slideshowSettings = createSlideshowSettings(config, log);
 
