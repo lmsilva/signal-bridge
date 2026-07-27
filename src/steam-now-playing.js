@@ -5,6 +5,7 @@
 const {
   fetchPlayerSummary,
   fetchRecentlyPlayedGames,
+  fetchMostRecentlyPlayedOwnedGame,
   fetchAppDetails,
   fetchOwnedGamePlaytime,
   fetchAchievementProgress,
@@ -19,10 +20,11 @@ const {
 } = require('./udp-payload');
 
 /**
- * Steam Web API gameid often lags a local launch by tens of seconds.
- * When the theater-PC reporter has a fresh appId, trust that until Steam catches up.
+ * Steam Web API gameid often lags a local launch by tens of seconds — or never
+ * appears. Prefer account gameid, then local presence, then a fresh OwnedGames
+ * last-played timestamp (see pickRecentPlayAppId).
  */
-function resolveEffectiveSteamAppId(accountAppId, presenceEntry) {
+function resolveEffectiveSteamAppId(accountAppId, presenceEntry, recentAppId = null) {
   const fromAccount = Number(accountAppId);
   if (Number.isFinite(fromAccount) && fromAccount > 0) {
     return fromAccount;
@@ -30,6 +32,48 @@ function resolveEffectiveSteamAppId(accountAppId, presenceEntry) {
   const fromPresence = Number(presenceEntry?.appId);
   if (Number.isFinite(fromPresence) && fromPresence > 0) {
     return fromPresence;
+  }
+  const fromRecent = Number(recentAppId);
+  if (Number.isFinite(fromRecent) && fromRecent > 0) {
+    return fromRecent;
+  }
+  return null;
+}
+
+/** Online / away / busy / etc. — not Offline (0) or unknown. */
+function isSteamPersonaOnline(personaState) {
+  const state = Number(personaState);
+  return Number.isFinite(state) && state >= 1;
+}
+
+/**
+ * When Steam omits gameid, infer the in-game app from OwnedGames rtime.
+ * - Fresh lastPlayedAt (infer window) starts a session.
+ * - Same app still most-recent within hold window keeps an active session.
+ */
+function pickRecentPlayAppId({
+  recentGame,
+  sessionAppId = null,
+  nowMs,
+  inferSeconds = 300,
+  holdSeconds = 900,
+  personaOnline = false,
+} = {}) {
+  if (!personaOnline || !recentGame) {
+    return null;
+  }
+  const appId = Number(recentGame.appId);
+  const lastPlayedAt = Number(recentGame.lastPlayedAt);
+  if (!Number.isFinite(appId) || appId <= 0 || !Number.isFinite(lastPlayedAt) || lastPlayedAt <= 0) {
+    return null;
+  }
+  const ageSec = Math.max(0, (Number(nowMs) - lastPlayedAt) / 1000);
+  if (ageSec <= inferSeconds) {
+    return appId;
+  }
+  const active = Number(sessionAppId);
+  if (Number.isFinite(active) && active === appId && ageSec <= holdSeconds) {
+    return appId;
   }
   return null;
 }
@@ -88,6 +132,8 @@ function createSteamNowPlaying({
       requirePresence: Boolean(steamConfig.requirePresence),
       allowedHosts: steamConfig.allowedHosts || [],
       restoreAfterInterruptSeconds: Math.round(restoreMs / 1000),
+      inferFromRecentSeconds: steamConfig.inferFromRecentSeconds,
+      recentPlayHoldSeconds: steamConfig.recentPlayHoldSeconds,
       status: lastStatus,
       message: lastError,
       session: session
@@ -321,12 +367,31 @@ function createSteamNowPlaying({
 
     const accountAppId = summary.gameId;
     const presenceHint = presence.matchForApp(accountAppId) || presence.matchForApp(null);
+    let recentAppId = null;
+    // Steam often leaves gameid empty for brand-new / laggy launches while
+    // OwnedGames rtime_last_played updates within seconds — use that.
+    if (!accountAppId && !presenceHint && isSteamPersonaOnline(summary.personaState)) {
+      try {
+        const recent = await fetchMostRecentlyPlayedOwnedGame(creds.apiKey, creds.steamId);
+        recentAppId = pickRecentPlayAppId({
+          recentGame: recent,
+          sessionAppId: session?.appId,
+          nowMs: now(),
+          inferSeconds: steamConfig.inferFromRecentSeconds,
+          holdSeconds: steamConfig.recentPlayHoldSeconds,
+          personaOnline: true,
+        });
+      } catch (error) {
+        log?.warn?.('Steam recent-play inference failed', error?.message || String(error));
+      }
+    }
     // Optional presence can still unstick Steam's laggy gameid, but is not required.
-    const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint);
+    const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint, recentAppId);
     const matchedPresence = effectiveAppId
       ? presence.matchForApp(effectiveAppId)
       : null;
-    const presenceLed = Boolean(effectiveAppId && !accountAppId && matchedPresence);
+    const presenceLed = Boolean(effectiveAppId && !accountAppId && matchedPresence && !recentAppId);
+    const recentLed = Boolean(effectiveAppId && !accountAppId && !presenceLed && recentAppId);
     const requirePresence = Boolean(steamConfig.requirePresence);
 
     // Detect session end / restart boundaries.
@@ -408,10 +473,12 @@ function createSteamNowPlaying({
     } else {
       session.details = reading;
     }
-    lastStatus = presenceLed ? 'playing_presence' : 'playing';
+    lastStatus = presenceLed ? 'playing_presence' : (recentLed ? 'playing_recent' : 'playing');
     lastError = presenceLed
       ? 'Showing from local presence hint (Steam profile gameid still catching up)'
-      : (requirePresence ? null : 'Showing for any PC (Steam account in-game)');
+      : recentLed
+        ? 'Showing from recent OwnedGames playtime (Steam profile gameid empty)'
+        : (requirePresence ? null : 'Showing for any PC (Steam account in-game)');
   }
 
   /**
@@ -445,13 +512,22 @@ function createSteamNowPlaying({
     let lastPlayedAt = null;
 
     if (!appId) {
-      let recent;
+      let top;
       try {
-        recent = await fetchRecentlyPlayedGames(creds.apiKey, creds.steamId, { count: 1 });
+        // OwnedGames rtime — GetRecentlyPlayedGames sorts by 2-week playtime
+        // and often omits the title you just launched.
+        top = await fetchMostRecentlyPlayedOwnedGame(creds.apiKey, creds.steamId);
       } catch (error) {
         return { ok: false, error: error?.message || String(error) };
       }
-      const top = recent[0];
+      if (!top?.appId) {
+        try {
+          const recent = await fetchRecentlyPlayedGames(creds.apiKey, creds.steamId, { count: 1 });
+          top = recent[0] || null;
+        } catch {
+          top = null;
+        }
+      }
       if (!top?.appId) {
         return { ok: false, error: 'Nothing playing right now, and no recently played games found' };
       }
@@ -528,6 +604,8 @@ function createSteamNowPlaying({
       pollIntervalSeconds: steamConfig.pollIntervalSeconds,
       requirePresence: Boolean(steamConfig.requirePresence),
       restoreAfterInterruptSeconds: steamConfig.restoreAfterInterruptSeconds,
+      inferFromRecentSeconds: steamConfig.inferFromRecentSeconds,
+      recentPlayHoldSeconds: steamConfig.recentPlayHoldSeconds,
       allowedHosts: steamConfig.allowedHosts,
     });
   }
@@ -564,4 +642,6 @@ function createSteamNowPlaying({
 module.exports = {
   createSteamNowPlaying,
   resolveEffectiveSteamAppId,
+  pickRecentPlayAppId,
+  isSteamPersonaOnline,
 };

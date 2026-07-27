@@ -55,6 +55,26 @@ function resolveSteamConfig(config, fileConfig = {}) {
         || 75,
       ) || 75,
     ),
+    // When GetPlayerSummaries omits gameid, treat OwnedGames rtime_last_played
+    // within this window as "just launched / currently playing" (default 5 min).
+    inferFromRecentSeconds: Math.max(
+      60,
+      Number(
+        process.env.STEAM_INFER_FROM_RECENT_SEC
+        || steam.inferFromRecentSeconds
+        || 300,
+      ) || 300,
+    ),
+    // Keep showing that inferred title a bit longer while gameid stays empty
+    // (Steam often never fills gameid for some launches; default 15 min).
+    recentPlayHoldSeconds: Math.max(
+      120,
+      Number(
+        process.env.STEAM_RECENT_PLAY_HOLD_SEC
+        || steam.recentPlayHoldSeconds
+        || 900,
+      ) || 900,
+    ),
     // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(
       process.env.STEAM_PRESENCE_SECRET
