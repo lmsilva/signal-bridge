@@ -14,6 +14,8 @@ const {
 } = require('./steam-api');
 const { createSteamPresenceStore } = require('./steam-presence');
 const { resolveSteamCredentials, markSteamAuthStatus } = require('./steam-session');
+const { createSteamArtworkCache } = require('./steam-artwork-cache');
+const { resolvePublicOrigin } = require('./steam-auth');
 const {
   buildSteamNowPlayingPayload,
   buildSteamNowPlayingClosePayload,
@@ -48,15 +50,19 @@ function isSteamPersonaOnline(personaState) {
 
 /**
  * When Steam omits gameid, infer the in-game app from OwnedGames rtime.
- * - Fresh lastPlayedAt (infer window) starts a session.
- * - Same app still most-recent within hold window keeps an active session.
+ * - Fresh lastPlayedAt (infer window) can start a session.
+ * - An active session stays alive only while playtime/rtime keeps moving, or
+ *   for a short stagnant grace after the last bump (quit detection).
  */
 function pickRecentPlayAppId({
   recentGame,
   sessionAppId = null,
+  sessionLastPlaytime = null,
+  sessionLastRtime = null,
+  sessionLastActivityAt = null,
   nowMs,
   inferSeconds = 300,
-  holdSeconds = 900,
+  stagnantSeconds = 120,
   personaOnline = false,
 } = {}) {
   if (!personaOnline || !recentGame) {
@@ -64,18 +70,53 @@ function pickRecentPlayAppId({
   }
   const appId = Number(recentGame.appId);
   const lastPlayedAt = Number(recentGame.lastPlayedAt);
+  const playtime = Number.isFinite(Number(recentGame.playtimeForeverMin))
+    ? Number(recentGame.playtimeForeverMin)
+    : null;
   if (!Number.isFinite(appId) || appId <= 0 || !Number.isFinite(lastPlayedAt) || lastPlayedAt <= 0) {
     return null;
   }
   const ageSec = Math.max(0, (Number(nowMs) - lastPlayedAt) / 1000);
-  if (ageSec <= inferSeconds) {
+  const active = Number(sessionAppId);
+  const sameSession = Number.isFinite(active) && active === appId;
+
+  if (!sameSession) {
+    return ageSec <= inferSeconds ? appId : null;
+  }
+
+  const playtimeGrew = playtime != null
+    && Number.isFinite(Number(sessionLastPlaytime))
+    && playtime > Number(sessionLastPlaytime);
+  const rtimeGrew = Number.isFinite(Number(sessionLastRtime))
+    && lastPlayedAt > Number(sessionLastRtime);
+  if (playtimeGrew || rtimeGrew) {
     return appId;
   }
-  const active = Number(sessionAppId);
-  if (Number.isFinite(active) && active === appId && ageSec <= holdSeconds) {
+
+  const lastActivity = Number(sessionLastActivityAt) || lastPlayedAt;
+  const stagnantFor = Math.max(0, (Number(nowMs) - lastActivity) / 1000);
+  if (stagnantFor <= stagnantSeconds) {
     return appId;
   }
   return null;
+}
+
+function applyCachedArtworkUrls(reading, artworkCache, publicOrigin) {
+  if (!reading?.appId || !artworkCache) {
+    return reading;
+  }
+  const local = artworkCache.getServedImageUrls(reading.appId, publicOrigin);
+  if (!local) {
+    return reading;
+  }
+  return {
+    ...reading,
+    posterCandidates: local.posterCandidates.length
+      ? local.posterCandidates
+      : reading.posterCandidates,
+    screenshots: local.screenshots.length ? local.screenshots : reading.screenshots,
+    headerImage: local.headerImage || reading.headerImage,
+  };
 }
 
 function createSteamNowPlaying({
@@ -83,9 +124,11 @@ function createSteamNowPlaying({
   log,
   sendUdpPayload,
   now = () => Date.now(),
+  artworkCache: artworkCacheArg = null,
 } = {}) {
   const steamConfig = config.steam;
   const presence = createSteamPresenceStore(steamConfig, { now });
+  const artworkCache = artworkCacheArg || createSteamArtworkCache(config, log);
 
   let timer = null;
   let tickSoonTimer = null;
@@ -100,15 +143,29 @@ function createSteamNowPlaying({
    *   pushed: boolean,
    *   lastPushAt: number,
    *   details: object | null,
+   *   lastPlaytime: number | null,
+   *   lastRtime: number | null,
+   *   lastActivityAt: number | null,
+   *   recentLed: boolean,
    * }} */
   let session = null;
   let lastAccountAppId = null;
+  /** Last non-null GetPlayerSummaries gameid — used to detect authoritative quits. */
+  let lastSummaryGameId = null;
+  /** After Steam clears gameid, ignore OwnedGames for that app until playtime/rtime grows. */
+  let quitSuppress = null; // { appId, playtime, rtime }
   let lastError = null;
   let lastStatus = 'idle';
   let restoreTimer = null;
+  /** @type {Set<number>} */
+  const detailsRefreshInFlight = new Set();
 
   function getCredentials() {
     return resolveSteamCredentials(steamConfig);
+  }
+
+  function publicOrigin() {
+    return resolvePublicOrigin(config, steamConfig);
   }
 
   function restoreAfterInterruptMs() {
@@ -121,6 +178,7 @@ function createSteamNowPlaying({
     const suppressedAgeMs = session?.suppressed && session.suppressedAt
       ? Math.max(0, now() - session.suppressedAt)
       : null;
+    const art = artworkCache.stats();
     return {
       enabled: steamConfig.enabled !== false,
       configured: Boolean(creds.apiKey && creds.steamId),
@@ -133,7 +191,11 @@ function createSteamNowPlaying({
       allowedHosts: steamConfig.allowedHosts || [],
       restoreAfterInterruptSeconds: Math.round(restoreMs / 1000),
       inferFromRecentSeconds: steamConfig.inferFromRecentSeconds,
-      recentPlayHoldSeconds: steamConfig.recentPlayHoldSeconds,
+      recentPlayStagnantSeconds: steamConfig.recentPlayStagnantSeconds,
+      artworkCache: {
+        apps: art.apps,
+        bytes: art.bytes,
+      },
       status: lastStatus,
       message: lastError,
       session: session
@@ -151,6 +213,7 @@ function createSteamNowPlaying({
             : null,
           pushed: session.pushed,
           elapsedSec: Math.max(0, Math.round((now() - session.startedAt) / 1000)),
+          recentLed: Boolean(session.recentLed),
         }
         : null,
       presence: presence.snapshot(),
@@ -158,9 +221,71 @@ function createSteamNowPlaying({
     };
   }
 
+  function scheduleArtworkWarm(appId, details) {
+    if (!details || !appId) {
+      return;
+    }
+    Promise.resolve()
+      .then(() => artworkCache.warmImages(appId, details))
+      .then((result) => {
+        if (!result?.warmed || !session || session.appId !== Number(appId)
+          || !session.pushed || session.suppressed) {
+          return;
+        }
+        // One re-push after a fresh warm so the display switches to LAN URLs.
+        const withLocal = applyCachedArtworkUrls(
+          session.details || details,
+          artworkCache,
+          publicOrigin(),
+        );
+        pushOpen({
+          ...withLocal,
+          host: session.host,
+          startedAt: session.startedAt,
+          elapsedSec: Math.max(0, Math.round((now() - session.startedAt) / 1000)),
+        });
+      })
+      .catch((error) => {
+        log?.warn?.('Steam artwork warm failed', error?.message || String(error));
+      });
+  }
+
+  function scheduleDetailsRefresh(appId) {
+    const id = Number(appId);
+    if (!Number.isFinite(id) || detailsRefreshInFlight.has(id)) {
+      return;
+    }
+    detailsRefreshInFlight.add(id);
+    Promise.resolve()
+      .then(() => fetchAppDetails(id))
+      .then((details) => {
+        if (!details) {
+          return;
+        }
+        artworkCache.saveDetails(id, details);
+        scheduleArtworkWarm(id, details);
+      })
+      .catch((error) => {
+        log?.warn?.('Steam details refresh failed', error?.message || String(error));
+      })
+      .finally(() => {
+        detailsRefreshInFlight.delete(id);
+      });
+  }
+
   async function enrichGame(apiKey, steamId, appId) {
+    const cachedDetails = artworkCache.getDetails(appId);
+    const detailsPromise = cachedDetails
+      ? Promise.resolve(cachedDetails)
+      : fetchAppDetails(appId).then((details) => {
+        if (details) {
+          artworkCache.saveDetails(appId, details);
+        }
+        return details;
+      });
+
     const [details, playtime, achievements, players] = await Promise.all([
-      fetchAppDetails(appId),
+      detailsPromise,
       fetchOwnedGamePlaytime(apiKey, steamId, appId).catch(() => null),
       fetchAchievementProgress(apiKey, steamId, appId).catch(() => ({
         earned: null,
@@ -172,7 +297,11 @@ function createSteamNowPlaying({
     if (!details) {
       return null;
     }
-    return {
+    if (cachedDetails) {
+      // Prefer snappy push from cache; refresh store metadata in the background.
+      scheduleDetailsRefresh(appId);
+    }
+    let reading = {
       ...details,
       playtimeForeverMin: playtime?.playtimeForeverMin ?? null,
       playtimeLabel: formatPlaytimeHours(playtime?.playtimeForeverMin),
@@ -180,6 +309,9 @@ function createSteamNowPlaying({
       achievements,
       currentPlayers: players,
     };
+    reading = applyCachedArtworkUrls(reading, artworkCache, publicOrigin());
+    scheduleArtworkWarm(appId, details);
+    return reading;
   }
 
   function pushOpen(reading) {
@@ -205,8 +337,14 @@ function createSteamNowPlaying({
     log?.info?.('Steam Now Playing closed', { reason });
   }
 
-  function beginSession({ appId, host }) {
+  function beginSession({ appId, host, recentLed = false, recentGame = null }) {
     clearRestoreTimer();
+    const playtime = recentGame && Number.isFinite(Number(recentGame.playtimeForeverMin))
+      ? Number(recentGame.playtimeForeverMin)
+      : null;
+    const rtime = recentGame && Number.isFinite(Number(recentGame.lastPlayedAt))
+      ? Number(recentGame.lastPlayedAt)
+      : null;
     session = {
       appId: Number(appId),
       host: String(host),
@@ -217,7 +355,40 @@ function createSteamNowPlaying({
       pushed: false,
       lastPushAt: 0,
       details: null,
+      lastPlaytime: playtime,
+      lastRtime: rtime,
+      lastActivityAt: now(),
+      recentLed: Boolean(recentLed),
     };
+  }
+
+  function noteRecentActivity(recentGame) {
+    if (!session || !recentGame) {
+      return;
+    }
+    const playtime = Number.isFinite(Number(recentGame.playtimeForeverMin))
+      ? Number(recentGame.playtimeForeverMin)
+      : null;
+    const rtime = Number.isFinite(Number(recentGame.lastPlayedAt))
+      ? Number(recentGame.lastPlayedAt)
+      : null;
+    const playtimeGrew = playtime != null
+      && session.lastPlaytime != null
+      && playtime > session.lastPlaytime;
+    const rtimeGrew = rtime != null
+      && session.lastRtime != null
+      && rtime > session.lastRtime;
+    if (playtimeGrew || rtimeGrew || session.lastPlaytime == null || session.lastRtime == null) {
+      if (playtime != null) {
+        session.lastPlaytime = playtime;
+      }
+      if (rtime != null) {
+        session.lastRtime = rtime;
+      }
+      if (playtimeGrew || rtimeGrew) {
+        session.lastActivityAt = now();
+      }
+    }
   }
 
   function endSession(reason) {
@@ -366,21 +537,66 @@ function createSteamNowPlaying({
     }
 
     const accountAppId = summary.gameId;
+    // Profile gameid clearing is authoritative quit — OwnedGames rtime often
+    // stamps the quit time and would otherwise keep the overlay up.
+    if (lastSummaryGameId && !accountAppId) {
+      quitSuppress = {
+        appId: Number(lastSummaryGameId),
+        playtime: session?.lastPlaytime ?? null,
+        rtime: session?.lastRtime ?? null,
+      };
+      if (session && session.appId === quitSuppress.appId && !session.recentLed) {
+        endSession('game-ended');
+      }
+    }
+    if (accountAppId) {
+      lastSummaryGameId = accountAppId;
+      if (quitSuppress && Number(quitSuppress.appId) === Number(accountAppId)) {
+        quitSuppress = null;
+      }
+    } else if (!accountAppId && !session) {
+      lastSummaryGameId = null;
+    }
+
     const presenceHint = presence.matchForApp(accountAppId) || presence.matchForApp(null);
     let recentAppId = null;
+    let recentGame = null;
     // Steam often leaves gameid empty for brand-new / laggy launches while
     // OwnedGames rtime_last_played updates within seconds — use that.
     if (!accountAppId && !presenceHint && isSteamPersonaOnline(summary.personaState)) {
       try {
-        const recent = await fetchMostRecentlyPlayedOwnedGame(creds.apiKey, creds.steamId);
+        recentGame = await fetchMostRecentlyPlayedOwnedGame(creds.apiKey, creds.steamId);
         recentAppId = pickRecentPlayAppId({
-          recentGame: recent,
+          recentGame,
           sessionAppId: session?.appId,
+          sessionLastPlaytime: session?.lastPlaytime,
+          sessionLastRtime: session?.lastRtime,
+          sessionLastActivityAt: session?.lastActivityAt,
           nowMs: now(),
           inferSeconds: steamConfig.inferFromRecentSeconds,
-          holdSeconds: steamConfig.recentPlayHoldSeconds,
+          stagnantSeconds: steamConfig.recentPlayStagnantSeconds,
           personaOnline: true,
         });
+        if (recentAppId && recentGame && quitSuppress
+          && Number(quitSuppress.appId) === Number(recentAppId)) {
+          const playtime = Number(recentGame.playtimeForeverMin);
+          const rtime = Number(recentGame.lastPlayedAt);
+          const playtimeGrew = Number.isFinite(playtime)
+            && Number.isFinite(Number(quitSuppress.playtime))
+            && playtime > Number(quitSuppress.playtime);
+          const rtimeGrew = Number.isFinite(rtime)
+            && Number.isFinite(Number(quitSuppress.rtime))
+            && rtime > Number(quitSuppress.rtime);
+          // Fresh quit stamps rtime once — require a later bump (relaunch) to resume.
+          if (!playtimeGrew && !rtimeGrew) {
+            recentAppId = null;
+          } else {
+            quitSuppress = null;
+          }
+        }
+        if (recentAppId && recentGame) {
+          noteRecentActivity(recentGame);
+        }
       } catch (error) {
         log?.warn?.('Steam recent-play inference failed', error?.message || String(error));
       }
@@ -426,10 +642,25 @@ function createSteamNowPlaying({
       if (session) {
         endSession('game-changed');
       }
-      beginSession({ appId: effectiveAppId, host: host || (requirePresence ? null : 'any') });
+      beginSession({
+        appId: effectiveAppId,
+        host: host || (requirePresence ? null : 'any'),
+        recentLed,
+        recentGame: recentLed ? recentGame : null,
+      });
     } else if (lastAccountAppId == null && effectiveAppId) {
       // Restart after idle gap while session object somehow lingered — treat as new.
-      beginSession({ appId: effectiveAppId, host: host || (requirePresence ? null : 'any') });
+      beginSession({
+        appId: effectiveAppId,
+        host: host || (requirePresence ? null : 'any'),
+        recentLed,
+        recentGame: recentLed ? recentGame : null,
+      });
+    } else {
+      session.recentLed = recentLed;
+      if (recentLed && recentGame) {
+        noteRecentActivity(recentGame);
+      }
     }
 
     lastAccountAppId = effectiveAppId;
@@ -452,6 +683,8 @@ function createSteamNowPlaying({
         lastError = error?.message || String(error);
         log?.warn?.('Steam game enrich failed', lastError);
       }
+    } else if (reading) {
+      reading = applyCachedArtworkUrls(reading, artworkCache, publicOrigin());
     }
     if (!reading) {
       lastStatus = 'enrich_failed';
@@ -605,7 +838,7 @@ function createSteamNowPlaying({
       requirePresence: Boolean(steamConfig.requirePresence),
       restoreAfterInterruptSeconds: steamConfig.restoreAfterInterruptSeconds,
       inferFromRecentSeconds: steamConfig.inferFromRecentSeconds,
-      recentPlayHoldSeconds: steamConfig.recentPlayHoldSeconds,
+      recentPlayStagnantSeconds: steamConfig.recentPlayStagnantSeconds,
       allowedHosts: steamConfig.allowedHosts,
     });
   }
@@ -632,6 +865,8 @@ function createSteamNowPlaying({
     statusSnapshot,
     pushManualPreview,
     presence,
+    artworkCache,
+    clearArtworkCache: () => artworkCache.clear(),
     // test helpers
     _getSession: () => session,
     _setSession: (value) => { session = value; },
@@ -644,4 +879,5 @@ module.exports = {
   resolveEffectiveSteamAppId,
   pickRecentPlayAppId,
   isSteamPersonaOnline,
+  applyCachedArtworkUrls,
 };

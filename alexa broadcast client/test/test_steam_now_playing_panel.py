@@ -83,6 +83,14 @@ class SteamNowPlayingClientTests(unittest.TestCase):
     def test_title(self):
         self.assertEqual(title_for_display_type("steam.now-playing"), ("Steam", "Now Playing"))
 
+    def test_steam_image_cache_path_is_stable(self):
+        from src.steam_now_playing_panel import steam_image_cache_path
+
+        a = steam_image_cache_path("https://example.com/steam/apps/570/library_600x900.jpg")
+        b = steam_image_cache_path("https://example.com/steam/apps/570/library_600x900.jpg")
+        self.assertEqual(a, b)
+        self.assertTrue(str(a).endswith(".jpg"))
+
     def test_portrait_boxes_do_not_overlap(self):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
         boxes = panel._compute_portrait_boxes(20, 40, 60, 1040, 1860)

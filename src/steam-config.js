@@ -65,16 +65,19 @@ function resolveSteamConfig(config, fileConfig = {}) {
         || 300,
       ) || 300,
     ),
-    // Keep showing that inferred title a bit longer while gameid stays empty
-    // (Steam often never fills gameid for some launches; default 15 min).
-    recentPlayHoldSeconds: Math.max(
-      120,
+    // After the last playtime/rtime bump, how long to keep a recent-inferred
+    // session before treating the game as quit (default 2 min). Replaces the
+    // old blind 15-minute hold that left the overlay up after exit.
+    recentPlayStagnantSeconds: Math.max(
+      45,
       Number(
-        process.env.STEAM_RECENT_PLAY_HOLD_SEC
+        process.env.STEAM_RECENT_PLAY_STAGNANT_SEC
+        || steam.recentPlayStagnantSeconds
         || steam.recentPlayHoldSeconds
-        || 900,
-      ) || 900,
+        || 120,
+      ) || 120,
     ),
+    artworkCacheDir: steam.artworkCacheDir || 'data/steam-artwork-cache',
     // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(
       process.env.STEAM_PRESENCE_SECRET

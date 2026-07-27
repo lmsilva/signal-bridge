@@ -22,14 +22,18 @@ test('resolveEffectiveSteamAppId prefers Steam gameid, else presence, else recen
   assert.equal(resolveEffectiveSteamAppId(null, null, null), null);
 });
 
-test('pickRecentPlayAppId infers fresh OwnedGames launches and holds active session', () => {
+test('pickRecentPlayAppId infers fresh launches and ends after stagnant grace', () => {
   const nowMs = 1_000_000_000;
-  const fresh = { appId: 2524850, lastPlayedAt: nowMs - 45_000 };
+  const fresh = {
+    appId: 2524850,
+    lastPlayedAt: nowMs - 45_000,
+    playtimeForeverMin: 2,
+  };
   assert.equal(pickRecentPlayAppId({
     recentGame: fresh,
     nowMs,
     inferSeconds: 300,
-    holdSeconds: 900,
+    stagnantSeconds: 120,
     personaOnline: true,
   }), 2524850);
   assert.equal(pickRecentPlayAppId({
@@ -38,31 +42,56 @@ test('pickRecentPlayAppId infers fresh OwnedGames launches and holds active sess
     personaOnline: false,
   }), null);
 
-  const aging = { appId: 2524850, lastPlayedAt: nowMs - 600_000 };
+  // Active session: no playtime/rtime growth and past stagnant grace → quit.
   assert.equal(pickRecentPlayAppId({
-    recentGame: aging,
-    sessionAppId: null,
+    recentGame: {
+      appId: 2524850,
+      lastPlayedAt: nowMs - 60_000,
+      playtimeForeverMin: 2,
+    },
+    sessionAppId: 2524850,
+    sessionLastPlaytime: 2,
+    sessionLastRtime: nowMs - 60_000,
+    sessionLastActivityAt: nowMs - 180_000,
     nowMs,
     inferSeconds: 300,
-    holdSeconds: 900,
+    stagnantSeconds: 120,
     personaOnline: true,
   }), null);
+
+  // Still within stagnant grace after last activity → keep showing.
   assert.equal(pickRecentPlayAppId({
-    recentGame: aging,
+    recentGame: {
+      appId: 2524850,
+      lastPlayedAt: nowMs - 60_000,
+      playtimeForeverMin: 2,
+    },
     sessionAppId: 2524850,
+    sessionLastPlaytime: 2,
+    sessionLastRtime: nowMs - 60_000,
+    sessionLastActivityAt: nowMs - 30_000,
     nowMs,
     inferSeconds: 300,
-    holdSeconds: 900,
+    stagnantSeconds: 120,
     personaOnline: true,
   }), 2524850);
+
+  // Playtime bump keeps the session even when lastPlayedAt is older than infer.
   assert.equal(pickRecentPlayAppId({
-    recentGame: { appId: 2524850, lastPlayedAt: nowMs - 1_000_000 },
+    recentGame: {
+      appId: 2524850,
+      lastPlayedAt: nowMs - 600_000,
+      playtimeForeverMin: 5,
+    },
     sessionAppId: 2524850,
+    sessionLastPlaytime: 4,
+    sessionLastRtime: nowMs - 600_000,
+    sessionLastActivityAt: nowMs - 600_000,
     nowMs,
     inferSeconds: 300,
-    holdSeconds: 900,
+    stagnantSeconds: 120,
     personaOnline: true,
-  }), null);
+  }), 2524850);
 });
 
 test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
@@ -79,7 +108,7 @@ test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
     assert.equal(steam.pollIntervalSeconds, 15);
     assert.equal(steam.restoreAfterInterruptSeconds, 75);
     assert.equal(steam.inferFromRecentSeconds, 300);
-    assert.equal(steam.recentPlayHoldSeconds, 900);
+    assert.equal(steam.recentPlayStagnantSeconds, 120);
   } finally {
     if (prevHosts === undefined) delete process.env.STEAM_ALLOWED_HOSTS;
     else process.env.STEAM_ALLOWED_HOSTS = prevHosts;

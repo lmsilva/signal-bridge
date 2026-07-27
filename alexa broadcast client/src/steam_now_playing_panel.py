@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import ssl
 import threading
 import tkinter as tk
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     from PIL import Image, ImageTk
@@ -18,6 +21,33 @@ except ImportError:
 from src.display_panels import BasePanel
 from src.message_scroll import MessageScrollController
 from src.payload_utils import parse_iso_timestamp
+from src.paths import app_root
+
+# Frozen builds / bridge self-signed certs: once unverified works, stick with it.
+_unverified_ssl = False
+
+
+def _is_ssl_failure(error: BaseException) -> bool:
+    current: BaseException | None = error
+    while current is not None:
+        if "CERTIFICATE_VERIFY_FAILED" in str(current) or "SSL" in str(current):
+            return True
+        current = getattr(current, "reason", None) or getattr(current, "__cause__", None)
+    return False
+
+
+def steam_image_cache_dir() -> Path:
+    return app_root() / "steam-artwork-cache"
+
+
+def steam_image_cache_path(url: str) -> Path:
+    text = str(url or "")
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:40]
+    # Keep a hint of the original extension for easier debugging on disk.
+    ext = Path(urlsplit(text).path).suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        ext = ".img"
+    return steam_image_cache_dir() / f"{digest}{ext}"
 
 
 class SteamNowPlayingPanel(BasePanel):
@@ -554,9 +584,26 @@ class SteamNowPlayingPanel(BasePanel):
     def _fetch_first_image(self, token, urls, max_w, max_h, target):
         image = None
         for url in urls:
+            # Prefer disk cache for an instant paint, then refresh from network
+            # in the background so artwork stays current.
+            cached = self._load_cached_photo(url, max_w, max_h)
+            if cached is not None:
+                self.root.after(0, lambda img=cached: self._apply_image(token, img, target))
+                threading.Thread(
+                    target=self._refresh_cached_photo,
+                    args=(token, url, max_w, max_h, target),
+                    daemon=True,
+                ).start()
+                return
             image = self._fetch_photo(url, max_w, max_h)
             if image is not None:
                 break
+        self.root.after(0, lambda: self._apply_image(token, image, target))
+
+    def _refresh_cached_photo(self, token, url, max_w, max_h, target):
+        image = self._fetch_photo(url, max_w, max_h, force_network=True)
+        if image is None:
+            return
         self.root.after(0, lambda: self._apply_image(token, image, target))
 
     def _apply_image(self, token, image, target):
@@ -577,16 +624,56 @@ class SteamNowPlayingPanel(BasePanel):
             pass
 
     @classmethod
-    def _fetch_photo(cls, url: str, max_w: int, max_h: int):
+    def _load_cached_photo(cls, url: str, max_w: int, max_h: int):
         if not url or Image is None:
             return None
+        cache_file = steam_image_cache_path(url)
+        if not cache_file.exists():
+            return None
         try:
-            context = ssl.create_default_context()
+            image = Image.open(cache_file).convert("RGB")
+            image.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+            return image
+        except Exception:
+            return None
+
+    @classmethod
+    def _fetch_photo(cls, url: str, max_w: int, max_h: int, force_network: bool = False):
+        global _unverified_ssl
+        if not url or Image is None:
+            return None
+        if not force_network:
+            cached = cls._load_cached_photo(url, max_w, max_h)
+            if cached is not None:
+                return cached
+        try:
             request = urllib.request.Request(
                 url, headers={"User-Agent": "alexa-broadcast-client/1.0"},
             )
-            with urllib.request.urlopen(request, timeout=10, context=context) as response:
-                data = response.read()
+
+            def download(context):
+                with urllib.request.urlopen(request, timeout=10, context=context) as response:
+                    return response.read()
+
+            context = (
+                ssl._create_unverified_context()
+                if _unverified_ssl
+                else ssl.create_default_context()
+            )
+            try:
+                data = download(context)
+            except Exception as error:
+                if not _unverified_ssl and _is_ssl_failure(error):
+                    data = download(ssl._create_unverified_context())
+                    _unverified_ssl = True
+                else:
+                    raise
+            try:
+                cache_dir = steam_image_cache_dir()
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                steam_image_cache_path(url).write_bytes(data)
+            except OSError:
+                pass
             image = Image.open(io.BytesIO(data)).convert("RGB")
             image.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
             return image
