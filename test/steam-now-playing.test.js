@@ -12,6 +12,9 @@ const {
   createSteamNowPlaying,
   resolveEffectiveSteamAppId,
   pickRecentPlayAppId,
+  isRecentBlockedByQuitSuppress,
+  applyCachedArtworkUrls,
+  isUsableArtworkOrigin,
 } = require('../src/steam-now-playing');
 
 test('resolveEffectiveSteamAppId prefers Steam gameid, else presence, else recent', () => {
@@ -20,6 +23,40 @@ test('resolveEffectiveSteamAppId prefers Steam gameid, else presence, else recen
   assert.equal(resolveEffectiveSteamAppId(0, { appId: 440 }, 2524850), 440);
   assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), 2524850);
   assert.equal(resolveEffectiveSteamAppId(null, null, null), null);
+});
+
+test('isRecentBlockedByQuitSuppress blocks just-quit titles until relaunch', () => {
+  const quitSuppress = { appId: 111, playtime: 10, rtime: 1_000 };
+  assert.equal(isRecentBlockedByQuitSuppress({
+    appId: 111,
+    playtimeForeverMin: 10,
+    lastPlayedAt: 1_000,
+  }, quitSuppress), true);
+  assert.equal(isRecentBlockedByQuitSuppress({
+    appId: 222,
+    playtimeForeverMin: 1,
+    lastPlayedAt: 2_000,
+  }, quitSuppress), false);
+  assert.equal(isRecentBlockedByQuitSuppress({
+    appId: 111,
+    playtimeForeverMin: 11,
+    lastPlayedAt: 1_000,
+  }, quitSuppress), false);
+});
+
+test('applyCachedArtworkUrls keeps CDN fallbacks and ignores loopback origins', () => {
+  const reading = {
+    appId: 570,
+    posterCandidates: ['https://cdn.example/poster.jpg'],
+    screenshots: ['https://cdn.example/s1.jpg'],
+    headerImage: 'https://cdn.example/header.jpg',
+  };
+  assert.equal(isUsableArtworkOrigin('https://127.0.0.1:47810'), false);
+  assert.equal(isUsableArtworkOrigin('https://192.168.1.10:47810'), true);
+  assert.deepEqual(
+    applyCachedArtworkUrls(reading, null, 'https://192.168.1.10:47810'),
+    reading,
+  );
 });
 
 test('pickRecentPlayAppId infers fresh launches and ends after stagnant grace', () => {

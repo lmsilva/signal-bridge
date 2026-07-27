@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam quit detection + artwork cache)
+**Last updated:** 2026-07-26 (Steam quit/artwork follow-up)
 
 ---
 
@@ -491,6 +491,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Steam quit/artwork follow-up** — after quit, OwnedGames no longer resurrects the closed title when launching something else (quit-suppress + scan next fresh games). Artwork warm no longer mid-session re-pushes LAN-only URLs that blanked the hero; CDN fallbacks are kept when cache URLs are used. Deploy: `./recreate.sh` (+ portable client rebuild for safer image cache writes).
 - 2026-07-26: **Steam quit detection + artwork cache** — recent-play no longer uses a blind 15‑minute hold; sessions end after `STEAM_RECENT_PLAY_STAGNANT_SEC` (default 120) without playtime/rtime growth, and clearing profile `gameid` closes immediately (OwnedGames won’t resurrect until relaunch). Bridge caches store details + poster/screenshots under `data/steam-artwork-cache/`, serves `/steam-artwork/…`, prefers cache on push and warms in the background; Settings → Clear Steam artwork cache. Display client also disk-caches fetched images for instant re-show. Deploy: `./recreate.sh` + portable client rebuild for client cache.
 - 2026-07-26: **Steam Now Playing infers launches when `gameid` is empty** — GetPlayerSummaries often omits the current game (brand-new titles, API lag) while OwnedGames `rtime_last_played` updates within seconds. Poller treats a fresh last-played title as in-game (`STEAM_INFER_FROM_RECENT_SEC` / stagnant quit window); manual Auth preview uses the same OwnedGames ordering. Deploy: `./recreate.sh`.
 - 2026-07-26: **Steam Now Playing restores after Alexa interrupts** — other overlays set `session.suppressed` and never cleared it until the game quit, so a launch that got interrupted (or a long play session after any voice command) looked like "Steam didn't detect the game" even though the Web API showed in-game and manual Auth preview still worked. Suppress now schedules a restore tick (`STEAM_RESTORE_AFTER_INTERRUPT_SEC`, default 75s) and re-pushes while still playing. Deploy: `./recreate.sh`.

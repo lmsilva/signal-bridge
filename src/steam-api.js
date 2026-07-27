@@ -208,44 +208,41 @@ async function fetchRecentlyPlayedGames(apiKey, steamId, { count = 5 } = {}) {
 }
 
 /**
- * Most recently played owned title by rtime_last_played.
+ * Owned titles sorted by rtime_last_played (newest first).
  * GetPlayerSummaries gameid is often missing even while this timestamp is fresh
  * (privacy lag, brand-new launches, some titles). GetRecentlyPlayedGames also
  * omits rtime and sorts by 2-week playtime — OwnedGames is the reliable signal.
  */
-async function fetchMostRecentlyPlayedOwnedGame(apiKey, steamId) {
+async function fetchMostRecentlyPlayedOwnedGames(apiKey, steamId, { limit = 8 } = {}) {
   const url = `${API_HOST}/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}`
     + `&steamid=${encodeURIComponent(steamId)}`
     + '&include_played_free_games=1&include_appinfo=1';
   const json = await httpsGetJson(url);
   const games = Array.isArray(json?.response?.games) ? json.response.games : [];
-  let best = null;
+  const ranked = [];
   for (const game of games) {
     const appId = Number(game.appid);
     const rtime = Number(game.rtime_last_played);
     if (!Number.isFinite(appId) || appId <= 0 || !Number.isFinite(rtime) || rtime <= 0) {
       continue;
     }
-    if (!best || rtime > best.rtime) {
-      best = {
-        appId,
-        name: game.name || `App ${appId}`,
-        rtime,
-        playtimeForeverMin: Number.isFinite(Number(game.playtime_forever))
-          ? Number(game.playtime_forever)
-          : null,
-      };
-    }
+    ranked.push({
+      appId,
+      name: game.name || `App ${appId}`,
+      playtimeForeverMin: Number.isFinite(Number(game.playtime_forever))
+        ? Number(game.playtime_forever)
+        : null,
+      lastPlayedAt: rtime * 1000,
+    });
   }
-  if (!best) {
-    return null;
-  }
-  return {
-    appId: best.appId,
-    name: best.name,
-    playtimeForeverMin: best.playtimeForeverMin,
-    lastPlayedAt: best.rtime * 1000,
-  };
+  ranked.sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+  const max = Math.max(1, Number(limit) || 8);
+  return ranked.slice(0, max);
+}
+
+async function fetchMostRecentlyPlayedOwnedGame(apiKey, steamId) {
+  const list = await fetchMostRecentlyPlayedOwnedGames(apiKey, steamId, { limit: 1 });
+  return list[0] || null;
 }
 
 async function fetchOwnedGamePlaytime(apiKey, steamId, appId) {
@@ -353,6 +350,7 @@ module.exports = {
   libraryCapsuleUrls,
   fetchPlayerSummary,
   fetchRecentlyPlayedGames,
+  fetchMostRecentlyPlayedOwnedGames,
   fetchMostRecentlyPlayedOwnedGame,
   fetchAppDetails,
   fetchOwnedGamePlaytime,
