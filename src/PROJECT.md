@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam last-played timestamp)
+**Last updated:** 2026-07-26 (air quality cache preview + weather steal)
 
 ---
 
@@ -491,6 +491,9 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Indoor air quality display race** — voice matched and UDP logged, but Smart Home enrich blocked for seconds with no preview, and empty-summary temperature TTS could flash outdoor weather over the AQ card. Now: cache-first AQ preview, weather ignores IAQ answers, suppress placeholder `weather query` while AQ is pending on that device. Deploy: `./recreate.sh`.
+- 2026-07-26: **Fix "alexa next" miss from duplicated ASR** — history joins wake-word + repeat (`"alexa next, next"`), which failed the whole-utterance `MUSIC_SKIP_RE` and landed in unmatched with no Now Playing push. Skip matcher accepts comma/`|`-joined skip segments. Deploy: `./recreate.sh`.
+- 2026-07-26: **Indoor temp + air quality voice phrasing** — "what's the main floor temperature" was misrouted to outdoor weather (location-before-metric not extracted); "what's the indoor quality" (ASR drops "air") never matched and was marked processed before TTS. Matcher now accepts location-before-metric / `indoor` markers, and indoor-quality ASR + spoken IAQ upgrades. Deploy: `./recreate.sh`.
 - 2026-07-26: **Steam last-played uses OwnedGames `rtime_last_played`** — manual "Last played" preview no longer stamps push-time as lastPlayedAt (which made the display show "just now"). Enrichment pulls Steam's last-played unix time from GetOwnedGames when recently-played omits it. Deploy: `./recreate.sh` + portable client rebuild for **LAST PLAYED** corner label.
 - 2026-07-26: **Voice Guest Snaps slideshow honors admin order/seconds** — admin UI and Alexa voice each had their own in-memory `slideshow-settings` copy, so "oldest first" saved in the portal never reached `open guest snaps slideshow`. Getters now reload from `data/slideshow-settings.json` on every read. Deploy: `./recreate.sh`.
 - 2026-07-26: **Admin: hide Remote on All Displays + auto-select new announces** — Remote tab joins Control in staying hidden unless a single display is selected. When a new display id appears while All Displays is selected (or the prior display was pruned), the picker jumps to that display. Cache-bust `?v=signal17`. Hard-refresh admin.

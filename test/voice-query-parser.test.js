@@ -255,6 +255,11 @@ test('voice query parser detects next/skip as music-skip', () => {
   const skip = parser.parse(activity('skip this song', ''));
   assert.equal(skip?.kind, 'music');
   assert.equal(skip?.trigger, 'music-skip');
+
+  // activity-fields joins wake-word + repeated CUSTOMER_TRANSCRIPT parts
+  const duplicated = parser.parse(activity('alexa next, next', ''));
+  assert.equal(duplicated?.kind, 'music');
+  assert.equal(duplicated?.trigger, 'music-skip');
 });
 
 test('voice query parser detects "what song is playing" as a music query', () => {

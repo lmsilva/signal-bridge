@@ -163,11 +163,42 @@ test('matchesAirQualityQuery accepts named and generic air quality questions', (
   assert.equal(matchesAirQualityQuery('show indoor air quality', "Well, the air quality's pretty good."), true);
 });
 
+test('matchesAirQualityQuery tolerates ASR that drops "air"', () => {
+  const spoken =
+    'The indoor air quality is 86 out of 100 in the Dome, 84 in the Machine Room, and 36 on the Main Floor.';
+  assert.equal(matchesAirQualityQuery("what's the indoor quality", ''), true);
+  assert.equal(matchesAirQualityQuery("what's the indoor quality", spoken), true);
+  assert.equal(matchesAirQualityQuery('', spoken), true);
+});
+
+test('voice query parser routes indoor quality ASR to air quality', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity("what's the indoor quality", ''));
+  assert.equal(event?.kind, 'air-quality');
+});
+
 test('voice query parser routes show indoor air quality', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity(
     'show indoor air quality',
     "Well, the air quality's pretty good. On the main floor, air quality is 88 out of 100.",
+  ));
+  assert.equal(event?.kind, 'air-quality');
+});
+
+test('voice query parser does not route indoor air quality TTS to weather', () => {
+  const parser = createVoiceQueryParser();
+  const spoken =
+    'The indoor air quality is 86 out of 100 in the Dome, 84 in the Machine Room, and 36 on the Main Floor.';
+  const event = parser.parse(activity('', spoken));
+  assert.equal(event?.kind, 'air-quality');
+});
+
+test('alexa-prefixed indoor air quality ASR routes to air quality', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    "alexa what's the indoor air quality, what's the indoor air quality",
+    '',
   ));
   assert.equal(event?.kind, 'air-quality');
 });

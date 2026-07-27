@@ -49,6 +49,15 @@ function matchesWeatherQuery(summary, response) {
   if (matchesIndoorQuery(summary, response)) {
     return false;
   }
+  // Indoor AQ answers (and IAQ score lines) must not fall through to outdoor
+  // weather — history often delivers them as empty-summary TTS right after
+  // "what's the indoor air quality", which would replace the AQ overlay.
+  if (matchesAirQualityQuery(summary, response)) {
+    return false;
+  }
+  if (/\b(?:air\s*quality|out\s+of\s+100)\b/i.test(String(response || ''))) {
+    return false;
+  }
 
   if (WEATHER_QUERY_RE.test(summary || '')) {
     return true;

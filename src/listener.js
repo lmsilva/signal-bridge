@@ -366,6 +366,22 @@ function createListener({ config, log }) {
       return;
     }
 
+    // Right after an indoor air-quality ask, Alexa sometimes emits a separate
+    // empty-summary temperature TTS that parses as outdoor weather (query
+    // placeholder "weather query") and would replace the AQ overlay.
+    if (
+      voiceEvent.kind === 'weather'
+      && pendingVoiceResponses.hasPending(voiceEvent.device, 'air-quality')
+      && /^(?:weather query)$/i.test(String(voiceEvent.query || '').trim())
+    ) {
+      voiceQueryParser.markProcessed(activityId);
+      log.info('Weather suppressed (pending air-quality on device)', {
+        device: voiceEvent.device,
+        spoken: String(voiceEvent.spokenResponse || '').slice(0, 120) || null,
+      });
+      return;
+    }
+
     // Incomplete distance ASR ("distance from Saratoga Springs Utah" with no
     // "to …" and no miles TTS yet) must not consume the dedup slot or be marked
     // processed — otherwise the same activityId's later spoken answer is dropped.
@@ -746,6 +762,23 @@ function createListener({ config, log }) {
       let reading = buildAirQualityReading(event, airQualityConfig);
       let monitors = reading.monitors || parseMonitorSummaries(event.spokenResponse, airQualityConfig);
 
+      // Smart Home enrich can take several seconds per monitor — push the
+      // cached multi-monitor card immediately so the display is not blank.
+      const cachedAq = loadAirQualityCache(config);
+      if (cachedAq?.monitors?.length && !monitors.length && reading.iaqScore == null) {
+        const preview = buildAirQualityPayload(event, config, {
+          location: cachedAq.location || location,
+          reading: cachedAq.reading || reading,
+          monitors: cachedAq.monitors,
+        });
+        if (preview) {
+          emitVoicePayload(preview);
+          log.info(`Cached preview sent while refreshing (air-quality) for ${event.device}`, {
+            cachedAt: cachedAq.savedAt || null,
+          });
+        }
+      }
+
       if (voiceSettings.fetchAirQuality) {
         try {
           if (location?.multiMonitor || monitors.length > 1) {
@@ -771,17 +804,17 @@ function createListener({ config, log }) {
       }
 
       if ((!reading.band || reading.band === 'unknown') && reading.iaqScore == null && !monitors.length) {
-        const cached = loadAirQualityCache(config);
-        if (cached?.monitors?.length) {
+        if (cachedAq?.monitors?.length) {
           log.info('Air quality unavailable, serving cached reading', {
-            cachedAt: cached.savedAt || null,
+            cachedAt: cachedAq.savedAt || null,
           });
-          monitors = cached.monitors;
-          reading = mergeAirQualityReadings(reading, cached.reading || summarizeMonitorReadings(monitors, airQualityConfig));
+          monitors = cachedAq.monitors;
+          reading = mergeAirQualityReadings(reading, cachedAq.reading || summarizeMonitorReadings(monitors, airQualityConfig));
         }
       }
 
       payload = buildAirQualityPayload(event, config, { location, reading, monitors });
+      pendingVoiceResponses.remember(event);
     } else if (event.kind === 'weather') {
       const location = extractWeatherLocation(
         event.query,

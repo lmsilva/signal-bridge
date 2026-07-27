@@ -62,17 +62,39 @@ function matchesNowPlayingQuery(summary, response) {
   return false;
 }
 
-function matchesMusicSkipQuery(summary) {
+/**
+ * History often joins wake-word + echo of the same command:
+ * "alexa next, next" / "next | next". Each segment must still look like a
+ * skip on its own so "what's next, next" does not sneak through.
+ */
+function skipQueryCandidates(summary) {
   const text = normalizeQueryText(summary);
-  if (!text || MUSIC_BLOCKLIST_RE.test(text)) {
+  if (!text) {
+    return [];
+  }
+  const parts = text
+    .split(/\s*[,|]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 2 && parts.every((part) => MUSIC_SKIP_RE.test(part))) {
+    return parts;
+  }
+  return [text];
+}
+
+function matchesMusicSkipQuery(summary) {
+  const candidates = skipQueryCandidates(summary);
+  if (!candidates.length || candidates.some((part) => MUSIC_BLOCKLIST_RE.test(part))) {
     return false;
   }
-  return MUSIC_SKIP_RE.test(text);
+  return candidates.every((part) => MUSIC_SKIP_RE.test(part));
 }
 
 function isExplicitSongSkipQuery(summary) {
-  const text = normalizeQueryText(summary);
-  return Boolean(text && MUSIC_SKIP_RE.test(text) && MUSIC_SKIP_EXPLICIT_SONG_RE.test(text));
+  const candidates = skipQueryCandidates(summary);
+  return candidates.some(
+    (part) => MUSIC_SKIP_RE.test(part) && MUSIC_SKIP_EXPLICIT_SONG_RE.test(part),
+  );
 }
 
 function isMusicPlayerContent(nowPlaying, { explicitSongSkip = false } = {}) {

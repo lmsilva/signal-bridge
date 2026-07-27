@@ -26,6 +26,10 @@ test('extractIndoorLocationPhrase reads top floor and bedroom echo aliases', () 
   assert.equal(extractIndoorLocationPhrase("what's the temperature at main floor"), 'main floor');
   assert.equal(extractIndoorLocationPhrase("what's the temperature in the bedroom echo"), 'bedroom echo');
   assert.equal(extractIndoorLocationPhrase('what is the humidity of top floor'), 'top floor');
+  assert.equal(extractIndoorLocationPhrase("what's the main floor temperature"), 'main floor');
+  assert.equal(extractIndoorLocationPhrase('alexa what is the living room humidity'), 'living room');
+  assert.equal(extractIndoorLocationPhrase("what's the temperature"), null);
+  assert.equal(matchesIndoorQuery("what's the temperature", ''), false);
 });
 
 test('generic temperature query is not treated as indoor', () => {
@@ -125,6 +129,10 @@ test('voice query parser routes indoor location before outdoor weather', () => {
 
   const indoor = parser.parse(activity("what's the temperature on top floor", "It's 76 degrees on the top floor"));
   assert.equal(indoor.kind, 'indoor-temperature');
+
+  const locationBeforeMetric = parser.parse(activity("what's the main floor temperature", ''));
+  assert.equal(locationBeforeMetric.kind, 'indoor-temperature');
+  assert.equal(extractIndoorLocationPhrase(locationBeforeMetric.query), 'main floor');
 
   const outdoor = parser.parse(activity("what's the temperature", "It's 72 degrees and sunny"));
   assert.equal(outdoor.kind, 'weather');
