@@ -8,7 +8,7 @@ const {
   matchesNowPlayingQuery,
   matchesMusicSkipQuery,
 } = require('./music-info');
-const { matchesRouteQuery } = require('./route-query');
+const { matchesRouteQuery, looksLikeRouteQuery } = require('./route-query');
 const { matchesTeslaBatteryQuery } = require('./tesla-battery');
 const { matchesTeslaDashboardQuery } = require('./tesla-dashboard');
 const {
@@ -260,14 +260,16 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
       };
     }
 
-    if (matchesRouteQuery(matchSummary, response)) {
+    if (matchesRouteQuery(matchSummary, response) || looksLikeRouteQuery(matchSummary)) {
       return {
         kind: 'route',
         activityId,
         device,
         deviceSerial,
         timestamp,
-        query: summary || matchSummary,
+        // Distance skills often omit ASR (NO_TEXT_OR_AUDIO_STORED) and only
+        // leave TTS — keep the spoken answer as the query for logs/extract.
+        query: summary || matchSummary || response || 'route query',
         spokenResponse: response || null,
         trigger: 'route-query',
       };

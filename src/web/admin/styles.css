@@ -46,6 +46,22 @@ body {
   flex-direction: column;
   min-height: 100dvh;
   overscroll-behavior-y: none;
+  /* Reserve space for the fixed tab bar so Control / Slideshow / Push
+     action buttons never sit under it (desktop Chrome was still covering
+     the bottom of those tabs when clearance lived only on `.content`). */
+  padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---------- Sticky chrome (header + display picker) ----------
+   One sticky stack — separate sticky header + display-bar with a guessed
+   `top: 52px` let the display hint paint over Control-tab buttons on desktop
+   Chrome when the real header height differed. */
+
+.sticky-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
 }
 
 /* ---------- Header ---------- */
@@ -56,10 +72,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 8px;
-  position: sticky;
-  top: 0;
   background: var(--bg);
-  z-index: 6;
 }
 
 .header-actions {
@@ -80,11 +93,7 @@ body {
 /* ---------- Display picker ---------- */
 
 .display-bar {
-  position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + 52px);
-  z-index: 5;
   padding: 0 18px 12px;
-  /* Solid bg — a transparent fade let this hint paint over Control-tab buttons. */
   background: var(--bg);
   border-bottom: 1px solid rgba(38, 52, 80, 0.65);
 }
@@ -246,14 +255,24 @@ body {
 
 .content {
   flex: 1;
-  padding: 4px 16px calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 20px);
+  /* Extra air above the tab bar; body already reserves --tab-h. */
+  padding: 4px 16px 24px;
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
 }
 
-.tab-panel { display: none; }
-.tab-panel.active { display: block; animation: fadein 160ms ease-out; }
+/* Inactive panels must stay fully out of flow. `[hidden]` must beat
+   `.tab-panel.active` — otherwise an active+hidden race (or a stuck
+   `.active` class) can keep painting Slideshow over Push/Control. */
+.tab-panel:not(.active),
+.tab-panel[hidden] {
+  display: none !important;
+}
+.tab-panel.active:not([hidden]) {
+  display: block !important;
+  animation: fadein 160ms ease-out;
+}
 
 @keyframes fadein {
   from { opacity: 0; transform: translateY(4px); }
@@ -706,14 +725,19 @@ textarea.field-input.text-input-area {
   left: 0;
   right: 0;
   bottom: 0;
+  min-height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
   height: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: rgba(18, 27, 48, 0.92);
+  background: rgba(18, 27, 48, 0.96);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
   display: flex;
+  align-items: stretch;
+  justify-content: stretch;
   z-index: 10;
+  /* Icons+labels must not spill upward over page buttons. */
+  overflow: hidden;
 }
 
 .tab-btn {
@@ -731,9 +755,18 @@ textarea.field-input.text-input-area {
   gap: 3px;
   cursor: pointer;
   transition: color 120ms ease;
+  min-width: 0;
+  padding: 0 4px;
 }
 
-.tab-btn svg { width: 23px; height: 23px; }
+.tab-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.tab-btn svg { width: 23px; height: 23px; flex-shrink: 0; }
 .tab-btn.active { color: var(--accent); }
 
 /* ---------- Toasts ---------- */
@@ -1296,4 +1329,32 @@ textarea.field-input.text-input-area {
   .push-columns { flex-direction: row; align-items: flex-start; }
   .push-column { flex: 1; min-width: 0; }
   .card-row-quad { grid-template-columns: repeat(4, 1fr); }
+
+  .push-card {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .push-card-title {
+    overflow-wrap: break-word;
+    line-height: 1.25;
+  }
+
+  /* Keep the phone-style bottom tabs, but pin them under the content
+     column instead of stretching Push……Remote……Slideshow……Settings
+     across a wide monitor (which made Control/Slideshow look buried
+     under empty chrome and easy to miss / click-miss). */
+  .tab-bar {
+    left: 50%;
+    right: auto;
+    width: min(100%, 980px);
+    transform: translateX(-50%);
+    border-radius: 14px 14px 0 0;
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+
+  .tab-btn {
+    flex: 1 1 0;
+    max-width: none;
+  }
 }

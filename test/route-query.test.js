@@ -124,7 +124,100 @@ test('extractRouteLocations returns null when no place names are found', () => {
 });
 
 test('extractRouteLocations returns null when the default location is unavailable and origin is implicit', () => {
-  const result = extractRouteLocations('how far is moab', null);
+  assert.equal(extractRouteLocations('how far is moab', null), null);
+  assert.equal(extractRouteLocations('what is the distance from here to Las Vegas', null), null);
+  assert.equal(extractRouteLocations('directions to moab', null), null);
+});
+
+test('extractRouteLocations still works for two named places without a default location', () => {
+  const result = extractRouteLocations(
+    "what's the distance from Saratoga Springs Utah to Los Angeles",
+    null,
+  );
+  assert.equal(result.origin.query, 'Saratoga Springs Utah');
+  assert.equal(result.destination.query, 'Los Angeles');
+});
+
+test('matchesRouteQuery normalizes curly apostrophes and whats', () => {
+  assert.equal(matchesRouteQuery('what\u2019s the distance from here to Las Vegas', ''), true);
+  assert.equal(matchesRouteQuery('whats the distance from here to Las Vegas', ''), true);
+});
+
+test('matchesRouteQuery treats ASR "difference" as "distance"', () => {
+  assert.equal(
+    matchesRouteQuery("what's the difference from here to Las Vegas", ''),
+    true,
+  );
+  assert.equal(
+    matchesRouteQuery("what's the difference from Saratoga Springs Utah to Los Angeles", ''),
+    true,
+  );
+});
+
+test('extractRouteLocations parses ASR "difference from here to City"', () => {
+  const result = extractRouteLocations(
+    "what's the difference from here to Las Vegas",
+    DEFAULT_LOCATION,
+  );
   assert.equal(result.origin.scope, 'local');
-  assert.equal(result.origin.latitude, null);
+  assert.equal(result.destination.query, 'Las Vegas');
+});
+
+test('matchesRouteQuery detects Alexa "Y is about N miles from X" TTS with empty ASR', () => {
+  const spoken = "Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies. By road it's roughly 2,818 miles.";
+  assert.equal(matchesRouteQuery('', spoken), true);
+  assert.equal(matchesRouteQuery(null, spoken), true);
+});
+
+test('extractRouteLocations parses Alexa crow-flies spoken answer', () => {
+  const spoken = "Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies. By road it's roughly 2,818 miles.";
+  const result = extractRouteLocations('', DEFAULT_LOCATION, spoken);
+  assert.equal(result.destination.query, 'Los Angeles');
+  assert.equal(result.origin.query, 'Saratoga Springs, Utah');
+});
+
+test('extractRouteLocations parses "it\'s about N miles to Y from X"', () => {
+  const result = extractRouteLocations(
+    '',
+    DEFAULT_LOCATION,
+    "It's about 380 miles to Las Vegas from here.",
+  );
+  assert.equal(result.destination.query, 'Las Vegas');
+  assert.equal(result.origin.scope, 'local');
+  assert.equal(result.origin.latitude, DEFAULT_LOCATION.latitude);
+});
+
+test('looksLikeRouteQuery catches incomplete "distance from City" ASR', () => {
+  const { looksLikeRouteQuery } = require('../src/route-query');
+  assert.equal(looksLikeRouteQuery("what's the distance from saratoga springs utah"), true);
+  assert.equal(looksLikeRouteQuery('what is the weather like'), false);
+  assert.equal(matchesRouteQuery("what's the distance from saratoga springs utah", ''), false);
+});
+
+test('extractRouteLocations does not invent a pair from incomplete "distance from PLACE"', () => {
+  // ASR often cuts off before "to Los Angeles"; inventing home→PLACE would
+  // flash a useless near-zero route when PLACE is the configured home.
+  const result = extractRouteLocations(
+    "what's the distance from saratoga springs utah",
+    DEFAULT_LOCATION,
+  );
+  assert.equal(result, null);
+});
+
+test('extractRouteLocations prefers spoken miles answer over incomplete ASR', () => {
+  const spoken = 'Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies.';
+  const result = extractRouteLocations(
+    "what's the distance from saratoga springs utah",
+    DEFAULT_LOCATION,
+    spoken,
+  );
+  assert.equal(result.destination.query, 'Los Angeles');
+  assert.equal(result.origin.query, 'Saratoga Springs, Utah');
+});
+
+test('spokenHasRouteAnswer detects Alexa miles TTS without place names', () => {
+  const { spokenHasRouteAnswer } = require('../src/route-query');
+  const spoken = 'Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies.';
+  assert.equal(spokenHasRouteAnswer(spoken), true);
+  assert.equal(spokenHasRouteAnswer('the weather is sunny today'), false);
 });

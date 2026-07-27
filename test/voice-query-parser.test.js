@@ -199,6 +199,15 @@ test('voice query parser detects "what is the distance between X and Y"', () => 
   assert.equal(event?.trigger, 'route-query');
 });
 
+test('voice query parser detects distance from TTS-only activity (empty ASR)', () => {
+  const parser = createVoiceQueryParser();
+  const spoken = "Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies. By road it's roughly 2,818 miles.";
+  const event = parser.parse(activity('', spoken));
+  assert.equal(event?.kind, 'route');
+  assert.equal(event?.trigger, 'route-query');
+  assert.match(event?.query || '', /Los Angeles is about 564 miles/i);
+});
+
 test('voice query parser detects "how far is Y from here"', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('how far is moab from here', ''));
@@ -221,6 +230,13 @@ test('voice query parser detects bare "how far is Y"', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('how far is moab', ''));
   assert.equal(event?.kind, 'route');
+});
+
+test('voice query parser detects incomplete "distance from City" ASR as route', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity("what's the distance from saratoga springs utah", ''));
+  assert.equal(event?.kind, 'route');
+  assert.equal(event?.trigger, 'route-query');
 });
 
 test('voice query parser detects music play command', () => {

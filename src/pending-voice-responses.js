@@ -1,4 +1,6 @@
-const { hasAlarmStatusInSpeech } = require('./vivint-alarm');const { hasNotificationContent } = require('./alexa-notifications');
+const { hasAlarmStatusInSpeech } = require('./vivint-alarm');
+const { hasNotificationContent } = require('./alexa-notifications');
+const { extractRouteLocations, spokenHasRouteAnswer } = require('./route-query');
 
 const DEFAULT_TTL_MS = 90000;
 
@@ -41,6 +43,12 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
         return;
       }
       pending.set(pendingKey(event.device, 'alexa-notifications'), { event, at: now });
+      prune(now);
+      return;
+    }
+
+    if (event.kind === 'route') {
+      pending.set(pendingKey(event.device, 'route'), { event, at: now });
       prune(now);
     }
   }
@@ -98,6 +106,25 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
           spokenResponse: response,
           timestamp: activity?.creationTimestamp || now,
           trigger: 'alexa-notifications-response',
+        };
+      }
+    }
+
+    const routePending = pending.get(pendingKey(device, 'route'));
+    if (routePending && now - routePending.at <= ttlMs) {
+      const defaultLocation = helpers.defaultLocation ?? null;
+      if (
+        spokenHasRouteAnswer(response)
+        || extractRouteLocations(routePending.event.query, defaultLocation, response)
+      ) {
+        pending.delete(pendingKey(device, 'route'));
+        return {
+          ...routePending.event,
+          activityId: helpers.getActivityId(activity),
+          sourceActivityId: routePending.event.activityId || null,
+          spokenResponse: response,
+          timestamp: activity?.creationTimestamp || now,
+          trigger: 'route-response',
         };
       }
     }

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam elapsed / last-played AGO)
+**Last updated:** 2026-07-26 (Route display seconds)
 
 ---
 
@@ -54,7 +54,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/display_announce.py` | UDP `display.announce` to `bridgeHosts` + broadcast on `discoveryPort` (default 47833); encrypts when `udpSecret` set; responds to `display.discover`; while a Steam game is running, announces every ~20s (else 5 min); ASCII-only logs |
 | `src/input_control.py` | Apply `input.pointer` / `input.key` / `input.text` — absolute Win32 `SendInput` (tracked tip); clicks aimed at tip; `pynput` for keys; `handle_text()` types a whole string in one call (`Controller.type()`, Unicode-safe) instead of one keystroke per key, with optional trailing Enter. Keeps the process DPI-*unaware* so Tk overlay layouts match font metrics. |
 | `src/remote_cursor.py` | Click-through software arrow at the remote tip; blanks system cursors while active; restores on idle or physical (non-injected) mouse move |
-| `src/config.py` | Load `config.json`; `effective_display_seconds` (timers and `photo.slideshow` use the payload's full requested duration, bypassing `maxDisplaySeconds`) |
+| `src/config.py` | Load `config.json`; `effective_display_seconds` (timers, `photo.slideshow`, `guest.photobooth`, and `route-planner.query` use the payload's full requested duration, bypassing `maxDisplaySeconds`) |
 | `src/paths.py` | Resolve config path for dev vs portable build |
 | `config.json` | User settings (port, fade, display caps, colors) |
 | `run.bat` | Dev: venv + `python src/main.py` |
@@ -258,6 +258,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-26: **Route Planner bypasses `maxDisplaySeconds`** — `route-planner.query` keeps the bridge's requested duration (≥120s) so map/facts tiles are not cut off by a tight client cap. Restart the display client (or rebuild portable) to pick up.
+- 2026-07-26: **Route Planner header overlap** — long "City, State, US → City, State, US" titles wrap, but stats used a single linespace and painted over the destination line. Stats/tiles now use the real title bbox; place names drop trailing `, US`. Restart the display client (or rebuild portable) to pick up.
 - 2026-07-26: **Steam footer players** — **PLAYING NOW** value shows `N players` (worldwide concurrent). Portable rebuild required.
 - 2026-07-26: **Steam elapsed / last-played AGO** — playing sessions tick ELAPSED every second from `startedAt` (`45s` / `12m 05s` / `1h 02m`); last-played header shows **AGO** (relative) instead of a live timer (lifetime playtime stays in the footer). Portable rebuild required.
 - 2026-07-26: **Steam fields on display.announce (optional)** — announce can carry `hostname` + `steamAppId`; unused for default any-PC Now Playing (games on MOVIETHEATERPC, overlays on MOVIETHEATERPOSTER).

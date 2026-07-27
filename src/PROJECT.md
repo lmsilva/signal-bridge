@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam any-PC Now Playing)
+**Last updated:** 2026-07-26 (Route wait for miles TTS)
 
 ---
 
@@ -70,7 +70,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth voice queries from history |
 | `src/guest-photobooth.js` | Match "open guest snaps" (dual-QR welcome) + "open guest snaps slideshow" (Shared Photo Slideshow; ASR "slide show" / legacy "slideshow guest snaps") + legacy "guest photobooth"; `photosToSlideshowEntries` builds absolute `/qr-images/…` URLs; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
-| `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, mirrors `weather-location.js`) |
+| `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery` + incomplete-ASR `looksLikeRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, incl. incomplete "distance from PLACE" → home→PLACE; `spokenHasRouteAnswer` for orphan miles TTS; mirrors `weather-location.js`) |
 | `src/route-fetch.js` | Free/no-key route data: OSRM driving route (`fetchDrivingRoute`) with great-circle "flight" fallback (`greatCircleEstimate`) when no drivable route exists |
 | `src/music-info.js` | Detect "play \<song\>" (`matchesMusicQuery`), "what song is playing" (`matchesNowPlayingQuery` — apostrophe-less ASR + spoken-answer fallback), and "next"/"skip" (`matchesMusicSkipQuery`); `fetchNowPlaying` / `fetchNowPlayingAfterSkip` (prefer title change after skip); `isMusicPlayerContent` gates out flash briefing/news/Audible so bare "next" does not open the song card; `emptyNowPlaying` for failed what's-playing queries |
 | `src/indoor-locations.js` | Thermostat/sensor names + alias resolution (bedroom echo → Room 7, etc.) |
@@ -194,7 +194,7 @@ Docker listener passes Tesla vars via `env_file: .env` in `docker-compose.yml`.
 
 ### Voice pipeline notes
 
-- `voice-event-gate.js` — Tesla does **not** wait for Alexa spoken response.
+- `voice-event-gate.js` — Tesla does **not** wait for Alexa spoken response. Route waits when origin/destination cannot be extracted from the query alone (incomplete distance ASR).
 - `pending-voice-responses.js` — no Tesla pending/correlation.
 - `tesla-session-keepalive.js` — started with listener; refreshes tokens before expiry.
 
@@ -491,6 +491,14 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Route Planner waits for miles TTS (no home→home flash)** — incomplete "distance from Saratoga Springs Utah" must not invent a pair from `defaultLocation` (that skipped pending pairing and could emit a useless near-zero route). Gate always waits when the ASR looks like distance but isn't a full two-place query; orphan miles TTS on a later activity id completes via `pending-voice-responses`. Deploy: `./recreate.sh`.
+- 2026-07-26: **Route split-activity miles TTS pairing** — incomplete distance ASR on one activity id + Alexa's miles answer on another: `spokenHasRouteAnswer` + `pending-voice-responses` remember orphan route queries and `tryComplete` attaches miles TTS; listener schedules follow-up polls and forgets on emit. Deploy: `./recreate.sh`.
+- 2026-07-26: **Admin desktop tab bar clearance** — body reserves space for the fixed bottom tabs so Control/Slideshow actions aren’t covered on Chrome PC; wide screens center the tab strip under the content column (no full-bleed stretch). Cache-bust `?v=signal16`. Hard-refresh admin.
+- 2026-07-26: **Route Planner incomplete ASR no longer drops TTS** — "distance from Saratoga Springs Utah" (no destination yet) was marked processed / dedup-consumed before Alexa's miles answer landed on the same activity id. Now `looksLikeRouteQuery` keeps it as `route`, `voice-event-gate` waits when extract fails, listener skips dedup until upgrade, and dedup allows empty→spoken / spoken-signature upgrades. Deploy: `./recreate.sh`.
+- 2026-07-26: **Revert admin desktop side rail** — moving the tab bar left did not address the reported overlap (wrong diagnosis). Bottom tab bar restored on desktop; tab panels stay force-hidden via `[hidden]` beating `.active`.
+- 2026-07-26: **Route ASR "difference"→"distance" + admin tab paint fix** — Alexa often hears "what's the difference from here to …"; normalize to distance. Admin: one sticky chrome stack + inactive `.tab-panel` force-hidden. Deploy: `./recreate.sh` for route matcher.
+- 2026-07-26: **Route Planner matches Alexa TTS distance answers** — real history rows for distance skills often have empty ASR (`NO_TEXT_OR_AUDIO_STORED`) and only TTS like "Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies…". Prior matcher only knew "N miles from X to Y", so events landed in `unmatched-activities.jsonl` with no UDP. Now match/extract `Y is about N miles from X` and `it's about N miles to Y (from X)`. Deploy: `./recreate.sh`.
+- 2026-07-26: **Route Planner "here"/distance fix** — production `data/config.json` was missing `voiceEvents.defaultLocation`, so "distance from here to …" resolved to a null-coord local stub, skipped geocode (`scope === 'local'`), then aborted with no UDP. Named A→B queries were fine in unit tests but the same silent path hurt debugging. Now: require a real default for "here"/"home"; geocode any place still missing coords; warn clearly when extract fails. Deploy: `./recreate.sh` (config is volume-mounted — restart picks up `defaultLocation`).
 - 2026-07-26: **Steam Now Playing = any PC by default** — Steam cannot report which machine launched a game; `STEAM_REQUIRE_PRESENCE=0` (default) shows the overlay whenever the linked account is in-game. Household split: games on **MOVIETHEATERPC** (no display client), overlays on **MOVIETHEATERPOSTER**. No software needed on the gaming PC. Optional host gate via `STEAM_REQUIRE_PRESENCE=1`. Removed admin Steam API-key Save UI. Deploy: `./recreate.sh`.
 - 2026-07-26: **Steam display.announce presence (optional)** — client can still send `hostname` + `steamAppId` for snappier/host-gated detection when desired.
 - 2026-07-26: **Now Playing Quick Push** — Push tab Indoor Temperature tile replaced with **Now Playing** (`POST /api/push/now-playing` → `music-query`).

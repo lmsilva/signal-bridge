@@ -29,6 +29,7 @@ from src.payload_utils import (
     format_local_time_at_offset,
     format_route_distance,
     format_route_duration,
+    shorten_route_place_name,
     format_timer_clock,
     format_timer_set_label,
     format_alarm_time,
@@ -6394,17 +6395,23 @@ class RoutePlannerPanel(BasePanel):
         badge_fg = self.AMBER if mode == "flight" else self.GREEN
         pill_h = self._pill(x, top, badge_label, fill=badge_fill, fg=badge_fg)
 
-        origin_name = origin.get("name") or "Origin"
-        dest_name = destination.get("name") or "Destination"
+        origin_name = shorten_route_place_name(origin.get("name") or "Origin")
+        dest_name = shorten_route_place_name(destination.get("name") or "Destination")
         title_y = top + pill_h + 14
-        self._track(
-            self.canvas.create_text(
-                x, title_y, anchor="nw", text=f"{origin_name}  \u2192  {dest_name}",
-                fill=text, font=self.shell.section_title_font, width=width,
-            )
+        # `width=` makes Tk wrap long "A → B" titles onto multiple lines. Stats
+        # must sit below the *actual* wrapped bbox — using a single linespace
+        # put "395 mi · about 5h 42m" on top of the destination line.
+        title_id = self.canvas.create_text(
+            x, title_y, anchor="nw", text=f"{origin_name}  \u2192  {dest_name}",
+            fill=text, font=self.shell.section_title_font, width=width,
         )
+        self._track(title_id)
+        title_bbox = self.canvas.bbox(title_id)
+        if title_bbox:
+            stat_y = title_bbox[3] + 10
+        else:
+            stat_y = title_y + self.shell.section_title_font.metrics("linespace") + 10
 
-        stat_y = title_y + self.shell.section_title_font.metrics("linespace") + 6
         distance_label = format_route_distance(distance_miles)
         duration_label = format_route_duration(duration_min)
         stat_text = (
@@ -6412,13 +6419,16 @@ class RoutePlannerPanel(BasePanel):
             if duration_min is not None
             else distance_label
         )
-        self._track(
-            self.canvas.create_text(
-                x, stat_y, anchor="nw", text=stat_text, fill=accent, font=self.shell.body_font,
-            )
+        stat_id = self.canvas.create_text(
+            x, stat_y, anchor="nw", text=stat_text, fill=accent,
+            font=self.shell.body_font, width=width,
         )
-
-        tiles_top = stat_y + self.shell.body_font.metrics("linespace") + 18
+        self._track(stat_id)
+        stat_bbox = self.canvas.bbox(stat_id)
+        if stat_bbox:
+            tiles_top = stat_bbox[3] + 18
+        else:
+            tiles_top = stat_y + self.shell.body_font.metrics("linespace") + 18
         tiles_bottom = bottom - 6
         boxes = self._compute_tile_boxes(x, width, tiles_top, tiles_bottom, layout.portrait)
         self._tile_boxes = boxes

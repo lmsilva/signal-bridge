@@ -184,9 +184,9 @@
       const activeControl = document.querySelector('.tab-btn.active')?.dataset?.tab === 'control';
       if (activeControl) {
         document.querySelector('.tab-btn[data-tab="push"]')?.click();
-      }
-      if (controlPanel) {
+      } else if (controlPanel) {
         controlPanel.classList.remove('active');
+        controlPanel.hidden = true;
       }
     }
     updateControlLockUi();
@@ -368,18 +368,34 @@
 
   // ------------------------------------------------------------------- Tabs
 
+  function activateTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.tab-panel').forEach((panel) => {
+      const on = panel.id === `tab-${tabId}`;
+      panel.classList.toggle('active', on);
+      // Belt-and-suspenders with [hidden] so nested grid/flex never paints
+      // an inactive panel (e.g. Camera Roll over Control on desktop Chrome).
+      panel.hidden = !on;
+    });
+    if (typeof closeLightbox === 'function') {
+      closeLightbox();
+    }
+    window.scrollTo(0, 0);
+    document.scrollingElement?.scrollTo?.(0, 0);
+    updateControlLockUi();
+  }
+
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
-      document.querySelectorAll('.tab-panel').forEach((panel) => {
-        panel.classList.toggle('active', panel.id === `tab-${btn.dataset.tab}`);
-      });
-      // Keep Control (and other tabs) starting at the top — otherwise a prior
-      // Push/Settings scroll can hide the touchpad under the sticky header.
-      window.scrollTo(0, 0);
-      document.scrollingElement?.scrollTo?.(0, 0);
-      updateControlLockUi();
+      activateTab(btn.dataset.tab);
     });
+  });
+
+  // Initial state: only the default active panel should be un-hidden.
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.hidden = !panel.classList.contains('active');
   });
 
   // ---------------------------------------------------------- Status poller

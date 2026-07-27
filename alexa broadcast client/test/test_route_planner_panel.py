@@ -6,6 +6,7 @@ from src.payload_utils import (
     format_local_time_at_offset,
     format_route_distance,
     format_route_duration,
+    shorten_route_place_name,
 )
 
 
@@ -172,6 +173,17 @@ class RouteFormattingTests(unittest.TestCase):
 
     def test_format_route_duration_handles_missing_value(self):
         self.assertEqual(format_route_duration(None), "—")
+
+    def test_shorten_route_place_name_strips_us_country_suffix(self):
+        self.assertEqual(
+            shorten_route_place_name("Saratoga Springs, Utah, US"),
+            "Saratoga Springs, Utah",
+        )
+        self.assertEqual(
+            shorten_route_place_name("Las Vegas, Nevada, United States"),
+            "Las Vegas, Nevada",
+        )
+        self.assertEqual(shorten_route_place_name("Moab"), "Moab")
 
     def test_format_local_time_at_offset_matches_manual_utc_math(self):
         from datetime import datetime, timedelta, timezone

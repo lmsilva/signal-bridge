@@ -18,7 +18,7 @@ const { getSessionMeta } = require('./session-meta');
 const { tokenDateAdvanced } = require('./session-token-health');
 const { formatError } = require('./error-format');
 const { createVoiceEventDedup } = require('./voice-event-dedup');
-const { shouldMarkActivityProcessed } = require('./voice-event-gate');
+const { needsSpokenResponseUpgrade, shouldMarkActivityProcessed } = require('./voice-event-gate');
 const { createVoiceQueryParser } = require('./voice-query-parser');
 const { extractWeatherLocation } = require('./weather-location');
 const { fetchWeatherForecast, geocodeLocation } = require('./weather-fetch');
@@ -362,6 +362,20 @@ function createListener({ config, log }) {
 
     if (!voiceEvent) {
       voiceQueryParser.markProcessed(activityId);
+      return;
+    }
+
+    // Incomplete distance ASR ("distance from Saratoga Springs Utah" with no
+    // "to …" and no miles TTS yet) must not consume the dedup slot or be marked
+    // processed — otherwise the same activityId's later spoken answer is dropped.
+    if (voiceEvent.kind === 'route' && needsSpokenResponseUpgrade(voiceEvent, config)) {
+      pendingVoiceResponses.remember(voiceEvent);
+      scheduleResponseFollowup('route');
+      log.info('Voice event captured (awaiting Alexa response upgrade)', {
+        trigger,
+        kind: voiceEvent.kind,
+        query: voiceEvent.query,
+      });
       return;
     }
 
@@ -812,25 +826,49 @@ function createListener({ config, log }) {
         event.spokenResponse,
       );
       if (!locations) {
+        log.warn('Route planner could not extract origin/destination — set voiceEvents.defaultLocation for "here"/"home" queries', {
+          query: event.query,
+          spokenResponse: event.spokenResponse || null,
+          hasDefaultLocation: Boolean(
+            config.voiceEvents?.defaultLocation?.latitude != null
+            && config.voiceEvents?.defaultLocation?.longitude != null,
+          ),
+        });
         return;
       }
+      pendingVoiceResponses.forget(event.device, 'route');
       let { origin, destination } = locations;
-      try {
-        if (origin.scope === 'named' && (origin.latitude == null || origin.longitude == null)) {
-          const geocoded = await geocodeLocation(origin.query);
-          if (!geocoded) {
-            log.warn('Route planner could not geocode origin', { query: origin.query });
-            return;
-          }
-          origin = { ...origin, ...geocoded };
+
+      // Geocode any place that still lacks coordinates (named cities, or a
+      // name-only defaultLocation). Local "here" with lat/lon skips this.
+      const ensureRouteCoords = async (place, role) => {
+        if (place?.latitude != null && place?.longitude != null) {
+          return place;
         }
-        if (destination.scope === 'named' && (destination.latitude == null || destination.longitude == null)) {
-          const geocoded = await geocodeLocation(destination.query);
-          if (!geocoded) {
-            log.warn('Route planner could not geocode destination', { query: destination.query });
-            return;
-          }
-          destination = { ...destination, ...geocoded };
+        const query = String(place?.query || place?.resolvedName || '').trim();
+        if (!query || /^(local|here|home)$/i.test(query)) {
+          log.warn(`Route planner missing ${role} coordinates`, {
+            query: query || null,
+            scope: place?.scope || null,
+          });
+          return null;
+        }
+        const geocoded = await geocodeLocation(query);
+        if (!geocoded) {
+          log.warn(`Route planner could not geocode ${role}`, { query });
+          return null;
+        }
+        return { ...place, ...geocoded };
+      };
+
+      try {
+        origin = await ensureRouteCoords(origin, 'origin');
+        if (!origin) {
+          return;
+        }
+        destination = await ensureRouteCoords(destination, 'destination');
+        if (!destination) {
+          return;
         }
       } catch (error) {
         log.warn('Route planner geocoding failed', error.message || error);
@@ -1009,6 +1047,7 @@ function createListener({ config, log }) {
       getDeviceName,
       getActivityId,
       matchesShoppingListSpeech,
+      defaultLocation: config.voiceEvents?.defaultLocation || null,
     });
     if (completed) {
       // Retire the original query activity too so later history polls don't

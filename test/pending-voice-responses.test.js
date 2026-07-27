@@ -51,3 +51,33 @@ test('tryComplete attaches orphan Vivint arm response to pending query', () => {
   assert.equal(completed?.activityId, 'response-vivint');
   assert.equal(completed?.sourceActivityId, 'query-vivint');
 });
+
+test('tryComplete attaches orphan route miles TTS to pending distance query', () => {
+  const pending = createPendingVoiceResponses();
+  const defaultLocation = { name: 'Home', latitude: 40.35, longitude: -111.9 };
+  pending.remember({
+    kind: 'route',
+    device: 'Office Echo',
+    query: "what's the distance from saratoga springs utah",
+    spokenResponse: null,
+    trigger: 'route-query',
+    activityId: 'query-route',
+  });
+
+  const spoken = 'Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies.';
+  const completed = pending.tryComplete(
+    { creationTimestamp: Date.now() },
+    spoken,
+    {
+      getDeviceName: () => 'Office Echo',
+      getActivityId: () => 'response-route',
+      matchesShoppingListSpeech: () => false,
+      defaultLocation,
+    },
+  );
+
+  assert.equal(completed?.spokenResponse, spoken);
+  assert.equal(completed?.trigger, 'route-response');
+  assert.equal(completed?.activityId, 'response-route');
+  assert.equal(completed?.sourceActivityId, 'query-route');
+});

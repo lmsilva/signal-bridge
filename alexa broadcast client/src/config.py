@@ -78,6 +78,10 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         # the bridge's longer default (often 180s) down to maxDisplaySeconds.
         return max(requested, 1)
 
+    if payload.get("type") == "route-planner.query":
+        # Map + facts + weather tiles need time; bridge asks for ≥120s.
+        return max(requested, 1)
+
     if payload.get("type") == "steam.now-playing":
         # Auto sessions are persistent; manual preview / last-played use displaySeconds.
         if payload.get("persistent") is True:
