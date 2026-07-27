@@ -55,29 +55,6 @@ function resolveSteamConfig(config, fileConfig = {}) {
         || 75,
       ) || 75,
     ),
-    // When GetPlayerSummaries omits gameid, treat OwnedGames rtime_last_played
-    // within this window as "just launched / currently playing" (default 5 min).
-    inferFromRecentSeconds: Math.max(
-      60,
-      Number(
-        process.env.STEAM_INFER_FROM_RECENT_SEC
-        || steam.inferFromRecentSeconds
-        || 300,
-      ) || 300,
-    ),
-    // After the last playtime/rtime bump, how long to keep a recent-inferred
-    // session before treating the game as quit (default 2 min). Replaces the
-    // old blind 15-minute hold that left the overlay up after exit.
-    recentPlayStagnantSeconds: Math.max(
-      45,
-      Number(
-        process.env.STEAM_RECENT_PLAY_STAGNANT_SEC
-        || steam.recentPlayStagnantSeconds
-        || steam.recentPlayHoldSeconds
-        || 120,
-      ) || 120,
-    ),
-    artworkCacheDir: steam.artworkCacheDir || 'data/steam-artwork-cache',
     // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(
       process.env.STEAM_PRESENCE_SECRET

@@ -584,8 +584,9 @@ class SteamNowPlayingPanel(BasePanel):
     def _fetch_first_image(self, token, urls, max_w, max_h, target):
         image = None
         for url in urls:
-            # Prefer disk cache for an instant paint, then refresh from network
-            # in the background so artwork stays current.
+            # Prefer disk cache for an instant paint, then refresh that URL
+            # in the background. If the network refresh fails we keep the
+            # cached image; if there is no cache, try the next candidate.
             cached = self._load_cached_photo(url, max_w, max_h)
             if cached is not None:
                 self.root.after(0, lambda img=cached: self._apply_image(token, img, target))
@@ -595,7 +596,7 @@ class SteamNowPlayingPanel(BasePanel):
                     daemon=True,
                 ).start()
                 return
-            image = self._fetch_photo(url, max_w, max_h)
+            image = self._fetch_photo(url, max_w, max_h, force_network=True)
             if image is not None:
                 break
         self.root.after(0, lambda: self._apply_image(token, image, target))
