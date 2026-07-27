@@ -122,6 +122,19 @@ test('buildSteamNowPlayingPayload last-played is dismissible', () => {
   assert.equal(payload.trigger, 'steam-manual-preview');
 });
 
+test('buildSteamNowPlayingPayload last-played omits fabricated lastPlayedAt', () => {
+  const payload = buildSteamNowPlayingPayload({
+    appId: 570,
+    name: 'Dota 2',
+    startedAt: Date.now(),
+  }, { udpBroadcast: { defaultDisplaySeconds: 90 } }, {
+    mode: 'last-played',
+    dismissible: true,
+  });
+  assert.equal(payload.steam.mode, 'last-played');
+  assert.equal(payload.steam.lastPlayedAt, null);
+});
+
 test('resolveSteamCredentials prefers STEAM_API_KEY from env over session', () => {
   const { resolveSteamCredentials, saveSteamSession } = require('../src/steam-session');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-creds-'));

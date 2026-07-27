@@ -209,32 +209,49 @@ async function fetchRecentlyPlayedGames(apiKey, steamId, { count = 5 } = {}) {
 
 async function fetchOwnedGamePlaytime(apiKey, steamId, appId) {
   // Prefer recently-played (small payload); fall back to full owned list scan.
+  // GetRecentlyPlayedGames often omits rtime_last_played — GetOwnedGames
+  // returns it for the API-key owner's own SteamID.
+  let recentPlaytime = null;
   try {
     const recentUrl = `${API_HOST}/IPlayerService/GetRecentlyPlayedGames/v1/?key=${encodeURIComponent(apiKey)}`
       + `&steamid=${encodeURIComponent(steamId)}&count=20`;
     const recent = await httpsGetJson(recentUrl);
     const hit = (recent?.response?.games || []).find((entry) => Number(entry.appid) === Number(appId));
     if (hit) {
-      return {
+      const fromRecent = Number.isFinite(Number(hit.rtime_last_played)) && Number(hit.rtime_last_played) > 0
+        ? Number(hit.rtime_last_played) * 1000
+        : null;
+      recentPlaytime = {
         playtimeForeverMin: Number(hit.playtime_forever) || 0,
         playtime2WeeksMin: Number(hit.playtime_2weeks) || 0,
+        lastPlayedAt: fromRecent,
       };
+      if (fromRecent) {
+        return recentPlaytime;
+      }
     }
   } catch {
     // fall through
   }
-  const url = `${API_HOST}/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}`
-    + `&steamid=${encodeURIComponent(steamId)}`
-    + '&include_played_free_games=1&include_appinfo=0';
-  const json = await httpsGetJson(url);
-  const game = (json?.response?.games || []).find((entry) => Number(entry.appid) === Number(appId));
-  if (!game) {
-    return null;
+  try {
+    const url = `${API_HOST}/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}`
+      + `&steamid=${encodeURIComponent(steamId)}`
+      + '&include_played_free_games=1&include_appinfo=0';
+    const json = await httpsGetJson(url);
+    const game = (json?.response?.games || []).find((entry) => Number(entry.appid) === Number(appId));
+    if (game) {
+      return {
+        playtimeForeverMin: Number(game.playtime_forever) || recentPlaytime?.playtimeForeverMin || 0,
+        playtime2WeeksMin: Number(game.playtime_2weeks) || recentPlaytime?.playtime2WeeksMin || 0,
+        lastPlayedAt: Number.isFinite(Number(game.rtime_last_played)) && Number(game.rtime_last_played) > 0
+          ? Number(game.rtime_last_played) * 1000
+          : null,
+      };
+    }
+  } catch {
+    // fall through to recent-only
   }
-  return {
-    playtimeForeverMin: Number(game.playtime_forever) || 0,
-    playtime2WeeksMin: Number(game.playtime_2weeks) || 0,
-  };
+  return recentPlaytime;
 }
 
 async function fetchAchievementProgress(apiKey, steamId, appId) {

@@ -324,9 +324,9 @@ class SteamNowPlayingPanel(BasePanel):
             font=badge_font,
         ))
         if last_played:
-            # No live ELAPSED on last-played — show how long ago instead.
-            # Lifetime playtime stays in the footer ("YOUR PLAYTIME").
-            right_label = "AGO"
+            # Relative age since Steam's last-played stamp (session end / last
+            # activity — Steam does not expose an exact "quit" time).
+            right_label = "LAST PLAYED"
             right_value = self.format_ago(start_dt)
             self._elapsed_value_id = None
         else:

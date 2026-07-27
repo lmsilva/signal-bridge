@@ -52,3 +52,18 @@ test('createSlideshowSettings migrates order-only files with default seconds', (
   const settings = createSlideshowSettings({ slideshowSettingsPath: settingsPath });
   assert.deepEqual(settings.get(), { order: 'oldest', secondsPerPhoto: 5 });
 });
+
+test('getOrder reloads from disk so a second instance sees admin updates', () => {
+  const settingsPath = tempSettingsPath();
+  const admin = createSlideshowSettings({ slideshowSettingsPath: settingsPath });
+  const voice = createSlideshowSettings({ slideshowSettingsPath: settingsPath });
+  assert.equal(voice.getOrder(), 'recent');
+
+  const updated = admin.update({ order: 'oldest', secondsPerPhoto: 12 });
+  assert.equal(updated.ok, true);
+
+  // Voice listener historically kept a stale in-memory copy — must re-read.
+  assert.equal(voice.getOrder(), 'oldest');
+  assert.equal(voice.getSecondsPerPhoto(), 12);
+  assert.deepEqual(voice.get(), { order: 'oldest', secondsPerPhoto: 12 });
+});

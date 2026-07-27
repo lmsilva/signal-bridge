@@ -222,6 +222,20 @@ test('control page HTML uses relative asset URLs for subpath proxies', () => {
   assert.doesNotMatch(html, /src="\/app\.js/);
 });
 
+test('control page hides Remote and Control tabs unless a single display is selected', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  assert.match(html, /id="tab-btn-remote"[^>]*\bhidden\b/);
+  assert.match(html, /id="tab-btn-control"[^>]*\bhidden\b/);
+
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(js, /tab-btn-remote/);
+  assert.match(js, /remoteBtn\.hidden\s*=\s*!single/);
+  assert.match(js, /controlBtn\.hidden\s*=\s*!single/);
+  // New announces while on All Displays jump the picker to that display.
+  assert.match(js, /previous === ALL_DISPLAYS/);
+  assert.match(js, /pickNewestDisplay/);
+});
+
 test('control page JS keeps /api routes root-absolute under /admin/', () => {
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   assert.match(js, /function appUrl\(/);

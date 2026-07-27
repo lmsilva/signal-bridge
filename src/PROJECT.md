@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Route wait for miles TTS)
+**Last updated:** 2026-07-26 (Steam last-played timestamp)
 
 ---
 
@@ -107,7 +107,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/web-admin-auth.js` | Admin login sessions (HTTP-only cookie) for `/admin` + protected APIs |
 | `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
 | `src/qr-image-cache.js` | Stores "QR code → embedded photo" uploads under `data/qr-image-cache/` **indefinitely** (no automatic expiry) — serves them back at `/qr-images/<token>.<ext>`; `list()` returns every stored photo newest-first (with its `token`) for the Slideshow Manager tab / Shared Photo Slideshow tile; `delete(token)` removes a photo (file + index entry) on request; `onChange(listener)` fires on every `store()`/`delete()` (with the fresh `list()`) so `GET /api/photos/events` (SSE) can push live camera-roll updates to every open browser tab |
-| `src/slideshow-settings.js` | Persists Shared Photo Slideshow prefs — playback order (`recent` \| `oldest` \| `random`, default `recent`) and seconds per photo (5–60, default 5) — to `data/slideshow-settings.json`, set from the web Settings tab |
+| `src/slideshow-settings.js` | Persists Shared Photo Slideshow prefs — playback order (`recent` \| `oldest` \| `random`, default `recent`) and seconds per photo (5–60, default 5) — to `data/slideshow-settings.json`; getters reload from disk so admin UI and Alexa voice stay in sync |
 | `src/web/` | **Signal** UI assets: `index.html`, `app.js`, `styles.css`, `logo.svg` / `favicon.svg` / `logo.png`, vendored `jsqr.min.js` |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
 | `test/*.test.js` | Node built-in test suite (`npm test`) |
@@ -491,6 +491,9 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-26: **Steam last-played uses OwnedGames `rtime_last_played`** — manual "Last played" preview no longer stamps push-time as lastPlayedAt (which made the display show "just now"). Enrichment pulls Steam's last-played unix time from GetOwnedGames when recently-played omits it. Deploy: `./recreate.sh` + portable client rebuild for **LAST PLAYED** corner label.
+- 2026-07-26: **Voice Guest Snaps slideshow honors admin order/seconds** — admin UI and Alexa voice each had their own in-memory `slideshow-settings` copy, so "oldest first" saved in the portal never reached `open guest snaps slideshow`. Getters now reload from `data/slideshow-settings.json` on every read. Deploy: `./recreate.sh`.
+- 2026-07-26: **Admin: hide Remote on All Displays + auto-select new announces** — Remote tab joins Control in staying hidden unless a single display is selected. When a new display id appears while All Displays is selected (or the prior display was pruned), the picker jumps to that display. Cache-bust `?v=signal17`. Hard-refresh admin.
 - 2026-07-26: **Route Planner waits for miles TTS (no home→home flash)** — incomplete "distance from Saratoga Springs Utah" must not invent a pair from `defaultLocation` (that skipped pending pairing and could emit a useless near-zero route). Gate always waits when the ASR looks like distance but isn't a full two-place query; orphan miles TTS on a later activity id completes via `pending-voice-responses`. Deploy: `./recreate.sh`.
 - 2026-07-26: **Route split-activity miles TTS pairing** — incomplete distance ASR on one activity id + Alexa's miles answer on another: `spokenHasRouteAnswer` + `pending-voice-responses` remember orphan route queries and `tryComplete` attaches miles TTS; listener schedules follow-up polls and forgets on emit. Deploy: `./recreate.sh`.
 - 2026-07-26: **Admin desktop tab bar clearance** — body reserves space for the fixed bottom tabs so Control/Slideshow actions aren’t covered on Chrome PC; wide screens center the tab strip under the content column (no full-bleed stretch). Cache-bust `?v=signal16`. Hard-refresh admin.
