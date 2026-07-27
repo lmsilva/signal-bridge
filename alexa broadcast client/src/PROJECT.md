@@ -258,6 +258,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-26: **Steam artwork disk cache** — `SteamNowPlayingPanel` stores fetched posters/screenshots under `steam-artwork-cache/` next to the app, paints from cache immediately, then refreshes from the network in the background (SSL fallback for the bridge’s self-signed cert). Portable rebuild required.
 - 2026-07-26: **Steam last-played AGO → real timestamp** — corner label is **LAST PLAYED** (relative age from Steam `rtime_last_played` via GetOwnedGames; no more inventing "just now" from push time). Portable rebuild required.
 - 2026-07-26: **Portable boot `ModuleNotFoundError: src.config`** — added `src/__init__.py`, PyInstaller now `collect_submodules('src')` (so panels aren’t omitted from the freeze), and `main.py` adds the client root to `sys.path` for non-frozen launches. Rebuild portable zip and redeploy to the poster PC.
 - 2026-07-26: **Route Planner bypasses `maxDisplaySeconds`** — `route-planner.query` keeps the bridge's requested duration (≥120s) so map/facts tiles are not cut off by a tight client cap. Restart the display client (or rebuild portable) to pick up.
