@@ -668,14 +668,19 @@ class SteamNowPlayingPanel(BasePanel):
                     _unverified_ssl = True
                 else:
                     raise
+            image = Image.open(io.BytesIO(data)).convert("RGB")
+            image.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
             try:
                 cache_dir = steam_image_cache_dir()
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 steam_image_cache_path(url).write_bytes(data)
             except OSError:
                 pass
-            image = Image.open(io.BytesIO(data)).convert("RGB")
-            image.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
             return image
         except Exception:
+            # Drop a corrupt cache entry so the next candidate/URL can win.
+            try:
+                steam_image_cache_path(url).unlink(missing_ok=True)
+            except OSError:
+                pass
             return None

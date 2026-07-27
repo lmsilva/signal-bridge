@@ -5,6 +5,7 @@
 const {
   fetchPlayerSummary,
   fetchRecentlyPlayedGames,
+  fetchMostRecentlyPlayedOwnedGames,
   fetchMostRecentlyPlayedOwnedGame,
   fetchAppDetails,
   fetchOwnedGamePlaytime,
@@ -15,7 +16,7 @@ const {
 const { createSteamPresenceStore } = require('./steam-presence');
 const { resolveSteamCredentials, markSteamAuthStatus } = require('./steam-session');
 const { createSteamArtworkCache } = require('./steam-artwork-cache');
-const { resolvePublicOrigin } = require('./steam-auth');
+const { resolvePublicOrigin, isLoopbackHost } = require('./steam-auth');
 const {
   buildSteamNowPlayingPayload,
   buildSteamNowPlayingClosePayload,
@@ -101,8 +102,60 @@ function pickRecentPlayAppId({
   return null;
 }
 
+/** True when this OwnedGames row is the game we just closed (no relaunch bump yet). */
+function isRecentBlockedByQuitSuppress(recentGame, quitSuppress) {
+  if (!quitSuppress || !recentGame) {
+    return false;
+  }
+  if (Number(quitSuppress.appId) !== Number(recentGame.appId)) {
+    return false;
+  }
+  const playtime = Number(recentGame.playtimeForeverMin);
+  const rtime = Number(recentGame.lastPlayedAt);
+  const playtimeGrew = Number.isFinite(playtime)
+    && Number.isFinite(Number(quitSuppress.playtime))
+    && playtime > Number(quitSuppress.playtime);
+  const rtimeGrew = Number.isFinite(rtime)
+    && Number.isFinite(Number(quitSuppress.rtime))
+    && rtime > Number(quitSuppress.rtime);
+  // Quit stamps rtime once — require a later bump (relaunch) to allow again.
+  return !playtimeGrew && !rtimeGrew;
+}
+
+function dedupeUrls(urls) {
+  const seen = new Set();
+  const out = [];
+  for (const url of urls || []) {
+    const text = String(url || '').trim();
+    if (!text || seen.has(text)) {
+      continue;
+    }
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+}
+
+/** LAN artwork URLs only help when displays can reach a non-loopback origin. */
+function isUsableArtworkOrigin(origin) {
+  const text = String(origin || '').trim().replace(/\/$/, '');
+  if (!text) {
+    return false;
+  }
+  try {
+    const parsed = new URL(text.includes('://') ? text : `https://${text}`);
+    return !isLoopbackHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Prefer bridge-cached artwork when available, but keep Steam CDN URLs as
+ * fallbacks so a bad/unreachable LAN origin never blanks the hero.
+ */
 function applyCachedArtworkUrls(reading, artworkCache, publicOrigin) {
-  if (!reading?.appId || !artworkCache) {
+  if (!reading?.appId || !artworkCache || !isUsableArtworkOrigin(publicOrigin)) {
     return reading;
   }
   const local = artworkCache.getServedImageUrls(reading.appId, publicOrigin);
@@ -111,10 +164,14 @@ function applyCachedArtworkUrls(reading, artworkCache, publicOrigin) {
   }
   return {
     ...reading,
-    posterCandidates: local.posterCandidates.length
-      ? local.posterCandidates
-      : reading.posterCandidates,
-    screenshots: local.screenshots.length ? local.screenshots : reading.screenshots,
+    posterCandidates: dedupeUrls([
+      ...(local.posterCandidates || []),
+      ...(reading.posterCandidates || []),
+    ]),
+    screenshots: dedupeUrls([
+      ...(local.screenshots || []),
+      ...(reading.screenshots || []),
+    ]).slice(0, 3),
     headerImage: local.headerImage || reading.headerImage,
   };
 }
@@ -225,26 +282,11 @@ function createSteamNowPlaying({
     if (!details || !appId) {
       return;
     }
+    // Warm disk cache in the background for the *next* show. Do not re-push
+    // mid-session — replacing CDN URLs with LAN /steam-artwork/ links was
+    // blanking artwork when the display could not reach the bridge origin.
     Promise.resolve()
       .then(() => artworkCache.warmImages(appId, details))
-      .then((result) => {
-        if (!result?.warmed || !session || session.appId !== Number(appId)
-          || !session.pushed || session.suppressed) {
-          return;
-        }
-        // One re-push after a fresh warm so the display switches to LAN URLs.
-        const withLocal = applyCachedArtworkUrls(
-          session.details || details,
-          artworkCache,
-          publicOrigin(),
-        );
-        pushOpen({
-          ...withLocal,
-          host: session.host,
-          startedAt: session.startedAt,
-          elapsedSec: Math.max(0, Math.round((now() - session.startedAt) / 1000)),
-        });
-      })
       .catch((error) => {
         log?.warn?.('Steam artwork warm failed', error?.message || String(error));
       });
@@ -393,6 +435,15 @@ function createSteamNowPlaying({
 
   function endSession(reason) {
     clearRestoreTimer();
+    if (session) {
+      // Prevent OwnedGames from immediately resurrecting the title we just closed
+      // (rtime is stamped at quit and stays "fresh" for several minutes).
+      quitSuppress = {
+        appId: Number(session.appId),
+        playtime: session.lastPlaytime ?? null,
+        rtime: session.lastRtime ?? null,
+      };
+    }
     const wasPushed = Boolean(session?.pushed && !session?.suppressed);
     session = null;
     if (wasPushed) {
@@ -540,13 +591,14 @@ function createSteamNowPlaying({
     // Profile gameid clearing is authoritative quit — OwnedGames rtime often
     // stamps the quit time and would otherwise keep the overlay up.
     if (lastSummaryGameId && !accountAppId) {
-      quitSuppress = {
-        appId: Number(lastSummaryGameId),
-        playtime: session?.lastPlaytime ?? null,
-        rtime: session?.lastRtime ?? null,
-      };
-      if (session && session.appId === quitSuppress.appId && !session.recentLed) {
+      if (session && session.appId === Number(lastSummaryGameId) && !session.recentLed) {
         endSession('game-ended');
+      } else if (!session) {
+        quitSuppress = {
+          appId: Number(lastSummaryGameId),
+          playtime: null,
+          rtime: null,
+        };
       }
     }
     if (accountAppId) {
@@ -565,34 +617,37 @@ function createSteamNowPlaying({
     // OwnedGames rtime_last_played updates within seconds — use that.
     if (!accountAppId && !presenceHint && isSteamPersonaOnline(summary.personaState)) {
       try {
-        recentGame = await fetchMostRecentlyPlayedOwnedGame(creds.apiKey, creds.steamId);
-        recentAppId = pickRecentPlayAppId({
-          recentGame,
-          sessionAppId: session?.appId,
-          sessionLastPlaytime: session?.lastPlaytime,
-          sessionLastRtime: session?.lastRtime,
-          sessionLastActivityAt: session?.lastActivityAt,
-          nowMs: now(),
-          inferSeconds: steamConfig.inferFromRecentSeconds,
-          stagnantSeconds: steamConfig.recentPlayStagnantSeconds,
-          personaOnline: true,
-        });
-        if (recentAppId && recentGame && quitSuppress
-          && Number(quitSuppress.appId) === Number(recentAppId)) {
-          const playtime = Number(recentGame.playtimeForeverMin);
-          const rtime = Number(recentGame.lastPlayedAt);
-          const playtimeGrew = Number.isFinite(playtime)
-            && Number.isFinite(Number(quitSuppress.playtime))
-            && playtime > Number(quitSuppress.playtime);
-          const rtimeGrew = Number.isFinite(rtime)
-            && Number.isFinite(Number(quitSuppress.rtime))
-            && rtime > Number(quitSuppress.rtime);
-          // Fresh quit stamps rtime once — require a later bump (relaunch) to resume.
-          if (!playtimeGrew && !rtimeGrew) {
-            recentAppId = null;
-          } else {
+        const recentGames = await fetchMostRecentlyPlayedOwnedGames(
+          creds.apiKey,
+          creds.steamId,
+          { limit: 8 },
+        );
+        for (const candidate of recentGames) {
+          // Skip the title we just quit so a new launch isn't briefly shown as
+          // the previous game while Steam's rtime for the new title catches up.
+          if (isRecentBlockedByQuitSuppress(candidate, quitSuppress)) {
+            continue;
+          }
+          const picked = pickRecentPlayAppId({
+            recentGame: candidate,
+            sessionAppId: session?.appId,
+            sessionLastPlaytime: session?.lastPlaytime,
+            sessionLastRtime: session?.lastRtime,
+            sessionLastActivityAt: session?.lastActivityAt,
+            nowMs: now(),
+            inferSeconds: steamConfig.inferFromRecentSeconds,
+            stagnantSeconds: steamConfig.recentPlayStagnantSeconds,
+            personaOnline: true,
+          });
+          if (!picked) {
+            continue;
+          }
+          recentGame = candidate;
+          recentAppId = picked;
+          if (quitSuppress && Number(quitSuppress.appId) === Number(picked)) {
             quitSuppress = null;
           }
+          break;
         }
         if (recentAppId && recentGame) {
           noteRecentActivity(recentGame);
@@ -879,5 +934,7 @@ module.exports = {
   resolveEffectiveSteamAppId,
   pickRecentPlayAppId,
   isSteamPersonaOnline,
+  isRecentBlockedByQuitSuppress,
   applyCachedArtworkUrls,
+  isUsableArtworkOrigin,
 };

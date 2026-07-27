@@ -195,7 +195,7 @@ function createSteamArtworkCache(config = {}, log = console) {
 
   async function downloadFirst(urls) {
     for (const url of urls || []) {
-      if (!url || String(url).startsWith(ROUTE_PREFIX)) {
+      if (!url || String(url).includes('/steam-artwork/')) {
         continue;
       }
       try {
