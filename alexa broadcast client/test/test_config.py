@@ -1,6 +1,10 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
-from src.config import effective_display_seconds
+from src.config import DEFAULTS, effective_display_seconds, load_config
 from src.main import BroadcastClientApp
 
 
@@ -57,13 +61,28 @@ class ConfigTests(unittest.TestCase):
 
     def test_route_planner_bypasses_max_display_seconds(self):
         config = {"defaultDisplaySeconds": 60, "maxDisplaySeconds": 60}
-        payload = {"type": "route-planner.query", "displaySeconds": 120}
-        self.assertEqual(effective_display_seconds(payload, config), 120)
+        payload = {"type": "route-planner.query", "displaySeconds": 240}
+        self.assertEqual(effective_display_seconds(payload, config), 240)
 
     def test_guest_photobooth_bypasses_max_display_seconds(self):
         config = {"defaultDisplaySeconds": 60, "maxDisplaySeconds": 60}
         payload = {"type": "guest.photobooth", "displaySeconds": 180}
         self.assertEqual(effective_display_seconds(payload, config), 180)
+
+    def test_load_config_merges_shopping_list_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp_name:
+            path = Path(tmp_name) / "config.json"
+            path.write_text(
+                json.dumps({"shoppingList": {"itemsPerPage": 15}}),
+                encoding="utf-8",
+            )
+            with mock.patch("src.config.CONFIG_PATH", path):
+                config = load_config()
+        self.assertEqual(config["shoppingList"]["itemsPerPage"], 15)
+        self.assertEqual(
+            config["shoppingList"]["pageSeconds"],
+            DEFAULTS["shoppingList"]["pageSeconds"],
+        )
 
 
 if __name__ == "__main__":

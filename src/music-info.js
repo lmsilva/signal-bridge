@@ -214,6 +214,32 @@ function listAlexaMediaDevices(alexa) {
   return devices;
 }
 
+/**
+ * True when `id` is a real Echo / media endpoint alexa-remote2 can resolve.
+ * Web Quick Push defaults device to "Signal", which is not an Alexa player —
+ * preferred getPlayerInfo always fails and must not burn retry sleeps.
+ */
+function isKnownAlexaMediaDevice(alexa, id) {
+  const key = String(id || '').trim();
+  if (!key || /^signal$/i.test(key)) {
+    return false;
+  }
+  if (typeof alexa?.find === 'function') {
+    try {
+      if (alexa.find(key)) {
+        return true;
+      }
+    } catch {
+      // fall through to serialNumbers scan
+    }
+  }
+  const lower = key.toLowerCase();
+  return listAlexaMediaDevices(alexa).some((entry) => (
+    String(entry.serial || '').toLowerCase() === lower
+    || String(entry.name || '').toLowerCase() === lower
+  ));
+}
+
 function getPlayerInfoOnce(alexa, serialOrName) {
   return new Promise((resolve) => {
     try {
@@ -348,7 +374,10 @@ async function fetchNowPlaying(alexa, serialOrName, device, { attempts = 4, dela
 
 /**
  * "What's playing?" often targets an idle Echo while music plays elsewhere.
- * Prefer the asked device, then scan other household devices for PLAYING music.
+ * Prefer the asked device (when it is a real Alexa media endpoint), then scan
+ * other household devices. Web Quick Push uses device "Signal" — skip the
+ * preferred lookup entirely and scan immediately. Prefer PLAYING; if nothing
+ * is actively playing, accept paused music content (same as preferred path).
  */
 async function fetchNowPlayingHousehold(
   alexa,
@@ -356,19 +385,35 @@ async function fetchNowPlayingHousehold(
   preferredDevice,
   { attempts = 3, delayMs = 900, scanAttempts = 1 } = {},
 ) {
-  const preferred = await fetchNowPlaying(alexa, preferredSerial, preferredDevice, {
-    attempts,
-    delayMs,
-  });
-  if (preferred && preferred.state === 'PLAYING' && isMusicPlayerContent(preferred)) {
-    return preferred;
-  }
-  if (preferred && isMusicPlayerContent(preferred)) {
-    return preferred;
+  const preferredKnown = isKnownAlexaMediaDevice(alexa, preferredSerial)
+    || isKnownAlexaMediaDevice(alexa, preferredDevice);
+
+  let preferred = null;
+  if (preferredKnown) {
+    preferred = await fetchNowPlaying(alexa, preferredSerial, preferredDevice, {
+      attempts,
+      delayMs,
+    });
+    if (preferred && preferred.state === 'PLAYING' && isMusicPlayerContent(preferred)) {
+      return preferred;
+    }
+    if (preferred && isMusicPlayerContent(preferred)) {
+      return preferred;
+    }
   }
 
-  const preferredKey = String(preferredSerial || '').trim().toLowerCase();
-  const preferredName = String(preferredDevice || '').trim().toLowerCase();
+  const preferredKey = preferredKnown
+    ? String(preferredSerial || '').trim().toLowerCase()
+    : '';
+  const preferredName = preferredKnown
+    ? String(preferredDevice || '').trim().toLowerCase()
+    : '';
+  // Unknown preferred (Signal / web): poll each device a bit harder once —
+  // there is no spoken "X by Y" fallback on web pushes.
+  const effectiveScanAttempts = preferredKnown
+    ? scanAttempts
+    : Math.max(scanAttempts, 2);
+  let pausedFallback = null;
   for (const entry of listAlexaMediaDevices(alexa)) {
     const serialKey = String(entry.serial || '').trim().toLowerCase();
     const nameKey = String(entry.name || '').trim().toLowerCase();
@@ -379,15 +424,21 @@ async function fetchNowPlayingHousehold(
       continue;
     }
     const info = await fetchNowPlaying(alexa, entry.serial, entry.name, {
-      attempts: scanAttempts,
+      attempts: effectiveScanAttempts,
       delayMs: 0,
     });
-    if (info && info.state === 'PLAYING' && isMusicPlayerContent(info)) {
+    if (!info || !isMusicPlayerContent(info)) {
+      continue;
+    }
+    if (info.state === 'PLAYING') {
       return info;
+    }
+    if (!pausedFallback) {
+      pausedFallback = info;
     }
   }
 
-  return preferred || null;
+  return pausedFallback || preferred || null;
 }
 
 /**
@@ -475,6 +526,7 @@ module.exports = {
   resolveMusicQueryNowPlaying,
   parseSpokenNowPlaying,
   listAlexaMediaDevices,
+  isKnownAlexaMediaDevice,
   normalizePlayerInfo,
   coerceMediaSeconds,
   extractMediaProgress,

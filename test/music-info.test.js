@@ -276,6 +276,63 @@ test('fetchNowPlayingHousehold finds PLAYING music on another Echo', async () =>
   assert.equal(result.device, 'Office Echo');
 });
 
+test('fetchNowPlayingHousehold skips fake Signal preferred and scans household', async () => {
+  const queried = [];
+  const alexa = {
+    serialNumbers: {
+      a: { serialNumber: 'office-serial', accountName: 'Office Echo' },
+    },
+    getPlayerInfo(id, cb) {
+      queried.push(id);
+      if (id === 'Signal') {
+        cb(new Error('Unknown Device or Serial number'), null);
+        return;
+      }
+      cb(null, {
+        playerInfo: {
+          infoText: { title: 'Tennessee', subText1: 'Arrested Development' },
+          state: 'PLAYING',
+          provider: { providerDisplayName: 'Amazon Music' },
+        },
+      });
+    },
+  };
+
+  const result = await fetchNowPlayingHousehold(alexa, 'Signal', 'Signal', {
+    attempts: 3,
+    delayMs: 50,
+    scanAttempts: 1,
+  });
+  assert.equal(result.song, 'Tennessee');
+  assert.equal(result.device, 'Office Echo');
+  assert.ok(!queried.includes('Signal'), `should not query Signal, got ${queried.join(',')}`);
+});
+
+test('fetchNowPlayingHousehold accepts PAUSED music when nothing is PLAYING', async () => {
+  const alexa = {
+    serialNumbers: {
+      a: { serialNumber: 'office-serial', accountName: 'Office Echo' },
+    },
+    getPlayerInfo(_id, cb) {
+      cb(null, {
+        playerInfo: {
+          infoText: { title: 'Tennessee', subText1: 'Arrested Development' },
+          state: 'PAUSED',
+          provider: { providerDisplayName: 'Amazon Music' },
+        },
+      });
+    },
+  };
+
+  const result = await fetchNowPlayingHousehold(alexa, 'Signal', 'Signal', {
+    attempts: 1,
+    delayMs: 1,
+    scanAttempts: 1,
+  });
+  assert.equal(result.song, 'Tennessee');
+  assert.equal(result.state, 'PAUSED');
+});
+
 test('resolveMusicQueryNowPlaying falls back to spoken answer when all devices idle', async () => {
   const alexa = {
     serialNumbers: {

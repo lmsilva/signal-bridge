@@ -209,6 +209,91 @@ test('BroadcastParser migrates legacy plain-string fingerprints as already expir
   assert.equal(parser.isDuplicateContent('this is a test', 'Office Echo', now + 1000), true);
 });
 
+test('parseBroadcastUtterance strips duplicated ASR broadcast echo', () => {
+  const parsed = parseBroadcastUtterance(
+    'alexa broadcast this is a test, broadcast this is a test',
+  );
+  assert.equal(parsed.kind, 'inline');
+  assert.equal(parsed.message, 'this is a test');
+});
+
+test('parseBroadcastUtterance treats broadcast, broadcast as command-only', () => {
+  const parsed = parseBroadcastUtterance('broadcast, broadcast');
+  assert.equal(parsed.kind, 'command-only');
+  assert.equal(parsed.message, null);
+});
+
+test('resolveBroadcastUtterance prefers a clean single ASR fragment', () => {
+  const {
+    resolveBroadcastUtterance,
+    cleanBroadcastMessage,
+  } = require('../src/broadcast-parse');
+  const parsed = resolveBroadcastUtterance(
+    'alexa broadcast this is a test, broadcast this is a test',
+    ['alexa broadcast this is a test', 'broadcast this is a test'],
+  );
+  assert.equal(parsed.kind, 'inline');
+  assert.equal(parsed.message, 'this is a test');
+  assert.equal(cleanBroadcastMessage(', broadcast'), null);
+});
+
+test('BroadcastParser captures duplicated-ASR inline as a clean message', () => {
+  const parser = new BroadcastParser();
+  const record = parser.parseActivity({
+    creationTimestamp: Date.now(),
+    name: 'Office Echo',
+    description: { summary: 'alexa broadcast this is a test' },
+    alexaResponse: 'Announcing on all devices',
+    data: {
+      recordKey: 'dup-asr-1',
+      voiceHistoryRecordItems: [
+        { recordItemType: 'ASR_REPLACEMENT_TEXT', transcriptText: 'alexa broadcast this is a test' },
+        { recordItemType: 'ASR_REPLACEMENT_TEXT', transcriptText: 'broadcast this is a test' },
+        { recordItemType: 'TTS_REPLACEMENT_TEXT', transcriptText: 'Announcing on all devices' },
+      ],
+    },
+  });
+  assert.ok(record);
+  assert.equal(record.message, 'this is a test');
+  assert.equal(record.trigger, 'broadcast-inline');
+});
+
+test('BroadcastParser does not display verb-only ", broadcast" leftovers', () => {
+  const parser = new BroadcastParser();
+  const record = parser.parseActivity({
+    creationTimestamp: Date.now(),
+    name: 'Kitchen Echo',
+    description: { summary: 'broadcast, broadcast' },
+    alexaResponse: "what's the message?",
+    data: { recordKey: 'verb-only-1' },
+  });
+  assert.equal(record, null);
+});
+
+test('BroadcastParser follow-up cleans joined broadcast echo in the message', () => {
+  const parser = new BroadcastParser();
+  const now = Date.now();
+  parser.parseActivity({
+    creationTimestamp: now,
+    name: 'Kitchen Echo',
+    description: { summary: 'broadcast' },
+    alexaResponse: "what's the message?",
+    data: { recordKey: 'follow-clean-1' },
+  });
+
+  const record = parser.parseActivity({
+    creationTimestamp: now + 1000,
+    name: 'Kitchen Echo',
+    description: { summary: 'dinner is ready, broadcast dinner is ready' },
+    alexaResponse: 'OK',
+    data: { recordKey: 'follow-clean-2' },
+  });
+
+  assert.ok(record);
+  assert.equal(record.message, 'dinner is ready');
+  assert.equal(record.trigger, 'broadcast-followup');
+});
+
 test('isBroadcastCommandOnly and isBroadcastPrompt helpers', () => {
   assert.equal(isBroadcastCommandOnly('broadcast'), true);
   assert.equal(isBroadcastCommandOnly('announce to office echo'), true);

@@ -221,3 +221,35 @@ test('spokenHasRouteAnswer detects Alexa miles TTS without place names', () => {
   assert.equal(spokenHasRouteAnswer(spoken), true);
   assert.equal(spokenHasRouteAnswer('the weather is sunny today'), false);
 });
+
+test('extractRouteLocations dedupes comma-joined ASR echo (live failure case)', () => {
+  const result = extractRouteLocations(
+    "alexa what's the distance from saratoga springs utah to las vegas, what's the distance from saratoga springs utah to las vegas",
+    DEFAULT_LOCATION,
+  );
+  assert.ok(result);
+  assert.equal(result.origin.query.toLowerCase(), 'saratoga springs utah');
+  assert.equal(result.destination.query.toLowerCase(), 'las vegas');
+});
+
+test('extractRouteLocations cleans "show the distance from here to …" ASR echo', () => {
+  const result = extractRouteLocations(
+    'alexa show the distance from here to las vegas, show the distance from here to las vegas',
+    DEFAULT_LOCATION,
+  );
+  assert.ok(result);
+  assert.equal(result.origin.latitude, DEFAULT_LOCATION.latitude);
+  assert.equal(result.destination.query.toLowerCase(), 'las vegas');
+});
+
+test('cleanRoutePlaceName strips leaked query tails after a place', () => {
+  const { cleanRoutePlaceName } = require('../src/route-query');
+  assert.equal(
+    cleanRoutePlaceName("las vegas, what's the distance from here to las vegas").toLowerCase(),
+    'las vegas',
+  );
+  assert.equal(
+    cleanRoutePlaceName('las vegas, show the distance from here to las vegas').toLowerCase(),
+    'las vegas',
+  );
+});

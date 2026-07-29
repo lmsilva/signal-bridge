@@ -37,3 +37,23 @@ test('isSentToDisplayResponse matches common Alexa confirmations', () => {
   assert.equal(isSentToDisplayResponse('Sent to your display.'), true);
   assert.equal(isSentToDisplayResponse('Okay'), false);
 });
+
+test('extractActivityFields exposes customerParts for multi-ASR broadcast join', () => {
+  const fields = extractActivityFields({
+    description: { summary: '' },
+    alexaResponse: '',
+    data: {
+      voiceHistoryRecordItems: [
+        { recordItemType: 'ASR_REPLACEMENT_TEXT', transcriptText: 'alexa broadcast this is a test' },
+        { recordItemType: 'ASR_REPLACEMENT_TEXT', transcriptText: 'broadcast this is a test' },
+        { recordItemType: 'TTS_REPLACEMENT_TEXT', transcriptText: 'Sending broadcast' },
+      ],
+    },
+  });
+  assert.deepEqual(fields.customerParts, [
+    'alexa broadcast this is a test',
+    'broadcast this is a test',
+  ]);
+  assert.deepEqual(fields.responseParts, ['Sending broadcast']);
+  assert.match(fields.summary, /broadcast this is a test/i);
+});

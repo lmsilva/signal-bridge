@@ -141,3 +141,87 @@ test('geocodeLocation resolves Las Vegas Nevada via city+state parse', async () 
     global.fetch = originalFetch;
   }
 });
+
+test('geocodeLocation rejects wrong admin1 then finds match on next lookup', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    const text = String(url);
+    calls.push(text);
+    if (text.includes('countryCode=US')) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            results: [
+              {
+                name: 'Saratoga Springs',
+                admin1: 'New York',
+                country_code: 'US',
+                latitude: 43.08,
+                longitude: -73.78,
+                timezone: 'America/New_York',
+              },
+            ],
+          };
+        },
+      };
+    }
+    return {
+      ok: true,
+      async json() {
+        return {
+          results: [
+            {
+              name: 'Saratoga Springs',
+              admin1: 'New York',
+              country_code: 'US',
+              latitude: 43.08,
+              longitude: -73.78,
+              timezone: 'America/New_York',
+            },
+            {
+              name: 'Saratoga Springs',
+              admin1: 'Utah',
+              country_code: 'US',
+              latitude: 40.35,
+              longitude: -111.9,
+              timezone: 'America/Denver',
+            },
+          ],
+        };
+      },
+    };
+  };
+  try {
+    const result = await geocodeLocation('Saratoga Springs Utah', { maxLookups: 2 });
+    assert.equal(result.latitude, 40.35);
+    assert.equal(calls.length, 2);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('geocodeLocation respects maxLookups', async () => {
+  let calls = 0;
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    calls += 1;
+    return { ok: true, async json() { return { results: [] }; } };
+  };
+  try {
+    assert.equal(await geocodeLocation('Nowhereville', { maxLookups: 1 }), null);
+    assert.equal(calls, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('geocode and forecast fetch timeouts stay tight for voice overlays', () => {
+  const {
+    GEOCODE_FETCH_TIMEOUT_MS,
+    DEFAULT_FETCH_TIMEOUT_MS,
+  } = require('../src/weather-fetch');
+  assert.equal(GEOCODE_FETCH_TIMEOUT_MS, 6000);
+  assert.equal(DEFAULT_FETCH_TIMEOUT_MS, 8000);
+});

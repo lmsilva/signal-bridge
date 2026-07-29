@@ -131,15 +131,68 @@ function celsiusToFahrenheit(c) {
   return Math.round((c * 9) / 5 + 32);
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Weather API HTTP ${response.status}`);
+const DEFAULT_FETCH_TIMEOUT_MS = 8000;
+const GEOCODE_FETCH_TIMEOUT_MS = 6000;
+
+async function fetchJson(url, { timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Weather API HTTP ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return response.json();
 }
 
-async function geocodeLocation(name) {
+function hitMatchesAdmin1(hit, admin1) {
+  if (!admin1) {
+    return true;
+  }
+  return String(hit?.admin1 || '').toLowerCase() === String(admin1).toLowerCase();
+}
+
+function formatGeocodeHit(hit) {
+  if (!hit) {
+    return null;
+  }
+  return {
+    resolvedName: [hit.name, hit.admin1, hit.country_code].filter(Boolean).join(', '),
+    latitude: hit.latitude,
+    longitude: hit.longitude,
+    timezone: hit.timezone,
+  };
+}
+
+async function searchGeocodeApi(name, { countryCode = null, timeoutMs = GEOCODE_FETCH_TIMEOUT_MS } = {}) {
+  const query = encodeURIComponent(String(name || '').trim());
+  if (!query) {
+    return null;
+  }
+  let url = `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json`;
+  if (countryCode) {
+    url += `&countryCode=${encodeURIComponent(countryCode)}`;
+  }
+  try {
+    return await fetchJson(url, { timeoutMs });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a place name via Open-Meteo. US-first for household speed; skips to
+ * worldwide only on miss. When a US state was parsed, reject wrong-state hits
+ * so we keep searching instead of locking onto the first same-named city.
+ *
+ * Options:
+ * - timeoutMs: per-request abort (default 6s)
+ * - maxLookups: cap sequential HTTP attempts (default 4; route uses 2)
+ */
+async function geocodeLocation(name, { timeoutMs = GEOCODE_FETCH_TIMEOUT_MS, maxLookups = 4 } = {}) {
   const raw = String(name || '').trim();
   if (!raw) {
     return null;
@@ -151,56 +204,40 @@ async function geocodeLocation(name) {
 
   const parsed = parseGeocodeQuery(raw);
   const searchName = parsed.city || raw;
-  const query = encodeURIComponent(searchName);
-  if (!query) {
+  if (!searchName) {
     return null;
   }
 
-  const data = await fetchJson(
-    `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json&countryCode=US`,
-  );
-  let hit = pickGeocodeHit(data?.results, parsed.admin1);
-  if (!hit) {
-    // Retry worldwide when the US-biased search misses (foreign cities).
-    const worldwide = await fetchJson(
-      `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json`,
+  const lookups = [
+    { name: searchName, countryCode: 'US' },
+    { name: searchName, countryCode: null },
+  ];
+  if (searchName !== raw) {
+    lookups.push(
+      { name: raw, countryCode: 'US' },
+      { name: raw, countryCode: null },
     );
-    hit = pickGeocodeHit(worldwide?.results, parsed.admin1);
-  }
-  if (!hit) {
-    // Last resort: try the original phrase in case Open-Meteo accepts it.
-    if (searchName !== raw) {
-      const fallback = await fetchJson(
-        `${GEOCODE_URL}?name=${encodeURIComponent(raw)}&count=10&language=en&format=json&countryCode=US`,
-      );
-      let fallbackHit = pickGeocodeHit(fallback?.results, parsed.admin1);
-      if (!fallbackHit) {
-        const fallbackWorld = await fetchJson(
-          `${GEOCODE_URL}?name=${encodeURIComponent(raw)}&count=10&language=en&format=json`,
-        );
-        fallbackHit = pickGeocodeHit(fallbackWorld?.results, parsed.admin1);
-      }
-      if (!fallbackHit) {
-        return null;
-      }
-      return {
-        resolvedName: [fallbackHit.name, fallbackHit.admin1, fallbackHit.country_code]
-          .filter(Boolean)
-          .join(', '),
-        latitude: fallbackHit.latitude,
-        longitude: fallbackHit.longitude,
-        timezone: fallbackHit.timezone,
-      };
-    }
-    return null;
   }
 
-  return {
-    resolvedName: [hit.name, hit.admin1, hit.country_code].filter(Boolean).join(', '),
-    latitude: hit.latitude,
-    longitude: hit.longitude,
-    timezone: hit.timezone,
-  };
+  const limit = Math.max(1, Math.min(lookups.length, Number(maxLookups) || lookups.length));
+  for (let i = 0; i < limit; i += 1) {
+    const attempt = lookups[i];
+    const data = await searchGeocodeApi(attempt.name, {
+      countryCode: attempt.countryCode,
+      timeoutMs,
+    });
+    const hit = pickGeocodeHit(data?.results, parsed.admin1);
+    if (!hit) {
+      continue;
+    }
+    // State was explicit ("Moab Utah") — don't accept NY Saratoga Springs etc.
+    if (parsed.admin1 && !hitMatchesAdmin1(hit, parsed.admin1)) {
+      continue;
+    }
+    return formatGeocodeHit(hit);
+  }
+
+  return null;
 }
 
 async function resolveLocation(location) {
@@ -360,4 +397,6 @@ module.exports = {
   resolveLocation,
   weatherCodeToCondition,
   celsiusToFahrenheit,
+  GEOCODE_FETCH_TIMEOUT_MS,
+  DEFAULT_FETCH_TIMEOUT_MS,
 };

@@ -38,6 +38,10 @@ DEFAULTS = {
         "latitude": 40.0,
         "longitude": -111.0,
     },
+    "shoppingList": {
+        "pageSeconds": 10,
+        "itemsPerPage": 10,
+    },
 }
 
 
@@ -51,6 +55,11 @@ def load_config() -> dict:
             config["defaultLocation"] = {
                 **DEFAULTS.get("defaultLocation", {}),
                 **loaded["defaultLocation"],
+            }
+        if isinstance(loaded.get("shoppingList"), dict):
+            config["shoppingList"] = {
+                **DEFAULTS.get("shoppingList", {}),
+                **loaded["shoppingList"],
             }
     return config
 
@@ -79,7 +88,8 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         return max(requested, 1)
 
     if payload.get("type") == "route-planner.query":
-        # Map + facts + weather tiles need time; bridge asks for ≥120s.
+        # Map + facts + weather tiles need time; bridge asks for 2× default
+        # (or routePlanner.displaySeconds) and we must not clamp it.
         return max(requested, 1)
 
     if payload.get("type") == "steam.now-playing":

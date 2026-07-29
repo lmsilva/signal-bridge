@@ -288,11 +288,23 @@ const SLOW_REQUEST_INFO = {
   route: {
     title: 'Route Planner',
     source: 'Maps',
+    // Prefer progressive route-planner.query skeletons over this ack; kept for
+    // any leftover callers. Long window so a hung geocode does not flash fail.
+    timeoutSeconds: 90,
     stages: [
       { afterSec: 0, message: 'Request received — looking up places…' },
       { afterSec: 3, message: 'Geocoding origin and destination…' },
       { afterSec: 8, message: 'Calculating distance and drive time…' },
-      { afterSec: 18, message: 'Still working — map services can be slow…' },
+      { afterSec: 25, message: 'Still working — map services can be slow…' },
+    ],
+  },
+  music: {
+    title: 'Now Playing',
+    source: 'Alexa players',
+    stages: [
+      { afterSec: 0, message: 'Looking up what’s playing…' },
+      { afterSec: 4, message: 'Checking Echo devices in your household…' },
+      { afterSec: 10, message: 'Still checking player status…' },
     ],
   },
 };
@@ -303,6 +315,10 @@ function buildProcessingAckPayload(event, config) {
     return null;
   }
 
+  const timeoutSeconds = Number(info.timeoutSeconds) > 0
+    ? Number(info.timeoutSeconds)
+    : PROCESSING_ACK_TIMEOUT_SEC;
+
   return {
     version: 2,
     type: 'request.processing',
@@ -311,14 +327,14 @@ function buildProcessingAckPayload(event, config) {
     // Ceiling covers the timeout plus ~15s for the failure state to be read
     // before the overlay dismisses itself; the real payload replaces this
     // placeholder long before then in the normal case.
-    displaySeconds: PROCESSING_ACK_TIMEOUT_SEC + 15,
+    displaySeconds: timeoutSeconds + 15,
     trigger: 'processing-ack',
     kind: event.kind,
     query: event.query,
     request: {
       title: info.title,
       source: info.source,
-      timeoutSeconds: PROCESSING_ACK_TIMEOUT_SEC,
+      timeoutSeconds,
       stages: info.stages,
     },
   };
@@ -776,24 +792,63 @@ function buildPhotoSlideshowPayload({
   };
 }
 
-// "Route Planner" — the bridge resolves both places and a driving route (or
-// a great-circle flight fallback) as fast as possible and sends everything
-// it has in one payload; the display client fetches map tiles, place facts
-// and weather independently afterwards (same async-tile pattern already
-// used for album art / Tesla map tiles), so this payload deliberately stays
-// lean: just names, coordinates, the route mode/line, distance and duration.
+// "Route Planner" — bridge may send progressive updates: first a skeleton with
+// place names (`status: "loading"`), then coords, then distance/route
+// (`status: "ready"`). The display client paints what it has and fills tiles
+// as later UDP updates arrive. Map tiles / place facts / weather still fetch
+// client-side once coordinates exist.
+//
+// Dismiss window is separate from the standard overlay duration: default
+// **2×** `udpBroadcast.defaultDisplaySeconds` (min 180s). Override with
+// `routePlanner.displaySeconds`.
 function routePlannerDisplaySeconds(config) {
-  return Math.max(displaySeconds(config), 120);
+  const override = Number(config?.routePlanner?.displaySeconds);
+  if (Number.isFinite(override) && override > 0) {
+    return Math.max(60, Math.round(override));
+  }
+  const base = displaySeconds(config);
+  return Math.max(180, base * 2);
+}
+
+function routePlaceFields(place) {
+  if (!place || typeof place !== 'object') {
+    return null;
+  }
+  const name = place.resolvedName || place.query || place.name || null;
+  if (!name && place.latitude == null && place.longitude == null) {
+    return null;
+  }
+  return {
+    name: name || 'Unknown',
+    latitude: place.latitude != null ? Number(place.latitude) : null,
+    longitude: place.longitude != null ? Number(place.longitude) : null,
+  };
 }
 
 function buildRoutePlannerPayload(event, config, {
   origin,
   destination,
-  route,
-  mode,
+  route = null,
+  mode = 'driving',
+  status = null,
+  error = null,
 } = {}) {
-  if (!origin || !destination || !route) {
+  const originFields = routePlaceFields(origin);
+  const destinationFields = routePlaceFields(destination);
+  if (!originFields || !destinationFields) {
     return null;
+  }
+
+  const hasRoute = Boolean(route)
+    && (route.distanceMiles != null || (Array.isArray(route.geometry) && route.geometry.length >= 2));
+  let resolvedStatus = status;
+  if (!resolvedStatus) {
+    resolvedStatus = hasRoute ? 'ready' : 'loading';
+  }
+  if (resolvedStatus === 'failed') {
+    resolvedStatus = 'failed';
+  } else if (hasRoute) {
+    resolvedStatus = 'ready';
   }
 
   return {
@@ -805,21 +860,15 @@ function buildRoutePlannerPayload(event, config, {
     trigger: event.trigger || 'route-query',
     query: event.query,
     spokenResponse: event.spokenResponse || null,
+    status: resolvedStatus,
+    error: error ? String(error).slice(0, 160) : null,
     mode: mode === 'flight' ? 'flight' : 'driving',
-    origin: {
-      name: origin.resolvedName || origin.query || 'Origin',
-      latitude: origin.latitude,
-      longitude: origin.longitude,
-    },
-    destination: {
-      name: destination.resolvedName || destination.query || 'Destination',
-      latitude: destination.latitude,
-      longitude: destination.longitude,
-    },
-    distanceMiles: route.distanceMiles,
-    durationMin: route.durationMin,
+    origin: originFields,
+    destination: destinationFields,
+    distanceMiles: route?.distanceMiles ?? null,
+    durationMin: route?.durationMin ?? null,
     route: {
-      geometry: Array.isArray(route.geometry) ? route.geometry : [],
+      geometry: Array.isArray(route?.geometry) ? route.geometry : [],
     },
   };
 }

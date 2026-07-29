@@ -1041,7 +1041,7 @@ def build_payload(args) -> dict:
             "type": "route-planner.query",
             "device": args.sender,
             "timestamp": _iso_now(),
-            "displaySeconds": max(display_seconds, 120),
+            "displaySeconds": max(display_seconds, 240),
             "trigger": "route-query",
             "query": "what is the distance between Saratoga Springs and Moab",
             "spokenResponse": "it's roughly 177 miles from Saratoga Springs to Moab",

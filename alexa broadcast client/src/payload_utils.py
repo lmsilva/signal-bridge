@@ -263,11 +263,11 @@ def format_route_duration(minutes: int | float | None) -> str:
     """'3h 15m' style duration for the Route Planner tile — distinct from
     `format_duration`'s H:MM:SS countdown-clock style."""
     if minutes is None:
-        return "—"
+        return "…"
     try:
         total_minutes = max(0, round(float(minutes)))
     except (TypeError, ValueError):
-        return "—"
+        return "…"
     hours, mins = divmod(total_minutes, 60)
     if hours and mins:
         return f"{hours}h {mins}m"
@@ -278,11 +278,11 @@ def format_route_duration(minutes: int | float | None) -> str:
 
 def format_route_distance(miles: int | float | None) -> str:
     if miles is None:
-        return "—"
+        return "…"
     try:
         value = float(miles)
     except (TypeError, ValueError):
-        return "—"
+        return "…"
     if value < 10:
         return f"{value:.1f} mi"
     return f"{round(value)} mi"

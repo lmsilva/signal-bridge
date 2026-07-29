@@ -1995,9 +1995,16 @@ class AirQualityPanel(BasePanel):
         ))
         list_top = y + 32 * u
         max_rows = min(len(rooms), 8)
-        # Pack from the top — never stretch a few rooms across the whole column.
+        # Pack from the top — leave a little air under a short room list so the
+        # BY ROOM block sits closer to the metrics instead of leaving a huge
+        # empty band under a 3-room household.
         list_h = max(60 * u, avail_h - 32 * u)
-        row_h = min(112 * u, max(72 * u, list_h / max(1, max_rows)))
+        row_h = min(128 * u, max(80 * u, list_h / max(1, max_rows)))
+        if max_rows <= 6:
+            # Prefer taller rows when we have spare height (≤6 sensors).
+            packed = max_rows * row_h
+            if packed < list_h * 0.85:
+                row_h = min(140 * u, list_h / max(1, max_rows))
         for index, (name, score, row_color) in enumerate(rooms[:max_rows]):
             self._draw_room_row(
                 x, list_top + index * row_h, w, row_h,
@@ -2104,9 +2111,12 @@ class AirQualityPanel(BasePanel):
         y0 = chrome.content_top
         width = chrome.content_w
         bottom = chrome.content_bottom
+        # Shift the stack down into unused lower space (≤6 rooms — no need to
+        # pack hard against the header).
+        shift = min(140 * u, max(40 * u, (bottom - y0) * 0.10))
 
         diameter = min(540 * u, width * 0.72)
-        ring_cy = y0 + 30 * u + diameter / 2
+        ring_cy = y0 + shift + 30 * u + diameter / 2
         rating_font = self._draw_score_ring(
             x0 + width / 2, ring_cy, diameter, score, color, track, u,
         )
@@ -2125,7 +2135,7 @@ class AirQualityPanel(BasePanel):
             x0, after_scale + 8 * u, width, values,
             accent=accent, ink=ink, line=line, u=u,
         )
-        rooms_y = met_bottom + 30 * u
+        rooms_y = met_bottom + 36 * u
         self._draw_rooms_block(
             x0, rooms_y, width, bottom - rooms_y, monitors, color, ink, ink3, track, u,
         )
@@ -3314,10 +3324,12 @@ class ShoppingListPanel(BasePanel):
     """Shopping list — large type for short lists; denser grid for 20–30+.
 
     Picks the largest (cols, font, row) that fits the whole list when possible;
-    otherwise uses the densest layout and pages every PAGE_SECONDS.
+    otherwise pages (default 10 items / 10s — configurable via shoppingList).
     """
 
-    PAGE_SECONDS = 12
+    DEFAULT_PAGE_SECONDS = 10
+    DEFAULT_ITEMS_PER_PAGE = 10
+    TOP_PAD_U = 36
     # (cols, font_u, row_u) — tried largest-first until everything fits.
     LANDSCAPE_DENSITY = (
         (2, 58, 170),
@@ -3342,10 +3354,24 @@ class ShoppingListPanel(BasePanel):
         self._items: list[dict] = []
         self._page = 0
         self._page_size = 10
+        self._page_seconds = self.DEFAULT_PAGE_SECONDS
+        self._items_per_page = self.DEFAULT_ITEMS_PER_PAGE
         self._added_item = None
         self._layout_cols = 2
         self._layout_font_u = 58
         self._layout_row_u = 170
+
+    def _shopping_settings(self) -> tuple[int, int]:
+        settings = self.config.get("shoppingList") or {}
+        try:
+            page_seconds = int(settings.get("pageSeconds", self.DEFAULT_PAGE_SECONDS))
+        except (TypeError, ValueError):
+            page_seconds = self.DEFAULT_PAGE_SECONDS
+        try:
+            items_per_page = int(settings.get("itemsPerPage", self.DEFAULT_ITEMS_PER_PAGE))
+        except (TypeError, ValueError):
+            items_per_page = self.DEFAULT_ITEMS_PER_PAGE
+        return max(3, page_seconds), max(5, min(30, items_per_page))
 
     def show(self, payload: dict):
         self.hide()
@@ -3353,10 +3379,11 @@ class ShoppingListPanel(BasePanel):
         self._items = list(payload.get("items") or [])
         self._added_item = (payload.get("addedItem") or "").strip().lower() or None
         self._page = 0
+        self._page_seconds, self._items_per_page = self._shopping_settings()
         self._apply_density()
         self._render_page()
         if self._page_count() > 1:
-            self._tick_job = self.root.after(self.PAGE_SECONDS * 1000, self._next_page)
+            self._tick_job = self.root.after(self._page_seconds * 1000, self._next_page)
 
     def hide(self):
         super().hide()
@@ -3378,37 +3405,53 @@ class ShoppingListPanel(BasePanel):
         zone_h: float,
         u: float,
         reserve_cue: float = 0.0,
+        prefer_cap: int | None = None,
     ) -> tuple[int, float, float, int]:
-        """Return (cols, font_u, row_u, page_cap) — largest layout that fits, else densest."""
+        """Return (cols, font_u, row_u, page_cap) — largest layout that fits, else densest.
+
+        When `prefer_cap` is set (paging mode), prefer the largest type whose
+        capacity is at least that many items per page.
+        """
         ladder = cls.PORTRAIT_DENSITY if portrait else cls.LANDSCAPE_DENSITY
         usable = max(80.0, zone_h - reserve_cue)
         best = None
+        preferred = None
         for cols, font_u, row_u in ladder:
             rows = max(1, int(usable / max(1.0, row_u * u)))
             cap = rows * cols
             best = (cols, font_u, row_u, cap)
-            if count <= cap:
+            if prefer_cap is not None and cap >= prefer_cap and preferred is None:
+                preferred = best
+            if count <= cap and prefer_cap is None:
                 return best
+        if prefer_cap is not None and preferred is not None:
+            return preferred
         return best or (2, 24, 58, max(1, count))
 
     def _apply_density(self):
         from src.design_system import page_chrome
         sw, sh = self._screen()
         chrome = page_chrome(sw, sh, timed=True)
-        zone_h = chrome.content_bottom - chrome.content_top
-        # Leave a little room for the page cue when we might need paging.
-        reserve = 28 * chrome.u if len(self._items) > 12 else 0
+        top_pad = self.TOP_PAD_U * chrome.u
+        zone_h = chrome.content_bottom - chrome.content_top - top_pad
+        count = len(self._items)
+        paging = count > self._items_per_page
+        reserve = 28 * chrome.u if paging else 0
         cols, font_u, row_u, cap = self.pick_density(
-            len(self._items),
+            count if not paging else self._items_per_page,
             portrait=chrome.portrait,
             zone_h=zone_h,
             u=chrome.u,
             reserve_cue=reserve,
+            prefer_cap=self._items_per_page if paging else None,
         )
         self._layout_cols = cols
         self._layout_font_u = font_u
         self._layout_row_u = row_u
-        self._page_size = max(1, cap)
+        if paging:
+            self._page_size = max(1, min(cap, self._items_per_page))
+        else:
+            self._page_size = max(1, cap)
 
     def _page_count(self) -> int:
         if not self._items:
@@ -3425,7 +3468,7 @@ class ShoppingListPanel(BasePanel):
         self._item_ids.clear()
         self._render_page()
         if self._page_count() > 1:
-            self._tick_job = self.root.after(self.PAGE_SECONDS * 1000, self._next_page)
+            self._tick_job = self.root.after(self._page_seconds * 1000, self._next_page)
 
     def _render(self, payload: dict):  # pragma: no cover - show() drives rendering
         self._render_page()
@@ -3453,9 +3496,10 @@ class ShoppingListPanel(BasePanel):
         )
 
         x0 = chrome.content_x
-        y0 = chrome.content_top
+        top_pad = self.TOP_PAD_U * u
+        y0 = chrome.content_top + top_pad
         width = chrome.content_w
-        height = chrome.content_bottom - chrome.content_top
+        height = chrome.content_bottom - y0
 
         if not self._items:
             self._track(self.canvas.create_text(
@@ -4076,9 +4120,22 @@ class TeslaBatteryPanel(BasePanel):
         color = GOOD if not is_error else (WARN if status == "rate_limited" else ALERT)
         text = str(battery.get("error")) if is_error and battery.get("error") else format_battery_percent(percent)
         if chrome.portrait:
-            car_h = max(180 * chrome.u, min((bottom - y) * .38, 500 * chrome.u))
-            self._place_car_image(x + w / 2, y, min(w - 40 * chrome.u, 760 * chrome.u), car_h, ACCENT, self.CARD)
-            self._draw_battery_specs(x, y + car_h + 18 * chrome.u, w, text, value, color, battery, portrait=True)
+            avail = max(200.0, bottom - y)
+            # Slightly smaller car so battery specs + slack fit; shift the block
+            # down into the empty lower third of the screen.
+            car_h = max(160 * chrome.u, min(avail * 0.32, 420 * chrome.u))
+            specs_reserve = max(200 * chrome.u, avail * 0.28)
+            block = car_h + 18 * chrome.u + specs_reserve
+            y_car = y + max(0.0, (avail - block) * 0.55)
+            self._place_car_image(
+                x + w / 2, y_car,
+                min(w - 40 * chrome.u, 760 * chrome.u), car_h,
+                ACCENT, self.CARD,
+            )
+            self._draw_battery_specs(
+                x, y_car + car_h + 18 * chrome.u, w,
+                text, value, color, battery, portrait=True,
+            )
         else:
             left_w, gap = min(1040 * chrome.u, w * .56), 24 * chrome.u
             self._place_car_image(x + left_w / 2, y, left_w - 20 * chrome.u, bottom - y, ACCENT, self.CARD)
@@ -4212,9 +4269,9 @@ class TeslaBatteryPanel(BasePanel):
 
     @staticmethod
     def battery_bar_height(percent_font_linespace: int, *, portrait: bool) -> int:
-        """Large bordered battery gauge; the percent remains above it."""
+        """Compact bordered battery gauge; the percent remains above it."""
         _ = percent_font_linespace
-        return 120 if portrait else 92
+        return 72 if portrait else 56
 
     def _place_car_image(self, center_x, image_top, image_width, image_height, accent, chip):
         image_path = asset_path(self.IMAGE_NAME)
@@ -4316,8 +4373,16 @@ class TeslaDashboardPanel(BasePanel):
         layout = self.shell.layout
         x = layout.content_x
         width = layout.content_width
-        top = int(self.shell.overlay.screen_h * (0.035 if layout.portrait else 0.05))
-        bottom = layout.message_area_bottom
+        # Slightly higher on the screen, and clear the dismiss footer band so the
+        # outer frame border is not covered by "Dismisses in…".
+        from src.design_system import design_u
+        u = design_u(
+            int(getattr(self.shell.overlay, "screen_w", 1080) or 1080),
+            int(getattr(self.shell.overlay, "screen_h", 1920) or 1920),
+        )
+        top = int(self.shell.overlay.screen_h * (0.018 if layout.portrait else 0.028))
+        footer_clear = max(10, int(round(u * 14)))
+        bottom = layout.message_area_bottom - footer_clear
         pad = 20
         self._round_rect(
             x - pad, top - 14, x + width + pad, bottom,
@@ -6510,8 +6575,11 @@ class GuestPhotoboothPanel(BasePanel):
             self.canvas, screen_w=screen_w, screen_h=screen_h, pill="Guest Snaps",
             left_label="Network", left_value=ssid, track=self._track,
         )
+        # Extra bottom inset so the lower card border clears the raised dismiss footer.
+        footer_clear = int(round(18 * chrome.u))
         geo = self.compute_card_geometry(
-            int(chrome.content_w), int(chrome.content_bottom - chrome.content_top),
+            int(chrome.content_w),
+            int(max(360, chrome.content_bottom - chrome.content_top - footer_clear)),
             chrome.portrait, u=chrome.u,
         )
         for index, (step, card) in enumerate(zip((wifi, booth), geo["cards"]), start=1):
@@ -7027,6 +7095,71 @@ class RoutePlannerPanel(BasePanel):
 
     # -- layout ---------------------------------------------------------------
 
+    @staticmethod
+    def content_frame_bounds(screen_w: int, screen_h: int) -> tuple[int, int, int]:
+        """Return `(top, bottom, footer_clear)` for the route planner plate.
+
+        `bottom` is exclusive of the dismiss footer band plus an extra clear so
+        the Local Times card / outer frame never sit under "Dismisses in…".
+        """
+        from src.design_system import page_chrome
+
+        chrome = page_chrome(screen_w, screen_h, timed=True)
+        footer_clear = max(14, int(round(chrome.u * 18)))
+        # Slightly above the shared content_top so the Driving Estimate badge
+        # has room without colliding with a phantom shared header.
+        top = int(round(screen_h * (0.032 if chrome.portrait else 0.038)))
+        top = max(int(round(20 * chrome.u)), min(top, int(round(chrome.content_top))))
+        bottom = int(round(chrome.content_bottom)) - footer_clear
+        if bottom - top < 280:
+            bottom = int(round(chrome.content_bottom)) - max(8, footer_clear // 2)
+        return top, bottom, footer_clear
+
+    @staticmethod
+    def resolve_status(payload: dict) -> str:
+        """Normalize progressive route status (`loading` / `ready` / `failed`)."""
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in ("loading", "ready", "failed"):
+            status = "ready" if payload.get("distanceMiles") is not None else "loading"
+        return status
+
+    @staticmethod
+    def status_badge_label(status: str, mode: str) -> str:
+        if status == "failed":
+            return "Route Unavailable"
+        if status == "loading":
+            return "Looking Up Route"
+        if mode == "flight":
+            return "Flight-Path Estimate"
+        return "Driving Estimate"
+
+    @staticmethod
+    def status_stat_text(payload: dict, status: str) -> str:
+        """Header distance line for progressive loading / ready / failed."""
+        if status == "failed":
+            return str(payload.get("error") or "").strip() or "Could not calculate this route"
+        distance_miles = payload.get("distanceMiles")
+        duration_min = payload.get("durationMin")
+        if distance_miles is None and duration_min is None:
+            return "Finding places and calculating distance\u2026"
+        distance_label = format_route_distance(distance_miles)
+        duration_label = format_route_duration(duration_min)
+        if duration_min is not None:
+            return f"{distance_label}  \u00b7  about {duration_label}"
+        return distance_label
+
+    @staticmethod
+    def places_have_coords(origin: dict | None, destination: dict | None) -> bool:
+        """True when both ends have lat/lon — map/weather may start."""
+        origin = origin or {}
+        destination = destination or {}
+        return (
+            origin.get("latitude") is not None
+            and origin.get("longitude") is not None
+            and destination.get("latitude") is not None
+            and destination.get("longitude") is not None
+        )
+
     def _compute_tile_boxes(self, x: float, width: float, top: float, bottom: float, portrait: bool):
         # Weather and the local-times strip only ever hold a couple of
         # short, fixed-size lines, so they get compact fixed-ish shares of
@@ -7079,17 +7212,26 @@ class RoutePlannerPanel(BasePanel):
         request_id = self._request_id
         self._weather_done = {"origin": False, "destination": False}
 
+        from src.design_system import page_chrome
+
         layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        top = int(self.shell.overlay.screen_h * (0.035 if layout.portrait else 0.05))
-        bottom = layout.message_area_bottom
-        self._container_frame(x, top, width, bottom - top)
+        screen_w = int(getattr(self.shell.overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1920)
+        screen_h = int(getattr(self.shell.overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1080)
+        chrome = page_chrome(screen_w, screen_h, timed=True)
+        x = int(round(chrome.content_x))
+        width = int(round(chrome.content_w))
+        # Own the top band (no shared header), but keep a clear air gap above
+        # the dismiss footer — same idea as Tesla mission / Guest Snaps.
+        # Without this, the Local Times card border sits flush on the black band.
+        top, bottom, _footer_clear = RoutePlannerPanel.content_frame_bounds(
+            screen_w, screen_h,
+        )
+        self._container_frame(x, top, width, max(1, bottom - top))
 
         mode = payload.get("mode") if payload.get("mode") in ("driving", "flight") else "driving"
+        status = self.resolve_status(payload)
         origin = payload.get("origin") or {}
         destination = payload.get("destination") or {}
-        distance_miles = payload.get("distanceMiles")
         duration_min = payload.get("durationMin")
         geometry = (payload.get("route") or {}).get("geometry") or []
         self._duration_min = duration_min
@@ -7098,9 +7240,13 @@ class RoutePlannerPanel(BasePanel):
         muted = self.config["mutedTextColor"]
         accent = self.config.get("accentColor", "#38bdf8")
 
-        badge_label = "Flight-Path Estimate" if mode == "flight" else "Driving Estimate"
-        badge_fill = self.AMBER_BG if mode == "flight" else self.GREEN_BG
-        badge_fg = self.AMBER if mode == "flight" else self.GREEN
+        badge_label = self.status_badge_label(status, mode)
+        if status == "failed":
+            badge_fill, badge_fg = self.RED_BG, self.RED
+        elif status == "loading" or mode == "flight":
+            badge_fill, badge_fg = self.AMBER_BG, self.AMBER
+        else:
+            badge_fill, badge_fg = self.GREEN_BG, self.GREEN
         pill_h = self._pill(x, top, badge_label, fill=badge_fill, fg=badge_fg)
 
         origin_name = shorten_route_place_name(origin.get("name") or "Origin")
@@ -7120,15 +7266,15 @@ class RoutePlannerPanel(BasePanel):
         else:
             stat_y = title_y + self.shell.section_title_font.metrics("linespace") + 10
 
-        distance_label = format_route_distance(distance_miles)
-        duration_label = format_route_duration(duration_min)
-        stat_text = (
-            f"{distance_label}  \u00b7  about {duration_label}"
-            if duration_min is not None
-            else distance_label
-        )
+        stat_text = self.status_stat_text(payload, status)
+        if status == "failed":
+            stat_fill = self.RED
+        elif payload.get("distanceMiles") is None and duration_min is None:
+            stat_fill = muted
+        else:
+            stat_fill = accent
         stat_id = self.canvas.create_text(
-            x, stat_y, anchor="nw", text=stat_text, fill=accent,
+            x, stat_y, anchor="nw", text=stat_text, fill=stat_fill,
             font=self.shell.body_font, width=width,
         )
         self._track(stat_id)
@@ -7137,8 +7283,10 @@ class RoutePlannerPanel(BasePanel):
             tiles_top = stat_bbox[3] + 18
         else:
             tiles_top = stat_y + self.shell.body_font.metrics("linespace") + 18
-        tiles_bottom = bottom - 6
-        boxes = self._compute_tile_boxes(x, width, tiles_top, tiles_bottom, layout.portrait)
+        # Keep the Local Times card (and map column) inside the container with
+        # a small inner pad so the card outline is not flush on the frame edge.
+        tiles_bottom = bottom - max(10, int(round(10 * chrome.u)))
+        boxes = self._compute_tile_boxes(x, width, tiles_top, tiles_bottom, chrome.portrait)
         self._tile_boxes = boxes
 
         for key, label in (
@@ -7153,11 +7301,16 @@ class RoutePlannerPanel(BasePanel):
 
         self._schedule_tick()
 
-        self._start_map_fetch(origin, destination, geometry, mode, boxes["map"], request_id)
+        if self.places_have_coords(origin, destination):
+            self._start_map_fetch(origin, destination, geometry, mode, boxes["map"], request_id)
+            self._start_weather_fetch("origin", origin, boxes["weather_origin"], request_id)
+            self._start_weather_fetch("destination", destination, boxes["weather_destination"], request_id)
+        else:
+            # Keep map/weather spinners while the bridge is still geocoding —
+            # a later UDP update will re-render with coordinates.
+            pass
         self._start_facts_fetch("facts_origin", origin_name, boxes["facts_origin"], request_id)
         self._start_facts_fetch("facts_destination", dest_name, boxes["facts_destination"], request_id)
-        self._start_weather_fetch("origin", origin, boxes["weather_origin"], request_id)
-        self._start_weather_fetch("destination", destination, boxes["weather_destination"], request_id)
 
     # -- map tile -----------------------------------------------------------------
 

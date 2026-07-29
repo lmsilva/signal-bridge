@@ -36,7 +36,7 @@ const DISTANCE_SPOKEN_HINT_RE = /\b\d[\d,]*(?:\.\d+)?\s*(?:miles?|mi|kilometers?
 const LOCAL_ORIGIN_RE = /^(?:here|home|my\s+house|our\s+house|this\s+house|my\s+place|your\s+location|your\s+house|there)$/i;
 
 function normalizeRouteText(value) {
-  return String(value || '')
+  let text = String(value || '')
     .replace(/[\u2018\u2019\u2032`´]/g, "'")
     .replace(/\bwhats\b/gi, "what's")
     // Amazon ASR very often mishears "distance" as "difference"
@@ -44,6 +44,51 @@ function normalizeRouteText(value) {
     .replace(/\bdifference\b/gi, 'distance')
     .replace(/\s+/g, ' ')
     .trim();
+  return dedupeCommaJoinedRouteAsr(text);
+}
+
+/**
+ * Amazon often stores the same distance ask twice in one activity
+ * ("alexa what's the distance …, what's the distance …"). Joining those
+ * with commas made place captures swallow the second clause
+ * ("las vegas, what's the distance from …") and geocode failed instantly.
+ *
+ * Only collapse when two+ clauses look like distance *asks* — never split
+ * "Saratoga Springs, Utah" inside a miles TTS sentence.
+ */
+function dedupeCommaJoinedRouteAsr(text) {
+  const parts = String(text || '')
+    .split(/\s*,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return text;
+  }
+
+  const askClauses = parts.filter((part) => (
+    /\b(?:distance|how\s+far|directions?)\b/i.test(part)
+    && /\b(?:to|from|between)\b/i.test(part)
+  ));
+  if (askClauses.length < 2) {
+    return text;
+  }
+
+  const norm = (value) => String(value || '')
+    .replace(/^alexa[,\s]+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  const norms = askClauses.map(norm);
+  const allNearDupes = norms.every((entry) => (
+    entry
+    && norms[0]
+    && (entry === norms[0] || entry.includes(norms[0]) || norms[0].includes(entry))
+  ));
+  if (!allNearDupes) {
+    return askClauses[0];
+  }
+  return askClauses.slice().sort((a, b) => b.length - a.length)[0];
 }
 
 function matchesRouteQuery(summary, response) {
@@ -118,11 +163,18 @@ function resolveRouteDefaultOrigin(defaultLocation) {
 }
 
 function cleanRoutePlaceName(rawName) {
-  return cleanLocationName(rawName)
+  let cleaned = cleanLocationName(rawName)
     .replace(/\s+as\s+the\s+crow\s+flies.*$/i, '')
     .replace(/\s+by\s+(?:air|car|road|driving).*$/i, '')
-    .replace(/[?.!,]+$/g, '')
     .trim();
+  // Place captures must not keep a second ASR/query clause after a comma
+  // ("las vegas, what's the distance from here to las vegas").
+  cleaned = cleaned.replace(
+    /,?\s*(?:alexa|what(?:'s|\s+is)?|show(?:\s+me)?(?:\s+the)?|how\s+far|how\s+long|distance|directions?)\b.*$/i,
+    '',
+  );
+  cleaned = cleaned.replace(/,\s+(?:the\s+)?distance\b.*$/i, '');
+  return cleaned.replace(/[?.!,]+$/g, '').trim();
 }
 
 // Builds a location descriptor (same shape `extractWeatherLocation` returns)
@@ -245,6 +297,9 @@ module.exports = {
   spokenHasRouteAnswer,
   extractRouteLocations,
   resolveRouteDefaultOrigin,
+  normalizeRouteText,
+  cleanRoutePlaceName,
+  dedupeCommaJoinedRouteAsr,
   DISTANCE_BETWEEN_RE,
   HOW_FAR_FROM_RE,
   DRIVE_TIME_RE,
