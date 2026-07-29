@@ -138,6 +138,63 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertAlmostEqual(boxes["footer"][3], 1040)
         self.assertLessEqual(meta[3], boxes["shots"][1] + 0.1)
 
+    def test_timed_landscape_content_clears_dismiss_footer(self):
+        from src.design_system import page_chrome
+
+        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
+        panel.shell = mock.Mock()
+        panel.root = mock.Mock()
+        panel.root.winfo_screenwidth.return_value = 1920
+        panel.root.winfo_screenheight.return_value = 1080
+        panel.shell.overlay = mock.Mock(screen_w=1920, screen_h=1080, _display_seconds=90)
+        rect = panel._content_rect()
+        chrome = page_chrome(1920, 1080, timed=True)
+        self.assertFalse(rect["portrait"])
+        self.assertTrue(rect["timed"])
+        self.assertGreater(rect["footer_clear"], 0)
+        self.assertLess(rect["y1"], chrome.content_bottom)
+        self.assertEqual(rect["y1"], int(chrome.content_bottom) - rect["footer_clear"])
+        # Boxes built from the cleared bottom stay above the dismiss band.
+        boxes = panel._compute_landscape_boxes(
+            rect["x0"], rect["y0"], rect["x1"], rect["y1"],
+            u=rect["u"], has_shots=True,
+        )
+        self.assertLessEqual(boxes["footer"][3], rect["y1"] + 0.1)
+        self.assertLessEqual(boxes["hero"][3], rect["y1"] + 0.1)
+
+    def test_persistent_landscape_keeps_existing_layout_height(self):
+        from src.design_system import page_chrome
+
+        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
+        panel.shell = mock.Mock()
+        panel.root = mock.Mock()
+        panel.root.winfo_screenwidth.return_value = 1920
+        panel.root.winfo_screenheight.return_value = 1080
+        panel.shell.overlay = mock.Mock(screen_w=1920, screen_h=1080, _display_seconds=0)
+        rect = panel._content_rect()
+        chrome = page_chrome(1920, 1080, timed=False)
+        self.assertFalse(rect["timed"])
+        self.assertEqual(rect["footer_clear"], 0)
+        # Persistent landscape keeps the intentional bottom pad (40u), not flush.
+        self.assertEqual(rect["y1"], int(round(1080 - 40 * chrome.u)))
+        self.assertLess(rect["y1"], int(chrome.content_bottom))
+
+    def test_timed_portrait_also_clears_dismiss_footer(self):
+        from src.design_system import page_chrome
+
+        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
+        panel.shell = mock.Mock()
+        panel.root = mock.Mock()
+        panel.root.winfo_screenwidth.return_value = 1080
+        panel.root.winfo_screenheight.return_value = 1920
+        panel.shell.overlay = mock.Mock(screen_w=1080, screen_h=1920, _display_seconds=90)
+        rect = panel._content_rect()
+        chrome = page_chrome(1080, 1920, timed=True)
+        self.assertTrue(rect["portrait"])
+        self.assertTrue(rect["timed"])
+        self.assertLess(rect["y1"], int(round(1920 - chrome.footer_h)))
+        self.assertGreater(rect["y1"] - rect["y0"], 1000)
+
     def test_hero_aspect_hint_prefers_portrait_library_capsule(self):
         from src.steam_now_playing_panel import hero_aspect_hint
 

@@ -39,8 +39,37 @@ test('buildProcessingAckPayload builds ack for tesla dashboard', () => {
   assert.equal(payload.request.title, 'Tesla Dashboard');
 });
 
+test('buildProcessingAckPayload builds ack for music', () => {
+  const payload = buildProcessingAckPayload({
+    kind: 'music',
+    device: 'Signal',
+    timestamp: Date.now(),
+    query: "what's playing",
+  }, config);
+
+  assert.ok(payload);
+  assert.equal(payload.type, 'request.processing');
+  assert.equal(payload.kind, 'music');
+  assert.equal(payload.request.title, 'Now Playing');
+  assert.ok(payload.request.stages.length >= 2);
+});
+
+test('buildProcessingAckPayload route uses its own timeoutSeconds', () => {
+  const payload = buildProcessingAckPayload({
+    kind: 'route',
+    device: 'Office Echo',
+    query: 'how far is Moab from here',
+  }, config);
+
+  assert.ok(payload);
+  assert.equal(payload.kind, 'route');
+  assert.equal(payload.request.title, 'Route Planner');
+  assert.equal(payload.request.timeoutSeconds, 90);
+  assert.equal(payload.displaySeconds, 105);
+});
+
 test('buildProcessingAckPayload skips fast request kinds', () => {
-  for (const kind of ['weather', 'time', 'shopping-list', 'music', 'smart-home']) {
+  for (const kind of ['weather', 'time', 'shopping-list', 'smart-home']) {
     assert.equal(
       buildProcessingAckPayload({ kind, device: 'Echo', query: 'q' }, config),
       null,

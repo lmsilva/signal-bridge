@@ -4,6 +4,7 @@ const {
   fetchDrivingRoute,
   greatCircleEstimate,
   haversineMiles,
+  OSRM_TIMEOUT_MS,
 } = require('../src/route-fetch');
 
 const EXAMPLE_ORIGIN = { latitude: 40.39, longitude: -111.85 }; // public placeholder near Lehi, UT
@@ -103,4 +104,31 @@ test('fetchDrivingRoute returns ok:false when the request throws', async () => {
   );
   assert.equal(result.ok, false);
   assert.match(result.error, /network down/);
+});
+
+test('OSRM_TIMEOUT_MS stays at 12s for progressive route planner', () => {
+  assert.equal(OSRM_TIMEOUT_MS, 12000);
+});
+
+test('fetchDrivingRoute passes an AbortSignal to fetch', async () => {
+  let seenSignal = null;
+  const result = await withMockedFetch(
+    async (_url, options) => {
+      seenSignal = options?.signal || null;
+      return {
+        ok: true,
+        json: async () => ({
+          code: 'Ok',
+          routes: [{
+            distance: 1000,
+            duration: 60,
+            geometry: { coordinates: [[-111.0, 40.0], [-109.5, 38.5]] },
+          }],
+        }),
+      };
+    },
+    () => fetchDrivingRoute(EXAMPLE_ORIGIN, MOAB),
+  );
+  assert.equal(result.ok, true);
+  assert.ok(seenSignal && typeof seenSignal.aborted === 'boolean');
 });

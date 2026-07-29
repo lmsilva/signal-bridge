@@ -242,8 +242,59 @@ test('buildRoutePlannerPayload builds a driving payload with names, coords and r
   assert.equal(payload.distanceMiles, 177.1);
   assert.equal(payload.durationMin, 180);
   assert.deepEqual(payload.route.geometry, DRIVING_ROUTE.geometry);
-  // A lot to read — generous minimum display window like the Tesla dashboard.
-  assert.ok(payload.displaySeconds >= 120);
+  // A lot to read — dismiss window is 2× the standard default (min 180s;
+  // override via routePlanner.displaySeconds).
+  assert.equal(payload.displaySeconds, 240);
+  assert.equal(payload.status, 'ready');
+});
+
+test('buildRoutePlannerPayload displaySeconds doubles the default and honors override', () => {
+  const doubled = buildRoutePlannerPayload({ device: 'Signal' }, {
+    udpBroadcast: { defaultDisplaySeconds: 90 },
+  }, {
+    origin: ORIGIN,
+    destination: DESTINATION,
+    route: DRIVING_ROUTE,
+    mode: 'driving',
+  });
+  assert.equal(doubled.displaySeconds, 180);
+
+  const overridden = buildRoutePlannerPayload({ device: 'Signal' }, {
+    udpBroadcast: { defaultDisplaySeconds: 90 },
+    routePlanner: { displaySeconds: 300 },
+  }, {
+    origin: ORIGIN,
+    destination: DESTINATION,
+    route: DRIVING_ROUTE,
+    mode: 'driving',
+  });
+  assert.equal(overridden.displaySeconds, 300);
+});
+
+test('buildRoutePlannerPayload can emit a loading skeleton without a route', () => {
+  const payload = buildRoutePlannerPayload({ device: 'Signal', query: 'how far is Moab' }, config, {
+    origin: { query: 'Home', latitude: 40.0, longitude: -111.0 },
+    destination: { query: 'Moab' },
+    route: null,
+    status: 'loading',
+  });
+  assert.equal(payload.status, 'loading');
+  assert.equal(payload.distanceMiles, null);
+  assert.equal(payload.destination.name, 'Moab');
+  assert.equal(payload.destination.latitude, null);
+  assert.equal(payload.displaySeconds, 240);
+});
+
+test('buildRoutePlannerPayload can emit a failed status after a skeleton', () => {
+  const payload = buildRoutePlannerPayload({ device: 'Signal' }, config, {
+    origin: ORIGIN,
+    destination: { query: 'Atlantis' },
+    route: null,
+    status: 'failed',
+    error: 'Could not find one of those places',
+  });
+  assert.equal(payload.status, 'failed');
+  assert.match(payload.error, /Could not find/);
 });
 
 test('buildRoutePlannerPayload defaults an unrecognized mode to driving', () => {
@@ -274,9 +325,8 @@ test('buildRoutePlannerPayload falls back to the raw query string when a place h
   assert.equal(payload.origin.name, 'moab');
 });
 
-test('buildRoutePlannerPayload returns null when origin, destination or route is missing', () => {
+test('buildRoutePlannerPayload returns null when origin or destination is missing', () => {
   assert.equal(buildRoutePlannerPayload({}, config, { destination: DESTINATION, route: DRIVING_ROUTE }), null);
   assert.equal(buildRoutePlannerPayload({}, config, { origin: ORIGIN, route: DRIVING_ROUTE }), null);
-  assert.equal(buildRoutePlannerPayload({}, config, { origin: ORIGIN, destination: DESTINATION }), null);
   assert.equal(buildRoutePlannerPayload({}, config), null);
 });

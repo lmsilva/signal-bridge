@@ -187,6 +187,10 @@ class SteamNowPlayingPanel(BasePanel):
         overlay = getattr(self.shell, "overlay", None)
         timed = bool(overlay and int(getattr(overlay, "_display_seconds", 0) or 0) > 0)
         chrome = page_chrome(screen_w, screen_h, timed=timed)
+        # Timed last-played / preview sessions show the shared dismiss band —
+        # keep an air gap so the hero border + stats strip are not covered.
+        # Persistent auto sessions (displaySeconds 0) keep the full height.
+        footer_clear = max(14, int(round(chrome.u * 18))) if timed else 0
         # Steam paints its own header — start at the page header band, not at
         # content_top (that left a ~100px empty strip above the panel in landscape).
         if chrome.portrait:
@@ -194,18 +198,18 @@ class SteamNowPlayingPanel(BasePanel):
             x0 = pad
             x1 = screen_w - pad
             y0 = pad
-            y1 = screen_h - (chrome.footer_h if timed else pad)
+            y1 = screen_h - (chrome.footer_h if timed else pad) - footer_clear
         else:
-            # Spec §9.1: header 28–112, content zone 132–1040 (40 bottom margin).
+            # Spec §9.1: header at header_top; content clears dismiss footer.
             x0 = chrome.content_x
             x1 = x0 + chrome.content_w
             y0 = chrome.header_top
             if timed:
-                y1 = chrome.content_bottom
+                y1 = chrome.content_bottom - footer_clear
             else:
                 y1 = screen_h - 40 * chrome.u
         if y1 <= y0 + 120:
-            y1 = screen_h - 64
+            y1 = screen_h - 64 - footer_clear
         return {
             "screen_w": screen_w,
             "screen_h": screen_h,
@@ -215,6 +219,8 @@ class SteamNowPlayingPanel(BasePanel):
             "y1": int(y1),
             "portrait": chrome.portrait,
             "u": chrome.u,
+            "timed": timed,
+            "footer_clear": int(footer_clear),
         }
 
     def _render(self, payload: dict):

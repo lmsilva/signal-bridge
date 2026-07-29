@@ -124,6 +124,8 @@ function extractActivityFields(activity) {
     response: normalizeText(response),
     miscText: normalizeText(miscText),
     allText: normalizeText(allText),
+    customerParts: [...into.customerParts],
+    responseParts: [...into.responseParts],
     itemTypes: [...into.itemTypes].sort(),
     utteranceType: activity?.data?.utteranceType || activity?.utteranceType || null,
   };

@@ -4,6 +4,7 @@
 // route exists (e.g. overseas), we fall back to a great-circle "as the plane
 // flies" estimate so the feature still answers something useful.
 const OSRM_ROUTE_URL = 'https://router.project-osrm.org/route/v1/driving';
+const OSRM_TIMEOUT_MS = 12000;
 
 const EARTH_RADIUS_MILES = 3958.8;
 const FLIGHT_CRUISE_SPEED_MPH = 500;
@@ -47,8 +48,10 @@ async function fetchDrivingRoute(origin, destination) {
 
   const url = `${OSRM_ROUTE_URL}/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=simplified&geometries=geojson`;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
       return { ok: false };
     }
@@ -67,6 +70,8 @@ async function fetchDrivingRoute(origin, destination) {
     };
   } catch (error) {
     return { ok: false, error: error.message || String(error) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -96,4 +101,5 @@ module.exports = {
   fetchDrivingRoute,
   greatCircleEstimate,
   haversineMiles,
+  OSRM_TIMEOUT_MS,
 };

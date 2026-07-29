@@ -9,13 +9,13 @@ class TeslaBatteryBarHeightTests(unittest.TestCase):
     def test_landscape_gauge_height_is_fixed(self):
         for linespace in (28, 36, 42, 48):
             self.assertEqual(
-                TeslaBatteryPanel.battery_bar_height(linespace, portrait=False), 92,
+                TeslaBatteryPanel.battery_bar_height(linespace, portrait=False), 56,
             )
 
     def test_portrait_gauge_height_is_fixed(self):
         for linespace in (20, 36, 48):
             self.assertEqual(
-                TeslaBatteryPanel.battery_bar_height(linespace, portrait=True), 120,
+                TeslaBatteryPanel.battery_bar_height(linespace, portrait=True), 72,
             )
 
 

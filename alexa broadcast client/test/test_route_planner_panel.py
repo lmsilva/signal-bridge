@@ -10,6 +10,47 @@ from src.payload_utils import (
 )
 
 
+class ContentFrameBoundsTests(unittest.TestCase):
+    """Route planner must clear the dismiss footer in both orientations."""
+
+    def test_landscape_bottom_clears_dismiss_footer(self):
+        from src.design_system import page_chrome
+
+        screen_w, screen_h = 1920, 1080
+        top, bottom, footer_clear = RoutePlannerPanel.content_frame_bounds(screen_w, screen_h)
+        chrome = page_chrome(screen_w, screen_h, timed=True)
+        self.assertGreater(footer_clear, 0)
+        self.assertLess(bottom, chrome.content_bottom)
+        self.assertEqual(bottom, int(round(chrome.content_bottom)) - footer_clear)
+        self.assertGreater(bottom - top, 280)
+        # Footer band starts at content_bottom; keep a visible gap.
+        self.assertGreaterEqual(chrome.content_bottom - bottom, 14)
+
+    def test_portrait_bottom_clears_dismiss_footer(self):
+        from src.design_system import page_chrome
+
+        screen_w, screen_h = 1080, 1920
+        top, bottom, footer_clear = RoutePlannerPanel.content_frame_bounds(screen_w, screen_h)
+        chrome = page_chrome(screen_w, screen_h, timed=True)
+        self.assertLess(bottom, chrome.content_bottom)
+        self.assertEqual(bottom, int(round(chrome.content_bottom)) - footer_clear)
+        self.assertGreater(bottom - top, 280)
+        self.assertLess(top, chrome.content_top)
+
+    def test_tile_boxes_stay_inside_cleared_frame(self):
+        screen_w, screen_h = 1920, 1080
+        top, bottom, _ = RoutePlannerPanel.content_frame_bounds(screen_w, screen_h)
+        tiles_top = top + 120
+        tiles_bottom = bottom - 10
+        boxes = RoutePlannerPanel._compute_tile_boxes(
+            None, 60, 1800, tiles_top, tiles_bottom, False,
+        )
+        for key, (_x0, y0, _x1, y1) in boxes.items():
+            self.assertGreaterEqual(y0, tiles_top - 1, key)
+            self.assertLessEqual(y1, tiles_bottom + 1, key)
+        self.assertLessEqual(boxes["time"][3], tiles_bottom + 1)
+
+
 class ComputeTileBoxesTests(unittest.TestCase):
     """`_compute_tile_boxes` only does arithmetic on its arguments — no Tk
     canvas/config access — so it can run against a bare (unconstructed)
@@ -159,8 +200,8 @@ class RouteFormattingTests(unittest.TestCase):
         self.assertEqual(format_route_distance(177.1), "177 mi")
 
     def test_format_route_distance_handles_missing_value(self):
-        self.assertEqual(format_route_distance(None), "—")
-        self.assertEqual(format_route_distance("n/a"), "—")
+        self.assertEqual(format_route_distance(None), "…")
+        self.assertEqual(format_route_distance("n/a"), "…")
 
     def test_format_route_duration_hours_and_minutes(self):
         self.assertEqual(format_route_duration(195), "3h 15m")
@@ -172,7 +213,7 @@ class RouteFormattingTests(unittest.TestCase):
         self.assertEqual(format_route_duration(45), "45m")
 
     def test_format_route_duration_handles_missing_value(self):
-        self.assertEqual(format_route_duration(None), "—")
+        self.assertEqual(format_route_duration(None), "…")
 
     def test_shorten_route_place_name_strips_us_country_suffix(self):
         self.assertEqual(
@@ -205,6 +246,74 @@ class RouteFormattingTests(unittest.TestCase):
         label = format_local_time_at_offset(None)
         expected = datetime.now(timezone.utc).strftime("%I:%M %p").lstrip("0")
         self.assertEqual(label, expected)
+
+
+class ProgressiveStatusTests(unittest.TestCase):
+    """Progressive UDP updates: names first, then coords, then distance."""
+
+    def test_resolve_status_defaults_to_loading_without_distance(self):
+        self.assertEqual(
+            RoutePlannerPanel.resolve_status({"origin": {}, "destination": {}}),
+            "loading",
+        )
+
+    def test_resolve_status_defaults_to_ready_when_distance_present(self):
+        self.assertEqual(
+            RoutePlannerPanel.resolve_status({"distanceMiles": 177}),
+            "ready",
+        )
+
+    def test_loading_badge_and_finding_places_copy(self):
+        payload = {
+            "status": "loading",
+            "origin": {"name": "Home"},
+            "destination": {"name": "Moab"},
+        }
+        self.assertEqual(
+            RoutePlannerPanel.status_badge_label("loading", "driving"),
+            "Looking Up Route",
+        )
+        self.assertIn(
+            "Finding places",
+            RoutePlannerPanel.status_stat_text(payload, "loading"),
+        )
+
+    def test_failed_badge_and_error_copy(self):
+        payload = {"status": "failed", "error": "Could not find one of those places"}
+        self.assertEqual(
+            RoutePlannerPanel.status_badge_label("failed", "driving"),
+            "Route Unavailable",
+        )
+        self.assertEqual(
+            RoutePlannerPanel.status_stat_text(payload, "failed"),
+            "Could not find one of those places",
+        )
+
+    def test_ready_driving_and_flight_badges(self):
+        self.assertEqual(
+            RoutePlannerPanel.status_badge_label("ready", "driving"),
+            "Driving Estimate",
+        )
+        self.assertEqual(
+            RoutePlannerPanel.status_badge_label("ready", "flight"),
+            "Flight-Path Estimate",
+        )
+        payload = {"distanceMiles": 177.1, "durationMin": 180}
+        text = RoutePlannerPanel.status_stat_text(payload, "ready")
+        self.assertIn("177", text)
+        self.assertIn("about", text)
+
+    def test_map_weather_wait_until_both_places_have_coords(self):
+        skeleton = (
+            {"name": "Home", "latitude": 40.0, "longitude": -111.0},
+            {"name": "Moab"},
+        )
+        self.assertFalse(RoutePlannerPanel.places_have_coords(*skeleton))
+        geocoded = (
+            {"name": "Home", "latitude": 40.0, "longitude": -111.0},
+            {"name": "Moab", "latitude": 38.57, "longitude": -109.55},
+        )
+        self.assertTrue(RoutePlannerPanel.places_have_coords(*geocoded))
 
 
 if __name__ == "__main__":

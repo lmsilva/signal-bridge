@@ -13,6 +13,9 @@
     "targets": [],
     "sharedSecret": ""
   },
+  "routePlanner": {
+    "displaySeconds": null
+  },
   "webServer": {
     "enabled": true,
     "port": 47810,

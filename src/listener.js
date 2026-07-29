@@ -539,11 +539,17 @@ function createListener({ config, log }) {
           log.info(`Processing ack sent (${event.kind}) for ${event.device}`);
         }
       }
-    } else if (event.kind === 'route') {
+    } else if (
+      event.kind === 'music'
+      && event.trigger === 'music-query'
+      && /^signal$/i.test(String(event.device || ''))
+    ) {
+      // Web Quick Push has no Echo preferred device and no spoken answer —
+      // household scan can take a few seconds; ack so the display reacts now.
       const ack = buildProcessingAckPayload(event, config);
       if (ack) {
         emitVoicePayload(ack);
-        log.info(`Processing ack sent (route) for ${event.device}`);
+        log.info(`Processing ack sent (music) for ${event.device}`);
       }
     }
 
@@ -892,8 +898,38 @@ function createListener({ config, log }) {
       pendingVoiceResponses.forget(event.device, 'route');
       let { origin, destination } = locations;
 
-      // Geocode any place that still lacks coordinates (named cities, or a
-      // name-only defaultLocation). Local "here" with lat/lon skips this.
+      const emitRouteUpdate = (parts, meta = {}) => {
+        const update = buildRoutePlannerPayload(event, config, parts);
+        if (!update) {
+          return null;
+        }
+        emitVoicePayload(update);
+        voiceEventsLog.append({
+          type: update.type,
+          device: update.device,
+          query: event.query,
+          status: update.status,
+        });
+        log.info(`Route planner update (${update.status}) for ${event.device}`, {
+          query: event.query,
+          status: update.status,
+          origin: update.origin?.name || null,
+          destination: update.destination?.name || null,
+          distanceMiles: update.distanceMiles,
+          ...meta,
+        });
+        return update;
+      };
+
+      // 1) Names on screen immediately — no waiting for geocode/OSRM.
+      emitRouteUpdate({
+        origin,
+        destination,
+        route: null,
+        mode: 'driving',
+        status: 'loading',
+      });
+
       const ensureRouteCoords = async (place, role) => {
         if (place?.latitude != null && place?.longitude != null) {
           return place;
@@ -906,7 +942,10 @@ function createListener({ config, log }) {
           });
           return null;
         }
-        const geocoded = await geocodeLocation(query);
+        const geocoded = await geocodeLocation(query, {
+          timeoutMs: 10000,
+          maxLookups: 3,
+        });
         if (!geocoded) {
           log.warn(`Route planner could not geocode ${role}`, { query });
           return null;
@@ -915,18 +954,39 @@ function createListener({ config, log }) {
       };
 
       try {
-        origin = await ensureRouteCoords(origin, 'origin');
-        if (!origin) {
-          return;
-        }
-        destination = await ensureRouteCoords(destination, 'destination');
-        if (!destination) {
-          return;
-        }
+        const [resolvedOrigin, resolvedDestination] = await Promise.all([
+          ensureRouteCoords(origin, 'origin'),
+          ensureRouteCoords(destination, 'destination'),
+        ]);
+        origin = resolvedOrigin;
+        destination = resolvedDestination;
       } catch (error) {
         log.warn('Route planner geocoding failed', error.message || error);
+        origin = null;
+        destination = null;
+      }
+
+      if (!origin || !destination) {
+        emitRouteUpdate({
+          origin: origin || locations.origin,
+          destination: destination || locations.destination,
+          route: null,
+          mode: 'driving',
+          status: 'failed',
+          error: 'Could not find one of those places',
+        });
+        lastCaptureAt = Date.now();
         return;
       }
+
+      // 2) Coords ready — client can start map/weather while OSRM runs.
+      emitRouteUpdate({
+        origin,
+        destination,
+        route: null,
+        mode: 'driving',
+        status: 'loading',
+      }, { phase: 'geocoded' });
 
       let mode = 'driving';
       let route;
@@ -940,16 +1000,29 @@ function createListener({ config, log }) {
         route = greatCircleEstimate(origin, destination);
         if (!route) {
           log.warn('Route planner could not compute a flight fallback', { origin, destination });
+          emitRouteUpdate({
+            origin,
+            destination,
+            route: null,
+            mode: 'driving',
+            status: 'failed',
+            error: 'Could not calculate a route',
+          });
+          lastCaptureAt = Date.now();
           return;
         }
       }
 
-      payload = buildRoutePlannerPayload(event, config, {
-        origin, destination, route, mode,
-      });
-      if (!payload) {
-        return;
-      }
+      // 3) Final distance / geometry — handled here (early return, not fall-through).
+      emitRouteUpdate({
+        origin,
+        destination,
+        route,
+        mode,
+        status: 'ready',
+      }, { phase: 'routed', mode });
+      lastCaptureAt = Date.now();
+      return;
     } else if (event.kind === 'guest-photobooth') {
       const settings = resolveGuestPhotoboothSettings(config);
       if (!settings.configured) {

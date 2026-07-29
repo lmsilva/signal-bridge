@@ -15,8 +15,10 @@ const DUPLICATE_CONTENT_WINDOW_MS = 2 * 60 * 1000;
 
 const {
   parseBroadcastUtterance,
+  resolveBroadcastUtterance,
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
+  cleanBroadcastMessage,
 } = require('./broadcast-parse');
 const { extractActivityFields } = require('./activity-fields');
 
@@ -196,10 +198,11 @@ class BroadcastParser {
     const fields = extractActivityFields(activity);
     const summary = fields.summary || fields.allText;
     const response = fields.response;
+    const customerParts = fields.customerParts || [];
     const device = getDeviceName(activity);
     const utteranceType = fields.utteranceType || activity?.data?.utteranceType;
 
-    if (!summary && !response) {
+    if (!summary && !response && customerParts.length === 0) {
       return null;
     }
 
@@ -207,8 +210,39 @@ class BroadcastParser {
       return null;
     }
 
-    if (BROADCAST_VERB_RE.test(summary)) {
-      const parsed = parseBroadcastUtterance(summary);
+    const pendingFollowUp = Boolean(
+      this.pendingAnnounceDevice
+      && device === this.pendingAnnounceDevice
+      && messageLooksLikeFollowUp(summary, customerParts)
+      && timestamp >= this.pendingAnnounceStartedAt - 5000
+      && Date.now() - this.pendingAnnounceStartedAt < 120000
+    );
+
+    // Prefer completing a pending two-step announce before treating a
+    // comma-joined ", broadcast …" echo as a new broadcast verb utterance.
+    if (pendingFollowUp) {
+      const followUp = resolveBroadcastUtterance(summary, customerParts);
+      const message = followUp?.kind === 'follow-up'
+        ? followUp.message
+        : cleanBroadcastMessage(summary);
+      if (!message) {
+        return null;
+      }
+      return this.recordIfNew({
+        message,
+        destination: this.pendingAnnounceDestination,
+        device,
+        source: 'voice',
+        trigger: 'broadcast-followup',
+        timestamp,
+        rawSummary: summary,
+        rawResponse: response,
+        activityId,
+      });
+    }
+
+    if (BROADCAST_VERB_RE.test(summary) || customerParts.some((part) => BROADCAST_VERB_RE.test(part))) {
+      const parsed = resolveBroadcastUtterance(summary, customerParts);
       if (parsed?.kind === 'inline' && parsed.message) {
         return this.recordIfNew({
           message: parsed.message,
@@ -237,27 +271,6 @@ class BroadcastParser {
       return null;
     }
 
-    if (
-      this.pendingAnnounceDevice
-      && device === this.pendingAnnounceDevice
-      && summary
-      && messageLooksLikeFollowUp(summary)
-      && timestamp >= this.pendingAnnounceStartedAt - 5000
-      && Date.now() - this.pendingAnnounceStartedAt < 120000
-    ) {
-      return this.recordIfNew({
-        message: summary,
-        destination: this.pendingAnnounceDestination,
-        device,
-        source: 'voice',
-        trigger: 'broadcast-followup',
-        timestamp,
-        rawSummary: summary,
-        rawResponse: response,
-        activityId,
-      });
-    }
-
     if (this.pendingAnnounceDevice && Date.now() - this.pendingAnnounceStartedAt > 120000) {
       this.clearPendingAnnounce();
     }
@@ -266,18 +279,23 @@ class BroadcastParser {
   }
 }
 
-function messageLooksLikeFollowUp(summary) {
-  const text = normalizeText(summary);
-  if (!text) {
-    return false;
+function messageLooksLikeFollowUp(summary, customerParts = []) {
+  const candidates = [normalizeText(summary), ...(customerParts || []).map((part) => normalizeText(part))]
+    .filter(Boolean);
+  for (const text of candidates) {
+    if (!text || WAKE_WORD_ONLY_RE.test(text)) {
+      continue;
+    }
+    // A trailing ", broadcast …" echo must not disqualify a real follow-up message.
+    const cleaned = cleanBroadcastMessage(text);
+    if (cleaned && !BROADCAST_VERB_RE.test(cleaned)) {
+      return true;
+    }
+    if (!BROADCAST_VERB_RE.test(text) && cleaned) {
+      return true;
+    }
   }
-  if (BROADCAST_VERB_RE.test(text)) {
-    return false;
-  }
-  if (WAKE_WORD_ONLY_RE.test(text)) {
-    return false;
-  }
-  return true;
+  return false;
 }
 
 module.exports = {
@@ -288,4 +306,6 @@ module.exports = {
   isBroadcastCommandOnly,
   isBroadcastPrompt,
   parseBroadcastUtterance,
+  resolveBroadcastUtterance,
+  cleanBroadcastMessage,
 };

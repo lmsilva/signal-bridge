@@ -90,46 +90,156 @@ function parseBroadcastUtterance(summary) {
   }
 
   let rest = normalizeText(verbMatch[1]);
+  // Amazon often joins a second ASR fragment with a comma:
+  // "broadcast this is a test, broadcast this is a test" → rest still has
+  // ", broadcast …". Drop the redundant verb clause before splitting.
+  rest = stripTrailingBroadcastEcho(rest);
   if (!rest) {
     return { kind: 'command-only', destination: null, message: null };
   }
 
   rest = rest.replace(/^that\s+/i, '');
+  rest = normalizeText(rest.replace(/^[,.\s]+/, ''));
+  if (!rest) {
+    return { kind: 'command-only', destination: null, message: null };
+  }
 
   if (/^to\s+/i.test(rest)) {
     rest = rest.replace(/^to\s+/i, '');
 
     const allDevicesMatch = rest.match(/^(all\s+devices|everywhere)\b\s*(.*)$/i);
     if (allDevicesMatch) {
-      const message = normalizeText(allDevicesMatch[2]);
+      const message = cleanBroadcastMessage(allDevicesMatch[2]);
       return message
         ? { kind: 'inline', destination: 'All devices', message }
         : { kind: 'command-only', destination: 'All devices', message: null };
     }
 
-    return splitDestinationAndMessage(rest);
+    const split = splitDestinationAndMessage(rest);
+    if (split.kind === 'inline' && split.message) {
+      const message = cleanBroadcastMessage(split.message);
+      if (!message) {
+        return { kind: 'command-only', destination: split.destination, message: null };
+      }
+      return { ...split, message };
+    }
+    return split;
   }
 
-  return { kind: 'inline', destination: null, message: rest };
+  const message = cleanBroadcastMessage(rest);
+  if (!message) {
+    return { kind: 'command-only', destination: null, message: null };
+  }
+  return { kind: 'inline', destination: null, message };
 }
 
-function extractInlineBroadcastMessage(summary) {
-  const parsed = parseBroadcastUtterance(summary);
+/**
+ * Amazon frequently stores the same broadcast twice in one activity
+ * (ASR_REPLACEMENT + description.summary, or wake+repeat). Joining those
+ * with commas produced display text like
+ * "this is a test, broadcast this is a test" or ", broadcast".
+ */
+function stripTrailingBroadcastEcho(text) {
+  return normalizeText(text).replace(
+    /\s*,\s*(?:alexa[,\s]+)?(?:announce(?:ment)?|broadcast(?:ing)?|make an announcement|send an announcement)\b.*$/i,
+    '',
+  );
+}
+
+function cleanBroadcastMessage(value) {
+  let text = normalizeText(value);
+  if (!text) {
+    return null;
+  }
+  text = stripTrailingBroadcastEcho(text);
+  text = normalizeText(text.replace(/^[,.\s]+/, '').replace(/[,.\s]+$/, ''));
+  if (!text) {
+    return null;
+  }
+  // Verb-only leftovers after cleaning ("broadcast", "announce").
+  if (/^(?:announce(?:ment)?|broadcast(?:ing)?|make an announcement|send an announcement)$/i.test(text)) {
+    return null;
+  }
+  return text;
+}
+
+/**
+ * Prefer a single customer ASR fragment over the comma-joined summary when
+ * parsing broadcasts — joined fragments are what created the duplicated
+ * on-screen messages.
+ */
+function resolveBroadcastUtterance(summary, customerParts = []) {
+  const parts = [];
+  for (const part of customerParts || []) {
+    const text = normalizeText(part);
+    if (text && !parts.includes(text)) {
+      parts.push(text);
+    }
+  }
+  const joined = normalizeText(summary);
+  if (joined && !parts.includes(joined)) {
+    parts.push(joined);
+  }
+
+  // Longest-first: full "broadcast this is a test" wins over bare "broadcast".
+  const ranked = [...parts].sort((a, b) => b.length - a.length);
+
+  let bestCommandOnly = null;
+  for (const part of ranked) {
+    const parsed = parseBroadcastUtterance(part);
+    if (!parsed) {
+      continue;
+    }
+    if (parsed.kind === 'inline' && parsed.message) {
+      return parsed;
+    }
+    if (parsed.kind === 'command-only' && !bestCommandOnly) {
+      bestCommandOnly = parsed;
+    }
+  }
+
+  if (bestCommandOnly) {
+    return bestCommandOnly;
+  }
+
+  // Follow-up style: parts with no broadcast verb (message only).
+  for (const part of ranked) {
+    if (BROADCAST_VERB_TOKEN_RE.test(part)) {
+      continue;
+    }
+    const message = cleanBroadcastMessage(part);
+    if (message) {
+      return { kind: 'follow-up', destination: null, message };
+    }
+  }
+
+  return null;
+}
+
+const BROADCAST_VERB_TOKEN_RE = /\b(?:announce(?:ment)?|broadcast(?:ing)?|make an announcement|send an announcement)\b/i;
+
+function extractInlineBroadcastMessage(summary, customerParts = []) {
+  const parsed = resolveBroadcastUtterance(summary, customerParts)
+    || parseBroadcastUtterance(summary);
   if (parsed?.kind === 'inline' && parsed.message) {
     return parsed.message;
   }
   return null;
 }
 
-function isBroadcastCommandOnly(summary) {
-  const parsed = parseBroadcastUtterance(summary);
+function isBroadcastCommandOnly(summary, customerParts = []) {
+  const parsed = resolveBroadcastUtterance(summary, customerParts)
+    || parseBroadcastUtterance(summary);
   return parsed?.kind === 'command-only';
 }
 
 module.exports = {
   parseBroadcastUtterance,
+  resolveBroadcastUtterance,
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
+  cleanBroadcastMessage,
+  stripTrailingBroadcastEcho,
   destinationLooksLikeDevice,
   messageLooksLikeContent,
   splitDestinationAndMessage,
