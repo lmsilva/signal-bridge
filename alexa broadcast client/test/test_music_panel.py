@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -88,6 +88,28 @@ class MusicPanelEmptyTests(unittest.TestCase):
         )
         panel.shell.overlay = mock.MagicMock()
         panel.visible = True
+        # Observe positive remaining first so a units bug (already 0) cannot dismiss.
+        panel._bind_progress({
+            "state": "PLAYING",
+            "mediaLengthSec": 100,
+            "mediaProgressSec": 99,
+            "progressAt": None,
+        })
+        self.assertEqual(panel._progress_remaining(), 1)
+        self.assertTrue(panel._saw_positive_remaining)
+        panel._media_progress_sec = 100
+        self.assertEqual(panel._progress_remaining(), 0)
+        self.assertEqual(panel._progress_label(0), "Length 1m40s - 0s left")
+        panel._auto_dismissed = False
+        panel._progress_text_id = None
+        panel._progress_fill_id = None
+        panel._on_progress_tick()
+        panel.shell.overlay.dismiss_immediately.assert_called_once()
+
+    def test_progress_zero_on_first_bind_does_not_auto_dismiss(self):
+        panel = self._make_panel()
+        panel.shell.overlay = mock.MagicMock()
+        panel.visible = True
         panel._bind_progress({
             "state": "PLAYING",
             "mediaLengthSec": 100,
@@ -95,12 +117,12 @@ class MusicPanelEmptyTests(unittest.TestCase):
             "progressAt": None,
         })
         self.assertEqual(panel._progress_remaining(), 0)
-        self.assertEqual(panel._progress_label(0), "0:00 left · 1:40")
+        self.assertFalse(panel._saw_positive_remaining)
         panel._auto_dismissed = False
         panel._progress_text_id = None
         panel._progress_fill_id = None
         panel._on_progress_tick()
-        panel.shell.overlay.dismiss_immediately.assert_called_once()
+        panel.shell.overlay.dismiss_immediately.assert_not_called()
 
 
 if __name__ == "__main__":

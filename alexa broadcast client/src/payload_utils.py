@@ -326,6 +326,34 @@ def format_music_clock(seconds: int | float | None) -> str:
     return format_timer_clock(seconds)
 
 
+def format_music_duration_compact(seconds: int | float | None) -> str:
+    """Compact track length — `3m49s` / `1h02m05s` / `45s`."""
+    if seconds is None:
+        return "—"
+    total = max(0, int(seconds))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
+def format_music_progress_label(
+    length_sec: int | float | None,
+    remaining_sec: int | float | None,
+) -> str:
+    """`Length 3m49s - 1m37s left` (total first, live remaining second)."""
+    if length_sec is None:
+        return ""
+    total = format_music_duration_compact(length_sec)
+    if remaining_sec is None:
+        return f"Length {total}"
+    left = format_music_duration_compact(remaining_sec)
+    return f"Length {total} - {left} left"
+
+
 def music_remaining_seconds(
     *,
     media_length_sec: int | float | None,

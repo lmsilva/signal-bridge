@@ -6,6 +6,8 @@ Landscape: 1920×1080 with stage + vertical rail + right sidebar (§11).
 
 from __future__ import annotations
 
+import math
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 from dataclasses import dataclass
@@ -160,6 +162,19 @@ def compute_layout(
     )
 
 
+HUE_BINS = 36  # 10° bins
+SAMPLE_PX = 48
+LUMA_LO = 0.07
+LUMA_HI = 0.93
+MIN_CHROMA_S = 0.14  # ignore near-gray / muddy pavement
+MIN_SURVIVOR_FRAC = 0.08
+EDGE_FRAC = 0.18  # outer ring — mat sits against these pixels
+EDGE_WEIGHT = 2.75
+RUNNER_UP_RATIO = 0.32  # consider alternate hues with ≥ this share of the mode
+EARTHY_HUE_LO = 12.0
+EARTHY_HUE_HI = 55.0
+
+
 def rgb_to_hsl(r: float, g: float, b: float) -> tuple[float, float, float]:
     mx = max(r, g, b)
     mn = min(r, g, b)
@@ -178,36 +193,134 @@ def rgb_to_hsl(r: float, g: float, b: float) -> tuple[float, float, float]:
     return h, s, l
 
 
+def circular_mean_hue(hues_deg: list[float]) -> float:
+    """Mean hue on the colour wheel — 350° and 10° → ~0°, not 180°."""
+    if not hues_deg:
+        return 0.0
+    sin_sum = 0.0
+    cos_sum = 0.0
+    for hue in hues_deg:
+        rad = math.radians(float(hue) % 360.0)
+        sin_sum += math.sin(rad)
+        cos_sum += math.cos(rad)
+    return math.degrees(math.atan2(sin_sum, cos_sum)) % 360.0
+
+
+def is_earthy_hue(hue_deg: float) -> bool:
+    """Warm yellow–orange band that turns chocolate-brown at low lightness."""
+    h = float(hue_deg) % 360.0
+    return EARTHY_HUE_LO <= h <= EARTHY_HUE_HI
+
+
+def _mat_sat_for_hue(hue: float, sat: float) -> float:
+    """Dark mat chroma: keep cool hues vivid; keep earthy hues near-charcoal."""
+    if is_earthy_hue(hue):
+        # Vivid sunsets may tint a little; skin/wood stay charcoal-warm, not brown.
+        if sat >= 0.55:
+            return min(0.20, sat * 0.32)
+        return min(0.10, sat * 0.22)
+    if 180.0 <= (hue % 360.0) <= 280.0:  # blue / indigo
+        return min(0.34, max(0.14, sat * 0.65))
+    if 80.0 <= (hue % 360.0) <= 160.0:  # green / teal
+        return min(0.30, max(0.12, sat * 0.55))
+    return min(0.28, max(0.10, sat * 0.50))
+
+
 def sample_mat_accent(image) -> tuple[str, str]:
-    """Return (mat, accent) per spec §7. Neutral fallback if dull."""
+    """Return (mat, accent) that harmonize with the photo.
+
+    Algorithm:
+    1. Downsample, keep mid-luma chromatic pixels.
+    2. Weight by sat² and boost edge pixels (the mat frames the photo).
+    3. Pick the hue-bin mode (not an RGB mean — that always muddies to brown).
+    4. If the mode is muddy earth-tone, prefer a cooler/vivid runner-up when
+       it has a meaningful share of the vote.
+    5. Build a near-black tinted mat + brighter accent from the chosen hue.
+    """
     if image is None or Image is None:
         return NEUTRAL_MAT, NEUTRAL_ACCENT
     try:
         small = image.convert("RGB").resize(
-            (16, 16),
+            (SAMPLE_PX, SAMPLE_PX),
             getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.LANCZOS),
         )
-        pixels = list(small.getdata())
-        rs = gs = bs = 0.0
-        n = 0
-        for r, g, b in pixels:
+        try:
+            pixels = list(small.get_flattened_data())
+        except AttributeError:
+            pixels = list(small.getdata())
+        # get_flattened_data returns a flat R,G,B,… sequence on newer Pillow.
+        if pixels and not isinstance(pixels[0], (tuple, list)):
+            flat = pixels
+            pixels = [
+                (flat[i], flat[i + 1], flat[i + 2])
+                for i in range(0, len(flat) - 2, 3)
+            ]
+        total = len(pixels)
+        if total <= 0:
+            return NEUTRAL_MAT, NEUTRAL_ACCENT
+
+        edge_lo = int(SAMPLE_PX * EDGE_FRAC)
+        edge_hi = SAMPLE_PX - 1 - edge_lo
+        bin_weight = [0.0] * HUE_BINS
+        bin_hues: list[list[float]] = [[] for _ in range(HUE_BINS)]
+        bin_sats: list[list[float]] = [[] for _ in range(HUE_BINS)]
+        survivors = 0
+
+        for index, (r, g, b) in enumerate(pixels):
             R, G, B = r / 255.0, g / 255.0, b / 255.0
             luma = 0.2126 * R + 0.7152 * G + 0.0722 * B
-            if luma < 0.08 or luma > 0.92:
+            if luma < LUMA_LO or luma > LUMA_HI:
                 continue
-            rs += R
-            gs += G
-            bs += B
-            n += 1
-        if n < 0.2 * 256:
+            h, s, _l = rgb_to_hsl(R, G, B)
+            if s < MIN_CHROMA_S:
+                continue
+            survivors += 1
+            x = index % SAMPLE_PX
+            y = index // SAMPLE_PX
+            on_edge = x <= edge_lo or x >= edge_hi or y <= edge_lo or y >= edge_hi
+            # sat² favors vivid sky/grass over dull walls; edges matter for framing.
+            vote = (s * s) * (EDGE_WEIGHT if on_edge else 1.0)
+            bin_i = int(h / (360.0 / HUE_BINS)) % HUE_BINS
+            bin_weight[bin_i] += vote
+            bin_hues[bin_i].append(h)
+            bin_sats[bin_i].append(s)
+
+        if survivors < max(6, int(MIN_SURVIVOR_FRAC * total)):
             return NEUTRAL_MAT, NEUTRAL_ACCENT
-        h, s, _l = rgb_to_hsl(rs / n, gs / n, bs / n)
-        if s < 0.06:
+
+        ranked = sorted(range(HUE_BINS), key=lambda i: bin_weight[i], reverse=True)
+        mode = ranked[0]
+        if bin_weight[mode] <= 0 or not bin_hues[mode]:
             return NEUTRAL_MAT, NEUTRAL_ACCENT
-        mat_s = min(s, 0.32)
-        acc_s = max(0.35, min(s, 0.60))
-        mat = f"#{_hsl_to_hex(h, mat_s, 0.11)}"
-        accent = f"#{_hsl_to_hex(h, acc_s, 0.72)}"
+
+        def _bin_hs(bin_i: int) -> tuple[float, float]:
+            return (
+                circular_mean_hue(bin_hues[bin_i]),
+                sum(bin_sats[bin_i]) / len(bin_sats[bin_i]),
+            )
+
+        h, s = _bin_hs(mode)
+
+        # Muddy warm majorities (skin, wood, dry grass) → try a cooler/vivid alt.
+        if is_earthy_hue(h) and s < 0.58:
+            for alt in ranked[1:5]:
+                if bin_weight[alt] < RUNNER_UP_RATIO * bin_weight[mode]:
+                    break
+                if not bin_hues[alt]:
+                    continue
+                h2, s2 = _bin_hs(alt)
+                cooler_or_vivid = (not is_earthy_hue(h2)) or (s2 >= s + 0.08)
+                if cooler_or_vivid and s2 >= 0.20:
+                    h, s = h2, s2
+                    break
+
+        if s < 0.08:
+            return NEUTRAL_MAT, NEUTRAL_ACCENT
+
+        mat_s = _mat_sat_for_hue(h, s)
+        acc_s = max(0.38, min(0.62, s * 0.85 + 0.12))
+        mat = f"#{_hsl_to_hex(h, mat_s, 0.09)}"
+        accent = f"#{_hsl_to_hex(h, acc_s, 0.70)}"
         return mat, accent
     except Exception:
         return NEUTRAL_MAT, NEUTRAL_ACCENT
@@ -215,6 +328,9 @@ def sample_mat_accent(image) -> tuple[str, str]:
 
 def _hsl_to_hex(h: float, s: float, l: float) -> str:
     """HSL → RRGGBB (Tk-safe solid colors; hsl() strings are unreliable in Tk)."""
+    h = float(h) % 360.0
+    s = max(0.0, min(1.0, float(s)))
+    l = max(0.0, min(1.0, float(l)))
     c = (1 - abs(2 * l - 1)) * s
     x = c * (1 - abs((h / 60) % 2 - 1))
     m = l - c / 2
@@ -285,6 +401,32 @@ def counter_label(index: int, total: int) -> str:
     return f"{index + 1:02d} / {total:02d}"
 
 
+def rail_remaining_fraction(
+    started_at: float,
+    dwell_ms: int,
+    *,
+    now: float | None = None,
+) -> float:
+    """Accent fill fraction (1.0 full → 0.0 empty) from the same clock as NEXT IN."""
+    if dwell_ms <= 0:
+        return 0.0
+    elapsed_ms = max(0.0, ((now if now is not None else time.time()) - started_at) * 1000.0)
+    return max(0.0, min(1.0, 1.0 - elapsed_ms / float(dwell_ms)))
+
+
+def next_in_seconds(
+    started_at: float,
+    dwell_sec: int,
+    *,
+    now: float | None = None,
+) -> int:
+    """Whole seconds left for `NEXT IN Xs` / `Dismisses in Xs` (matches advance)."""
+    if dwell_sec <= 0:
+        return 0
+    elapsed = max(0.0, (now if now is not None else time.time()) - started_at)
+    return max(0, int(dwell_sec) - int(elapsed))
+
+
 class SharedPhotosRenderer:
     """Draws mat / header / stage / bar onto a Tk canvas."""
 
@@ -302,18 +444,23 @@ class SharedPhotosRenderer:
         self._photo_refs: list = []
         self._qr_ref = None
         self._rail_fill_id = None
+        self._rail_geom: tuple | None = None  # ("h", x0, x1, y0, h) | ("v", x0, x1, y0, y1)
         self._status_id = None
         self._layout: SharedPhotosLayout | None = None
         self._accent = NEUTRAL_ACCENT
         self._rail_token = 0
+        self._rail_started_at = 0.0
+        self._rail_dwell_ms = 0
         self._mode = "slideshow"
 
     def clear_refs(self):
         self._photo_refs = []
         self._qr_ref = None
         self._rail_fill_id = None
+        self._rail_geom = None
         self._status_id = None
         self._rail_token += 1
+        self._rail_dwell_ms = 0
 
     def _u_font(self, *, mono: bool, size_u: float, weight: str = "normal"):
         """Return a Tk font *spec* (tuple) so painting works without Font()."""
@@ -455,21 +602,23 @@ class SharedPhotosRenderer:
         dwell_ms: int,
         status_text: str,
         accent: str,
+        started_at: float | None = None,
     ):
         layout = self._layout
         assert layout
         self._accent = accent or NEUTRAL_ACCENT
+        started = time.time() if started_at is None else float(started_at)
         if layout.portrait:
             self._paint_bar_portrait(
                 mode=mode, index=index, total=total, uploaded_at=uploaded_at,
                 caption=caption, qr_url=qr_url, build_qr=build_qr,
-                dwell_ms=dwell_ms, status_text=status_text,
+                dwell_ms=dwell_ms, status_text=status_text, started_at=started,
             )
         else:
             self._paint_bar_landscape(
                 mode=mode, index=index, total=total, uploaded_at=uploaded_at,
                 caption=caption, qr_url=qr_url, build_qr=build_qr,
-                dwell_ms=dwell_ms, status_text=status_text,
+                dwell_ms=dwell_ms, status_text=status_text, started_at=started,
             )
 
     def _paint_rail(
@@ -480,12 +629,17 @@ class SharedPhotosRenderer:
         total: int,
         dwell_ms: int,
         accent: str,
+        started_at: float,
     ):
         layout = self._layout
         assert layout
         rx0, ry0, rx1, ry1 = layout.rail
         self._rail_token += 1
         rail_token = self._rail_token
+        self._rail_started_at = started_at
+        self._rail_dwell_ms = max(0, int(dwell_ms))
+        self._rail_geom = None
+        self._rail_fill_id = None
         show_rail = not (mode != "upload" and total <= 1)
         # Upload keeps a draining rail in the photos chrome (system footer suppressed).
         if not show_rail and mode != "upload":
@@ -501,13 +655,7 @@ class SharedPhotosRenderer:
                 )
                 self.track(fill_id)
                 self._rail_fill_id = fill_id
-                if dwell_ms > 0:
-                    self.canvas.after(
-                        16,
-                        lambda: self._animate_rail_vertical(
-                            rail_token, rx0, rx1, ry0, ry1, dwell_ms,
-                        ),
-                    )
+                self._rail_geom = ("v", rx0, rx1, ry0, ry1)
             else:
                 gap = 4 * layout.u
                 seg_h = (ry1 - ry0 - gap * (total - 1)) / max(1, total)
@@ -524,13 +672,10 @@ class SharedPhotosRenderer:
                         )
                         self.track(fill_id)
                         self._rail_fill_id = fill_id
-                        if dwell_ms > 0:
-                            self.canvas.after(
-                                16,
-                                lambda s=sy, e=ey: self._animate_rail_vertical(
-                                    rail_token, rx0, rx1, s, e, dwell_ms,
-                                ),
-                            )
+                        self._rail_geom = ("v", rx0, rx1, sy, ey)
+            if self._rail_dwell_ms > 0 and self._rail_fill_id is not None:
+                self.set_rail_fraction(1.0)  # start empty; fills top→bottom / left→right
+                self.canvas.after(16, lambda: self._tick_rail_clock(rail_token))
             return
 
         # Portrait horizontal rail along the top of the bar.
@@ -548,11 +693,7 @@ class SharedPhotosRenderer:
             )
             self.track(fill_id)
             self._rail_fill_id = fill_id
-            if dwell_ms > 0:
-                self.canvas.after(
-                    16,
-                    lambda: self._animate_rail(rail_token, bx0, bx1, rail_top, rail_h, dwell_ms),
-                )
+            self._rail_geom = ("h", bx0, bx1, rail_top, rail_h)
         else:
             gap = 4 * layout.u
             seg_w = (bx1 - bx0 - gap * (total - 1)) / max(1, total)
@@ -569,22 +710,51 @@ class SharedPhotosRenderer:
                     )
                     self.track(fill_id)
                     self._rail_fill_id = fill_id
-                    if dwell_ms > 0:
-                        self.canvas.after(
-                            16,
-                            lambda s=sx, e=ex: self._animate_rail(
-                                rail_token, s, e, rail_top, rail_h, dwell_ms,
-                            ),
-                        )
+                    self._rail_geom = ("h", sx, ex, rail_top, rail_h)
+        if self._rail_dwell_ms > 0 and self._rail_fill_id is not None:
+            self.set_rail_fraction(1.0)  # start empty; fills left→right
+            self.canvas.after(16, lambda: self._tick_rail_clock(rail_token))
 
     def _meta_strings(self, mode: str, uploaded_at, caption: str) -> tuple[str, str]:
+        """Return (eyebrow, primary) for the sidebar / bottom bar.
+
+        Eyebrow stays short so it rarely wraps; date + time share one muted line.
+        Caption (e.g. "Scan to save this photo") is the primary and may wrap.
+        """
         date = format_shared_date(uploaded_at)
         time_s = format_shared_time(uploaded_at)
         verb = "UPLOADED" if mode == "upload" else "SHARED"
         cap = (caption or "").strip()
+        eyebrow = f"{verb} {date} · {time_s}"
         if cap:
-            return f"{verb} {date} · {time_s}", cap
-        return f"{verb} {date}", time_s
+            return eyebrow, cap
+        return eyebrow, ""
+
+    def _wrapped_line_count(self, font_spec, text: str, width: float) -> int:
+        """How many lines Tk-style word wrap needs for `text` in `width`."""
+        text = (text or "").strip()
+        if not text:
+            return 0
+        width = max(1.0, float(width))
+        words = text.split()
+        if not words:
+            return 1
+        lines = 1
+        current = words[0]
+        for word in words[1:]:
+            trial = f"{current} {word}"
+            if self._measure(font_spec, trial) <= width:
+                current = trial
+            else:
+                lines += 1
+                current = word
+        return max(1, lines)
+
+    def _text_block_height(self, font_spec, text: str, width: float) -> float:
+        lines = self._wrapped_line_count(font_spec, text, width)
+        if lines <= 0:
+            return 0.0
+        return lines * float(self._linespace(font_spec))
 
     def _paint_qr_plate(self, qr_x0, qr_y0, plate, qr_size, qr_url, build_qr):
         layout = self._layout
@@ -626,49 +796,55 @@ class SharedPhotosRenderer:
         build_qr,
         dwell_ms: int,
         status_text: str,
+        started_at: float,
     ):
         layout = self._layout
         assert layout
         accent = self._accent
         bx0, by0, bx1, by1 = layout.bar
         self._paint_rail(
-            mode=mode, index=index, total=total, dwell_ms=dwell_ms, accent=accent,
+            mode=mode, index=index, total=total, dwell_ms=dwell_ms,
+            accent=accent, started_at=started_at,
         )
 
         bin_top = by0 + 32 * layout.u
         bin_left = bx0 + 40 * layout.u
         bin_right = bx1 - 40 * layout.u
         bin_bottom = by1 - 27 * layout.u
-        bin_cy = (bin_top + bin_bottom) / 2
 
         plate = layout.qr_plate
         qr_x1 = bin_right
         qr_x0 = qr_x1 - plate
         left_right = qr_x0 - 24 * layout.u
+        text_w = max(40.0, left_right - bin_left)
 
         eyeb_font = self._u_font(mono=True, size_u=22)
-        primary_font = self._u_font(mono=False, size_u=36)
+        primary_font = self._u_font(mono=False, size_u=34)
         status_font = self._u_font(mono=True, size_u=24)
         eyebrow, primary = self._meta_strings(mode, uploaded_at, caption)
 
+        cursor = bin_top + 8 * layout.u
+        gap = 10 * layout.u
         self.track(self.canvas.create_text(
-            bin_left, bin_cy - 40 * layout.u, anchor="w", text=eyebrow,
-            fill="#8a93a0", font=eyeb_font,
+            bin_left, cursor, anchor="nw", text=eyebrow,
+            fill="#8a93a0", font=eyeb_font, width=int(text_w),
         ))
-        max_primary_w = max(40, left_right - bin_left)
-        display_primary = primary
-        while self._measure(primary_font, display_primary) > max_primary_w and len(display_primary) > 4:
-            display_primary = display_primary[:-2].rstrip() + "…"
-        self.track(self.canvas.create_text(
-            bin_left, bin_cy, anchor="w", text=display_primary,
-            fill="#ffffff", font=primary_font,
-        ))
+        cursor += self._text_block_height(eyeb_font, eyebrow, text_w) + gap
+
+        if primary:
+            self.track(self.canvas.create_text(
+                bin_left, cursor, anchor="nw", text=primary,
+                fill="#ffffff", font=primary_font, width=int(text_w),
+            ))
+            cursor += self._text_block_height(primary_font, primary, text_w) + gap
+
         self._status_id = self.canvas.create_text(
-            bin_left, bin_cy + 40 * layout.u, anchor="w", text=status_text,
-            fill=accent, font=status_font,
+            bin_left, cursor, anchor="nw", text=status_text,
+            fill=accent, font=status_font, width=int(text_w),
         )
         self.track(self._status_id)
-        self._paint_qr_plate(qr_x0, bin_cy - plate / 2, plate, layout.qr_size, qr_url, build_qr)
+        qr_y0 = min(bin_bottom - plate, max(bin_top, (bin_top + bin_bottom - plate) / 2))
+        self._paint_qr_plate(qr_x0, qr_y0, plate, layout.qr_size, qr_url, build_qr)
 
     def _paint_bar_landscape(
         self,
@@ -682,14 +858,16 @@ class SharedPhotosRenderer:
         build_qr,
         dwell_ms: int,
         status_text: str,
+        started_at: float,
     ):
-        """Right sidebar: meta at top, QR plate pinned to the bottom (§11.4)."""
+        """Right sidebar: meta stacked from the top (no overlap), QR at bottom."""
         layout = self._layout
         assert layout
         accent = self._accent
         bx0, by0, bx1, by1 = layout.bar
         self._paint_rail(
-            mode=mode, index=index, total=total, dwell_ms=dwell_ms, accent=accent,
+            mode=mode, index=index, total=total, dwell_ms=dwell_ms,
+            accent=accent, started_at=started_at,
         )
 
         pad = 20 * layout.u
@@ -697,79 +875,78 @@ class SharedPhotosRenderer:
         qr_x0 = bx0 + (bx1 - bx0 - plate) / 2
         qr_y0 = by1 - pad - plate
 
-        eyeb_font = self._u_font(mono=True, size_u=22)
-        primary_font = self._u_font(mono=False, size_u=36)
-        status_font = self._u_font(mono=True, size_u=24)
+        eyeb_font = self._u_font(mono=True, size_u=20)
+        primary_font = self._u_font(mono=False, size_u=32)
+        status_font = self._u_font(mono=True, size_u=22)
         eyebrow, primary = self._meta_strings(mode, uploaded_at, caption)
 
         text_x = bx0 + pad
-        text_w = max(40, bx1 - bx0 - pad * 2)
+        text_w = max(40.0, bx1 - bx0 - pad * 2)
+        gap = 12 * layout.u
         cursor = by0 + pad
+        meta_bottom = qr_y0 - 24 * layout.u
+
+        # Shrink primary type if the caption would collide with the QR plate.
+        status_h = self._text_block_height(status_font, status_text, text_w)
+        eyebrow_h = self._text_block_height(eyeb_font, eyebrow, text_w)
+        budget = meta_bottom - cursor - eyebrow_h - status_h - gap * (3 if primary else 2)
+        if primary and budget > 0:
+            for size_u in (32, 28, 24, 22):
+                primary_font = self._u_font(mono=False, size_u=size_u)
+                if self._text_block_height(primary_font, primary, text_w) <= budget:
+                    break
+
         self.track(self.canvas.create_text(
             text_x, cursor, anchor="nw", text=eyebrow,
-            fill="#8a93a0", font=eyeb_font, width=text_w,
+            fill="#8a93a0", font=eyeb_font, width=int(text_w),
         ))
-        cursor += self._linespace(eyeb_font) + 10 * layout.u
-        display_primary = primary
-        while self._measure(primary_font, display_primary) > text_w and len(display_primary) > 4:
-            display_primary = display_primary[:-2].rstrip() + "…"
-        self.track(self.canvas.create_text(
-            text_x, cursor, anchor="nw", text=display_primary,
-            fill="#ffffff", font=primary_font, width=text_w,
-        ))
-        cursor += self._linespace(primary_font) + 12 * layout.u
+        cursor += self._text_block_height(eyeb_font, eyebrow, text_w) + gap
+
+        if primary:
+            self.track(self.canvas.create_text(
+                text_x, cursor, anchor="nw", text=primary,
+                fill="#ffffff", font=primary_font, width=int(text_w),
+            ))
+            cursor += self._text_block_height(primary_font, primary, text_w) + gap
+
         self._status_id = self.canvas.create_text(
             text_x, cursor, anchor="nw", text=status_text,
-            fill=accent, font=status_font, width=text_w,
+            fill=accent, font=status_font, width=int(text_w),
         )
         self.track(self._status_id)
         self._paint_qr_plate(qr_x0, qr_y0, plate, layout.qr_size, qr_url, build_qr)
 
-    def _animate_rail(self, token: int, x0, x1, y0, h, dwell_ms: int):
-        """Drain left→right remaining (1.0 full → 0.0 empty)."""
+    def set_rail_fraction(self, remaining: float):
+        """Paint elapsed progress from the NEXT IN clock.
+
+        `remaining` is time-left fraction (1.0 just started → 0.0 done).
+        The accent bar *loads* left→right (portrait) / top→bottom (landscape).
+        """
         fill_id = self._rail_fill_id
-        if fill_id is None or token != self._rail_token or dwell_ms <= 0:
+        geom = self._rail_geom
+        if fill_id is None or geom is None:
             return
-        steps = max(1, int(dwell_ms / 33))
-        width = x1 - x0
-        state = {"i": 0}
+        remaining = max(0.0, min(1.0, float(remaining)))
+        elapsed = 1.0 - remaining
+        try:
+            kind = geom[0]
+            if kind == "h":
+                _, x0, x1, y0, h = geom
+                self.canvas.coords(fill_id, x0, y0, x0 + (x1 - x0) * elapsed, y0 + h)
+            else:
+                _, x0, x1, y0, y1 = geom
+                self.canvas.coords(fill_id, x0, y0, x1, y0 + (y1 - y0) * elapsed)
+        except Exception:
+            pass
 
-        def tick():
-            if fill_id != self._rail_fill_id or token != self._rail_token:
-                return
-            state["i"] += 1
-            remaining = max(0.0, 1.0 - state["i"] / steps)
-            try:
-                self.canvas.coords(fill_id, x0, y0, x0 + width * remaining, y0 + h)
-            except Exception:
-                return
-            if remaining > 0.0:
-                self.canvas.after(33, tick)
-
-        tick()
-
-    def _animate_rail_vertical(self, token: int, x0, x1, y0, y1, dwell_ms: int):
-        """Drain top→bottom remaining so the accent length matches NEXT IN Xs."""
-        fill_id = self._rail_fill_id
-        if fill_id is None or token != self._rail_token or dwell_ms <= 0:
+    def _tick_rail_clock(self, token: int):
+        """Wall-clock fill — same started_at/dwell as NEXT IN / advance."""
+        if token != self._rail_token or self._rail_dwell_ms <= 0:
             return
-        steps = max(1, int(dwell_ms / 33))
-        height = y1 - y0
-        state = {"i": 0}
-
-        def tick():
-            if fill_id != self._rail_fill_id or token != self._rail_token:
-                return
-            state["i"] += 1
-            remaining = max(0.0, 1.0 - state["i"] / steps)
-            try:
-                self.canvas.coords(fill_id, x0, y0, x1, y0 + height * remaining)
-            except Exception:
-                return
-            if remaining > 0.0:
-                self.canvas.after(33, tick)
-
-        tick()
+        frac = rail_remaining_fraction(self._rail_started_at, self._rail_dwell_ms)
+        self.set_rail_fraction(frac)
+        if frac > 0.0:
+            self.canvas.after(33, lambda: self._tick_rail_clock(token))
 
     def set_status(self, text: str):
         if self._status_id is None:
@@ -778,3 +955,12 @@ class SharedPhotosRenderer:
             self.canvas.itemconfigure(self._status_id, text=text, fill=self._accent)
         except Exception:
             pass
+
+    def sync_status_and_rail(self, started_at: float, dwell_sec: int, *, status_prefix: str):
+        """Update NEXT IN / Dismisses text + rail from one wall clock."""
+        now = time.time()
+        left = next_in_seconds(started_at, dwell_sec, now=now)
+        self.set_status(f"{status_prefix} {left}s")
+        dwell_ms = max(0, int(dwell_sec) * 1000)
+        self.set_rail_fraction(rail_remaining_fraction(started_at, dwell_ms, now=now))
+        return left

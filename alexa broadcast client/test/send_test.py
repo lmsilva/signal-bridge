@@ -291,7 +291,44 @@ def build_payload(args) -> dict:
             },
         }
 
-    if args.type == "timers":
+    if args.type in ("timers", "timers-nine", "timers-dense"):
+        labels = [
+            "Toast", "Pasta", "Rice", "Eggs", "Greens", "Sauce", "Roast",
+            "Potatoes", "Bread proof", "Stock", "Brisket rest", "Dough",
+            "Chill", "Marinade", "Soup", "Beans", "Corn", "Gravy",
+            "Pie", "Coffee", "Tea", "Yogurt", "Kimchi", "Pickles",
+            "Broth", "Noodles", "Dumplings", "Stew", "Curry", "Ribs",
+            "Cake", "Cookies",
+        ]
+        if args.type == "timers":
+            count = 2
+            remainings = [75, 240]
+            durations = [300, 900]
+            names = ["Pizza", None]
+        elif args.type == "timers-nine":
+            count = 9
+            remainings = [135, 280, 425, 680, 840, 1110, 1575, 2280, 2700]
+            durations = [r + 60 for r in remainings]
+            names = labels[:count]
+        else:
+            count = 32
+            # Under-1h densify + 8 over-1h for Mode C collapse row.
+            remainings = [52 + i * 145 for i in range(24)] + [3700 + i * 420 for i in range(8)]
+            durations = [max(r + 120, 600) for r in remainings]
+            names = labels[:count]
+        timers = []
+        for i in range(count):
+            rem = remainings[i]
+            label = names[i]
+            timers.append({
+                "amazonId": f"timer-{i + 1}",
+                "device": "Kitchen Echo" if i % 2 == 0 else "Bedroom Echo",
+                "label": label,
+                "durationSec": durations[i],
+                "remainingSec": rem,
+                "status": "ON",
+                "fireAt": (now + timedelta(seconds=rem)).isoformat().replace("+00:00", "Z"),
+            })
         return {
             "version": 2,
             "type": "timer.snapshot",
@@ -299,26 +336,7 @@ def build_payload(args) -> dict:
             "timestamp": _iso_now(),
             "displaySeconds": display_seconds,
             "trigger": "test",
-            "timers": [
-                {
-                    "amazonId": "timer-1",
-                    "device": "Kitchen Echo",
-                    "label": "Pizza",
-                    "durationSec": 900,
-                    "remainingSec": 240,
-                    "status": "ON",
-                    "fireAt": (now + timedelta(minutes=4)).isoformat().replace("+00:00", "Z"),
-                },
-                {
-                    "amazonId": "timer-2",
-                    "device": "Bedroom Echo",
-                    "label": None,
-                    "durationSec": 300,
-                    "remainingSec": 75,
-                    "status": "ON",
-                    "fireAt": (now + timedelta(seconds=75)).isoformat().replace("+00:00", "Z"),
-                },
-            ],
+            "timers": timers,
             "event": {"kind": "list"},
         }
 
@@ -423,6 +441,30 @@ def build_payload(args) -> dict:
             "highlightAmazonId": "alarm-3",
         }
 
+    if args.type in ("shopping-list", "shopping-list-many"):
+        short = [
+            "eggs", "shampoo", "baby aspirin", "milkshakes", "heavy whip cream",
+            "onions", "paper towels", "Brisket", "toilet cover",
+        ]
+        many = short + [
+            "butter", "cheddar", "spinach", "lemons", "garlic",
+            "olive oil", "rice", "black beans", "tortillas", "salsa",
+            "coffee", "oat milk", "bananas", "blueberries", "yogurt",
+            "chicken thighs", "salmon", "asparagus", "mushrooms", "sourdough",
+            "dish soap", "trash bags",
+        ]
+        values = many if args.type == "shopping-list-many" else short
+        return {
+            "version": 2,
+            "type": "shopping-list.snapshot",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": max(display_seconds, 45 if args.type == "shopping-list-many" else 20),
+            "trigger": "test",
+            "items": [{"value": v, "completed": False} for v in values],
+            "event": {"kind": "list"},
+        }
+
     if args.type == "processing":
         return {
             "version": 2,
@@ -483,6 +525,13 @@ def build_payload(args) -> dict:
                 "label": "Battery",
                 "source": "fleet-api",
                 "status": "ok",
+                "batteryRange": 214,
+                "rangeMiles": 214,
+                "chargeLimit": 80,
+                "chargeLimitSoc": 80,
+                "lastChargeKwh": 32.4,
+                "rangeAddedMiles": 118,
+                "chargingLabel": "Not plugged in",
             },
         }
 
@@ -1031,7 +1080,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timer-fired", "alarms", "alarm-set", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "music", "route-planner", "route-planner-flight"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "music", "route-planner", "route-planner-flight"],
         default="broadcast",
         help="Payload type to send",
     )

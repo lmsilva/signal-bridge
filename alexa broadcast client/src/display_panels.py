@@ -1896,23 +1896,43 @@ class AirQualityPanel(BasePanel):
         self._track(self.canvas.create_rectangle(
             x, y, x + w, y + h, outline=line, width=max(1, int(round(u))), fill="",
         ))
-        # Scale type to the cell so landscape 1×5 / 3+2 stay readable, not cramped.
-        lab_u = min(20.0, max(14.0, h / u * 0.18))
-        val_u = min(38.0, max(22.0, h / u * 0.34))
-        lab_font = ("Consolas", max(10, int(round(lab_u * u))))
-        val_font = tkfont.Font(
-            family=self.config.get("titleFontFamily", "Segoe UI"),
-            size=max(14, int(round(val_u * u))),
-            weight="bold",
-        )
+        lab_font, val_font = self._metric_cell_fonts(h, u)
+        gap = max(4.0, 6 * u)
+        lab_h = lab_font.metrics("linespace")
+        val_h = val_font.metrics("linespace")
+        # Stack label above value, vertically centered — never overlap.
+        block = lab_h + gap + val_h
+        top = y + max(4.0, (h - block) / 2)
+        cx = x + w / 2
         self._track(self.canvas.create_text(
-            x + w / 2, y + min(20 * u, h * 0.22), anchor="n",
-            text=label, fill=accent, font=lab_font,
+            cx, top, anchor="n", text=label, fill=accent, font=lab_font,
         ))
         self._track(self.canvas.create_text(
-            x + w / 2, y + h - min(18 * u, h * 0.18), anchor="s",
-            text=value, fill=ink, font=val_font,
+            cx, top + lab_h + gap, anchor="n", text=value, fill=ink, font=val_font,
         ))
+
+    def _metric_cell_fonts(self, h: float, u: float):
+        """Pick label/value fonts that fit stacked inside the cell height."""
+        title_family = self.config.get("titleFontFamily", "Segoe UI")
+        lab_size = max(10, int(round(min(18.0, max(12.0, h / u * 0.16)) * u)))
+        val_size = max(12, int(round(min(34.0, max(18.0, h / u * 0.28)) * u)))
+        lab_font = tkfont.Font(family="Consolas", size=lab_size)
+        val_font = tkfont.Font(family=title_family, size=val_size, weight="bold")
+        gap = max(4.0, 6 * u)
+        pad = max(6.0, 8 * u)
+        while True:
+            need = lab_font.metrics("linespace") + gap + val_font.metrics("linespace") + 2 * pad
+            if need <= h:
+                break
+            cur_val = int(val_font.cget("size"))
+            cur_lab = int(lab_font.cget("size"))
+            if cur_val > 12:
+                val_font.configure(size=cur_val - 1)
+            elif cur_lab > 9:
+                lab_font.configure(size=cur_lab - 1)
+            else:
+                break
+        return lab_font, val_font
 
     def _draw_room_row(self, x, y, w, h, name, score, color, ink, track, u):
         self._track(self.canvas.create_line(
@@ -1987,7 +2007,7 @@ class AirQualityPanel(BasePanel):
     def _draw_metrics_row(self, x, y, width, values, *, accent, ink, line, u, cell_h: float | None = None) -> float:
         gap = 16 * u
         cell_w = (width - gap * 4) / 5
-        met_h = cell_h if cell_h is not None else 120 * u
+        met_h = cell_h if cell_h is not None else 132 * u
         for index, (key, label) in enumerate(self.METRICS):
             self._draw_metric_cell(
                 x + index * (cell_w + gap), y, cell_w, met_h,
@@ -2001,14 +2021,14 @@ class AirQualityPanel(BasePanel):
         gap = 16 * u
         # Prefer a single row when each cell has room for label + value.
         if width / 5 >= 150 * u:
-            cell_h = min(130 * u, max(96 * u, height * 0.28))
+            cell_h = min(148 * u, max(110 * u, height * 0.32))
             return self._draw_metrics_row(
                 x, y, width, values,
                 accent=accent, ink=ink, line=line, u=u, cell_h=cell_h,
             )
         # 3 on top, 2 below — both rows use the same cell width (⅓), bottom centered.
         cell_w = (width - gap * 2) / 3
-        cell_h = min(120 * u, max(88 * u, (height * 0.42 - gap) / 2))
+        cell_h = min(132 * u, max(100 * u, (height * 0.48 - gap) / 2))
         top = self.METRICS[:3]
         bottom = self.METRICS[3:]
         for index, (key, label) in enumerate(top):
@@ -2420,6 +2440,10 @@ class TimerPanel(BasePanel):
         clock_scale = 0.18 if long_clock else 0.24
         clock_size = max(13, int(round(clock_scale * diameter)))
         lab_font = ("Consolas", max(11, int(round(26 * u))))
+        place_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(10, int(round(22 * u))),
+        )
         clock_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
             size=clock_size,
@@ -2430,9 +2454,16 @@ class TimerPanel(BasePanel):
             size=max(11, int(round(28 * u))),
         )
 
+        primary, place = self._timer_name_and_place(timer, ring=True)
+        label_y = cy - radius - 14 * u
+        if place:
+            self._track(self.canvas.create_text(
+                cx, label_y, anchor="s", text=place, fill=ink2, font=place_font,
+            ))
+            label_y -= place_font.metrics("linespace") + 4 * u
         self._track(self.canvas.create_text(
-            cx, cy - radius - 14 * u, anchor="s",
-            text=timer_display_label(timer), fill=ink3, font=lab_font,
+            cx, label_y, anchor="s",
+            text=primary, fill=ink3, font=lab_font,
         ))
         arc_id = self._draw_ring(cx, cy, radius, stroke, frac, color, track)
         remaining_id = self._track(self.canvas.create_text(
@@ -2461,6 +2492,19 @@ class TimerPanel(BasePanel):
         chip = timer_display_label(timer)
         return chip.title() if chip != "TIMER" else chip
 
+    @classmethod
+    def _timer_place(cls, timer: dict | None) -> str:
+        place = cls._format_device_name((timer or {}).get("device"))
+        return "" if place == "Unknown device" else place
+
+    @classmethod
+    def _timer_name_and_place(cls, timer: dict | None, *, ring: bool = False) -> tuple[str, str]:
+        """Return (primary label, Echo place). Place empty when unknown."""
+        place = cls._timer_place(timer)
+        if ring:
+            return timer_display_label(timer), place
+        return cls._row_display_name(timer or {}), place
+
     def _paint_then_row(
         self,
         timer: dict,
@@ -2476,7 +2520,7 @@ class TimerPanel(BasePanel):
         ink3: str,
         track: str,
     ):
-        """Mode B THEN row — clock · name · ends + drain bar (106–160 tall)."""
+        """Mode B THEN row — clock · name/device · ends + drain bar (106–160 tall)."""
         deadline = self._deadline_for_timer(timer)
         remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
         duration = float(timer.get("durationSec") or remaining or 1)
@@ -2487,6 +2531,10 @@ class TimerPanel(BasePanel):
         name_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
             size=max(11, int(round(30 * u))),
+        )
+        place_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(10, int(round(22 * u))),
         )
         end_font = ("Consolas", max(11, int(round(22 * u))))
         cy = y + h / 2
@@ -2506,16 +2554,34 @@ class TimerPanel(BasePanel):
             x, cy, anchor="w", text=format_timer_clock(remaining),
             fill=color, font=time_font,
         ))
-        display_name = self._row_display_name(timer)
+        primary, place = self._timer_name_and_place(timer)
         name_x = x + time_col + 18 * u
         ends = self._ends_text(timer, short=True)
         end_w = tkfont.Font(family="Consolas", size=max(11, int(round(22 * u)))).measure(ends or "")
         name_right = x + w - end_w - 16 * u
-        while name_font.measure(display_name) > max(40, name_right - name_x) and len(display_name) > 4:
-            display_name = display_name[:-2].rstrip() + "…"
-        self._track(self.canvas.create_text(
-            name_x, cy, anchor="w", text=display_name, fill=ink2, font=name_font,
-        ))
+        max_name_w = max(40, name_right - name_x)
+
+        def _ellipsize(text: str, font) -> str:
+            display = text
+            while font.measure(display) > max_name_w and len(display) > 4:
+                display = display[:-2].rstrip() + "…"
+            return display
+
+        if place:
+            name_y = cy - (name_font.metrics("linespace") + place_font.metrics("linespace")) / 2
+            self._track(self.canvas.create_text(
+                name_x, name_y, anchor="nw",
+                text=_ellipsize(primary, name_font), fill=ink2, font=name_font,
+            ))
+            self._track(self.canvas.create_text(
+                name_x, name_y + name_font.metrics("linespace") + 2 * u, anchor="nw",
+                text=_ellipsize(place, place_font), fill=ink3, font=place_font,
+            ))
+        else:
+            self._track(self.canvas.create_text(
+                name_x, cy, anchor="w",
+                text=_ellipsize(primary, name_font), fill=ink2, font=name_font,
+            ))
         if ends:
             self._track(self.canvas.create_text(
                 x + w, cy, anchor="e", text=ends, fill=ink3, font=end_font,
@@ -2539,9 +2605,10 @@ class TimerPanel(BasePanel):
         u: float,
         role: str,
         ink2: str,
+        ink3: str,
         track: str,
     ):
-        """Mode C compact cell — clock + name + thin drain bar (84 tall)."""
+        """Mode C compact cell — clock + name/device + thin drain bar (84 tall)."""
         deadline = self._deadline_for_timer(timer)
         remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
         duration = float(timer.get("durationSec") or remaining or 1)
@@ -2551,6 +2618,10 @@ class TimerPanel(BasePanel):
         name_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
             size=max(11, int(round(26 * u))),
+        )
+        place_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(9, int(round(18 * u))),
         )
         cy = y + h / 2
         time_col = 150 * u
@@ -2568,13 +2639,31 @@ class TimerPanel(BasePanel):
             x, cy, anchor="w", text=format_timer_clock(remaining),
             fill=color, font=time_font,
         ))
-        display_name = self._row_display_name(timer)
+        primary, place = self._timer_name_and_place(timer)
         name_x = x + time_col + 14 * u
-        while name_font.measure(display_name) > max(30, x + w - name_x) and len(display_name) > 4:
-            display_name = display_name[:-2].rstrip() + "…"
-        self._track(self.canvas.create_text(
-            name_x, cy, anchor="w", text=display_name, fill=ink2, font=name_font,
-        ))
+        max_name_w = max(30, x + w - name_x)
+
+        def _ellipsize(text: str, font) -> str:
+            display = text
+            while font.measure(display) > max_name_w and len(display) > 4:
+                display = display[:-2].rstrip() + "…"
+            return display
+
+        if place:
+            name_y = cy - (name_font.metrics("linespace") + place_font.metrics("linespace")) / 2
+            self._track(self.canvas.create_text(
+                name_x, name_y, anchor="nw",
+                text=_ellipsize(primary, name_font), fill=ink2, font=name_font,
+            ))
+            self._track(self.canvas.create_text(
+                name_x, name_y + name_font.metrics("linespace") + 1 * u, anchor="nw",
+                text=_ellipsize(place, place_font), fill=ink3, font=place_font,
+            ))
+        else:
+            self._track(self.canvas.create_text(
+                name_x, cy, anchor="w",
+                text=_ellipsize(primary, name_font), fill=ink2, font=name_font,
+            ))
 
         self._deadlines.append(deadline)
         self._durations.append(duration)
@@ -2595,7 +2684,7 @@ class TimerPanel(BasePanel):
         ink2: str,
         ink3: str,
     ):
-        """Mode C soonest strip — large clock + name + ENDS (no ring)."""
+        """Mode C soonest strip — large clock + name/device + ENDS (no ring)."""
         deadline = self._deadline_for_timer(timer)
         remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
         duration = float(timer.get("durationSec") or remaining or 1)
@@ -2609,6 +2698,10 @@ class TimerPanel(BasePanel):
             family=self.config.get("titleFontFamily", "Segoe UI"),
             size=max(13, int(round(40 * u))),
         )
+        place_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(11, int(round(26 * u))),
+        )
         end_font = ("Consolas", max(11, int(round(24 * u))))
         cy = y + h / 2
         clock = format_timer_clock(remaining)
@@ -2616,17 +2709,35 @@ class TimerPanel(BasePanel):
             x, cy, anchor="w", text=clock, fill=color, font=clock_font,
         ))
         clock_w = clock_font.measure(clock)
-        name = self._row_display_name(timer)
+        primary, place = self._timer_name_and_place(timer)
         name_x = x + clock_w + 28 * u
         ends = self._ends_text(timer, short=True)
         ends_label = f"ENDS {ends}" if ends else ""
         end_w = tkfont.Font(family="Consolas", size=max(11, int(round(24 * u)))).measure(ends_label)
         name_right = x + w - end_w - 28 * u
-        while name_font.measure(name) > max(40, name_right - name_x) and len(name) > 4:
-            name = name[:-2].rstrip() + "…"
-        self._track(self.canvas.create_text(
-            name_x, cy, anchor="w", text=name, fill=ink2, font=name_font,
-        ))
+        max_name_w = max(40, name_right - name_x)
+
+        def _ellipsize(text: str, font) -> str:
+            display = text
+            while font.measure(display) > max_name_w and len(display) > 4:
+                display = display[:-2].rstrip() + "…"
+            return display
+
+        if place:
+            name_y = cy - (name_font.metrics("linespace") + place_font.metrics("linespace")) / 2
+            self._track(self.canvas.create_text(
+                name_x, name_y, anchor="nw",
+                text=_ellipsize(primary, name_font), fill=ink2, font=name_font,
+            ))
+            self._track(self.canvas.create_text(
+                name_x, name_y + name_font.metrics("linespace") + 2 * u, anchor="nw",
+                text=_ellipsize(place, place_font), fill=ink3, font=place_font,
+            ))
+        else:
+            self._track(self.canvas.create_text(
+                name_x, cy, anchor="w",
+                text=_ellipsize(primary, name_font), fill=ink2, font=name_font,
+            ))
         if ends_label:
             self._track(self.canvas.create_text(
                 x + w, cy, anchor="e", text=ends_label, fill=ink3, font=end_font,
@@ -2872,6 +2983,7 @@ class TimerPanel(BasePanel):
                 u=u,
                 role="muted",
                 ink2=ink2,
+                ink3=ink3,
                 track=track,
             )
 
@@ -3424,6 +3536,7 @@ class MusicPanel(BasePanel):
         self._progress_at = None
         self._playback_playing = True
         self._auto_dismissed = False
+        self._saw_positive_remaining = False
 
     def hide(self):
         self._stop_progress_tick()
@@ -3437,6 +3550,7 @@ class MusicPanel(BasePanel):
         self._media_progress_sec = None
         self._progress_at = None
         self._auto_dismissed = False
+        self._saw_positive_remaining = False
         super().hide()
 
     def _stop_progress_tick(self):
@@ -3500,6 +3614,7 @@ class MusicPanel(BasePanel):
         self._media_progress_sec = None
         self._progress_at = None
         self._playback_playing = str(music.get("state") or "PLAYING").upper() == "PLAYING"
+        self._saw_positive_remaining = False
         try:
             length = music.get("mediaLengthSec")
             if length is not None:
@@ -3512,7 +3627,17 @@ class MusicPanel(BasePanel):
                 self._media_progress_sec = max(0, int(float(progress)))
         except (TypeError, ValueError):
             self._media_progress_sec = 0 if self._media_length_sec is not None else None
+        # Guard against bridge progress units bugs (progress >> length).
+        if (
+            self._media_length_sec is not None
+            and self._media_progress_sec is not None
+            and self._media_progress_sec > self._media_length_sec
+        ):
+            self._media_progress_sec = min(self._media_progress_sec, self._media_length_sec)
         self._progress_at = music.get("progressAt")
+        remaining = self._progress_remaining()
+        if remaining is not None and remaining > 0:
+            self._saw_positive_remaining = True
 
     def _progress_remaining(self) -> int | None:
         return music_remaining_seconds(
@@ -3561,7 +3686,15 @@ class MusicPanel(BasePanel):
         if not self.visible or self._auto_dismissed:
             return
         remaining = self._progress_remaining()
-        if remaining is not None and remaining <= 0:
+        if remaining is not None and remaining > 0:
+            self._saw_positive_remaining = True
+        # Only auto-dismiss after we've observed a positive remaining once —
+        # never on first paint when progress units were wrong (remaining already 0).
+        if (
+            remaining is not None
+            and remaining <= 0
+            and getattr(self, "_saw_positive_remaining", False)
+        ):
             self._auto_dismissed = True
             self._dismiss_overlay()
             return

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-28 (Music progress in now-playing)
+**Last updated:** 2026-07-29 (Music progress units + route ack)
 
 ---
 
@@ -492,6 +492,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-07-29: **Music progress units + skip/route reliability** — `extractMediaProgress` coerces length/progress as a pair (early-track ms no longer read as thousands of seconds); skip falls back to household scan; softer `next please` match. Route queries emit a processing ack and geocode prefers `countryCode=US` first so distance overlays aren't silent.
 
 - 2026-07-28: **Now Playing includes track progress** — `normalizePlayerInfo` reads Alexa `progress.mediaLength` / `mediaProgress` (ms→sec) into `music.{mediaLengthSec,mediaProgressSec,progressAt}` on `music.playing` so the display can show time left and auto-dismiss when the track ends.
 - 2026-07-28: **Timer/alarm followups no longer steal Shared Photo Slideshow** — `shouldEmitSnapshot` / `shouldEmitAlarmSnapshot` only treat the *initial* `show-timers` / `show-alarms` (and set/cancel voice) as empty-list emitters; `*-followup-*` polls stay silent unless lifecycle/gained/lost. Client also protects `photo.slideshow` / `guest.photobooth` from soft refreshes.

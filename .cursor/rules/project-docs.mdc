@@ -36,7 +36,7 @@ Bridge tests: `test/*.test.js` — parser (incl. legacy fingerprint migration), 
 
 Client tests: `alexa broadcast client/test/test_*.py` (~237) — install `requirements-test.txt`; covers UDP listener, overlay countdown, broadcast/music panels, Steam artwork cache, Tesla stale bits, paths/announce, payload utils, config, LAN crypto, weather, web overlay (incl. steam close), display remote, QR/guest/slideshow/route/marquee panels.
 
-Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timer-fired,tesla-battery,tesla-battery-limited,web-open,web-open-bad,web-close,system-reboot,system-poweroff,display-discover,input-click,input-key,qr-url,qr-wifi,guest-photobooth,input-text,photo-slideshow,steam-now-playing,steam-now-playing-close,music,route-planner,route-planner-flight}`.
+Manual UDP smoke tests: `alexa broadcast client/test/send_test.py --type {broadcast,time,weather,timers,timers-nine,timers-dense,timer-fired,shopping-list,shopping-list-many,tesla-battery,tesla-battery-limited,web-open,web-open-bad,web-close,system-reboot,system-poweroff,display-discover,input-click,input-key,qr-url,qr-wifi,guest-photobooth,input-text,photo-slideshow,steam-now-playing,steam-now-playing-close,music,route-planner,route-planner-flight}`.
 
 Portable build smoke: after `build_portable.bat`, confirm `dist/alexa broadcast client/Run Alexa Broadcast Client.bat` exists and `dist/alexa broadcast client.zip` was created.
 

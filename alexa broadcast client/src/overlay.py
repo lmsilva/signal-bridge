@@ -416,6 +416,7 @@ class OverlayWindow:
         self._stop_active_panel()
         owns_chrome = display_type in (
             "tesla-dashboard.query",
+            "tesla-battery.query",
             "route-planner.query",
             "guest.photobooth",
             "steam.now-playing",
