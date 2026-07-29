@@ -386,13 +386,13 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (556+ tests)
-run_all_tests.bat           # repo root — bridge + Windows client (556+ + 308+)
+npm test                    # bridge only (560 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (560 + 317)
 ```
 
 Bridge tests in `test/*.test.js` — includes **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration + broadcast ASR dedupe), `web-command-payloads` (progressive route loading/failed), `qr-image-cache`, `route-query`/`route-fetch` (OSRM AbortSignal + 12s timeout), `guest-photobooth`, `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth`, `display-registry`, `music-info` (Signal preferred skip), `activity-fields` (`customerParts`/`responseParts`).
 
-Client tests in `alexa broadcast client/test/test_*.py` — 308+ tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
+Client tests in `alexa broadcast client/test/test_*.py` — 317 tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 ---
@@ -505,7 +505,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 - 2026-07-29: **Route Planner progressive load** — no more processing-ack failure wall: emit skeleton `route-planner.query` with names immediately, then geocoded coords, then distance/route (or `failed`). Parallel geocode (10s/3 lookups) + OSRM 12s. Dismiss **max(180, 2× default)** so the ~60s ack timeout is not the dismiss clock. Deploy: `./recreate.sh` + **restart/rebuild display client** for loading UI.
 - 2026-07-29: **Route Planner faster + longer dismiss** — parallel origin/destination geocode, 6s/8s aborts on Open-Meteo/OSRM, route geocode capped at 2 lookups; processing ack timeout 50s. Overlay dismiss is now **2×** `defaultDisplaySeconds` (override `routePlanner.displaySeconds`). Deploy: `./recreate.sh` (bridge); client already bypasses `maxDisplaySeconds` for routes.
 - 2026-07-29: **Signal Quick Push Now Playing** — web push used fake device `Signal`, so preferred `getPlayerInfo` always failed (~1.8s wasted) before household scan, ignored PAUSED tracks, and had no spoken fallback. Skip unknown preferred, scan household (PLAYING then PAUSED), emit `request.processing` ack for Signal `music-query`. Deploy: `./recreate.sh`.
-- 2026-07-29: **Test suite catch-up** — regression coverage for broadcast/route ASR dedupe, Signal music preferred skip, progressive route payloads, OSRM AbortSignal + geocode timeouts, activity `customerParts`, route loading/failed UI copy, Steam/route dismiss footer clear, shopping list paging config. Suite: **556+ bridge** + **308+ client**.
+- 2026-07-29: **Test suite catch-up** — regression coverage for broadcast/route ASR dedupe, Signal music preferred skip, progressive route payloads, OSRM AbortSignal + geocode timeouts, activity `customerParts`, route loading/failed UI copy, Steam/route dismiss footer clear, shopping list paging config. Suite: **560 bridge** + **317 client**.
 - 2026-07-28: **Certbot inside the container** — Alpine image installs `certbot`; host `./issue-letsencrypt-cert.sh` runs interactive DNS-01 via `docker exec -it`, writes `data/web-certs/`, then `docker restart`. LE state under `data/letsencrypt/`. Scripts bind-mounted; fallback `apk add certbot` if image is old.
 - 2026-07-28: **Manual Let's Encrypt (Certbot DNS-01)** — removed in-container Whois ACME auto-renew (API is reseller-only). Host script `issue-letsencrypt-cert.sh` runs Certbot manual TXT, installs `data/web-certs/{cert,key}.pem`, then `./recreate.sh`.
 - 2026-07-28: **Steam panel mockup alignment** — hero uses same art as full-frame blurred backdrop + contained sharp poster; developer·year right-aligned; smaller tags (no overlap into description); description wraps full meta width (`center_x=0`); shorter screenshot band + compact stats footer. Portable rebuild required.
