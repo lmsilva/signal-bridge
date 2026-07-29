@@ -29,6 +29,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
       # So loadDotEnv / guest-photobooth can read newly edited secrets after a
       # process restart (compose env_file alone only injects at container create).
       - ./.env:/app/.env:ro

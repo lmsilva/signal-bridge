@@ -123,7 +123,12 @@ class SteamNowPlayingPanel(BasePanel):
     PILL_BG = "#1a2740"
     FOOTER_LINE = "#243147"
     DESC_BG = "#070b14"
-    HERO_PAD = 2  # near-flush art inside the hero frame (was 24 → tiny poster)
+    # Sharp poster sits inset; blurred cover-fill uses the full hero frame behind it.
+    HERO_FG_PAD = 18
+    HERO_BLUR_RADIUS = 28
+    HERO_BLUR_BRIGHTNESS = 0.62
+    TAG_PILL_H = 22
+    TAG_FONT_GAP = 10
 
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
@@ -240,20 +245,22 @@ class SteamNowPlayingPanel(BasePanel):
         width = max(200, x1 - x0)
         aspect_wh = float(aspect_wh or _PORTRAIT_HERO_WH)
         header_h = max(48, int(height * 0.07))
-        footer_h = max(64, int(height * 0.085))
+        # Compact stats strip — mockup keeps this much shorter than the shot row.
+        footer_h = max(44, int(height * 0.052))
         gap = 8
         content_w = width - margin * 2
 
         shots_h = 0
         if has_shots:
-            shots_h = min(168, max(96, int(height * 0.13)))
+            # Modest screenshot band (was ~13% / up to 168px — dominated the footer).
+            shots_h = min(100, max(64, int(height * 0.08)))
 
-        meta_min = max(140, int(height * 0.16))
+        meta_min = max(150, int(height * 0.18))
         usable = height - margin * 2 - header_h - footer_h - shots_h - gap * (4 if has_shots else 3)
 
         ideal_hero = int(content_w / max(0.35, aspect_wh))
         max_hero = max(180, usable - meta_min)
-        soft_cap = int(height * (0.52 if aspect_wh < 1.0 else 0.34))
+        soft_cap = int(height * (0.50 if aspect_wh < 1.0 else 0.34))
         hero_h = max(160, min(ideal_hero, max_hero, soft_cap))
 
         hero_top = y0 + margin + header_h + gap
@@ -286,7 +293,7 @@ class SteamNowPlayingPanel(BasePanel):
         width = max(200, x1 - x0)
         aspect_wh = float(aspect_wh or _PORTRAIT_HERO_WH)
         header_h = int(height * 0.12)
-        footer_h = int(height * 0.14)
+        footer_h = max(44, int(height * 0.08))
         left_frac = 0.46 if aspect_wh < 1.0 else 0.50
         left_w = int((width - margin * 3) * left_frac)
         return {
@@ -501,28 +508,35 @@ class SteamNowPlayingPanel(BasePanel):
             anchor="center", text=label, fill="#94a3b8", font=steam_font,
         ))
 
+    def _tag_font(self):
+        return (
+            getattr(self.shell, "forecast_label_font", None)
+            or self.shell.chip_label_font
+        )
+
     def _draw_tags(self, tags, tx0, ty0, tx1, ty1):
         if not tags or ty1 <= ty0 + 8:
             return ty0
-        pill_gap = 8
+        pill_gap = 6
         x = tx0
         row_y0 = ty0
-        row_h = max(22, ty1 - ty0)
+        row_h = min(self.TAG_PILL_H, max(18, ty1 - ty0))
+        tag_font = self._tag_font()
         for tag in tags:
             label = str(tag)
             try:
-                tw = self.shell.chip_label_font.measure(label) + 22
+                tw = int(tag_font.measure(label)) + 16
             except Exception:
-                tw = len(label) * 8 + 22
+                tw = len(label) * 7 + 16
             if x + tw > tx1:
                 break
             self._round_rect(
-                x, row_y0, x + tw, row_y0 + row_h, 10,
+                x, row_y0, x + tw, row_y0 + row_h, 8,
                 fill="", outline=self.ACCENT,
             )
             self._item_ids.append(self.canvas.create_text(
                 x + tw / 2, row_y0 + row_h / 2, anchor="center", text=label,
-                fill=self.ACCENT, font=self.shell.chip_label_font,
+                fill=self.ACCENT, font=tag_font,
             ))
             x += tw + pill_gap
         return row_y0 + row_h
@@ -545,7 +559,7 @@ class SteamNowPlayingPanel(BasePanel):
         shots_box = boxes.get("shots") or (0, 0, 0, 0)
         shots_separate = shots_box[3] > shots_box[1] + 20
         shots = list(steam.get("screenshots") or [])[:3]
-        title_band, _desc_unused, shot_h = self._meta_band_heights(
+        _title_band, _desc_unused, shot_h = self._meta_band_heights(
             boxes["meta"], bool(shots) and not shots_separate, shots_separate=shots_separate,
         )
 
@@ -556,37 +570,39 @@ class SteamNowPlayingPanel(BasePanel):
             font=title_font,
         ))
         try:
-            title_h = title_font.metrics("linespace")
-            title_w = title_font.measure(title)
+            title_h = int(title_font.metrics("linespace"))
+            title_w = int(title_font.measure(title))
         except Exception:
             title_h = 32
             title_w = 200
+
+        # Mockup: developer · year flush to the right edge of the meta column.
         if credit:
-            credit_x = mx0 + title_w + 16
-            if credit_x + 40 < mx1:
-                try:
-                    credit_ls = credit_font.metrics("linespace")
-                except Exception:
-                    credit_ls = 14
+            try:
+                credit_ls = int(credit_font.metrics("linespace"))
+                credit_w = int(credit_font.measure(credit))
+            except Exception:
+                credit_ls = 14
+                credit_w = 120
+            # Only share the title row when there is clear space after the title.
+            if title_w + credit_w + 24 < (mx1 - mx0):
                 self._item_ids.append(self.canvas.create_text(
-                    credit_x, my0 + 2 + max(0, (title_h - credit_ls) // 2),
-                    anchor="nw", text=credit, fill=muted, font=credit_font,
+                    mx1, my0 + 2 + max(0, (title_h - credit_ls) // 2),
+                    anchor="ne", text=credit, fill=muted, font=credit_font,
                 ))
             else:
                 self._item_ids.append(self.canvas.create_text(
                     mx0, my0 + title_h + 4, anchor="nw", text=credit, fill=muted,
                     font=credit_font,
                 ))
-                try:
-                    title_h += credit_font.metrics("linespace") + 4
-                except Exception:
-                    title_h += 18
+                title_h += credit_ls + 4
 
-        tags_top = my0 + title_h + 10
-        tags_bottom = self._draw_tags(tags, mx0, tags_top, mx1, tags_top + 28)
-        credit_bottom = max(tags_bottom + 8, my0 + title_h + 8)
-
-        desc_top = min(credit_bottom, my0 + title_band)
+        tags_top = my0 + title_h + self.TAG_FONT_GAP
+        tags_bottom = self._draw_tags(
+            tags, mx0, tags_top, mx1, tags_top + self.TAG_PILL_H,
+        )
+        # Always place description *below* title/tags — never min() into the tag band.
+        desc_top = (tags_bottom if tags else my0 + title_h) + 12
         if shots_separate:
             shot_top = my1
             desc_bottom = my1
@@ -608,6 +624,7 @@ class SteamNowPlayingPanel(BasePanel):
                 bd=0,
                 bg=self.DESC_BG,
             )
+            # anchor=nw at x=0 so wrap uses the full meta width (not centered half-column).
             text_id = viewport.create_text(
                 0, 0, anchor="nw", text="",
                 fill=text, font=desc_font, width=body_width, justify=tk.LEFT,
@@ -616,7 +633,7 @@ class SteamNowPlayingPanel(BasePanel):
                 viewport, text_id, self.config, self.root, on_finish=lambda: None,
             )
             needs = scroller.configure(
-                desc, center_x=body_width / 2, viewport_height=desc_h,
+                desc, center_x=0, viewport_height=desc_h,
             )
             self.scroller = scroller
             self.needs_scroll = needs
@@ -665,19 +682,22 @@ class SteamNowPlayingPanel(BasePanel):
             ("PLAYING NOW", players_text),
         )
         col_w = (fx1 - fx0) / 3
+        # Compact vertical rhythm — label + value with little padding (footer is short).
+        label_y = fy0 + max(6, int((fy1 - fy0) * 0.18))
+        value_y = fy0 + max(22, int((fy1 - fy0) * 0.52))
         for i, (label, value) in enumerate(cols):
             cx = fx0 + col_w * i + col_w / 2
             if i > 0:
                 div_x = fx0 + col_w * i
                 self._item_ids.append(self.canvas.create_line(
-                    div_x, fy0 + 10, div_x, fy1 - 8, fill=self.FOOTER_LINE,
+                    div_x, fy0 + 6, div_x, fy1 - 6, fill=self.FOOTER_LINE,
                 ))
             self._item_ids.append(self.canvas.create_text(
-                cx, fy0 + 12, anchor="n", text=label, fill=muted,
+                cx, label_y, anchor="n", text=label, fill=muted,
                 font=self.shell.chip_label_font,
             ))
             self._item_ids.append(self.canvas.create_text(
-                cx, fy0 + 34, anchor="n", text=value, fill=text,
+                cx, value_y, anchor="n", text=value, fill=text,
                 font=self.shell.chip_value_font,
             ))
 
@@ -703,8 +723,9 @@ class SteamNowPlayingPanel(BasePanel):
         hero_box = self._layout_boxes.get("hero")
         if hero_box:
             x0, y0, x1, y1 = hero_box
-            max_w = max(40, int(x1 - x0 - self.HERO_PAD * 2))
-            max_h = max(40, int(y1 - y0 - self.HERO_PAD * 2))
+            # Fetch a large source; blur-fill + contain-fit happen in _apply_image.
+            max_w = max(40, int(x1 - x0))
+            max_h = max(40, int(y1 - y0))
             candidates = list(steam.get("posterCandidates") or [])
             if steam.get("headerImage"):
                 candidates.append(steam["headerImage"])
@@ -726,7 +747,10 @@ class SteamNowPlayingPanel(BasePanel):
     def _fetch_first_image(self, token, urls, max_w, max_h, target):
         image = None
         for url in urls:
-            cached = self._load_cached_photo(url, max_w, max_h, cover=(target == "hero"))
+            # Hero: keep near-full source so we can blur-fill the frame + contain the poster.
+            cover = False
+            raw = target == "hero"
+            cached = self._load_cached_photo(url, max_w, max_h, cover=cover, raw=raw)
             if cached is not None:
                 self.root.after(0, lambda img=cached: self._apply_image(token, img, target))
                 threading.Thread(
@@ -735,28 +759,32 @@ class SteamNowPlayingPanel(BasePanel):
                     daemon=True,
                 ).start()
                 return
-            image = self._fetch_photo(url, max_w, max_h, force_network=True, cover=(target == "hero"))
+            image = self._fetch_photo(
+                url, max_w, max_h, force_network=True, cover=cover, raw=raw,
+            )
             if image is not None:
                 break
         self.root.after(0, lambda: self._apply_image(token, image, target))
 
     def _refresh_cached_photo(self, token, url, max_w, max_h, target):
-        image = self._fetch_photo(url, max_w, max_h, force_network=True, cover=(target == "hero"))
+        raw = target == "hero"
+        image = self._fetch_photo(
+            url, max_w, max_h, force_network=True, cover=False, raw=raw,
+        )
         if image is None:
             return
         self.root.after(0, lambda: self._apply_image(token, image, target))
 
-    def _make_glow(self, image, max_w, max_h):
+    def _make_blur_backdrop(self, image, box_w, box_h):
+        """Cover-fill the hero frame with a blurred copy of the same art."""
         if image is None or Image is None or ImageFilter is None:
             return None
         try:
-            glow_w = max(8, int(max_w * 1.08))
-            glow_h = max(8, int(max_h * 1.08))
-            base = image.copy().resize((glow_w, glow_h), Image.Resampling.LANCZOS)
-            base = base.filter(ImageFilter.GaussianBlur(radius=18))
+            filled = fit_image_cover(image, box_w, box_h)
+            blurred = filled.filter(ImageFilter.GaussianBlur(radius=self.HERO_BLUR_RADIUS))
             if ImageEnhance is not None:
-                base = ImageEnhance.Brightness(base).enhance(0.55)
-            return base
+                blurred = ImageEnhance.Brightness(blurred).enhance(self.HERO_BLUR_BRIGHTNESS)
+            return blurred
         except Exception:
             return None
 
@@ -765,19 +793,27 @@ class SteamNowPlayingPanel(BasePanel):
             return
         if target == "hero":
             hero_box = self._layout_boxes.get("hero")
-            if hero_box:
-                x0, y0, x1, y1 = hero_box
-                max_w = max(40, int(x1 - x0 - self.HERO_PAD * 2))
-                max_h = max(40, int(y1 - y0 - self.HERO_PAD * 2))
-                glow = self._make_glow(image, max_w, max_h)
-                if glow is not None and self._hero_glow_id:
-                    glow_photo = ImageTk.PhotoImage(glow)
-                    self._photo_refs.append(glow_photo)
-                    try:
-                        self.canvas.itemconfigure(self._hero_glow_id, image=glow_photo)
-                    except Exception:
-                        pass
-            photo = ImageTk.PhotoImage(image)
+            if not hero_box:
+                return
+            x0, y0, x1, y1 = hero_box
+            box_w = max(40, int(x1 - x0))
+            box_h = max(40, int(y1 - y0))
+            # Backdrop: same image, cover-fitted + blurred, fills the whole frame.
+            backdrop = self._make_blur_backdrop(image, box_w, box_h)
+            if backdrop is not None and self._hero_glow_id:
+                glow_photo = ImageTk.PhotoImage(backdrop)
+                self._photo_refs.append(glow_photo)
+                try:
+                    self.canvas.itemconfigure(self._hero_glow_id, image=glow_photo)
+                except Exception:
+                    pass
+            # Foreground: full poster contained (letterbox filled by blur behind).
+            fg_w = max(40, box_w - self.HERO_FG_PAD * 2)
+            fg_h = max(40, box_h - self.HERO_FG_PAD * 2)
+            foreground = fit_image_contain(image, fg_w, fg_h)
+            if foreground is None:
+                return
+            photo = ImageTk.PhotoImage(foreground)
             self._photo_refs.append(photo)
             try:
                 self.canvas.itemconfigure(self._hero_image_id, image=photo)
@@ -793,7 +829,7 @@ class SteamNowPlayingPanel(BasePanel):
             pass
 
     @classmethod
-    def _load_cached_photo(cls, url: str, max_w: int, max_h: int, cover: bool = False):
+    def _load_cached_photo(cls, url: str, max_w: int, max_h: int, cover: bool = False, raw: bool = False):
         if not url or Image is None:
             return None
         cache_file = steam_image_cache_path(url)
@@ -801,6 +837,13 @@ class SteamNowPlayingPanel(BasePanel):
             return None
         try:
             image = Image.open(cache_file).convert("RGB")
+            if raw:
+                # Downscale huge sources for Tk memory, but keep aspect for later fits.
+                max_edge = max(max_w, max_h) * 2
+                if max(image.size) > max_edge > 0:
+                    image = image.copy()
+                    image.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+                return image
             if cover:
                 return fit_image_cover(image, max_w, max_h)
             return fit_image_contain(image, max_w, max_h)
@@ -808,12 +851,15 @@ class SteamNowPlayingPanel(BasePanel):
             return None
 
     @classmethod
-    def _fetch_photo(cls, url: str, max_w: int, max_h: int, force_network: bool = False, cover: bool = False):
+    def _fetch_photo(
+        cls, url: str, max_w: int, max_h: int, force_network: bool = False,
+        cover: bool = False, raw: bool = False,
+    ):
         global _unverified_ssl
         if not url or Image is None:
             return None
         if not force_network:
-            cached = cls._load_cached_photo(url, max_w, max_h, cover=cover)
+            cached = cls._load_cached_photo(url, max_w, max_h, cover=cover, raw=raw)
             if cached is not None:
                 return cached
         try:
@@ -839,14 +885,19 @@ class SteamNowPlayingPanel(BasePanel):
                 else:
                     raise
             image = Image.open(io.BytesIO(data)).convert("RGB")
-            fitted = fit_image_cover(image, max_w, max_h) if cover else fit_image_contain(image, max_w, max_h)
             try:
                 cache_dir = steam_image_cache_dir()
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 steam_image_cache_path(url).write_bytes(data)
             except OSError:
                 pass
-            return fitted
+            if raw:
+                max_edge = max(max_w, max_h) * 2
+                if max(image.size) > max_edge > 0:
+                    image = image.copy()
+                    image.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+                return image
+            return fit_image_cover(image, max_w, max_h) if cover else fit_image_contain(image, max_w, max_h)
         except Exception:
             try:
                 steam_image_cache_path(url).unlink(missing_ok=True)

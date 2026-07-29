@@ -148,6 +148,8 @@ function loadConfig() {
     adminSessionHours: Number(process.env.ADMIN_SESSION_HOURS)
       || Number(config.webServer?.adminSessionHours)
       || 12,
+    certFile: process.env.WEB_TLS_CERT_FILE || config.webServer?.certFile || '',
+    keyFile: process.env.WEB_TLS_KEY_FILE || config.webServer?.keyFile || '',
   };
 
   // Guest Snaps dual-QR overlay (Alexa "open guest snaps").

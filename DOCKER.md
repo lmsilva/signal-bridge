@@ -250,8 +250,41 @@ docker compose logs -f
 | Re-auth on QNAP | Stop listener, run `docker-compose.auth.yml`, then `docker compose up -d` |
 | Windows client not receiving overlays | Add PC IP to `udpBroadcast.targets`; check Windows firewall on port **47832** |
 | Control page shows no displays | Client needs `bridgeHosts: ["<NAS_IP>"]` + restart; bridge must listen on **47833** (check logs for “UDP display discovery listening”); tap refresh on the control page |
-| Control page / QR camera blocked | Use **https://** `:47810`, accept cert once; put NAS IP in `webServer.certHosts`, delete `data/web-certs/` and recreate if SAN was wrong |
+| Control page / QR camera blocked | Use **https://** `:47810`. With self-signed: accept cert once; put NAS IP in `webServer.certHosts`. With Let's Encrypt: browse the hostname (e.g. `https://signal.wittydigital.com:47810/`) — no warning |
 | Pushed URL does nothing | Client needs WebView2; check client logs; try `send_test.py --type web-open` |
+
+---
+
+## Let's Encrypt (Certbot inside the container)
+
+Whois.com has no customer DNS API, so renewals are manual. Certbot runs **inside** `signal-bridge` (Alpine image includes `certbot`); you add the TXT record in Whois when prompted.
+
+```bash
+# Once: rebuild so the image includes certbot (QNAP build can fail — see troubleshooting).
+# If build fails, the host script can still `apk add certbot` into the running container.
+./recreate.sh --build
+
+chmod +x ./issue-letsencrypt-cert.sh ./scripts/issue-letsencrypt-inside.sh
+
+# On the QNAP (or any host with docker) — interactive; leaves the container running:
+./issue-letsencrypt-cert.sh \
+  --domain signal.wittydigital.com \
+  --email you@example.com
+```
+
+What happens:
+1. `docker exec -it signal-bridge …` runs Certbot DNS-01 (manual TXT)
+2. PEMs land in `data/web-certs/cert.pem` + `key.pem` (and LE account state in `data/letsencrypt/`)
+3. Host script runs `docker restart signal-bridge` so HTTPS reloads (use `--no-restart` to skip)
+
+Re-run before the ~90-day expiry. Staging: add `--staging`.
+
+Also set in `.env`:
+
+```env
+GUEST_PHOTOBOOTH_URL=https://signal.wittydigital.com:47810/
+STEAM_OPENID_REALM=https://signal.wittydigital.com:47810
+```
 
 ---
 

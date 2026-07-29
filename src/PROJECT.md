@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-28 (full QAA test expansion)
+**Last updated:** 2026-07-28 (Certbot inside container)
 
 ---
 
@@ -103,9 +103,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-auth.js` | One-shot OAuth (`npm run tesla-auth`, `tesla-auth-pc.bat`) |
 | `src/tesla-register.js` | Partner domain register + `--verify-only` |
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
-| `src/web-server.js` | **HTTPS web UI**: guest photo booth at `/`, password-gated admin SPA at `/admin/` (`ADMIN_PASSWORD`); JSON API (public: displays + photo upload/push + `/qr-images/*`; admin: status, Tesla/URL/weather/shopping/timers/slideshow, QR URL/Wi‑Fi, Slideshow Manager, remote input, auth); self-signed TLS via `web-tls.js` |
+| `src/web-server.js` | **HTTPS web UI**: guest photo booth at `/`, password-gated admin SPA at `/admin/` (`ADMIN_PASSWORD`); JSON API (public: displays + photo upload/push + `/qr-images/*`; admin: status, Tesla/URL/weather/shopping/timers/slideshow, QR URL/Wi‑Fi, Slideshow Manager, remote input, auth); TLS via `web-tls.js` |
 | `src/web-admin-auth.js` | Admin login sessions (HTTP-only cookie) for `/admin` + protected APIs |
-| `src/web-tls.js` | Auto-generates/loads self-signed cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome) |
+| `src/web-tls.js` | Loads/generates cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome); reuses existing PEMs (e.g. Let's Encrypt from `issue-letsencrypt-cert.sh`); optional `WEB_TLS_CERT_FILE` / `WEB_TLS_KEY_FILE` |
 | `src/qr-image-cache.js` | Stores "QR code → embedded photo" uploads under `data/qr-image-cache/` **indefinitely** (no automatic expiry) — serves them back at `/qr-images/<token>.<ext>`; `list()` returns every stored photo newest-first (with its `token`) for the Slideshow Manager tab / Shared Photo Slideshow tile; `delete(token)` removes a photo (file + index entry) on request; `onChange(listener)` fires on every `store()`/`delete()` (with the fresh `list()`) so `GET /api/photos/events` (SSE) can push live camera-roll updates to every open browser tab |
 | `src/slideshow-settings.js` | Persists Shared Photo Slideshow prefs — playback order (`recent` \| `oldest` \| `random`, default `recent`) and seconds per photo (5–60, default 5) — to `data/slideshow-settings.json`; getters reload from disk so admin UI and Alexa voice stay in sync |
 | `src/web/` | **Signal** UI assets: `index.html`, `app.js`, `styles.css`, `logo.svg` / `favicon.svg` / `logo.png`, vendored `jsqr.min.js` |
@@ -294,9 +294,12 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `alarmSync.*` | Alarm poll/mirror; `localTimeZone` for `originalDate`/`originalTime` (default `America/Denver`) |
 | `teslaFleet.*` | Fleet API region, domain, VIN, keep-alive, `minRequestIntervalSec` |
 | `webServer.enabled/port` | Control web page HTTPS port (default enabled, `47810`) |
-| `webServer.https` | `true` (default) — self-signed TLS; required for live camera QR on iOS |
+| `webServer.https` | `true` (default) — TLS; required for live camera QR on iOS |
 | `webServer.httpRedirectPort` | Optional plain HTTP redirect to HTTPS (default `47811`; set `0` to disable) |
-| `webServer.certDir` / `certHosts` | Cert folder (`data/web-certs`) and extra SAN hostnames/IPs (include your NAS LAN IP) |
+| `webServer.certDir` / `certHosts` | Cert folder (`data/web-certs`) and extra SAN hostnames/IPs (self-signed only) |
+| `WEB_TLS_CERT_FILE` / `WEB_TLS_KEY_FILE` | Optional PEM path overrides |
+| `issue-letsencrypt-cert.sh` | Host wrapper: `docker exec -it` Certbot DNS-01 inside the container, then `docker restart` |
+| `scripts/issue-letsencrypt-inside.sh` | In-container Certbot (state under `data/letsencrypt/`, PEMs → `data/web-certs/`) |
 | `webServer.controlAuth.*` | PIN unlock for mouse/keyboard/power (`enabled`, `pinDigits`, `pinDisplaySeconds` null→`defaultDisplaySeconds`, `sessionMinutes` default 60 — mirrors the 1h client-side lock) |
 | `qrImage.cacheDir` | Folder for "QR → embedded photo" uploads (default `data/qr-image-cache`); photos are kept **indefinitely** — delete them from the web page's Slideshow tab |
 | `qrImage.maxBytes` | Max decoded photo size accepted by `/api/qr/image-upload` (default 6MB) |
@@ -431,7 +434,7 @@ Client tests in `alexa broadcast client/test/test_*.py` — 237 tests; see clien
 
 ## Control web page (`src/web-server.js` + `src/web/`)
 
-Served by the listener at **`https://<NAS_IP>:47810/`** (config `webServer.{enabled,port,https}`; self-signed TLS in `data/web-certs/`). Optional HTTP→HTTPS redirect on **47811**.
+Served by the listener at **`https://<NAS_IP or hostname>:47810/`** (config `webServer.{enabled,port,https}`; TLS in `data/web-certs/` — self-signed by default, or Let's Encrypt PEMs via `./issue-letsencrypt-cert.sh` → Certbot inside the container). Optional HTTP→HTTPS redirect on **47811**.
 
 | URL | Who | What |
 |-----|-----|------|
@@ -490,6 +493,9 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-28: **Certbot inside the container** — Alpine image installs `certbot`; host `./issue-letsencrypt-cert.sh` runs interactive DNS-01 via `docker exec -it`, writes `data/web-certs/`, then `docker restart`. LE state under `data/letsencrypt/`. Scripts bind-mounted; fallback `apk add certbot` if image is old.
+- 2026-07-28: **Manual Let's Encrypt (Certbot DNS-01)** — removed in-container Whois ACME auto-renew (API is reseller-only). Host script `issue-letsencrypt-cert.sh` runs Certbot manual TXT, installs `data/web-certs/{cert,key}.pem`, then `./recreate.sh`.
+- 2026-07-28: **Steam panel mockup alignment** — hero uses same art as full-frame blurred backdrop + contained sharp poster; developer·year right-aligned; smaller tags (no overlap into description); description wraps full meta width (`center_x=0`); shorter screenshot band + compact stats footer. Portable rebuild required.
 - 2026-07-28: **Full QAA test expansion** — Steam poller integration (mocked API tick/quit/infer/restore/presence), music empty-card + retry outcomes, companion-weather suppress helper, UDP AES-GCM send/receive integration, OwnedGames `rtime` mapping, voice orchestration payloads, legacy broadcast fingerprint migration, route pending TTL/cross-device. Extracted `musicQueryRetryOutcome` / `shouldSuppressCompanionWeather`; fixed Steam interrupt path that re-`beginSession`ed a matching suppressed session. Suite: **535 bridge** + **237 client**.
 - 2026-07-26: **Steam OwnedGames with idle baseline** — auto detection is gameid → presence → OwnedGames only when last-played/playtime **advanced past a boot-seeded idle baseline** (quit stamps are absorbed on session end, so they cannot reopen the card). Open sessions stay alive through brief `gameid` dropouts via OwnedGames; stagnant sessions close after `STEAM_RECENT_PLAY_STAGNANT_SEC` (default 150). Fixes “never shows” after gameid-only mode and “shows again after quit.” Deploy: `./recreate.sh`.
 - 2026-07-26: **Steam auto Now Playing = gameid or presence only** — removed OwnedGames `rtime_last_played` inference. That timestamp updates on quit and was reopening Boomerang Fu / other titles while idle. Overlay opens only when Steam reports `gameid` or a fresh local presence appId; closes as soon as both are gone. Manual Auth preview can still show last-played. Deploy: `./recreate.sh`.
