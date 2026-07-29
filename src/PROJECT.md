@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-29 (Steam state + admin lockout)
+**Last updated:** 2026-07-29 (Steam return init fix)
 
 ---
 
@@ -494,6 +494,12 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-07-29: **Fix Steam return leaving Auth stuck on "Checking session…"** — `applySteamReturnTab` now runs at end of admin startup (try/catch) so it cannot abort status polling / Authenticate handlers. Waiting Steam login shows a proper status + followup link; Authenticate opens Steam in a new tab. Cache-bust `?v=signal20`.
+
+- 2026-07-29: **Steam callback lands on Settings; logo → Push** — `/admin/?steam=ok|error` opens the Settings tab (Auth card) with a toast, then strips the query. Header logo/title (`btn-app-home`) switches to the Push tab from any tab. Cache-bust `?v=signal19`.
+
+- 2026-07-29: **Admin Shared Photo Slideshow tile → guest booth** — subtitle is now "Play every uploaded photo"; tapping **uploaded photo** opens the guest photobooth (`/`) in a new tab (same destination as the login-page link). Cache-bust `?v=signal18`.
 
 - 2026-07-29: **Steam OpenID state + admin login lockout** — Steam link callbacks require a one-time `state` nonce created by admin `/api/auth/steam/start` (blocks unauthenticated re-link). Admin login applies progressive per-IP delays after failed passwords (in-memory; unlock via `./recreate.sh`). Docs stress **`LAN_UDP_SECRET` / `udpSecret` as required** on a real LAN. Deploy: `./recreate.sh`.
 

@@ -344,6 +344,7 @@ function createWebServer({
       steamAuth.status = 'error';
       steamAuth.error = message || 'Steam link failed';
       steamAuth.running = false;
+      // Admin UI reads ?steam= and opens the Settings tab (Auth card).
       res.writeHead(302, { Location: '/admin/?steam=error' });
       res.end();
     };
@@ -393,6 +394,7 @@ function createWebServer({
       } catch {
         // ignore
       }
+      // Admin UI reads ?steam= and opens the Settings tab (Auth card).
       res.writeHead(302, { Location: '/admin/?steam=ok' });
       res.end();
     } catch (error) {

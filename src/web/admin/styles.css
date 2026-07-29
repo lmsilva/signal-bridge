@@ -214,6 +214,20 @@ body {
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+button.app-title:hover {
+  color: var(--accent);
+}
+button.app-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .app-logo {
@@ -341,6 +355,19 @@ body {
 
 .push-card-title { font-size: 1rem; font-weight: 700; }
 .push-card-sub { font-size: 0.78rem; color: var(--text-dim); }
+
+/* Inline guest-booth shortcut on the Shared Photo Slideshow tile
+   (same destination as the login-page "photo booth" link). */
+.push-booth-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.push-booth-link:hover,
+.push-booth-link:focus-visible {
+  color: #7dd3fc;
+}
 
 /* Quick Push grid — same tile as Tesla; 2 columns on phones (wraps to
    multiple rows), 4 columns on wide screens so two full rows of four. */

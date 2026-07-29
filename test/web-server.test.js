@@ -966,6 +966,29 @@ test('weather and shopping-list quick-push tiles feed synthetic events into the 
   }
 });
 
+test('admin home logo goes to Push; Steam return opens Settings', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  assert.match(html, /id="btn-app-home"/);
+  assert.match(html, /title="Go to Push"/);
+
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(js, /btn-app-home/);
+  assert.match(js, /activateTab\('push'\)/);
+  assert.match(js, /function applySteamReturnTab\(/);
+  assert.match(js, /params\.get\('steam'\)/);
+  assert.match(js, /activateTab\('settings'\)/);
+  // Steam return must run at end of startup — mid-script throws used to skip
+  // startPolling / Authenticate handlers and leave "Checking session…".
+  const applyAt = js.indexOf('function applySteamReturnTab(');
+  const startPollAt = js.lastIndexOf('startPolling();');
+  const applyCallAt = js.lastIndexOf('applySteamReturnTab();');
+  assert.ok(applyAt > 0 && startPollAt > 0 && applyCallAt > startPollAt);
+
+  const server = fs.readFileSync(path.join(__dirname, '../src/web-server.js'), 'utf8');
+  assert.match(server, /Location:\s*'\/admin\/\?steam=ok'/);
+  assert.match(server, /Location:\s*'\/admin\/\?steam=error'/);
+});
+
 test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="btn-push-guest-snaps"/);
