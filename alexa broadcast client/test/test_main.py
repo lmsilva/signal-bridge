@@ -1,6 +1,7 @@
 import unittest
+from unittest import mock
 
-from src.main import BroadcastClientApp
+from src.main import BroadcastClientApp, _make_console_streams_unicode_safe
 
 
 class MainDisplayRoutingTests(unittest.TestCase):
@@ -109,6 +110,20 @@ class MainDisplayRoutingTests(unittest.TestCase):
         app.overlay.advance = advance
         app._show_payload({"type": "weather.query", "displaySeconds": 60}, 60)
         self.assertTrue(called["advance"])
+
+
+class ConsoleUnicodeTests(unittest.TestCase):
+    def test_make_console_streams_unicode_safe_reconfigures_streams(self):
+        stdout = mock.MagicMock()
+        stderr = mock.MagicMock()
+        with mock.patch("src.main.sys.stdout", stdout), mock.patch("src.main.sys.stderr", stderr):
+            _make_console_streams_unicode_safe()
+        stdout.reconfigure.assert_called_once_with(encoding="utf-8", errors="backslashreplace")
+        stderr.reconfigure.assert_called_once_with(encoding="utf-8", errors="backslashreplace")
+
+    def test_make_console_streams_unicode_safe_ignores_streams_without_reconfigure(self):
+        with mock.patch("src.main.sys.stdout", object()), mock.patch("src.main.sys.stderr", object()):
+            _make_console_streams_unicode_safe()
 
 
 if __name__ == "__main__":

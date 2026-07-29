@@ -1,5 +1,5 @@
 # Runtime dependencies for the Windows display client (dev + portable build).
-# See README.md for feature mapping.
+# See README.md for feature mapping. For unit tests, also install requirements-test.txt.
 
 pystray>=0.19.5          # system tray icon
 Pillow>=10.0.0           # tray / image helpers

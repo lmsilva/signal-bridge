@@ -190,6 +190,25 @@ test('BroadcastParser restores fingerprint timestamps from getState() for later 
   assert.equal(parser.isDuplicateContent('this is a test', 'Office Echo', now + 3 * 60 * 1000), false);
 });
 
+test('BroadcastParser migrates legacy plain-string fingerprints as already expired', () => {
+  const now = Date.now();
+  const fp = fingerprint('this is a test', 'Office Echo');
+  const parser = new BroadcastParser({
+    fingerprintFn: fingerprint,
+    // Old bridge-state.json stored bare strings with no timestamp.
+    recordedFingerprints: [fp],
+  });
+  // Migrated as ts: 0 → immediately outside the 2-minute window.
+  assert.equal(parser.isDuplicateContent('this is a test', 'Office Echo', now), false);
+  // Fresh mark still dedupes within the window.
+  parser.markRecorded('act-1', {
+    message: 'this is a test',
+    device: 'Office Echo',
+    timestamp: now,
+  });
+  assert.equal(parser.isDuplicateContent('this is a test', 'Office Echo', now + 1000), true);
+});
+
 test('isBroadcastCommandOnly and isBroadcastPrompt helpers', () => {
   assert.equal(isBroadcastCommandOnly('broadcast'), true);
   assert.equal(isBroadcastCommandOnly('announce to office echo'), true);

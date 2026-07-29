@@ -60,6 +60,11 @@ class ConfigTests(unittest.TestCase):
         payload = {"type": "route-planner.query", "displaySeconds": 120}
         self.assertEqual(effective_display_seconds(payload, config), 120)
 
+    def test_guest_photobooth_bypasses_max_display_seconds(self):
+        config = {"defaultDisplaySeconds": 60, "maxDisplaySeconds": 60}
+        payload = {"type": "guest.photobooth", "displaySeconds": 180}
+        self.assertEqual(effective_display_seconds(payload, config), 180)
+
 
 if __name__ == "__main__":
     unittest.main()
