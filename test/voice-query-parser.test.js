@@ -285,6 +285,38 @@ test('voice query parser detects smart home command', () => {
   const event = parser.parse(activity('alexa lights on', 'Okay'));
   assert.equal(event?.kind, 'smart-home');
   assert.equal(event.command.action, 'on');
+  assert.equal(event.command.target, 'lights');
+});
+
+test('voice query parser strips comma-joined smart home ASR echo from target', () => {
+  const parser = createVoiceQueryParser();
+  // Amazon joins wake+repeat → summary "lights off, lights off"; bare matcher
+  // used to set target to "lights off, lights" ("Lights Off, Lights" on display).
+  const event = parser.parse(activity('lights off, lights off', 'Okay'));
+  assert.equal(event?.kind, 'smart-home');
+  assert.equal(event.command.action, 'off');
+  assert.equal(event.command.target, 'lights');
+  assert.ok(!/,/.test(event.command.target));
+});
+
+test('voice query parser prefers a clean customer ASR fragment for lights off', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Office Echo',
+    description: { summary: 'alexa lights off, lights' },
+    alexaResponse: 'Okay',
+    data: {
+      recordKey: 'sh-asr-1',
+      voiceHistoryRecordItems: [
+        { recordItemType: 'ASR_REPLACEMENT_TEXT', transcriptText: 'alexa lights off' },
+        { recordItemType: 'ASR_REPLACEMENT_TEXT', transcriptText: 'lights' },
+      ],
+    },
+  });
+  assert.equal(event?.kind, 'smart-home');
+  assert.equal(event.command.action, 'off');
+  assert.equal(event.command.target, 'lights');
 });
 
 test('voice query parser deduplicates processed activity ids', () => {
