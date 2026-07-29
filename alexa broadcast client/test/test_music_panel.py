@@ -39,15 +39,25 @@ class MusicPanelEmptyTests(unittest.TestCase):
     def test_render_empty_shows_nothing_playing(self):
         panel = self._make_panel()
         texts = []
+        art_sizes = []
 
         def capture_text(*args, **kwargs):
             texts.append(kwargs.get("text"))
             return len(texts)
 
+        def capture_art(cx, cy, size, accent):
+            art_sizes.append(size)
+            return panel._draw_art_placeholder(cx, cy, size, accent, False)
+
         panel.canvas.create_text.side_effect = capture_text
+        panel._make_empty_album_photo = staticmethod(lambda size, accent: None)
+        panel._draw_empty_album_art = capture_art
         panel._render_empty(panel.shell.layout, "Kitchen Echo")
         self.assertIn("Nothing playing", texts)
         self.assertTrue(any("Kitchen Echo" in text for text in texts))
+        # Same sizing path as a real album cover (not the old 180px chip).
+        self.assertEqual(len(art_sizes), 1)
+        self.assertGreaterEqual(art_sizes[0], 330)
 
     def test_render_empty_when_music_empty_flag(self):
         panel = self._make_panel()
@@ -70,6 +80,27 @@ class MusicPanelEmptyTests(unittest.TestCase):
             "music": {"device": "Living Room"},
         })
         panel._render_empty.assert_called_once_with(panel.shell.layout, "Living Room")
+
+    def test_progress_label_and_auto_dismiss_at_zero(self):
+        panel = self._make_panel()
+        panel.shell.chip_value_font = mock.MagicMock(
+            metrics=lambda key: 18 if key == "linespace" else 0,
+        )
+        panel.shell.overlay = mock.MagicMock()
+        panel.visible = True
+        panel._bind_progress({
+            "state": "PLAYING",
+            "mediaLengthSec": 100,
+            "mediaProgressSec": 100,
+            "progressAt": None,
+        })
+        self.assertEqual(panel._progress_remaining(), 0)
+        self.assertEqual(panel._progress_label(0), "0:00 left · 1:40")
+        panel._auto_dismissed = False
+        panel._progress_text_id = None
+        panel._progress_fill_id = None
+        panel._on_progress_tick()
+        panel.shell.overlay.dismiss_immediately.assert_called_once()
 
 
 if __name__ == "__main__":

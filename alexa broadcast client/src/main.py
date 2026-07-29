@@ -261,11 +261,51 @@ class BroadcastClientApp:
             return True
         return bool(payload.get("message"))
 
+    # Displays that own a full timed pass — soft timer/alarm refreshes must not
+    # steal them (bridge followup polls after "show timers/alarms" used to).
+    _EXCLUSIVE_DISPLAY_TYPES = frozenset({"photo.slideshow", "guest.photobooth"})
+
+    @staticmethod
+    def _is_soft_timer_or_alarm_refresh(payload: dict) -> bool:
+        """True for background/followup list refreshes — not fired / explicit show."""
+        payload_type = payload.get("type")
+        if payload_type not in ("timer.snapshot", "alarm.snapshot"):
+            return False
+        kind = BroadcastClientApp._timer_event_kind(payload)
+        if kind == "fired":
+            return False
+        trigger = str(payload.get("trigger") or "")
+        if trigger in (
+            "show-timers",
+            "show-alarms",
+            "timer-set-voice",
+            "timer-cancel-voice",
+            "alarm-set-voice",
+            "alarm-cancel-voice",
+        ):
+            return False
+        # Followups (`show-timers-followup-2000ms`) and scheduled sync polls.
+        if "-followup-" in trigger:
+            return True
+        if trigger in ("", "scheduled") or trigger.startswith("scheduled"):
+            return kind in ("list", "updated", "paused", "resumed")
+        if trigger.startswith("show-timers-") or trigger.startswith("show-alarms-"):
+            return True
+        if trigger.startswith("timer-") or trigger.startswith("alarm-"):
+            return kind == "list"
+        return kind == "list"
+
     def _show_payload(self, payload: dict, seconds: int):
         if not self._should_show(payload):
             return
 
         if self.display_active and self.overlay.visible:
+            active = self.overlay.active_display_type
+            if (
+                active in self._EXCLUSIVE_DISPLAY_TYPES
+                and self._is_soft_timer_or_alarm_refresh(payload)
+            ):
+                return
             self.overlay.advance(payload, seconds)
             return
 

@@ -230,6 +230,46 @@ function sleep(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+/**
+ * Alexa player-info `progress.mediaLength` / `mediaProgress` are usually
+ * milliseconds, but some code paths already return seconds. Values ≥ 10000
+ * are treated as ms (a 10s+ track in ms is unambiguous; multi-hour podcasts
+ * in seconds stay under that bar until ~2.7h).
+ */
+function coerceMediaSeconds(value) {
+  if (value == null || value === '') {
+    return null;
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    return null;
+  }
+  if (n >= 10000) {
+    return Math.round(n / 1000);
+  }
+  return Math.round(n);
+}
+
+function extractMediaProgress(playerInfo) {
+  const progress = playerInfo?.progress || {};
+  const mediaLengthSec = coerceMediaSeconds(
+    progress.mediaLength ?? progress.mediaLengthInMilliseconds,
+  );
+  const mediaProgressSec = coerceMediaSeconds(
+    progress.mediaProgress ?? progress.mediaProgressInMilliseconds,
+  );
+  if (mediaLengthSec == null && mediaProgressSec == null) {
+    return null;
+  }
+  return {
+    mediaLengthSec: mediaLengthSec != null && mediaLengthSec > 0 ? mediaLengthSec : null,
+    mediaProgressSec: mediaProgressSec != null && mediaProgressSec >= 0
+      ? mediaProgressSec
+      : null,
+    progressAt: new Date().toISOString(),
+  };
+}
+
 function normalizePlayerInfo(playerInfo, device) {
   if (!playerInfo) {
     return null;
@@ -239,6 +279,7 @@ function normalizePlayerInfo(playerInfo, device) {
   if (!song) {
     return null;
   }
+  const timing = extractMediaProgress(playerInfo) || {};
   return {
     song,
     artist: String(info.subText1 || '').trim() || null,
@@ -247,6 +288,9 @@ function normalizePlayerInfo(playerInfo, device) {
     provider: playerInfo.provider?.providerDisplayName || playerInfo.provider?.providerName || null,
     state: playerInfo.state || null,
     device: device || null,
+    mediaLengthSec: timing.mediaLengthSec ?? null,
+    mediaProgressSec: timing.mediaProgressSec ?? null,
+    progressAt: timing.progressAt ?? null,
   };
 }
 
@@ -388,6 +432,8 @@ module.exports = {
   parseSpokenNowPlaying,
   listAlexaMediaDevices,
   normalizePlayerInfo,
+  coerceMediaSeconds,
+  extractMediaProgress,
   emptyNowPlaying,
   musicQueryRetryOutcome,
   normalizeQueryText,

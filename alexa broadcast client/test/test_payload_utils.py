@@ -165,6 +165,10 @@ class PayloadUtilsTests(unittest.TestCase):
             alarm_title,
             alarm_until_line,
             format_alarm_time,
+            format_alarm_clock_parts,
+            format_alarm_in_compact,
+            format_alarm_recurrence_chip,
+            format_timer_ends_label,
             resolve_alarm_trigger_time,
         )
 
@@ -177,6 +181,14 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertIn("on Kitchen Echo", alarm_detail_line(alarm, "Kitchen Echo"))
         self.assertEqual(alarm_until_line(alarm), "in 1h 1m")
         self.assertRegex(format_alarm_time(alarm["triggerTime"]), r"\d:\d\d")
+        clock, ampm = format_alarm_clock_parts(alarm["triggerTime"])
+        self.assertRegex(clock, r"^\d{1,2}:\d{2}$")
+        self.assertIn(ampm, ("AM", "PM"))
+        self.assertEqual(format_alarm_in_compact({"remainingSec": 8 * 3600 + 49 * 60}), "IN 8H 49M")
+        self.assertEqual(format_alarm_recurrence_chip({"recurrence": "daily"}), "DAILY")
+        self.assertEqual(format_alarm_recurrence_chip({"status": "OFF"}), "OFF")
+        self.assertEqual(format_alarm_recurrence_chip({}), "ONCE")
+        self.assertTrue(format_timer_ends_label({"remainingSec": 120}).startswith("Ends "))
 
     def test_resolve_alarm_trigger_time_from_remaining_sec(self):
         from src.payload_utils import format_alarm_time, resolve_alarm_trigger_time
@@ -354,6 +366,30 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(format_timer_set_label(300), "5 min timer")
         self.assertEqual(format_timer_clock(300), "5:00")
         self.assertEqual(format_timer_clock(254), "4:14")
+
+    def test_music_remaining_seconds_extrapolates_while_playing(self):
+        from src.payload_utils import music_remaining_seconds, format_music_clock
+        from datetime import datetime, timezone
+
+        captured = datetime(2026, 7, 28, 12, 0, 0, tzinfo=timezone.utc)
+        now = captured.timestamp() + 30
+        left = music_remaining_seconds(
+            media_length_sec=200,
+            media_progress_sec=50,
+            progress_at=captured.isoformat(),
+            now=now,
+            playing=True,
+        )
+        self.assertEqual(left, 120)
+        paused = music_remaining_seconds(
+            media_length_sec=200,
+            media_progress_sec=50,
+            progress_at=captured.isoformat(),
+            now=now,
+            playing=False,
+        )
+        self.assertEqual(paused, 150)
+        self.assertEqual(format_music_clock(125), "2:05")
 
     def test_normalize_condition(self):
         self.assertEqual(normalize_condition("mostly cloudy"), "cloudy")

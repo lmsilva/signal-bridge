@@ -96,7 +96,12 @@ class MainDisplayRoutingTests(unittest.TestCase):
         app.overlay = type(
             "Overlay",
             (),
-            {"visible": True, "advance": lambda *args: None, "show": lambda *args: None},
+            {
+                "visible": True,
+                "active_display_type": "weather.query",
+                "advance": lambda *args: None,
+                "show": lambda *args: None,
+            },
         )()
         app._on_display_closed = lambda: None
 
@@ -109,6 +114,81 @@ class MainDisplayRoutingTests(unittest.TestCase):
 
         app.overlay.advance = advance
         app._show_payload({"type": "weather.query", "displaySeconds": 60}, 60)
+        self.assertTrue(called["advance"])
+
+    def test_slideshow_ignores_soft_timer_followup(self):
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        app.display_active = True
+        called = {"advance": False}
+        app.overlay = type(
+            "Overlay",
+            (),
+            {
+                "visible": True,
+                "active_display_type": "photo.slideshow",
+                "advance": lambda *a, **k: called.__setitem__("advance", True),
+                "show": lambda *a, **k: None,
+            },
+        )()
+        app._show_payload(
+            {
+                "type": "timer.snapshot",
+                "trigger": "show-timers-followup-2000ms",
+                "event": {"kind": "list"},
+                "timers": [{"label": "Pasta"}],
+            },
+            30,
+        )
+        self.assertFalse(called["advance"])
+
+    def test_slideshow_yields_to_explicit_show_timers(self):
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        app.display_active = True
+        called = {"advance": False}
+        app.overlay = type(
+            "Overlay",
+            (),
+            {
+                "visible": True,
+                "active_display_type": "photo.slideshow",
+                "advance": lambda *a, **k: called.__setitem__("advance", True),
+                "show": lambda *a, **k: None,
+            },
+        )()
+        app._show_payload(
+            {
+                "type": "timer.snapshot",
+                "trigger": "show-timers",
+                "event": {"kind": "list"},
+                "timers": [],
+            },
+            30,
+        )
+        self.assertTrue(called["advance"])
+
+    def test_slideshow_yields_to_timer_fired(self):
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        app.display_active = True
+        called = {"advance": False}
+        app.overlay = type(
+            "Overlay",
+            (),
+            {
+                "visible": True,
+                "active_display_type": "photo.slideshow",
+                "advance": lambda *a, **k: called.__setitem__("advance", True),
+                "show": lambda *a, **k: None,
+            },
+        )()
+        app._show_payload(
+            {
+                "type": "timer.snapshot",
+                "trigger": "scheduled",
+                "event": {"kind": "fired", "timer": {"label": "Pizza"}},
+                "timers": [],
+            },
+            120,
+        )
         self.assertTrue(called["advance"])
 
 

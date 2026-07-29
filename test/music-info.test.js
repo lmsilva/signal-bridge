@@ -144,6 +144,23 @@ test('normalizePlayerInfo extracts song artist album and art', () => {
   assert.equal(info.device, 'Kitchen Echo');
 });
 
+test('normalizePlayerInfo coerces mediaLength/mediaProgress from milliseconds', () => {
+  const { coerceMediaSeconds } = require('../src/music-info');
+  assert.equal(coerceMediaSeconds(225000), 225);
+  assert.equal(coerceMediaSeconds(225), 225);
+  assert.equal(coerceMediaSeconds(null), null);
+
+  const info = normalizePlayerInfo({
+    infoText: { title: 'Song', subText1: 'Artist' },
+    state: 'PLAYING',
+    progress: { mediaLength: 225000, mediaProgress: 45000 },
+    provider: { providerDisplayName: 'Amazon Music' },
+  }, 'Kitchen');
+  assert.equal(info.mediaLengthSec, 225);
+  assert.equal(info.mediaProgressSec, 45);
+  assert.ok(info.progressAt);
+});
+
 test('fetchNowPlayingAfterSkip returns the new title once it changes', async () => {
   const bodies = [
     {

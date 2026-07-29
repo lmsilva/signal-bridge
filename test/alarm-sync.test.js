@@ -7,6 +7,7 @@ const {
   normalizeAlarmNotification,
   isActiveAlarm,
   listActiveAlarms,
+  shouldEmitAlarmSnapshot,
 } = require('../src/alarm-sync');
 const { buildAlarmSnapshotPayload } = require('../src/udp-payload');
 const { createAlarmSync } = require('../src/alarm-sync');
@@ -182,4 +183,17 @@ test('listActiveAlarms sorts by trigger time', () => {
 
   assert.equal(alarms[0].amazonId, 'sooner');
   assert.equal(alarms[1].amazonId, 'later');
+});
+
+test('shouldEmitAlarmSnapshot does not re-emit unchanged lists on followup polls', () => {
+  assert.equal(shouldEmitAlarmSnapshot([], 'show-alarms'), true);
+  assert.equal(shouldEmitAlarmSnapshot([], 'show-alarms-followup-2000ms'), false);
+  assert.equal(shouldEmitAlarmSnapshot([], 'alarm-set-voice-followup-5000ms'), false);
+  assert.equal(
+    shouldEmitAlarmSnapshot(
+      [{ kind: 'started', amazonId: 'a1', alarm: { amazonId: 'a1' } }],
+      'show-alarms-followup-2000ms',
+    ),
+    true,
+  );
 });

@@ -95,60 +95,48 @@ class SteamNowPlayingClientTests(unittest.TestCase):
 
     def test_portrait_boxes_do_not_overlap(self):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
-        boxes = panel._compute_portrait_boxes(
-            20, 40, 60, 1040, 1860, aspect_wh=600 / 900, has_shots=True,
-        )
+        boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_shots=True)
         ordered = ["header", "hero", "meta", "shots", "footer"]
         bottoms = []
         for key in ordered:
             x0, y0, x1, y1 = boxes[key]
             self.assertLess(x0, x1)
             self.assertLess(y0, y1)
-            self.assertGreaterEqual(y0, bottoms[-1] if bottoms else 0)
+            self.assertGreaterEqual(y0, bottoms[-1] if bottoms else 0 - 0.1)
             bottoms.append(y1)
-        # Hero must claim real screen space (guards against the winfo_width=1 bug).
         hero = boxes["hero"]
-        self.assertGreater(hero[2] - hero[0], 400)
-        self.assertGreater(hero[3] - hero[1], 200)
+        # Fixed stage is 1000 wide × up to 1100 tall.
+        self.assertAlmostEqual(hero[2] - hero[0], 1000)
+        self.assertGreater(hero[3] - hero[1], 400)
 
-    def test_portrait_meta_gets_room_under_capped_hero(self):
+    def test_portrait_stage_is_fixed_geometry(self):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
-        boxes = panel._compute_portrait_boxes(
-            20, 40, 60, 1040, 1860, aspect_wh=600 / 900, has_shots=True,
-        )
+        boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_shots=True)
         hero_h = boxes["hero"][3] - boxes["hero"][1]
-        meta_h = boxes["meta"][3] - boxes["meta"][1]
         shots_h = boxes["shots"][3] - boxes["shots"][1]
         footer_h = boxes["footer"][3] - boxes["footer"][1]
-        # Portrait hero can take ~half the column; meta + shots still get room.
-        self.assertLessEqual(hero_h, int((1860 - 60) * 0.55))
-        self.assertGreater(meta_h, 140)
-        self.assertGreater(shots_h, 60)
-        self.assertLessEqual(shots_h, 110)
-        # Stats strip stays compact vs the screenshot band.
-        self.assertLess(footer_h, shots_h + 20)
-        self.assertLessEqual(footer_h, 110)
-        # Footer sits at the content bottom (no stranded empty band).
-        self.assertGreaterEqual(boxes["footer"][3], 1860 - 20 - 5)
+        self.assertAlmostEqual(hero_h, 1100, delta=1)
+        self.assertAlmostEqual(shots_h, 183, delta=1)
+        self.assertAlmostEqual(footer_h, 101, delta=1)
+        # Meta sits between stage and shots — no overlap with hero.
+        self.assertGreaterEqual(boxes["meta"][1], boxes["hero"][3])
+        self.assertLessEqual(boxes["meta"][3], boxes["shots"][1] + 0.1)
 
-    def test_landscape_hero_box_is_short_to_avoid_letterboxing(self):
-        from src.steam_now_playing_panel import hero_aspect_hint
-
+    def test_landscape_boxes_keep_hero_and_meta_side_by_side(self):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
-        aspect = hero_aspect_hint({
-            "posterCandidates": [
-                "https://cdn.example/steam/apps/1/header.jpg",
-            ],
-        })
-        self.assertGreater(aspect, 1.5)
-        boxes = panel._compute_portrait_boxes(
-            20, 40, 60, 1040, 1860, aspect_wh=aspect, has_shots=True,
-        )
-        hero_h = boxes["hero"][3] - boxes["hero"][1]
-        hero_w = boxes["hero"][2] - boxes["hero"][0]
-        # Landscape frame stays much wider than tall (Denshattack fix).
-        self.assertLess(hero_h / hero_w, 0.55)
-        self.assertLessEqual(hero_h, int((1860 - 60) * 0.36))
+        # y0 = header_top (28); zone is 132→1040 (908 tall) per spec §9.
+        boxes = panel._compute_landscape_boxes(60, 28, 1860, 1040, u=1.0, has_shots=True)
+        hero = boxes["hero"]
+        meta = boxes["meta"]
+        self.assertAlmostEqual(boxes["header"][1], 28)
+        self.assertAlmostEqual(hero[1], 132)
+        self.assertAlmostEqual(hero[3], 1040)
+        self.assertAlmostEqual(hero[3] - hero[1], 908, delta=2)
+        self.assertLess(hero[2], meta[0])  # hero right edge left of meta left edge
+        self.assertAlmostEqual(hero[2] - hero[0], 888, delta=2)
+        # Shots + footer pinned to the bottom of the right column.
+        self.assertAlmostEqual(boxes["footer"][3], 1040)
+        self.assertLessEqual(meta[3], boxes["shots"][1] + 0.1)
 
     def test_hero_aspect_hint_prefers_portrait_library_capsule(self):
         from src.steam_now_playing_panel import hero_aspect_hint
@@ -168,17 +156,6 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertGreater(shot_h, 0)
         self.assertGreater(desc_h, 0)
         self.assertLessEqual(title_band + desc_h + shot_h, 410)
-
-    def test_landscape_boxes_keep_hero_and_meta_side_by_side(self):
-        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
-        boxes = panel._compute_landscape_boxes(
-            20, 80, 50, 1840, 980, aspect_wh=600 / 900,
-        )
-        hero = boxes["hero"]
-        meta = boxes["meta"]
-        self.assertLess(hero[2], meta[0])  # hero right edge left of meta left edge
-        self.assertGreater(hero[2] - hero[0], 300)
-        self.assertGreater(hero[3] - hero[1], 200)
 
     def test_fit_image_cover_fills_box_without_letterboxing(self):
         from src.steam_now_playing_panel import fit_image_cover, Image
@@ -205,6 +182,7 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         class _Overlay:
             screen_w = 1920
             screen_h = 1080
+            _display_seconds = 0  # persistent — full height
 
         class _Shell:
             layout = _Layout()
@@ -216,10 +194,13 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         rect = panel._content_rect()
         self.assertEqual(rect["screen_w"], 1920)
         self.assertEqual(rect["screen_h"], 1080)
-        self.assertEqual(rect["x0"], 100)
-        self.assertEqual(rect["x1"], 900)
-        # Prefer countdown_y so the card fills down toward the dismiss clock.
-        self.assertEqual(rect["y1"], 1022)
+        # Landscape content column: 60u side margins → 1800 wide.
+        self.assertEqual(rect["x0"], 60)
+        self.assertEqual(rect["x1"], 1860)
+        # Header starts at 28u — not content_top (132), which wasted the top band.
+        self.assertEqual(rect["y0"], 28)
+        self.assertEqual(rect["y1"], 1040)
+        self.assertFalse(rect["portrait"])
 
     def test_portrait_content_rect_uses_wide_column(self):
         class _Layout:
@@ -241,8 +222,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         panel.shell = _Shell()
         panel.root = type("R", (), {"winfo_screenwidth": lambda self: 1, "winfo_screenheight": lambda self: 1})()
         rect = panel._content_rect()
-        # 90% of portrait screen — mockup gutters, not the old skinny column.
-        self.assertEqual(rect["x1"] - rect["x0"], int(1080 * 0.90))
+        # Spec: 40 pad → 1000-wide column.
+        self.assertEqual(rect["x1"] - rect["x0"], 1000)
         self.assertTrue(rect["portrait"])
 
     def _make_draw_panel(self):
@@ -272,11 +253,13 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         panel.canvas = shell.content_canvas
         return panel
 
-    def test_long_description_uses_scrolling_viewport(self):
+    def test_long_description_is_static_not_scrolled(self):
         panel = self._make_draw_panel()
         boxes = {
             "meta": (0, 50, 800, 420),
             "shots": (0, 430, 800, 560),
+            "desc_h": 128,
+            "tags_h": 40,
         }
         steam = {
             "name": "Boomerang Fu",
@@ -286,39 +269,50 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a", "http://b", "http://c"],
             "tags": ["PvP", "Co-op"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
-            canvas_cls.return_value.bbox.return_value = (0, 0, 400, 600)
-            panel._draw_meta(boxes, steam)
-        self.assertIsNotNone(panel.scroller)
-        self.assertTrue(panel.needs_scroll)
-        # Screenshots live in the dedicated shots band.
+        panel._draw_meta(boxes, steam)
+        # Spec: description is a static clamp, not a scrolling viewport.
+        self.assertIsNone(panel.scroller)
+        self.assertFalse(panel.needs_scroll)
+        # Screenshots live in the dedicated shots band (3 columns).
         self.assertEqual(len(panel._shot_ids), 3)
+        # STEAM source chip is drawn in the tag row (not on the art).
+        steam_chip = False
+        for call in panel.canvas.create_text.call_args_list:
+            kwargs = call.kwargs
+            args = call.args
+            text = kwargs.get("text")
+            if text is None and len(args) >= 3:
+                text = args[2]
+            if text == "STEAM":
+                steam_chip = True
+                break
+        self.assertTrue(steam_chip)
 
-    def test_hide_stops_description_scroller(self):
+    def test_hide_clears_panel_state(self):
         panel = self._make_draw_panel()
         boxes = {
             "meta": (0, 50, 800, 420),
             "shots": (0, 430, 800, 560),
+            "desc_h": 128,
+            "tags_h": 40,
         }
         steam = {
             "name": "Game",
             "shortDescription": "Long text. " * 40,
             "screenshots": ["http://a"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
-            canvas_cls.return_value.bbox.return_value = (0, 0, 400, 600)
-            panel._draw_meta(boxes, steam)
-        scroller = panel.scroller
+        panel._draw_meta(boxes, steam)
         panel.hide()
         self.assertIsNone(panel.scroller)
         self.assertFalse(panel.needs_scroll)
-        self.assertEqual(scroller._state, "idle")
 
     def test_credit_is_right_aligned_on_title_row(self):
         panel = self._make_draw_panel()
         boxes = {
             "meta": (0, 50, 800, 420),
             "shots": (0, 430, 800, 560),
+            "desc_h": 128,
+            "tags_h": 40,
         }
         steam = {
             "name": "Boomerang Fu",
@@ -328,9 +322,7 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a"],
             "tags": ["PvP"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
-            canvas_cls.return_value.bbox.return_value = (0, 0, 400, 40)
-            panel._draw_meta(boxes, steam)
+        panel._draw_meta(boxes, steam)
         found = False
         for call in panel.canvas.create_text.call_args_list:
             kwargs = call.kwargs
@@ -345,26 +337,33 @@ class SteamNowPlayingClientTests(unittest.TestCase):
                 break
         self.assertTrue(found, "developer/year credit was not drawn right-aligned")
 
-    def test_description_scroller_starts_at_left_edge(self):
+    def test_description_is_static_canvas_text(self):
         panel = self._make_draw_panel()
         boxes = {
             "meta": (10, 50, 810, 420),
             "shots": (10, 430, 810, 560),
+            "desc_h": 128,
+            "tags_h": 40,
         }
         steam = {
             "name": "Game",
             "shortDescription": "Desc line. " * 40,
             "screenshots": ["http://a"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
-            canvas_cls.return_value.bbox.return_value = (0, 0, 400, 600)
-            with mock.patch("src.steam_now_playing_panel.MessageScrollController") as scroller_cls:
-                scroller_cls.return_value.configure.return_value = True
-                panel._draw_meta(boxes, steam)
-                conf = scroller_cls.return_value.configure
-                self.assertTrue(conf.called)
-                # center_x must be 0 so wrap fills the full meta width.
-                self.assertEqual(conf.call_args.kwargs.get("center_x"), 0)
+        panel._draw_meta(boxes, steam)
+        self.assertIsNone(panel.scroller)
+        # Description drawn as create_text with a wrap width (no nested Canvas).
+        found = False
+        for call in panel.canvas.create_text.call_args_list:
+            kwargs = call.kwargs
+            if kwargs.get("width") == 800 and "Desc line" in str(kwargs.get("text", "")):
+                found = True
+                break
+            args = call.args
+            if len(args) >= 3 and "Desc line" in str(args[2]):
+                found = True
+                break
+        self.assertTrue(found)
 
     def test_blur_backdrop_cover_fills_hero_box(self):
         from src.steam_now_playing_panel import Image

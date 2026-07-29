@@ -4,7 +4,17 @@ import unittest
 from unittest import mock
 from urllib.error import URLError
 
+from PIL import Image
+
 from src.display_panels import PhotoSlideshowPanel, QrPanel
+from src.shared_photos_page import (
+    compute_layout,
+    counter_label,
+    fit_photo_for_box,
+    sample_mat_accent,
+    NEUTRAL_MAT,
+    PRINT_BORDER,
+)
 
 # 1x1 transparent PNG — same fixture used by the bridge's qr-image-cache tests.
 TINY_PNG_BYTES = base64.b64decode(
@@ -91,9 +101,7 @@ class PhotoSlideshowPanelShowAdvanceTests(unittest.TestCase):
         shell = mock.MagicMock()
         shell.content_canvas = mock.MagicMock()
         # Mirror production: OverlayLayout has NO screen_w/screen_h — those
-        # live on the overlay (reachable via OverlayShell.__getattr__). The
-        # old chrome path read layout.screen_w and crashed before the fetch
-        # thread started, leaving the panel stuck on "Loading photo…".
+        # live on the overlay (reachable via OverlayShell.__getattr__).
         layout = mock.MagicMock(spec=[
             "content_x", "content_width", "message_area_top", "message_area_bottom",
             "portrait",
@@ -104,12 +112,15 @@ class PhotoSlideshowPanelShowAdvanceTests(unittest.TestCase):
         layout.message_area_bottom = 700
         layout.portrait = True
         shell.layout = layout
+        shell.overlay.screen_w = 1080
+        shell.overlay.screen_h = 1920
         shell.screen_w = 1080
         shell.screen_h = 1920
         shell.body_font = mock.MagicMock()
         shell.body_font.metrics.return_value = 24
         shell.chip_value_font = mock.MagicMock()
         shell.chip_value_font.metrics.return_value = 20
+        shell.chip_value_font.actual.return_value = "Segoe UI"
         root = mock.MagicMock()
         root.winfo_screenwidth.return_value = 1080
         root.winfo_screenheight.return_value = 1920
@@ -133,8 +144,12 @@ class PhotoSlideshowPanelShowAdvanceTests(unittest.TestCase):
         self.assertEqual(
             panel._photos,
             [
-                {"url": "https://nas/a.jpg", "uploadedAt": "2026-01-01T00:00:00Z"},
-                {"url": "https://nas/b.jpg", "uploadedAt": None},
+                {
+                    "url": "https://nas/a.jpg",
+                    "uploadedAt": "2026-01-01T00:00:00Z",
+                    "caption": "",
+                },
+                {"url": "https://nas/b.jpg", "uploadedAt": None, "caption": ""},
             ],
         )
         self.assertEqual(panel._seconds_per_photo, 3)
@@ -174,9 +189,6 @@ class PhotoSlideshowPanelShowAdvanceTests(unittest.TestCase):
                     "secondsPerPhoto": 5,
                 },
             })
-        # Worker was still scheduled (root.after from the thread callback
-        # path isn't what we assert — _fetch_photo itself must have run).
-        # Give the daemon thread a moment to call into the stub.
         import time
         for _ in range(20):
             if fetch.called:
@@ -194,133 +206,66 @@ class QrPanelSharedPhotoTests(unittest.TestCase):
         self.assertFalse(QrPanel._is_shared_photo_url(""))
 
 
-class PhotoStageGeometryTests(unittest.TestCase):
-    """Landscape reserves a right QR gutter; portrait reserves a band below
-    the photo. The scan QR never overlaps the image."""
+class SharedPhotosLayoutTests(unittest.TestCase):
+    """Spec v2 1080×1920 page: large stage, bottom bar with QR plate."""
 
-    def _panel(self, *, portrait: bool, content_x=80, content_width=1200,
-               top=120, bottom=900):
-        shell = mock.MagicMock()
-        shell.content_canvas = mock.MagicMock()
-        layout = mock.MagicMock()
-        layout.content_x = content_x
-        layout.content_width = content_width
-        layout.message_area_top = top
-        layout.message_area_bottom = bottom
-        layout.portrait = portrait
-        shell.layout = layout
-        shell.chip_value_font = mock.MagicMock()
-        shell.chip_value_font.metrics.return_value = 18
-        shell.chip_label_font = mock.MagicMock()
-        shell.chip_label_font.actual.return_value = "Segoe UI"
-        shell.chip_label_font.metrics.return_value = 16
-        shell.chip_label_font.measure.return_value = 100
-        return PhotoSlideshowPanel(
-            mock.MagicMock(),
-            shell,
-            {"mutedTextColor": "#94a3b8", "textColor": "#f8fafc"},
-        )
+    def test_portrait_page_fills_1080x1920(self):
+        layout = compute_layout(1080, 1920)
+        self.assertAlmostEqual(layout.u, 1.0)
+        self.assertTrue(layout.portrait)
+        self.assertAlmostEqual(layout.page_w, 1080)
+        self.assertAlmostEqual(layout.page_h, 1920)
+        self.assertAlmostEqual(layout.photo_box[0], 1032)
+        self.assertAlmostEqual(layout.photo_box[1], 1416)
+        # Stage sits between header and bar.
+        self.assertLess(layout.header[3], layout.stage[1])
+        self.assertLessEqual(layout.stage[3], layout.bar[1])
+        self.assertFalse(layout.rail_vertical)
 
-    def test_landscape_reserves_right_gutter_and_meta_band(self):
-        panel = self._panel(portrait=False, content_x=100, content_width=1400)
-        photo_cx, _cy, max_w, _max_h, layout = panel._photo_stage_geometry()
-        gutter = panel._SCAN_QR_GUTTER_LANDSCAPE
-        self.assertEqual(max_w, 1400 - 40 - gutter)
-        self.assertEqual(photo_cx, 100 + (1400 - gutter) // 2)
-        self.assertLess(photo_cx, layout.content_x + layout.content_width // 2)
-        self.assertGreater(panel._photo_meta_block_height(), 0)
+    def test_landscape_uses_sidebar_not_letterboxed_portrait(self):
+        layout = compute_layout(1920, 1080, mode="slideshow")
+        self.assertFalse(layout.portrait)
+        self.assertTrue(layout.rail_vertical)
+        # Full-bleed landscape page — not a centred 9:16 letterbox.
+        self.assertAlmostEqual(layout.page_w, 1920)
+        self.assertAlmostEqual(layout.page_h, 1080)
+        # Stage left of rail/sidebar (mockup: stage 1388, rail at 1420, sidebar 380).
+        self.assertLess(layout.stage[2], layout.rail[0] + 1)
+        self.assertAlmostEqual(layout.rail[0], layout.bar[0], delta=2)
+        self.assertAlmostEqual(layout.stage[1], layout.bar[1])
+        self.assertAlmostEqual(layout.stage[3], layout.bar[3])
+        # Photo box uses the stage's full height (inset), not the portrait 1416 box.
+        self.assertGreater(layout.photo_box[0], 1000)
+        self.assertLess(layout.photo_box[1], 920)
+        self.assertGreater(layout.photo_box[1], 700)
 
-    def test_portrait_reserves_bottom_qr_band(self):
-        panel = self._panel(portrait=True, content_x=40, content_width=800,
-                            top=120, bottom=900)
-        photo_cx, photo_cy, max_w, max_h, _layout = panel._photo_stage_geometry()
-        self.assertEqual(max_w, 800 - 40)
-        self.assertEqual(photo_cx, 40 + 800 // 2)
-        # Photo stage must leave room below for the QR band.
-        stage_top = 120 + panel._photo_meta_block_height()
-        qr_band = panel._scan_qr_block_height(True) + panel._SCAN_QR_GAP
-        self.assertEqual(max_h, 900 - stage_top - qr_band)
-        self.assertLess(photo_cy + max_h / 2, 900 - qr_band + 0.5)
+    def test_landscape_upload_zone_is_shorter_than_slideshow(self):
+        slide = compute_layout(1920, 1080, mode="slideshow")
+        upload = compute_layout(1920, 1080, mode="upload")
+        self.assertLess(upload.stage[3] - upload.stage[1], slide.stage[3] - slide.stage[1])
 
-    def test_scan_qr_badge_sits_beside_photo_in_landscape(self):
-        panel = self._panel(portrait=False, content_x=100, content_width=1400,
-                            top=100, bottom=800)
+    def test_counter_label_zero_pads(self):
+        self.assertEqual(counter_label(0, 12), "01 / 12")
+        self.assertEqual(counter_label(11, 12), "12 / 12")
 
-        class FakeQr:
-            width = 160
-            height = 160
+    def test_fit_photo_contains_and_caps_upscale(self):
+        tiny = Image.new("RGB", (100, 50), (10, 20, 30))
+        fitted = fit_photo_for_box(tiny, 1032, 1416, border_px=0)
+        self.assertIsNotNone(fitted)
+        # ≤2× upscale from 100×50 → 200×100
+        self.assertEqual(fitted.size, (200, 100))
 
-        fitted = mock.MagicMock()
-        fitted.metrics.return_value = 18
-        fitted.measure.return_value = 160
+    def test_fit_photo_adds_print_border(self):
+        src = Image.new("RGB", (400, 600), (200, 100, 50))
+        fitted = fit_photo_for_box(src, 500, 700, border_px=10)
+        self.assertIsNotNone(fitted)
+        # Border expands on all sides.
+        self.assertEqual(fitted.getpixel((0, 0)), tuple(int(PRINT_BORDER[i:i + 2], 16) for i in (1, 3, 5)))
 
-        photo_cx, photo_cy = 600.0, 450.0
-        photo_w, photo_h = 800, 500
-
-        with mock.patch.object(QrPanel, "_build_qr_image", return_value=FakeQr()), \
-                mock.patch.object(panel, "_fit_scan_qr_caption_font", return_value=fitted), \
-                mock.patch("src.display_panels.ImageTk") as image_tk:
-            image_tk.PhotoImage.return_value = mock.MagicMock()
-            photo = panel._draw_scan_qr_badge(
-                "https://nas/qr-images/a.jpg",
-                photo_cx=photo_cx,
-                photo_cy=photo_cy,
-                photo_w=photo_w,
-                photo_h=photo_h,
-            )
-        self.assertIsNotNone(photo)
-
-        image_calls = list(panel.canvas.create_image.call_args_list)
-        self.assertEqual(len(image_calls), 1)
-        qx, qy = image_calls[0].args[:2]
-        photo_right = photo_cx + photo_w / 2
-        # Entirely to the right of the photo — no overlap.
-        self.assertGreaterEqual(qx - FakeQr.width / 2, photo_right + panel._SCAN_QR_GAP - 0.5)
-        self.assertAlmostEqual(qy, photo_cy)
-
-        text_calls = panel.canvas.create_text.call_args_list
-        self.assertTrue(text_calls)
-        args, kwargs = text_calls[-1]
-        self.assertEqual(args[0], qx)
-        self.assertEqual(kwargs.get("anchor"), "s")
-        self.assertEqual(kwargs.get("text"), "Scan for photo")
-
-    def test_scan_qr_badge_sits_below_photo_in_portrait(self):
-        panel = self._panel(portrait=True, content_x=40, content_width=800,
-                            top=100, bottom=900)
-
-        class FakeQr:
-            width = 140
-            height = 140
-
-        fitted = mock.MagicMock()
-        fitted.metrics.return_value = 18
-        fitted.measure.return_value = 140
-
-        photo_cx, photo_cy = 440.0, 420.0
-        photo_w, photo_h = 500, 400
-
-        with mock.patch.object(QrPanel, "_build_qr_image", return_value=FakeQr()), \
-                mock.patch.object(panel, "_fit_scan_qr_caption_font", return_value=fitted), \
-                mock.patch("src.display_panels.ImageTk") as image_tk:
-            image_tk.PhotoImage.return_value = mock.MagicMock()
-            photo = panel._draw_scan_qr_badge(
-                "https://nas/qr-images/a.jpg",
-                photo_cx=photo_cx,
-                photo_cy=photo_cy,
-                photo_w=photo_w,
-                photo_h=photo_h,
-            )
-        self.assertIsNotNone(photo)
-
-        qx, qy = panel.canvas.create_image.call_args_list[0].args[:2]
-        photo_bottom = photo_cy + photo_h / 2
-        self.assertGreaterEqual(qy - FakeQr.height / 2, photo_bottom + panel._SCAN_QR_GAP - 0.5)
-        # Right-aligned to the photo.
-        self.assertAlmostEqual(qx + FakeQr.width / 2, photo_cx + photo_w / 2)
-
-    def test_scan_qr_caption_constant(self):
-        self.assertEqual(PhotoSlideshowPanel._SCAN_QR_CAPTION, "Scan for photo")
+    def test_sample_mat_accent_falls_back_for_near_black(self):
+        dark = Image.new("RGB", (32, 32), (2, 2, 2))
+        mat, accent = sample_mat_accent(dark)
+        self.assertEqual(mat, NEUTRAL_MAT)
 
 
 if __name__ == "__main__":
