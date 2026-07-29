@@ -49,3 +49,71 @@ test('logout clears the session', () => {
   assert.match(cleared.setCookie, /Max-Age=0/);
   assert.equal(auth.sessionFromRequest(req).ok, false);
 });
+
+test('progressive lockout engages after repeated bad passwords from one IP', () => {
+  const auth = createWebAdminAuth({
+    webServer: { adminPassword: 's3cret', adminSessionHours: 1 },
+  }, silentLog);
+  const req = { headers: {}, socket: { remoteAddress: '10.0.0.42' } };
+
+  const first = auth.login('wrong', req);
+  assert.equal(first.ok, false);
+  assert.equal(first.status, 401);
+  assert.equal(first.code, 'bad_password');
+
+  const second = auth.login('wrong', req);
+  assert.equal(second.status, 401);
+
+  const third = auth.login('wrong', req);
+  assert.equal(third.ok, false);
+  assert.equal(third.status, 429);
+  assert.equal(third.code, 'rate_limited');
+  assert.equal(third.retryAfterSec, 5);
+
+  const whileLocked = auth.login('s3cret', req);
+  assert.equal(whileLocked.ok, false);
+  assert.equal(whileLocked.status, 429);
+  assert.equal(whileLocked.code, 'rate_limited');
+  assert.ok(whileLocked.retryAfterSec >= 1);
+  assert.equal(auth._sessions.size, 0);
+});
+
+test('successful login clears lockout for that IP', () => {
+  const auth = createWebAdminAuth({
+    webServer: { adminPassword: 's3cret', adminSessionHours: 1 },
+  }, silentLog);
+  const req = { headers: {}, socket: { remoteAddress: '10.0.0.99' } };
+  auth.login('wrong', req);
+  auth.login('wrong', req);
+  const good = auth.login('s3cret', req);
+  assert.equal(good.ok, true);
+  assert.equal(auth._loginAttempts.has('10.0.0.99'), false);
+
+  // Fresh failures start the ladder again (not stuck at prior fail count).
+  const again = auth.login('wrong', req);
+  assert.equal(again.status, 401);
+});
+
+test('lockout ladder matches the documented seconds', () => {
+  const { lockoutSecondsForFails, LOCKOUT_LADDER_SEC } = require('../src/web-admin-auth');
+  assert.deepEqual(
+    [1, 2, 3, 4, 5, 6, 7, 8].map(lockoutSecondsForFails),
+    [0, 0, 5, 15, 60, 300, 900, 900],
+  );
+  assert.equal(LOCKOUT_LADDER_SEC[LOCKOUT_LADDER_SEC.length - 1], 900);
+});
+
+test('client IP prefers X-Forwarded-For first hop', () => {
+  const { clientIpFromRequest } = require('../src/web-admin-auth');
+  assert.equal(
+    clientIpFromRequest({
+      headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' },
+      socket: { remoteAddress: '127.0.0.1' },
+    }),
+    '203.0.113.9',
+  );
+  assert.equal(
+    clientIpFromRequest({ headers: {}, socket: { remoteAddress: '::ffff:192.168.1.5' } }),
+    '192.168.1.5',
+  );
+});

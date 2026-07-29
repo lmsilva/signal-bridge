@@ -4,6 +4,8 @@ System-tray app for Windows that listens for UDP JSON from [**Signal Bridge**](.
 
 The client does **not** talk to Amazon. The NAS bridge does that; this app only receives UDP and renders UI / runs commands.
 
+> **Required on a real LAN:** set `"udpSecret"` in `config.json` to the **same** value as the bridge `.env` `LAN_UDP_SECRET`. Empty secret = plaintext UDP — anyone on the LAN can forge overlays, remote keyboard/mouse, reboot, and `web.open`. See the [bridge README — LAN UDP encryption](../README.md#lan-udp-encryption).
+
 ---
 
 ## Features
@@ -60,7 +62,7 @@ dist\alexa broadcast client\
 Or use the zip: `dist\alexa broadcast client.zip`.
 
 1. Extract / copy to the poster PC  
-2. Edit `config.json` — set `displayName`, `bridgeHosts` to your NAS IP, and `udpSecret` to match the bridge `LAN_UDP_SECRET`  
+2. Edit `config.json` — set `displayName`, `bridgeHosts` to your NAS IP, and **`udpSecret` to match the bridge `LAN_UDP_SECRET`** (do not leave empty on a real network)  
 3. Double-click `Run Alexa Broadcast Client.bat`  
 4. Allow Windows Firewall (private network) for UDP  
 5. On your phone open `https://<NAS_IP>:47810/` and confirm this display appears  
@@ -105,7 +107,7 @@ Build extras: `requirements-build.txt` (adds PyInstaller).
 | `listenAddress` | `0.0.0.0` | Bind address |
 | `displayName` | hostname | Friendly name in the bridge control page |
 | `bridgeHosts` | `["192.168.1.10"]` | NAS IP(s) for `display.announce` unicasts |
-| `udpSecret` | `""` | Shared AES-GCM secret (must match bridge `LAN_UDP_SECRET`). Empty = plaintext UDP |
+| `udpSecret` | `""` | **Required on a real LAN.** Shared AES-GCM secret (must match bridge `LAN_UDP_SECRET`). Empty = plaintext UDP (forgeable commands — local testing only) |
 | `discoveryPort` | 47833 | Bridge discovery listen port |
 | `maxDisplaySeconds` | 30 | Hard cap on most overlay durations |
 | `defaultDisplaySeconds` | 30 | Used if payload omits duration |

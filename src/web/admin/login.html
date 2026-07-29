@@ -98,6 +98,11 @@
             if (data.code === 'admin_password_unset') {
               hintEl.textContent = 'Set ADMIN_PASSWORD in the bridge .env file and restart the container, then try again.';
             }
+            if (data.code === 'rate_limited' && data.retryAfterSec > 0) {
+              throw new Error(
+                data.error || `Too many failed logins — wait ${data.retryAfterSec}s and try again.`,
+              );
+            }
             throw new Error(data.error || 'Login failed');
           }
           location.href = next.startsWith('/admin') ? next : '/admin/';

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-29 (Test suite catch-up)
+**Last updated:** 2026-07-29 (UDP secret docs)
 
 ---
 
@@ -168,7 +168,7 @@ python test/send_test.py --type route-planner-flight   # flight fallback: dashed
 | `listenAddress` | `0.0.0.0` | All interfaces |
 | `displayName` | hostname | Shown in bridge control page picker |
 | `bridgeHosts` | `["192.168.1.10"]` | NAS IP(s) for announce unicasts |
-| `udpSecret` | `""` | Shared secret for AES-GCM UDP (must match bridge `LAN_UDP_SECRET`). Empty = plaintext |
+| `udpSecret` | `""` | **Required on a real LAN.** Shared secret for AES-GCM UDP (must match bridge `LAN_UDP_SECRET`). Empty = plaintext (forgeable commands — local testing only) |
 | `discoveryPort` | 47833 | Must match bridge `udpBroadcast.discoveryPort` |
 | `maxDisplaySeconds` | 30 | Hard cap on overlay duration |
 | `defaultDisplaySeconds` | 30 | If payload omits `displaySeconds` |
@@ -262,6 +262,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-29: **Docs: UDP secret required on real LAN** — README / config notes stress matching `udpSecret` to bridge `LAN_UDP_SECRET` (empty = forgeable plaintext commands).
 - 2026-07-29: **Test suite catch-up** — regression coverage for Steam/route dismiss footer clear, progressive route loading/failed UI, shopping list paging config merge/clamps. Full suite with bridge: **317 client** tests.
 - 2026-07-29: **Steam timed landscape clears dismiss footer** — last-played / preview sessions inset ~18u above the dismiss band so the hero border + stats strip are not covered; persistent auto sessions keep full height; portrait timed gets the same clear. Restart/rebuild display client.
 - 2026-07-29: **Route Planner clears dismiss footer** — content plate + Local Times tile inset above the dismiss band (`content_frame_bounds`, ~18u) in portrait and landscape so the bottom card is no longer covered. Restart/rebuild display client.
