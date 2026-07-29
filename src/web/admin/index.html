@@ -25,15 +25,15 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal17">
+  <link rel="stylesheet" href="styles.css?v=signal20">
 </head>
 <body>
   <div class="sticky-chrome">
     <header class="app-header">
-      <div class="app-title">
+      <button type="button" class="app-title" id="btn-app-home" title="Go to Push">
         <img class="app-logo" src="/logo.png" width="28" height="28" alt="">
         Signal Bridge
-      </div>
+      </button>
       <div class="header-actions">
         <div class="header-status" id="header-status" title="Signal Bridge status">
           <span class="pulse" id="bridge-pulse"></span>
@@ -86,12 +86,12 @@
 
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad">
-          <button class="push-card push-card-photo" id="btn-push-photo-slideshow">
+          <button type="button" class="push-card push-card-photo" id="btn-push-photo-slideshow">
             <span class="push-icon push-icon-photo">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
             </span>
             <span class="push-card-title">Shared Photo Slideshow</span>
-            <span class="push-card-sub">Play every saved photo</span>
+            <span class="push-card-sub">Play every <span class="push-booth-link" data-booth-link role="link" tabindex="0">uploaded photo</span></span>
           </button>
           <button class="push-card" id="btn-push-weather">
             <span class="push-icon">
@@ -530,6 +530,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal17"></script>
+  <script src="app.js?v=signal20"></script>
 </body>
 </html>

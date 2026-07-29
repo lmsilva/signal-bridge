@@ -390,6 +390,9 @@
 
   function toast(message, kind = '') {
     const wrap = $('toast-wrap');
+    if (!wrap) {
+      return;
+    }
     const el = document.createElement('div');
     el.className = `toast ${kind}`.trim();
     el.textContent = message;
@@ -425,6 +428,11 @@
     btn.addEventListener('click', () => {
       activateTab(btn.dataset.tab);
     });
+  });
+
+  // Logo / title → Push (home) from any tab.
+  $('btn-app-home')?.addEventListener('click', () => {
+    activateTab('push');
   });
 
   // Initial state: only the default active panel should be un-hidden.
@@ -513,21 +521,40 @@
 
     // Steam auth status
     const steamPill = $('steam-status-pill');
+    const steamDetail = $('steam-status-detail');
+    const steamFollowup = $('steam-auth-followup');
     const steam = status.steam || {};
     const steamAuth = steam.auth || {};
     if (steamAuth.status === 'success') {
       pillState(steamPill, 'ok', 'Linked');
-      $('steam-status-detail').textContent = 'Steam account linked.';
+      if (steamDetail) {
+        steamDetail.textContent = 'Steam account linked.';
+      }
     } else if (steamAuth.status === 'error') {
       pillState(steamPill, 'bad', 'Auth failed');
-      $('steam-status-detail').textContent = steamAuth.error || steam.message || 'Steam login failed.';
+      if (steamDetail) {
+        steamDetail.textContent = steamAuth.error || steam.message || 'Steam login failed.';
+      }
+    } else if (steamAuth.status === 'waiting' || steamAuth.running) {
+      pillState(steamPill, 'warn', 'Waiting');
+      if (steamDetail) {
+        steamDetail.textContent = 'Finish signing in with Steam — you will return here when it completes.';
+      }
+      if (steamAuth.authorizeUrl && $('steam-auth-link') && steamFollowup) {
+        $('steam-auth-link').href = steamAuth.authorizeUrl;
+        steamFollowup.hidden = false;
+      }
     } else if (!steam.hasApiKey) {
       pillState(steamPill, 'warn', 'Need API key');
-      $('steam-status-detail').textContent = 'Set STEAM_API_KEY in the bridge .env, then recreate the container.';
+      if (steamDetail) {
+        steamDetail.textContent = 'Set STEAM_API_KEY in the bridge .env, then recreate the container.';
+      }
     } else if (!steam.hasSteamId) {
       pillState(steamPill, 'warn', 'Link account');
       const keySrc = steam.apiKeySource === 'env' ? 'from .env' : 'saved in session';
-      $('steam-status-detail').textContent = `API key ready (${keySrc}) — authenticate with Steam to link your SteamID.`;
+      if (steamDetail) {
+        steamDetail.textContent = `API key ready (${keySrc}) — authenticate with Steam to link your SteamID.`;
+      }
     } else if (
       steam.status === 'playing'
       || steam.status === 'playing_presence'
@@ -541,28 +568,38 @@
           ? ' (OwnedGames beyond idle baseline)'
           : '';
       const hostLabel = host && host !== 'any' ? host : 'any PC';
-      $('steam-status-detail').textContent = `Playing on ${hostLabel}${lagNote}`
-        + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');
+      if (steamDetail) {
+        steamDetail.textContent = `Playing on ${hostLabel}${lagNote}`
+          + (steam.session?.suppressed ? ' (suppressed by another overlay)' : '');
+      }
     } else if (steam.status === 'playing_elsewhere') {
       pillState(steamPill, 'warn', 'Other PC');
-      $('steam-status-detail').textContent = steam.message
-        || 'Steam shows a game, but host filtering is on and no allowlisted presence was seen.';
+      if (steamDetail) {
+        steamDetail.textContent = steam.message
+          || 'Steam shows a game, but host filtering is on and no allowlisted presence was seen.';
+      }
     } else if (steam.status === 'suppressed') {
       pillState(steamPill, 'warn', 'Suppressed');
-      $('steam-status-detail').textContent = 'Game still running — overlay hidden until a new Steam session.';
+      if (steamDetail) {
+        steamDetail.textContent = 'Game still running — overlay hidden until a new Steam session.';
+      }
     } else if (steam.status === 'api_error') {
       pillState(steamPill, 'bad', 'API error');
-      $('steam-status-detail').textContent = steam.message || 'Steam API request failed.';
+      if (steamDetail) {
+        steamDetail.textContent = steam.message || 'Steam API request failed.';
+      }
     } else {
       pillState(steamPill, 'ok', 'Ready');
       const watch = steam.requirePresence
         ? `Watching ${(steam.allowedHosts || []).join(', ') || 'allowlisted hosts'} only.`
         : 'Watching any PC (Steam account in-game).';
-      $('steam-status-detail').textContent = `Linked${steam.personaName ? ` as ${steam.personaName}` : ''}. ${watch}`;
+      if (steamDetail) {
+        steamDetail.textContent = `Linked${steam.personaName ? ` as ${steam.personaName}` : ''}. ${watch}`;
+      }
     }
 
-    if (steamAuth.status === 'success' && !$('steam-auth-followup').hidden) {
-      $('steam-auth-followup').hidden = true;
+    if (steamAuth.status === 'success' && steamFollowup && !steamFollowup.hidden) {
+      steamFollowup.hidden = true;
       toast('Steam account linked', 'good');
     }
   }
@@ -649,7 +686,18 @@
     }));
   }
 
+  function openGuestPhotoBooth() {
+    // Root-absolute `/` (guest upload page) — ignores <base href="/admin/…">.
+    window.open('/', '_blank', 'noopener,noreferrer');
+  }
+
   $('btn-push-photo-slideshow')?.addEventListener('click', async (e) => {
+    // "uploaded photo" opens the guest booth in a new tab (same as login page).
+    if (e.target.closest('[data-booth-link]')) {
+      e.preventDefault();
+      openGuestPhotoBooth();
+      return;
+    }
     const button = e.currentTarget;
     button.classList.add('busy');
     try {
@@ -666,6 +714,16 @@
     } finally {
       setTimeout(() => button.classList.remove('busy'), 900);
     }
+  });
+
+  // Keyboard activation for the inline booth link (role=link inside the tile).
+  $('btn-push-photo-slideshow')?.querySelector('[data-booth-link]')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    openGuestPhotoBooth();
   });
 
   // -------------------------------------------------------------- URL push
@@ -1233,7 +1291,10 @@
   }
 
   function closeLightbox() {
-    $('photo-lightbox').hidden = true;
+    const lightbox = $('photo-lightbox');
+    if (lightbox) {
+      lightbox.hidden = true;
+    }
     lightboxToken = null;
     lightboxIndex = -1;
   }
@@ -1859,12 +1920,25 @@
 
   $('btn-steam-auth')?.addEventListener('click', async () => {
     const button = $('btn-steam-auth');
+    if (!button) {
+      return;
+    }
     button.disabled = true;
     try {
       const result = await apiPost('/api/auth/steam/start');
-      $('steam-auth-link').href = result.authorizeUrl;
-      $('steam-auth-followup').hidden = false;
-      toast('Open Steam login to link your account', 'good');
+      const link = $('steam-auth-link');
+      const followup = $('steam-auth-followup');
+      if (link && result.authorizeUrl) {
+        link.href = result.authorizeUrl;
+      }
+      if (followup) {
+        followup.hidden = false;
+      }
+      // Open Steam immediately — the followup link remains as a fallback.
+      if (result.authorizeUrl) {
+        window.open(result.authorizeUrl, '_blank', 'noopener,noreferrer');
+      }
+      toast('Complete Steam login in the new tab', 'good');
     } catch (error) {
       toast(error.message, 'bad');
     } finally {
@@ -2383,9 +2457,34 @@
 
   // -------------------------------------------------------------- Start up
 
+  // Steam OpenID returns to /admin/?steam=ok|error — open Settings so the
+  // Auth card is visible. Must run at end of init (never mid-script) so a
+  // failure here cannot skip status polling / button handlers.
+  function applySteamReturnTab() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const steam = params.get('steam');
+      if (!steam) {
+        return;
+      }
+      activateTab('settings');
+      if (steam === 'ok') {
+        toast('Steam account linked', 'good');
+      } else if (steam === 'error') {
+        toast('Steam link failed — try again from Auth', 'bad');
+      }
+      params.delete('steam');
+      const qs = params.toString();
+      history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash || ''}`);
+    } catch (error) {
+      console.warn('Steam return tab handling failed', error);
+    }
+  }
+
   refreshDisplays({ quiet: true });
   startDisplayEvents();
   startPolling();
+  applySteamReturnTab();
   // Fallback poll if EventSource is blocked or drops (SSE is primary).
   setInterval(() => refreshDisplays({ quiet: true }), 60000);
 })();
