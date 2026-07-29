@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-26 (Steam baseline OwnedGames detection)
+**Last updated:** 2026-07-28 (full QAA test expansion)
 
 ---
 
@@ -381,16 +381,15 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (399 tests)
-run_all_tests.bat           # repo root — bridge + Windows client
+npm test                    # bridge only (535 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (535 + 237)
 ```
 
-Bridge tests in `test/*.test.js` — includes `tesla-fleet.test.js`, `tesla-udp-payload.test.js`, `tesla-auth-status.test.js`, `tesla-battery.test.js`, `tesla-battery-cache.test.js`, `tesla-dashboard.test.js`, `tesla-dashboard-data.test.js`, `tesla-dashboard-cache.test.js`, voice-event gate/dedup for Fleet API flow, `web-command-payloads.test.js` (web.open/web.close/system.command builders + `buildWifiQrContent`/`buildQrDisplayPayload`/`buildInputTextPayload`/`buildPhotoSlideshowPayload` incl. `{url,uploadedAt}` object photos + `recent`/`oldest`/`random` ordering/`buildRoutePlannerPayload`), `qr-image-cache.test.js` (store/get/`delete()`, no auto-expiry, oversized/invalid rejection, `list()` newest-first with tokens, `onChange` notifies on store/delete and tolerates a throwing/non-function listener), `route-query.test.js` (distance/directions phrasing detection + origin/destination extraction, incl. "from here"/"from home" and Alexa's own spoken distance answer), `route-fetch.test.js` (haversine math, great-circle fallback, mocked-`fetch` OSRM success/`NoRoute`/HTTP-error/throw paths), and `web-server.test.js` (static + API routes, URL validation, Tesla phone-OAuth callback flow with mocked token endpoint, QR push + photo upload/serve, weather/shopping-list/timers quick-push tiles, full-string text input, photo-slideshow list + push, photo delete single/bulk, slideshow order setting get/set/validation + applied-on-push, Slideshow Manager tab + Photo\|URL\|Wi-Fi QR order markup, `/api/photos/events` SSE hello + live store/delete pushes).
+Bridge tests in `test/*.test.js` — includes **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration), `web-command-payloads`, `qr-image-cache`, `route-query`/`route-fetch`, `guest-photobooth`, `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth`, `display-registry`.
 
-Client tests in `alexa broadcast client/test/test_*.py` — includes `format_limit_reset_time`, Tesla fleet battery payload routing, `test_web_overlay.py` (pre-flight, host command, command routing, error payload), `test_qr_panel.py` (`QrPanel._build_qr_image` sizing, empty-content fallback), `test_photo_slideshow_panel.py` (`PhotoSlideshowPanel._fetch_photo` download/thumbnail/SSL-fallback, `_is_ssl_failure`, `show()` normalizing `{url,uploadedAt}`/bare-string photo entries, `_advance()` stopping after the last photo instead of wrapping), and `test_display_remote.py` (`handle_text` full-string typing, optional Enter press, broken-pynput survival).
+Client tests in `alexa broadcast client/test/test_*.py` — 237 tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
-
 ---
 
 ## Docker notes (QNAP)
@@ -491,6 +490,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-07-28: **Full QAA test expansion** — Steam poller integration (mocked API tick/quit/infer/restore/presence), music empty-card + retry outcomes, companion-weather suppress helper, UDP AES-GCM send/receive integration, OwnedGames `rtime` mapping, voice orchestration payloads, legacy broadcast fingerprint migration, route pending TTL/cross-device. Extracted `musicQueryRetryOutcome` / `shouldSuppressCompanionWeather`; fixed Steam interrupt path that re-`beginSession`ed a matching suppressed session. Suite: **535 bridge** + **237 client**.
 - 2026-07-26: **Steam OwnedGames with idle baseline** — auto detection is gameid → presence → OwnedGames only when last-played/playtime **advanced past a boot-seeded idle baseline** (quit stamps are absorbed on session end, so they cannot reopen the card). Open sessions stay alive through brief `gameid` dropouts via OwnedGames; stagnant sessions close after `STEAM_RECENT_PLAY_STAGNANT_SEC` (default 150). Fixes “never shows” after gameid-only mode and “shows again after quit.” Deploy: `./recreate.sh`.
 - 2026-07-26: **Steam auto Now Playing = gameid or presence only** — removed OwnedGames `rtime_last_played` inference. That timestamp updates on quit and was reopening Boomerang Fu / other titles while idle. Overlay opens only when Steam reports `gameid` or a fresh local presence appId; closes as soon as both are gone. Manual Auth preview can still show last-played. Deploy: `./recreate.sh`.
 - 2026-07-26: **Remove bridge Steam artwork cache; fix quit reopen** — bridge no longer rewrites/warms `/steam-artwork/` URLs (that path blanked screenshots by crowding out CDN fallbacks and added little speed). Display client still disk-caches CDN images locally. Quit sets a cooldown (`STEAM_QUIT_COOLDOWN_SEC`, default 90s) so Steam’s quit-time `rtime_last_played` bump cannot immediately reopen the card. Deploy: `./recreate.sh` (+ portable client rebuild for client image cache).

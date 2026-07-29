@@ -95,3 +95,57 @@ test('tryComplete attaches orphan route miles TTS to pending distance query', ()
   assert.equal(completed?.activityId, 'response-route');
   assert.equal(completed?.sourceActivityId, 'query-route');
 });
+
+test('tryComplete rejects orphan route miles TTS on a different device', () => {
+  const pending = createPendingVoiceResponses();
+  pending.remember({
+    kind: 'route',
+    device: 'Office Echo',
+    query: "what's the distance from here to Los Angeles",
+    spokenResponse: null,
+    trigger: 'route-query',
+    activityId: 'query-route',
+  });
+
+  const completed = pending.tryComplete(
+    { creationTimestamp: Date.now() },
+    'Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies.',
+    {
+      getDeviceName: () => 'Kitchen Echo',
+      getActivityId: () => 'response-other',
+      matchesShoppingListSpeech: () => false,
+      defaultLocation: { name: 'Home', latitude: 40.35, longitude: -111.9 },
+    },
+  );
+  assert.equal(completed, null);
+  assert.equal(pending.hasPending('Office Echo', 'route'), true);
+});
+
+test('pending route expires after TTL and is not completed', () => {
+  const pending = createPendingVoiceResponses({ ttlMs: 1000 });
+  const t0 = 1_700_000_000_000;
+  pending.remember({
+    kind: 'route',
+    device: 'Office Echo',
+    query: "what's the distance from here to Los Angeles",
+    spokenResponse: null,
+    trigger: 'route-query',
+    activityId: 'query-route',
+  }, t0);
+
+  assert.equal(pending.hasPending('Office Echo', 'route', t0 + 500), true);
+  assert.equal(pending.hasPending('Office Echo', 'route', t0 + 2000), false);
+
+  const completed = pending.tryComplete(
+    { creationTimestamp: t0 + 2500 },
+    'Los Angeles is about 564 miles from Saratoga Springs, Utah as the crow flies.',
+    {
+      getDeviceName: () => 'Office Echo',
+      getActivityId: () => 'response-late',
+      matchesShoppingListSpeech: () => false,
+      defaultLocation: { name: 'Home', latitude: 40.35, longitude: -111.9 },
+    },
+    t0 + 2500,
+  );
+  assert.equal(completed, null);
+});

@@ -129,6 +129,29 @@ function emptyNowPlaying(device) {
 }
 
 /**
+ * Decide what a music-query / music-skip retry should do after a fetch attempt.
+ * music-query emits an explicit empty card when exhausted; music-skip stays silent
+ * so news/briefing advances never flash "Nothing playing".
+ */
+function musicQueryRetryOutcome({
+  trigger,
+  attempt = 1,
+  maxAttempts = 2,
+  nowPlaying = null,
+} = {}) {
+  if (nowPlaying) {
+    return { action: 'emit', nowPlaying };
+  }
+  if (attempt < maxAttempts) {
+    return { action: 'retry' };
+  }
+  if (trigger === 'music-skip') {
+    return { action: 'silent' };
+  }
+  return { action: 'emit-empty' };
+}
+
+/**
  * Parse Alexa's spoken now-playing answer when player-info on the asked
  * device is idle (common: song is playing on another Echo).
  */
@@ -366,6 +389,7 @@ module.exports = {
   listAlexaMediaDevices,
   normalizePlayerInfo,
   emptyNowPlaying,
+  musicQueryRetryOutcome,
   normalizeQueryText,
   PLAY_MUSIC_RE,
   NOW_PLAYING_QUERY_RE,

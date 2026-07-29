@@ -634,13 +634,6 @@ function createSteamNowPlaying({
         recentLed,
         recentGame: recentLed ? recentGame : null,
       });
-    } else if (lastAccountAppId == null && effectiveAppId) {
-      beginSession({
-        appId: effectiveAppId,
-        host: host || (requirePresence ? null : 'any'),
-        recentLed,
-        recentGame: recentLed ? recentGame : null,
-      });
     } else {
       session.recentLed = recentLed || session.recentLed;
       if (recentLed && recentGame) {

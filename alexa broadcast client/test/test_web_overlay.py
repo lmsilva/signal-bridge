@@ -247,6 +247,17 @@ class CommandRoutingTests(unittest.TestCase):
             )
         popen.assert_not_called()
 
+    def test_steam_close_dismisses_only_when_steam_active(self):
+        app = self._make_app()
+        app.overlay.active_display_type = "steam.now-playing"
+        app._handle_command_payload({"type": "steam.now-playing.close"})
+        app.overlay.dismiss_immediately.assert_called_once()
+
+        app.overlay.dismiss_immediately.reset_mock()
+        app.overlay.active_display_type = "weather.query"
+        app._handle_command_payload({"type": "steam.now-playing.close"})
+        app.overlay.dismiss_immediately.assert_not_called()
+
 
 class WebviewHostTests(unittest.TestCase):
     def test_clamp_opacity(self):

@@ -67,6 +67,7 @@ const {
   fetchNowPlayingAfterSkip,
   resolveMusicQueryNowPlaying,
   emptyNowPlaying,
+  musicQueryRetryOutcome,
   isMusicPlayerContent,
   isExplicitSongSkipQuery,
 } = require('./music-info');
@@ -77,6 +78,7 @@ const { enrichIndoorReading } = require('./indoor-temperature-fetch');
 const {
   buildAirQualityReading,
   resolveAirQualityQueryLocation,
+  shouldSuppressCompanionWeather,
 } = require('./air-quality');
 const {
   mergeAirQualityReadings,
@@ -296,40 +298,45 @@ function createListener({ config, log }) {
       } catch (error) {
         log.warn('Player info retry fetch failed', error.message || error);
       }
-      if (nowPlaying) {
-        const payload = buildMusicPayload(event, config, { nowPlaying });
+      const outcome = musicQueryRetryOutcome({
+        trigger: event.trigger,
+        attempt,
+        maxAttempts: 2,
+        nowPlaying,
+      });
+      if (outcome.action === 'emit') {
+        const payload = buildMusicPayload(event, config, { nowPlaying: outcome.nowPlaying });
         if (payload) {
           const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
           sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
           voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
           log.info(`Now-playing query resolved on retry for ${event.device}`, {
-            playingDevice: nowPlaying.device || null,
-            source: nowPlaying.source || 'player-info',
+            playingDevice: outcome.nowPlaying.device || null,
+            source: outcome.nowPlaying.source || 'player-info',
           });
         }
         return;
       }
-      if (attempt < 2) {
+      if (outcome.action === 'retry') {
         scheduleMusicQueryRetry(event, attempt + 1);
-      } else if (isSkip) {
+        return;
+      }
+      if (outcome.action === 'silent') {
         // Skip/next: silent give-up — don't flash "Nothing playing" for news
         // advances or a slow player-info API mid-playlist.
         log.info(`Music skip gave up after retries for ${event.device}`, { query: event.query });
-      } else {
-        // Don't leave the display blank — previous behavior silently
-        // returned after retries, so "what's playing" with a slow/empty
-        // player-info API looked completely broken. Emit an explicit
-        // empty now-playing card instead.
-        const payload = buildMusicPayload(event, config, {
-          nowPlaying: emptyNowPlaying(event.device),
-        });
-        if (payload) {
-          const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
-          sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
-          voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
-        }
-        log.info(`Now-playing query gave up after retries for ${event.device}`, { query: event.query });
+        return;
       }
+      // emit-empty — music-query exhausted retries; show an explicit empty card.
+      const payload = buildMusicPayload(event, config, {
+        nowPlaying: emptyNowPlaying(event.device),
+      });
+      if (payload) {
+        const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
+        sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+        voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
+      }
+      log.info(`Now-playing query gave up after retries for ${event.device}`, { query: event.query });
     }, delayMs);
   }
 
@@ -375,11 +382,10 @@ function createListener({ config, log }) {
     // Right after an indoor air-quality ask, Alexa sometimes emits a separate
     // empty-summary temperature TTS that parses as outdoor weather (query
     // placeholder "weather query") and would replace the AQ overlay.
-    if (
-      voiceEvent.kind === 'weather'
-      && pendingVoiceResponses.hasPending(voiceEvent.device, 'air-quality')
-      && /^(?:weather query)$/i.test(String(voiceEvent.query || '').trim())
-    ) {
+    if (shouldSuppressCompanionWeather(
+      voiceEvent,
+      pendingVoiceResponses.hasPending(voiceEvent.device, 'air-quality'),
+    )) {
       voiceQueryParser.markProcessed(activityId);
       log.info('Weather suppressed (pending air-quality on device)', {
         device: voiceEvent.device,
@@ -1560,4 +1566,5 @@ function createListener({ config, log }) {
 
 module.exports = {
   createListener,
+  shouldSuppressSteamForPayload,
 };

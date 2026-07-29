@@ -262,6 +262,21 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "photo.slideshow"}), "photo.slideshow")
         self.assertEqual(title_for_display_type("photo.slideshow"), ("Signal", "Shared Photos"))
 
+    def test_route_planner_query_is_a_recognized_display_type(self):
+        self.assertIn("route-planner.query", DISPLAY_TYPES)
+        self.assertEqual(resolve_display_type({"type": "route-planner.query"}), "route-planner.query")
+        self.assertEqual(
+            title_for_display_type("route-planner.query"),
+            ("Alexa", "Route Planner"),
+        )
+
+    def test_title_for_payload_qr_photo_type(self):
+        payload = {
+            "type": "qr.display",
+            "qr": {"qrType": "photo", "content": "https://example.com/photo.jpg"},
+        }
+        self.assertEqual(title_for_payload(payload), ("Signal", "Shared Photo"))
+
     def test_input_text_is_a_recognized_command_type(self):
         self.assertTrue(is_command_payload({"type": "input.text", "text": {"value": "hi"}}))
         self.assertFalse(is_display_payload({"type": "input.text"}))

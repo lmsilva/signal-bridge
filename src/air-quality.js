@@ -41,8 +41,21 @@ function resolveAirQualityQueryLocation(event, config = {}) {
   return resolveAirQualityLocationFromTexts(event.query, event.spokenResponse, config);
 }
 
+/**
+ * Right after an indoor air-quality ask, Alexa sometimes emits a separate
+ * empty-summary temperature TTS that parses as outdoor weather (query
+ * placeholder "weather query"). Suppress that so it cannot replace the AQ overlay.
+ */
+function shouldSuppressCompanionWeather(voiceEvent, hasPendingAirQuality) {
+  if (!voiceEvent || voiceEvent.kind !== 'weather' || !hasPendingAirQuality) {
+    return false;
+  }
+  return /^(?:weather query)$/i.test(String(voiceEvent.query || '').trim());
+}
+
 module.exports = {
   buildAirQualityReading,
   matchesAirQualityQuery,
   resolveAirQualityQueryLocation,
+  shouldSuppressCompanionWeather,
 };
