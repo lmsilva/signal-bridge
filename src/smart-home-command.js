@@ -25,12 +25,41 @@ const CATEGORY_TYPES = {
   THERMOSTAT: 'thermostat',
 };
 
+/**
+ * Amazon often joins wake+repeat ASR with commas
+ * ("lights off, lights off" / "lights off, lights"). The bare on/off matcher
+ * then treats everything before the *last* on|off as the target →
+ * "Lights Off, Lights" on the display.
+ *
+ * Prefer the shortest clause that already looks like a device on/off command.
+ */
+function dedupeCommaJoinedSmartHomeAsr(text) {
+  const parts = String(text || '')
+    .split(/\s*,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return text;
+  }
+
+  const commandish = parts.filter((part) => (
+    /\b(?:on|off)\b/i.test(part)
+    && /\b(?:turn|switch|power|lights?|lamp|plug|fan)\b/i.test(part)
+  ));
+  if (commandish.length === 0) {
+    return parts[0];
+  }
+  return commandish.slice().sort((a, b) => a.length - b.length)[0];
+}
+
 function parseSmartHomeCommand(summary) {
-  const text = String(summary || '')
-    .replace(/[\u2018\u2019\u2032`´]/g, "'")
-    .replace(/^alexa[,\s]+/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const text = dedupeCommaJoinedSmartHomeAsr(
+    String(summary || '')
+      .replace(/[\u2018\u2019\u2032`´]/g, "'")
+      .replace(/^alexa[,\s]+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
   if (!text) {
     return null;
   }
@@ -78,6 +107,10 @@ function parseSmartHomeCommand(summary) {
   }
 
   target = target.replace(/\b(?:please|alexa|now)\b/gi, '').replace(/\s+/g, ' ').trim();
+  // Belt-and-suspenders: never keep a second ASR fragment in the target.
+  if (target.includes(',')) {
+    target = target.split(/\s*,\s*/)[0].trim();
+  }
   if (!target) {
     return null;
   }
@@ -160,6 +193,7 @@ function resolveDeviceType(endpoints, target) {
 
 module.exports = {
   parseSmartHomeCommand,
+  dedupeCommaJoinedSmartHomeAsr,
   resolveDeviceType,
   keywordDeviceType,
   isGenericTarget,

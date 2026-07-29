@@ -40,6 +40,25 @@ test('buildSmartHomePayload shapes on/off command card', () => {
   assert.ok(payload.displaySeconds <= 15);
 });
 
+test('buildSmartHomePayload keeps spokenTarget free of ASR echo commas', () => {
+  const { parseSmartHomeCommand } = require('../src/smart-home-command');
+  const command = parseSmartHomeCommand('lights off, lights off');
+  const payload = buildSmartHomePayload(
+    {
+      device: 'Office Echo',
+      timestamp: Date.now(),
+      trigger: 'smart-home-command',
+      query: 'lights off, lights off',
+      command,
+    },
+    { udpBroadcast: { defaultDisplaySeconds: 45 } },
+    { deviceType: 'light' },
+  );
+  assert.equal(payload.command.target, 'lights');
+  assert.equal(payload.command.spokenTarget, 'lights');
+  assert.ok(!/,/.test(payload.command.target));
+});
+
 test('buildPhotoSlideshowPayload accepts guest-snaps-slideshow-query trigger', () => {
   const payload = buildPhotoSlideshowPayload({
     photos: [

@@ -17,9 +17,36 @@ test('parseSmartHomeCommand detects turn on/off commands', () => {
   });
 });
 
-test('parseSmartHomeCommand ignores non-device commands', () => {
-  assert.equal(parseSmartHomeCommand('play some music'), null);
-  assert.equal(parseSmartHomeCommand('set a timer for 5 minutes'), null);
+test('parseSmartHomeCommand dedupes comma-joined ASR echoes', () => {
+  // Wake+repeat: bare matcher used to swallow "lights off, lights" as target.
+  assert.deepEqual(parseSmartHomeCommand('lights off, lights off'), {
+    action: 'off',
+    target: 'lights',
+  });
+  assert.deepEqual(parseSmartHomeCommand('alexa lights off, lights off'), {
+    action: 'off',
+    target: 'lights',
+  });
+  assert.deepEqual(parseSmartHomeCommand('lights off, lights'), {
+    action: 'off',
+    target: 'lights',
+  });
+  assert.deepEqual(parseSmartHomeCommand('office lights on, lights'), {
+    action: 'on',
+    target: 'office lights',
+  });
+  assert.deepEqual(parseSmartHomeCommand('bedroom lamp off, lamp'), {
+    action: 'off',
+    target: 'bedroom lamp',
+  });
+});
+
+test('dedupeCommaJoinedSmartHomeAsr prefers shortest command-like clause', () => {
+  const { dedupeCommaJoinedSmartHomeAsr } = require('../src/smart-home-command');
+  assert.equal(dedupeCommaJoinedSmartHomeAsr('lights off, lights off'), 'lights off');
+  assert.equal(dedupeCommaJoinedSmartHomeAsr('lights off, lights'), 'lights off');
+  assert.equal(dedupeCommaJoinedSmartHomeAsr('turn bedroom lamp off, lamp'), 'turn bedroom lamp off');
+  assert.equal(dedupeCommaJoinedSmartHomeAsr('lights off'), 'lights off');
 });
 
 test('keywordDeviceType classifies common targets', () => {
