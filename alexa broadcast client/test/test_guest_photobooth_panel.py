@@ -6,44 +6,30 @@ from src.payload_utils import DISPLAY_TYPES, is_display_payload, title_for_displ
 
 
 class GuestPhotoboothLayoutTests(unittest.TestCase):
-    def test_portrait_stacks_two_cards_with_connector_band(self):
-        geo = GuestPhotoboothPanel.compute_card_geometry(720, 1100, True)
+    def test_portrait_stacks_two_cards_without_connector(self):
+        geo = GuestPhotoboothPanel.compute_card_geometry(1000, 1600, True)
         self.assertTrue(geo["portrait"])
         self.assertEqual(len(geo["cards"]), 2)
         self.assertEqual(geo["cards"][0]["x"], 0)
         self.assertEqual(geo["cards"][1]["x"], 0)
-        # Second card starts after first card + dedicated connector band.
-        self.assertGreaterEqual(
+        self.assertGreater(
             geo["cards"][1]["y"],
-            geo["cards"][0]["y"] + geo["card_h"] + geo["connector_h"],
+            geo["cards"][0]["y"] + geo["card_h"],
         )
-        # Connector sits in the band between cards (not inside either card).
-        connector_y = geo["connector"]["y"]
-        self.assertGreater(connector_y, geo["cards"][0]["y"] + geo["card_h"])
-        self.assertLess(connector_y, geo["cards"][1]["y"])
-        self.assertGreaterEqual(geo["qr_size"], 140)
-        # Portrait spreads title/QR/footer inside each card (landscape does not).
-        self.assertTrue(geo["spread_content"])
-        self.assertFalse(geo["vcenter_content"])
+        self.assertEqual(geo["gap"], 24)
+        self.assertEqual(geo["connector_h"], 0)
+        self.assertEqual(geo["plate"], 620)
+        self.assertEqual(geo["qr_size"], 560)
 
     def test_landscape_places_cards_side_by_side(self):
-        geo = GuestPhotoboothPanel.compute_card_geometry(1400, 700, False, header_h=96)
+        geo = GuestPhotoboothPanel.compute_card_geometry(1400, 700, False)
         self.assertFalse(geo["portrait"])
         self.assertEqual(geo["cards"][0]["y"], geo["cards"][1]["y"])
         self.assertGreater(geo["cards"][1]["x"], geo["cards"][0]["x"])
-        self.assertGreaterEqual(geo["qr_size"], 140)
-        self.assertTrue(geo["vcenter_content"])
-        self.assertFalse(geo["spread_content"])
-        # Wide gutter so "then" never sits on clipped subtitle text.
-        self.assertGreaterEqual(geo["gap"], 48)
-        # Cards sized to content and vertically centered — not stretched full-height.
-        block_bottom = geo["cards"][0]["y"] + geo["card_h"]
-        self.assertLess(block_bottom, 700)
-        self.assertGreater(geo["origin_y"], 0)
-
-    def test_landscape_header_keeps_cards_below_subtitle(self):
-        geo = GuestPhotoboothPanel.compute_card_geometry(1600, 800, False, header_h=110)
-        self.assertGreaterEqual(geo["cards"][0]["y"], geo["origin_y"] + 110)
+        self.assertGreaterEqual(geo["qr_size"], 400)
+        self.assertGreaterEqual(geo["plate"], 450)
+        self.assertEqual(geo["gap"], 24)
+        self.assertEqual(geo["origin_y"], 0)
 
     def test_guest_photobooth_is_a_recognized_display_type(self):
         self.assertIn("guest.photobooth", DISPLAY_TYPES)

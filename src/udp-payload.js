@@ -285,6 +285,16 @@ const SLOW_REQUEST_INFO = {
       { afterSec: 25, message: 'Hang tight — waking a sleeping vehicle can take up to 30 seconds…' },
     ],
   },
+  route: {
+    title: 'Route Planner',
+    source: 'Maps',
+    stages: [
+      { afterSec: 0, message: 'Request received — looking up places…' },
+      { afterSec: 3, message: 'Geocoding origin and destination…' },
+      { afterSec: 8, message: 'Calculating distance and drive time…' },
+      { afterSec: 18, message: 'Still working — map services can be slow…' },
+    ],
+  },
 };
 
 function buildProcessingAckPayload(event, config) {

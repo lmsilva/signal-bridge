@@ -8,9 +8,13 @@ from PIL import Image
 
 from src.display_panels import PhotoSlideshowPanel, QrPanel
 from src.shared_photos_page import (
+    circular_mean_hue,
     compute_layout,
     counter_label,
     fit_photo_for_box,
+    next_in_seconds,
+    rail_remaining_fraction,
+    rgb_to_hsl,
     sample_mat_accent,
     NEUTRAL_MAT,
     PRINT_BORDER,
@@ -262,10 +266,135 @@ class SharedPhotosLayoutTests(unittest.TestCase):
         # Border expands on all sides.
         self.assertEqual(fitted.getpixel((0, 0)), tuple(int(PRINT_BORDER[i:i + 2], 16) for i in (1, 3, 5)))
 
+    def test_meta_strings_keep_time_on_eyebrow_when_caption_present(self):
+        from src.shared_photos_page import SharedPhotosRenderer
+        page = SharedPhotosRenderer.__new__(SharedPhotosRenderer)
+        eyebrow, primary = page._meta_strings(
+            "upload", "2026-07-28T23:58:00Z", "Scan to save this photo",
+        )
+        self.assertIn("UPLOADED", eyebrow)
+        self.assertIn("·", eyebrow)
+        self.assertEqual(primary, "Scan to save this photo")
+
+    def test_wrapped_caption_is_taller_than_one_line(self):
+        import tkinter as tk
+        from src.shared_photos_page import SharedPhotosRenderer, compute_layout
+
+        root = tk.Tk()
+        root.withdraw()
+        canvas = tk.Canvas(root, width=400, height=400)
+        page = SharedPhotosRenderer(canvas, shell=None, config={}, track=lambda i: i)
+        page._layout = compute_layout(1920, 1080, mode="upload")
+        font = page._u_font(mono=False, size_u=32)
+        narrow = 160.0
+        one = page._text_block_height(font, "Hi", narrow)
+        many = page._text_block_height(font, "Scan to save this photo", narrow)
+        root.destroy()
+        self.assertGreater(many, one * 1.5)
+
     def test_sample_mat_accent_falls_back_for_near_black(self):
         dark = Image.new("RGB", (32, 32), (2, 2, 2))
         mat, accent = sample_mat_accent(dark)
         self.assertEqual(mat, NEUTRAL_MAT)
+
+    def test_circular_mean_hue_wraps_around_red(self):
+        # Numeric average of 350 and 10 is 180 (cyan) — circular mean stays red.
+        mean = circular_mean_hue([350.0, 10.0])
+        self.assertLess(min(mean, 360.0 - mean), 8.0)
+
+    def test_sample_mat_uses_dominant_hue_not_rgb_mean(self):
+        """Blue sky + green grass + warm skin must not collapse to muddy brown."""
+        w = h = 48
+        pixels = []
+        n = w * h
+        for i in range(n):
+            if i < int(0.70 * n):
+                pixels.append((30, 100, 210))  # blue
+            elif i < int(0.85 * n):
+                pixels.append((50, 170, 70))  # green
+            else:
+                pixels.append((210, 155, 120))  # warm skin
+        img = Image.new("RGB", (w, h))
+        img.putdata(pixels)
+        mat, accent = sample_mat_accent(img)
+        self.assertNotEqual(mat, NEUTRAL_MAT)
+        ar = int(accent[1:3], 16) / 255.0
+        ag = int(accent[3:5], 16) / 255.0
+        ab = int(accent[5:7], 16) / 255.0
+        hue, sat, _l = rgb_to_hsl(ar, ag, ab)
+        # Dominant bin is blue (~210°); RGB-mean mud sits ~20–40° brown.
+        self.assertGreaterEqual(hue, 180.0)
+        self.assertLessEqual(hue, 260.0)
+        self.assertGreater(sat, 0.2)
+        self.assertGreater(ab, ar)
+        self.assertGreater(ab, ag)
+
+    def test_sample_mat_blue_photo_is_cool_not_brown(self):
+        img = Image.new("RGB", (48, 48), (40, 110, 220))
+        mat, accent = sample_mat_accent(img)
+        mr = int(mat[1:3], 16)
+        mg = int(mat[3:5], 16)
+        mb = int(mat[5:7], 16)
+        # Dark blue mat: blue channel leads; not equal warm brown.
+        self.assertGreater(mb, mr)
+        self.assertGreater(mb, mg)
+        self.assertLess(mr + mg, mb * 2.2)
+
+    def test_sample_mat_skin_heavy_avoids_chocolate_brown(self):
+        """Skin/wood majority without cool accents → charcoal tint, not #5a3a20 brown."""
+        img = Image.new("RGB", (48, 48), (210, 155, 120))
+        mat, _accent = sample_mat_accent(img)
+        mr = int(mat[1:3], 16)
+        mg = int(mat[3:5], 16)
+        mb = int(mat[5:7], 16)
+        # Near-black: all channels low; no strong orange cast (R >> B).
+        self.assertLess(max(mr, mg, mb), 45)
+        self.assertLess(mr - mb, 18)
+
+    def test_sample_mat_green_photo_tints_green(self):
+        img = Image.new("RGB", (48, 48), (40, 170, 70))
+        mat, accent = sample_mat_accent(img)
+        self.assertNotEqual(mat, NEUTRAL_MAT)
+        ag = int(accent[3:5], 16)
+        ar = int(accent[1:3], 16)
+        ab = int(accent[5:7], 16)
+        self.assertGreater(ag, ar)
+        self.assertGreater(ag, ab)
+
+    def test_rail_remaining_matches_next_in_clock(self):
+        started = 1_000_000.0
+        dwell_ms = 5000
+        # t=0 → full bar + NEXT IN 5
+        self.assertAlmostEqual(
+            rail_remaining_fraction(started, dwell_ms, now=started), 1.0,
+        )
+        self.assertEqual(next_in_seconds(started, 5, now=started), 5)
+        # halfway → half bar + NEXT IN 3 (elapsed int 2)
+        mid = started + 2.5
+        self.assertAlmostEqual(
+            rail_remaining_fraction(started, dwell_ms, now=mid), 0.5,
+        )
+        self.assertEqual(next_in_seconds(started, 5, now=mid), 3)
+        # dwell complete → empty bar + NEXT IN 0 (advance fires)
+        end = started + 5.0
+        self.assertAlmostEqual(
+            rail_remaining_fraction(started, dwell_ms, now=end), 0.0,
+        )
+        self.assertEqual(next_in_seconds(started, 5, now=end), 0)
+
+    def test_rail_fill_grows_with_elapsed_not_remaining(self):
+        """Accent bar loads left→right / top→bottom via elapsed = 1 − remaining."""
+        # remaining 1.0 → just started → zero fill; remaining 0.0 → full elapsed.
+        for remaining in (1.0, 0.75, 0.5, 0.25, 0.0):
+            elapsed = 1.0 - remaining
+            self.assertGreaterEqual(elapsed, 0.0)
+            self.assertLessEqual(elapsed, 1.0)
+            # As remaining shrinks, elapsed (fill fraction) grows.
+            if remaining < 1.0:
+                self.assertGreater(elapsed, 0.0)
+        self.assertAlmostEqual(1.0 - rail_remaining_fraction(0, 1000, now=0), 0.0)
+        self.assertAlmostEqual(1.0 - rail_remaining_fraction(0, 1000, now=0.5), 0.5)
+        self.assertAlmostEqual(1.0 - rail_remaining_fraction(0, 1000, now=1.0), 1.0)
 
 
 if __name__ == "__main__":

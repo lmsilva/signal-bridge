@@ -368,7 +368,12 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(format_timer_clock(254), "4:14")
 
     def test_music_remaining_seconds_extrapolates_while_playing(self):
-        from src.payload_utils import music_remaining_seconds, format_music_clock
+        from src.payload_utils import (
+            music_remaining_seconds,
+            format_music_clock,
+            format_music_duration_compact,
+            format_music_progress_label,
+        )
         from datetime import datetime, timezone
 
         captured = datetime(2026, 7, 28, 12, 0, 0, tzinfo=timezone.utc)
@@ -390,6 +395,13 @@ class PayloadUtilsTests(unittest.TestCase):
         )
         self.assertEqual(paused, 150)
         self.assertEqual(format_music_clock(125), "2:05")
+        self.assertEqual(format_music_duration_compact(229), "3m49s")
+        self.assertEqual(format_music_duration_compact(97), "1m37s")
+        self.assertEqual(format_music_duration_compact(45), "45s")
+        self.assertEqual(
+            format_music_progress_label(229, 97),
+            "Length 3m49s - 1m37s left",
+        )
 
     def test_normalize_condition(self):
         self.assertEqual(normalize_condition("mostly cloudy"), "cloudy")

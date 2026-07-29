@@ -6,19 +6,17 @@ from src.display_panels import TeslaBatteryPanel
 class TeslaBatteryBarHeightTests(unittest.TestCase):
     """`battery_bar_height` is a pure @staticmethod — no Tk root needed."""
 
-    def test_flat_track_is_compact(self):
-        # Percent label sits above the bar; the track itself stays thin.
+    def test_landscape_gauge_height_is_fixed(self):
         for linespace in (28, 36, 42, 48):
-            for portrait in (True, False):
-                h = TeslaBatteryPanel.battery_bar_height(linespace, portrait=portrait)
-                self.assertLessEqual(h, 32)
-                self.assertGreaterEqual(h, 20)
+            self.assertEqual(
+                TeslaBatteryPanel.battery_bar_height(linespace, portrait=False), 92,
+            )
 
-    def test_portrait_floor_is_at_least_landscape(self):
-        self.assertGreaterEqual(
-            TeslaBatteryPanel.battery_bar_height(20, portrait=True),
-            TeslaBatteryPanel.battery_bar_height(20, portrait=False),
-        )
+    def test_portrait_gauge_height_is_fixed(self):
+        for linespace in (20, 36, 48):
+            self.assertEqual(
+                TeslaBatteryPanel.battery_bar_height(linespace, portrait=True), 120,
+            )
 
 
 class TeslaBatteryStatusBitsTests(unittest.TestCase):

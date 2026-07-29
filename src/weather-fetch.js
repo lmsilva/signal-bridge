@@ -157,16 +157,29 @@ async function geocodeLocation(name) {
   }
 
   const data = await fetchJson(
-    `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json`,
+    `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json&countryCode=US`,
   );
-  const hit = pickGeocodeHit(data?.results, parsed.admin1);
+  let hit = pickGeocodeHit(data?.results, parsed.admin1);
+  if (!hit) {
+    // Retry worldwide when the US-biased search misses (foreign cities).
+    const worldwide = await fetchJson(
+      `${GEOCODE_URL}?name=${query}&count=10&language=en&format=json`,
+    );
+    hit = pickGeocodeHit(worldwide?.results, parsed.admin1);
+  }
   if (!hit) {
     // Last resort: try the original phrase in case Open-Meteo accepts it.
     if (searchName !== raw) {
       const fallback = await fetchJson(
-        `${GEOCODE_URL}?name=${encodeURIComponent(raw)}&count=10&language=en&format=json`,
+        `${GEOCODE_URL}?name=${encodeURIComponent(raw)}&count=10&language=en&format=json&countryCode=US`,
       );
-      const fallbackHit = pickGeocodeHit(fallback?.results, parsed.admin1);
+      let fallbackHit = pickGeocodeHit(fallback?.results, parsed.admin1);
+      if (!fallbackHit) {
+        const fallbackWorld = await fetchJson(
+          `${GEOCODE_URL}?name=${encodeURIComponent(raw)}&count=10&language=en&format=json`,
+        );
+        fallbackHit = pickGeocodeHit(fallbackWorld?.results, parsed.admin1);
+      }
       if (!fallbackHit) {
         return null;
       }

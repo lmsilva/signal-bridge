@@ -19,7 +19,7 @@ const NOW_PLAYING_ANSWER_RE = /\b(?:currently\s+playing|now\s+playing|you'?re\s+
 
 // Whole-utterance skip/next. Bare "next"/"skip" is shared with news/briefings;
 // explicit "... song/track" phrases are music-intent regardless of provider.
-const MUSIC_SKIP_RE = /^(?:alexa[,\s]+)?(?:next(?:\s+(?:song|track|one))?|skip(?:\s+(?:(?:this|the)\s+)?(?:song|track))?)$/i;
+const MUSIC_SKIP_RE = /^(?:alexa[,\s]+)?(?:next(?:\s+(?:song|track|one))?|skip(?:\s+(?:(?:this|the)\s+)?(?:song|track))?)(?:\s+please)?[.!?]*$/i;
 const MUSIC_SKIP_EXPLICIT_SONG_RE = /\b(?:song|track)\b/i;
 
 // Providers that mean "advance the next thing" but are not a song card.
@@ -232,9 +232,11 @@ function sleep(ms) {
 
 /**
  * Alexa player-info `progress.mediaLength` / `mediaProgress` are usually
- * milliseconds, but some code paths already return seconds. Values ≥ 10000
- * are treated as ms (a 10s+ track in ms is unambiguous; multi-hour podcasts
- * in seconds stay under that bar until ~2.7h).
+ * milliseconds. Coerce them as a *pair*: if either value (or an explicit
+ * `*InMilliseconds` field) looks like ms, treat both as ms. Converting them
+ * independently breaks the first ~10s of a track — e.g. length 225000 → 225s
+ * while progress 3500 stays "3500s", so the client thinks the song is over
+ * and auto-dismisses right after skip / what's-playing.
  */
 function coerceMediaSeconds(value) {
   if (value == null || value === '') {
@@ -252,15 +254,45 @@ function coerceMediaSeconds(value) {
 
 function extractMediaProgress(playerInfo) {
   const progress = playerInfo?.progress || {};
-  const mediaLengthSec = coerceMediaSeconds(
-    progress.mediaLength ?? progress.mediaLengthInMilliseconds,
-  );
-  const mediaProgressSec = coerceMediaSeconds(
-    progress.mediaProgress ?? progress.mediaProgressInMilliseconds,
-  );
-  if (mediaLengthSec == null && mediaProgressSec == null) {
+  const lengthRaw = progress.mediaLengthInMilliseconds ?? progress.mediaLength;
+  const progressRaw = progress.mediaProgressInMilliseconds ?? progress.mediaProgress;
+  const lengthN = lengthRaw == null || lengthRaw === '' ? null : Number(lengthRaw);
+  const progressN = progressRaw == null || progressRaw === '' ? null : Number(progressRaw);
+  const lengthOk = Number.isFinite(lengthN) && lengthN >= 0;
+  const progressOk = Number.isFinite(progressN) && progressN >= 0;
+  if (!lengthOk && !progressOk) {
     return null;
   }
+
+  const explicitMs = progress.mediaLengthInMilliseconds != null
+    || progress.mediaProgressInMilliseconds != null;
+  const eitherLooksMs = explicitMs
+    || (lengthOk && lengthN >= 10000)
+    || (progressOk && progressN >= 10000);
+
+  let mediaLengthSec = lengthOk
+    ? Math.round(eitherLooksMs ? lengthN / 1000 : lengthN)
+    : null;
+  let mediaProgressSec = progressOk
+    ? Math.round(eitherLooksMs ? progressN / 1000 : progressN)
+    : null;
+
+  // Safety: progress cannot exceed length; if it still does, prefer ms decode
+  // of the raw progress against a seconds length.
+  if (
+    mediaLengthSec != null
+    && mediaProgressSec != null
+    && mediaProgressSec > mediaLengthSec
+    && progressOk
+    && !eitherLooksMs
+    && progressN >= 1000
+  ) {
+    mediaProgressSec = Math.round(progressN / 1000);
+  }
+  if (mediaLengthSec != null && mediaProgressSec != null) {
+    mediaProgressSec = Math.min(mediaProgressSec, mediaLengthSec);
+  }
+
   return {
     mediaLengthSec: mediaLengthSec != null && mediaLengthSec > 0 ? mediaLengthSec : null,
     mediaProgressSec: mediaProgressSec != null && mediaProgressSec >= 0
@@ -393,7 +425,7 @@ async function fetchNowPlayingAfterSkip(
   alexa,
   serialOrName,
   device,
-  { attempts = 5, delayMs = 1200 } = {},
+  { attempts = 5, delayMs = 1200, householdFallback = true } = {},
 ) {
   let baselineTitle = null;
   let lastSeen = null;
@@ -416,7 +448,19 @@ async function fetchNowPlayingAfterSkip(
       await sleep(delayMs);
     }
   }
-  return lastSeen;
+  if (lastSeen) {
+    return lastSeen;
+  }
+  // Skip said on an idle Echo while music plays elsewhere — same household
+  // scan "what's playing" already uses.
+  if (householdFallback) {
+    return fetchNowPlayingHousehold(alexa, serialOrName, device, {
+      attempts: 2,
+      delayMs: 400,
+      scanAttempts: 1,
+    });
+  }
+  return null;
 }
 
 module.exports = {

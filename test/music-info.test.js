@@ -145,7 +145,7 @@ test('normalizePlayerInfo extracts song artist album and art', () => {
 });
 
 test('normalizePlayerInfo coerces mediaLength/mediaProgress from milliseconds', () => {
-  const { coerceMediaSeconds } = require('../src/music-info');
+  const { coerceMediaSeconds, extractMediaProgress } = require('../src/music-info');
   assert.equal(coerceMediaSeconds(225000), 225);
   assert.equal(coerceMediaSeconds(225), 225);
   assert.equal(coerceMediaSeconds(null), null);
@@ -159,6 +159,14 @@ test('normalizePlayerInfo coerces mediaLength/mediaProgress from milliseconds', 
   assert.equal(info.mediaLengthSec, 225);
   assert.equal(info.mediaProgressSec, 45);
   assert.ok(info.progressAt);
+
+  // Early-track progress (<10s in ms) must not be treated as thousands of seconds
+  // when length is already in the ms range — that caused instant auto-dismiss.
+  const early = extractMediaProgress({
+    progress: { mediaLength: 225000, mediaProgress: 3500 },
+  });
+  assert.equal(early.mediaLengthSec, 225);
+  assert.equal(early.mediaProgressSec, 4);
 });
 
 test('fetchNowPlayingAfterSkip returns the new title once it changes', async () => {

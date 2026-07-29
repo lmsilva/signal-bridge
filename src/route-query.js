@@ -95,7 +95,7 @@ function looksLikeRouteQuery(summary) {
   if (matchesRouteQuery(text, '')) {
     return true;
   }
-  return /\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?)?distance\b|\bhow\s+far\b|\bdirections?\b|\bhow\s+long\b.+\b(?:drive|driving|get|travel|road\s*trip)\b/i.test(text);
+  return /\b(?:what(?:'s|\s+is)?\s+(?:the\s+)?)?(?:show\s+(?:me\s+)?(?:the\s+)?)?distance\b|\bhow\s+far\b|\bdirections?\b|\bhow\s+long\b.+\b(?:drive|driving|get|travel|road\s*trip)\b/i.test(text);
 }
 
 // "here"/"home" need a configured default with real coordinates (or a

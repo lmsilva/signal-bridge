@@ -511,6 +511,8 @@ function createListener({ config, log }) {
     // to wake) get instant on-screen feedback: the cached snapshot marked
     // "refreshing" when one exists (real data replaces it once the live fetch
     // lands), otherwise a processing acknowledgment placeholder.
+    // Route geocode + OSRM is also slow / silent on failure — ack so the
+    // display always reacts to "show distance…".
     if ((event.kind === 'tesla-battery' || event.kind === 'tesla-dashboard')
       && isFleetConfigured(config.teslaFleet)) {
       let preview = null;
@@ -536,6 +538,12 @@ function createListener({ config, log }) {
           emitVoicePayload(ack);
           log.info(`Processing ack sent (${event.kind}) for ${event.device}`);
         }
+      }
+    } else if (event.kind === 'route') {
+      const ack = buildProcessingAckPayload(event, config);
+      if (ack) {
+        emitVoicePayload(ack);
+        log.info(`Processing ack sent (route) for ${event.device}`);
       }
     }
 

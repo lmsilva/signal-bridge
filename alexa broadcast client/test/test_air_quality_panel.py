@@ -35,6 +35,40 @@ class AirQualityDisplayBandTests(unittest.TestCase):
         self.assertEqual(AirQualityPanel.rating_word("good"), "Good")
         self.assertEqual(AirQualityPanel.rating_word("severe"), "Severe")
 
+    def test_metric_keys_are_five(self):
+        # Landscape lays these as 1×5 or 3+2 — never a 2×3 with a hole.
+        self.assertEqual(len(AirQualityPanel.METRICS), 5)
+        self.assertEqual([key for key, _ in AirQualityPanel.METRICS], [
+            "temperatureF", "humidity", "pm25", "co", "voc",
+        ])
+
+
+class AirQualityMetricCellFontTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import tkinter as tk
+        cls.root = tk.Tk()
+        cls.root.withdraw()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.root.destroy()
+
+    def test_metric_fonts_fit_inside_typical_cell(self):
+        panel = AirQualityPanel.__new__(AirQualityPanel)
+        panel.config = {}
+        for h_u in (96, 110, 132, 148):
+            for u in (0.75, 1.0, 1.5):
+                h = h_u * u
+                lab, val = panel._metric_cell_fonts(h, u)
+                gap = max(4.0, 6 * u)
+                pad = max(6.0, 8 * u)
+                need = lab.metrics("linespace") + gap + val.metrics("linespace") + 2 * pad
+                self.assertLessEqual(
+                    need, h + 0.5,
+                    f"fonts overflow cell h_u={h_u} u={u}: need={need:.1f} h={h:.1f}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
