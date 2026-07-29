@@ -27,6 +27,10 @@ from src.display_panels import (
     VivintAlarmPanel,
     WeatherPanel,
 )
+from src.design_system import ACCENT, BG, page_chrome
+from src.design_system import design_u as dismiss_u
+from src.dismiss_footer import DismissFooter, footer_height
+from src.page_header import paint_page_header
 from src.payload_utils import resolve_display_type, title_for_display_type, title_for_payload
 from src.steam_now_playing_panel import SteamNowPlayingPanel
 from src.weather_fetch import enrich_weather_payload
@@ -153,18 +157,18 @@ class OverlayWindow:
             self.on_local_timer_fired(timer, base_payload)
 
     def _build_fonts(self):
+        # Design system: weights 400/500 only. Tk's "bold" stands in for medium.
         title_family = self.config.get("titleFontFamily", "Segoe UI")
         portrait = self.portrait
         self.title_primary_font = tkfont.Font(family=title_family, size=34 if portrait else 40, weight="bold")
-        self.title_accent_font = tkfont.Font(family=title_family, size=28 if portrait else 32)
-        self.chip_label_font = tkfont.Font(family=title_family, size=11 if portrait else 12, weight="bold")
-        self.chip_value_font = tkfont.Font(family=title_family, size=15 if portrait else 17)
+        self.title_accent_font = tkfont.Font(family=title_family, size=28 if portrait else 32, weight="bold")
+        self.chip_label_font = tkfont.Font(family=title_family, size=11 if portrait else 12)
+        self.chip_value_font = tkfont.Font(family=title_family, size=15 if portrait else 17, weight="bold")
         self.message_font = tkfont.Font(family=title_family, size=36 if portrait else 42, weight="bold")
-        self.countdown_font = tkfont.Font(family=title_family, size=15 if portrait else 16)
         self.digital_time_font = tkfont.Font(family=title_family, size=54 if portrait else 64, weight="bold")
         self.date_font = tkfont.Font(family=title_family, size=22 if portrait else 26)
         self.section_title_font = tkfont.Font(family=title_family, size=28 if portrait else 32, weight="bold")
-        self.section_label_font = tkfont.Font(family=title_family, size=16 if portrait else 18, weight="bold")
+        self.section_label_font = tkfont.Font(family=title_family, size=16 if portrait else 18)
         self.hero_font = tkfont.Font(family=title_family, size=42 if portrait else 48, weight="bold")
         self.body_font = tkfont.Font(family=title_family, size=18 if portrait else 20)
         self.forecast_label_font = tkfont.Font(family=title_family, size=10 if portrait else 11)
@@ -175,24 +179,23 @@ class OverlayWindow:
         self.timer_alert_font = tkfont.Font(family=title_family, size=38 if portrait else 44, weight="bold")
 
     def _compute_layout(self) -> OverlayLayout:
-        content_width = int(self.screen_w * (0.82 if self.portrait else 0.68))
-        content_x = (self.screen_w - content_width) // 2
-        top_y = int(self.screen_h * (0.12 if self.portrait else 0.14))
-        accent_line_height = self.title_accent_font.metrics("linespace")
-        received_y = top_y + self.title_primary_font.metrics("linespace") + 6
-        # message_area_top starts right under the title stack (not after the
-        # chip row) since most panels don't render chips. BroadcastPanel is the
-        # exception — it still shows the FROM/TO/TIME chip row and computes its
-        # own message top (chip_y + chip_height + gap) from these chip_* fields
-        # so its scrolling text never overlaps the chips.
+        # Shared page frame (design-system §1.7): header 32–116, content 136–footer.
+        chrome = page_chrome(self.screen_w, self.screen_h, timed=True)
+        content_width = max(200, int(round(chrome.content_w)))
+        content_x = int(round(chrome.content_x))
+        message_area_top = int(round(chrome.content_top))
+        message_area_bottom = int(round(chrome.content_bottom))
+        # BroadcastPanel still shows FROM/TO/TIME chips at content top and
+        # computes its own message top below them from chip_* fields.
         chip_gap = 16
         chip_count = 3
         chip_width = (content_width - chip_gap * (chip_count - 1)) // chip_count
         chip_height = 72 if self.portrait else 78
-        chip_y = received_y + accent_line_height + 24
-        message_area_top = chip_y
-        countdown_y = self.screen_h - 40
-        message_area_bottom = countdown_y - 48
+        chip_y = message_area_top
+        footer_h = footer_height(self.screen_w, self.screen_h)
+        u = dismiss_u(self.screen_w, self.screen_h)
+        rail_h = max(2, int(round(6 * u)))
+        countdown_y = message_area_bottom + rail_h + (footer_h - rail_h) // 2
         message_content_width = content_width - 48
         message_viewport_height = max(120, message_area_bottom - message_area_top)
         message_center_x = message_content_width // 2
@@ -233,88 +236,99 @@ class OverlayWindow:
 
     def _build_shell(self):
         self.canvas.delete("all")
+        # Flat design-system surface — no rounded card framing the chrome.
         self.canvas.create_rectangle(
             0,
             0,
             self.screen_w,
             self.screen_h,
-            fill=self.config["overlayBackground"],
+            fill=self.config.get("overlayBackground", BG),
             outline="",
         )
 
         layout = self.layout
-        title_center_x = layout.content_x + layout.content_width // 2
-        top_y = int(self.screen_h * (0.12 if self.portrait else 0.14))
 
-        # Rounded backdrop frame shared by every panel (mission-control look).
-        frame_pad = 26
-        self.frame_top = top_y - int(self.screen_h * 0.045)
-        self.frame_bottom = layout.message_area_bottom + 30
-        self.backdrop_frame_id = self._create_round_rect(
-            layout.content_x - frame_pad,
-            self.frame_top,
-            layout.content_x + layout.content_width + frame_pad,
-            self.frame_bottom,
-            radius=28,
-            fill="#0d1524",
-            outline="#1d2a40",
+        # Kept as a no-op id so chrome-owning panels can still "hide" it safely.
+        self.frame_top = 0
+        self.frame_bottom = layout.message_area_bottom
+        self.backdrop_frame_id = self.canvas.create_rectangle(
+            0, 0, 0, 0, fill="", outline="", state="hidden",
         )
-        title_color = self.config.get("titleColor", self.config["textColor"])
-        self._default_title_accent_color = self.config.get("titleAccentColor", self.config["accentColor"])
-        title_accent_color = self._default_title_accent_color
-
+        self._default_title_accent_color = self.config.get("titleAccentColor", ACCENT)
+        if self._default_title_accent_color in ("#38bdf8", "#0ea5e9"):
+            self._default_title_accent_color = ACCENT
+        # Shared 3-column header lives in the 32–116 band; content starts at 136.
+        self._header_ids: list[int] = []
+        # Back-compat placeholders (tests / older call sites may itemconfigure).
         self.title_primary_id = self.canvas.create_text(
-            title_center_x,
-            top_y,
-            anchor="n",
-            text="Alexa Broadcast",
-            fill=title_color,
-            font=self.title_primary_font,
-            tags=("overlay_chrome",),
+            0, 0, text="", state="hidden", tags=("overlay_chrome",),
         )
         self.title_accent_id = self.canvas.create_text(
-            title_center_x,
-            top_y + self.title_primary_font.metrics("linespace") + 6,
-            anchor="n",
-            text="Received",
-            fill=title_accent_color,
-            font=self.title_accent_font,
-            tags=("overlay_chrome",),
+            0, 0, text="", state="hidden", tags=("overlay_chrome",),
         )
+        self._paint_shell_header("Alexa Broadcast", "Received")
+
+    def _clear_shell_header(self):
+        for item_id in getattr(self, "_header_ids", []) or []:
+            try:
+                self.canvas.delete(item_id)
+            except tk.TclError:
+                pass
+        self._header_ids = []
+
+    def _paint_shell_header(self, primary: str, accent: str):
+        """Shared page header — center pill is the page type (design-system §1.7)."""
+        self._clear_shell_header()
+        family = self.config.get("titleFontFamily", "Segoe UI")
+        left_value = ""
+        if primary and primary not in ("Alexa", "Signal", "Steam", "Tesla", "Unlock"):
+            left_value = primary
+        self._header_ids = paint_page_header(
+            self.canvas,
+            screen_w=self.screen_w,
+            screen_h=self.screen_h,
+            pill=accent or "Display",
+            left_label="",
+            left_value=left_value,
+            right_label="",
+            right_value="",
+            sans_family=family,
+            mono_family="Consolas",
+        )
+        for item_id in self._header_ids:
+            self.canvas.addtag_withtag("overlay_chrome", item_id)
 
     def _build_countdown_widget(self):
-        pill_bg = self.config.get("chipBackground", "#141a24")
-        self.countdown_label = tk.Label(
+        family = self.config.get("titleFontFamily", "Segoe UI")
+        self.dismiss_footer = DismissFooter(
+            self.canvas,
             self.root,
-            text="",
-            bg=pill_bg,
-            fg=self.config["textColor"],
-            font=self.countdown_font,
-            bd=0,
-            highlightthickness=0,
-            padx=20,
-            pady=10,
+            screen_w=self.screen_w,
+            screen_h=self.screen_h,
+            font_family=family,
+            on_click=self._on_dismiss_input,
         )
-        self.countdown_label.bind("<Button-1>", self._on_dismiss_input)
-
-    def _position_countdown(self):
-        layout = self.layout
-        center_x = layout.content_x + layout.content_width // 2
-        self.countdown_label.place(x=center_x, y=layout.countdown_y, anchor="center")
-        self.countdown_label.lift()
+        # Back-compat alias for older tests / call sites.
+        self.countdown_label = self.dismiss_footer
 
     def _set_countdown_text(self, text: str):
+        """Show/hide the shared dismiss footer. Non-empty text is ignored —
+        the footer owns formatting from the deadline."""
         if text:
-            self.countdown_label.configure(text=text)
-            self._position_countdown()
+            if self._display_seconds > 0 and not self._suppress_dismiss_footer():
+                self.dismiss_footer.show(
+                    self._display_seconds * 1000,
+                    expires_at=self._expires_at or None,
+                )
+                if text.startswith("Finishing"):
+                    self.dismiss_footer.set_finishing(True)
         else:
-            self.countdown_label.place_forget()
-            self.countdown_label.configure(text="")
+            self.dismiss_footer.hide()
 
     def _raise_overlay_chrome(self):
         self.canvas.tag_raise("overlay_chrome")
-        if self.countdown_label.winfo_ismapped():
-            self.countdown_label.lift()
+        if getattr(self.dismiss_footer, "_visible", False):
+            self.dismiss_footer.raise_()
 
     def hide(self):
         if not self.visible:
@@ -331,7 +345,7 @@ class OverlayWindow:
         self.root.withdraw()
         self.visible = False
         self._hide_job = None
-        self._set_countdown_text("")
+        self.dismiss_footer.hide()
         self._notify_closed()
 
     def _notify_closed(self):
@@ -364,8 +378,12 @@ class OverlayWindow:
                 status = str(auth.get("status") or "").strip().lower()
                 if status in ("ok", "authenticated", "success"):
                     accent_color = "#22c55e"
+        # accent_color kept for theme hooks (notifications / vivint / auth);
+        # shared header uses ink/pill chrome rather than coloured title text.
+        _ = accent_color
         self.canvas.itemconfigure(self.title_primary_id, text=primary)
-        self.canvas.itemconfigure(self.title_accent_id, text=accent, fill=accent_color)
+        self.canvas.itemconfigure(self.title_accent_id, text=accent)
+        self._paint_shell_header(primary, accent)
         self.canvas.tag_raise("overlay_chrome")
 
     def _stop_active_panel(self):
@@ -396,14 +414,22 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
-        if display_type in (
+        owns_chrome = display_type in (
             "tesla-dashboard.query",
             "route-planner.query",
             "guest.photobooth",
             "steam.now-playing",
-        ):
+            "photo.slideshow",
+            "weather.query",
+            "timer.snapshot",
+            "alarm.snapshot",
+            "shopping-list.snapshot",
+            "air-quality.query",
+        ) or self._is_shared_photo_qr(display_type, payload)
+        if owns_chrome:
             self.canvas.itemconfigure(self.title_primary_id, text="")
             self.canvas.itemconfigure(self.title_accent_id, text="")
+            self._clear_shell_header()
             # These panels draw their own header — hide the shared backdrop +
             # generic title so we never get "frame inside a frame" / duplicate titles.
             self.canvas.itemconfigure(self.backdrop_frame_id, state="hidden")
@@ -420,15 +446,12 @@ class OverlayWindow:
         self._active_panel_key = display_type
         panel.show(payload)
         self.canvas.tag_raise("overlay_chrome")
-        # Blank the dismiss clock immediately for photo slideshow (don't wait
-        # for the first countdown tick — and clear any leftover text from the
-        # previous overlay if panel.show raised mid-render).
-        if display_type == "photo.slideshow" or (
-            display_type == "steam.now-playing" and self._display_seconds <= 0
-        ):
-            self._set_countdown_text("")
-        elif self.countdown_label.cget("text"):
-            self.countdown_label.lift()
+        # Shared-photos + persistent Steam own their own chrome — hide the
+        # system dismiss footer. Everything else gets it from `_start_countdown`.
+        if self._suppress_dismiss_footer():
+            self.dismiss_footer.hide()
+        else:
+            self.dismiss_footer.raise_()
 
         if display_type == "broadcast" and panel.message_viewport:
             panel.message_viewport.bind("<Button-1>", self._on_dismiss_input)
@@ -438,28 +461,52 @@ class OverlayWindow:
             self.root.after_cancel(self._countdown_job)
             self._countdown_job = None
 
+    @staticmethod
+    def _is_shared_photo_qr(display_type: str, payload: dict | None) -> bool:
+        """Single-upload shared photo preview (`qr.display` with photo content)."""
+        if display_type != "qr.display":
+            return False
+        qr = (payload or {}).get("qr") or {}
+        if str(qr.get("qrType") or "").lower() == "photo":
+            return True
+        return QrPanel._is_shared_photo_url(str(qr.get("content") or ""))
+
+    def _is_shared_photo_qr_active(self) -> bool:
+        if self._active_panel_key != "qr.display":
+            return False
+        panel = self._active_panel
+        return bool(panel and getattr(panel, "_photo_mode", False))
+
+    def _suppress_dismiss_footer(self) -> bool:
+        """Shared-photos pages keep their own rails; persistent Steam has no timer."""
+        if self._active_panel_key == "photo.slideshow":
+            return True
+        if self._is_shared_photo_qr_active():
+            return True
+        if self._active_panel_key == "steam.now-playing" and self._display_seconds <= 0:
+            return True
+        return False
+
     def _format_remaining(self, remaining_seconds: int, finishing: bool = False) -> str:
+        from src.dismiss_footer import format_dismiss_parts
+
         if finishing:
             return "Finishing…"
-        remaining_seconds = max(0, remaining_seconds)
-        minutes, seconds = divmod(remaining_seconds, 60)
-        if minutes:
-            return f"Dismisses in {minutes}:{seconds:02d}"
-        return f"Dismisses in {seconds}s"
+        prefix, value = format_dismiss_parts(max(1, remaining_seconds))
+        return f"{prefix}{value}"
 
     def _update_countdown(self):
         remaining = max(0, int(math.ceil(self._expires_at - time.time())))
         finishing = remaining <= 0 and self._needs_scroll()
-        # The photo slideshow must stay up until it has played through every
-        # photo once (or a new command interrupts it) rather than showing a
-        # ticking "Dismisses in…" clock — the timer below still runs (sized
-        # to exactly one pass through the photos) so auto-dismiss still fires.
-        if self._active_panel_key == "photo.slideshow" or (
-            self._active_panel_key == "steam.now-playing" and self._display_seconds <= 0
-        ):
-            self._set_countdown_text("")
+
+        if self._suppress_dismiss_footer() or self._display_seconds <= 0:
+            self.dismiss_footer.hide()
+        elif finishing:
+            self.dismiss_footer.set_finishing(True)
+            self.dismiss_footer.raise_()
         else:
-            self._set_countdown_text(self._format_remaining(remaining, finishing=finishing))
+            self.dismiss_footer.raise_()
+
         self._raise_overlay_chrome()
 
         if self._display_seconds <= 0:
@@ -487,13 +534,21 @@ class OverlayWindow:
 
         self.hide()
 
-    def _start_countdown(self, display_seconds: int):
+    def _start_countdown(self, display_seconds: int, *, extend: bool = False):
         self._cancel_countdown()
         if display_seconds <= 0:
             self._expires_at = 0
-            self._set_countdown_text("")
+            self.dismiss_footer.hide()
             return
         self._expires_at = time.time() + display_seconds
+        if self._suppress_dismiss_footer():
+            self.dismiss_footer.hide()
+        else:
+            self.dismiss_footer.show(
+                display_seconds * 1000,
+                expires_at=self._expires_at,
+                extend=extend,
+            )
         self._update_countdown()
 
     def _on_show_ready(self):
@@ -515,10 +570,8 @@ class OverlayWindow:
             self.root.after_cancel(self._fade_job)
             self._fade_job = None
         self._cancel_countdown()
-        # Cancelling the job alone leaves the previous "Dismisses in Xs"
-        # label on screen — clear it so a failed/partial panel switch can't
-        # strand a stale countdown under the new content.
-        self._set_countdown_text("")
+        # Footer visibility is owned by `_start_countdown` / `_apply_payload`
+        # (so `advance()` can extend the rail instead of hard-resetting).
         scroller = self._scroller
         if scroller:
             scroller.stop()
@@ -554,7 +607,9 @@ class OverlayWindow:
         self._alpha = 1.0
         self.root.attributes("-alpha", self._effective_opacity())
         self._on_show_ready()
-        self._start_countdown(display_seconds)
+        # Replacing an active timed page extends the rail (spec §5) rather than
+        # hard-resetting from empty.
+        self._start_countdown(display_seconds, extend=True)
 
     def dismiss_immediately(self):
         if not self.visible:
@@ -567,7 +622,7 @@ class OverlayWindow:
         self.root.attributes("-alpha", 0.0)
         self.root.withdraw()
         self.visible = False
-        self._set_countdown_text("")
+        self.dismiss_footer.hide()
         self._notify_closed()
 
     def _effective_opacity(self) -> float:

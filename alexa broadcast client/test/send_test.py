@@ -254,6 +254,11 @@ def build_payload(args) -> dict:
                 "voc": 1,
                 "summary": "Air quality is at 94 out of 100 right now",
             },
+            "monitors": [
+                {"label": "Main Floor", "iaqScore": 99, "band": "good"},
+                {"label": "Machine Room", "iaqScore": 99, "band": "good"},
+                {"label": "Dome", "iaqScore": 95, "band": "good"},
+            ],
         }
 
     if args.type == "air-quality-poor":
@@ -849,6 +854,9 @@ def build_payload(args) -> dict:
                 "provider": "Amazon Music",
                 "state": "PLAYING",
                 "device": args.sender,
+                "mediaLengthSec": 200,
+                "mediaProgressSec": 45,
+                "progressAt": _iso_now(),
             },
         }
 

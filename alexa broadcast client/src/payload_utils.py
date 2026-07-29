@@ -321,6 +321,39 @@ def format_timer_clock(seconds: int | float | None) -> str:
     return f"{minutes}:{secs:02d}"
 
 
+def format_music_clock(seconds: int | float | None) -> str:
+    """Track time — same shape as timer clock (`3:45` / `1:02:30`)."""
+    return format_timer_clock(seconds)
+
+
+def music_remaining_seconds(
+    *,
+    media_length_sec: int | float | None,
+    media_progress_sec: int | float | None,
+    progress_at: str | None,
+    now: float | None = None,
+    playing: bool = True,
+) -> int | None:
+    """Seconds left in the track, extrapolating from a progress snapshot."""
+    if media_length_sec is None:
+        return None
+    try:
+        length = max(0, int(float(media_length_sec)))
+    except (TypeError, ValueError):
+        return None
+    try:
+        progress = max(0, int(float(media_progress_sec or 0)))
+    except (TypeError, ValueError):
+        progress = 0
+    if playing and progress_at:
+        captured = parse_iso_timestamp(progress_at)
+        if captured is not None:
+            import time as _time
+            elapsed = max(0.0, (now if now is not None else _time.time()) - captured.timestamp())
+            progress = int(progress + elapsed)
+    return max(0, length - progress)
+
+
 def format_timer_set_label(seconds: int | float | None) -> str:
     if seconds is None:
         return "Timer"
@@ -350,6 +383,32 @@ def timer_title(timer: dict | None) -> str:
     return format_timer_set_label((timer or {}).get("durationSec"))
 
 
+def format_timer_duration_chip(seconds: int | float | None) -> str:
+    """Unlabelled timer name slot — `15 MIN` / `1 HR` (design-system §2.2)."""
+    if seconds is None:
+        return "TIMER"
+    total = max(0, int(seconds))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours and minutes == 0 and secs == 0:
+        return "1 HR" if hours == 1 else f"{hours} HR"
+    if hours:
+        return f"{hours}:{minutes:02d} HR"
+    if minutes and secs == 0:
+        return "1 MIN" if minutes == 1 else f"{minutes} MIN"
+    if minutes:
+        return f"{minutes}:{secs:02d}"
+    return f"{secs}S"
+
+
+def timer_display_label(timer: dict | None) -> str:
+    """Ring/row label: named timer uppercased, else duration chip."""
+    label = timer_label_name(timer)
+    if label:
+        return label.upper()
+    return format_timer_duration_chip((timer or {}).get("durationSec"))
+
+
 def timer_detail_line(timer: dict | None, device: str, *, finished: bool = False) -> str:
     parts = [device]
     duration_sec = (timer or {}).get("durationSec")
@@ -366,6 +425,76 @@ def format_alarm_time(value: str | None) -> str:
     if parsed:
         return parsed.astimezone().strftime("%I:%M %p").lstrip("0")
     return "—"
+
+
+def format_alarm_clock_parts(value: str | None) -> tuple[str, str]:
+    """Return `(clock, ampm)` for the alarms hero — e.g. `("6:30", "AM")`."""
+    parsed = parse_iso_timestamp(value or "")
+    if not parsed:
+        return "—", ""
+    local = parsed.astimezone()
+    clock = local.strftime("%I:%M").lstrip("0") or "12:00"
+    return clock, local.strftime("%p")
+
+
+def format_alarm_in_compact(alarm: dict | None) -> str:
+    """Landscape hero line — `IN 8H 49M` / `IN 12M` / `IN 45S`."""
+    remaining = (alarm or {}).get("remainingSec")
+    if remaining is None:
+        return ""
+    remaining = max(0, int(remaining))
+    if remaining >= 86400:
+        days, rem = divmod(remaining, 86400)
+        hours = rem // 3600
+        return f"IN {days}D {hours}H" if hours else f"IN {days}D"
+    if remaining >= 3600:
+        hours, rem = divmod(remaining, 3600)
+        minutes = rem // 60
+        return f"IN {hours}H {minutes}M"
+    if remaining >= 60:
+        return f"IN {remaining // 60}M"
+    return f"IN {remaining}S"
+
+
+def format_alarm_recurrence_chip(alarm: dict | None) -> str:
+    """Small chip for alarm rows — DAILY / MON–FRI / ONCE / OFF."""
+    if not alarm:
+        return "ONCE"
+    if str(alarm.get("status") or "").upper() == "OFF":
+        return "OFF"
+    recurrence = alarm.get("recurrence")
+    if not recurrence:
+        return "ONCE"
+    if isinstance(recurrence, str):
+        text = recurrence.strip()
+        return text.upper() if text else "ONCE"
+    if isinstance(recurrence, dict):
+        for key in ("label", "type", "recurrence", "pattern"):
+            val = recurrence.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip().upper()
+        days = recurrence.get("byDay") or recurrence.get("days")
+        if isinstance(days, (list, tuple)) and days:
+            names = [str(d)[:3].upper() for d in days]
+            if names == ["MON", "TUE", "WED", "THU", "FRI"]:
+                return "MON–FRI"
+            if len(names) == 7:
+                return "DAILY"
+            return "·".join(names[:3]) + ("…" if len(names) > 3 else "")
+        return "REPEATS"
+    return "REPEATS"
+
+
+def format_timer_ends_label(timer: dict | None) -> str:
+    """`Ends 9:51 PM` from fireAt or remainingSec."""
+    fire_at = parse_iso_timestamp((timer or {}).get("fireAt") or "")
+    if fire_at:
+        return f"Ends {fire_at.astimezone().strftime('%I:%M %p').lstrip('0')}"
+    remaining = (timer or {}).get("remainingSec")
+    if remaining is None:
+        return ""
+    ends = datetime.now(timezone.utc) + timedelta(seconds=max(0, int(remaining)))
+    return f"Ends {ends.astimezone().strftime('%I:%M %p').lstrip('0')}"
 
 
 def resolve_alarm_trigger_time(alarm: dict | None) -> str | None:
@@ -739,6 +868,7 @@ def air_quality_band_label(band: str | None) -> str:
         "fair": "Fair",
         "moderate": "Moderate",
         "poor": "Poor",
+        "severe": "Severe",
         "unknown": "Unknown",
     }
     return labels.get(str(band or "unknown"), "Unknown")

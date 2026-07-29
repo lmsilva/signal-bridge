@@ -32,7 +32,14 @@ from src.payload_utils import (
     shorten_route_place_name,
     format_timer_clock,
     format_timer_set_label,
+    format_timer_ends_label,
+    format_music_clock,
+    music_remaining_seconds,
+    timer_display_label,
     format_alarm_time,
+    format_alarm_clock_parts,
+    format_alarm_in_compact,
+    format_alarm_recurrence_chip,
     resolve_alarm_trigger_time,
     format_alarm_date,
     alarm_title,
@@ -70,16 +77,16 @@ class BasePanel:
     needs_scroll = False
     scroller = None
 
-    # Shared dark "mission control" palette used by all panels.
-    GREEN = "#4ade80"
+    # Design-system palette (display-design-system.md §1.3–1.4).
+    GREEN = "#6EE7A8"
     GREEN_BG = "#123524"
-    AMBER = "#f59e0b"
+    AMBER = "#F5C453"
     AMBER_BG = "#3a2605"
-    RED = "#ef4444"
+    RED = "#FF7A6B"
     RED_BG = "#3f1220"
-    CONTAINER = "#0d1524"
-    CARD = "#101b2d"
-    CARD_EDGE = "#1d2a40"
+    CONTAINER = "#0B1730"
+    CARD = "#141F35"
+    CARD_EDGE = "#264060"
     INNER = "#0a111e"
 
     def __init__(self, root: tk.Tk, shell, config: dict):
@@ -119,183 +126,16 @@ class BasePanel:
         widget.place(**kwargs)
         self._widgets.append(widget)
 
-    # Shared photo + scan-QR layout (slideshow and single shared-photo push).
-    # The QR never overlays the photo: landscape uses a right gutter beside it;
-    # portrait reserves a band below it. Photo meta sits under the title stack
-    # (never beside "Shared Photos"). Caption width is fitted to the QR.
-    _SCAN_QR_SIZE_PORTRAIT = 148
-    _SCAN_QR_SIZE_LANDSCAPE = 168
-    _SCAN_QR_GUTTER_LANDSCAPE = 220
-    _SCAN_QR_GAP = 18
-    _SCAN_QR_MARGIN = 16
-    _SCAN_QR_CAPTION = "Scan for photo"
-    _PHOTO_META_TOP_PAD = 8
-    _PHOTO_META_BOTTOM_PAD = 18
-
-    def _photo_meta_block_height(self) -> int:
-        """Vertical space reserved above the photo for counter + shared date.
-
-        Slideshow overrides this; single photo-push leaves it at 0.
-        """
-        return 0
-
-    def _scan_qr_block_height(self, portrait: bool) -> int:
-        """Caption + gap + QR — used to reserve a non-overlapping portrait band."""
-        qr = self._SCAN_QR_SIZE_PORTRAIT if portrait else self._SCAN_QR_SIZE_LANDSCAPE
-        # Caption ~18–22px; keep a stable reserve so geometry doesn't depend on font fit.
-        return 22 + 8 + qr + self._SCAN_QR_MARGIN
-
-    def _photo_stage_geometry(self):
-        """`(photo_cx, photo_cy, max_w, max_h, layout)` with QR gutter/band reserved."""
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        top = layout.message_area_top + self._photo_meta_block_height()
-        bottom = layout.message_area_bottom
-        if layout.portrait:
-            qr_band = self._scan_qr_block_height(True) + self._SCAN_QR_GAP
-            max_w = max(1, width - 40)
-            max_h = max(120, bottom - top - qr_band)
-            photo_cx = x + width // 2
-            photo_cy = top + max_h // 2
-        else:
-            gutter = self._SCAN_QR_GUTTER_LANDSCAPE
-            max_w = max(1, width - 40 - gutter)
-            max_h = max(120, bottom - top - 24)
-            photo_cx = x + (width - gutter) // 2
-            photo_cy = top + (bottom - top) // 2
-        return photo_cx, photo_cy, max_w, max_h, layout
-
-    def _fit_scan_qr_caption_font(self, caption: str, target_width: int):
-        """Bold caption font sized so text width matches the QR (not wider/narrower)."""
-        family = "Segoe UI"
-        try:
-            family = self.shell.chip_label_font.actual("family") or family
-        except Exception:
-            pass
-
-        try:
-            size = max(11, min(28, int(target_width / max(1, len(caption) * 0.55))))
-            font = tkfont.Font(family=family, size=size, weight="bold")
-            while font.measure(caption) > target_width and size > 9:
-                size -= 1
-                font.configure(size=size)
-            while font.measure(caption) < target_width and size < 32:
-                size += 1
-                font.configure(size=size)
-                if font.measure(caption) > target_width:
-                    size -= 1
-                    font.configure(size=size)
-                    break
-            self._scan_qr_caption_font = font
-            return font
-        except Exception:
-            return self.shell.chip_label_font
-
-    def _draw_scan_qr_badge(
-        self,
-        url: str,
-        caption: str | None = None,
-        *,
-        photo_cx: float | None = None,
-        photo_cy: float | None = None,
-        photo_w: int | None = None,
-        photo_h: int | None = None,
-    ):
-        """Draw a scan QR beside (landscape) or below (portrait) the hero photo.
-
-        Never overlaps the photo. Returns the ``PhotoImage`` (caller must keep
-        a reference) or ``None``. Caption is bold and font-fitted to the QR width.
-        """
-        if ImageTk is None or not url:
-            return None
-        layout = self.shell.layout
-        caption = (caption or self._SCAN_QR_CAPTION).strip() or self._SCAN_QR_CAPTION
-        muted = self.config.get("mutedTextColor") or self.config.get("textColor") or "#f8fafc"
-        target = (
-            self._SCAN_QR_SIZE_PORTRAIT if layout.portrait else self._SCAN_QR_SIZE_LANDSCAPE
-        )
-        qr_image = QrPanel._build_qr_image(url, target)
-        if qr_image is None:
-            return None
-
-        margin = self._SCAN_QR_MARGIN
-        gap = 8
-        photo_gap = self._SCAN_QR_GAP
-        caption_font = self._fit_scan_qr_caption_font(caption, qr_image.width)
-        caption_h = caption_font.metrics("linespace")
-
-        content_left = layout.content_x + margin
-        content_right = layout.content_x + layout.content_width - margin
-        content_bottom = layout.message_area_bottom - margin
-        meta_bottom = layout.message_area_top + self._photo_meta_block_height()
-
-        has_photo = (
-            photo_cx is not None
-            and photo_cy is not None
-            and photo_w
-            and photo_h
-            and photo_w > 0
-            and photo_h > 0
-        )
-
-        if has_photo and layout.portrait:
-            # Below the photo, right-aligned to the photo's right edge.
-            photo_right = photo_cx + photo_w / 2
-            photo_bottom = photo_cy + photo_h / 2
-            qx = min(photo_right - qr_image.width / 2, content_right - qr_image.width / 2)
-            qx = max(qx, content_left + qr_image.width / 2)
-            qr_top = photo_bottom + photo_gap + caption_h + gap
-            if qr_top + qr_image.height > content_bottom:
-                qr_top = content_bottom - qr_image.height
-            qy = qr_top + qr_image.height / 2
-        elif has_photo:
-            # Right gutter beside the photo, vertically centered on the photo.
-            photo_right = photo_cx + photo_w / 2
-            gutter_left = photo_right + photo_gap
-            gutter_center = (gutter_left + content_right) / 2
-            qx = min(
-                max(gutter_center, gutter_left + qr_image.width / 2),
-                content_right - qr_image.width / 2,
-            )
-            qy = photo_cy
-            qr_top = qy - qr_image.height / 2
-            # Keep caption above the QR and inside the stage (below meta).
-            if qr_top - gap - caption_h < meta_bottom:
-                qr_top = meta_bottom + caption_h + gap
-                qy = qr_top + qr_image.height / 2
-            if qy + qr_image.height / 2 > content_bottom:
-                qy = content_bottom - qr_image.height / 2
-                qr_top = qy - qr_image.height / 2
-        elif layout.portrait:
-            qx = content_right - qr_image.width / 2
-            qr_top = content_bottom - qr_image.height
-            qy = qr_top + qr_image.height / 2
-        else:
-            qx = content_right - qr_image.width / 2
-            mid = meta_bottom + (content_bottom - meta_bottom) / 2
-            qy = mid
-            qr_top = qy - qr_image.height / 2
-            if qr_top - gap - caption_h < meta_bottom:
-                qr_top = meta_bottom + caption_h + gap
-                qy = qr_top + qr_image.height / 2
-
-        photo = ImageTk.PhotoImage(qr_image)
-        self._track(self.canvas.create_image(qx, qy, image=photo))
-        self._track(
-            self.canvas.create_text(
-                qx,
-                qr_top - gap,
-                anchor="s",
-                text=caption,
-                fill=muted,
-                font=caption_font,
-            )
-        )
-        return photo
-
-    def _round_rect(self, x0, y0, x1, y1, *, radius=14, fill="", outline="", width=1, dash=None):
-        radius = max(2, min(int(radius), int(x1 - x0) // 2, int(y1 - y0) // 2))
+    def _round_rect(self, x0, y0, x1, y1, *, radius=0, fill="", outline="", width=1, dash=None):
+        """Sharp cards by default (design-system radius 0)."""
+        radius = max(0, min(int(radius), int(x1 - x0) // 2, int(y1 - y0) // 2))
+        if radius <= 0:
+            kwargs = {"fill": fill, "outline": outline or fill, "width": width}
+            if dash:
+                # Canvas rectangle doesn't support dash the same way; fall through.
+                pass
+            else:
+                return self._track(self.canvas.create_rectangle(x0, y0, x1, y1, **kwargs))
         points = [
             x0 + radius, y0, x1 - radius, y0, x1, y0, x1, y0 + radius,
             x1, y1 - radius, x1, y1, x1 - radius, y1, x0 + radius, y1,
@@ -306,7 +146,7 @@ class BasePanel:
             kwargs["dash"] = dash
         return self._track(self.canvas.create_polygon(points, **kwargs))
 
-    def _panel_card(self, x, y, w, h, *, radius=18, fill=None, outline=None, dash=None):
+    def _panel_card(self, x, y, w, h, *, radius=0, fill=None, outline=None, dash=None):
         return self._round_rect(
             x, y, x + w, y + h,
             radius=radius,
@@ -315,10 +155,10 @@ class BasePanel:
             dash=dash,
         )
 
-    def _container_frame(self, x, y, w, h, *, pad=20, radius=26):
-        """Large rounded backdrop that frames the whole panel."""
+    def _container_frame(self, x, y, w, h, *, pad=20, radius=0):
+        """Full-bleed content plate (no rounded chrome; never into dismiss footer)."""
         return self._round_rect(
-            x - pad, y - 14, x + w + pad, y + h + 12,
+            x - pad, y - 14, x + w + pad, y + h,
             radius=radius, fill=self.CONTAINER, outline=self.CARD_EDGE,
         )
 
@@ -335,7 +175,8 @@ class BasePanel:
             x0 = x - w // 2
         else:
             x0 = x
-        self._round_rect(x0, y, x0 + w, y + h, radius=h // 2, fill=fill, outline=outline or fill)
+        # Square chips (radius 0) — design system forbids rounded-full pills.
+        self._round_rect(x0, y, x0 + w, y + h, radius=0, fill=fill, outline=outline or fill)
         self._track(
             self.canvas.create_text(
                 x0 + w // 2, y + h // 2, anchor="center", text=label, fill=fg, font=font,
@@ -451,7 +292,7 @@ class BroadcastPanel(BasePanel):
                 layout.chip_y,
                 chip_x + layout.chip_width,
                 layout.chip_y + layout.chip_height,
-                radius=16,
+                radius=0,
                 fill=self.CARD,
                 outline=self.CARD_EDGE,
             )
@@ -894,15 +735,7 @@ class WeatherPanel(BasePanel):
 
         return slot_height, day_height
 
-    def _render(self, payload: dict):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        y = layout.message_area_top
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
-
+    def _weather_context(self, payload: dict) -> dict:
         location = payload.get("location") or {}
         weather = payload.get("weather") or {}
         current = weather.get("current") or {}
@@ -911,74 +744,381 @@ class WeatherPanel(BasePanel):
         spoken = payload.get("spokenResponse") or ""
         spoken_bits = parse_spoken_weather(spoken)
         location_name = format_weather_location(location)
-
-        self._track(
-            self.canvas.create_text(
-                x + width // 2,
-                y,
-                anchor="n",
-                text=location_name,
-                fill=text,
-                font=self.shell.section_title_font,
-            )
-        )
-        y += 42
-
-        # Alexa's spoken current temperature is what the user just heard — it
-        # wins over the Open-Meteo model value for the hero number. Spoken
-        # numbers that may be forecast highs/lows are only a last resort.
+        # Spoken current temp wins for the hero number.
         temp_f = spoken_bits.get("temp_f") if spoken_bits.get("temp_is_current") else None
         if temp_f is None:
             temp_f = current.get("temperatureF")
         if temp_f is None:
             temp_f = spoken_bits.get("temp_f")
         temp_c = round((temp_f - 32) * 5 / 9) if temp_f is not None else None
-
         condition = normalize_condition(current.get("condition") or spoken_bits.get("condition"))
         if condition == "unknown" and spoken_bits.get("condition"):
             condition = normalize_condition(spoken_bits.get("condition"))
+        updated = (
+            current.get("observedAt")
+            or weather.get("updatedAt")
+            or payload.get("receivedAt")
+        )
+        try:
+            updated_label = format_chip_timestamp(updated).split("·")[-1].strip() if updated else ""
+        except Exception:
+            updated_label = ""
+        if not updated_label:
+            updated_label = datetime.now().strftime("%I:%M %p").lstrip("0")
+        return {
+            "location_name": location_name,
+            "current": current,
+            "hourly": hourly,
+            "daily": daily,
+            "spoken_bits": spoken_bits,
+            "temp_f": temp_f,
+            "temp_c": temp_c,
+            "condition": condition,
+            "updated_label": updated_label,
+            "wind": current.get("windSpeedMph"),
+            "rain": (hourly[0].get("precipitationProbability") if hourly else None),
+            "humidity": current.get("humidity"),
+        }
+
+    def _paint_weather_header(self, ctx: dict, screen_w: int, screen_h: int):
+        from src.page_header import paint_page_header
+
+        city = ctx["location_name"] or "Home"
+        # Keep the header value short so it doesn't collide with the pill.
+        if "," in city:
+            city = city.split(",")[0].strip()
+        paint_page_header(
+            self.canvas,
+            screen_w=screen_w,
+            screen_h=screen_h,
+            pill="WEATHER",
+            left_label="UPDATED",
+            left_value=ctx["updated_label"],
+            right_label="LOCATION",
+            right_value=city,
+            track=self._track,
+            sans_family=self.config.get("titleFontFamily", "Segoe UI"),
+            mono_family="Consolas",
+        )
+
+    @staticmethod
+    def _temp_gradient_color(t: float, t_min: float, t_max: float) -> str:
+        """Shared week gradient: cold→hot = cyan→mint→amber→coral."""
+        if t_max <= t_min:
+            return "#6EE7A8"
+        frac = max(0.0, min(1.0, (float(t) - t_min) / (t_max - t_min)))
+        stops = (
+            (0.0, (95, 208, 255)),
+            (0.33, (110, 231, 168)),
+            (0.66, (245, 196, 83)),
+            (1.0, (255, 122, 107)),
+        )
+        for i in range(len(stops) - 1):
+            a_f, a_c = stops[i]
+            b_f, b_c = stops[i + 1]
+            if frac <= b_f or i == len(stops) - 2:
+                local = 0.0 if b_f == a_f else (frac - a_f) / (b_f - a_f)
+                local = max(0.0, min(1.0, local))
+                r = int(a_c[0] + (b_c[0] - a_c[0]) * local)
+                g = int(a_c[1] + (b_c[1] - a_c[1]) * local)
+                b = int(a_c[2] + (b_c[2] - a_c[2]) * local)
+                return f"#{r:02x}{g:02x}{b:02x}"
+        return "#FF7A6B"
+
+    def _render(self, payload: dict):
+        from src.design_system import page_chrome, ACCENT, INK, INK_2, INK_3
+
+        ctx = self._weather_context(payload)
+        overlay = getattr(self.shell, "overlay", None)
+        screen_w = int(getattr(overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        screen_h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        chrome = page_chrome(screen_w, screen_h, timed=True)
+        self._paint_weather_header(ctx, screen_w, screen_h)
+        if chrome.portrait:
+            self._render_weather_portrait(ctx, chrome, ACCENT, INK, INK_2, INK_3)
+        else:
+            self._render_weather_landscape(ctx, chrome, ACCENT, INK, INK_2, INK_3)
+
+    def _render_weather_landscape(self, ctx, chrome, accent, ink, ink2, ink3):
+        """Landscape mockup: hero+sparkline top band, 7 vertical range bars below."""
+        u = chrome.u
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        zone_h = chrome.content_bottom - chrome.content_top
+        top_h = min(470 * u, zone_h * 0.55)
+        gap = 24 * u
+        left_w = 736 * u
+        right_w = width - left_w - gap
+
+        temp_f = ctx["temp_f"]
+        temp_c = ctx["temp_c"]
+        condition = ctx["condition"]
+        cond_label = self.CONDITION_LABELS.get(condition, condition.title())
+        if temp_f is not None:
+            hero = f"{round(temp_f)}°"
+            cond = f"{cond_label} · {temp_c}°C" if cond_label else f"{temp_c}°C"
+        else:
+            hero = "—"
+            cond = ctx["spoken_bits"].get("summary") or "Forecast unavailable"
+
+        # Hero display size (~232u) — use a dedicated font, fall back to shell hero.
+        try:
+            from tkinter import font as tkfont
+            hero_font = tkfont.Font(
+                family=self.config.get("titleFontFamily", "Segoe UI"),
+                size=max(48, int(round(120 * u))),
+                weight="bold",
+            )
+            cond_font = tkfont.Font(
+                family=self.config.get("titleFontFamily", "Segoe UI"),
+                size=max(14, int(round(40 * u))),
+            )
+            value_font = tkfont.Font(
+                family=self.config.get("titleFontFamily", "Segoe UI"),
+                size=max(14, int(round(38 * u))),
+                weight="bold",
+            )
+            sec_font = ("Consolas", max(11, int(round(22 * u))))
+        except Exception:
+            hero_font = self.shell.hero_font
+            cond_font = self.shell.body_font
+            value_font = self.shell.section_title_font
+            sec_font = self.shell.section_label_font
+
+        self._track(self.canvas.create_text(
+            x0, y0, anchor="nw", text=hero, fill=ink, font=hero_font,
+        ))
+        hero_h = hero_font.metrics("linespace") if hasattr(hero_font, "metrics") else int(120 * u)
+        self._track(self.canvas.create_text(
+            x0, y0 + hero_h + 8 * u, anchor="nw", text=cond, fill=ink2, font=cond_font,
+        ))
+        # Condition icon on the right of the hero column.
+        self._draw_condition_icon(
+            x0 + left_w - 70 * u, y0 + 90 * u, max(48, 120 * u), condition,
+        )
+
+        stats_y = y0 + top_h - 120 * u
+        self._track(self.canvas.create_line(
+            x0, stats_y, x0 + left_w, stats_y, fill="#264060",
+        ))
+        stats = (
+            ("WIND", f"{round(ctx['wind'])} mph" if ctx["wind"] is not None else "—"),
+            ("RAIN", f"{ctx['rain']}%" if ctx["rain"] is not None else "—"),
+            ("HUMIDITY", f"{ctx['humidity']}%" if ctx["humidity"] is not None else "—"),
+        )
+        cell_w = left_w / 3
+        for i, (lab, val) in enumerate(stats):
+            cx = x0 + cell_w * i + cell_w / 2
+            if i:
+                self._track(self.canvas.create_line(
+                    x0 + cell_w * i, stats_y + 8 * u,
+                    x0 + cell_w * i, stats_y + 90 * u,
+                    fill="#264060",
+                ))
+            self._track(self.canvas.create_text(
+                cx, stats_y + 18 * u, anchor="n", text=lab,
+                fill=accent, font=sec_font,
+            ))
+            self._track(self.canvas.create_text(
+                cx, stats_y + 48 * u, anchor="n", text=val,
+                fill=ink, font=value_font,
+            ))
+
+        # Hourly sparkline (right of hero).
+        hx = x0 + left_w + gap
+        self._track(self.canvas.create_text(
+            hx, y0, anchor="nw", text="NEXT 24 HOURS", fill=ink3, font=sec_font,
+        ))
+        spark_top = y0 + 36 * u
+        spark_h = top_h - 110 * u
+        self._draw_hourly_sparkline(
+            hx, spark_top, right_w, spark_h, ctx["hourly"], accent, ink, ink3, u,
+        )
+
+        # 7-day vertical range bars.
+        week_y = y0 + top_h + 24 * u
+        week_h = chrome.content_bottom - week_y
+        self._draw_week_vertical_bars(
+            x0, week_y, width, week_h, ctx["daily"], accent, ink, ink2, ink3, u,
+        )
+
+    def _draw_hourly_sparkline(
+        self, x, y, w, h, hourly, accent, ink, ink3, u,
+    ):
+        if not hourly:
+            self._track(self.canvas.create_text(
+                x, y + 24, anchor="nw", text="Hourly forecast unavailable",
+                fill=ink3, font=self.shell.body_font,
+            ))
+            return
+        # Skip "Now" — start at next whole hour samples (design-system note).
+        picks = sample_hourly_indices(len(hourly), 6)
+        if picks and picks[0] == 0 and len(hourly) > 1:
+            picks = sample_hourly_indices(max(1, len(hourly) - 1), 6)
+            picks = [i + 1 for i in picks if i + 1 < len(hourly)]
+            if len(picks) < 6:
+                picks = sample_hourly_indices(len(hourly), 6)
+        temps = []
+        labels = []
+        for idx in picks:
+            slot = hourly[idx]
+            temps.append(slot.get("temperatureF"))
+            label = "—"
+            if slot.get("time"):
+                try:
+                    label = (
+                        datetime.fromisoformat(slot["time"].replace("Z", "+00:00"))
+                        .strftime("%I%p")
+                        .lstrip("0")
+                    )
+                except ValueError:
+                    label = str(slot["time"])[-5:]
+            labels.append(label)
+        valid = [t for t in temps if t is not None]
+        if not valid:
+            return
+        t_min, t_max = min(valid), max(valid)
+        pad = 20 * u
+        chart_h = max(40, h - 50 * u)
+        n = len(picks)
+        xs = [x + (w * (i + 0.5) / n) for i in range(n)]
+        ys = []
+        for t in temps:
+            if t is None:
+                ys.append(y + chart_h / 2)
+            else:
+                frac = 0.5 if t_max == t_min else (t - t_min) / (t_max - t_min)
+                ys.append(y + pad + chart_h * (1 - frac))
+        for i in range(n - 1):
+            self._track(self.canvas.create_line(
+                xs[i], ys[i], xs[i + 1], ys[i + 1],
+                fill=accent, width=max(2, int(3 * u)),
+            ))
+        for i, t in enumerate(temps):
+            r = max(3, int(7 * u))
+            self._track(self.canvas.create_oval(
+                xs[i] - r, ys[i] - r, xs[i] + r, ys[i] + r,
+                fill=accent, outline="",
+            ))
+            if t is not None:
+                self._track(self.canvas.create_text(
+                    xs[i], ys[i] - 18 * u, anchor="s",
+                    text=f"{round(t)}°", fill=ink,
+                    font=self.shell.forecast_value_font,
+                ))
+            self._track(self.canvas.create_text(
+                xs[i], y + h - 4 * u, anchor="s",
+                text=labels[i], fill=ink3,
+                font=self.shell.forecast_label_font,
+            ))
+
+    def _draw_week_vertical_bars(
+        self, x, y, w, h, daily, accent, ink, ink2, ink3, u,
+    ):
+        days = list(daily or [])[:7]
+        highs = [d.get("highF") for d in days if d.get("highF") is not None]
+        lows = [d.get("lowF") for d in days if d.get("lowF") is not None]
+        if highs and lows:
+            week_lo, week_hi = min(lows), max(highs)
+            sec = f"7-DAY FORECAST · {round(week_lo)}° TO {round(week_hi)}°"
+        else:
+            week_lo, week_hi = 0, 100
+            sec = "7-DAY FORECAST"
+        sec_font = ("Consolas", max(11, int(round(22 * u))))
+        self._track(self.canvas.create_text(
+            x, y, anchor="nw", text=sec, fill=ink3, font=sec_font,
+        ))
+        if not days:
+            self._track(self.canvas.create_text(
+                x, y + 40 * u, anchor="nw", text="Daily forecast unavailable",
+                fill=ink3, font=self.shell.body_font,
+            ))
+            return
+        plot_top = y + 36 * u
+        plot_h = max(120 * u, h - 56 * u)
+        col_gap = 24 * u
+        col_w = (w - col_gap * (len(days) - 1)) / max(1, len(days))
+        bar_w = min(60 * u, col_w * 0.45)
+        track_h = min(200 * u, plot_h - 90 * u)
+        for i, day in enumerate(days):
+            cx = x + i * (col_w + col_gap) + col_w / 2
+            high = day.get("highF")
+            low = day.get("lowF")
+            label = "TODAY" if i == 0 else ""
+            if not label and day.get("date"):
+                try:
+                    label = datetime.fromisoformat(day["date"]).strftime("%a").upper()
+                except ValueError:
+                    label = str(day.get("date"))[-5:]
+            self._track(self.canvas.create_text(
+                cx, plot_top, anchor="n",
+                text=f"{round(high)}°" if high is not None else "—",
+                fill=ink, font=self.shell.forecast_value_font,
+            ))
+            track_y0 = plot_top + 36 * u
+            track_x0 = cx - bar_w / 2
+            self._track(self.canvas.create_rectangle(
+                track_x0, track_y0, track_x0 + bar_w, track_y0 + track_h,
+                fill="#1a2438", outline="",
+            ))
+            if high is not None and low is not None and week_hi > week_lo:
+                top_frac = (week_hi - high) / (week_hi - week_lo)
+                bot_frac = (week_hi - low) / (week_hi - week_lo)
+                by0 = track_y0 + track_h * top_frac
+                by1 = track_y0 + track_h * bot_frac
+                mid = (float(high) + float(low)) / 2
+                color = self._temp_gradient_color(mid, week_lo, week_hi)
+                self._track(self.canvas.create_rectangle(
+                    track_x0, by0, track_x0 + bar_w, by1,
+                    fill=color, outline="",
+                ))
+            self._track(self.canvas.create_text(
+                cx, track_y0 + track_h + 8 * u, anchor="n",
+                text=f"{round(low)}°" if low is not None else "—",
+                fill=ink3, font=self.shell.forecast_label_font,
+            ))
+            self._track(self.canvas.create_text(
+                cx, track_y0 + track_h + 32 * u, anchor="n",
+                text=label, fill=ink2, font=sec_font,
+            ))
+
+    def _render_weather_portrait(self, ctx, chrome, accent, ink, ink2, ink3):
+        """Portrait stack in the shared content zone (header already painted)."""
+        layout = self.shell.layout
+        x = chrome.content_x
+        width = chrome.content_w
+        y = chrome.content_top
+        text = ink
+        muted = ink2
+        temp_f = ctx["temp_f"]
+        temp_c = ctx["temp_c"]
+        condition = ctx["condition"]
+        hourly = ctx["hourly"]
+        daily = ctx["daily"]
 
         icon_x = x + 72
         icon_y = y + 54
         self._draw_condition_icon(icon_x, icon_y, 54, condition)
 
         if temp_f is not None:
-            temp_line = f"{round(temp_f)}°F"
+            temp_line = f"{round(temp_f)}°"
             condition_label = self.CONDITION_LABELS.get(condition, condition.title())
-            sub_line = f"{temp_c}°C · {condition_label}" if condition_label else f"{temp_c}°C"
+            sub_line = f"{condition_label} · {temp_c}°C" if condition_label else f"{temp_c}°C"
         else:
             temp_line = "—"
-            sub_line = spoken_bits.get("summary") or "Forecast unavailable"
+            sub_line = ctx["spoken_bits"].get("summary") or "Forecast unavailable"
 
-        self._track(
-            self.canvas.create_text(
-                x + 130,
-                y + 18,
-                anchor="nw",
-                text=temp_line,
-                fill=text,
-                font=self.shell.hero_font,
-            )
-        )
-        self._track(
-            self.canvas.create_text(
-                x + 130,
-                y + 88,
-                anchor="nw",
-                text=sub_line,
-                fill=muted,
-                font=self.shell.body_font,
-                width=max(240, width - 150),
-            )
-        )
+        self._track(self.canvas.create_text(
+            x + 130, y + 18, anchor="nw", text=temp_line, fill=text, font=self.shell.hero_font,
+        ))
+        self._track(self.canvas.create_text(
+            x + 130, y + 88, anchor="nw", text=sub_line, fill=muted,
+            font=self.shell.body_font, width=max(240, width - 150),
+        ))
 
-        wind = current.get("windSpeedMph")
-        rain = hourly[0].get("precipitationProbability") if hourly else None
-        humidity = current.get("humidity")
-        feels_like = current.get("feelsLikeF")
+        wind, rain, humidity = ctx["wind"], ctx["rain"], ctx["humidity"]
         detail_parts = []
-        if feels_like is not None and temp_f is not None and abs(feels_like - temp_f) >= 3:
-            detail_parts.append(f"Feels like {round(feels_like)}°")
         if wind is not None:
             detail_parts.append(f"Wind {round(wind)} mph")
         if rain is not None:
@@ -987,206 +1127,152 @@ class WeatherPanel(BasePanel):
             detail_parts.append(f"Humidity {humidity}%")
         if detail_parts:
             detail_y = y + 136
-            self._track(
-                self.canvas.create_text(
-                    x + 130,
-                    detail_y,
-                    anchor="nw",
-                    text=" · ".join(detail_parts),
-                    fill=accent,
-                    font=self.shell.chip_value_font,
-                )
-            )
+            self._track(self.canvas.create_text(
+                x + 130, detail_y, anchor="nw", text=" · ".join(detail_parts),
+                fill=accent, font=self.shell.chip_value_font,
+            ))
             y = detail_y + self.shell.chip_value_font.metrics("linespace") + 40
         else:
             y += 148
 
-        slot_height, day_height = self._fit_forecast_heights(layout, y, bool(hourly), bool(daily))
-
-        self._track(
-            self.canvas.create_text(
-                x,
-                y,
-                anchor="nw",
-                text="Next 24 hours",
-                fill=text,
-                font=self.shell.section_label_font,
-            )
+        # Fake an OverlayLayout-like object for height fitting.
+        class _L:
+            pass
+        fit_layout = _L()
+        fit_layout.message_area_bottom = chrome.content_bottom
+        slot_height, day_height = self._fit_forecast_heights(
+            fit_layout, int(y), bool(hourly), bool(daily),
         )
-        y += self.shell.section_label_font.metrics("linespace") + 16
 
+        self._track(self.canvas.create_text(
+            x, y, anchor="nw", text="NEXT 24 HOURS", fill=ink3,
+            font=self.shell.section_label_font,
+        ))
+        y += self.shell.section_label_font.metrics("linespace") + 16
         icon_box = 22
         if hourly:
-            slot_count = min(8, max(4, width // 90))
-            # Sample the FULL 24h window: first tile is "Now", the rest are
-            # spread evenly so the last tile lands ~24h out (not just the
-            # next few hours).
-            picks = sample_hourly_indices(len(hourly), slot_count)
-            slot_width = width // len(picks)
+            picks = sample_hourly_indices(len(hourly), min(6, max(4, int(width // 90))))
+            slot_width = width / max(1, len(picks))
             for index, hour_index in enumerate(picks):
                 slot = hourly[hour_index]
                 slot_x = x + index * slot_width
                 inner_w = slot_width - 10
-                center_x = slot_x + inner_w // 2
-                is_now = hour_index == 0
-                label = "Now" if is_now else "—"
-                if not is_now and slot.get("time"):
+                center_x = slot_x + inner_w / 2
+                label = "—"
+                if slot.get("time"):
                     try:
-                        # Times are already in the forecast location's local
-                        # time — format directly, no timezone shifting.
                         label = (
                             datetime.fromisoformat(slot["time"].replace("Z", "+00:00"))
-                            .strftime("%I%p")
-                            .lstrip("0")
+                            .strftime("%I%p").lstrip("0")
                         )
                     except ValueError:
-                        label = slot["time"][-5:]
+                        label = str(slot["time"])[-5:]
                 temp = slot.get("temperatureF")
                 rain_chance = slot.get("precipitationProbability")
                 self._round_rect(
-                    slot_x,
-                    y,
-                    slot_x + inner_w,
-                    y + slot_height,
-                    radius=14,
-                    fill=self.CARD,
-                    outline=accent if is_now else self.CARD_EDGE,
-                    width=2 if is_now else 1,
+                    slot_x, y, slot_x + inner_w, y + slot_height,
+                    radius=0, fill=self.CARD, outline=self.CARD_EDGE,
                 )
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        y + 4,
-                        anchor="n",
-                        text=label,
-                        fill=accent if is_now else muted,
-                        font=self.shell.forecast_label_font,
-                    )
+                self._track(self.canvas.create_text(
+                    center_x, y + 4, anchor="n", text=label, fill=muted,
+                    font=self.shell.forecast_label_font,
+                ))
+                self._draw_condition_icon(
+                    center_x, y + 20 + icon_box / 2, icon_box, slot.get("condition", "unknown"),
                 )
-                icon_center_y = y + 20 + icon_box / 2
-                self._draw_condition_icon(center_x, icon_center_y, icon_box, slot.get("condition", "unknown"))
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        y + 20 + icon_box + 10,
-                        anchor="n",
-                        text=f"{temp}°" if temp is not None else "—",
-                        fill=text,
-                        font=self.shell.forecast_value_font,
-                    )
-                )
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        y + slot_height - 8,
-                        anchor="s",
-                        text=f"{rain_chance}%" if rain_chance is not None else "",
-                        fill=accent,
-                        font=self.shell.forecast_detail_font,
-                    )
-                )
+                self._track(self.canvas.create_text(
+                    center_x, y + 20 + icon_box + 10, anchor="n",
+                    text=f"{temp}°" if temp is not None else "—",
+                    fill=text, font=self.shell.forecast_value_font,
+                ))
+                self._track(self.canvas.create_text(
+                    center_x, y + slot_height - 8, anchor="s",
+                    text=f"{rain_chance}%" if rain_chance is not None else "",
+                    fill=accent, font=self.shell.forecast_detail_font,
+                ))
         else:
-            self._track(
-                self.canvas.create_text(
-                    x,
-                    y + 24,
-                    anchor="nw",
-                    text="Hourly forecast unavailable",
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
-            )
+            self._track(self.canvas.create_text(
+                x, y + 24, anchor="nw", text="Hourly forecast unavailable",
+                fill=muted, font=self.shell.body_font,
+            ))
 
         y += slot_height + 22 if hourly else 96
-        self._track(
-            self.canvas.create_text(
-                x,
-                y,
-                anchor="nw",
-                text="7-day forecast",
-                fill=text,
-                font=self.shell.section_label_font,
-            )
-        )
-        # Same header-to-tile spacing as the "Next 24 hours" section.
+        highs = [d.get("highF") for d in daily if d.get("highF") is not None]
+        lows = [d.get("lowF") for d in daily if d.get("lowF") is not None]
+        if highs and lows:
+            week_label = f"7-DAY FORECAST · {round(min(lows))}° TO {round(max(highs))}°"
+            week_lo, week_hi = min(lows), max(highs)
+        else:
+            week_label = "7-DAY FORECAST"
+            week_lo, week_hi = 0, 100
+        self._track(self.canvas.create_text(
+            x, y, anchor="nw", text=week_label, fill=ink3,
+            font=self.shell.section_label_font,
+        ))
         y += self.shell.section_label_font.metrics("linespace") + 16
 
         if daily:
-            day_count = min(7, max(5, width // 100))
-            day_width = width // day_count
+            day_count = min(7, len(daily))
+            row_h = max(72, min(day_height, (chrome.content_bottom - y) / max(1, day_count)))
+            track_x0 = x + 120
+            track_x1 = x + width - 190
+            track_w = max(40, track_x1 - track_x0)
             for index, day in enumerate(daily[:day_count]):
-                day_x = x + index * day_width
-                inner_w = day_width - 10
-                center_x = day_x + inner_w // 2
-                is_today = index == 0
-                label = "Today" if is_today else day.get("date", "")[-5:]
-                if not is_today and day.get("date"):
+                row_y = y + index * row_h
+                label = "TODAY" if index == 0 else ""
+                if not label and day.get("date"):
                     try:
-                        label = datetime.fromisoformat(day["date"]).strftime("%a")
+                        label = datetime.fromisoformat(day["date"]).strftime("%a").upper()
                     except ValueError:
-                        pass
+                        label = str(day.get("date"))[-5:]
                 high = day.get("highF")
                 low = day.get("lowF")
-                rain_chance = day.get("precipitationProbability")
-                self._round_rect(
-                    day_x,
-                    y,
-                    day_x + inner_w,
-                    y + day_height,
-                    radius=14,
-                    fill=self.CARD,
-                    outline=accent if is_today else self.CARD_EDGE,
-                    width=2 if is_today else 1,
-                )
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        y + 4,
-                        anchor="n",
-                        text=label,
-                        fill=accent if is_today else muted,
-                        font=self.shell.forecast_label_font,
-                    )
-                )
-                day_icon_y = y + 20 + icon_box / 2
-                self._draw_condition_icon(center_x, day_icon_y, icon_box, day.get("condition", "unknown"))
-                high_low = "—"
+                self._track(self.canvas.create_text(
+                    x, row_y + row_h / 2, anchor="w", text=label,
+                    fill=ink2, font=self.shell.forecast_label_font,
+                ))
+                self._track(self.canvas.create_rectangle(
+                    track_x0, row_y + row_h / 2 - 7, track_x1, row_y + row_h / 2 + 7,
+                    fill="#1a2438", outline="",
+                ))
+                if high is not None and low is not None and week_hi > week_lo:
+                    left_frac = (low - week_lo) / (week_hi - week_lo)
+                    right_frac = (high - week_lo) / (week_hi - week_lo)
+                    bx0 = track_x0 + track_w * left_frac
+                    bx1 = track_x0 + track_w * right_frac
+                    mid = (float(high) + float(low)) / 2
+                    color = self._temp_gradient_color(mid, week_lo, week_hi)
+                    self._track(self.canvas.create_rectangle(
+                        bx0, row_y + row_h / 2 - 7, bx1, row_y + row_h / 2 + 7,
+                        fill=color, outline="",
+                    ))
                 if high is not None and low is not None:
-                    high_low = f"{high}° / {low}°"
-                elif high is not None:
-                    high_low = f"{high}°"
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        y + 20 + icon_box + 10,
-                        anchor="n",
-                        text=high_low,
-                        fill=text,
+                    self._track(self.canvas.create_text(
+                        x + width, row_y + row_h / 2, anchor="e",
+                        text=f"{round(high)}°", fill=text,
                         font=self.shell.forecast_value_font,
-                    )
-                )
-                if rain_chance is not None:
-                    self._track(
-                        self.canvas.create_text(
-                            center_x,
-                            y + day_height - 8,
-                            anchor="s",
-                            text=f"Rain {rain_chance}%",
-                            fill=accent,
-                            font=self.shell.forecast_detail_font,
-                        )
-                    )
+                    ))
+                    # lo sits left of hi in the right column.
+                    try:
+                        hi_w = self.shell.forecast_value_font.measure(f"{round(high)}°")
+                    except Exception:
+                        hi_w = 48
+                    self._track(self.canvas.create_text(
+                        x + width - hi_w - 12, row_y + row_h / 2, anchor="e",
+                        text=f"{round(low)}°", fill=ink3,
+                        font=self.shell.forecast_value_font,
+                    ))
+                elif high is not None:
+                    self._track(self.canvas.create_text(
+                        x + width, row_y + row_h / 2, anchor="e",
+                        text=f"{round(high)}°", fill=text,
+                        font=self.shell.forecast_value_font,
+                    ))
         else:
-            self._track(
-                self.canvas.create_text(
-                    x,
-                    y,
-                    anchor="nw",
-                    text="Daily forecast unavailable",
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
-            )
+            self._track(self.canvas.create_text(
+                x, y, anchor="nw", text="Daily forecast unavailable",
+                fill=muted, font=self.shell.body_font,
+            ))
 
     def _draw_condition_icon(self, cx: float, cy: float, size: float, condition: str):
         condition = normalize_condition(condition)
@@ -1607,157 +1693,106 @@ class IndoorTemperaturePanel(BasePanel):
 
 
 class AirQualityPanel(BasePanel):
-    BAND_COLORS = {
-        "good": "#2dd4bf",
-        "fair": "#84cc16",
-        "moderate": "#fbbf24",
-        "poor": "#f97316",
-        "unknown": "#64748b",
-    }
+    """Indoor air quality — score ring hero (design-system §2.5 / §3.6 + HTML)."""
 
+    # Named bands sized to real cutoffs (100→65→35→15→0), left→right.
+    BAND_SEGMENTS = (
+        ("good", 35, "GOOD 100–65"),
+        ("fair", 30, "FAIR"),
+        ("poor", 20, "POOR"),
+        ("severe", 15, "SEVERE 0"),
+    )
     METRICS = (
-        ("temperatureF", "Temp", "°F"),
-        ("humidity", "Humidity", "%"),
-        ("pm25", "PM 2.5", "µg/m³"),
-        ("co", "CO", "ppm"),
-        ("voc", "VOCs", ""),
+        ("temperatureF", "TEMP"),
+        ("humidity", "HUMID"),
+        ("pm25", "PM2.5"),
+        ("co", "CO"),
+        ("voc", "VOC"),
     )
 
-    def _render(self, payload: dict):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        y = layout.message_area_top
-        bottom = layout.message_area_bottom
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        chip = self.config.get("chipBackground", "#141a24")
-        center_x = x + width // 2
+    @staticmethod
+    def display_band(score: int | float | None, fallback: str | None = None) -> str:
+        """Map IAQ score onto the display scale (65 / 35 / 15)."""
+        if score is not None:
+            try:
+                value = float(score)
+            except (TypeError, ValueError):
+                value = None
+            else:
+                if value >= 65:
+                    return "good"
+                if value >= 35:
+                    return "fair"
+                if value >= 15:
+                    return "poor"
+                return "severe"
+        band = str(fallback or "unknown").lower()
+        if band == "moderate":
+            return "fair"
+        if band in ("good", "fair", "poor", "severe", "unknown"):
+            return band
+        return "unknown"
 
-        location = payload.get("location") or {}
-        reading = payload.get("reading") or {}
-        spoken = payload.get("spokenResponse") or ""
-        monitors = list(payload.get("monitors") or reading.get("monitors") or [])
-        spoken_bits = parse_spoken_air_quality(spoken)
-        air_config = self.config.get("airQuality") or {}
+    @staticmethod
+    def band_color(band: str) -> str:
+        from src.design_system import GOOD, WARN, ALERT, INK_3
+        return {
+            "good": GOOD,
+            "fair": WARN,
+            "poor": ALERT,
+            "severe": ALERT,
+            "unknown": INK_3,
+        }.get(str(band or "unknown"), INK_3)
 
-        iaq_score = reading.get("iaqScore")
-        if iaq_score is None and spoken_bits.get("iaq_score") is not None:
-            iaq_score = spoken_bits["iaq_score"]
+    @staticmethod
+    def rating_word(band: str) -> str:
+        if band == "severe":
+            return "Severe"
+        return air_quality_band_label(band)
 
-        band = reading.get("band") or spoken_bits.get("band") or air_quality_band(
-            iaq_score,
-            good_min=air_config.get("goodMin", 80),
-            fair_min=air_config.get("fairMin", 60),
-            moderate_min=air_config.get("moderateMin", 40),
+    def _screen(self) -> tuple[int, int]:
+        overlay = getattr(self.shell, "overlay", None)
+        w = int(getattr(overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        return w, h
+
+    def _updated_label(self, payload: dict, reading: dict) -> str:
+        updated = (
+            reading.get("observedAt")
+            or reading.get("updatedAt")
+            or payload.get("receivedAt")
+            or payload.get("timestamp")
         )
-        if band == "unknown":
-            qualitative = parse_qualitative_air_quality_band(spoken)
-            if qualitative:
-                band = qualitative
-        band_color = self.BAND_COLORS.get(band, self.BAND_COLORS["unknown"])
-        location_name = format_air_quality_location(location)
+        try:
+            if updated:
+                text = format_chip_timestamp(updated)
+                if "·" in text:
+                    return text.split("·")[-1].strip()
+                return text
+        except Exception:
+            pass
+        return datetime.now().strftime("%I:%M %p").lstrip("0")
 
-        values = {
-            "temperatureF": reading.get("temperatureF") if reading.get("temperatureF") is not None else spoken_bits.get("temperature_f"),
-            "humidity": reading.get("humidity") if reading.get("humidity") is not None else spoken_bits.get("humidity"),
-            "pm25": reading.get("pm25") if reading.get("pm25") is not None else spoken_bits.get("pm25"),
-            "co": reading.get("co") if reading.get("co") is not None else spoken_bits.get("co"),
-            "voc": reading.get("voc") if reading.get("voc") is not None else spoken_bits.get("voc"),
-        }
-        self._merge_monitor_metric_values(values, monitors)
+    def _paint_header(self, updated: str):
+        from src.page_header import paint_page_header
+        from src.design_system import page_chrome
 
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                y,
-                anchor="n",
-                text=location_name,
-                fill=text,
-                font=self.shell.section_title_font,
-            )
+        sw, sh = self._screen()
+        chrome = page_chrome(sw, sh, timed=True)
+        paint_page_header(
+            self.canvas,
+            screen_w=sw,
+            screen_h=sh,
+            pill="AIR QUALITY",
+            left_label="SOURCE",
+            left_value="Alexa",
+            right_label="UPDATED",
+            right_value=updated,
+            track=self._track,
+            sans_family=self.config.get("titleFontFamily", "Segoe UI"),
+            mono_family="Consolas",
         )
-
-        area_top = y + self.shell.section_title_font.metrics("linespace") + 24
-        stat_row_h = 78
-        stat_gap = 24
-        available_metrics = [
-            (key, label, unit)
-            for key, label, unit in self.METRICS
-            if values.get(key) is not None
-        ]
-        monitor_rows = min(len(monitors), 4)
-        metrics_h = (stat_gap + stat_row_h) if available_metrics else 0
-        monitors_h = monitor_rows * 64 if monitor_rows else 0
-        hero_h = 220
-        content_h = hero_h + metrics_h + (18 if metrics_h and monitors_h else 0) + monitors_h
-        block_top = area_top + max(0, (bottom - area_top - content_h) // 2)
-
-        hero_bottom = self._draw_iaq_hero(
-            center_x,
-            block_top,
-            iaq_score,
-            band,
-            band_color,
-            text,
-            muted,
-            chip,
-        )
-
-        cursor = hero_bottom + stat_gap
-        if available_metrics:
-            cursor = self._draw_air_quality_metrics(
-                x,
-                width,
-                cursor,
-                available_metrics,
-                values,
-                stat_row_h,
-                chip=chip,
-                text=text,
-                muted=muted,
-            ) + stat_gap
-
-        if monitors:
-            self._draw_monitor_rows(
-                x,
-                width,
-                cursor,
-                bottom - 48,
-                monitors,
-                chip=chip,
-                text=text,
-                muted=muted,
-            )
-
-        if iaq_score is None:
-            summary = spoken_bits.get("summary") or reading.get("summary")
-            if summary and not monitors:
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        bottom - 8,
-                        anchor="s",
-                        text=summary,
-                        fill=muted,
-                        font=self.shell.chip_label_font,
-                        width=max(280, width - 80),
-                        justify="center",
-                    )
-                )
-            elif summary and monitors:
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        bottom - 8,
-                        anchor="s",
-                        text=summary if len(summary) <= 120 else f"{summary[:117].rstrip()}…",
-                        fill=muted,
-                        font=self.shell.chip_label_font,
-                        width=max(280, width - 80),
-                        justify="center",
-                    )
-                )
+        return chrome
 
     def _merge_monitor_metric_values(self, values: dict, monitors: list[dict]) -> None:
         for monitor in monitors:
@@ -1768,388 +1803,358 @@ class AirQualityPanel(BasePanel):
                 if values.get(key) is None and monitor_reading.get(key) is not None:
                     values[key] = monitor_reading.get(key)
 
-    def _draw_air_quality_metrics(
-        self,
-        x: float,
-        width: float,
-        y: float,
-        available_metrics: list[tuple[str, str, str]],
-        values: dict,
-        stat_row_h: float,
-        *,
-        chip: str,
-        text: str,
-        muted: str,
-    ) -> float:
-        col_count = len(available_metrics)
-        col_gap = 10
-        col_w = max(110, (width - col_gap * (col_count - 1)) // col_count)
-        grid_w = col_count * col_w + (col_count - 1) * col_gap
-        stat_x = x + max(0, (width - grid_w) // 2)
+    def _metric_text(self, key: str, value) -> str:
+        if value is None:
+            return "—"
+        if key == "voc":
+            return voc_band_label(value) or "—"
+        if key == "temperatureF":
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return "—"
+            return f"{int(numeric)}°" if numeric.is_integer() else f"{numeric:.1f}°"
+        if key == "humidity":
+            try:
+                return f"{int(float(value))}%"
+            except (TypeError, ValueError):
+                return "—"
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if numeric.is_integer():
+            return str(int(numeric))
+        return f"{numeric:g}"
 
-        for index, (key, label, unit) in enumerate(available_metrics):
-            tile_x = stat_x + index * (col_w + col_gap)
-            value = values.get(key)
-            if key == "voc":
-                band_word = voc_band_label(value)
-                value_text = band_word or "—"
+    def _draw_score_ring(self, cx, cy, diameter, score, color, track_color, u):
+        radius = diameter / 2
+        stroke = max(4.0, 0.024 * diameter)  # ~13 at Ø540
+        frac = 0.0
+        if score is not None:
+            try:
+                frac = max(0.0, min(1.0, float(score) / 100.0))
+            except (TypeError, ValueError):
+                frac = 0.0
+        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
+        self._track(self.canvas.create_oval(
+            *bbox, outline=track_color, width=stroke, fill="",
+        ))
+        if frac > 0:
+            self._track(self.canvas.create_arc(
+                *bbox, start=90, extent=-360.0 * frac, style=tk.ARC,
+                outline=color, width=stroke,
+            ))
+        score_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(28, int(round(0.344 * diameter))),
+            weight="bold",
+        )
+        rating_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(14, int(round(40 * u))),
+        )
+        score_text = "—" if score is None else str(int(float(score)))
+        self._track(self.canvas.create_text(
+            cx, cy - 8 * u, anchor="center", text=score_text,
+            fill="#F2F7FF", font=score_font,
+        ))
+        return rating_font
+
+    def _draw_band_scale(self, x, y, width, band, color, ink3, u) -> float:
+        gap = 4 * u
+        total_parts = sum(seg[1] for seg in self.BAND_SEGMENTS)
+        usable = width - gap * (len(self.BAND_SEGMENTS) - 1)
+        h = max(4.0, 14 * u)
+        cursor = x
+        for name, weight, _label in self.BAND_SEGMENTS:
+            seg_w = usable * (weight / total_parts)
+            fill = color if name == band else "#1a2438"
+            self._track(self.canvas.create_rectangle(
+                cursor, y, cursor + seg_w, y + h, fill=fill, outline="",
+            ))
+            cursor += seg_w + gap
+        lab_font = ("Consolas", max(10, int(round(20 * u))))
+        label_y = y + h + 10 * u
+        cursor = x
+        last = len(self.BAND_SEGMENTS) - 1
+        for index, (_name, weight, label) in enumerate(self.BAND_SEGMENTS):
+            seg_w = usable * (weight / total_parts)
+            if index == 0:
+                anchor, tx = "nw", cursor
+            elif index == last:
+                anchor, tx = "ne", cursor + seg_w
             else:
-                value_text = self._format_metric_value(value, unit)
-            self._draw_air_quality_stat(
-                tile_x,
-                y,
-                col_w,
-                stat_row_h,
-                label,
-                value_text,
-                chip=chip,
-                text=text,
-                muted=muted,
-                value_color=text,
-            )
+                anchor, tx = "n", cursor + seg_w / 2
+            self._track(self.canvas.create_text(
+                tx, label_y, anchor=anchor, text=label, fill=ink3, font=lab_font,
+            ))
+            cursor += seg_w + gap
+        return label_y + 28 * u
 
-        return y + stat_row_h
+    def _draw_metric_cell(self, x, y, w, h, label, value, accent, ink, line, u):
+        self._track(self.canvas.create_rectangle(
+            x, y, x + w, y + h, outline=line, width=max(1, int(round(u))), fill="",
+        ))
+        lab_font = ("Consolas", max(10, int(round(20 * u))))
+        val_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(14, int(round(38 * u))),
+            weight="bold",
+        )
+        self._track(self.canvas.create_text(
+            x + w / 2, y + min(24 * u, h * 0.28), anchor="n",
+            text=label, fill=accent, font=lab_font,
+        ))
+        self._track(self.canvas.create_text(
+            x + w / 2, y + h - min(24 * u, h * 0.22), anchor="s",
+            text=value, fill=ink, font=val_font,
+        ))
 
-    def _draw_monitor_rows(
-        self,
-        x: float,
-        width: float,
-        y: float,
-        bottom: float,
-        monitors: list[dict],
-        *,
-        chip: str,
-        text: str,
-        muted: str,
-    ) -> float:
-        cursor = y
-        row_h = 54
-        gap = 10
-        card_x = x + 4
-        card_w = width - 8
+    def _draw_room_row(self, x, y, w, h, name, score, color, ink, track, u):
+        self._track(self.canvas.create_line(
+            x, y + h - 1, x + w, y + h - 1, fill="#1e3050",
+        ))
+        cy = y + h / 2
+        name_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(14, int(round(40 * u))),
+        )
+        score_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(14, int(round(36 * u))),
+            weight="bold",
+        )
+        bar_w = min(220 * u, w * 0.28)
+        bar_h = max(4.0, 10 * u)
+        score_text = "—" if score is None else str(int(float(score)))
+        score_slot = 70 * u
+        display_name = name
+        max_name_w = w - bar_w - score_slot - 40 * u
+        while name_font.measure(display_name) > max(40, max_name_w) and len(display_name) > 4:
+            display_name = display_name[:-2].rstrip() + "…"
+        self._track(self.canvas.create_text(
+            x, cy, anchor="w", text=display_name, fill=ink, font=name_font,
+        ))
+        bar_x1 = x + w - score_slot
+        bar_x0 = bar_x1 - bar_w - 20 * u
+        bar_y0 = cy - bar_h / 2
+        self._track(self.canvas.create_rectangle(
+            bar_x0, bar_y0, bar_x0 + bar_w, bar_y0 + bar_h, fill=track, outline="",
+        ))
+        frac = 0.0 if score is None else max(0.0, min(1.0, float(score) / 100.0))
+        if frac > 0:
+            self._track(self.canvas.create_rectangle(
+                bar_x0, bar_y0, bar_x0 + bar_w * frac, bar_y0 + bar_h,
+                fill=color, outline="",
+            ))
+        self._track(self.canvas.create_text(
+            x + w, cy, anchor="e", text=score_text, fill=color, font=score_font,
+        ))
 
-        for monitor in monitors[:4]:
-            if cursor + row_h > bottom:
-                break
-
+    def _draw_rooms_block(self, x, y, w, avail_h, monitors, color_fallback, ink, ink3, track, u):
+        rooms = []
+        for monitor in monitors:
             label = str(monitor.get("label") or "Monitor")
             score = monitor.get("iaqScore")
             if score is None and isinstance(monitor.get("reading"), dict):
                 score = monitor["reading"].get("iaqScore")
-            band = str(monitor.get("band") or "unknown")
-            band_color = self.BAND_COLORS.get(band, self.BAND_COLORS["unknown"])
-            status = air_quality_band_label(band)
-            if score is not None:
-                status = f"{status} · {int(float(score))}"
+            mband = self.display_band(score, monitor.get("band"))
+            rooms.append((label, score, self.band_color(mband)))
+        if not rooms:
+            return
 
-            self._round_rect(
-                card_x,
-                cursor,
-                card_x + card_w,
-                cursor + row_h,
-                radius=14,
-                fill=self.CARD,
-                outline=band_color,
-                width=2,
+        sec_font = ("Consolas", max(11, int(round(22 * u))))
+        self._track(self.canvas.create_text(
+            x, y, anchor="nw", text="BY ROOM", fill=ink3, font=sec_font,
+        ))
+        list_top = y + 36 * u
+        max_rows = min(len(rooms), 6)
+        row_h = max(110 * u, min(160 * u, (avail_h - 36 * u) / max(1, max_rows)))
+        for index, (name, score, row_color) in enumerate(rooms[:max_rows]):
+            self._draw_room_row(
+                x, list_top + index * row_h, w, row_h,
+                name, score, row_color or color_fallback, ink, track, u,
             )
-            self._round_rect(
-                card_x + 8,
-                cursor + 10,
-                card_x + 14,
-                cursor + row_h - 10,
-                radius=3,
-                fill=band_color,
-            )
-            self._track(
-                self.canvas.create_text(
-                    card_x + 26,
-                    cursor + row_h / 2,
-                    anchor="w",
-                    text=label,
-                    fill=text,
-                    font=self.shell.section_label_font,
-                )
-            )
-            self._track(
-                self.canvas.create_text(
-                    card_x + card_w - 16,
-                    cursor + row_h / 2,
-                    anchor="e",
-                    text=status,
-                    fill=band_color,
-                    font=self.shell.body_font,
-                )
-            )
-            cursor += row_h + gap
 
-        return cursor
-
-    def _draw_air_quality_stat(
-        self,
-        x: float,
-        y: float,
-        width: float,
-        height: float,
-        label: str,
-        value: str,
-        *,
-        chip: str,
-        text: str,
-        muted: str,
-        value_color: str,
-    ):
-        self._round_rect(
-            x,
-            y,
-            x + width,
-            y + height,
-            radius=14,
-            fill=self.CARD,
-            outline=self.CARD_EDGE,
-        )
-        self._track(
-            self.canvas.create_text(
-                x + width / 2,
-                y + 12,
-                anchor="n",
-                text=label,
-                fill=muted,
-                font=self.shell.chip_label_font,
+    def _draw_metrics_row(self, x, y, width, values, *, accent, ink, line, u) -> float:
+        gap = 20 * u
+        cell_w = (width - gap * 4) / 5
+        met_h = 120 * u
+        for index, (key, label) in enumerate(self.METRICS):
+            self._draw_metric_cell(
+                x + index * (cell_w + gap), y, cell_w, met_h,
+                label, self._metric_text(key, values.get(key)),
+                accent, ink, line, u,
             )
-        )
-        self._track(
-            self.canvas.create_text(
-                x + width / 2,
-                y + height - 16,
-                anchor="s",
-                text=value,
-                fill=value_color,
-                font=self.shell.chip_value_font,
-            )
-        )
+        return y + met_h
 
-    def _format_metric_value(self, value: int | float | None, unit: str) -> str:
-        if value is None:
-            return "—"
-        if unit == "°F":
-            return format_temperature_f(value)
-        if isinstance(value, float) and not float(value).is_integer():
-            return f"{value:g}{unit}"
-        return f"{int(float(value))}{unit}"
-
-    def _draw_iaq_hero(
-        self,
-        center_x: float,
-        y: float,
-        score: int | float | None,
-        band: str,
-        band_color: str,
-        text: str,
-        muted: str,
-        chip: str,
-    ) -> float:
-        radius = 52
-        cy = y + radius + 4
-        self._track(
-            self.canvas.create_oval(
-                center_x - radius,
-                cy - radius,
-                center_x + radius,
-                cy + radius,
-                fill=band_color,
-                outline=band_color,
-                width=2,
+    def _draw_metrics_grid(self, x, y, width, values, *, accent, ink, line, u) -> float:
+        """Landscape 2×3 grid (5 metrics + empty sixth)."""
+        gap = 24 * u
+        cell_w = (width - gap) / 2
+        cell_h = 150 * u
+        for index, (key, label) in enumerate(self.METRICS):
+            row, col = divmod(index, 2)
+            self._draw_metric_cell(
+                x + col * (cell_w + gap),
+                y + row * (cell_h + gap),
+                cell_w,
+                cell_h,
+                label,
+                self._metric_text(key, values.get(key)),
+                accent, ink, line, u,
             )
-        )
-        if score is not None:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cy - 4,
-                    anchor="center",
-                    text=str(int(float(score))),
-                    fill=self.config["overlayBackground"],
-                    font=self.shell.digital_time_font,
-                )
+        # 5 metrics → rows 0,0 / 0,1 / 1,0 / 1,1 / 2,0
+        return y + 3 * (cell_h + gap)
+
+    def _render(self, payload: dict):
+        from src.design_system import ACCENT, INK, INK_2, INK_3, LINE, RING_TRACK
+
+        reading = payload.get("reading") or {}
+        spoken = payload.get("spokenResponse") or ""
+        monitors = list(payload.get("monitors") or reading.get("monitors") or [])
+        spoken_bits = parse_spoken_air_quality(spoken)
+        air_config = self.config.get("airQuality") or {}
+
+        iaq_score = reading.get("iaqScore")
+        if iaq_score is None and spoken_bits.get("iaq_score") is not None:
+            iaq_score = spoken_bits["iaq_score"]
+
+        payload_band = reading.get("band") or spoken_bits.get("band")
+        if not payload_band or payload_band == "unknown":
+            payload_band = air_quality_band(
+                iaq_score,
+                good_min=air_config.get("goodMin", 80),
+                fair_min=air_config.get("fairMin", 60),
+                moderate_min=air_config.get("moderateMin", 40),
+            )
+            if payload_band == "unknown":
+                qualitative = parse_qualitative_air_quality_band(spoken)
+                if qualitative:
+                    payload_band = qualitative
+        band = self.display_band(iaq_score, payload_band)
+        color = self.band_color(band)
+        chrome = self._paint_header(self._updated_label(payload, reading))
+        u = chrome.u
+
+        values = {
+            "temperatureF": reading.get("temperatureF") if reading.get("temperatureF") is not None else spoken_bits.get("temperature_f"),
+            "humidity": reading.get("humidity") if reading.get("humidity") is not None else spoken_bits.get("humidity"),
+            "pm25": reading.get("pm25") if reading.get("pm25") is not None else spoken_bits.get("pm25"),
+            "co": reading.get("co") if reading.get("co") is not None else spoken_bits.get("co"),
+            "voc": reading.get("voc") if reading.get("voc") is not None else spoken_bits.get("voc"),
+        }
+        self._merge_monitor_metric_values(values, monitors)
+
+        if chrome.portrait:
+            self._render_portrait(
+                chrome, iaq_score, band, color, values, monitors,
+                accent=ACCENT, ink=INK, ink3=INK_3, line=LINE, track=RING_TRACK,
             )
         else:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    cy,
-                    anchor="center",
-                    text="—",
-                    fill=self.config["overlayBackground"],
-                    font=self.shell.hero_font,
-                )
+            self._render_landscape(
+                chrome, iaq_score, band, color, values, monitors,
+                accent=ACCENT, ink=INK, ink3=INK_3, line=LINE, track=RING_TRACK,
             )
 
-        label_y = cy + radius + 14
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                label_y,
-                anchor="n",
-                text=air_quality_band_label(band),
-                fill=text,
-                font=self.shell.body_font,
-            )
+    def _render_portrait(self, chrome, score, band, color, values, monitors, *, accent, ink, ink3, line, track):
+        u = chrome.u
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        bottom = chrome.content_bottom
+
+        diameter = min(540 * u, width * 0.72)
+        ring_cy = y0 + 30 * u + diameter / 2
+        rating_font = self._draw_score_ring(
+            x0 + width / 2, ring_cy, diameter, score, color, track, u,
         )
-        indoor_label_y = label_y + self.shell.body_font.metrics("linespace") + 8
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                indoor_label_y,
-                anchor="n",
-                text="Indoor Air Quality",
-                fill=muted,
-                font=self.shell.chip_label_font,
-            )
+        self._track(self.canvas.create_text(
+            x0 + width / 2,
+            ring_cy + 0.18 * diameter,
+            anchor="n",
+            text=self.rating_word(band),
+            fill=color,
+            font=rating_font,
+        ))
+
+        scale_y = ring_cy + diameter / 2 + 40 * u
+        after_scale = self._draw_band_scale(x0, scale_y, width, band, color, ink3, u)
+        met_bottom = self._draw_metrics_row(
+            x0, after_scale + 8 * u, width, values,
+            accent=accent, ink=ink, line=line, u=u,
+        )
+        rooms_y = met_bottom + 30 * u
+        self._draw_rooms_block(
+            x0, rooms_y, width, bottom - rooms_y, monitors, color, ink, ink3, track, u,
         )
 
-        scale_y = indoor_label_y + self.shell.chip_label_font.metrics("linespace") + 16
-        scale_w = min(320, radius * 2 + 80)
-        scale_x = center_x - scale_w / 2
-        self._draw_scale_bar(scale_x, scale_y, scale_w, score, 0, 100, (100, 65, 35, 0), chip, band_color, muted, invert=True)
-        tick_y = scale_y + 14
-        for tick in (100, 65, 35, 0):
-            tick_x = scale_x + self._scale_position(tick, 0, 100, scale_w, invert=True)
-            self._track(
-                self.canvas.create_text(
-                    tick_x,
-                    tick_y,
-                    anchor="n",
-                    text=str(tick),
-                    fill=muted,
-                    font=self.shell.forecast_detail_font,
-                )
-            )
-        return tick_y + self.shell.forecast_detail_font.metrics("linespace") + 8
+    def _render_landscape(self, chrome, score, band, color, values, monitors, *, accent, ink, ink3, line, track):
+        u = chrome.u
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        height = chrome.content_bottom - chrome.content_top
+        gap = 24 * u
+        col_w = (width - gap) / 2
 
-    def _scale_position(self, value: float, scale_min: float, scale_max: float, width: float, *, invert: bool = False) -> float:
-        if scale_max <= scale_min:
-            return 0.0
-        ratio = max(0.0, min(1.0, (float(value) - scale_min) / (scale_max - scale_min)))
-        if invert:
-            ratio = 1.0 - ratio
-        return ratio * width
+        diameter = min(560 * u, col_w * 0.85, height - 160 * u)
+        block_h = diameter + 120 * u
+        block_top = y0 + max(0, (height - block_h) / 2)
+        cx = x0 + col_w / 2
+        ring_cy = block_top + diameter / 2
+        rating_font = self._draw_score_ring(cx, ring_cy, diameter, score, color, track, u)
+        self._track(self.canvas.create_text(
+            cx, ring_cy + 0.18 * diameter, anchor="n",
+            text=self.rating_word(band), fill=color, font=rating_font,
+        ))
+        scale_y = ring_cy + diameter / 2 + 36 * u
+        self._draw_band_scale(x0, scale_y, col_w, band, color, ink3, u)
 
-    def _draw_scale_bar(
-        self,
-        x: float,
-        y: float,
-        width: float,
-        value: int | float | None,
-        scale_min: float,
-        scale_max: float,
-        ticks: tuple[int | float, ...],
-        track: str,
-        fill: str,
-        muted: str,
-        *,
-        invert: bool = False,
-    ):
-        height = 8
-        self._round_rect(
-            x,
-            y,
-            x + width,
-            y + height,
-            radius=height // 2,
-            fill=track,
+        right_x = x0 + col_w + gap
+        after_metrics = self._draw_metrics_grid(
+            right_x, y0, col_w, values,
+            accent=accent, ink=ink, line=line, u=u,
         )
-        if value is not None:
-            marker_x = x + self._scale_position(value, scale_min, scale_max, width, invert=invert)
-            if marker_x - x > height:
-                self._round_rect(
-                    x,
-                    y,
-                    marker_x,
-                    y + height,
-                    radius=height // 2,
-                    fill=fill,
-                )
-            self._track(
-                self.canvas.create_oval(
-                    marker_x - 6,
-                    y - 2,
-                    marker_x + 6,
-                    y + height + 2,
-                    fill=fill,
-                    outline="",
-                )
-            )
-        for tick in ticks:
-            tick_x = x + self._scale_position(tick, scale_min, scale_max, width, invert=invert)
-            self._track(
-                self.canvas.create_line(
-                    tick_x,
-                    y - 2,
-                    tick_x,
-                    y + height + 2,
-                    fill=muted,
-                    width=1,
-                )
-            )
-
-    def _draw_metric_row(
-        self,
-        x: float,
-        y: float,
-        width: float,
-        label: str,
-        value: int | float | None,
-        scale_min: float,
-        scale_max: float,
-        ticks: tuple[int | float, ...],
-        track: str,
-        text: str,
-        muted: str,
-        fill: str,
-    ):
-        value_text = "—"
-        if value is not None:
-            if isinstance(value, float) and not float(value).is_integer():
-                value_text = f"{value:g}"
-            else:
-                value_text = str(int(float(value)))
-
-        self._track(
-            self.canvas.create_text(
-                x,
-                y,
-                anchor="nw",
-                text=label,
-                fill=text,
-                font=self.shell.chip_label_font,
-            )
+        self._draw_rooms_block(
+            right_x, after_metrics, col_w,
+            chrome.content_bottom - after_metrics,
+            monitors, color, ink, ink3, track, u,
         )
-        self._track(
-            self.canvas.create_text(
-                x + width,
-                y,
-                anchor="ne",
-                text=value_text,
-                fill=fill if value is not None else text,
-                font=self.shell.chip_value_font,
-            )
-        )
-        bar_y = y + self.shell.chip_label_font.metrics("linespace") + 8
-        self._draw_scale_bar(x, bar_y, width, value, scale_min, scale_max, ticks, track, fill, muted)
-
 
 class TimerPanel(BasePanel):
+    """Timers — count ladder (design-system §2.2 / §3.3 + HTML mockup).
+
+    1–4: rings (size shrinks with count). 5+: soonest keeps a ring; rest are rows.
+    Always soonest-first. Only the next-to-fire ring uses accent (unless warn/alert).
+    """
+
+    WARN_SEC = 60
+    ALERT_SEC = 10
+    # Landscape ring Ø (design px). Portrait uses §2.2 sizes.
+    LANDSCAPE_RING = {1: 760, 2: 700, 3: 560, 4: 420}
+    PORTRAIT_RING = {1: 860, 2: 680, 3: 440, 4: 440}
+    HERO_RING_L = 560
+    HERO_RING_P = 420
+    MAX_THEN_ROWS_L = 5
+    MAX_THEN_ROWS_P = 8
+
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
         self._tick_job = None
         self._countdown_items: list[int] = []
-        self._countdown_suffix_items: list[int] = []
+        self._ring_arc_items: list[int] = []
+        self._row_bar_items: list[tuple] = []
+        self._color_roles: list[str] = []  # "soonest" | "muted" per tracked timer
         self._deadlines: list[float | None] = []
+        self._durations: list[float] = []
         self._is_fired = False
         self._payload: dict | None = None
         self._timers: list[dict] = []
         self._local_fire_triggered = False
         self._on_local_fire = None
+        self._chrome = None
 
     def set_on_local_fire(self, callback):
         self._on_local_fire = callback
@@ -2167,12 +2172,16 @@ class TimerPanel(BasePanel):
     def hide(self):
         super().hide()
         self._countdown_items.clear()
-        self._countdown_suffix_items.clear()
+        self._ring_arc_items.clear()
+        self._row_bar_items.clear()
+        self._color_roles.clear()
         self._deadlines.clear()
+        self._durations.clear()
         self._is_fired = False
         self._payload = None
         self._timers.clear()
         self._local_fire_triggered = False
+        self._chrome = None
 
     def _start_tick(self):
         self._stop_tick()
@@ -2187,20 +2196,66 @@ class TimerPanel(BasePanel):
             return
         self._tick_job = self.root.after(1000, self._tick)
 
+    @staticmethod
+    def sort_soonest_first(timers: list[dict]) -> list[dict]:
+        def key(timer: dict):
+            rem = timer.get("remainingSec")
+            fire_at = parse_iso_timestamp(timer.get("fireAt") or "")
+            if fire_at is not None:
+                return (0, fire_at.timestamp())
+            if rem is not None:
+                return (0, time.time() + max(0, int(rem)))
+            return (1, 10**18)
+
+        return sorted(timers, key=key)
+
+    @classmethod
+    def ring_diameter_u(cls, count: int, *, portrait: bool) -> float:
+        """Design-px ring diameter for an all-rings layout (count 1–4)."""
+        table = cls.PORTRAIT_RING if portrait else cls.LANDSCAPE_RING
+        return float(table.get(max(1, min(4, count)), table[4]))
+
+    def _arc_color(self, remaining: int, role: str) -> str:
+        from src.design_system import ACCENT, WARN, ALERT, MUTE_ARC
+        if remaining <= self.ALERT_SEC:
+            return ALERT
+        if remaining <= self.WARN_SEC:
+            return WARN
+        return ACCENT if role == "soonest" else MUTE_ARC
+
     def _update_countdowns(self):
         expired_index = None
         for index, deadline in enumerate(self._deadlines):
             if index >= len(self._countdown_items):
                 continue
             remaining_id = self._countdown_items[index]
-            suffix_id = self._countdown_suffix_items[index] if index < len(self._countdown_suffix_items) else None
             if deadline is None:
                 continue
             remaining = max(0, int(math.ceil(deadline - time.time())))
-            self.canvas.itemconfigure(remaining_id, text=format_timer_clock(remaining))
-            if suffix_id is not None:
-                suffix = "Finished!" if remaining == 0 else "left"
-                self.canvas.itemconfigure(suffix_id, text=suffix)
+            role = self._color_roles[index] if index < len(self._color_roles) else "muted"
+            color = self._arc_color(remaining, role)
+            try:
+                self.canvas.itemconfigure(remaining_id, text=format_timer_clock(remaining), fill=color)
+            except Exception:
+                pass
+            if index < len(self._ring_arc_items):
+                arc_id = self._ring_arc_items[index]
+                if arc_id is not None and arc_id >= 0:
+                    duration = self._durations[index] if index < len(self._durations) else 0
+                    frac = 0.0 if duration <= 0 else max(0.0, min(1.0, remaining / duration))
+                    try:
+                        self.canvas.itemconfigure(arc_id, extent=-360.0 * frac, outline=color)
+                    except Exception:
+                        pass
+            if index < len(self._row_bar_items):
+                fill_id, x0, y0, x1, y1, duration = self._row_bar_items[index]
+                if fill_id is not None:
+                    frac = 0.0 if duration <= 0 else max(0.0, min(1.0, remaining / duration))
+                    try:
+                        self.canvas.coords(fill_id, x0, y0, x0 + (x1 - x0) * frac, y1)
+                        self.canvas.itemconfigure(fill_id, fill=color)
+                    except Exception:
+                        pass
             if remaining == 0 and expired_index is None:
                 expired_index = index
 
@@ -2225,188 +2280,377 @@ class TimerPanel(BasePanel):
             return time.time() + max(0, int(remaining))
         return None
 
+    def _screen(self) -> tuple[int, int]:
+        overlay = getattr(self.shell, "overlay", None)
+        w = int(getattr(overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        return w, h
+
+    def _paint_header(self, *, running: int, fired: bool):
+        from src.page_header import paint_page_header
+        from src.design_system import page_chrome
+
+        sw, sh = self._screen()
+        self._chrome = page_chrome(sw, sh, timed=True)
+        paint_page_header(
+            self.canvas,
+            screen_w=sw,
+            screen_h=sh,
+            pill="TIMERS",
+            left_label="SOURCE",
+            left_value="Alexa",
+            right_label="DONE" if fired else "RUNNING",
+            right_value="1" if fired else str(running),
+            track=self._track,
+            sans_family=self.config.get("titleFontFamily", "Segoe UI"),
+            mono_family="Consolas",
+        )
+        return self._chrome
+
+    def _draw_ring(self, cx, cy, radius, stroke, frac, color, track):
+        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
+        self._track(self.canvas.create_oval(
+            *bbox, outline=track, width=stroke, fill="",
+        ))
+        extent = -360.0 * max(0.0, min(1.0, frac))
+        return self._track(self.canvas.create_arc(
+            *bbox, start=90, extent=extent, style=tk.ARC, outline=color, width=stroke,
+        ))
+
+    def _ends_text(self, timer: dict, *, short: bool) -> str:
+        full = format_timer_ends_label(timer)
+        if not full:
+            return ""
+        if short and full.startswith("Ends "):
+            return full[5:]
+        return full
+
+    def _paint_ring_block(
+        self,
+        timer: dict,
+        *,
+        cx: float,
+        cy: float,
+        diameter: float,
+        u: float,
+        role: str,
+        short_ends: bool,
+        long_clock: bool,
+        ink2: str,
+        ink3: str,
+        track: str,
+    ):
+        radius = diameter / 2
+        stroke = max(2.0, 0.023 * diameter)
+        deadline = self._deadline_for_timer(timer)
+        remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
+        duration = float(timer.get("durationSec") or remaining or 1)
+        frac = remaining / duration if duration > 0 else 0.0
+        color = self._arc_color(remaining, role)
+        clock_scale = 0.18 if long_clock else 0.24
+        clock_size = max(13, int(round(clock_scale * diameter)))
+        lab_font = ("Consolas", max(11, int(round(26 * u))))
+        clock_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=clock_size,
+            weight="bold",
+        )
+        end_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(11, int(round(28 * u))),
+        )
+
+        self._track(self.canvas.create_text(
+            cx, cy - radius - 14 * u, anchor="s",
+            text=timer_display_label(timer), fill=ink3, font=lab_font,
+        ))
+        arc_id = self._draw_ring(cx, cy, radius, stroke, frac, color, track)
+        remaining_id = self._track(self.canvas.create_text(
+            cx, cy, anchor="center", text=format_timer_clock(remaining),
+            fill=color, font=clock_font,
+        ))
+        ends = self._ends_text(timer, short=short_ends)
+        if ends:
+            self._track(self.canvas.create_text(
+                cx, cy + radius + 14 * u, anchor="n", text=ends,
+                fill=ink2, font=end_font,
+            ))
+        self._deadlines.append(deadline)
+        self._durations.append(duration)
+        self._countdown_items.append(remaining_id)
+        self._ring_arc_items.append(arc_id)
+        self._row_bar_items.append((None, 0, 0, 0, 0, duration))
+        self._color_roles.append(role)
+
+    def _paint_then_row(
+        self,
+        timer: dict,
+        *,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        u: float,
+        role: str,
+        ink: str,
+        ink2: str,
+        ink3: str,
+        track: str,
+    ):
+        deadline = self._deadline_for_timer(timer)
+        remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
+        duration = float(timer.get("durationSec") or remaining or 1)
+        frac = remaining / duration if duration > 0 else 0.0
+        color = self._arc_color(remaining, role)
+        time_font = ("Consolas", max(14, int(round(72 * u))))
+        name_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(12, int(round(34 * u))),
+        )
+        end_font = ("Consolas", max(11, int(round(24 * u))))
+        cy = y + h / 2
+        time_col = 240 * u
+        bar_h = max(2.0, 4 * u)
+        bar_y1 = y + h
+        bar_y0 = bar_y1 - bar_h
+
+        self._track(self.canvas.create_rectangle(
+            x, bar_y0, x + w, bar_y1, fill=track, outline="",
+        ))
+        fill_id = self._track(self.canvas.create_rectangle(
+            x, bar_y0, x + w * frac, bar_y1, fill=color, outline="",
+        ))
+
+        remaining_id = self._track(self.canvas.create_text(
+            x, cy, anchor="w", text=format_timer_clock(remaining),
+            fill=color, font=time_font,
+        ))
+        name = timer_display_label(timer)
+        # Title case for rows (HTML: "Pasta") — keep named as given case-ish.
+        named = timer_label_name(timer)
+        display_name = named if named else name.title() if name != "TIMER" else name
+        name_x = x + time_col + 20 * u
+        ends = self._ends_text(timer, short=True)
+        end_w = tkfont.Font(family="Consolas", size=max(11, int(round(24 * u)))).measure(ends or "")
+        name_right = x + w - end_w - 16 * u
+        while name_font.measure(display_name) > max(40, name_right - name_x) and len(display_name) > 4:
+            display_name = display_name[:-2].rstrip() + "…"
+        self._track(self.canvas.create_text(
+            name_x, cy, anchor="w", text=display_name, fill=ink2, font=name_font,
+        ))
+        if ends:
+            self._track(self.canvas.create_text(
+                x + w, cy, anchor="e", text=ends, fill=ink3, font=end_font,
+            ))
+
+        self._deadlines.append(deadline)
+        self._durations.append(duration)
+        self._countdown_items.append(remaining_id)
+        self._ring_arc_items.append(-1)  # no ring arc for list rows
+        self._row_bar_items.append((fill_id, x, bar_y0, x + w, bar_y1, duration))
+        self._color_roles.append(role)
+
     def _render(self, payload: dict):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        y = layout.message_area_top
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
-        alert = self.config.get("alertColor", "#f97316")
-        chip_fill = self.config.get("chipBackground", "#141a24")
+        from src.design_system import INK, INK_2, INK_3, ALERT, RING_TRACK
 
         timers = list(payload.get("timers") or [])
         event = payload.get("event") or {}
         event_kind = event.get("kind", "list")
         self._is_fired = event_kind == "fired"
-
         if self._is_fired and not timers and event.get("timer"):
             timers = [event["timer"]]
+        if not self._is_fired:
+            timers = self.sort_soonest_first(timers)
+        self._timers = timers
 
-        fired_timer = timers[0] if self._is_fired and timers else None
+        chrome = self._paint_header(running=len(timers), fired=self._is_fired)
+        u = chrome.u
+        zone_x = chrome.content_x
+        zone_y = chrome.content_top
+        zone_w = chrome.content_w
+        zone_h = chrome.content_bottom - chrome.content_top
+
         if self._is_fired:
-            label = timer_label_name(fired_timer)
-            device = self._format_device_name((fired_timer or {}).get("device"))
-            duration_sec = (fired_timer or {}).get("durationSec")
-            if label:
-                headline = f'"{label}" timer finished!'
-            elif duration_sec is not None:
-                headline = f"{format_timer_set_label(duration_sec)} finished!"
-            else:
-                headline = "Timer finished!"
-            headline_color = alert
-            headline_font = self.shell.timer_alert_font
-        else:
-            headline = {
-                "started": "Timer started",
-                "updated": "Timer updated",
-                "cancelled": "Timer cancelled",
-                "paused": "Timer paused",
-                "resumed": "Timer resumed",
-                "list": "Active timers",
-            }.get(event_kind, "Active timers")
-            headline_color = text
-            headline_font = self.shell.section_title_font
-
-        self._track(
-            self.canvas.create_text(
-                x + width // 2,
-                y,
-                anchor="n",
-                text=headline,
-                fill=headline_color,
-                font=headline_font,
-            )
-        )
-        y += 64 if self._is_fired else 68
-
-        if self._is_fired and fired_timer:
-            summary = timer_detail_line(
-                fired_timer,
-                self._format_device_name(fired_timer.get("device")),
-                finished=True,
-            )
-            self._track(
-                self.canvas.create_text(
-                    x + width // 2,
-                    y,
-                    anchor="n",
-                    text=summary,
-                    fill=text,
-                    font=self.shell.body_font,
-                )
-            )
-            y += 34
+            self._render_fired(timers, chrome, INK, ALERT, INK_2)
+            return
 
         if not timers:
-            self._track(
-                self.canvas.create_text(
-                    x + width // 2,
-                    y + 40,
-                    anchor="n",
-                    text="No active timers",
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
+            self._track(self.canvas.create_text(
+                zone_x + zone_w / 2, zone_y + zone_h / 2, anchor="center",
+                text="No timers running", fill=INK_2, font=self.shell.body_font,
+            ))
+            return
+
+        long_clock = any(
+            (t.get("remainingSec") or 0) >= 3600
+            or (t.get("durationSec") or 0) >= 3600
+            for t in timers
+        )
+
+        if len(timers) >= 5:
+            self._render_hero_rows(
+                timers, chrome, long_clock=long_clock,
+                ink=INK, ink2=INK_2, ink3=INK_3, track=RING_TRACK,
             )
             return
 
-        row_height = 112 if self._is_fired else 96
+        self._render_rings(
+            timers, chrome, long_clock=long_clock,
+            ink2=INK_2, ink3=INK_3, track=RING_TRACK,
+        )
+
+    def _render_rings(self, timers, chrome, *, long_clock, ink2, ink3, track):
+        u = chrome.u
+        count = len(timers)
+        diameter = self.ring_diameter_u(count, portrait=chrome.portrait) * u
+        # Cap by zone (label + ends ≈ 80 design px).
+        max_d = max(120.0, chrome.content_bottom - chrome.content_top - 80 * u)
+        diameter = min(diameter, max_d)
+        gap = 24 * u
+        zone_x = chrome.content_x
+        zone_y = chrome.content_top
+        zone_w = chrome.content_w
+        zone_h = chrome.content_bottom - chrome.content_top
+
+        if chrome.portrait:
+            cols, rows = (2, 2) if count == 4 else (1, count)
+        else:
+            cols, rows = count, 1
+
+        cell_w = (zone_w - gap * (cols - 1)) / max(1, cols)
+        cell_h = (zone_h - gap * (rows - 1)) / max(1, rows)
+        diameter = min(diameter, cell_w * 0.96, max(120.0, cell_h - 80 * u))
+        diameter = max(120.0, diameter)
+        short_ends = count >= 4 and not chrome.portrait
+
         for index, timer in enumerate(timers):
-            row_y = y + index * (row_height + 14)
-            row_fill = "#2a1808" if self._is_fired else self.CARD
-            outline = alert if self._is_fired else self.CARD_EDGE
-            outline_width = 3 if self._is_fired else 1
-            self._round_rect(
-                x,
-                row_y,
-                x + width,
-                row_y + row_height,
-                radius=18,
-                fill=row_fill,
-                outline=outline,
-                width=outline_width,
+            if chrome.portrait and count == 4:
+                row, col = divmod(index, cols)
+            elif chrome.portrait:
+                row, col = index, 0
+            else:
+                row, col = 0, index
+            cx = zone_x + col * (cell_w + gap) + cell_w / 2
+            cy = zone_y + row * (cell_h + gap) + cell_h / 2
+            role = "soonest" if index == 0 else "muted"
+            self._paint_ring_block(
+                timer, cx=cx, cy=cy, diameter=diameter, u=u, role=role,
+                short_ends=short_ends, long_clock=long_clock,
+                ink2=ink2, ink3=ink3, track=track,
             )
 
-            label = timer_label_name(timer)
-            device = self._format_device_name(timer.get("device"))
-            status = timer.get("status", "ON")
-            row_center_y = row_y + row_height // 2
+    def _render_hero_rows(self, timers, chrome, *, long_clock, ink, ink2, ink3, track):
+        u = chrome.u
+        zone_x = chrome.content_x
+        zone_y = chrome.content_top
+        zone_w = chrome.content_w
+        zone_h = chrome.content_bottom - chrome.content_top
+        hero = timers[0]
+        rest = timers[1:]
+        max_rows = self.MAX_THEN_ROWS_L if not chrome.portrait else self.MAX_THEN_ROWS_P
 
-            title = timer_title(timer)
-            title_font = self.shell.section_label_font if label else self.shell.body_font
-            # Subtitle already reads "{device} · {duration} timer" (timer_detail_line),
-            # so the countdown side doesn't repeat the set duration above it.
-            subtitle = timer_detail_line(timer, device, finished=self._is_fired)
-            if status == "PAUSED" and not self._is_fired:
-                subtitle = f"{subtitle} · Paused"
-
-            deadline = self._deadline_for_timer(timer)
-            if self._is_fired:
-                deadline = time.time()
-            remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
-            remaining_text = format_timer_clock(remaining)
-
-            self._deadlines.append(deadline)
-            remaining_font = self.shell.timer_alert_font if self._is_fired else self.shell.timer_remaining_font
-            remaining_color = alert if self._is_fired else accent
-            suffix_font = self.shell.timer_meta_font
-
-            self._track(
-                self.canvas.create_text(
-                    x + 24,
-                    row_center_y - 16,
-                    anchor="w",
-                    text=title,
-                    fill=alert if self._is_fired and label else text,
-                    font=title_font if not self._is_fired or not label else self.shell.section_title_font,
-                )
+        if chrome.portrait:
+            diameter = min(self.HERO_RING_P * u, zone_w * 0.7, zone_h * 0.38)
+            hero_h = diameter + 80 * u
+            self._paint_ring_block(
+                hero,
+                cx=zone_x + zone_w / 2,
+                cy=zone_y + hero_h / 2,
+                diameter=diameter,
+                u=u,
+                role="soonest",
+                short_ends=False,
+                long_clock=long_clock,
+                ink2=ink2,
+                ink3=ink3,
+                track=track,
             )
-            self._track(
-                self.canvas.create_text(
-                    x + 24,
-                    row_center_y + 18,
-                    anchor="w",
-                    text=subtitle,
-                    fill=muted,
-                    font=self.shell.timer_meta_font,
-                )
+            list_x = zone_x
+            list_w = zone_w
+            list_top = zone_y + hero_h + 12 * u
+            list_h = chrome.content_bottom - list_top
+        else:
+            left_w = 736 * u
+            gap = 24 * u
+            diameter = min(self.HERO_RING_L * u, left_w * 0.92, zone_h - 80 * u)
+            self._paint_ring_block(
+                hero,
+                cx=zone_x + left_w / 2,
+                cy=zone_y + zone_h / 2,
+                diameter=diameter,
+                u=u,
+                role="soonest",
+                short_ends=False,
+                long_clock=long_clock,
+                ink2=ink2,
+                ink3=ink3,
+                track=track,
             )
+            list_x = zone_x + left_w + gap
+            list_w = zone_w - left_w - gap
+            list_top = zone_y
+            list_h = zone_h
 
-            # Center the big countdown + its "left"/"Finished!" caption as one
-            # block, with a real gap between them (measured from font metrics
-            # so portrait/landscape font sizes never end up touching).
-            countdown_gap = 10
-            remaining_line_h = remaining_font.metrics("linespace")
-            suffix_line_h = suffix_font.metrics("linespace")
-            block_h = remaining_line_h + countdown_gap + suffix_line_h
-            block_top = row_center_y - block_h / 2
-            remaining_y = block_top + remaining_line_h / 2
-            suffix_y = block_top + remaining_line_h + countdown_gap + suffix_line_h / 2
+        sec_font = ("Consolas", max(11, int(round(22 * u))))
+        self._track(self.canvas.create_text(
+            list_x, list_top, anchor="nw", text="THEN", fill=ink3, font=sec_font,
+        ))
+        rows_top = list_top + 36 * u
+        avail = max(110 * u, list_h - 36 * u)
+        show = rest[:max_rows]
+        overflow = len(rest) - len(show)
+        row_count = len(show) + (1 if overflow > 0 else 0)
+        if row_count <= 0:
+            return
+        # clamp(avail / n, 110, 160) in design px → screen via u.
+        row_h = max(110 * u, min(160 * u, avail / row_count))
 
-            remaining_id = self._track(
-                self.canvas.create_text(
-                    x + width - 24,
-                    remaining_y,
-                    anchor="e",
-                    text=remaining_text,
-                    fill=remaining_color,
-                    font=remaining_font,
-                )
+        for index, timer in enumerate(show):
+            self._paint_then_row(
+                timer,
+                x=list_x,
+                y=rows_top + index * row_h,
+                w=list_w,
+                h=row_h,
+                u=u,
+                role="muted",
+                ink=ink,
+                ink2=ink2,
+                ink3=ink3,
+                track=track,
             )
-            suffix_id = self._track(
-                self.canvas.create_text(
-                    x + width - 24,
-                    suffix_y,
-                    anchor="e",
-                    text="Finished!" if self._is_fired else "left",
-                    fill=alert if self._is_fired else muted,
-                    font=suffix_font,
-                )
-            )
-            self._countdown_items.append(remaining_id)
-            self._countdown_suffix_items.append(suffix_id)
+        if overflow > 0:
+            self._track(self.canvas.create_text(
+                list_x,
+                rows_top + len(show) * row_h + row_h / 2,
+                anchor="w",
+                text=f"+{overflow} more",
+                fill=ink3,
+                font=("Consolas", max(12, int(round(28 * u)))),
+            ))
+
+    def _render_fired(self, timers, chrome, ink, alert, ink2):
+        timer = timers[0] if timers else {}
+        label = timer_label_name(timer)
+        device = self._format_device_name(timer.get("device"))
+        duration_sec = timer.get("durationSec")
+        if label:
+            headline = f'"{label}" timer finished!'
+        elif duration_sec is not None:
+            headline = f"{format_timer_set_label(duration_sec)} finished!"
+        else:
+            headline = "Timer finished!"
+        cx = chrome.content_x + chrome.content_w / 2
+        cy = chrome.content_top + (chrome.content_bottom - chrome.content_top) / 2
+        self._track(self.canvas.create_text(
+            cx, cy - 40, anchor="center", text=headline,
+            fill=alert, font=self.shell.timer_alert_font,
+        ))
+        summary = timer_detail_line(timer, device, finished=True)
+        self._track(self.canvas.create_text(
+            cx, cy + 40, anchor="center", text=summary,
+            fill=ink, font=self.shell.body_font,
+        ))
 
     @staticmethod
     def _format_device_name(device: str | None) -> str:
@@ -2418,139 +2662,223 @@ class TimerPanel(BasePanel):
 
 
 class AlarmPanel(BasePanel):
-    ROW_HEIGHT = 96
-    ROW_GAP = 14
-    ACCENT_WIDTH = 4
+    """Alarms — next alarm as hero + ALSO SET rows (landscape redesign)."""
+
+    def _screen(self) -> tuple[int, int]:
+        overlay = getattr(self.shell, "overlay", None)
+        w = int(getattr(overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        return w, h
+
+    def _paint_header(self, count: int):
+        from src.page_header import paint_page_header
+        from src.design_system import page_chrome
+
+        sw, sh = self._screen()
+        chrome = page_chrome(sw, sh, timed=True)
+        paint_page_header(
+            self.canvas,
+            screen_w=sw,
+            screen_h=sh,
+            pill="ALARMS",
+            left_label="SOURCE",
+            left_value="Alexa",
+            right_label="SET",
+            right_value=str(count),
+            track=self._track,
+            sans_family=self.config.get("titleFontFamily", "Segoe UI"),
+            mono_family="Consolas",
+        )
+        return chrome
 
     def _render(self, payload: dict):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        y = layout.message_area_top
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
-        chip_fill = self.config.get("chipBackground", "#141a24")
+        from src.design_system import ACCENT, INK, INK_2, INK_3, LINE
 
         alarms = list(payload.get("alarms") or [])
-        event = payload.get("event") or {}
-        event_kind = event.get("kind", "list")
-
-        headline = {
-            "started": "Alarm set",
-            "cancelled": "Alarm cancelled",
-            "list": "Active alarms",
-        }.get(event_kind, "Active alarms")
-
-        self._track(
-            self.canvas.create_text(
-                x + width // 2,
-                y,
-                anchor="n",
-                text=headline,
-                fill=text,
-                font=self.shell.section_title_font,
-            )
+        # Soonest first for the hero.
+        alarms = sorted(
+            alarms,
+            key=lambda a: (
+                a.get("remainingSec") is None,
+                a.get("remainingSec") if a.get("remainingSec") is not None else 10**12,
+            ),
         )
-        y += 68
+        chrome = self._paint_header(len(alarms))
+        u = chrome.u
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        height = chrome.content_bottom - chrome.content_top
 
         if not alarms:
-            self._track(
-                self.canvas.create_text(
-                    x + width // 2,
-                    y + 40,
-                    anchor="n",
-                    text="No active alarms",
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
-            )
+            self._track(self.canvas.create_text(
+                x0 + width / 2, y0 + height / 2, anchor="center",
+                text="No active alarms", fill=INK_2, font=self.shell.body_font,
+            ))
             return
 
-        for index, alarm in enumerate(alarms):
-            row_y = y + index * (self.ROW_HEIGHT + self.ROW_GAP)
-            is_new = bool(alarm.get("isNew"))
-            row_outline = accent if is_new else self.CARD_EDGE
-            outline_width = 2 if is_new else 1
+        if chrome.portrait:
+            self._render_portrait(alarms, chrome, ACCENT, INK, INK_2, INK_3, LINE)
+        else:
+            self._render_landscape(alarms, chrome, ACCENT, INK, INK_2, INK_3, LINE)
 
-            self._round_rect(
-                x,
-                row_y,
-                x + width,
-                row_y + self.ROW_HEIGHT,
-                radius=16,
-                fill=self.CARD,
-                outline=row_outline,
-                width=outline_width,
-            )
-            self._round_rect(
-                x + 8,
-                row_y + 10,
-                x + 8 + self.ACCENT_WIDTH,
-                row_y + self.ROW_HEIGHT - 10,
-                radius=self.ACCENT_WIDTH // 2,
-                fill=accent if is_new else muted,
+    def _render_landscape(self, alarms, chrome, accent, ink, ink2, ink3, line):
+        u = chrome.u
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        height = chrome.content_bottom - chrome.content_top
+        left_w = 736 * u
+        gap = 24 * u
+        right_x = x0 + left_w + gap
+        right_w = width - left_w - gap
+
+        next_alarm = alarms[0]
+        rest = alarms[1:]
+        self._paint_next_hero(next_alarm, x0, y0, left_w, height, accent, ink, ink2, ink3, u)
+
+        sec_font = ("Consolas", max(11, int(round(22 * u))))
+        self._track(self.canvas.create_text(
+            right_x, y0, anchor="nw", text="ALSO SET", fill=ink3, font=sec_font,
+        ))
+        list_top = y0 + 36 * u
+        row_h = 140 * u
+        max_rows = max(1, int((height - 36 * u) / row_h))
+        for index, alarm in enumerate(rest[:max_rows]):
+            self._paint_alarm_row(
+                alarm,
+                right_x,
+                list_top + index * row_h,
+                right_w,
+                row_h,
+                accent, ink, ink2, ink3, line, u,
             )
 
-            device = self._format_device_name(alarm.get("device"))
-            row_center_y = row_y + self.ROW_HEIGHT // 2
-            title = alarm_title(alarm)
-            subtitle = alarm_detail_line(alarm, device)
-            time_text = format_alarm_time(resolve_alarm_trigger_time(alarm))
-            until_text = alarm_until_line(alarm)
+    def _render_portrait(self, alarms, chrome, accent, ink, ink2, ink3, line):
+        u = chrome.u
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        height = chrome.content_bottom - chrome.content_top
+        hero_h = min(height * 0.42, 520 * u)
+        self._paint_next_hero(alarms[0], x0, y0, width, hero_h, accent, ink, ink2, ink3, u)
+        rest = alarms[1:]
+        if not rest:
+            return
+        sec_font = ("Consolas", max(11, int(round(22 * u))))
+        list_y = y0 + hero_h + 20 * u
+        self._track(self.canvas.create_text(
+            x0, list_y, anchor="nw", text="ALSO SET", fill=ink3, font=sec_font,
+        ))
+        list_y += 36 * u
+        row_h = 120 * u
+        max_rows = max(1, int((chrome.content_bottom - list_y) / row_h))
+        for index, alarm in enumerate(rest[:max_rows]):
+            self._paint_alarm_row(
+                alarm, x0, list_y + index * row_h, width, row_h,
+                accent, ink, ink2, ink3, line, u,
+            )
 
-            self._track(
-                self.canvas.create_text(
-                    x + 24,
-                    row_center_y - 16,
-                    anchor="w",
-                    text=title,
-                    fill=accent if is_new else text,
-                    font=self.shell.section_label_font,
-                )
-            )
-            self._track(
-                self.canvas.create_text(
-                    x + 24,
-                    row_center_y + 18,
-                    anchor="w",
-                    text=subtitle,
-                    fill=muted,
-                    font=self.shell.timer_meta_font,
-                )
-            )
-            self._track(
-                self.canvas.create_text(
-                    x + width - 24,
-                    row_center_y - 18,
-                    anchor="e",
-                    text=time_text,
-                    fill=accent if is_new else text,
-                    font=self.shell.timer_remaining_font,
-                )
-            )
-            if until_text:
-                self._track(
-                    self.canvas.create_text(
-                        x + width - 24,
-                        row_center_y + 16,
-                        anchor="e",
-                        text=until_text,
-                        fill=muted,
-                        font=self.shell.forecast_label_font,
-                    )
-                )
-            if is_new:
-                self._track(
-                    self.canvas.create_text(
-                        x + width - 24,
-                        row_y + 12,
-                        anchor="ne",
-                        text="NEW",
-                        fill=accent,
-                        font=self.shell.forecast_label_font,
-                    )
-                )
+    def _paint_next_hero(self, alarm, x, y, w, h, accent, ink, ink2, ink3, u):
+        trigger = resolve_alarm_trigger_time(alarm)
+        clock, ampm = format_alarm_clock_parts(trigger)
+        label = alarm_title(alarm)
+        until = format_alarm_in_compact(alarm)
+        sec_font = ("Consolas", max(11, int(round(22 * u))))
+        hero_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(28, int(round(226 * u * min(1.0, w / max(1, 736 * u))))),
+            weight="bold",
+        )
+        am_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(14, int(round(62 * u))),
+            weight="bold",
+        )
+        lab_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(13, int(round(44 * u))),
+        )
+        in_font = ("Consolas", max(11, int(round(26 * u))))
+
+        cursor = y + max(0, (h - 420 * u) / 2)
+        self._track(self.canvas.create_text(
+            x, cursor, anchor="nw", text="NEXT ALARM", fill=ink3, font=sec_font,
+        ))
+        cursor += 40 * u
+        self._track(self.canvas.create_text(
+            x, cursor, anchor="nw", text=clock, fill=ink, font=hero_font,
+        ))
+        # AM/PM baseline-aligned to the right of the clock.
+        clock_w = hero_font.measure(clock)
+        self._track(self.canvas.create_text(
+            x + clock_w + 16 * u, cursor + hero_font.metrics("ascent") - am_font.metrics("ascent"),
+            anchor="nw", text=ampm, fill=ink2, font=am_font,
+        ))
+        cursor += hero_font.metrics("linespace") + 22 * u
+        self._track(self.canvas.create_text(
+            x, cursor, anchor="nw", text=label, fill=ink, font=lab_font,
+        ))
+        if until:
+            cursor += lab_font.metrics("linespace") + 14 * u
+            self._track(self.canvas.create_text(
+                x, cursor, anchor="nw", text=until, fill=accent, font=in_font,
+            ))
+
+    def _paint_alarm_row(self, alarm, x, y, w, h, accent, ink, ink2, ink3, line, u):
+        off = str(alarm.get("status") or "").upper() == "OFF"
+        trigger = resolve_alarm_trigger_time(alarm)
+        clock, ampm = format_alarm_clock_parts(trigger)
+        name = alarm_title(alarm)
+        chip = format_alarm_recurrence_chip(alarm)
+        time_font = ("Consolas", max(13, int(round(46 * u))))
+        am_font = ("Consolas", max(11, int(round(26 * u))))
+        name_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(12, int(round(34 * u))),
+        )
+        chip_font = ("Consolas", max(10, int(round(21 * u))))
+
+        # Bottom hairline
+        self._track(self.canvas.create_line(
+            x, y + h - 1, x + w, y + h - 1, fill=line,
+        ))
+        cy = y + h / 2
+        fill_time = ink3 if off else ink
+        fill_name = ink3 if off else ink2
+        fill_chip = ink3 if off else accent
+        chip_border = "#3a5070" if off else "#4a78a0"
+
+        time_col_w = 230 * u
+        self._track(self.canvas.create_text(
+            x, cy, anchor="w", text=clock, fill=fill_time, font=time_font,
+        ))
+        tw = tkfont.Font(family="Consolas", size=max(13, int(round(46 * u)))).measure(clock)
+        self._track(self.canvas.create_text(
+            x + tw + 8 * u, cy + 6 * u, anchor="w", text=ampm,
+            fill=ink3, font=am_font,
+        ))
+        name_x = x + time_col_w + 20 * u
+        chip_pad_x, chip_pad_y = 13 * u, 6 * u
+        chip_w = tkfont.Font(family="Consolas", size=max(10, int(round(21 * u)))).measure(chip) + chip_pad_x * 2
+        chip_h = max(28 * u, 21 * u + chip_pad_y * 2)
+        chip_x1 = x + w
+        chip_x0 = chip_x1 - chip_w
+        name_right = chip_x0 - 16 * u
+        display_name = name
+        while name_font.measure(display_name) > max(40, name_right - name_x) and len(display_name) > 4:
+            display_name = display_name[:-2].rstrip() + "…"
+        self._track(self.canvas.create_text(
+            name_x, cy, anchor="w", text=display_name, fill=fill_name, font=name_font,
+        ))
+        self._track(self.canvas.create_rectangle(
+            chip_x0, cy - chip_h / 2, chip_x1, cy + chip_h / 2,
+            outline=chip_border, width=max(1, int(round(u))), fill="",
+        ))
+        self._track(self.canvas.create_text(
+            (chip_x0 + chip_x1) / 2, cy, anchor="center", text=chip,
+            fill=fill_chip, font=chip_font,
+        ))
 
     @staticmethod
     def _format_device_name(device: str | None) -> str:
@@ -2562,18 +2890,16 @@ class AlarmPanel(BasePanel):
 
 
 class ShoppingListPanel(BasePanel):
+    """Shopping list — two large landscape columns (no cards)."""
+
     PAGE_SECONDS = 15
-    ROW_GAP = 6
-    CARD_INSET = 0
-    ACCENT_WIDTH = 4
-    TEXT_PAD_X = 18
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
         self._tick_job = None
         self._items: list[dict] = []
         self._page = 0
-        self._page_size = 8
+        self._page_size = 10
         self._added_item = None
 
     def show(self, payload: dict):
@@ -2592,19 +2918,22 @@ class ShoppingListPanel(BasePanel):
         self._items = []
         self._page = 0
 
-    def _item_font(self):
-        return self.shell.body_font
+    def _screen(self) -> tuple[int, int]:
+        overlay = getattr(self.shell, "overlay", None)
+        w = int(getattr(overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        return w, h
 
     def _compute_page_size(self) -> int:
-        layout = self.shell.layout
-        header = self.shell.section_title_font.metrics("linespace") + 28
-        dots_reserve = 40
-        row_block = self._row_height() + self.ROW_GAP
-        available = layout.message_area_bottom - layout.message_area_top - header - dots_reserve
-        return max(3, available // row_block)
-
-    def _row_height(self) -> int:
-        return self._item_font().metrics("linespace") + 14
+        from src.design_system import page_chrome
+        sw, sh = self._screen()
+        chrome = page_chrome(sw, sh, timed=True)
+        u = chrome.u
+        row_h = 170 * u if not chrome.portrait else 120 * u
+        zone_h = chrome.content_bottom - chrome.content_top
+        cols = 2 if not chrome.portrait else 1
+        rows = max(3, int(zone_h / max(1, row_h)))
+        return rows * cols
 
     def _page_count(self) -> int:
         if not self._items:
@@ -2627,118 +2956,89 @@ class ShoppingListPanel(BasePanel):
         self._render_page()
 
     def _render_page(self):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        y = layout.message_area_top
-        bottom = layout.message_area_bottom
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
-        chip = self.config.get("chipBackground", "#141a24")
+        from src.design_system import ACCENT, INK, INK_2, INK_3, LINE, page_chrome
+        from src.page_header import paint_page_header
 
+        sw, sh = self._screen()
+        chrome = page_chrome(sw, sh, timed=True)
+        u = chrome.u
         count = len(self._items)
-        header = f"{count} item{'s' if count != 1 else ''}" if count else "List is empty"
-        self._track(
-            self.canvas.create_text(
-                x + width // 2,
-                y,
-                anchor="n",
-                text=header,
-                fill=muted if count else text,
-                font=self.shell.section_title_font,
-            )
+        paint_page_header(
+            self.canvas,
+            screen_w=sw,
+            screen_h=sh,
+            pill="SHOPPING LIST",
+            left_label="SOURCE",
+            left_value="Alexa",
+            right_label="ITEMS",
+            right_value=str(count),
+            track=self._track,
+            sans_family=self.config.get("titleFontFamily", "Segoe UI"),
+            mono_family="Consolas",
         )
-        y += self.shell.section_title_font.metrics("linespace") + 28
+
+        x0 = chrome.content_x
+        y0 = chrome.content_top
+        width = chrome.content_w
+        height = chrome.content_bottom - chrome.content_top
 
         if not self._items:
-            self._track(
-                self.canvas.create_text(
-                    x + width // 2,
-                    y + 40,
-                    anchor="n",
-                    text="Nothing on the shopping list",
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
-            )
+            self._track(self.canvas.create_text(
+                x0 + width / 2, y0 + height / 2, anchor="center",
+                text="Nothing on the shopping list",
+                fill=INK_2, font=self.shell.body_font,
+            ))
             return
 
-        item_font = self._item_font()
-        row_height = self._row_height()
-        card_x0 = x + self.CARD_INSET
-        card_x1 = x + width - self.CARD_INSET
-        text_x = card_x0 + self.ACCENT_WIDTH + self.TEXT_PAD_X
-        start = self._page * self._page_size
-        page_items = self._items[start : start + self._page_size]
+        cols = 1 if chrome.portrait else 2
+        gap = 24 * u
+        col_w = (width - gap * (cols - 1)) / cols
+        row_h = 170 * u if not chrome.portrait else 120 * u
+        rows_per_col = max(1, int(height / max(1, row_h)))
+        page_cap = rows_per_col * cols
+        start = self._page * page_cap
+        page_items = self._items[start : start + page_cap]
 
-        for index, item in enumerate(page_items):
-            row_y = y + index * (row_height + self.ROW_GAP)
-            value = str(item.get("value") or "")
-            is_new = self._added_item is not None and value.strip().lower() == self._added_item
-            row_color = accent if is_new else text
-            card_outline = accent if is_new else muted
+        item_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(13, int(round((58 if not chrome.portrait else 44) * u))),
+        )
 
-            self._round_rect(
-                card_x0,
-                row_y,
-                card_x1,
-                row_y + row_height,
-                radius=12,
-                fill=self.CARD,
-                outline=accent if is_new else self.CARD_EDGE,
-                width=2 if is_new else 1,
-            )
-            self._round_rect(
-                card_x0 + 8,
-                row_y + 8,
-                card_x0 + 8 + self.ACCENT_WIDTH,
-                row_y + row_height - 8,
-                radius=self.ACCENT_WIDTH // 2,
-                fill=accent if is_new else card_outline,
-            )
-            self._track(
-                self.canvas.create_text(
-                    text_x,
-                    row_y + row_height // 2,
-                    anchor="w",
-                    text=value,
-                    fill=row_color,
+        # Split into columns top-to-bottom (left then right).
+        per_col = rows_per_col
+        for col in range(cols):
+            col_items = page_items[col * per_col : (col + 1) * per_col]
+            cx = x0 + col * (col_w + gap)
+            for index, item in enumerate(col_items):
+                value = str(item.get("value") or "")
+                is_new = (
+                    self._added_item is not None
+                    and value.strip().lower() == self._added_item
+                )
+                row_y = y0 + index * row_h
+                self._track(self.canvas.create_line(
+                    cx, row_y + row_h - 1, cx + col_w, row_y + row_h - 1, fill=LINE,
+                ))
+                display = value
+                max_w = col_w - 8 * u
+                while item_font.measure(display) > max_w and len(display) > 4:
+                    display = display[:-2].rstrip() + "…"
+                self._track(self.canvas.create_text(
+                    cx, row_y + row_h / 2, anchor="w",
+                    text=display,
+                    fill=ACCENT if is_new else INK,
                     font=item_font,
-                )
-            )
-            if is_new:
-                self._track(
-                    self.canvas.create_text(
-                        card_x1 - 16,
-                        row_y + row_height // 2,
-                        anchor="e",
-                        text="New",
-                        fill=accent,
-                        font=self.shell.chip_label_font,
-                    )
-                )
+                ))
 
         pages = self._page_count()
         if pages > 1:
-            dot_gap = 22
-            dots_width = (pages - 1) * dot_gap
-            dot_y = bottom - 16
-            start_x = x + width // 2 - dots_width // 2
-            for page_index in range(pages):
-                dot_x = start_x + page_index * dot_gap
-                radius = 7 if page_index == self._page else 4
-                self._track(
-                    self.canvas.create_oval(
-                        dot_x - radius,
-                        dot_y - radius,
-                        dot_x + radius,
-                        dot_y + radius,
-                        fill=accent if page_index == self._page else muted,
-                        outline="",
-                    )
-                )
-
+            # Small page cue above the dismiss footer.
+            cue = f"{self._page + 1} / {pages}"
+            self._track(self.canvas.create_text(
+                x0 + width / 2, chrome.content_bottom - 8 * u, anchor="s",
+                text=cue, fill=INK_3,
+                font=("Consolas", max(11, int(round(20 * u)))),
+            ))
 
 class MusicPanel(BasePanel):
     # Soft cap only — actual size is driven by available space (see
@@ -2752,12 +3052,37 @@ class MusicPanel(BasePanel):
         self._art_request = 0
         self._art_placeholder_ids: list[int] = []
         self._marquees: list[MarqueeLine] = []
+        self._tick_job = None
+        self._progress_text_id = None
+        self._progress_fill_id = None
+        self._progress_track = None  # (x0, y0, x1, y1)
+        self._media_length_sec = None
+        self._media_progress_sec = None
+        self._progress_at = None
+        self._playback_playing = True
+        self._auto_dismissed = False
 
     def hide(self):
+        self._stop_progress_tick()
         for marquee in self._marquees:
             marquee.stop()
         self._marquees = []
+        self._progress_text_id = None
+        self._progress_fill_id = None
+        self._progress_track = None
+        self._media_length_sec = None
+        self._media_progress_sec = None
+        self._progress_at = None
+        self._auto_dismissed = False
         super().hide()
+
+    def _stop_progress_tick(self):
+        if self._tick_job is not None:
+            try:
+                self.root.after_cancel(self._tick_job)
+            except Exception:
+                pass
+            self._tick_job = None
 
     def _draw_marquee_line(self, center_x, y, text, font, fill, width) -> int:
         """Draws one line of Now Playing text (song/artist/album/detail)
@@ -2798,55 +3123,247 @@ class MusicPanel(BasePanel):
         provider = music.get("provider")
         device = music.get("device") or payload.get("device")
         art_url = music.get("artUrl")
+        self._bind_progress(music)
 
         if layout.portrait:
             self._render_stack(layout, song, artist, album, provider, device, art_url)
         else:
             self._render_landscape(layout, song, artist, album, provider, device, art_url)
+        if self._media_length_sec is not None:
+            self._start_progress_tick()
 
-    def _render_empty(self, layout, device):
+    def _bind_progress(self, music: dict):
+        self._media_length_sec = None
+        self._media_progress_sec = None
+        self._progress_at = None
+        self._playback_playing = str(music.get("state") or "PLAYING").upper() == "PLAYING"
+        try:
+            length = music.get("mediaLengthSec")
+            if length is not None:
+                self._media_length_sec = max(0, int(float(length)))
+        except (TypeError, ValueError):
+            self._media_length_sec = None
+        try:
+            progress = music.get("mediaProgressSec")
+            if progress is not None:
+                self._media_progress_sec = max(0, int(float(progress)))
+        except (TypeError, ValueError):
+            self._media_progress_sec = 0 if self._media_length_sec is not None else None
+        self._progress_at = music.get("progressAt")
+
+    def _progress_remaining(self) -> int | None:
+        return music_remaining_seconds(
+            media_length_sec=self._media_length_sec,
+            media_progress_sec=self._media_progress_sec,
+            progress_at=self._progress_at,
+            playing=self._playback_playing,
+        )
+
+    def _progress_label(self, remaining: int | None) -> str:
+        if self._media_length_sec is None:
+            return ""
+        total = format_music_clock(self._media_length_sec)
+        if remaining is None:
+            return total
+        return f"{format_music_clock(remaining)} left · {total}"
+
+    def _draw_progress_block(self, x0, y, width, *, accent, muted) -> int:
+        """Progress rail + `1:23 left · 3:45`. Returns height used."""
+        if self._media_length_sec is None:
+            return 0
+        remaining = self._progress_remaining()
+        label = self._progress_label(remaining)
+        label_font = self.shell.chip_value_font
+        label_h = label_font.metrics("linespace")
+        self._progress_text_id = self._track(self.canvas.create_text(
+            x0 + width / 2, y, anchor="n", text=label, fill=muted, font=label_font,
+        ))
+        rail_y = y + label_h + 10
+        rail_h = max(4, 8)
+        track_fill = "#1a2438"
+        self._track(self.canvas.create_rectangle(
+            x0, rail_y, x0 + width, rail_y + rail_h, fill=track_fill, outline="",
+        ))
+        length = max(1, int(self._media_length_sec))
+        played = length - (remaining if remaining is not None else 0)
+        frac = max(0.0, min(1.0, played / length))
+        fill_w = width * frac
+        self._progress_fill_id = self._track(self.canvas.create_rectangle(
+            x0, rail_y, x0 + fill_w, rail_y + rail_h, fill=accent, outline="",
+        ))
+        self._progress_track = (x0, rail_y, x0 + width, rail_y + rail_h)
+        return label_h + 10 + rail_h + 8
+
+    def _start_progress_tick(self):
+        self._stop_progress_tick()
+        self._tick_job = self.root.after(1000, self._on_progress_tick)
+
+    def _on_progress_tick(self):
+        self._tick_job = None
+        if not self.visible or self._auto_dismissed:
+            return
+        remaining = self._progress_remaining()
+        if remaining is not None and remaining <= 0:
+            self._auto_dismissed = True
+            self._dismiss_overlay()
+            return
+        if self._progress_text_id is not None:
+            try:
+                self.canvas.itemconfigure(
+                    self._progress_text_id, text=self._progress_label(remaining),
+                )
+            except Exception:
+                pass
+        if self._progress_fill_id is not None and self._progress_track is not None:
+            x0, y0, x1, y1 = self._progress_track
+            length = max(1, int(self._media_length_sec or 1))
+            played = length - (remaining if remaining is not None else 0)
+            frac = max(0.0, min(1.0, played / length))
+            try:
+                self.canvas.coords(self._progress_fill_id, x0, y0, x0 + (x1 - x0) * frac, y1)
+            except Exception:
+                pass
+        self._tick_job = self.root.after(1000, self._on_progress_tick)
+
+    def _dismiss_overlay(self):
+        overlay = getattr(self.shell, "overlay", None)
+        if overlay is not None and hasattr(overlay, "dismiss_immediately"):
+            try:
+                overlay.dismiss_immediately()
+                return
+            except Exception:
+                pass
+        self.hide()
+
+    def _art_size_for_layout(self, layout) -> tuple[int, float, float]:
+        """Return (art_size, art_cx, art_cy) matching the playing layouts."""
         x = layout.content_x
         width = layout.content_width
         y = layout.message_area_top
         bottom = layout.message_area_bottom
+        title_h = self.shell.section_title_font.metrics("linespace")
+        body_h = self.shell.body_font.metrics("linespace")
+        if layout.portrait:
+            text_block = title_h + body_h + 10 + 24
+            available = bottom - y - text_block
+            art_size = min(self.ART_SIZE, max(330, min(width - 48, available - 16)))
+            return art_size, x + width // 2, y + art_size // 2 + 8
+        gap = 56
+        text_col_width = max(300, int(width * 0.36))
+        art_col_width = width - text_col_width - gap
+        available_h = bottom - y
+        art_size = min(self.ART_SIZE, max(280, min(art_col_width, available_h - 16)))
+        return art_size, x + art_col_width // 2, y + available_h // 2
+
+    def _render_empty(self, layout, device):
+        x = layout.content_x
+        width = layout.content_width
         text = self.config["textColor"]
         muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
-        center_x = x + width // 2
-        cy = y + max(80, (bottom - y) // 2)
-        self._draw_art_placeholder(center_x, cy - 40, 180, accent, False)
+        accent = self.config.get("accentColor", "#5FD0FF")
+        art_size, art_cx, art_cy = self._art_size_for_layout(layout)
+        self._draw_empty_album_art(art_cx, art_cy, art_size, accent)
+
+        if layout.portrait:
+            text_cx = art_cx
+            cursor = art_cy + art_size // 2 + 28
+            text_w = width - 40
+        else:
+            gap = 56
+            text_col_width = max(300, int(width * 0.36))
+            art_col_width = width - text_col_width - gap
+            text_cx = x + art_col_width + gap + text_col_width // 2
+            title_h = self.shell.section_title_font.metrics("linespace")
+            body_h = self.shell.body_font.metrics("linespace")
+            text_h = title_h + 10 + body_h
+            cursor = art_cy - text_h // 2
+            text_w = text_col_width
+
         self._track(
             self.canvas.create_text(
-                center_x, cy + 80, anchor="n", text="Nothing playing",
+                text_cx, cursor, anchor="n", text="Nothing playing",
                 fill=text, font=self.shell.section_title_font,
+                width=text_w, justify=tk.CENTER,
             )
         )
+        cursor += self.shell.section_title_font.metrics("linespace") + 10
         subtitle = f"Asked on {device}" if device else "No track is playing right now"
         self._track(
             self.canvas.create_text(
-                center_x, cy + 80 + self.shell.section_title_font.metrics("linespace") + 10,
-                anchor="n", text=subtitle, fill=muted, font=self.shell.body_font,
+                text_cx, cursor, anchor="n", text=subtitle,
+                fill=muted, font=self.shell.body_font,
+                width=text_w, justify=tk.CENTER,
             )
         )
 
+    def _draw_empty_album_art(self, cx, cy, size, accent):
+        """Album-sized empty cover — two-tone field matching design mockups."""
+        self._art_placeholder_ids = []
+        size = max(120, int(size))
+        photo = self._make_empty_album_photo(size, accent)
+        if photo is not None:
+            self._art_image = photo
+            img_id = self._track(self.canvas.create_image(cx, cy, image=photo))
+            self._art_placeholder_ids.append(img_id)
+            # Soft edge plate so the field reads as a cover, not a floating bitmap.
+            frame_id = self._round_rect(
+                cx - size // 2, cy - size // 2, cx + size // 2, cy + size // 2,
+                radius=0, fill="", outline=self.CARD_EDGE, width=1,
+            )
+            self._art_placeholder_ids.append(frame_id)
+            return
+        self._draw_art_placeholder(cx, cy, size, accent, False)
+
+    @staticmethod
+    def _make_empty_album_photo(size: int, accent: str):
+        if Image is None or ImageTk is None:
+            return None
+        try:
+            from PIL import ImageDraw
+        except ImportError:
+            return None
+        size = max(64, int(size))
+        # Neutral two-tone square (no lettering) — same language as photo mockups.
+        dark = (20, 32, 52)
+        mid = (36, 52, 78)
+        try:
+            hex_accent = (accent or "#5FD0FF").lstrip("#")
+            ar, ag, ab = int(hex_accent[0:2], 16), int(hex_accent[2:4], 16), int(hex_accent[4:6], 16)
+            tint = (
+                int(dark[0] * 0.65 + ar * 0.35),
+                int(dark[1] * 0.65 + ag * 0.35),
+                int(dark[2] * 0.65 + ab * 0.35),
+            )
+        except (TypeError, ValueError, IndexError):
+            tint = mid
+        img = Image.new("RGB", (size, size), dark)
+        draw = ImageDraw.Draw(img)
+        # Diagonal wash + centred diamond so the plate reads as a cover, not a void.
+        draw.polygon([(size, 0), (size, size), (0, size)], fill=tint)
+        inset = max(10, size // 7)
+        draw.rectangle((inset, inset, size - inset, size - inset), outline=mid, width=max(2, size // 80))
+        cx = cy = size // 2
+        r = max(18, size // 6)
+        draw.polygon([(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)], fill=dark, outline=mid)
+        try:
+            return ImageTk.PhotoImage(img)
+        except Exception:
+            return None
+
     def _draw_art_placeholder(self, cx, cy, size, accent, loading_art):
+        # Empty stage plate only — nothing composited over artwork (§1.10).
         self._art_placeholder_ids = []
         rect_id = self._round_rect(
             cx - size // 2,
             cy - size // 2,
             cx + size // 2,
             cy + size // 2,
-            radius=26,
+            radius=0,
             fill=self.CARD,
             outline=accent if not loading_art else self.CARD_EDGE,
             width=2 if not loading_art else 1,
         )
-        note_id = self._track(
-            self.canvas.create_text(
-                cx, cy, anchor="center", text="♪", fill=accent, font=self.shell.hero_font,
-            )
-        )
-        self._art_placeholder_ids.extend((rect_id, note_id))
+        self._art_placeholder_ids.append(rect_id)
 
     def _render_stack(self, layout, song, artist, album, provider, device, art_url):
         x = layout.content_x
@@ -2864,6 +3381,8 @@ class MusicPanel(BasePanel):
         if album:
             text_block += self.shell.body_font.metrics("linespace") + 8
         text_block += self.shell.chip_value_font.metrics("linespace") + 24
+        if self._media_length_sec is not None:
+            text_block += self.shell.chip_value_font.metrics("linespace") + 30
 
         available = bottom - y - text_block
         art_size = min(self.ART_SIZE, max(330, min(width - 48, available - 16)))
@@ -2893,14 +3412,17 @@ class MusicPanel(BasePanel):
         if device:
             detail_parts.append(f"on {device}")
         if detail_parts:
-            self._draw_marquee_line(
+            cursor += self._draw_marquee_line(
                 center_x,
                 cursor,
                 " · ".join(detail_parts),
                 self.shell.chip_value_font,
                 muted,
                 width - 40,
-            )
+            ) + 14
+        self._draw_progress_block(
+            x + 24, cursor, max(120, width - 48), accent=accent, muted=muted,
+        )
 
     def _render_landscape(self, layout, song, artist, album, provider, device, art_url):
         # Landscape had the same single centered column as portrait, wasting
@@ -2933,6 +3455,8 @@ class MusicPanel(BasePanel):
             text_h += body_font.metrics("linespace") + 10
         if detail_parts:
             text_h += detail_font.metrics("linespace") + 14
+        if self._media_length_sec is not None:
+            text_h += detail_font.metrics("linespace") + 30
 
         gap = 56
         text_col_width = max(300, int(width * 0.36))
@@ -2962,14 +3486,17 @@ class MusicPanel(BasePanel):
                 text_center_x, cursor, album, body_font, muted, text_col_width,
             ) + 14
         if detail_parts:
-            self._draw_marquee_line(
+            cursor += self._draw_marquee_line(
                 text_center_x,
                 cursor,
                 " · ".join(detail_parts),
                 detail_font,
                 muted,
                 text_col_width,
-            )
+            ) + 14
+        self._draw_progress_block(
+            x + art_col_width + gap, cursor, text_col_width, accent=accent, muted=muted,
+        )
 
     def _load_art_async(self, url: str, cx: float, cy: float, size: int):
         self._art_request += 1
@@ -3012,7 +3539,8 @@ class MusicPanel(BasePanel):
         if not self.visible or request_id != self._art_request:
             return
         self._clear_art_placeholder()
-        self._art_image = ImageTk.PhotoImage(self._round_image_corners(image, 26))
+        # Sharp album art (radius 0) — no glyph/scrim on the image (§1.10).
+        self._art_image = ImageTk.PhotoImage(image.convert("RGBA") if hasattr(image, "convert") else image)
         self._track(self.canvas.create_image(cx, cy, image=self._art_image))
 
 
@@ -3063,16 +3591,18 @@ class TeslaBatteryPanel(BasePanel):
         title_font = self.shell.section_title_font
         body_font = self.shell.body_font
         label_font = self.shell.forecast_label_font
-        # Percent is drawn *inside* the bar with section_title_font — size the
-        # pill from that font so "80%" (etc.) isn't clipped top/bottom.
+        # Percent sits above a flat track (§1.10) — reserve headline + labels + bar.
         bar_height = self.battery_bar_height(
             title_font.metrics("linespace"), portrait=layout.portrait,
         )
         bar_gap = 18 if layout.portrait else 12
         footer_h = title_font.metrics("linespace") + 6 + body_font.metrics("linespace")
         status_h = self._status_block_height(status_bits, width - 80)
-        # Bar block: 0%/100% labels + bar + gap before status/footer.
-        bar_block_h = label_font.metrics("linespace") + 6 + bar_height + bar_gap
+        bar_block_h = (
+            title_font.metrics("linespace") + 8
+            + label_font.metrics("linespace") + 6
+            + bar_height + bar_gap
+        )
 
         if layout.portrait:
             self._render_stack(
@@ -3263,10 +3793,9 @@ class TeslaBatteryPanel(BasePanel):
 
     @staticmethod
     def battery_bar_height(percent_font_linespace: int, *, portrait: bool) -> int:
-        """Bar tall enough for the in-bar percent label (unit-tested)."""
-        pad = 22
-        floor = 56 if portrait else 52
-        return max(floor, int(percent_font_linespace) + pad)
+        """Flat track height — percent label sits above the bar (§1.10)."""
+        _ = percent_font_linespace
+        return 28 if portrait else 24
 
     def _draw_battery_bar(
         self,
@@ -3282,47 +3811,47 @@ class TeslaBatteryPanel(BasePanel):
     ):
         bar_x0 = center_x - bar_width // 2
         bar_x1 = bar_x0 + bar_width
-        bar_y1 = bar_y0 + bar_height
         label_font = self.shell.forecast_label_font
         percent_font = self.shell.section_title_font
+        percent_h = percent_font.metrics("linespace")
+        # Percent + end labels above the track — never composited into the fill.
         self._track(
             self.canvas.create_text(
-                bar_x0, bar_y0 - 8, anchor="sw", text="0%", fill=muted, font=label_font,
+                center_x, bar_y0, anchor="n",
+                text=percent_text, fill=headline_color, font=percent_font,
+            )
+        )
+        label_y = bar_y0 + percent_h + 6
+        self._track(
+            self.canvas.create_text(
+                bar_x0, label_y, anchor="nw", text="0%", fill=muted, font=label_font,
             )
         )
         self._track(
             self.canvas.create_text(
-                bar_x1, bar_y0 - 8, anchor="se", text="100%", fill=muted, font=label_font,
+                bar_x1, label_y, anchor="ne", text="100%", fill=muted, font=label_font,
             )
         )
+        track_y0 = label_y + label_font.metrics("linespace") + 6
+        track_y1 = track_y0 + bar_height
         self._round_rect(
-            bar_x0, bar_y0, bar_x1, bar_y1,
-            radius=bar_height // 2,
+            bar_x0, track_y0, bar_x1, track_y1,
+            radius=0,
             fill=self.INNER,
             outline=self.CARD_EDGE,
             width=2,
         )
         if percent_value is not None and bar_width > 0:
-            fill_width = max(bar_height, int((bar_width - 6) * (percent_value / 100)))
+            fill_width = max(4, int((bar_width - 4) * (percent_value / 100)))
             self._round_rect(
-                bar_x0 + 3,
-                bar_y0 + 3,
-                bar_x0 + 3 + fill_width,
-                bar_y1 - 3,
-                radius=max(2, (bar_height - 6) // 2),
+                bar_x0 + 2,
+                track_y0 + 2,
+                bar_x0 + 2 + fill_width,
+                track_y1 - 2,
+                radius=0,
                 fill=bar_color,
             )
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                bar_y0 + bar_height // 2,
-                anchor="center",
-                text=percent_text,
-                fill=headline_color,
-                font=percent_font,
-            )
-        )
-        return bar_y1
+        return track_y1
 
     def _place_car_image(self, center_x, image_top, image_width, image_height, accent, chip):
         image_path = asset_path(self.IMAGE_NAME)
@@ -3529,8 +4058,8 @@ class TeslaDashboardPanel(BasePanel):
         bottom = layout.message_area_bottom
         pad = 20
         self._round_rect(
-            x - pad, top - 14, x + width + pad, bottom + 12,
-            radius=26, fill=self.CONTAINER, outline=self.CARD_EDGE,
+            x - pad, top - 14, x + width + pad, bottom,
+            radius=0, fill=self.CONTAINER, outline=self.CARD_EDGE,
         )
 
         if dashboard.get("status") not in (None, "ok", ""):
@@ -3806,7 +4335,7 @@ class TeslaDashboardPanel(BasePanel):
         self._panel_card(x, y, width, height)
         footer_h = 40
         box = (x + 10, y + 10, x + width - 10, y + height - footer_h - 6)
-        self._round_rect(*box, radius=12, fill=self.INNER, outline=self.CARD_EDGE)
+        self._round_rect(*box, radius=0, fill=self.INNER, outline=self.CARD_EDGE)
         self._draw_map_placeholder(box)
 
         lat = map_data.get("latitude")
@@ -3855,11 +4384,8 @@ class TeslaDashboardPanel(BasePanel):
                 )
             )
 
-        geofence = self._geofence_label(map_data)
-        if geofence:
-            self._pill(x + 20, y + 20, f"⌂ {geofence}", fill=self.GREEN_BG, fg=self.GREEN, outline="#1d5c38")
-        elif map_data.get("locationRestricted"):
-            self._pill(x + 20, y + 20, "Location hidden", fill=self.AMBER_BG, fg=self.AMBER)
+        # Speed/gear chip is the only allowed map furniture (§1.10). Geofence /
+        # "location hidden" pills stay off the tiles — put them in the footer.
         driving = map_data.get("drivingChip") or "Parked"
         self._pill(x + width - 20, y + 20, driving, fill="#0d1830", fg=text, outline=self.CARD_EDGE, anchor="ne")
 
@@ -3867,6 +4393,11 @@ class TeslaDashboardPanel(BasePanel):
         if not location and lat is not None and lon is not None:
             location = f"{float(lat):.4f}, {float(lon):.4f}"
         location = location or "Location unavailable"
+        geofence = self._geofence_label(map_data)
+        if geofence:
+            location = f"{geofence} · {location}"
+        elif map_data.get("locationRestricted"):
+            location = f"Location hidden · {location}"
         self._track(
             self.canvas.create_text(
                 x + 20, y + height - footer_h // 2 - 4, anchor="w",
@@ -3914,22 +4445,9 @@ class TeslaDashboardPanel(BasePanel):
         self._pulse_job = self.root.after(420, self._pulse_tick)
 
     def _pulse_tick(self):
+        # No pulsing glow rings — design system forbids decorative glow (§1.1).
         self._pulse_job = None
-        if not self.visible or not self._pin_center:
-            return
-        for item in self._pulse_items:
-            self.canvas.delete(item)
         self._pulse_items = []
-        self._pulse_phase = (self._pulse_phase + 1) % 4
-        pin_x, pin_y = self._pin_center
-        radius = 24 + self._pulse_phase * 7
-        shades = ["#38bdf8", "#2e9dd2", "#2379a5", "#17527a"]
-        ring = self.canvas.create_oval(
-            pin_x - radius, pin_y - radius, pin_x + radius, pin_y + radius,
-            outline=shades[self._pulse_phase], width=2,
-        )
-        self._pulse_items.append(self._track(ring))
-        self._schedule_pulse()
 
     def _draw_car_card(self, x, y, width, height, dashboard: dict):
         muted = self.config["mutedTextColor"]
@@ -3940,12 +4458,14 @@ class TeslaDashboardPanel(BasePanel):
 
         self._round_rect(
             x, y, x + width, y + height,
-            radius=18, fill=self.CARD, outline="#31415e", dash=(6, 5),
+            radius=0, fill=self.CARD, outline=self.CARD_EDGE,
         )
 
+        badge_row_h = 44
         image_path = asset_path(self.CAR_IMAGE_NAME)
         img_w = min(width - 60, 460)
-        img_h = max(80, height - 52)
+        img_h = max(80, height - badge_row_h - 28)
+        img_bottom = y + 12 + img_h
         if image_path.exists() and Image is not None and ImageTk is not None:
             try:
                 image = Image.open(image_path).convert("RGBA")
@@ -3954,13 +4474,15 @@ class TeslaDashboardPanel(BasePanel):
                 self._track(
                     self.canvas.create_image(
                         x + width // 2,
-                        y + height // 2,
+                        y + 12 + image.height // 2,
                         image=self._car_photo,
                     )
                 )
+                img_bottom = y + 12 + image.height
             except OSError:
                 pass
 
+        # Security status lives under the vehicle render — never on the art (§1.10).
         left_badges = []
         left_badges.append("🔒 Locked" if security.get("locked") else "🔓 Unlocked")
         if security.get("sentryOn"):
@@ -3970,18 +4492,21 @@ class TeslaDashboardPanel(BasePanel):
             ("Windows up", True) if security.get("windowsUp", True) else ("Window open", False),
         ]
 
-        badge_y = y + 16
+        badge_y = min(img_bottom + 10, y + height - badge_row_h)
+        badge_x = x + 16
         for label in left_badges:
-            h = self._pill(x + 16, badge_y, label, fill=secure_bg, fg=secure_color, outline=secure_bg)
-            badge_y += h + 8
-        badge_y = y + 16
+            h = self._pill(badge_x, badge_y, label, fill=secure_bg, fg=secure_color, outline=secure_bg)
+            badge_x += self.shell.forecast_label_font.measure(label) + 36
+            _ = h
+        badge_x = x + width - 16
         for label, ok in right_badges:
             h = self._pill(
-                x + width - 16, badge_y, label,
+                badge_x, badge_y, label,
                 fill=self.CARD, fg=muted if ok else self.AMBER,
                 outline=self.CARD_EDGE, anchor="ne",
             )
-            badge_y += h + 8
+            badge_x -= self.shell.forecast_label_font.measure(label) + 36
+            _ = h
 
     def _draw_battery_card(self, x, y, width, height, dashboard: dict):
         muted = self.config["mutedTextColor"]
@@ -4018,14 +4543,14 @@ class TeslaDashboardPanel(BasePanel):
         min_detail = label_h + 8
         if bar_y + bar_h + min_detail > y + height - 10:
             bar_y = max(y + pad_top + value_h + 6, y + height - bar_h - min_detail - 10)
-        self._round_rect(x + 18, bar_y, x + width - 18, bar_y + bar_h, radius=bar_h // 2, fill=self.INNER)
+        self._round_rect(x + 18, bar_y, x + width - 18, bar_y + bar_h, radius=0, fill=self.INNER)
         if percent is not None:
             pct = max(0, min(100, int(percent)))
             fill_w = (width - 36) * pct / 100
-            if fill_w > bar_h:
+            if fill_w > 2:
                 self._round_rect(
                     x + 18, bar_y, x + 18 + fill_w, bar_y + bar_h,
-                    radius=bar_h // 2, fill=bar_color,
+                    radius=0, fill=bar_color,
                 )
 
         detail_y = bar_y + bar_h + 10
@@ -5188,7 +5713,7 @@ class NotificationsPanel(BasePanel):
                 cursor,
                 card_x + card_width,
                 cursor + card_h,
-                radius=14,
+                radius=0,
                 fill=self.CARD,
                 outline=accent,
             )
@@ -5197,7 +5722,7 @@ class NotificationsPanel(BasePanel):
                 cursor + 8,
                 card_x + 14,
                 cursor + card_h - 8,
-                radius=3,
+                radius=0,
                 fill=accent,
             )
             self._track(
@@ -5352,8 +5877,7 @@ class QrPanel(BasePanel):
     bakes this into the image itself) so phone cameras can still lock on.
 
     Shared-photo pushes (`qrType: "photo"`, or a URL under `/qr-images/`)
-    render like the slideshow: the photo itself is the hero, with a small
-    corner QR so viewers can still scan it onto their phone.
+    use the same full-bleed shared-photos page as the slideshow (upload mode).
     """
 
     _HEADINGS = {
@@ -5367,10 +5891,25 @@ class QrPanel(BasePanel):
         self._qr_image = None  # keep a reference or Tk garbage-collects it
         self._photo_image = None
         self._fetch_token = 0
+        self._photo_mode = False
+        self._shared_page = None
+        self._status_job = None
+        self._dismiss_sec = 15
+        self._slide_started_at = 0.0
 
     def hide(self):
         self._fetch_token += 1
         self._photo_image = None
+        self._photo_mode = False
+        if self._status_job is not None:
+            try:
+                self.root.after_cancel(self._status_job)
+            except Exception:
+                pass
+            self._status_job = None
+        if self._shared_page is not None:
+            self._shared_page.clear_refs()
+            self._shared_page = None
         super().hide()
 
     @staticmethod
@@ -5402,6 +5941,14 @@ class QrPanel(BasePanel):
             return False
         return "/qr-images/" in path
 
+    def _overlay_display_seconds(self) -> int:
+        overlay = getattr(self.shell, "overlay", None)
+        try:
+            sec = int(getattr(overlay, "_display_seconds", 0) or 0)
+        except (TypeError, ValueError):
+            sec = 0
+        return sec if sec > 0 else 15
+
     def _render(self, payload: dict):
         for item_id in list(self._item_ids):
             self.canvas.delete(item_id)
@@ -5409,6 +5956,16 @@ class QrPanel(BasePanel):
         self._qr_image = None
         self._photo_image = None
         self._fetch_token += 1
+        self._photo_mode = False
+        if self._shared_page is not None:
+            self._shared_page.clear_refs()
+            self._shared_page = None
+        if self._status_job is not None:
+            try:
+                self.root.after_cancel(self._status_job)
+            except Exception:
+                pass
+            self._status_job = None
 
         qr = payload.get("qr") or {}
         qr_type = str(qr.get("qrType") or "url").lower()
@@ -5416,6 +5973,7 @@ class QrPanel(BasePanel):
         label = str(qr.get("label") or "").strip()
 
         if qr_type == "photo" or self._is_shared_photo_url(content):
+            self._photo_mode = True
             self._render_photo_with_corner_qr(content, label)
             return
 
@@ -5497,64 +6055,117 @@ class QrPanel(BasePanel):
             )
 
     def _render_photo_with_corner_qr(self, url: str, label: str):
-        """Hero photo + small corner QR — same composition as the slideshow."""
-        muted = self.config["mutedTextColor"]
-        photo_cx, photo_cy, max_w, max_h, _layout = self._photo_stage_geometry()
+        """Single-upload shared photo page (same layout as the slideshow)."""
+        from src.shared_photos_page import SharedPhotosRenderer, NEUTRAL_MAT
 
-        self._track(
-            self.canvas.create_text(
-                photo_cx,
-                photo_cy,
-                anchor="center",
-                text="Loading photo…",
-                fill=muted,
-                font=self.shell.body_font,
-            )
-        )
-        # Corner QR waits until the photo lands so it can sit inside the frame.
+        for item_id in list(self._item_ids):
+            self.canvas.delete(item_id)
+        self._item_ids.clear()
+        self._photo_image = None
+        self._qr_image = None
+
+        screen_w = int(getattr(self.shell.overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        screen_h = int(getattr(self.shell.overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        page = SharedPhotosRenderer(self.canvas, self.shell, self.config, self._track)
+        layout = page.prepare(screen_w, screen_h, mode="upload")
+        page.paint_mat(NEUTRAL_MAT, screen_w, screen_h)
+        page.paint_header(mode="upload", index=0, total=1)
+
+        muted = self.config["mutedTextColor"]
+        cx = layout.x0 + layout.page_w / 2
+        cy = (layout.stage[1] + layout.stage[3]) / 2
+        self._track(self.canvas.create_text(
+            cx, cy, anchor="center", text="Loading photo…",
+            fill=muted, font=self.shell.body_font,
+        ))
+
+        self._shared_page = page
         token = self._fetch_token
+        max_w = int(layout.photo_box[0]) * 2
+        max_h = int(layout.photo_box[1]) * 2
+        dismiss_sec = self._overlay_display_seconds()
 
         def worker():
             image = PhotoSlideshowPanel._fetch_photo(url, max_w, max_h)
-            self.root.after(0, lambda: self._apply_photo_preview(token, image, url, label))
+            self.root.after(
+                0,
+                lambda: self._apply_photo_preview(token, image, url, label, dismiss_sec),
+            )
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _apply_photo_preview(self, token: int, image, url: str, label: str):
+    def _apply_photo_preview(self, token: int, image, url: str, label: str, dismiss_sec: int = 15):
         if token != self._fetch_token or not self.visible:
             return
+        from src.shared_photos_page import (
+            SharedPhotosRenderer, sample_mat_accent, NEUTRAL_MAT, NEUTRAL_ACCENT,
+        )
+        import time as _time
+
         for item_id in list(self._item_ids):
             self.canvas.delete(item_id)
         self._item_ids.clear()
 
+        screen_w = int(getattr(self.shell.overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        screen_h = int(getattr(self.shell.overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        page = SharedPhotosRenderer(self.canvas, self.shell, self.config, self._track)
+        self._shared_page = page
+        layout = page.prepare(screen_w, screen_h, mode="upload")
+        mat, accent = sample_mat_accent(image) if image is not None else (NEUTRAL_MAT, NEUTRAL_ACCENT)
         muted = self.config["mutedTextColor"]
-        photo_cx, photo_cy, _max_w, _max_h, layout = self._photo_stage_geometry()
+
+        page.paint_mat(mat, screen_w, screen_h)
+        page.paint_header(mode="upload", index=0, total=1)
 
         if image is None:
-            self._track(
-                self.canvas.create_text(
-                    photo_cx,
-                    photo_cy,
-                    anchor="center",
-                    text="Could not load this photo",
-                    fill=muted,
-                    font=self.shell.body_font,
-                    width=layout.content_width - 60,
-                    justify=tk.CENTER,
-                )
-            )
-            self._qr_image = self._draw_scan_qr_badge(url, self._SCAN_QR_CAPTION)
+            cx = layout.x0 + layout.page_w / 2
+            cy = (layout.stage[1] + layout.stage[3]) / 2
+            self._track(self.canvas.create_text(
+                cx, cy, anchor="center", text="Could not load this photo",
+                fill=muted, font=self.shell.body_font,
+            ))
         else:
-            self._photo_image = ImageTk.PhotoImage(image)
-            self._track(self.canvas.create_image(photo_cx, photo_cy, image=self._photo_image))
-            self._qr_image = self._draw_scan_qr_badge(
-                url,
-                self._SCAN_QR_CAPTION,
-                photo_cx=photo_cx,
-                photo_cy=photo_cy,
-                photo_w=self._photo_image.width(),
-                photo_h=self._photo_image.height(),
-            )
+            self._photo_image = page.paint_photo(image)
+
+        self._dismiss_sec = max(1, int(dismiss_sec))
+        self._slide_started_at = _time.time()
+        page.paint_bar(
+            mode="upload",
+            index=0,
+            total=1,
+            uploaded_at=None,
+            caption=label or "",
+            qr_url=url,
+            build_qr=QrPanel._build_qr_image,
+            dwell_ms=self._dismiss_sec * 1000,
+            status_text=f"Dismisses in {self._dismiss_sec}s",
+            accent=accent,
+        )
+        self._qr_image = page._qr_ref
+        self._start_dismiss_clock()
+
+    def _start_dismiss_clock(self):
+        if self._status_job is not None:
+            try:
+                self.root.after_cancel(self._status_job)
+            except Exception:
+                pass
+            self._status_job = None
+        if not self._photo_mode or not self._shared_page:
+            return
+
+        import time as _time
+
+        def tick():
+            if not self.visible or not self._shared_page or not self._photo_mode:
+                return
+            elapsed = int(_time.time() - self._slide_started_at)
+            left = max(0, self._dismiss_sec - elapsed)
+            self._shared_page.set_status(f"Dismisses in {left}s")
+            if left > 0:
+                self._status_job = self.root.after(1000, tick)
+
+        self._status_job = self.root.after(1000, tick)
 
 
 class GuestPhotoboothPanel(BasePanel):
@@ -5565,9 +6176,9 @@ class GuestPhotoboothPanel(BasePanel):
     cards so "then" never overlaps card footers; landscape pairs them.
     """
 
-    ACCENT = "#38bdf8"
-    STEP_WIFI = "#34d399"
-    STEP_BOOTH = "#60a5fa"
+    ACCENT = "#5FD0FF"
+    STEP_WIFI = "#5FD0FF"
+    STEP_BOOTH = "#5FD0FF"
     QR_FRAME = "#f8fafc"
 
     def __init__(self, root: tk.Tk, shell, config: dict):
@@ -5679,9 +6290,8 @@ class GuestPhotoboothPanel(BasePanel):
         width = layout.content_width
         # Own the top of the screen (shell title/backdrop are hidden).
         top = int(self.shell.overlay.screen_h * (0.045 if layout.portrait else 0.05))
-        # Sit close to the dismiss clock so portrait doesn't strand empty band.
-        countdown_y = int(getattr(layout, "countdown_y", 0) or 0)
-        bottom = (countdown_y - 24) if countdown_y > 0 else layout.message_area_bottom
+        # Content ends at the dismiss-footer band (message_area_bottom).
+        bottom = layout.message_area_bottom
         height = max(360, bottom - top)
         title_h = self.shell.section_title_font.metrics("linespace")
         sub_h = self.shell.body_font.metrics("linespace") if subtitle else 0
@@ -5748,17 +6358,20 @@ class GuestPhotoboothPanel(BasePanel):
         )
 
         connector = geo["connector"]
-        label = "↓ then" if geo["portrait"] else "then"
-        self._pill(
-            x0 + connector["x"],
-            top + connector["y"] - 14,
-            label,
-            fill="#0f172a",
-            fg=self.ACCENT,
-            anchor="n",
-            font=self.shell.chip_value_font,
-            outline="#334155",
-        )
+        # Design system §2.8: numbered steps carry order — a 2px connector rule
+        # replaces the floating "then" pill (different colours implied status).
+        cx = x0 + connector["x"]
+        cy = top + connector["y"]
+        if geo["portrait"]:
+            self._track(self.canvas.create_line(
+                cx, cy - 30, cx, cy + 30,
+                fill=self.CARD_EDGE, width=2,
+            ))
+        else:
+            self._track(self.canvas.create_line(
+                cx - 30, cy, cx + 30, cy,
+                fill=self.CARD_EDGE, width=2,
+            ))
 
     def _draw_step_card(
         self,
@@ -5777,15 +6390,15 @@ class GuestPhotoboothPanel(BasePanel):
     ):
         muted = self.config["mutedTextColor"]
         text = self.config["textColor"]
-        self._panel_card(x, y, w, h, radius=22, fill=self.CARD, outline=self.CARD_EDGE)
+        self._panel_card(x, y, w, h, radius=0, fill=self.CARD, outline=self.CARD_EDGE)
 
         step_label = str(step.get("stepLabel") or "").strip() or "1"
         heading = str(step.get("heading") or "").strip() or "Scan"
         hint = str(step.get("hint") or "").strip()
         content = str(step.get("content") or "").strip()
-        # Compact step chip: "1" / "2" or keep "Step N" if sent that way.
+        # Mono numbered markers (01 / 02) — both steps share --accent.
         if step_label.isdigit():
-            step_chip = f"Step {step_label}"
+            step_chip = f"{int(step_label):02d}"
         else:
             step_chip = step_label
 
@@ -5845,7 +6458,7 @@ class GuestPhotoboothPanel(BasePanel):
             cursor - frame_pad,
             qr_x + draw_size + frame_pad,
             cursor + draw_size + frame_pad,
-            radius=16,
+            radius=0,
             fill=self.QR_FRAME,
             outline="#e2e8f0",
         )
@@ -5905,62 +6518,70 @@ class GuestPhotoboothPanel(BasePanel):
 
 
 class PhotoSlideshowPanel(BasePanel):
-    """Cycles once through every photo in the bridge's Slideshow Manager.
+    """Shared photos slideshow — one pass through the album (spec v2 layout)."""
 
-    The bridge sends a list of `{url, uploadedAt}` entries (its own control
-    page host, self-signed TLS), already ordered per the Settings tab's
-    playback-order preference, plus `secondsPerPhoto` — this panel owns the
-    per-photo timer internally (like ShoppingListPanel's page rotation),
-    stops after the last photo (the overlay's own display-seconds timer then
-    dismisses it — see overlay.py suppressing the "Dismisses in…" countdown
-    text for this panel), and is interrupted immediately by any new UDP
-    payload, same as every other overlay. Each photo is fetched off the Tk
-    main thread so a slow LAN fetch never stalls the UI, and centered so it
-    looks good in portrait or landscape. A scan QR beside (landscape) or
-    below (portrait) the photo links straight to that image on a phone.
-    """
-
-    # The bridge's control page uses a self-signed cert by design (LAN-only,
-    # same trust model phones accept manually) — remember the very first
-    # verification failure so later fetches skip straight to the unverified
-    # context instead of re-discovering it every time.
     _UNVERIFIED_SSL = False
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
         self._tick_job = None
+        self._status_job = None
         self._photos: list[dict] = []
         self._index = 0
         self._seconds_per_photo = 5
-        self._photo_image = None  # keep a reference or Tk garbage-collects it
-        self._corner_qr_image = None
+        self._photo_image = None
         self._fetch_token = 0
+        self._page = None
+        self._mode = "slideshow"
+        self._slide_started_at = 0.0
 
-    def _photo_meta_block_height(self) -> int:
-        """Reserve room under the title for "Photo x of y" + shared date."""
-        line_h = self.shell.chip_value_font.metrics("linespace")
-        return (
-            self._PHOTO_META_TOP_PAD
-            + line_h
-            + 4
-            + line_h
-            + self._PHOTO_META_BOTTOM_PAD
-        )
+    def _screen_size(self):
+        def _dim(obj, name: str) -> int:
+            if obj is None:
+                return 0
+            try:
+                return int(getattr(obj, name, 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        overlay = getattr(self.shell, "overlay", None)
+        screen_w = _dim(overlay, "screen_w")
+        screen_h = _dim(overlay, "screen_h")
+        if screen_w < 64:
+            screen_w = _dim(self.shell, "screen_w") or int(self.root.winfo_screenwidth() or 1080)
+        if screen_h < 64:
+            screen_h = _dim(self.shell, "screen_h") or int(self.root.winfo_screenheight() or 1920)
+        return screen_w, screen_h
+
+    def _ensure_page(self):
+        if self._page is None:
+            from src.shared_photos_page import SharedPhotosRenderer
+            self._page = SharedPhotosRenderer(
+                self.canvas, self.shell, self.config, self._track,
+            )
+        return self._page
 
     def show(self, payload: dict):
         self.hide()
         self.visible = True
+        self._mode = "slideshow"
         slideshow = payload.get("slideshow") or {}
         photos = []
         for entry in slideshow.get("photos") or []:
             if isinstance(entry, dict):
                 url = str(entry.get("url") or "").strip()
                 uploaded_at = entry.get("uploadedAt")
+                caption = str(entry.get("caption") or entry.get("message") or "").strip()
             else:
                 url = str(entry or "").strip()
                 uploaded_at = None
+                caption = ""
             if url:
-                photos.append({"url": url, "uploadedAt": uploaded_at})
+                photos.append({
+                    "url": url,
+                    "uploadedAt": uploaded_at,
+                    "caption": caption,
+                })
         self._photos = photos
         try:
             self._seconds_per_photo = max(1, int(slideshow.get("secondsPerPhoto") or 5))
@@ -5970,15 +6591,21 @@ class PhotoSlideshowPanel(BasePanel):
         self._render_current()
 
     def hide(self):
+        if self._status_job is not None:
+            try:
+                self.root.after_cancel(self._status_job)
+            except Exception:
+                pass
+            self._status_job = None
         super().hide()
         self._photos = []
         self._index = 0
         self._photo_image = None
-        self._corner_qr_image = None
-        # Invalidate any fetch still in flight for a photo we've moved away from.
         self._fetch_token += 1
+        if self._page:
+            self._page.clear_refs()
 
-    def _render(self, payload: dict):  # pragma: no cover - show() drives rendering
+    def _render(self, payload: dict):  # pragma: no cover
         self._render_current()
 
     def _advance(self):
@@ -5986,155 +6613,151 @@ class PhotoSlideshowPanel(BasePanel):
         if not self.visible or not self._photos:
             return
         if self._index + 1 >= len(self._photos):
-            # Played every photo once — hold on the last one; the overlay's
-            # own display-seconds timer (sized to exactly this pass) dismisses it.
             return
         self._index += 1
         self._render_current()
 
-    def _render_current(self):
+    def _clear_canvas_items(self):
         for item_id in list(self._item_ids):
             self.canvas.delete(item_id)
         self._item_ids.clear()
+        if self._page:
+            self._page.clear_refs()
         self._photo_image = None
-        self._corner_qr_image = None
 
-        photo_cx, photo_cy, max_w, max_h, layout = self._photo_stage_geometry()
-        muted = self.config["mutedTextColor"]
+    def _render_current(self):
+        self._clear_canvas_items()
+        page = self._ensure_page()
+        screen_w, screen_h = self._screen_size()
+        layout = page.prepare(screen_w, screen_h, mode=self._mode)
+        from src.shared_photos_page import NEUTRAL_MAT, NEUTRAL_ACCENT
+
+        page.paint_mat(NEUTRAL_MAT, screen_w, screen_h)
+        muted = self.config.get("mutedTextColor", "#94a3b8")
 
         if not self._photos:
-            self._track(
-                self.canvas.create_text(
-                    photo_cx,
-                    photo_cy,
-                    anchor="center",
-                    text="No saved photos yet — share one via QR Code → Photo first",
-                    fill=muted,
-                    font=self.shell.body_font,
-                    width=layout.content_width - 60,
-                    justify=tk.CENTER,
-                )
-            )
+            page.paint_header(mode=self._mode, index=0, total=0)
+            cx = layout.x0 + layout.page_w / 2
+            cy = (layout.stage[1] + layout.stage[3]) / 2
+            self._track(self.canvas.create_text(
+                cx, cy, anchor="center",
+                text="No saved photos yet",
+                fill=muted, font=self.shell.body_font,
+            ))
             return
 
         current = self._photos[self._index]
         url = current["url"]
         token = self._fetch_token
+        max_w = int(layout.photo_box[0])
+        max_h = int(layout.photo_box[1])
 
-        # Kick off the fetch *before* drawing chrome — a chrome glitch must
-        # never strand us on "Loading photo…" with no worker running.
         def worker():
-            image = self._fetch_photo(url, max_w, max_h)
+            image = self._fetch_photo(url, max_w * 2, max_h * 2)
             self.root.after(0, lambda: self._apply_fetched(token, image))
 
         threading.Thread(target=worker, daemon=True).start()
 
-        self._track(
-            self.canvas.create_text(
-                photo_cx,
-                photo_cy,
-                anchor="center",
-                text="Loading photo…",
-                fill=muted,
-                font=self.shell.body_font,
-            )
+        page.paint_header(
+            mode=self._mode, index=self._index, total=len(self._photos),
         )
-        try:
-            self._draw_chrome(include_scan_qr=False)
-        except Exception as error:
-            print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
-
-        if self._tick_job:
-            self.root.after_cancel(self._tick_job)
-            self._tick_job = None
-        if self._index + 1 < len(self._photos):
-            self._tick_job = self.root.after(self._seconds_per_photo * 1000, self._advance)
+        cx = layout.x0 + layout.page_w / 2
+        cy = (layout.stage[1] + layout.stage[3]) / 2
+        self._track(self.canvas.create_text(
+            cx, cy, anchor="center", text="Loading photo…",
+            fill=muted, font=self.shell.body_font,
+        ))
+        # Do not start the advance clock until the photo (and rail) are on
+        # screen — otherwise NEXT IN / the drain rail lag the real slide.
 
     def _apply_fetched(self, token: int, image):
         if token != self._fetch_token or not self.visible:
             return
-        for item_id in list(self._item_ids):
-            self.canvas.delete(item_id)
-        self._item_ids.clear()
-        self._corner_qr_image = None
+        self._clear_canvas_items()
+        page = self._ensure_page()
+        screen_w, screen_h = self._screen_size()
+        layout = page.prepare(screen_w, screen_h, mode=self._mode)
+        from src.shared_photos_page import sample_mat_accent, NEUTRAL_MAT, NEUTRAL_ACCENT
 
-        photo_cx, photo_cy, _max_w, _max_h, layout = self._photo_stage_geometry()
-        muted = self.config["mutedTextColor"]
+        muted = self.config.get("mutedTextColor", "#94a3b8")
+        current = self._photos[self._index] if self._photos else {}
+        total = len(self._photos)
+        mat, accent = sample_mat_accent(image) if image is not None else (NEUTRAL_MAT, NEUTRAL_ACCENT)
+
+        page.paint_mat(mat, screen_w, screen_h)
+        page.paint_header(mode=self._mode, index=self._index, total=total)
 
         if image is None:
-            self._track(
-                self.canvas.create_text(
-                    photo_cx,
-                    photo_cy,
-                    anchor="center",
-                    text="Could not load this photo",
-                    fill=muted,
-                    font=self.shell.body_font,
-                    width=layout.content_width - 60,
-                    justify=tk.CENTER,
-                )
-            )
+            cx = layout.x0 + layout.page_w / 2
+            cy = (layout.stage[1] + layout.stage[3]) / 2
+            self._track(self.canvas.create_text(
+                cx, cy, anchor="center", text="Could not load this photo",
+                fill=muted, font=self.shell.body_font,
+            ))
         else:
-            self._photo_image = ImageTk.PhotoImage(image)
-            self._track(self.canvas.create_image(photo_cx, photo_cy, image=self._photo_image))
+            self._photo_image = page.paint_photo(image)
 
-        try:
-            self._draw_chrome(include_scan_qr=True)
-        except Exception as error:
-            print(f"Photo slideshow chrome failed: {error}", file=sys.stderr, flush=True)
-
-    def _draw_chrome(self, *, include_scan_qr: bool = True):
-        """Draws photo meta under the title stack + a non-overlapping scan QR."""
-        if not self._photos:
-            return
-        layout = self.shell.layout
-        muted = self.config["mutedTextColor"]
-        current = self._photos[self._index]
-        total = len(self._photos)
-
-        # Centered under "Shared Photos" — never pulled up beside the title.
-        line_h = self.shell.chip_value_font.metrics("linespace")
-        center_x = layout.content_x + layout.content_width // 2
-        meta_y = layout.message_area_top + self._PHOTO_META_TOP_PAD
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                meta_y,
-                anchor="n",
-                text=f"Photo {self._index + 1} of {total}",
-                fill=muted,
-                font=self.shell.chip_value_font,
-            )
+        dwell_ms = self._seconds_per_photo * 1000
+        import time as _time
+        self._slide_started_at = _time.time()
+        left = self._seconds_per_photo
+        status = (
+            f"Dismisses in {left}s" if self._mode == "upload"
+            else f"NEXT IN {left}s"
         )
-        if current.get("uploadedAt"):
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    meta_y + line_h + 4,
-                    anchor="n",
-                    text=f"Shared {format_chip_timestamp(current['uploadedAt'])}",
-                    fill=muted,
-                    font=self.shell.chip_value_font,
-                )
-            )
+        if self._mode != "upload" and self._index + 1 >= total:
+            status = "LAST PHOTO"
 
-        if not include_scan_qr:
+        page.paint_bar(
+            mode=self._mode,
+            index=self._index,
+            total=total,
+            uploaded_at=current.get("uploadedAt"),
+            caption=current.get("caption") or "",
+            qr_url=current.get("url") or "",
+            build_qr=QrPanel._build_qr_image,
+            dwell_ms=dwell_ms if self._index + 1 < total or self._mode == "upload" else 0,
+            status_text=status,
+            accent=accent,
+        )
+        self._start_status_clock()
+        if self._tick_job:
+            try:
+                self.root.after_cancel(self._tick_job)
+            except Exception:
+                pass
+            self._tick_job = None
+        if self._mode != "upload" and self._index + 1 < total:
+            self._tick_job = self.root.after(dwell_ms, self._advance)
+
+    def _start_status_clock(self):
+        if self._status_job is not None:
+            try:
+                self.root.after_cancel(self._status_job)
+            except Exception:
+                pass
+            self._status_job = None
+        if not self._photos or not self._page:
+            return
+        if self._mode != "upload" and self._index + 1 >= len(self._photos):
             return
 
-        photo_cx, photo_cy, *_rest = self._photo_stage_geometry()
-        if self._photo_image is not None:
-            self._corner_qr_image = self._draw_scan_qr_badge(
-                current["url"],
-                self._SCAN_QR_CAPTION,
-                photo_cx=photo_cx,
-                photo_cy=photo_cy,
-                photo_w=self._photo_image.width(),
-                photo_h=self._photo_image.height(),
-            )
-        else:
-            self._corner_qr_image = self._draw_scan_qr_badge(
-                current["url"], self._SCAN_QR_CAPTION,
-            )
+        import time as _time
+
+        def tick():
+            if not self.visible or not self._page:
+                return
+            elapsed = int(_time.time() - self._slide_started_at)
+            left = max(0, self._seconds_per_photo - elapsed)
+            if self._mode == "upload":
+                text = f"Dismisses in {left}s"
+            else:
+                text = f"NEXT IN {left}s"
+            self._page.set_status(text)
+            if left > 0:
+                self._status_job = self.root.after(1000, tick)
+
+        self._status_job = self.root.after(1000, tick)
 
     @staticmethod
     def _is_ssl_failure(error) -> bool:
@@ -6178,7 +6801,9 @@ class PhotoSlideshowPanel(BasePanel):
                 else:
                     raise
             image = Image.open(io.BytesIO(data)).convert("RGB")
-            image.thumbnail((max_w, max_h), Image.LANCZOS)
+            # Soft ceiling so we don't keep multi‑MB bitmaps around; final
+            # contain+border happens in shared_photos_page.fit_photo_for_box.
+            image.thumbnail((max(max_w, 1), max(max_h, 1)), Image.LANCZOS)
             return image
         except Exception as error:
             print(f"Photo slideshow fetch failed: {error}", file=sys.stderr, flush=True)

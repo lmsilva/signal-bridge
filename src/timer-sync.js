@@ -194,11 +194,21 @@ function isCancelTrigger(trigger) {
     || String(trigger || '').startsWith('timer-cancel-voice-');
 }
 
+function isImmediateUserTimerTrigger(trigger) {
+  // Initial voice/UI command only — not the delayed followup polls that keep
+  // checking Amazon for lag. Followups must stay silent unless something
+  // actually changed (gained/lost/lifecycle), or they steal later overlays
+  // (e.g. Shared Photo Slideshow) by re-pushing the same timer list.
+  return trigger === 'show-timers'
+    || trigger === 'timer-set-voice'
+    || trigger === 'timer-cancel-voice';
+}
+
 function shouldEmitSnapshot(events, trigger) {
   if (filterNotifyEvents(events).length > 0) {
     return true;
   }
-  return isUserTimerTrigger(trigger);
+  return isImmediateUserTimerTrigger(trigger);
 }
 
 function pickPrimaryTimerEvent(events, trigger) {

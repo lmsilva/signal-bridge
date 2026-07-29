@@ -204,12 +204,20 @@ function pickPrimaryAlarmEvent(events, trigger) {
   return { kind: 'list' };
 }
 
+function isImmediateUserAlarmTrigger(trigger) {
+  // Same rule as timers: followup polls (`show-alarms-followup-…`) must not
+  // re-emit an unchanged list and interrupt a later overlay (slideshow, etc.).
+  return trigger === 'show-alarms'
+    || trigger === 'alarm-set-voice'
+    || trigger === 'alarm-cancel-voice';
+}
+
 function shouldEmitAlarmSnapshot(events, trigger) {
   const notifyEvents = (events || []).filter((entry) => ['started', 'cancelled'].includes(entry.kind));
   if (notifyEvents.length > 0) {
     return true;
   }
-  return isUserAlarmTrigger(trigger);
+  return isImmediateUserAlarmTrigger(trigger);
 }
 
 function listActiveAlarms(alarmMap) {
@@ -427,5 +435,6 @@ module.exports = {
   parseOriginalDateTimeMs,
   isActiveAlarm,
   listActiveAlarms,
+  shouldEmitAlarmSnapshot,
   DEFAULTS,
 };

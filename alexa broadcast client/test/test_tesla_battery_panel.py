@@ -6,13 +6,13 @@ from src.display_panels import TeslaBatteryPanel
 class TeslaBatteryBarHeightTests(unittest.TestCase):
     """`battery_bar_height` is a pure @staticmethod — no Tk root needed."""
 
-    def test_taller_than_percent_font_linespace(self):
-        # section_title_font linespace is typically ~36–42; old bar was 32–36.
+    def test_flat_track_is_compact(self):
+        # Percent label sits above the bar; the track itself stays thin.
         for linespace in (28, 36, 42, 48):
             for portrait in (True, False):
                 h = TeslaBatteryPanel.battery_bar_height(linespace, portrait=portrait)
-                self.assertGreaterEqual(h, linespace + 22)
-                self.assertGreaterEqual(h, 52)
+                self.assertLessEqual(h, 32)
+                self.assertGreaterEqual(h, 20)
 
     def test_portrait_floor_is_at_least_landscape(self):
         self.assertGreaterEqual(
@@ -25,12 +25,12 @@ class TeslaBatteryStatusBitsTests(unittest.TestCase):
     def _make_panel(self):
         panel = TeslaBatteryPanel.__new__(TeslaBatteryPanel)
         panel.config = {
-            "accentColor": "#38bdf8",
-            "mutedTextColor": "#94a3b8",
+            "accentColor": "#5FD0FF",
+            "mutedTextColor": "#A4ACC0",
         }
-        panel.CARD = "#101b2d"
-        panel.CARD_EDGE = "#1d2a40"
-        panel.AMBER = "#f59e0b"
+        panel.CARD = "#141F35"
+        panel.CARD_EDGE = "#264060"
+        panel.AMBER = "#F5C453"
         panel.AMBER_BG = "#3a2605"
         return panel
 

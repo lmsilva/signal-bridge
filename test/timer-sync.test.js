@@ -298,6 +298,14 @@ test('shouldEmitSnapshot ignores routine remaining-time updates', () => {
   assert.equal(shouldEmitSnapshot(events, 'timer-set-voice'), true);
 });
 
+test('shouldEmitSnapshot does not re-emit unchanged lists on followup polls', () => {
+  // Followups after "show my timers" used to push the same list again and
+  // steal later overlays (Shared Photo Slideshow).
+  assert.equal(shouldEmitSnapshot([], 'show-timers'), true);
+  assert.equal(shouldEmitSnapshot([], 'show-timers-followup-2000ms'), false);
+  assert.equal(shouldEmitSnapshot([], 'timer-set-voice-followup-5000ms'), false);
+});
+
 test('shouldEmitSnapshot notifies on timer lifecycle events', () => {
   const events = [{
     kind: 'started',
@@ -305,6 +313,7 @@ test('shouldEmitSnapshot notifies on timer lifecycle events', () => {
     timer: { amazonId: 'timer-1', remainingSec: 300 },
   }];
   assert.equal(shouldEmitSnapshot(events, 'scheduled'), true);
+  assert.equal(shouldEmitSnapshot(events, 'show-timers-followup-2000ms'), true);
 });
 
 test('pickPrimaryTimerEvent prefers cancelled on cancel-voice trigger', () => {
