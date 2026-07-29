@@ -33,7 +33,7 @@ from src.payload_utils import (
     format_timer_clock,
     format_timer_set_label,
     format_timer_ends_label,
-    format_music_clock,
+    format_music_progress_label,
     music_remaining_seconds,
     timer_display_label,
     format_alarm_time,
@@ -1896,18 +1896,21 @@ class AirQualityPanel(BasePanel):
         self._track(self.canvas.create_rectangle(
             x, y, x + w, y + h, outline=line, width=max(1, int(round(u))), fill="",
         ))
-        lab_font = ("Consolas", max(10, int(round(20 * u))))
+        # Scale type to the cell so landscape 1×5 / 3+2 stay readable, not cramped.
+        lab_u = min(20.0, max(14.0, h / u * 0.18))
+        val_u = min(38.0, max(22.0, h / u * 0.34))
+        lab_font = ("Consolas", max(10, int(round(lab_u * u))))
         val_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
-            size=max(14, int(round(38 * u))),
+            size=max(14, int(round(val_u * u))),
             weight="bold",
         )
         self._track(self.canvas.create_text(
-            x + w / 2, y + min(24 * u, h * 0.28), anchor="n",
+            x + w / 2, y + min(20 * u, h * 0.22), anchor="n",
             text=label, fill=accent, font=lab_font,
         ))
         self._track(self.canvas.create_text(
-            x + w / 2, y + h - min(24 * u, h * 0.22), anchor="s",
+            x + w / 2, y + h - min(18 * u, h * 0.18), anchor="s",
             text=value, fill=ink, font=val_font,
         ))
 
@@ -1916,17 +1919,19 @@ class AirQualityPanel(BasePanel):
             x, y + h - 1, x + w, y + h - 1, fill="#1e3050",
         ))
         cy = y + h / 2
+        name_u = min(40.0, max(22.0, h / u * 0.42))
+        score_u = min(36.0, max(20.0, h / u * 0.38))
         name_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
-            size=max(14, int(round(40 * u))),
+            size=max(12, int(round(name_u * u))),
         )
         score_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
-            size=max(14, int(round(36 * u))),
+            size=max(12, int(round(score_u * u))),
             weight="bold",
         )
-        bar_w = min(220 * u, w * 0.28)
-        bar_h = max(4.0, 10 * u)
+        bar_w = min(220 * u, w * 0.32)
+        bar_h = max(4.0, min(10 * u, h * 0.18))
         score_text = "—" if score is None else str(int(float(score)))
         score_slot = 70 * u
         display_name = name
@@ -1968,19 +1973,21 @@ class AirQualityPanel(BasePanel):
         self._track(self.canvas.create_text(
             x, y, anchor="nw", text="BY ROOM", fill=ink3, font=sec_font,
         ))
-        list_top = y + 36 * u
-        max_rows = min(len(rooms), 6)
-        row_h = max(110 * u, min(160 * u, (avail_h - 36 * u) / max(1, max_rows)))
+        list_top = y + 32 * u
+        max_rows = min(len(rooms), 8)
+        # Pack from the top — never stretch a few rooms across the whole column.
+        list_h = max(60 * u, avail_h - 32 * u)
+        row_h = min(112 * u, max(72 * u, list_h / max(1, max_rows)))
         for index, (name, score, row_color) in enumerate(rooms[:max_rows]):
             self._draw_room_row(
                 x, list_top + index * row_h, w, row_h,
                 name, score, row_color or color_fallback, ink, track, u,
             )
 
-    def _draw_metrics_row(self, x, y, width, values, *, accent, ink, line, u) -> float:
-        gap = 20 * u
+    def _draw_metrics_row(self, x, y, width, values, *, accent, ink, line, u, cell_h: float | None = None) -> float:
+        gap = 16 * u
         cell_w = (width - gap * 4) / 5
-        met_h = 120 * u
+        met_h = cell_h if cell_h is not None else 120 * u
         for index, (key, label) in enumerate(self.METRICS):
             self._draw_metric_cell(
                 x + index * (cell_w + gap), y, cell_w, met_h,
@@ -1989,24 +1996,37 @@ class AirQualityPanel(BasePanel):
             )
         return y + met_h
 
-    def _draw_metrics_grid(self, x, y, width, values, *, accent, ink, line, u) -> float:
-        """Landscape 2×3 grid (5 metrics + empty sixth)."""
-        gap = 24 * u
-        cell_w = (width - gap) / 2
-        cell_h = 150 * u
-        for index, (key, label) in enumerate(self.METRICS):
-            row, col = divmod(index, 2)
+    def _draw_metrics_grid(self, x, y, width, height, values, *, accent, ink, line, u) -> float:
+        """Landscape metrics — one tight row of 5, or 3+2 wrap (no empty cell)."""
+        gap = 16 * u
+        # Prefer a single row when each cell has room for label + value.
+        if width / 5 >= 150 * u:
+            cell_h = min(130 * u, max(96 * u, height * 0.28))
+            return self._draw_metrics_row(
+                x, y, width, values,
+                accent=accent, ink=ink, line=line, u=u, cell_h=cell_h,
+            )
+        # 3 on top, 2 below — both rows use the same cell width (⅓), bottom centered.
+        cell_w = (width - gap * 2) / 3
+        cell_h = min(120 * u, max(88 * u, (height * 0.42 - gap) / 2))
+        top = self.METRICS[:3]
+        bottom = self.METRICS[3:]
+        for index, (key, label) in enumerate(top):
             self._draw_metric_cell(
-                x + col * (cell_w + gap),
-                y + row * (cell_h + gap),
-                cell_w,
-                cell_h,
-                label,
-                self._metric_text(key, values.get(key)),
+                x + index * (cell_w + gap), y, cell_w, cell_h,
+                label, self._metric_text(key, values.get(key)),
                 accent, ink, line, u,
             )
-        # 5 metrics → rows 0,0 / 0,1 / 1,0 / 1,1 / 2,0
-        return y + 3 * (cell_h + gap)
+        bottom_y = y + cell_h + gap
+        bottom_span = len(bottom) * cell_w + gap * (len(bottom) - 1)
+        bottom_x = x + max(0, (width - bottom_span) / 2)
+        for index, (key, label) in enumerate(bottom):
+            self._draw_metric_cell(
+                bottom_x + index * (cell_w + gap), bottom_y, cell_w, cell_h,
+                label, self._metric_text(key, values.get(key)),
+                accent, ink, line, u,
+            )
+        return bottom_y + cell_h
 
     def _render(self, payload: dict):
         from src.design_system import ACCENT, INK, INK_2, INK_3, LINE, RING_TRACK
@@ -2096,49 +2116,59 @@ class AirQualityPanel(BasePanel):
         y0 = chrome.content_top
         width = chrome.content_w
         height = chrome.content_bottom - chrome.content_top
-        gap = 24 * u
-        col_w = (width - gap) / 2
+        gap = 36 * u
+        # Wider right column — metrics + rooms need the real estate.
+        left_w = width * 0.42
+        right_w = width - left_w - gap
+        right_x = x0 + left_w + gap
 
-        diameter = min(560 * u, col_w * 0.85, height - 160 * u)
-        block_h = diameter + 120 * u
+        diameter = min(560 * u, left_w * 0.92, height - 140 * u)
+        block_h = diameter + 110 * u
         block_top = y0 + max(0, (height - block_h) / 2)
-        cx = x0 + col_w / 2
+        cx = x0 + left_w / 2
         ring_cy = block_top + diameter / 2
         rating_font = self._draw_score_ring(cx, ring_cy, diameter, score, color, track, u)
         self._track(self.canvas.create_text(
             cx, ring_cy + 0.18 * diameter, anchor="n",
             text=self.rating_word(band), fill=color, font=rating_font,
         ))
-        scale_y = ring_cy + diameter / 2 + 36 * u
-        self._draw_band_scale(x0, scale_y, col_w, band, color, ink3, u)
+        scale_y = ring_cy + diameter / 2 + 28 * u
+        self._draw_band_scale(x0, scale_y, left_w, band, color, ink3, u)
 
-        right_x = x0 + col_w + gap
+        metrics_budget = min(height * 0.38, 280 * u)
         after_metrics = self._draw_metrics_grid(
-            right_x, y0, col_w, values,
+            right_x, y0, right_w, metrics_budget, values,
             accent=accent, ink=ink, line=line, u=u,
         )
+        rooms_top = after_metrics + 28 * u
         self._draw_rooms_block(
-            right_x, after_metrics, col_w,
-            chrome.content_bottom - after_metrics,
+            right_x, rooms_top, right_w,
+            chrome.content_bottom - rooms_top,
             monitors, color, ink, ink3, track, u,
         )
 
 class TimerPanel(BasePanel):
-    """Timers — count ladder (design-system §2.2 / §3.3 + HTML mockup).
+    """Timers — count ladder (design-system §2.2 / HTML high-count modes).
 
-    1–4: rings (size shrinks with count). 5+: soonest keeps a ring; rest are rows.
-    Always soonest-first. Only the next-to-fire ring uses accent (unless warn/alert).
+    1–4: rings (size shrinks with count).
+    5–9 (Mode B): soonest keeps a ring; rest are THEN rows (106–160 tall).
+    10+ (Mode C): numeric strip + dense 3-col grid; timers >1h collapse to MORE.
+    Always soonest-first. Only the next-to-fire uses accent (unless warn/alert).
     """
 
     WARN_SEC = 60
     ALERT_SEC = 10
+    HERO_LIST_MAX = 9  # last count that keeps the hero ring (Mode B)
+    COLLAPSE_SEC = 3600  # Mode C: collapse timers more than an hour out
     # Landscape ring Ø (design px). Portrait uses §2.2 sizes.
     LANDSCAPE_RING = {1: 760, 2: 700, 3: 560, 4: 420}
     PORTRAIT_RING = {1: 860, 2: 680, 3: 440, 4: 440}
     HERO_RING_L = 560
     HERO_RING_P = 420
-    MAX_THEN_ROWS_L = 5
-    MAX_THEN_ROWS_P = 8
+    MODE_B_ROW_MIN = 106
+    MODE_B_ROW_MAX = 160
+    MODE_C_STRIP_H = 180
+    MODE_C_ROW_H = 84
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
@@ -2214,6 +2244,46 @@ class TimerPanel(BasePanel):
         """Design-px ring diameter for an all-rings layout (count 1–4)."""
         table = cls.PORTRAIT_RING if portrait else cls.LANDSCAPE_RING
         return float(table.get(max(1, min(4, count)), table[4]))
+
+    @classmethod
+    def layout_mode(cls, count: int) -> str:
+        """`rings` | `hero` (Mode B, ≤9) | `dense` (Mode C, 10+)."""
+        if count <= 4:
+            return "rings"
+        if count <= cls.HERO_LIST_MAX:
+            return "hero"
+        return "dense"
+
+    @classmethod
+    def remaining_now(cls, timer: dict) -> int:
+        deadline = cls._deadline_for_timer(timer)
+        if deadline is None:
+            return max(0, int(timer.get("remainingSec") or 0))
+        return max(0, int(math.ceil(deadline - time.time())))
+
+    @classmethod
+    def split_dense_timers(cls, timers: list[dict]) -> tuple[dict, list[dict], list[dict]]:
+        """Soonest + under-1h rest + over-1h rest (Mode C collapse rule)."""
+        hero = timers[0]
+        near: list[dict] = []
+        far: list[dict] = []
+        for timer in timers[1:]:
+            if cls.remaining_now(timer) > cls.COLLAPSE_SEC:
+                far.append(timer)
+            else:
+                near.append(timer)
+        return hero, near, far
+
+    @staticmethod
+    def format_more_collapse(count: int, next_timer: dict | None) -> str:
+        """`+8 MORE · NEXT AT 10:47 PM`."""
+        when = ""
+        if next_timer:
+            ends = format_timer_ends_label(next_timer)
+            when = ends[5:] if ends.startswith("Ends ") else ends
+        if when:
+            return f"+{count} MORE · NEXT AT {when}"
+        return f"+{count} MORE"
 
     def _arc_color(self, remaining: int, role: str) -> str:
         from src.design_system import ACCENT, WARN, ALERT, MUTE_ARC
@@ -2382,6 +2452,15 @@ class TimerPanel(BasePanel):
         self._row_bar_items.append((None, 0, 0, 0, 0, duration))
         self._color_roles.append(role)
 
+    @staticmethod
+    def _row_display_name(timer: dict) -> str:
+        """Title-case row name (HTML: `Pasta` / `10 min`)."""
+        named = timer_label_name(timer)
+        if named:
+            return named
+        chip = timer_display_label(timer)
+        return chip.title() if chip != "TIMER" else chip
+
     def _paint_then_row(
         self,
         timer: dict,
@@ -2397,19 +2476,21 @@ class TimerPanel(BasePanel):
         ink3: str,
         track: str,
     ):
+        """Mode B THEN row — clock · name · ends + drain bar (106–160 tall)."""
         deadline = self._deadline_for_timer(timer)
         remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
         duration = float(timer.get("durationSec") or remaining or 1)
         frac = remaining / duration if duration > 0 else 0.0
         color = self._arc_color(remaining, role)
-        time_font = ("Consolas", max(14, int(round(72 * u))))
+        # Mockup at the Mode B ceiling (9): 58 / 30 / 22 over 106-tall rows.
+        time_font = ("Consolas", max(12, int(round(58 * u))))
         name_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
-            size=max(12, int(round(34 * u))),
+            size=max(11, int(round(30 * u))),
         )
-        end_font = ("Consolas", max(11, int(round(24 * u))))
+        end_font = ("Consolas", max(11, int(round(22 * u))))
         cy = y + h / 2
-        time_col = 240 * u
+        time_col = 220 * u
         bar_h = max(2.0, 4 * u)
         bar_y1 = y + h
         bar_y0 = bar_y1 - bar_h
@@ -2425,13 +2506,10 @@ class TimerPanel(BasePanel):
             x, cy, anchor="w", text=format_timer_clock(remaining),
             fill=color, font=time_font,
         ))
-        name = timer_display_label(timer)
-        # Title case for rows (HTML: "Pasta") — keep named as given case-ish.
-        named = timer_label_name(timer)
-        display_name = named if named else name.title() if name != "TIMER" else name
-        name_x = x + time_col + 20 * u
+        display_name = self._row_display_name(timer)
+        name_x = x + time_col + 18 * u
         ends = self._ends_text(timer, short=True)
-        end_w = tkfont.Font(family="Consolas", size=max(11, int(round(24 * u)))).measure(ends or "")
+        end_w = tkfont.Font(family="Consolas", size=max(11, int(round(22 * u)))).measure(ends or "")
         name_right = x + w - end_w - 16 * u
         while name_font.measure(display_name) > max(40, name_right - name_x) and len(display_name) > 4:
             display_name = display_name[:-2].rstrip() + "…"
@@ -2449,6 +2527,123 @@ class TimerPanel(BasePanel):
         self._ring_arc_items.append(-1)  # no ring arc for list rows
         self._row_bar_items.append((fill_id, x, bar_y0, x + w, bar_y1, duration))
         self._color_roles.append(role)
+
+    def _paint_dense_row(
+        self,
+        timer: dict,
+        *,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        u: float,
+        role: str,
+        ink2: str,
+        track: str,
+    ):
+        """Mode C compact cell — clock + name + thin drain bar (84 tall)."""
+        deadline = self._deadline_for_timer(timer)
+        remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
+        duration = float(timer.get("durationSec") or remaining or 1)
+        frac = remaining / duration if duration > 0 else 0.0
+        color = self._arc_color(remaining, role)
+        time_font = ("Consolas", max(11, int(round(42 * u))))
+        name_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(11, int(round(26 * u))),
+        )
+        cy = y + h / 2
+        time_col = 150 * u
+        bar_h = max(2.0, 3 * u)
+        bar_y1 = y + h
+        bar_y0 = bar_y1 - bar_h
+
+        self._track(self.canvas.create_rectangle(
+            x, bar_y0, x + w, bar_y1, fill=track, outline="",
+        ))
+        fill_id = self._track(self.canvas.create_rectangle(
+            x, bar_y0, x + w * frac, bar_y1, fill=color, outline="",
+        ))
+        remaining_id = self._track(self.canvas.create_text(
+            x, cy, anchor="w", text=format_timer_clock(remaining),
+            fill=color, font=time_font,
+        ))
+        display_name = self._row_display_name(timer)
+        name_x = x + time_col + 14 * u
+        while name_font.measure(display_name) > max(30, x + w - name_x) and len(display_name) > 4:
+            display_name = display_name[:-2].rstrip() + "…"
+        self._track(self.canvas.create_text(
+            name_x, cy, anchor="w", text=display_name, fill=ink2, font=name_font,
+        ))
+
+        self._deadlines.append(deadline)
+        self._durations.append(duration)
+        self._countdown_items.append(remaining_id)
+        self._ring_arc_items.append(-1)
+        self._row_bar_items.append((fill_id, x, bar_y0, x + w, bar_y1, duration))
+        self._color_roles.append(role)
+
+    def _paint_strip(
+        self,
+        timer: dict,
+        *,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        u: float,
+        ink2: str,
+        ink3: str,
+    ):
+        """Mode C soonest strip — large clock + name + ENDS (no ring)."""
+        deadline = self._deadline_for_timer(timer)
+        remaining = max(0, int(math.ceil((deadline or time.time()) - time.time())))
+        duration = float(timer.get("durationSec") or remaining or 1)
+        color = self._arc_color(remaining, "soonest")
+        clock_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(20, int(round(120 * u))),
+            weight="bold",
+        )
+        name_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(13, int(round(40 * u))),
+        )
+        end_font = ("Consolas", max(11, int(round(24 * u))))
+        cy = y + h / 2
+        clock = format_timer_clock(remaining)
+        remaining_id = self._track(self.canvas.create_text(
+            x, cy, anchor="w", text=clock, fill=color, font=clock_font,
+        ))
+        clock_w = clock_font.measure(clock)
+        name = self._row_display_name(timer)
+        name_x = x + clock_w + 28 * u
+        ends = self._ends_text(timer, short=True)
+        ends_label = f"ENDS {ends}" if ends else ""
+        end_w = tkfont.Font(family="Consolas", size=max(11, int(round(24 * u)))).measure(ends_label)
+        name_right = x + w - end_w - 28 * u
+        while name_font.measure(name) > max(40, name_right - name_x) and len(name) > 4:
+            name = name[:-2].rstrip() + "…"
+        self._track(self.canvas.create_text(
+            name_x, cy, anchor="w", text=name, fill=ink2, font=name_font,
+        ))
+        if ends_label:
+            self._track(self.canvas.create_text(
+                x + w, cy, anchor="e", text=ends_label, fill=ink3, font=end_font,
+            ))
+        # Hairline under the strip (mockup border-bottom).
+        from src.design_system import LINE
+        self._track(self.canvas.create_rectangle(
+            x, y + h - max(1.0, 1 * u), x + w, y + h,
+            fill=LINE, outline="",
+        ))
+
+        self._deadlines.append(deadline)
+        self._durations.append(duration)
+        self._countdown_items.append(remaining_id)
+        self._ring_arc_items.append(-1)
+        self._row_bar_items.append((None, 0, 0, 0, 0, duration))
+        self._color_roles.append("soonest")
 
     def _render(self, payload: dict):
         from src.design_system import INK, INK_2, INK_3, ALERT, RING_TRACK
@@ -2486,8 +2681,14 @@ class TimerPanel(BasePanel):
             or (t.get("durationSec") or 0) >= 3600
             for t in timers
         )
-
-        if len(timers) >= 5:
+        mode = self.layout_mode(len(timers))
+        if mode == "dense":
+            self._render_dense(
+                timers, chrome,
+                ink2=INK_2, ink3=INK_3, track=RING_TRACK,
+            )
+            return
+        if mode == "hero":
             self._render_hero_rows(
                 timers, chrome, long_clock=long_clock,
                 ink=INK, ink2=INK_2, ink3=INK_3, track=RING_TRACK,
@@ -2540,6 +2741,7 @@ class TimerPanel(BasePanel):
             )
 
     def _render_hero_rows(self, timers, chrome, *, long_clock, ink, ink2, ink3, track):
+        """Mode B (5–9): hero ring + THEN rows compressed 106–160 tall."""
         u = chrome.u
         zone_x = chrome.content_x
         zone_y = chrome.content_top
@@ -2547,7 +2749,6 @@ class TimerPanel(BasePanel):
         zone_h = chrome.content_bottom - chrome.content_top
         hero = timers[0]
         rest = timers[1:]
-        max_rows = self.MAX_THEN_ROWS_L if not chrome.portrait else self.MAX_THEN_ROWS_P
 
         if chrome.portrait:
             diameter = min(self.HERO_RING_P * u, zone_w * 0.7, zone_h * 0.38)
@@ -2596,16 +2797,17 @@ class TimerPanel(BasePanel):
             list_x, list_top, anchor="nw", text="THEN", fill=ink3, font=sec_font,
         ))
         rows_top = list_top + 36 * u
-        avail = max(110 * u, list_h - 36 * u)
-        show = rest[:max_rows]
-        overflow = len(rest) - len(show)
-        row_count = len(show) + (1 if overflow > 0 else 0)
-        if row_count <= 0:
+        avail = max(self.MODE_B_ROW_MIN * u, list_h - 36 * u)
+        if not rest:
             return
-        # clamp(avail / n, 110, 160) in design px → screen via u.
-        row_h = max(110 * u, min(160 * u, avail / row_count))
+        # Mode B shows every remaining timer (≤8 THEN rows at count 9).
+        # clamp(avail / n, 106, 160) design px.
+        row_h = max(
+            self.MODE_B_ROW_MIN * u,
+            min(self.MODE_B_ROW_MAX * u, avail / len(rest)),
+        )
 
-        for index, timer in enumerate(show):
+        for index, timer in enumerate(rest):
             self._paint_then_row(
                 timer,
                 x=list_x,
@@ -2619,14 +2821,75 @@ class TimerPanel(BasePanel):
                 ink3=ink3,
                 track=track,
             )
-        if overflow > 0:
+
+    def _render_dense(self, timers, chrome, *, ink2, ink3, track):
+        """Mode C (10+): strip + 3-col grid; collapse timers >1h (and space overflow)."""
+        u = chrome.u
+        zone_x = chrome.content_x
+        zone_y = chrome.content_top
+        zone_w = chrome.content_w
+        zone_h = chrome.content_bottom - chrome.content_top
+        hero, near, far = self.split_dense_timers(timers)
+
+        strip_h = min(self.MODE_C_STRIP_H * u, zone_h * 0.28)
+        self._paint_strip(
+            hero, x=zone_x, y=zone_y, w=zone_w, h=strip_h, u=u,
+            ink2=ink2, ink3=ink3,
+        )
+
+        grid_top = zone_y + strip_h + 20 * u
+        grid_h = max(self.MODE_C_ROW_H * u, chrome.content_bottom - grid_top)
+        cols = 2 if chrome.portrait else 3
+        gap = 24 * u
+        col_w = (zone_w - gap * (cols - 1)) / cols
+        row_h = self.MODE_C_ROW_H * u
+        rows_fit = max(1, int(grid_h // row_h))
+        slots = cols * rows_fit
+
+        collapsed = list(far)
+        show = list(near)
+        # Reserve last slot for the MORE row when anything is collapsed or overflows.
+        if collapsed or len(show) > slots:
+            show_slots = max(0, slots - 1)
+        else:
+            show_slots = slots
+        if len(show) > show_slots:
+            overflow = show[show_slots:]
+            show = show[:show_slots]
+            collapsed = overflow + collapsed
+
+        for index, timer in enumerate(show):
+            col = index // rows_fit
+            row = index % rows_fit
+            if col >= cols:
+                break
+            self._paint_dense_row(
+                timer,
+                x=zone_x + col * (col_w + gap),
+                y=grid_top + row * row_h,
+                w=col_w,
+                h=row_h,
+                u=u,
+                role="muted",
+                ink2=ink2,
+                track=track,
+            )
+
+        if collapsed:
+            # Place MORE in the next free cell (mockup: last column bottom).
+            more_index = len(show)
+            col = more_index // rows_fit
+            row = more_index % rows_fit
+            if col >= cols:
+                col, row = cols - 1, rows_fit - 1
+            label = self.format_more_collapse(len(collapsed), collapsed[0])
             self._track(self.canvas.create_text(
-                list_x,
-                rows_top + len(show) * row_h + row_h / 2,
+                zone_x + col * (col_w + gap),
+                grid_top + row * row_h + row_h / 2,
                 anchor="w",
-                text=f"+{overflow} more",
+                text=label,
                 fill=ink3,
-                font=("Consolas", max(12, int(round(28 * u)))),
+                font=("Consolas", max(11, int(round(26 * u)))),
             ))
 
     def _render_fired(self, timers, chrome, ink, alert, ink2):
@@ -2782,7 +3045,7 @@ class AlarmPanel(BasePanel):
     def _paint_next_hero(self, alarm, x, y, w, h, accent, ink, ink2, ink3, u):
         trigger = resolve_alarm_trigger_time(alarm)
         clock, ampm = format_alarm_clock_parts(trigger)
-        label = alarm_title(alarm)
+        primary, place = self._alarm_name_and_place(alarm)
         until = format_alarm_in_compact(alarm)
         sec_font = ("Consolas", max(11, int(round(22 * u))))
         hero_font = tkfont.Font(
@@ -2798,6 +3061,10 @@ class AlarmPanel(BasePanel):
         lab_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
             size=max(13, int(round(44 * u))),
+        )
+        place_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(12, int(round(32 * u))),
         )
         in_font = ("Consolas", max(11, int(round(26 * u))))
 
@@ -2817,10 +3084,18 @@ class AlarmPanel(BasePanel):
         ))
         cursor += hero_font.metrics("linespace") + 22 * u
         self._track(self.canvas.create_text(
-            x, cursor, anchor="nw", text=label, fill=ink, font=lab_font,
+            x, cursor, anchor="nw", text=primary, fill=ink, font=lab_font,
         ))
+        if place:
+            cursor += lab_font.metrics("linespace") + 8 * u
+            self._track(self.canvas.create_text(
+                x, cursor, anchor="nw", text=place, fill=ink2, font=place_font,
+            ))
+            last_font = place_font
+        else:
+            last_font = lab_font
         if until:
-            cursor += lab_font.metrics("linespace") + 14 * u
+            cursor += last_font.metrics("linespace") + 14 * u
             self._track(self.canvas.create_text(
                 x, cursor, anchor="nw", text=until, fill=accent, font=in_font,
             ))
@@ -2829,13 +3104,17 @@ class AlarmPanel(BasePanel):
         off = str(alarm.get("status") or "").upper() == "OFF"
         trigger = resolve_alarm_trigger_time(alarm)
         clock, ampm = format_alarm_clock_parts(trigger)
-        name = alarm_title(alarm)
+        primary, place = self._alarm_name_and_place(alarm)
         chip = format_alarm_recurrence_chip(alarm)
         time_font = ("Consolas", max(13, int(round(46 * u))))
         am_font = ("Consolas", max(11, int(round(26 * u))))
         name_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
             size=max(12, int(round(34 * u))),
+        )
+        place_font = tkfont.Font(
+            family=self.config.get("titleFontFamily", "Segoe UI"),
+            size=max(10, int(round(24 * u))),
         )
         chip_font = ("Consolas", max(10, int(round(21 * u))))
 
@@ -2846,6 +3125,7 @@ class AlarmPanel(BasePanel):
         cy = y + h / 2
         fill_time = ink3 if off else ink
         fill_name = ink3 if off else ink2
+        fill_place = ink3 if off else ink3
         fill_chip = ink3 if off else accent
         chip_border = "#3a5070" if off else "#4a78a0"
 
@@ -2865,12 +3145,29 @@ class AlarmPanel(BasePanel):
         chip_x1 = x + w
         chip_x0 = chip_x1 - chip_w
         name_right = chip_x0 - 16 * u
-        display_name = name
-        while name_font.measure(display_name) > max(40, name_right - name_x) and len(display_name) > 4:
-            display_name = display_name[:-2].rstrip() + "…"
-        self._track(self.canvas.create_text(
-            name_x, cy, anchor="w", text=display_name, fill=fill_name, font=name_font,
-        ))
+        max_name_w = max(40, name_right - name_x)
+
+        def _ellipsize(text: str, font) -> str:
+            display = text
+            while font.measure(display) > max_name_w and len(display) > 4:
+                display = display[:-2].rstrip() + "…"
+            return display
+
+        if place:
+            name_y = cy - (name_font.metrics("linespace") + place_font.metrics("linespace")) / 2
+            self._track(self.canvas.create_text(
+                name_x, name_y, anchor="nw",
+                text=_ellipsize(primary, name_font), fill=fill_name, font=name_font,
+            ))
+            self._track(self.canvas.create_text(
+                name_x, name_y + name_font.metrics("linespace") + 2 * u, anchor="nw",
+                text=_ellipsize(place, place_font), fill=fill_place, font=place_font,
+            ))
+        else:
+            self._track(self.canvas.create_text(
+                name_x, cy, anchor="w",
+                text=_ellipsize(primary, name_font), fill=fill_name, font=name_font,
+            ))
         self._track(self.canvas.create_rectangle(
             chip_x0, cy - chip_h / 2, chip_x1, cy + chip_h / 2,
             outline=chip_border, width=max(1, int(round(u))), fill="",
@@ -2879,6 +3176,18 @@ class AlarmPanel(BasePanel):
             (chip_x0 + chip_x1) / 2, cy, anchor="center", text=chip,
             fill=fill_chip, font=chip_font,
         ))
+
+    @classmethod
+    def _alarm_name_and_place(cls, alarm: dict | None) -> tuple[str, str]:
+        """Return (primary label, device place line). Place is empty when unknown."""
+        place = cls._format_device_name((alarm or {}).get("device"))
+        if place == "Unknown device":
+            place = ""
+        title = alarm_title(alarm)
+        # Unlabeled alarms: promote the Echo name so the row isn't just "Alarm".
+        if title == "Alarm" and place:
+            return place, ""
+        return title, place
 
     @staticmethod
     def _format_device_name(device: str | None) -> str:
@@ -2890,9 +3199,30 @@ class AlarmPanel(BasePanel):
 
 
 class ShoppingListPanel(BasePanel):
-    """Shopping list — two large landscape columns (no cards)."""
+    """Shopping list — large type for short lists; denser grid for 20–30+.
 
-    PAGE_SECONDS = 15
+    Picks the largest (cols, font, row) that fits the whole list when possible;
+    otherwise uses the densest layout and pages every PAGE_SECONDS.
+    """
+
+    PAGE_SECONDS = 12
+    # (cols, font_u, row_u) — tried largest-first until everything fits.
+    LANDSCAPE_DENSITY = (
+        (2, 58, 170),
+        (2, 46, 128),
+        (2, 38, 100),
+        (3, 34, 88),
+        (3, 28, 72),
+        (3, 24, 58),
+    )
+    PORTRAIT_DENSITY = (
+        (1, 44, 120),
+        (1, 36, 92),
+        (1, 30, 74),
+        (2, 28, 70),
+        (2, 24, 58),
+        (2, 20, 48),
+    )
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
@@ -2901,6 +3231,9 @@ class ShoppingListPanel(BasePanel):
         self._page = 0
         self._page_size = 10
         self._added_item = None
+        self._layout_cols = 2
+        self._layout_font_u = 58
+        self._layout_row_u = 170
 
     def show(self, payload: dict):
         self.hide()
@@ -2908,7 +3241,7 @@ class ShoppingListPanel(BasePanel):
         self._items = list(payload.get("items") or [])
         self._added_item = (payload.get("addedItem") or "").strip().lower() or None
         self._page = 0
-        self._page_size = self._compute_page_size()
+        self._apply_density()
         self._render_page()
         if self._page_count() > 1:
             self._tick_job = self.root.after(self.PAGE_SECONDS * 1000, self._next_page)
@@ -2924,16 +3257,46 @@ class ShoppingListPanel(BasePanel):
         h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
         return w, h
 
-    def _compute_page_size(self) -> int:
+    @classmethod
+    def pick_density(
+        cls,
+        count: int,
+        *,
+        portrait: bool,
+        zone_h: float,
+        u: float,
+        reserve_cue: float = 0.0,
+    ) -> tuple[int, float, float, int]:
+        """Return (cols, font_u, row_u, page_cap) — largest layout that fits, else densest."""
+        ladder = cls.PORTRAIT_DENSITY if portrait else cls.LANDSCAPE_DENSITY
+        usable = max(80.0, zone_h - reserve_cue)
+        best = None
+        for cols, font_u, row_u in ladder:
+            rows = max(1, int(usable / max(1.0, row_u * u)))
+            cap = rows * cols
+            best = (cols, font_u, row_u, cap)
+            if count <= cap:
+                return best
+        return best or (2, 24, 58, max(1, count))
+
+    def _apply_density(self):
         from src.design_system import page_chrome
         sw, sh = self._screen()
         chrome = page_chrome(sw, sh, timed=True)
-        u = chrome.u
-        row_h = 170 * u if not chrome.portrait else 120 * u
         zone_h = chrome.content_bottom - chrome.content_top
-        cols = 2 if not chrome.portrait else 1
-        rows = max(3, int(zone_h / max(1, row_h)))
-        return rows * cols
+        # Leave a little room for the page cue when we might need paging.
+        reserve = 28 * chrome.u if len(self._items) > 12 else 0
+        cols, font_u, row_u, cap = self.pick_density(
+            len(self._items),
+            portrait=chrome.portrait,
+            zone_h=zone_h,
+            u=chrome.u,
+            reserve_cue=reserve,
+        )
+        self._layout_cols = cols
+        self._layout_font_u = font_u
+        self._layout_row_u = row_u
+        self._page_size = max(1, cap)
 
     def _page_count(self) -> int:
         if not self._items:
@@ -2990,21 +3353,23 @@ class ShoppingListPanel(BasePanel):
             ))
             return
 
-        cols = 1 if chrome.portrait else 2
-        gap = 24 * u
+        cols = max(1, self._layout_cols)
+        gap = 20 * u if cols >= 3 else 24 * u
         col_w = (width - gap * (cols - 1)) / cols
-        row_h = 170 * u if not chrome.portrait else 120 * u
-        rows_per_col = max(1, int(height / max(1, row_h)))
-        page_cap = rows_per_col * cols
-        start = self._page * page_cap
-        page_items = self._items[start : start + page_cap]
+        pages = self._page_count()
+        cue_reserve = 28 * u if pages > 1 else 0
+        rows_per_col = max(1, math.ceil(self._page_size / cols))
+        usable_h = max(80.0, height - cue_reserve)
+        row_h = min(self._layout_row_u * u * 1.12, usable_h / rows_per_col)
+        start = self._page * self._page_size
+        page_items = self._items[start : start + self._page_size]
 
         item_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
-            size=max(13, int(round((58 if not chrome.portrait else 44) * u))),
+            size=max(12, int(round(self._layout_font_u * u))),
         )
 
-        # Split into columns top-to-bottom (left then right).
+        # Fill column-major (top→bottom, left→right) so short lists stay left-heavy.
         per_col = rows_per_col
         for col in range(cols):
             col_items = page_items[col * per_col : (col + 1) * per_col]
@@ -3030,9 +3395,7 @@ class ShoppingListPanel(BasePanel):
                     font=item_font,
                 ))
 
-        pages = self._page_count()
         if pages > 1:
-            # Small page cue above the dismiss footer.
             cue = f"{self._page + 1} / {pages}"
             self._track(self.canvas.create_text(
                 x0 + width / 2, chrome.content_bottom - 8 * u, anchor="s",
@@ -3160,15 +3523,10 @@ class MusicPanel(BasePanel):
         )
 
     def _progress_label(self, remaining: int | None) -> str:
-        if self._media_length_sec is None:
-            return ""
-        total = format_music_clock(self._media_length_sec)
-        if remaining is None:
-            return total
-        return f"{format_music_clock(remaining)} left · {total}"
+        return format_music_progress_label(self._media_length_sec, remaining)
 
     def _draw_progress_block(self, x0, y, width, *, accent, muted) -> int:
-        """Progress rail + `1:23 left · 3:45`. Returns height used."""
+        """Progress rail + `Length 3m49s - 1m37s left`. Returns height used."""
         if self._media_length_sec is None:
             return 0
         remaining = self._progress_remaining()
@@ -3553,104 +3911,119 @@ class TeslaBatteryPanel(BasePanel):
         self._photo = None
 
     def _render(self, payload: dict):
-        layout = self.shell.layout
-        x = layout.content_x
-        width = layout.content_width
-        y = layout.message_area_top
-        bottom = layout.message_area_bottom
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        accent = self.config.get("accentColor", "#38bdf8")
-        chip = self.config.get("chipBackground", "#141a24")
-        center_x = x + width // 2
+        from src.design_system import ACCENT, ALERT, GOOD, WARN, page_chrome
+        from src.page_header import paint_page_header
 
+        screen_w, screen_h = int(self.shell.screen_w), int(self.shell.screen_h)
+        chrome = page_chrome(screen_w, screen_h, timed=True)
         battery = payload.get("battery") or {}
         percent = battery.get("percent")
         if percent is None:
             percent = parse_spoken_battery_percent(payload.get("spokenResponse"))
-        model = battery.get("model") or "Model Y"
+        value = None if percent is None else max(0, min(100, int(round(float(percent)))))
+        model = str(battery.get("model") or "Model Y")
         status = str(battery.get("status") or "ok")
-        error_text = battery.get("error")
-        limit_reset = format_limit_reset_time(battery.get("limitResetAt"))
-        charging_label = battery.get("chargingLabel") or battery.get("chargingState")
         stale = bool(battery.get("stale"))
-        is_error = not stale and (status not in ("ok", "") or (percent is None and error_text))
-
-        percent_text = format_battery_percent(percent)
-        if is_error and error_text:
-            percent_text = str(error_text)
-        percent_value = None if percent is None else max(0, min(100, int(round(float(percent)))))
-        bar_color = battery_level_color(percent_value)
-        if is_error:
-            bar_color = "#f59e0b" if status == "rate_limited" else "#ef4444"
-        headline_color = "#ffffff" if percent_value is not None and not is_error else (
-            "#f59e0b" if status == "rate_limited" else "#ef4444" if is_error else text
+        is_error = not stale and (status not in ("ok", "") or (value is None and battery.get("error")))
+        updated = payload.get("timestamp") or battery.get("cachedAt") or battery.get("fetchedAt") or ""
+        paint_page_header(
+            self.canvas, screen_w=screen_w, screen_h=screen_h, pill="Tesla Battery",
+            left_label="Vehicle", left_value=model, right_label="Updated",
+            right_value=format_chip_timestamp(updated).split("·")[-1].strip() if updated else "",
+            track=self._track,
         )
-
-        status_bits = self._status_bits(battery, stale, limit_reset, charging_label, is_error)
-        title_font = self.shell.section_title_font
-        body_font = self.shell.body_font
-        label_font = self.shell.forecast_label_font
-        # Percent sits above a flat track (§1.10) — reserve headline + labels + bar.
-        bar_height = self.battery_bar_height(
-            title_font.metrics("linespace"), portrait=layout.portrait,
+        x, y, w, bottom = chrome.content_x, chrome.content_top, chrome.content_w, chrome.content_bottom
+        bits = self._status_bits(
+            battery, stale, format_limit_reset_time(battery.get("limitResetAt")),
+            "",  # charging shown as chip in specs, not banner body
+            is_error,
         )
-        bar_gap = 18 if layout.portrait else 12
-        footer_h = title_font.metrics("linespace") + 6 + body_font.metrics("linespace")
-        status_h = self._status_block_height(status_bits, width - 80)
-        bar_block_h = (
-            title_font.metrics("linespace") + 8
-            + label_font.metrics("linespace") + 6
-            + bar_height + bar_gap
-        )
-
-        if layout.portrait:
-            self._render_stack(
-                x=x,
-                width=width,
-                top=y,
-                bottom=bottom,
-                center_x=center_x,
-                accent=accent,
-                chip=chip,
-                muted=muted,
-                text=text,
-                model=model,
-                percent_text=percent_text,
-                percent_value=percent_value,
-                bar_color=bar_color,
-                headline_color=headline_color,
-                status_bits=status_bits,
-                bar_height=bar_height,
-                bar_gap=bar_gap,
-                bar_block_h=bar_block_h,
-                status_h=status_h,
-                footer_h=footer_h,
-                image_frac=0.62,
-                image_max=self.IMAGE_MAX_WIDTH,
-            )
+        if bits:
+            y = self._draw_battery_status(x, y, w, bits, chrome.u) + 18 * chrome.u
+        color = GOOD if not is_error else (WARN if status == "rate_limited" else ALERT)
+        text = str(battery.get("error")) if is_error and battery.get("error") else format_battery_percent(percent)
+        if chrome.portrait:
+            car_h = max(180 * chrome.u, min((bottom - y) * .38, 500 * chrome.u))
+            self._place_car_image(x + w / 2, y, min(w - 40 * chrome.u, 760 * chrome.u), car_h, ACCENT, self.CARD)
+            self._draw_battery_specs(x, y + car_h + 18 * chrome.u, w, text, value, color, battery, portrait=True)
         else:
-            self._render_landscape(
-                x=x,
-                width=width,
-                top=y,
-                bottom=bottom,
-                accent=accent,
-                chip=chip,
-                muted=muted,
-                text=text,
-                model=model,
-                percent_text=percent_text,
-                percent_value=percent_value,
-                bar_color=bar_color,
-                headline_color=headline_color,
-                status_bits=status_bits,
-                bar_height=bar_height,
-                bar_gap=bar_gap,
-                bar_block_h=bar_block_h,
-                status_h=status_h,
-                footer_h=footer_h,
-            )
+            left_w, gap = min(1040 * chrome.u, w * .56), 24 * chrome.u
+            self._place_car_image(x + left_w / 2, y, left_w - 20 * chrome.u, bottom - y, ACCENT, self.CARD)
+            self._draw_battery_specs(x + left_w + gap, y, w - left_w - gap, text, value, color, battery, portrait=False)
+
+    def _draw_battery_status(self, x, y, w, bits, u):
+        # Pill + legend (stale/refreshing) and optional body lines (rate-limit retry).
+        # Charging is drawn as a chip in specs, not here.
+        cursor = y
+        label_font = self.shell.forecast_label_font
+        body_font = self.shell.body_font
+        for bit in bits:
+            kind = bit.get("kind")
+            if kind == "pill":
+                h = self._pill(
+                    x, cursor, bit["text"],
+                    fill=bit["fill"], fg=bit["fg"], outline=bit["outline"],
+                    anchor="nw", font=label_font,
+                )
+                cursor += h + 6 * u
+            elif kind == "legend":
+                self._track(self.canvas.create_text(
+                    x, cursor, anchor="nw", text=bit["text"], fill=bit["fill"],
+                    font=label_font, width=w, justify="left",
+                ))
+                cursor += label_font.metrics("linespace") + 8 * u
+            elif kind == "body":
+                self._track(self.canvas.create_text(
+                    x, cursor, anchor="nw", text=bit["text"], fill=bit["fill"],
+                    font=body_font, width=w, justify="left",
+                ))
+                cursor += body_font.metrics("linespace") + 8 * u
+        return cursor
+
+    def _draw_battery_specs(self, x, y, w, percent_text, percent, color, battery, *, portrait):
+        from src.design_system import INK, INK_2, LINE
+        title, body, label = self.shell.section_title_font, self.shell.body_font, self.shell.forecast_label_font
+        range_value = battery.get("batteryRange", battery.get("rangeMiles"))
+        range_text = f"{range_value} mi" if range_value not in (None, "") else "— mi"
+        self._track(self.canvas.create_text(x, y, anchor="nw", text=percent_text, fill=INK, font=title))
+        self._track(self.canvas.create_text(x, y + title.metrics("linespace") + 4, anchor="nw", text=range_text, fill=INK_2, font=body))
+        gauge_y = y + title.metrics("linespace") + body.metrics("linespace") + 22
+        gauge_h = self.battery_bar_height(title.metrics("linespace"), portrait=portrait)
+        self._draw_ticked_gauge(x, gauge_y, w, gauge_h, percent, color, battery)
+        cursor = gauge_y + gauge_h + 16
+        charging = str(battery.get("chargingLabel") or battery.get("chargingState") or "").strip()
+        if charging:
+            cursor += self._pill(x, cursor, charging, fill=self.CARD, fg=INK, outline=LINE,
+                                 anchor="nw", font=label) + 14
+        for row, raw, suffix in (
+            ("CHARGE LIMIT", battery.get("chargeLimit", battery.get("chargeLimitSoc")), "%"),
+            ("LAST CHARGE", battery.get("lastChargeKwh"), " kWh"),
+            ("RANGE ADDED", battery.get("rangeAddedMiles"), " mi"),
+        ):
+            if raw in (None, ""):
+                continue
+            self._track(self.canvas.create_text(x, cursor, anchor="nw", text=row, fill=INK_2, font=label))
+            self._track(self.canvas.create_text(x + w, cursor, anchor="ne", text=f"{raw}{suffix}", fill=INK, font=body))
+            cursor += max(label.metrics("linespace"), body.metrics("linespace")) + 10
+
+    def _draw_ticked_gauge(self, x, y, w, h, percent, fill, battery):
+        from src.design_system import LINE
+        self._round_rect(x, y, x + w, y + h, radius=0, fill=self.INNER, outline=LINE, width=2)
+        if percent is not None:
+            filled = max(0, min(w - 4, int((w - 4) * percent / 100)))
+            if filled:
+                self._round_rect(x + 2, y + 2, x + 2 + filled, y + h - 2, radius=0, fill=fill)
+        for mark in range(0, 101, 20):
+            tick_x = x + w * mark / 100
+            self._track(self.canvas.create_line(tick_x, y + h - 12, tick_x, y + h, fill=LINE, width=2))
+        limit = battery.get("chargeLimit", battery.get("chargeLimitSoc"))
+        if isinstance(limit, (int, float)):
+            tick_x = x + w * max(0, min(100, limit)) / 100
+            self._track(self.canvas.create_line(tick_x, y - 8, tick_x, y + h + 8, fill="#F2F7FF", width=2))
+            self._track(self.canvas.create_text(tick_x, y - 10, anchor="s", text="LIMIT",
+                                                fill="#F2F7FF", font=self.shell.forecast_label_font))
+        self._track(self.canvas.create_rectangle(x + w - 7, y + h * .28, x + w + 3, y + h * .72,
+                                                 fill=LINE, outline=""))
 
     def _status_bits(self, battery, stale, limit_reset, charging_label, is_error):
         bits = []
@@ -3704,154 +4077,11 @@ class TeslaBatteryPanel(BasePanel):
             })
         return bits
 
-    def _status_block_height(self, status_bits, wrap_width: int) -> int:
-        if not status_bits:
-            return 0
-        label_font = self.shell.forecast_label_font
-        body_font = self.shell.body_font
-        height = 0
-        for bit in status_bits:
-            if bit["kind"] == "pill":
-                height += label_font.metrics("linespace") + 14 + 8
-            elif bit["kind"] == "legend":
-                # Estimate wrapped lines from measured width.
-                lines = max(1, int(math.ceil(label_font.measure(bit["text"]) / max(1, wrap_width))))
-                height += label_font.metrics("linespace") * lines + 8
-            else:
-                height += body_font.metrics("linespace") + 8
-        return height
-
-    def _draw_status_bits(self, center_x, cursor, width, status_bits):
-        label_font = self.shell.forecast_label_font
-        body_font = self.shell.body_font
-        for bit in status_bits:
-            if bit["kind"] == "pill":
-                h = self._pill(
-                    center_x,
-                    cursor,
-                    bit["text"],
-                    fill=bit["fill"],
-                    fg=bit["fg"],
-                    outline=bit["outline"],
-                    anchor="n",
-                )
-                cursor += h + 8
-            elif bit["kind"] == "legend":
-                item = self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        cursor,
-                        anchor="n",
-                        text=bit["text"],
-                        fill=bit["fill"],
-                        font=label_font,
-                        width=width - 80,
-                        justify="center",
-                    )
-                )
-                bbox = self.canvas.bbox(item)
-                cursor = (bbox[3] if bbox else cursor + label_font.metrics("linespace")) + 8
-            else:
-                self._track(
-                    self.canvas.create_text(
-                        center_x,
-                        cursor,
-                        anchor="n",
-                        text=bit["text"],
-                        fill=bit["fill"],
-                        font=body_font,
-                    )
-                )
-                cursor += body_font.metrics("linespace") + 8
-        return cursor
-
-    def _draw_footer(self, center_x, cursor, model, text, muted):
-        title_font = self.shell.section_title_font
-        body_font = self.shell.body_font
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text=model,
-                fill=text,
-                font=title_font,
-            )
-        )
-        cursor += title_font.metrics("linespace") + 6
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                cursor,
-                anchor="n",
-                text="Tesla Battery",
-                fill=muted,
-                font=body_font,
-            )
-        )
-        return cursor + body_font.metrics("linespace")
-
     @staticmethod
     def battery_bar_height(percent_font_linespace: int, *, portrait: bool) -> int:
-        """Flat track height — percent label sits above the bar (§1.10)."""
+        """Large bordered battery gauge; the percent remains above it."""
         _ = percent_font_linespace
-        return 28 if portrait else 24
-
-    def _draw_battery_bar(
-        self,
-        center_x,
-        bar_y0,
-        bar_width,
-        bar_height,
-        percent_text,
-        percent_value,
-        bar_color,
-        headline_color,
-        muted,
-    ):
-        bar_x0 = center_x - bar_width // 2
-        bar_x1 = bar_x0 + bar_width
-        label_font = self.shell.forecast_label_font
-        percent_font = self.shell.section_title_font
-        percent_h = percent_font.metrics("linespace")
-        # Percent + end labels above the track — never composited into the fill.
-        self._track(
-            self.canvas.create_text(
-                center_x, bar_y0, anchor="n",
-                text=percent_text, fill=headline_color, font=percent_font,
-            )
-        )
-        label_y = bar_y0 + percent_h + 6
-        self._track(
-            self.canvas.create_text(
-                bar_x0, label_y, anchor="nw", text="0%", fill=muted, font=label_font,
-            )
-        )
-        self._track(
-            self.canvas.create_text(
-                bar_x1, label_y, anchor="ne", text="100%", fill=muted, font=label_font,
-            )
-        )
-        track_y0 = label_y + label_font.metrics("linespace") + 6
-        track_y1 = track_y0 + bar_height
-        self._round_rect(
-            bar_x0, track_y0, bar_x1, track_y1,
-            radius=0,
-            fill=self.INNER,
-            outline=self.CARD_EDGE,
-            width=2,
-        )
-        if percent_value is not None and bar_width > 0:
-            fill_width = max(4, int((bar_width - 4) * (percent_value / 100)))
-            self._round_rect(
-                bar_x0 + 2,
-                track_y0 + 2,
-                bar_x0 + 2 + fill_width,
-                track_y1 - 2,
-                radius=0,
-                fill=bar_color,
-            )
-        return track_y1
+        return 120 if portrait else 92
 
     def _place_car_image(self, center_x, image_top, image_width, image_height, accent, chip):
         image_path = asset_path(self.IMAGE_NAME)
@@ -3872,107 +4102,6 @@ class TeslaBatteryPanel(BasePanel):
                 pass
         self._draw_fallback_car(center_x, image_top + 20, image_width, accent, chip)
         return image_top + max(80, int(image_height * 0.55))
-
-    def _render_stack(
-        self,
-        *,
-        x,
-        width,
-        top,
-        bottom,
-        center_x,
-        accent,
-        chip,
-        muted,
-        text,
-        model,
-        percent_text,
-        percent_value,
-        bar_color,
-        headline_color,
-        status_bits,
-        bar_height,
-        bar_gap,
-        bar_block_h,
-        status_h,
-        footer_h,
-        image_frac,
-        image_max,
-    ):
-        gap_after_image = 20
-        reserved = bar_block_h + status_h + footer_h + gap_after_image + 8
-        available = max(100, bottom - top - reserved)
-        image_width = min(image_max, width - 60, max(220, int(width * 0.78)))
-        image_height = max(90, min(int(available * image_frac), int(image_width * 0.52), available))
-
-        image_bottom = self._place_car_image(center_x, top + 4, image_width, image_height, accent, chip)
-        cursor = image_bottom + gap_after_image
-
-        # If the image still overshoots (font metrics / wrap), pull the bar up.
-        content_tail = bar_block_h + status_h + footer_h
-        if cursor + content_tail > bottom:
-            cursor = max(top + 40, bottom - content_tail)
-
-        bar_width = min(width - 100, 560)
-        bar_y1 = self._draw_battery_bar(
-            center_x, cursor, bar_width, bar_height,
-            percent_text, percent_value, bar_color, headline_color, muted,
-        )
-        cursor = bar_y1 + bar_gap
-        cursor = self._draw_status_bits(center_x, cursor, width, status_bits)
-        self._draw_footer(center_x, cursor, model, text, muted)
-
-    def _render_landscape(
-        self,
-        *,
-        x,
-        width,
-        top,
-        bottom,
-        accent,
-        chip,
-        muted,
-        text,
-        model,
-        percent_text,
-        percent_value,
-        bar_color,
-        headline_color,
-        status_bits,
-        bar_height,
-        bar_gap,
-        bar_block_h,
-        status_h,
-        footer_h,
-    ):
-        gap = 28
-        # Car on the left, status column on the right — keeps short landscape
-        # height free for cache / rate-limit copy without clipping the footer.
-        col_gap = gap
-        left_w = int(width * 0.46)
-        right_x = x + left_w + col_gap
-        right_w = width - left_w - col_gap
-        right_cx = right_x + right_w // 2
-        area_h = max(160, bottom - top)
-
-        image_width = min(520, left_w - 10)
-        image_height = max(100, min(int(area_h * 0.92), int(image_width * 0.55)))
-        image_top = top + max(0, (area_h - image_height) // 2)
-        self._place_car_image(x + left_w // 2, image_top, image_width, image_height, accent, chip)
-
-        info_h = bar_block_h + status_h + footer_h
-        cursor = top + max(0, (area_h - info_h) // 2)
-        # Keep the info column inside the message band even if wrap estimates are low.
-        if cursor + info_h > bottom:
-            cursor = max(top, bottom - info_h)
-        bar_width = min(right_w - 20, 420)
-        bar_y1 = self._draw_battery_bar(
-            right_cx, cursor, bar_width, bar_height,
-            percent_text, percent_value, bar_color, headline_color, muted,
-        )
-        cursor = bar_y1 + bar_gap
-        cursor = self._draw_status_bits(right_cx, cursor, right_w, status_bits)
-        self._draw_footer(right_cx, cursor, model, text, muted)
 
     def _draw_fallback_car(self, center_x: float, top_y: float, width: float, accent: str, chip: str):
         half_w = width * 0.42
@@ -6129,6 +6258,8 @@ class QrPanel(BasePanel):
 
         self._dismiss_sec = max(1, int(dismiss_sec))
         self._slide_started_at = _time.time()
+        from src.shared_photos_page import next_in_seconds
+        left = next_in_seconds(self._slide_started_at, self._dismiss_sec)
         page.paint_bar(
             mode="upload",
             index=0,
@@ -6138,8 +6269,9 @@ class QrPanel(BasePanel):
             qr_url=url,
             build_qr=QrPanel._build_qr_image,
             dwell_ms=self._dismiss_sec * 1000,
-            status_text=f"Dismisses in {self._dismiss_sec}s",
+            status_text=f"Dismisses in {left}s",
             accent=accent,
+            started_at=self._slide_started_at,
         )
         self._qr_image = page._qr_ref
         self._start_dismiss_clock()
@@ -6154,32 +6286,34 @@ class QrPanel(BasePanel):
         if not self._photo_mode or not self._shared_page:
             return
 
-        import time as _time
+        from src.shared_photos_page import next_in_seconds, rail_remaining_fraction
 
         def tick():
             if not self.visible or not self._shared_page or not self._photo_mode:
                 return
-            elapsed = int(_time.time() - self._slide_started_at)
-            left = max(0, self._dismiss_sec - elapsed)
+            left = next_in_seconds(self._slide_started_at, self._dismiss_sec)
             self._shared_page.set_status(f"Dismisses in {left}s")
+            self._shared_page.set_rail_fraction(
+                rail_remaining_fraction(
+                    self._slide_started_at, self._dismiss_sec * 1000,
+                ),
+            )
             if left > 0:
-                self._status_job = self.root.after(1000, tick)
+                self._status_job = self.root.after(250, tick)
 
-        self._status_job = self.root.after(1000, tick)
+        self._status_job = self.root.after(250, tick)
 
 
 class GuestPhotoboothPanel(BasePanel):
     """Guest Snaps welcome: Wi‑Fi QR + booth URL QR.
 
-    Owns its chrome (shared title/backdrop hidden in overlay.py) so the brand
-    appears once. Portrait stacks steps with a dedicated connector band between
-    cards so "then" never overlaps card footers; landscape pairs them.
+    Owns NETWORK/SSID + GUEST SNAPS chrome (shared title/backdrop hidden in
+    overlay.py). Portrait stacks the two large white QR plates; landscape pairs
+    them side-by-side. Gap is 24u; no connector/"then" band.
     """
 
     ACCENT = "#5FD0FF"
-    STEP_WIFI = "#5FD0FF"
-    STEP_BOOTH = "#5FD0FF"
-    QR_FRAME = "#f8fafc"
+    QR_FRAME = "#FFFFFF"
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
@@ -6197,324 +6331,128 @@ class GuestPhotoboothPanel(BasePanel):
         content_h: int,
         portrait: bool,
         *,
-        header_h: int | None = None,
+        header_h: int = 0,
+        u: float = 1.0,
     ) -> dict:
-        """Pure layout math for portrait stack vs landscape pair (unit-tested)."""
+        """Pure two-card geometry; the shared page header is outside content."""
         content_w = max(320, int(content_w))
         content_h = max(360, int(content_h))
-        # Caller should pass a measured header (title + subtitle + pad) so the
-        # subtitle never lands under the card tops in landscape.
-        if header_h is None:
-            header_h = 78 if portrait else 96
-        else:
-            header_h = max(56, int(header_h))
-
+        gap = int(round(24 * u))
+        plate_target = int(round(620 * u))
+        # Step row + caption + pads — leave the rest for the white plate.
+        chrome_reserve = int(round(140 * u))
+        side_pad = int(round(48 * u))
         if portrait:
-            connector_h = 40
-            usable_h = max(240, content_h - header_h - connector_h)
             card_w = content_w
-            card_h = max(200, usable_h // 2)
-            # Reserve more chrome so the QR doesn't crowd the step title.
-            qr_budget = min(card_w - 64, card_h - 140)
-            qr_size = int(max(150, min(300, qr_budget)))
-            y0 = header_h
-            y1 = header_h + card_h + connector_h
-            return {
-                "portrait": True,
-                "header_h": header_h,
-                "connector_h": connector_h,
-                "gap": connector_h,
-                "origin_y": 0,
-                "card_w": card_w,
-                "card_h": card_h,
-                "qr_size": qr_size,
-                "vcenter_content": False,
-                "spread_content": True,
-                "cards": (
-                    {"x": 0, "y": y0},
-                    {"x": 0, "y": y1},
-                ),
-                "connector": {
-                    "x": content_w // 2,
-                    "y": header_h + card_h + connector_h // 2,
-                },
-            }
-
-        # Landscape: size cards to the QR block (not full remaining height),
-        # leave a wide gutter for "then", and vertically center the whole block.
-        gap = 56
-        card_w = max(240, (content_w - gap) // 2)
-        # Chrome inside each card: step row + footer lines + padding.
-        inner_chrome = 110
-        max_card_h = max(220, content_h - header_h - 16)
-        qr_size = int(max(140, min(280, card_w - 56, max_card_h - inner_chrome)))
-        card_h = qr_size + inner_chrome
-        block_h = header_h + card_h
-        origin_y = max(0, (content_h - block_h) // 2)
+            card_h = max(200, (content_h - gap) // 2)
+            cards = ({"x": 0, "y": 0}, {"x": 0, "y": card_h + gap})
+        else:
+            card_w = max(240, (content_w - gap) // 2)
+            card_h = content_h
+            cards = ({"x": 0, "y": 0}, {"x": card_w + gap, "y": 0})
+        plate = int(max(
+            200 * u,
+            min(plate_target, card_w - side_pad, card_h - chrome_reserve),
+        ))
+        # Prefer plate ~620*u with QR at 560/620 of plate when space allows.
+        qr_size = int(round(plate * 560 / 620))
         return {
-            "portrait": False,
-            "header_h": header_h,
-            "connector_h": 0,
-            "gap": gap,
-            "origin_y": origin_y,
-            "card_w": card_w,
-            "card_h": card_h,
-            "qr_size": qr_size,
-            "vcenter_content": True,
-            "spread_content": False,
-            "cards": (
-                {"x": 0, "y": origin_y + header_h},
-                {"x": card_w + gap, "y": origin_y + header_h},
-            ),
-            "connector": {
-                "x": card_w + gap // 2,
-                "y": origin_y + header_h + card_h // 2,
-            },
+            "portrait": portrait, "header_h": header_h, "gap": gap, "origin_y": 0,
+            "card_w": card_w, "card_h": card_h, "plate": plate,
+            "qr_size": qr_size, "connector_h": 0, "cards": cards,
         }
 
     def _render(self, payload: dict):
-        for item_id in list(self._item_ids):
-            self.canvas.delete(item_id)
-        self._item_ids.clear()
-        self._wifi_qr_image = None
-        self._booth_qr_image = None
+        from src.design_system import page_chrome
+        from src.page_header import paint_page_header
 
         data = payload.get("guestPhotobooth") or {}
         wifi = data.get("wifi") or {}
         booth = data.get("booth") or {}
-        title = str(data.get("title") or "Guest Snaps").strip()
-        subtitle = str(data.get("subtitle") or "Two quick scans to share a photo").strip()
-
-        layout = self.shell.layout
-        x0 = layout.content_x
-        width = layout.content_width
-        # Own the top of the screen (shell title/backdrop are hidden).
-        top = int(self.shell.overlay.screen_h * (0.045 if layout.portrait else 0.05))
-        # Content ends at the dismiss-footer band (message_area_bottom).
-        bottom = layout.message_area_bottom
-        height = max(360, bottom - top)
-        title_h = self.shell.section_title_font.metrics("linespace")
-        sub_h = self.shell.body_font.metrics("linespace") if subtitle else 0
-        # Extra pad under the subtitle so landscape cards never cover it.
-        header_h = title_h + (6 + sub_h if subtitle else 0) + (28 if layout.portrait else 36)
+        ssid = str(wifi.get("ssid") or "Guest Wi‑Fi").strip()
+        screen_w = int(getattr(self.shell, "screen_w", self.canvas.winfo_width()))
+        screen_h = int(getattr(self.shell, "screen_h", self.canvas.winfo_height()))
+        chrome = page_chrome(screen_w, screen_h, timed=True)
+        paint_page_header(
+            self.canvas, screen_w=screen_w, screen_h=screen_h, pill="Guest Snaps",
+            left_label="Network", left_value=ssid, track=self._track,
+        )
         geo = self.compute_card_geometry(
-            width, height, layout.portrait, header_h=header_h,
+            int(chrome.content_w), int(chrome.content_bottom - chrome.content_top),
+            chrome.portrait, u=chrome.u,
         )
-        center_x = x0 + width // 2
-        text = self.config["textColor"]
-        muted = self.config["mutedTextColor"]
-        # Landscape may shift the whole composition down to center it.
-        origin = top + geo.get("origin_y", 0)
-
-        self._track(
-            self.canvas.create_text(
-                center_x,
-                origin,
-                anchor="n",
-                text=title,
-                fill=text,
-                font=self.shell.section_title_font,
-            )
-        )
-        if subtitle:
-            self._track(
-                self.canvas.create_text(
-                    center_x,
-                    origin + title_h + 6,
-                    anchor="n",
-                    text=subtitle,
-                    fill=muted,
-                    font=self.shell.body_font,
-                )
+        for index, (step, card) in enumerate(zip((wifi, booth), geo["cards"]), start=1):
+            self._draw_guest_redesign_card(
+                chrome.content_x + card["x"], chrome.content_top + card["y"],
+                geo["card_w"], geo["card_h"], geo["plate"], geo["qr_size"], step,
+                index=index, ssid=ssid,
+                qr_attr="_wifi_qr_image" if index == 1 else "_booth_qr_image",
             )
 
-        wifi_card = geo["cards"][0]
-        booth_card = geo["cards"][1]
-        self._draw_step_card(
-            x0 + wifi_card["x"],
-            top + wifi_card["y"],
-            geo["card_w"],
-            geo["card_h"],
-            geo["qr_size"],
-            step=wifi,
-            accent=self.STEP_WIFI,
-            qr_attr="_wifi_qr_image",
-            detail=str(wifi.get("ssid") or "").strip(),
-            vcenter=geo.get("vcenter_content", False),
-            spread=geo.get("spread_content", False),
-        )
-        self._draw_step_card(
-            x0 + booth_card["x"],
-            top + booth_card["y"],
-            geo["card_w"],
-            geo["card_h"],
-            geo["qr_size"],
-            step=booth,
-            accent=self.STEP_BOOTH,
-            qr_attr="_booth_qr_image",
-            detail="",
-            vcenter=geo.get("vcenter_content", False),
-            spread=geo.get("spread_content", False),
-        )
+    def _draw_guest_redesign_card(self, x, y, w, h, plate, qr_size, step, *, index, ssid, qr_attr):
+        from src.design_system import ACCENT, INK, INK_2, LINE
 
-        connector = geo["connector"]
-        # Design system §2.8: numbered steps carry order — a 2px connector rule
-        # replaces the floating "then" pill (different colours implied status).
-        cx = x0 + connector["x"]
-        cy = top + connector["y"]
-        if geo["portrait"]:
-            self._track(self.canvas.create_line(
-                cx, cy - 30, cx, cy + 30,
-                fill=self.CARD_EDGE, width=2,
-            ))
-        else:
-            self._track(self.canvas.create_line(
-                cx - 30, cy, cx + 30, cy,
-                fill=self.CARD_EDGE, width=2,
-            ))
-
-    def _draw_step_card(
-        self,
-        x,
-        y,
-        w,
-        h,
-        qr_size,
-        *,
-        step: dict,
-        accent: str,
-        qr_attr: str,
-        detail: str,
-        vcenter: bool = False,
-        spread: bool = False,
-    ):
-        muted = self.config["mutedTextColor"]
-        text = self.config["textColor"]
-        self._panel_card(x, y, w, h, radius=0, fill=self.CARD, outline=self.CARD_EDGE)
-
-        step_label = str(step.get("stepLabel") or "").strip() or "1"
-        heading = str(step.get("heading") or "").strip() or "Scan"
-        hint = str(step.get("hint") or "").strip()
+        pad = max(16, int(w * .035))
+        number = f"{index:02d}"
+        heading = str(step.get("heading") or (
+            "Join Wi‑Fi" if index == 1 else "Open Guest Snaps"
+        )).strip()
         content = str(step.get("content") or "").strip()
-        # Mono numbered markers (01 / 02) — both steps share --accent.
-        if step_label.isdigit():
-            step_chip = f"{int(step_label):02d}"
-        else:
-            step_chip = step_label
-
-        pad = 16
-        line_h = self.shell.chip_value_font.metrics("linespace")
-        header_row_h = max(34, self.shell.body_font.metrics("linespace") + 14)
-        footer_reserve = 12 + (line_h + 4 if detail else 0) + (line_h if hint else 0)
-        frame_pad = 10
-        # Portrait needs air between the step title and the white QR frame.
-        min_header_gap = 22 if spread else 10
-        draw_size = min(
-            qr_size,
-            max(120, h - header_row_h - footer_reserve - min_header_gap - 28),
+        mono = self.shell.chip_value_font
+        heading_font = self.shell.body_font
+        caption_font = self.shell.forecast_label_font
+        self._round_rect(x, y, x + w, y + h, radius=0, fill="", outline=LINE, width=2)
+        header_y = y + pad
+        self._track(self.canvas.create_text(
+            x + pad, header_y, anchor="nw", text=number, fill=ACCENT, font=mono,
+        ))
+        self._track(self.canvas.create_text(
+            x + pad + mono.measure(number) + 14, header_y, anchor="nw",
+            text=heading, fill=INK, font=heading_font,
+        ))
+        caption_h = caption_font.metrics("linespace")
+        plate_budget = min(
+            w - 2 * pad,
+            h - 3 * pad - caption_h - heading_font.metrics("linespace"),
         )
-        frame_h = draw_size + frame_pad * 2
-        content_h = header_row_h + min_header_gap + frame_h + footer_reserve
-        slack = max(0, h - 24 - content_h)
-        if spread:
-            # Keep the step title near the top; spend leftover height as
-            # breathing room above the QR and above the footer labels.
-            header_gap = min_header_gap + int(slack * 0.55)
-            after_qr_gap = 10 + int(slack * 0.45)
-            cursor = y + 12
-        else:
-            header_gap = min_header_gap
-            after_qr_gap = 8
-            cursor = y + 12
-            if vcenter and content_h < h - 8:
-                cursor = y + max(12, (h - content_h) // 2)
-
-        self._pill(
-            x + pad,
-            cursor,
-            step_chip,
-            fill=accent,
-            fg="#0b1220",
-            font=self.shell.chip_value_font,
-        )
-        # Heading on the same row as the chip when space allows.
-        chip_w = self.shell.chip_value_font.measure(step_chip) + 28
-        self._track(
-            self.canvas.create_text(
-                x + pad + chip_w + 10,
-                cursor + 4,
-                anchor="nw",
-                text=heading,
-                fill=text,
-                font=self.shell.body_font,
-                width=max(80, w - pad * 2 - chip_w - 10),
-            )
-        )
-        cursor += header_row_h + header_gap
-
-        qr_x = x + (w - draw_size) // 2
+        plate_size = max(120, min(int(plate), plate_budget))
+        draw_size = max(120, min(int(qr_size), int(plate_size * 560 / 620)))
+        plate_x = x + (w - plate_size) / 2
+        plate_y = y + heading_font.metrics("linespace") + 2 * pad
         self._round_rect(
-            qr_x - frame_pad,
-            cursor - frame_pad,
-            qr_x + draw_size + frame_pad,
-            cursor + draw_size + frame_pad,
-            radius=0,
-            fill=self.QR_FRAME,
-            outline="#e2e8f0",
+            plate_x, plate_y, plate_x + plate_size, plate_y + plate_size,
+            radius=0, fill=self.QR_FRAME, outline="#E2E8F0", width=1,
         )
-
         image = QrPanel._build_qr_image(content, draw_size)
-        if image is not None:
-            photo = ImageTk.PhotoImage(image) if ImageTk is not None else None
+        if image is not None and ImageTk is not None:
+            photo = ImageTk.PhotoImage(image)
             setattr(self, qr_attr, photo)
-            if photo is not None:
-                self._track(
-                    self.canvas.create_image(
-                        qr_x + draw_size // 2,
-                        cursor + draw_size // 2,
-                        image=photo,
-                    )
-                )
+            self._track(self.canvas.create_image(
+                plate_x + plate_size / 2, plate_y + plate_size / 2, image=photo,
+            ))
+        elif image is None:
+            self._track(self.canvas.create_text(
+                plate_x + plate_size / 2, plate_y + plate_size / 2, anchor="center",
+                text="QR unavailable", fill=INK_2, font=caption_font,
+            ))
+        caption_y = min(y + h - pad - caption_h, plate_y + plate_size + pad)
+        if index == 1:
+            prefix = "Network "
+            total_w = caption_font.measure(prefix) + mono.measure(ssid)
+            left = x + w / 2 - total_w / 2
+            self._track(self.canvas.create_text(
+                left, caption_y, anchor="nw", text=prefix, fill=INK_2, font=caption_font,
+            ))
+            self._track(self.canvas.create_text(
+                left + caption_font.measure(prefix), caption_y,
+                anchor="nw", text=ssid, fill=ACCENT, font=mono,
+            ))
         else:
-            self._track(
-                self.canvas.create_text(
-                    qr_x + draw_size // 2,
-                    cursor + draw_size // 2,
-                    anchor="center",
-                    text="QR unavailable",
-                    fill=muted,
-                    font=self.shell.chip_value_font,
-                )
-            )
-
-        footer_y = cursor + draw_size + frame_pad + after_qr_gap
-        # Never draw past the card bottom (avoids overlap with the "then" band).
-        footer_limit = y + h - 8
-        if detail and footer_y + line_h <= footer_limit:
-            self._track(
-                self.canvas.create_text(
-                    x + w // 2,
-                    footer_y,
-                    anchor="n",
-                    text=detail,
-                    fill=accent,
-                    font=self.shell.chip_value_font,
-                )
-            )
-            footer_y += line_h + 2
-        if hint and footer_y + line_h <= footer_limit:
-            self._track(
-                self.canvas.create_text(
-                    x + w // 2,
-                    footer_y,
-                    anchor="n",
-                    text=hint,
-                    fill=muted,
-                    font=self.shell.chip_value_font,
-                    width=w - pad * 2,
-                    justify=tk.CENTER,
-                )
-            )
+            self._track(self.canvas.create_text(
+                x + w / 2, caption_y, anchor="n",
+                text="Already connected? Start here",
+                fill=INK_2, font=caption_font,
+            ))
 
 
 class PhotoSlideshowPanel(BasePanel):
@@ -6697,10 +6635,17 @@ class PhotoSlideshowPanel(BasePanel):
         else:
             self._photo_image = page.paint_photo(image)
 
-        dwell_ms = self._seconds_per_photo * 1000
         import time as _time
+        from src.shared_photos_page import next_in_seconds
+
+        dwell_ms = self._seconds_per_photo * 1000
         self._slide_started_at = _time.time()
-        left = self._seconds_per_photo
+        active_dwell = (
+            dwell_ms
+            if self._index + 1 < total or self._mode == "upload"
+            else 0
+        )
+        left = next_in_seconds(self._slide_started_at, self._seconds_per_photo)
         status = (
             f"Dismisses in {left}s" if self._mode == "upload"
             else f"NEXT IN {left}s"
@@ -6716,9 +6661,10 @@ class PhotoSlideshowPanel(BasePanel):
             caption=current.get("caption") or "",
             qr_url=current.get("url") or "",
             build_qr=QrPanel._build_qr_image,
-            dwell_ms=dwell_ms if self._index + 1 < total or self._mode == "upload" else 0,
+            dwell_ms=active_dwell,
             status_text=status,
             accent=accent,
+            started_at=self._slide_started_at,
         )
         self._start_status_clock()
         if self._tick_job:
@@ -6728,7 +6674,8 @@ class PhotoSlideshowPanel(BasePanel):
                 pass
             self._tick_job = None
         if self._mode != "upload" and self._index + 1 < total:
-            self._tick_job = self.root.after(dwell_ms, self._advance)
+            # Advance when the same wall clock that drives NEXT IN / the rail hits 0.
+            self._tick_job = self.root.after(active_dwell, self._advance)
 
     def _start_status_clock(self):
         if self._status_job is not None:
@@ -6742,22 +6689,25 @@ class PhotoSlideshowPanel(BasePanel):
         if self._mode != "upload" and self._index + 1 >= len(self._photos):
             return
 
-        import time as _time
+        from src.shared_photos_page import next_in_seconds, rail_remaining_fraction
+
+        prefix = "Dismisses in" if self._mode == "upload" else "NEXT IN"
 
         def tick():
             if not self.visible or not self._page:
                 return
-            elapsed = int(_time.time() - self._slide_started_at)
-            left = max(0, self._seconds_per_photo - elapsed)
-            if self._mode == "upload":
-                text = f"Dismisses in {left}s"
-            else:
-                text = f"NEXT IN {left}s"
-            self._page.set_status(text)
+            left = next_in_seconds(self._slide_started_at, self._seconds_per_photo)
+            self._page.set_status(f"{prefix} {left}s")
+            # Keep rail glued to the same clock even if its after(33) loop jittered.
+            self._page.set_rail_fraction(
+                rail_remaining_fraction(
+                    self._slide_started_at, self._seconds_per_photo * 1000,
+                ),
+            )
             if left > 0:
-                self._status_job = self.root.after(1000, tick)
+                self._status_job = self.root.after(250, tick)
 
-        self._status_job = self.root.after(1000, tick)
+        self._status_job = self.root.after(250, tick)
 
     @staticmethod
     def _is_ssl_failure(error) -> bool:
