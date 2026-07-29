@@ -40,6 +40,8 @@ const {
   verifySteamOpenIdCallback,
   completeSteamLink,
   saveSteamApiKey,
+  createSteamLinkPending,
+  consumeSteamLinkPending,
 } = require('./steam-auth');
 const {
   resolveSteamCredentials,
@@ -321,7 +323,8 @@ function createWebServer({
     const steam = config.steam || {};
     try {
       const publicOrigin = publicOriginFromRequest(req, config);
-      const authorizeUrl = buildSteamAuthorizeUrl(config, steam, publicOrigin);
+      const state = createSteamLinkPending();
+      const authorizeUrl = buildSteamAuthorizeUrl(config, steam, publicOrigin, { state });
       steamAuth.running = true;
       steamAuth.status = 'waiting';
       steamAuth.error = null;
@@ -337,14 +340,33 @@ function createWebServer({
 
   async function handleSteamAuthCallback(reqUrl, res) {
     const query = Object.fromEntries(reqUrl.searchParams.entries());
+    const fail = (message) => {
+      steamAuth.status = 'error';
+      steamAuth.error = message || 'Steam link failed';
+      steamAuth.running = false;
+      res.writeHead(302, { Location: '/admin/?steam=error' });
+      res.end();
+    };
     try {
+      // State may arrive as a top-level query param (return_to?state=…) or only
+      // inside openid.return_to depending on the OpenID RP redirect shape.
+      let state = String(query.state || '').trim();
+      if (!state) {
+        try {
+          const returnTo = String(query['openid.return_to'] || '');
+          state = new URL(returnTo).searchParams.get('state') || '';
+        } catch {
+          state = '';
+        }
+      }
+      if (!consumeSteamLinkPending(state)) {
+        fail('Steam link state missing or expired — start linking again from Auth');
+        return;
+      }
+
       const verified = await verifySteamOpenIdCallback(query);
       if (!verified.ok) {
-        steamAuth.status = 'error';
-        steamAuth.error = verified.error;
-        steamAuth.running = false;
-        res.writeHead(302, { Location: '/admin/?steam=error' });
-        res.end();
+        fail(verified.error);
         return;
       }
       let personaName = null;
@@ -374,11 +396,7 @@ function createWebServer({
       res.writeHead(302, { Location: '/admin/?steam=ok' });
       res.end();
     } catch (error) {
-      steamAuth.status = 'error';
-      steamAuth.error = error?.message || String(error);
-      steamAuth.running = false;
-      res.writeHead(302, { Location: '/admin/?steam=error' });
-      res.end();
+      fail(error?.message || String(error));
     }
   }
 
@@ -508,11 +526,23 @@ function createWebServer({
   function handleAdminLogin(body, req, res) {
     const result = adminAuth.login(body?.password, req);
     if (!result.ok) {
-      sendJson(res, result.status || 401, {
+      const headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      };
+      if (result.retryAfterSec > 0) {
+        headers['Retry-After'] = String(result.retryAfterSec);
+      }
+      const payload = {
         ok: false,
         error: result.error,
         code: result.code,
-      });
+      };
+      if (result.retryAfterSec > 0) {
+        payload.retryAfterSec = result.retryAfterSec;
+      }
+      res.writeHead(result.status || 401, headers);
+      res.end(JSON.stringify(payload));
       return;
     }
     res.writeHead(200, {

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-29 (Smart Home ASR dedupe)
+**Last updated:** 2026-07-29 (Steam state + admin lockout)
 
 ---
 
@@ -61,7 +61,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set |
 | `src/lan-crypto.js` | Shared-secret **AES-256-GCM** for bridge↔display UDP (`LAN_UDP_SECRET` / `udpBroadcast.sharedSecret`); protocol v3 envelope `{v,alg,n,c}`; SHA-256 key derive; stamps `sentAt` at seal; ±120s freshness on `sentAt` (not Alexa activity `timestamp`) |
-| `src/steam-*.js` | Steam Now Playing: config/session/OpenID auth, Web API + store appdetails, presence allowlist, poller with interrupt-suppress, UDP builders |
+| `src/steam-*.js` | Steam Now Playing: config/session/OpenID auth (callback requires one-time `state` from admin start), Web API + store appdetails, presence allowlist, poller with interrupt-suppress, UDP builders |
 | `src/activity-fields.js` | Harvest summary/response/allText from all `voiceHistoryRecordItems` types (app routines often skip ASR) |
 | `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
 | `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
@@ -105,7 +105,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/tesla-register.js` | Partner domain register + `--verify-only` |
 | `src/tesla-http.js` | Form POST helper + `Retry-After` / rate-limit header parsing |
 | `src/web-server.js` | **HTTPS web UI**: guest photo booth at `/`, password-gated admin SPA at `/admin/` (`ADMIN_PASSWORD`); JSON API (public: displays + photo upload/push + `/qr-images/*`; admin: status, Tesla/URL/weather/shopping/timers/slideshow, QR URL/Wi‑Fi, Slideshow Manager, remote input, auth); TLS via `web-tls.js` |
-| `src/web-admin-auth.js` | Admin login sessions (HTTP-only cookie) for `/admin` + protected APIs |
+| `src/web-admin-auth.js` | Admin login sessions (HTTP-only cookie) for `/admin` + protected APIs; progressive per-IP lockout on bad passwords (in-memory; cleared on container restart) |
 | `src/web-tls.js` | Loads/generates cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome); reuses existing PEMs (e.g. Let's Encrypt from `issue-letsencrypt-cert.sh`); optional `WEB_TLS_CERT_FILE` / `WEB_TLS_KEY_FILE` |
 | `src/qr-image-cache.js` | Stores "QR code → embedded photo" uploads under `data/qr-image-cache/` **indefinitely** (no automatic expiry) — serves them back at `/qr-images/<token>.<ext>`; `list()` returns every stored photo newest-first (with its `token`) for the Slideshow Manager tab / Shared Photo Slideshow tile; `delete(token)` removes a photo (file + index entry) on request; `onChange(listener)` fires on every `store()`/`delete()` (with the fresh `list()`) so `GET /api/photos/events` (SSE) can push live camera-roll updates to every open browser tab |
 | `src/slideshow-settings.js` | Persists Shared Photo Slideshow prefs — playback order (`recent` \| `oldest` \| `random`, default `recent`) and seconds per photo (5–60, default 5) — to `data/slideshow-settings.json`; getters reload from disk so admin UI and Alexa voice stay in sync |
@@ -281,7 +281,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `amazonPage` / `acceptLanguage` | Region (e.g. `amazon.com`, `en-US`) |
 | `sessionFile` | Default `data/alexa-session.json` |
 | `udpBroadcast.enabled/port/targets/defaultDisplaySeconds` | LAN UDP overlays/commands to Windows clients (`:47832`) |
-| `LAN_UDP_SECRET` (`.env`) / `udpBroadcast.sharedSecret` | Shared secret for AES-256-GCM on UDP; must match each client's `udpSecret`. Empty = plaintext (warned at startup) |
+| `LAN_UDP_SECRET` (`.env`) / `udpBroadcast.sharedSecret` | **Required on a real LAN.** Shared secret for AES-256-GCM on UDP; must match each client's `udpSecret`. Empty = plaintext (startup warns; forgeable reboot/input/web.open — local smoke only) |
 | `udpBroadcast.discoveryPort` | Listen for `display.announce` (default **47833**) |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
 | `routePlanner.displaySeconds` | Overlay dismiss for `route-planner.query` (default **max(180, 2× `udpBroadcast.defaultDisplaySeconds`)**; explicit number overrides). Separate from the standard overlay duration so map/facts tiles have time to fill in |
@@ -316,7 +316,7 @@ Secrets and runtime files live under `data/` and are **not committed**.
 
 ## UDP payload (v2 inner / v3 wire)
 
-When `LAN_UDP_SECRET` is set, datagrams are a **v3 envelope** (`aes-256-gcm`); the decrypted inner JSON is still the v2 payload below. Without a secret, v2 JSON is sent plaintext (dev only).
+When `LAN_UDP_SECRET` is set, datagrams are a **v3 envelope** (`aes-256-gcm`); the decrypted inner JSON is still the v2 payload below. Without a secret, v2 JSON is sent plaintext (**dev/smoke only** — do not run a household install this way).
 
 ## UDP payload types (v2)
 
@@ -386,8 +386,8 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (564 tests)
-run_all_tests.bat           # repo root — bridge + Windows client (564 + 317)
+npm test                    # bridge only (573 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (573 + 317)
 ```
 
 Bridge tests in `test/*.test.js` — includes **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration + broadcast ASR dedupe), `web-command-payloads` (progressive route loading/failed), `qr-image-cache`, `route-query`/`route-fetch` (OSRM AbortSignal + 12s timeout), `guest-photobooth`, `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth`, `display-registry`, `music-info` (Signal preferred skip), `activity-fields` (`customerParts`/`responseParts`).
@@ -494,6 +494,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-07-29: **Steam OpenID state + admin login lockout** — Steam link callbacks require a one-time `state` nonce created by admin `/api/auth/steam/start` (blocks unauthenticated re-link). Admin login applies progressive per-IP delays after failed passwords (in-memory; unlock via `./recreate.sh`). Docs stress **`LAN_UDP_SECRET` / `udpSecret` as required** on a real LAN. Deploy: `./recreate.sh`.
 
 - 2026-07-29: **Music progress units + skip/route reliability** — `extractMediaProgress` coerces length/progress as a pair (early-track ms no longer read as thousands of seconds); skip falls back to household scan; softer `next please` match. Route queries emit a processing ack and geocode prefers `countryCode=US` first so distance overlays aren't silent.
 

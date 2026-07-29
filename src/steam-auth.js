@@ -1,14 +1,55 @@
 /**
  * Steam OpenID 2.0 link flow for the admin Auth tab.
  * Captures steamId only — API key stays in .env / session separately.
+ *
+ * Callbacks must present a one-time `state` nonce created by
+ * POST /api/auth/steam/start (admin session). That blocks strangers from
+ * finishing OpenID against /api/auth/steam/callback and overwriting steamId.
  */
 
+const crypto = require('crypto');
 const https = require('https');
 const { URL } = require('url');
 const { saveSteamSession, clearSteamAuthStatus, markSteamAuthStatus } = require('./steam-session');
 
 const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
 const CLAIMED_ID_RE = /^https?:\/\/steamcommunity\.com\/openid\/id\/(\d+)$/i;
+const PENDING_TTL_MS = 15 * 60 * 1000;
+
+/** @type {Map<string, { expiresAt: number }>} */
+const pendingSteamLinks = new Map();
+
+function purgeExpiredSteamPending(now = Date.now()) {
+  for (const [state, entry] of pendingSteamLinks) {
+    if (!entry || entry.expiresAt <= now) {
+      pendingSteamLinks.delete(state);
+    }
+  }
+}
+
+function createSteamLinkPending({ now = Date.now(), ttlMs = PENDING_TTL_MS } = {}) {
+  purgeExpiredSteamPending(now);
+  const state = crypto.randomBytes(24).toString('hex');
+  pendingSteamLinks.set(state, { expiresAt: now + Math.max(60_000, Number(ttlMs) || PENDING_TTL_MS) });
+  return state;
+}
+
+/**
+ * One-time consume. Returns true only for a live, unused state.
+ */
+function consumeSteamLinkPending(state, { now = Date.now() } = {}) {
+  purgeExpiredSteamPending(now);
+  const key = String(state || '').trim();
+  if (!key) {
+    return false;
+  }
+  const entry = pendingSteamLinks.get(key);
+  if (!entry) {
+    return false;
+  }
+  pendingSteamLinks.delete(key);
+  return entry.expiresAt > now;
+}
 
 function isLoopbackHost(host) {
   const hostname = String(host || '').split(':')[0].trim().toLowerCase();
@@ -60,13 +101,20 @@ function publicOriginFromRequest(req, config) {
   return `${proto}://${host}`;
 }
 
-function buildOpenIdReturnTo(config, steamConfig, publicOrigin = null) {
+function buildOpenIdReturnTo(config, steamConfig, publicOrigin = null, state = null) {
   const origin = resolvePublicOrigin(config, steamConfig, publicOrigin);
-  return `${origin}${steamConfig.openIdReturnPath || '/api/auth/steam/callback'}`;
+  const path = steamConfig.openIdReturnPath || '/api/auth/steam/callback';
+  const base = `${origin}${path}`;
+  const nonce = String(state || '').trim();
+  if (!nonce) {
+    return base;
+  }
+  const joiner = path.includes('?') ? '&' : '?';
+  return `${base}${joiner}state=${encodeURIComponent(nonce)}`;
 }
 
-function buildSteamAuthorizeUrl(config, steamConfig, publicOrigin = null) {
-  const returnTo = buildOpenIdReturnTo(config, steamConfig, publicOrigin);
+function buildSteamAuthorizeUrl(config, steamConfig, publicOrigin = null, { state = null } = {}) {
+  const returnTo = buildOpenIdReturnTo(config, steamConfig, publicOrigin, state);
   const realm = `${resolvePublicOrigin(config, steamConfig, publicOrigin)}/`;
   const params = new URLSearchParams({
     'openid.ns': 'http://specs.openid.net/auth/2.0',
@@ -162,6 +210,7 @@ function saveSteamApiKey(steamConfig, apiKey) {
 
 module.exports = {
   STEAM_OPENID,
+  PENDING_TTL_MS,
   isLoopbackHost,
   resolvePublicOrigin,
   publicOriginFromRequest,
@@ -171,4 +220,9 @@ module.exports = {
   verifySteamOpenIdCallback,
   completeSteamLink,
   saveSteamApiKey,
+  createSteamLinkPending,
+  consumeSteamLinkPending,
+  // test helpers
+  _pendingSteamLinks: pendingSteamLinks,
+  _purgeExpiredSteamPending: purgeExpiredSteamPending,
 };

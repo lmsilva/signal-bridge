@@ -19,6 +19,12 @@ The listener container needs the saved session file. With **`network_mode: host`
 
 No `ports:` mapping is required — host networking shares the NAS stack. See the [main README](README.md) for display discovery and the phone UI.
 
+### Required: LAN UDP secret
+
+Before treating this as a household install, set **`LAN_UDP_SECRET`** in `.env` to a long random value (`openssl rand -base64 32`) and put the **same** string in every display client’s `config.json` as `"udpSecret"`. Then `./recreate.sh` and restart/redeploy clients.
+
+Without it, UDP overlays and remote commands (reboot, keyboard/mouse, open URL) are **plaintext on the LAN** and forgeable. Details: [README — LAN UDP encryption](README.md#lan-udp-encryption).
+
 ---
 
 ## Recommended: authenticate on your PC, run listener on QNAP

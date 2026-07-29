@@ -5,6 +5,7 @@
   "bridgeHosts": ["192.168.1.10"],
   "discoveryPort": 47833,
   "udpSecret": "",
+  "_comment_udpSecret": "REQUIRED on a real LAN — same value as bridge LAN_UDP_SECRET (openssl rand -base64 32). Empty = plaintext / forgeable commands.",
   "defaultDisplaySeconds": 60,
   "maxDisplaySeconds": 60,
   "webOverlayOpacity": 0.88,

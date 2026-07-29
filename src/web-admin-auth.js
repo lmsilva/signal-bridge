@@ -3,12 +3,17 @@
  *
  * Login form → HTTP-only session cookie. Fail closed when ADMIN_PASSWORD
  * is unset/empty (admin APIs reject; login page explains how to configure).
+ *
+ * Progressive per-IP lockout on bad passwords (in-memory only — cleared by
+ * container recreate / process restart).
  */
 
 const crypto = require('crypto');
 
 const COOKIE_NAME = 'signal_admin';
 const DEFAULT_SESSION_HOURS = 12;
+/** Lockout seconds after N failures (index = fails after this attempt). */
+const LOCKOUT_LADDER_SEC = [0, 0, 5, 15, 60, 300, 900];
 
 function timingSafeEqualString(a, b) {
   const left = Buffer.from(String(a || ''), 'utf8');
@@ -50,6 +55,45 @@ function parseCookies(req) {
   return out;
 }
 
+function normalizeClientIp(raw) {
+  let ip = String(raw || '').trim();
+  if (!ip) {
+    return 'unknown';
+  }
+  // "192.168.1.5:54321" or "[::1]:54321"
+  if (ip.startsWith('[')) {
+    const end = ip.indexOf(']');
+    if (end > 0) {
+      ip = ip.slice(1, end);
+    }
+  } else if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(ip)) {
+    ip = ip.replace(/:\d+$/, '');
+  }
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.slice('::ffff:'.length);
+  }
+  return ip || 'unknown';
+}
+
+function clientIpFromRequest(req) {
+  const forwarded = String(req?.headers?.['x-forwarded-for'] || '')
+    .split(',')[0]
+    .trim();
+  if (forwarded) {
+    return normalizeClientIp(forwarded);
+  }
+  return normalizeClientIp(req?.socket?.remoteAddress || req?.connection?.remoteAddress);
+}
+
+function lockoutSecondsForFails(fails) {
+  const n = Math.max(0, Number(fails) || 0);
+  if (n <= 0) {
+    return 0;
+  }
+  const idx = Math.min(n, LOCKOUT_LADDER_SEC.length) - 1;
+  return LOCKOUT_LADDER_SEC[Math.max(0, idx)];
+}
+
 function createWebAdminAuth(config = {}, log = console) {
   const password = String(
     config.webServer?.adminPassword
@@ -65,6 +109,8 @@ function createWebAdminAuth(config = {}, log = console) {
 
   /** @type {Map<string, { expiresAt: number }>} */
   const sessions = new Map();
+  /** @type {Map<string, { fails: number, lockedUntil: number }>} */
+  const loginAttempts = new Map();
 
   function isConfigured() {
     return password.length > 0;
@@ -115,6 +161,34 @@ function createWebAdminAuth(config = {}, log = console) {
     return forwarded === 'https';
   }
 
+  function rateLimitStatus(ip, now = Date.now()) {
+    const entry = loginAttempts.get(ip);
+    if (!entry || entry.lockedUntil <= now) {
+      return null;
+    }
+    const retryAfterSec = Math.max(1, Math.ceil((entry.lockedUntil - now) / 1000));
+    return {
+      ok: false,
+      status: 429,
+      code: 'rate_limited',
+      retryAfterSec,
+      error: `Too many failed logins — try again in ${retryAfterSec}s`,
+    };
+  }
+
+  function recordFailedLogin(ip, now = Date.now()) {
+    const prev = loginAttempts.get(ip) || { fails: 0, lockedUntil: 0 };
+    const fails = prev.fails + 1;
+    const lockSec = lockoutSecondsForFails(fails);
+    const lockedUntil = lockSec > 0 ? now + lockSec * 1000 : 0;
+    loginAttempts.set(ip, { fails, lockedUntil });
+    return { fails, lockedUntil, lockSec };
+  }
+
+  function clearLoginAttempts(ip) {
+    loginAttempts.delete(ip);
+  }
+
   function login(candidatePassword, req) {
     if (!isConfigured()) {
       return {
@@ -124,10 +198,37 @@ function createWebAdminAuth(config = {}, log = console) {
         code: 'admin_password_unset',
       };
     }
-    if (!timingSafeEqualString(candidatePassword, password)) {
-      log.warn?.('Admin login failed — incorrect password');
-      return { ok: false, status: 401, error: 'Incorrect password', code: 'bad_password' };
+
+    const ip = clientIpFromRequest(req);
+    const now = Date.now();
+    const limited = rateLimitStatus(ip, now);
+    if (limited) {
+      // Keep response timing closer to a real password check.
+      timingSafeEqualString(candidatePassword, password);
+      log.warn?.('Admin login blocked — rate limited', { ip, retryAfterSec: limited.retryAfterSec });
+      return limited;
     }
+
+    if (!timingSafeEqualString(candidatePassword, password)) {
+      const recorded = recordFailedLogin(ip, now);
+      log.warn?.('Admin login failed — incorrect password', {
+        ip,
+        fails: recorded.fails,
+        lockSec: recorded.lockSec,
+      });
+      const retryAfterSec = recorded.lockSec > 0 ? recorded.lockSec : undefined;
+      return {
+        ok: false,
+        status: recorded.lockSec > 0 ? 429 : 401,
+        error: recorded.lockSec > 0
+          ? `Incorrect password — try again in ${recorded.lockSec}s`
+          : 'Incorrect password',
+        code: recorded.lockSec > 0 ? 'rate_limited' : 'bad_password',
+        retryAfterSec,
+      };
+    }
+
+    clearLoginAttempts(ip);
     purgeExpired();
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = Date.now() + sessionMs;
@@ -201,8 +302,11 @@ function createWebAdminAuth(config = {}, log = console) {
     logout,
     sessionFromRequest,
     assertAuthorized,
+    clientIpFromRequest,
     // test helpers
     _sessions: sessions,
+    _loginAttempts: loginAttempts,
+    _lockoutSecondsForFails: lockoutSecondsForFails,
   };
 }
 
@@ -211,4 +315,8 @@ module.exports = {
   parseCookies,
   COOKIE_NAME,
   timingSafeEqualString,
+  clientIpFromRequest,
+  normalizeClientIp,
+  lockoutSecondsForFails,
+  LOCKOUT_LADDER_SEC,
 };

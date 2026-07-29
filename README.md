@@ -8,6 +8,8 @@
 
 The companion [**Windows display client**](alexa%20broadcast%20client/README.md) shows fullscreen overlays on a poster PC, movie screen, or kitchen display. Alexa voice capture still uses `alexa-remote2` (unofficial); there is **no supported Amazon API** for passive listening.
 
+> **Required for any real LAN deploy:** set a shared **LAN UDP secret** (`LAN_UDP_SECRET` on the bridge, matching `udpSecret` on every display). Without it, overlays, remote keyboard/mouse, reboot, and `web.open` travel as **plaintext UDP** — anyone on the LAN can forge them. See [LAN UDP encryption](#lan-udp-encryption). Generate with `openssl rand -base64 32`.
+
 ---
 
 ## Features at a glance
@@ -118,16 +120,20 @@ Displays **advertise to the bridge** so Signal knows who is online and can targe
 | Bridge → clients | **47832** | `display.discover` — asks clients to announce now |
 | Bridge → clients | **47832** | overlays + `web.*` / `system.*` / `input.*` (optionally `target.id`) |
 
-### LAN UDP encryption
+### LAN UDP encryption (required on a real network)
 
-UDP overlays and remote input are **plaintext unless you set a shared secret**. Put the same long random value in:
+UDP carries overlays **and** dangerous commands (`system.command` reboot/power-off, `input.*` remote keyboard/mouse, `web.open`). Those are **plaintext unless you set a shared secret**. Leaving the secret empty is for local smoke tests only — **not** a trusted home LAN.
 
-- Bridge `.env`: `LAN_UDP_SECRET=...` (see `.env.example`; `openssl rand -base64 32`)
-- Each display `config.json`: `"udpSecret": "..."`
+**Do this before relying on Signal in production:**
 
-Then `./recreate.sh` and redeploy the portable client. When set, traffic uses AES-256-GCM (protocol v3 envelope). Mismatched/missing secrets drop packets (check bridge/client logs). Leave empty only for local plaintext testing.
+1. Generate a long random value: `openssl rand -base64 32`
+2. Bridge `.env`: `LAN_UDP_SECRET=...` (see [`.env.example`](.env.example))
+3. Each display `config.json`: `"udpSecret": "..."` (same value)
+4. `./recreate.sh` on the NAS, then restart/redeploy every display client
 
-Clients should set in their `config.json`:
+When set, traffic uses AES-256-GCM (protocol v3 envelope), including `display.announce`. Mismatched or missing secrets drop packets (check bridge/client logs). Anyone who knows the secret is trusted like the bridge — keep it out of git and guest machines.
+
+Clients should also set in their `config.json`:
 
 ```json
 "displayName": "Poster Display",
@@ -174,6 +180,7 @@ Needs the **WebView2 runtime** on the display PC (included on modern Windows 10/
   - UDP **47832** (overlays / commands)
   - Outbound UDP **47833** to the NAS (display announce)
   - Edge **WebView2** for pushed URLs
+  - Matching **`udpSecret`** / bridge **`LAN_UDP_SECRET`** (required on a real LAN — see [LAN UDP encryption](#lan-udp-encryption))
 - **Phone control:** browser that can reach `https://<NAS_IP>:47810/`
 
 ---
@@ -183,6 +190,7 @@ Needs the **WebView2 runtime** on the display PC (included on modern Windows 10/
 ```bash
 npm install
 cp config.example.json data/config.json   # or config.json at repo root for local dev
+cp .env.example .env                      # set ADMIN_PASSWORD; set LAN_UDP_SECRET for any real LAN
 npm run auth                              # one-time Amazon login → data/alexa-session.json
 npm start
 ```
@@ -350,11 +358,12 @@ If auth breaks after an Amazon change, run `npm run auth` (or `./reauth.sh` on t
 ## Notes
 
 - Uses the unofficial [`alexa-remote2`](https://www.npmjs.com/package/alexa-remote2) library (same approach as Home Assistant / Node-RED integrations).
+- **Always set `LAN_UDP_SECRET` + matching client `udpSecret` on a real network.** Empty secret = forgeable reboot / remote input / WebView over UDP. See [LAN UDP encryption](#lan-udp-encryption).
 - Announcements sent **only** from the Alexa app may not always appear in voice history.
 - Routines **Run from the Alexa app** (pick a device) are best-effort: the bridge has no Amazon “routine executed” webhook. Capture uses richer history fields, more push poll hints, and your automation catalog (`getAutomationRoutines`). If a Run still does nothing, check `data/unmatched-activities.jsonl` after the attempt.
 - Generic "what's the temperature" routes to **outdoor weather**; location-specific phrases ("top floor", "bedroom echo") route to **indoor temperature**.
 - Indoor locations, air monitor names, and device aliases can be customized in `config.json` — see `src/PROJECT.md`.
-- The Signal UI is intended for a **trusted LAN** (no login gate on the page itself).
+- The Signal guest booth is intentionally public on a **trusted LAN**; admin UI requires `ADMIN_PASSWORD`. Do not expose control ports to the internet without understanding that trade-off.
 
 ---
 
