@@ -184,15 +184,28 @@ function resolveCertDir(config) {
   return path.resolve(config.ROOT || path.resolve(__dirname, '..'), rel);
 }
 
+function resolveTlsPaths(config) {
+  const root = config.ROOT || path.resolve(__dirname, '..');
+  const certDir = resolveCertDir(config);
+  const certFileEnv = String(process.env.WEB_TLS_CERT_FILE || config.webServer?.certFile || '').trim();
+  const keyFileEnv = String(process.env.WEB_TLS_KEY_FILE || config.webServer?.keyFile || '').trim();
+  return {
+    certDir,
+    certPath: certFileEnv ? path.resolve(root, certFileEnv) : path.join(certDir, 'cert.pem'),
+    keyPath: keyFileEnv ? path.resolve(root, keyFileEnv) : path.join(certDir, 'key.pem'),
+  };
+}
+
 /**
  * Ensure key.pem + cert.pem exist; return { key, cert, keyPath, certPath, created }.
  * hosts: optional extra SANs (LAN IPs / hostnames) baked into a new cert.
+ * If cert.pem/key.pem already exist (e.g. Let's Encrypt via issue-letsencrypt-cert.sh),
+ * they are reused as-is and not overwritten.
  */
 function ensureWebTls(config, { hosts = [], force = false } = {}) {
-  const certDir = resolveCertDir(config);
-  fs.mkdirSync(certDir, { recursive: true });
-  const keyPath = path.join(certDir, 'key.pem');
-  const certPath = path.join(certDir, 'cert.pem');
+  const { certDir, keyPath, certPath } = resolveTlsPaths(config);
+  fs.mkdirSync(path.dirname(keyPath), { recursive: true });
+  fs.mkdirSync(path.dirname(certPath), { recursive: true });
   const cn = config.webServer?.certCommonName || 'alexa-broadcast-control';
   const days = Number(config.webServer?.certDays) || 3650;
   const sanHosts = [
@@ -227,6 +240,7 @@ function ensureWebTls(config, { hosts = [], force = false } = {}) {
 module.exports = {
   ensureWebTls,
   resolveCertDir,
+  resolveTlsPaths,
   generateWithNodeCrypto,
   generateWithOpenSsl,
 };

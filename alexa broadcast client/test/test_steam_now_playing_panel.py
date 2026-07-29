@@ -119,10 +119,15 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         hero_h = boxes["hero"][3] - boxes["hero"][1]
         meta_h = boxes["meta"][3] - boxes["meta"][1]
         shots_h = boxes["shots"][3] - boxes["shots"][1]
+        footer_h = boxes["footer"][3] - boxes["footer"][1]
         # Portrait hero can take ~half the column; meta + shots still get room.
         self.assertLessEqual(hero_h, int((1860 - 60) * 0.55))
         self.assertGreater(meta_h, 140)
-        self.assertGreater(shots_h, 90)
+        self.assertGreater(shots_h, 60)
+        self.assertLessEqual(shots_h, 110)
+        # Stats strip stays compact vs the screenshot band.
+        self.assertLess(footer_h, shots_h + 20)
+        self.assertLessEqual(footer_h, 110)
         # Footer sits at the content bottom (no stranded empty band).
         self.assertGreaterEqual(boxes["footer"][3], 1860 - 20 - 5)
 
@@ -308,6 +313,70 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertIsNone(panel.scroller)
         self.assertFalse(panel.needs_scroll)
         self.assertEqual(scroller._state, "idle")
+
+    def test_credit_is_right_aligned_on_title_row(self):
+        panel = self._make_draw_panel()
+        boxes = {
+            "meta": (0, 50, 800, 420),
+            "shots": (0, 430, 800, 560),
+        }
+        steam = {
+            "name": "Boomerang Fu",
+            "developers": ["Cranky Watermelon"],
+            "releaseYear": 2020,
+            "shortDescription": "Short.",
+            "screenshots": ["http://a"],
+            "tags": ["PvP"],
+        }
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 400, 40)
+            panel._draw_meta(boxes, steam)
+        found = False
+        for call in panel.canvas.create_text.call_args_list:
+            kwargs = call.kwargs
+            args = call.args
+            text = kwargs.get("text")
+            if text is None and len(args) >= 3:
+                text = args[2]
+            if text and "CRANKY WATERMELON" in str(text):
+                self.assertEqual(kwargs.get("anchor"), "ne")
+                self.assertEqual(args[0], 800)
+                found = True
+                break
+        self.assertTrue(found, "developer/year credit was not drawn right-aligned")
+
+    def test_description_scroller_starts_at_left_edge(self):
+        panel = self._make_draw_panel()
+        boxes = {
+            "meta": (10, 50, 810, 420),
+            "shots": (10, 430, 810, 560),
+        }
+        steam = {
+            "name": "Game",
+            "shortDescription": "Desc line. " * 40,
+            "screenshots": ["http://a"],
+        }
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 400, 600)
+            with mock.patch("src.steam_now_playing_panel.MessageScrollController") as scroller_cls:
+                scroller_cls.return_value.configure.return_value = True
+                panel._draw_meta(boxes, steam)
+                conf = scroller_cls.return_value.configure
+                self.assertTrue(conf.called)
+                # center_x must be 0 so wrap fills the full meta width.
+                self.assertEqual(conf.call_args.kwargs.get("center_x"), 0)
+
+    def test_blur_backdrop_cover_fills_hero_box(self):
+        from src.steam_now_playing_panel import Image
+
+        if Image is None:
+            self.skipTest("Pillow not installed")
+        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
+        # Portrait source into a wider hero frame — backdrop must fill exactly.
+        src = Image.new("RGB", (600, 900), color=(20, 180, 220))
+        out = panel._make_blur_backdrop(src, 800, 500)
+        self.assertIsNotNone(out)
+        self.assertEqual(out.size, (800, 500))
 
 
 class SteamArtworkCacheTests(unittest.TestCase):

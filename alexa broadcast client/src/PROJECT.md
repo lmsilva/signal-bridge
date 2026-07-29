@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-28 (Steam panel space-max layout)
+**Last updated:** 2026-07-28 (Steam panel mockup alignment)
 
 ---
 
@@ -258,6 +258,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-28: **Steam panel mockup alignment** — hero uses same art as full-frame blurred backdrop + contained sharp poster; developer·year right-aligned; smaller tags (no overlap into description); description wraps full meta width (`center_x=0`); shorter screenshot band + compact stats footer. Portable rebuild required.
 - 2026-07-28: **Steam panel space-max layout** — hero frame follows artwork aspect (tall for `library_600x900`, short/wide for `header.jpg`) so landscape art is no longer letterboxed in a tall box; portrait column widens to ~90% width; cover-fit art with soft glow + corner brackets; title + developer·year on one row, tags under title; larger dedicated screenshot band; footer dividers + compact PLAYING NOW count. Portable rebuild required.
 - 2026-07-28: **Client unit test expansion** — new tests for `UdpListener`, overlay countdown, broadcast viewport, music empty state, paths/config/announce/payload utils, Tesla stale `_status_bits`, Steam artwork cache/footer, `steam.now-playing.close` routing, UTF-8 console guard; `requirements-test.txt` includes runtime deps. Full suite: 237 tests (4 skipped without `qrcode`).
 - 2026-07-26: **Steam artwork disk cache** — `SteamNowPlayingPanel` stores fetched posters/screenshots under `steam-artwork-cache/` next to the app, paints from cache immediately, then refreshes from the network in the background (SSL fallback for the bridge’s self-signed cert). Bridge no longer hosts `/steam-artwork/` — CDN URLs only. Portable rebuild required.
