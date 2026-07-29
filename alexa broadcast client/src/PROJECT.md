@@ -207,13 +207,13 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only (308+ tests)
+test\run_tests.bat              # client unit tests only (317 tests)
 ```
 
 From repo root (bridge + client):
 
 ```powershell
-..\run_all_tests.bat            # bridge + client (308+ client)
+..\run_all_tests.bat            # bridge + client (317 client)
 ```
 
 **Unit tests:** `test/test_listener.py` (UDP accept/filter + `_rinfo` + LAN crypto), `test_overlay_countdown.py` (`_format_remaining`, slideshow/Steam countdown blanking, `_stop_timers`), `test_broadcast_panel.py` (chip/message viewport top), `test_music_panel.py` (empty state / "Nothing playing"), `test_paths.py` (`ensure_config_file`), `test_display_announce.py` (ASCII announce log, hostname/`steamAppId`), `test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`, `qr.display`/`photo.slideshow`/`route-planner.query` display types, `input.text` command type, `title_for_payload` photo QR), `test_config.py` (incl. `photo.slideshow` + `guest.photobooth` + `route-planner.query` bypassing `maxDisplaySeconds`, `shoppingList` merge), `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds, `qr.display`/`photo.slideshow` visibility, UTF-8 console reconfigure), `test_web_overlay.py` (URL pre-flight, host command build, web/system/steam-close command routing, friendly error payload), `test_qr_panel.py` (`QrPanel._build_qr_image` sizing vs target, empty-content fallback — skipped if `qrcode` isn't installed), `test_photo_slideshow_panel.py` (`PhotoSlideshowPanel._fetch_photo` download/thumbnail sizing, SSL-verify-failure fallback + memoization, `_is_ssl_failure`, `show()` normalizing `{url,uploadedAt}`/bare-string photo entries, `_advance()` stopping after the last photo instead of wrapping), `test_text_marquee.py` (`MarqueeLine` — fits-statically vs. overflows-and-scrolls branch, full pause/scroll/pause/reset tick cycle, `stop()` cancels the pending tick), `test_map_fetch.py` (`map_tiles` tile/SSL helpers + `zoom_to_fit`/pixel projection), `test_place_facts.py` (`fetch_place_summary` incl. MediaWiki search fallback + disambiguation/blank-extract/SSL-fallback handling), `test_route_planner_panel.py` (footer clear, progressive loading/failed status copy, map/weather wait-for-coords, `_compute_tile_boxes`, `_apply_facts`, formatting helpers), `test_shopping_list_panel.py` (density ladder + paging settings clamps), `test_steam_now_playing_panel.py` (timed landscape dismiss clear, layout, artwork cache/fetch, footer players, elapsed tick, last-played date), `test_tesla_battery_panel.py` (`battery_bar_height`, stale/refreshing `_status_bits`), `test_display_remote.py` (incl. `handle_text` full-string typing, optional Enter, broken-pynput survival).
@@ -262,7 +262,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
-- 2026-07-29: **Test suite catch-up** — regression coverage for Steam/route dismiss footer clear, progressive route loading/failed UI, shopping list paging config merge/clamps. Full suite with bridge: **308+ client** tests.
+- 2026-07-29: **Test suite catch-up** — regression coverage for Steam/route dismiss footer clear, progressive route loading/failed UI, shopping list paging config merge/clamps. Full suite with bridge: **317 client** tests.
 - 2026-07-29: **Steam timed landscape clears dismiss footer** — last-played / preview sessions inset ~18u above the dismiss band so the hero border + stats strip are not covered; persistent auto sessions keep full height; portrait timed gets the same clear. Restart/rebuild display client.
 - 2026-07-29: **Route Planner clears dismiss footer** — content plate + Local Times tile inset above the dismiss band (`content_frame_bounds`, ~18u) in portrait and landscape so the bottom card is no longer covered. Restart/rebuild display client.
 - 2026-07-29: **Route Planner progressive updates** — accepts `status: loading|ready|failed` payloads; shows names + “Finding places…” immediately, keeps map/weather spinners until coords arrive, then fills tiles. Dismiss uses bridge `displaySeconds` (typically 240s / 2× default, min 180). Restart or portable rebuild required.
