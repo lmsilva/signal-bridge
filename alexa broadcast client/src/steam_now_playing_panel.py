@@ -148,6 +148,7 @@ class SteamNowPlayingPanel(BasePanel):
         self.needs_scroll = False
         self.scroller = None
         self._desc_viewport = None
+        self._desc_window_id = None
         self._fetch_token = 0
         self._photo_refs = []
         self._tick_job = None
@@ -171,6 +172,15 @@ class SteamNowPlayingPanel(BasePanel):
             self.scroller.stop()
         self.scroller = None
         self.needs_scroll = False
+        win_id = self._desc_window_id
+        self._desc_window_id = None
+        if win_id is not None:
+            try:
+                self.canvas.delete(win_id)
+            except Exception:
+                pass
+            if win_id in self._item_ids:
+                self._item_ids.remove(win_id)
         viewport = self._desc_viewport
         self._desc_viewport = None
         if viewport is None:
@@ -272,9 +282,12 @@ class SteamNowPlayingPanel(BasePanel):
         ))
 
     def _compute_portrait_boxes(self, x0, y0, x1, y1, *, u=1.0, has_shots=True):
-        """Fixed stage 1000×1100; screenshots+footer pinned to the bottom."""
+        """Fixed stage 1000×1100; desc+screenshots+footer pinned to the bottom.
+
+        Description is its own band directly above screenshots so title/tag
+        growth cannot push copy into the shot row.
+        """
         u = float(u or 1.0)
-        col_w = x1 - x0
         header_h = 84 * u
         stage_h = 1100 * u
         title_h = 74 * u
@@ -286,6 +299,7 @@ class SteamNowPlayingPanel(BasePanel):
         g_stage = 24 * u
         g_title = 16 * u
         g_tags = 18 * u
+        g_desc = 12 * u
         g_shots = 22 * u
 
         header = (x0, y0, x1, y0 + header_h)
@@ -293,7 +307,7 @@ class SteamNowPlayingPanel(BasePanel):
         # If the column is shorter than the design canvas, scale the stage down
         # so nothing overlaps the footer / screenshots.
         fixed_below = (
-            g_stage + title_h + g_title + tags_h + g_tags + desc_h
+            g_stage + title_h + g_title + tags_h + g_tags + g_desc + desc_h
             + (g_shots + shots_h if has_shots else 0) + footer_h
         )
         max_stage = max(400 * u, (y1 - hero_top) - fixed_below)
@@ -302,16 +316,20 @@ class SteamNowPlayingPanel(BasePanel):
 
         footer_top = y1 - footer_h
         shots_top = footer_top - (g_shots + shots_h if has_shots else 0)
+        desc_bottom = shots_top
+        desc_top = desc_bottom - desc_h
         meta_top = hero[3] + g_stage
-        meta_bottom = shots_top
-        # Title/tags/desc live in meta; shots are a separate band.
+        meta_bottom = max(meta_top, desc_top - g_desc)
+        # Title/tags only above the pinned description band.
         meta = (x0, meta_top, x1, meta_bottom)
+        desc = (x0, desc_top, x1, desc_bottom)
         shots = (x0, shots_top, x1, shots_top + shots_h) if has_shots else (x0, shots_top, x1, shots_top)
         footer = (x0, footer_top, x1, y1)
         return {
             "header": header,
             "hero": hero,
             "meta": meta,
+            "desc": desc,
             "shots": shots,
             "footer": footer,
             "title_h": title_h,
@@ -335,14 +353,21 @@ class SteamNowPlayingPanel(BasePanel):
         header = (x0, y0, x1, y0 + header_h)
         zone_top = y0 + header_h + 20 * u
         zone_bottom = y1
-        # Right column: title/tags/desc from top; shots + stats pinned to bottom.
+        # Right column: title/tags above a pinned desc band; shots + stats at bottom.
         footer_h = 100 * u
+        desc_h = 256 * u
         shots_h = (158 * u) if has_shots else 0
+        g_desc = 12 * u
         g_shots = 22 * u
         footer_top = zone_bottom - footer_h
         shots_top = footer_top - (g_shots + shots_h if has_shots else 0)
+        desc_bottom = shots_top
+        desc_top = desc_bottom - desc_h
+        meta_top = zone_top
+        meta_bottom = max(meta_top, desc_top - g_desc)
         hero = (x0, zone_top, left_x1, zone_bottom)
-        meta = (right_x0, zone_top, x1, shots_top)
+        meta = (right_x0, meta_top, x1, meta_bottom)
+        desc = (right_x0, desc_top, x1, desc_bottom)
         shots = (
             (right_x0, shots_top, x1, shots_top + shots_h)
             if has_shots else (right_x0, shots_top, x1, shots_top)
@@ -352,11 +377,12 @@ class SteamNowPlayingPanel(BasePanel):
             "header": header,
             "hero": hero,
             "meta": meta,
+            "desc": desc,
             "shots": shots,
             "footer": footer,
             "title_h": 104 * u,
             "tags_h": 40 * u,
-            "desc_h": 256 * u,
+            "desc_h": desc_h,
             "u": u,
         }
 
@@ -638,20 +664,24 @@ class SteamNowPlayingPanel(BasePanel):
 
         tags_top = my0 + title_h + self.TAG_FONT_GAP
         tags_bottom = self._draw_tags(
-            tags, mx0, tags_top, mx1, tags_top + int(boxes.get("tags_h") or self.TAG_PILL_H),
+            tags, mx0, tags_top, mx1, min(my1, tags_top + int(boxes.get("tags_h") or self.TAG_PILL_H)),
         )
-        # Reserved description band — clipped nested canvas so long copy scrolls
-        # in place instead of painting over the screenshot row below.
-        reserved_desc = float(boxes.get("desc_h") or 128)
-        desc_top = tags_bottom + 12
-        # Never invade the screenshot band (meta bottom == shots top when separate).
-        hard_floor = float(my1)
-        if shots_separate:
-            hard_floor = min(hard_floor, float(shots_box[1]))
-        desc_bottom = min(hard_floor, desc_top + reserved_desc)
-        desc_h = max(0, int(desc_bottom - desc_top))
+        # Pinned description band (layout `desc`) — embedded via create_window so
+        # it shares the main canvas coordinate system / clip with screenshots.
+        desc_box = boxes.get("desc")
+        if desc_box:
+            dx0, dy0, dx1, dy1 = desc_box
+        else:
+            # Legacy fallback if a caller omits `desc` (tests / older boxes).
+            reserved_desc = float(boxes.get("desc_h") or 128)
+            dy0 = min(float(my1), float(tags_bottom) + 12)
+            hard_floor = float(my1)
+            if shots_separate:
+                hard_floor = min(hard_floor, float(shots_box[1]))
+            dy1 = min(hard_floor, dy0 + reserved_desc)
+            dx0, dx1 = mx0, mx1
         desc = str(steam.get("shortDescription") or "")
-        self._place_description_viewport(desc, mx0, desc_top, mx1, desc_h)
+        self._place_description_viewport(desc, dx0, dy0, dx1, max(0, int(dy1 - dy0)))
 
         if shots_separate and shots:
             self._draw_shot_placeholders(shots_box, shots)
@@ -665,7 +695,11 @@ class SteamNowPlayingPanel(BasePanel):
             self._place_screenshot_row(shots, sx0, sy0, sx1, sy1)
 
     def _place_description_viewport(self, desc: str, x0: float, y0: float, x1: float, height: int):
-        """Clipped description band; long text loops via MessageScrollController."""
+        """Clipped description band; long text loops via MessageScrollController.
+
+        Embedded with ``canvas.create_window`` (not root ``place``) so the band
+        cannot drift relative to screenshot images drawn on the same canvas.
+        """
         self._clear_description_viewport()
         if not desc or height < 20:
             return
@@ -673,8 +707,10 @@ class SteamNowPlayingPanel(BasePanel):
         body_width = max(40, int(x1 - x0))
         viewport_h = max(1, int(height))
         desc_font = getattr(self.shell, "body_font", None) or self.shell.chip_label_font
+        # Parent the nested canvas to the overlay canvas so create_window clips
+        # correctly inside the panel coordinate space.
         viewport = tk.Canvas(
-            self.root,
+            self.canvas,
             width=body_width,
             height=viewport_h,
             highlightthickness=0,
@@ -695,10 +731,23 @@ class SteamNowPlayingPanel(BasePanel):
         needs_scroll = scroller.configure(
             desc, center_x=0, viewport_height=viewport_h,
         )
+        win_id = self.canvas.create_window(
+            int(x0), int(y0),
+            anchor="nw",
+            window=viewport,
+            width=body_width,
+            height=viewport_h,
+        )
+        self._item_ids.append(win_id)
+        self._desc_window_id = win_id
         self._desc_viewport = viewport
+        self._widgets.append(viewport)
         self.scroller = scroller
         self.needs_scroll = bool(needs_scroll)
-        self._place_widget(viewport, x=int(x0), y=int(y0))
+        # Start immediately so persistent Steam (no dismiss timer) still scrolls;
+        # overlay._on_show_ready may call start() again (idempotent via stop).
+        if needs_scroll:
+            scroller.start()
 
     def _draw_shot_placeholders(self, shots_box, shots):
         """Empty cells stay as flat plates when fewer than 3 screenshots."""
