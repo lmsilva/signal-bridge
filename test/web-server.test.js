@@ -966,6 +966,17 @@ test('weather and shopping-list quick-push tiles feed synthetic events into the 
   }
 });
 
+test('admin on-screen keyboard sends Space and flashes pressed keys', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(js, /key:\s*'Space'/);
+  assert.doesNotMatch(js, /key:\s*' '\s*,\s*label:\s*'Space'/);
+  assert.match(js, /function flashPressed\(/);
+  assert.match(js, /classList\.add\('pressed'\)/);
+
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+  assert.match(css, /\.key\.pressed/);
+});
+
 test('admin home logo goes to Push; Steam return opens Settings', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="btn-app-home"/);

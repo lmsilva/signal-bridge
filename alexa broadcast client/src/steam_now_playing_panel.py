@@ -147,6 +147,7 @@ class SteamNowPlayingPanel(BasePanel):
         super().__init__(root, shell, config)
         self.needs_scroll = False
         self.scroller = None
+        self._desc_viewport = None
         self._fetch_token = 0
         self._photo_refs = []
         self._tick_job = None
@@ -161,12 +162,29 @@ class SteamNowPlayingPanel(BasePanel):
     def hide(self):
         self._fetch_token += 1
         self._stop_elapsed_tick()
+        self._clear_description_viewport()
+        self._photo_refs = []
+        super().hide()
+
+    def _clear_description_viewport(self):
         if self.scroller:
             self.scroller.stop()
         self.scroller = None
         self.needs_scroll = False
-        self._photo_refs = []
-        super().hide()
+        viewport = self._desc_viewport
+        self._desc_viewport = None
+        if viewport is None:
+            return
+        try:
+            viewport.place_forget()
+        except Exception:
+            pass
+        if viewport in self._widgets:
+            self._widgets.remove(viewport)
+        try:
+            viewport.destroy()
+        except Exception:
+            pass
 
     def _stop_elapsed_tick(self):
         if self._tick_job is not None:
@@ -622,22 +640,18 @@ class SteamNowPlayingPanel(BasePanel):
         tags_bottom = self._draw_tags(
             tags, mx0, tags_top, mx1, tags_top + int(boxes.get("tags_h") or self.TAG_PILL_H),
         )
-        # Spec: reserve fixed description height (3 lines portrait / 6 landscape).
+        # Reserved description band — clipped nested canvas so long copy scrolls
+        # in place instead of painting over the screenshot row below.
         reserved_desc = float(boxes.get("desc_h") or 128)
         desc_top = tags_bottom + 12
-        desc_bottom = min(my1, desc_top + reserved_desc)
-        desc_h = max(0, desc_bottom - desc_top)
+        # Never invade the screenshot band (meta bottom == shots top when separate).
+        hard_floor = float(my1)
+        if shots_separate:
+            hard_floor = min(hard_floor, float(shots_box[1]))
+        desc_bottom = min(hard_floor, desc_top + reserved_desc)
+        desc_h = max(0, int(desc_bottom - desc_top))
         desc = str(steam.get("shortDescription") or "")
-        desc_font = getattr(self.shell, "body_font", None) or self.shell.chip_label_font
-        self.needs_scroll = False
-        self.scroller = None
-        if desc and desc_h >= 20:
-            body_width = max(40, int(mx1 - mx0))
-            # Hard clamp via canvas text wrap — no scroll overlay on description.
-            self._item_ids.append(self.canvas.create_text(
-                mx0, desc_top, anchor="nw", text=desc,
-                fill=STEAM_INK_DIM, font=desc_font, width=body_width, justify=tk.LEFT,
-            ))
+        self._place_description_viewport(desc, mx0, desc_top, mx1, desc_h)
 
         if shots_separate and shots:
             self._draw_shot_placeholders(shots_box, shots)
@@ -649,6 +663,42 @@ class SteamNowPlayingPanel(BasePanel):
         if shots_separate and shots:
             sx0, sy0, sx1, sy1 = shots_box
             self._place_screenshot_row(shots, sx0, sy0, sx1, sy1)
+
+    def _place_description_viewport(self, desc: str, x0: float, y0: float, x1: float, height: int):
+        """Clipped description band; long text loops via MessageScrollController."""
+        self._clear_description_viewport()
+        if not desc or height < 20:
+            return
+
+        body_width = max(40, int(x1 - x0))
+        viewport_h = max(1, int(height))
+        desc_font = getattr(self.shell, "body_font", None) or self.shell.chip_label_font
+        viewport = tk.Canvas(
+            self.root,
+            width=body_width,
+            height=viewport_h,
+            highlightthickness=0,
+            bd=0,
+            bg=self.DESC_BG,
+        )
+        text_id = viewport.create_text(
+            0, 0, anchor="nw", text="",
+            fill=STEAM_INK_DIM, font=desc_font,
+            width=body_width, justify=tk.LEFT,
+        )
+        # on_finish hides when a timed session waits for one full scroll cycle
+        # after the dismiss timer (same contract as BroadcastPanel).
+        on_finish = getattr(getattr(self.shell, "overlay", None), "hide", lambda: None)
+        scroller = MessageScrollController(
+            viewport, text_id, self.config, self.root, on_finish=on_finish,
+        )
+        needs_scroll = scroller.configure(
+            desc, center_x=0, viewport_height=viewport_h,
+        )
+        self._desc_viewport = viewport
+        self.scroller = scroller
+        self.needs_scroll = bool(needs_scroll)
+        self._place_widget(viewport, x=int(x0), y=int(y0))
 
     def _draw_shot_placeholders(self, shots_box, shots):
         """Empty cells stay as flat plates when fewer than 3 screenshots."""

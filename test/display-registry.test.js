@@ -85,6 +85,12 @@ test('discover and input payload builders', () => {
   assert.equal(key.key.key, 'F4');
   assert.deepEqual(key.key.modifiers, ['alt', 'meta']);
 
+  // Literal space must not be trim()'d into a "Missing key" rejection.
+  const spaceLiteral = buildInputKeyPayload({ key: ' ' });
+  assert.equal(spaceLiteral.key.key, 'Space');
+  assert.equal(buildInputKeyPayload({ key: 'Space' }).key.key, 'Space');
+  assert.equal(buildInputKeyPayload({ key: 'space' }).key.key, 'Space');
+
   assert.equal(buildInputKeyPayload({ key: '' }), null);
 });
 
