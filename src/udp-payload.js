@@ -488,6 +488,22 @@ function buildInputPointerPayload({
 const INPUT_KEY_ACTIONS = new Set(['press', 'down', 'up']);
 const INPUT_MODIFIERS = new Set(['ctrl', 'alt', 'shift', 'meta', 'win']);
 
+function normalizeInputKeyName(key) {
+  // A literal space character is a valid key — do not trim() it to empty
+  // (admin keyboard used to send ' ' and the bridge replied "Missing key").
+  if (typeof key === 'string' && key.length > 0 && /^\s+$/.test(key)) {
+    return 'Space';
+  }
+  const normalized = String(key ?? '').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.toLowerCase() === 'space') {
+    return 'Space';
+  }
+  return normalized;
+}
+
 function buildInputKeyPayload({
   key,
   modifiers = [],
@@ -496,7 +512,7 @@ function buildInputKeyPayload({
   timestamp,
   trigger,
 } = {}) {
-  const normalizedKey = String(key || '').trim();
+  const normalizedKey = normalizeInputKeyName(key);
   if (!normalizedKey) {
     return null;
   }

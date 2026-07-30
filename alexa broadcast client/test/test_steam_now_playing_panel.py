@@ -118,9 +118,10 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertAlmostEqual(hero_h, 1100, delta=1)
         self.assertAlmostEqual(shots_h, 183, delta=1)
         self.assertAlmostEqual(footer_h, 101, delta=1)
-        # Meta sits between stage and shots — no overlap with hero.
+        # Meta sits between stage and shots — no overlap with hero/shots.
         self.assertGreaterEqual(boxes["meta"][1], boxes["hero"][3])
         self.assertLessEqual(boxes["meta"][3], boxes["shots"][1] + 0.1)
+        self.assertGreater(boxes["desc_h"], 0)
 
     def test_landscape_boxes_keep_hero_and_meta_side_by_side(self):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
@@ -310,7 +311,7 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         panel.canvas = shell.content_canvas
         return panel
 
-    def test_long_description_is_static_not_scrolled(self):
+    def test_long_description_scrolls_in_reserved_viewport(self):
         panel = self._make_draw_panel()
         boxes = {
             "meta": (0, 50, 800, 420),
@@ -326,10 +327,17 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a", "http://b", "http://c"],
             "tags": ["PvP", "Co-op"],
         }
-        panel._draw_meta(boxes, steam)
-        # Spec: description is a static clamp, not a scrolling viewport.
-        self.assertIsNone(panel.scroller)
-        self.assertFalse(panel.needs_scroll)
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            # Taller than the reserved 128px band → must scroll, not overflow.
+            canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
+            panel._draw_meta(boxes, steam)
+            canvas_cls.assert_called()
+            _, kwargs = canvas_cls.call_args
+            self.assertEqual(kwargs.get("height"), 128)
+            self.assertEqual(kwargs.get("width"), 800)
+        self.assertIsNotNone(panel.scroller)
+        self.assertTrue(panel.needs_scroll)
+        self.assertTrue(panel.scroller.needs_scroll)
         # Screenshots live in the dedicated shots band (3 columns).
         self.assertEqual(len(panel._shot_ids), 3)
         # STEAM source chip is drawn in the tag row (not on the art).
@@ -344,6 +352,65 @@ class SteamNowPlayingClientTests(unittest.TestCase):
                 steam_chip = True
                 break
         self.assertTrue(steam_chip)
+        # Description must not also be painted unbounded on the main canvas.
+        for call in panel.canvas.create_text.call_args_list:
+            kwargs = call.kwargs
+            text = kwargs.get("text") or ""
+            if "very long description" in str(text).lower():
+                self.fail("long description drawn on main canvas (would cover screenshots)")
+
+    def test_short_description_does_not_scroll(self):
+        panel = self._make_draw_panel()
+        boxes = {
+            "meta": (0, 50, 800, 420),
+            "shots": (0, 430, 800, 560),
+            "desc_h": 128,
+            "tags_h": 40,
+        }
+        steam = {
+            "name": "Game",
+            "shortDescription": "Short blurb.",
+            "screenshots": ["http://a"],
+        }
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 200, 40)
+            panel._draw_meta(boxes, steam)
+        self.assertIsNotNone(panel.scroller)
+        self.assertFalse(panel.needs_scroll)
+        self.assertFalse(panel.scroller.needs_scroll)
+
+    def test_description_viewport_stays_above_screenshots(self):
+        """Regression: unclipped create_text painted over the screenshot row."""
+        panel = self._make_draw_panel()
+        boxes = {
+            "meta": (40, 100, 840, 400),
+            "shots": (40, 400, 840, 580),
+            "desc_h": 128,
+            "tags_h": 40,
+        }
+        steam = {
+            "name": "Boomerang Fu",
+            "shortDescription": "Slice and dice your friends. " * 30,
+            "screenshots": ["http://a", "http://b", "http://c"],
+            "tags": ["PvP"],
+        }
+        placed = {}
+
+        def capture_place(widget, **kwargs):
+            placed.update(kwargs)
+            panel._widgets.append(widget)
+
+        panel._place_widget = capture_place
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 800, 500)
+            panel._draw_meta(boxes, steam)
+            height = canvas_cls.call_args.kwargs.get("height")
+        self.assertIn("y", placed)
+        self.assertIn("x", placed)
+        self.assertEqual(placed["x"], 40)
+        # Viewport bottom must not enter the shots band (y=400).
+        self.assertLessEqual(placed["y"] + height, boxes["shots"][1] + 0.1)
+        self.assertGreater(height, 20)
 
     def test_hide_clears_panel_state(self):
         panel = self._make_draw_panel()
@@ -358,10 +425,17 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "shortDescription": "Long text. " * 40,
             "screenshots": ["http://a"],
         }
-        panel._draw_meta(boxes, steam)
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
+            panel._draw_meta(boxes, steam)
+            scroller = panel.scroller
+            viewport = panel._desc_viewport
         panel.hide()
         self.assertIsNone(panel.scroller)
+        self.assertIsNone(panel._desc_viewport)
         self.assertFalse(panel.needs_scroll)
+        self.assertEqual(scroller._state, "idle")
+        viewport.destroy.assert_called()
 
     def test_credit_is_right_aligned_on_title_row(self):
         panel = self._make_draw_panel()
@@ -379,7 +453,9 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a"],
             "tags": ["PvP"],
         }
-        panel._draw_meta(boxes, steam)
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 200, 40)
+            panel._draw_meta(boxes, steam)
         found = False
         for call in panel.canvas.create_text.call_args_list:
             kwargs = call.kwargs
@@ -394,7 +470,7 @@ class SteamNowPlayingClientTests(unittest.TestCase):
                 break
         self.assertTrue(found, "developer/year credit was not drawn right-aligned")
 
-    def test_description_is_static_canvas_text(self):
+    def test_description_uses_clipped_nested_canvas(self):
         panel = self._make_draw_panel()
         boxes = {
             "meta": (10, 50, 810, 420),
@@ -407,20 +483,15 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "shortDescription": "Desc line. " * 40,
             "screenshots": ["http://a"],
         }
-        panel._draw_meta(boxes, steam)
-        self.assertIsNone(panel.scroller)
-        # Description drawn as create_text with a wrap width (no nested Canvas).
-        found = False
-        for call in panel.canvas.create_text.call_args_list:
-            kwargs = call.kwargs
-            if kwargs.get("width") == 800 and "Desc line" in str(kwargs.get("text", "")):
-                found = True
-                break
-            args = call.args
-            if len(args) >= 3 and "Desc line" in str(args[2]):
-                found = True
-                break
-        self.assertTrue(found)
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
+            panel._draw_meta(boxes, steam)
+            viewport = canvas_cls.return_value
+        self.assertIs(panel._desc_viewport, viewport)
+        viewport.create_text.assert_called()
+        # Nested text item is configured via the scroller (not main canvas).
+        self.assertIsNotNone(panel.scroller)
+        self.assertTrue(panel.scroller.needs_scroll)
 
     def test_blur_backdrop_cover_fills_hero_box(self):
         from src.steam_now_playing_panel import Image

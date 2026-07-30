@@ -2287,7 +2287,7 @@
           { kind: 'mod', mod: 'ctrl', label: 'Ctrl', cls: 'key-mod' },
           { kind: 'mod', mod: 'alt', label: 'Alt', cls: 'key-mod' },
           { kind: 'mod', mod: 'meta', label: 'Win', cls: 'key-mod' },
-          { key: ' ', label: 'Space', kind: 'action', span: 7, cls: 'key-space' },
+          { key: 'Space', label: 'Space', kind: 'action', span: 7, cls: 'key-space' },
           { key: 'Delete', label: 'Del', kind: 'action', cls: 'key-action' },
           { key: 'ArrowLeft', label: '←', kind: 'action' },
           { key: 'ArrowUp', label: '↑', kind: 'action' },
@@ -2386,6 +2386,16 @@
       return mods;
     }
 
+    /** Touch/click press flash — CSS :active alone is unreliable on phones. */
+    function flashPressed(btn) {
+      btn.classList.add('pressed');
+      window.clearTimeout(btn._pressFlashTimer);
+      btn._pressFlashTimer = window.setTimeout(() => {
+        btn.classList.remove('pressed');
+        btn._pressFlashTimer = null;
+      }, 160);
+    }
+
     for (const row of rows) {
       const rowEl = document.createElement('div');
       rowEl.className = `key-row cols-${row.cols}`;
@@ -2403,7 +2413,15 @@
         paintKey(btn, def);
         keyButtons.push({ btn, def });
 
+        btn.addEventListener('pointerdown', (e) => {
+          if (e.button != null && e.button !== 0) {
+            return;
+          }
+          flashPressed(btn);
+        });
+
         btn.addEventListener('click', () => {
+          flashPressed(btn);
           if (def.kind === 'shift') {
             // One-shot arm (tap again to cancel). Does not touch capsLock.
             shiftArmed = !shiftArmed;

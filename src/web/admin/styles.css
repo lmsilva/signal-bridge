@@ -1246,10 +1246,12 @@ textarea.field-input.text-input-area {
   gap: 1px;
 }
 
-.key:active {
+.key:active,
+.key.pressed {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
+  transform: scale(0.96);
 }
 
 .key .key-sub {
@@ -1266,6 +1268,15 @@ textarea.field-input.text-input-area {
 .key .key-main {
   font-size: 1em;
   line-height: 1;
+}
+
+/* Nested glyphs must follow the press flash (not stay dim grey). */
+.key:active .key-sub,
+.key:active .key-main,
+.key.pressed .key-sub,
+.key.pressed .key-main {
+  color: inherit;
+  opacity: 1;
 }
 
 .key.span-2 { grid-column: span 2; }
