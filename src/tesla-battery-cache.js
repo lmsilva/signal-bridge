@@ -18,10 +18,15 @@ function readingFromDashboard(dashboard) {
   if (percent == null) {
     return null;
   }
+  const rawRange = dashboard?.battery?.batteryRange ?? dashboard?.battery?.rangeMiles;
+  const numeric = Number(rawRange);
+  const rangeMiles = Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
   return {
     percent,
     model: dashboard?.vehicle?.model || 'Model Y',
     chargingLabel: dashboard?.battery?.chargingLabel || null,
+    batteryRange: rangeMiles,
+    rangeMiles,
     label: 'Battery',
     source: 'fleet-api',
     status: 'ok',

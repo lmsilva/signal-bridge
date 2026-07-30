@@ -26,12 +26,16 @@ test('saveBatteryCache persists only ok readings and loadBatteryCache reads them
     status: 'ok',
     percent: 72,
     model: 'Model Y',
+    batteryRange: 162,
+    rangeMiles: 162,
     fetchedAt: '2026-07-08T22:00:00.000Z',
   };
   assert.equal(saveBatteryCache(config, reading), true);
   const cached = loadBatteryCache(config);
   assert.equal(cached.percent, 72);
   assert.equal(cached.model, 'Model Y');
+  assert.equal(cached.batteryRange, 162);
+  assert.equal(cached.rangeMiles, 162);
   fs.rmSync(config.ROOT, { recursive: true, force: true });
 });
 
@@ -56,13 +60,15 @@ test('loadBatteryCache falls back to dashboard cache', () => {
         status: 'ok',
         fetchedAt: '2026-07-08T22:00:00.000Z',
         vehicle: { model: 'Model Y' },
-        battery: { percent: 64, chargingLabel: 'Not plugged in' },
+        battery: { percent: 64, chargingLabel: 'Not plugged in', rangeMiles: 171.4 },
       },
     }),
   );
   const cached = loadBatteryCache(config);
   assert.equal(cached.percent, 64);
   assert.equal(cached.chargingLabel, 'Not plugged in');
+  assert.equal(cached.batteryRange, 171);
+  assert.equal(cached.rangeMiles, 171);
   fs.rmSync(config.ROOT, { recursive: true, force: true });
 });
 

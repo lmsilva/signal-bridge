@@ -122,6 +122,15 @@ function mapChargingLabel(chargingState) {
   return state;
 }
 
+/** Rated/est/ideal range → whole miles for the battery overlay (null if unknown). */
+function normalizeBatteryRangeMiles(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null;
+  }
+  return Math.round(numeric);
+}
+
 function buildFleetReading({
   percent,
   chargingState,
@@ -132,11 +141,14 @@ function buildFleetReading({
   limitResetAt = null,
   source = 'fleet-api',
 }) {
+  const rangeMiles = normalizeBatteryRangeMiles(batteryRange);
   return {
     percent: percent == null ? null : clampPercent(percent),
     chargingState: chargingState || null,
     chargingLabel: mapChargingLabel(chargingState),
-    batteryRange: batteryRange == null ? null : Number(batteryRange),
+    // Send both keys — older display clients only read `rangeMiles`.
+    batteryRange: rangeMiles,
+    rangeMiles,
     model: model || 'Model Y',
     label: error ? 'Battery unavailable' : 'Battery',
     source,
@@ -264,7 +276,10 @@ function readingFromVehiclePayload(vehicleData) {
   return buildFleetReading({
     percent,
     chargingState: charge.charging_state,
-    batteryRange: charge.battery_range ?? charge.est_battery_range,
+    // Prefer rated, then estimated, then ideal — some partial payloads omit one.
+    batteryRange: charge.battery_range
+      ?? charge.est_battery_range
+      ?? charge.ideal_battery_range,
     model: mapVehicleModel(vehicleData),
     status: percent == null ? 'error' : 'ok',
     error: percent == null ? 'Battery level unavailable' : null,
@@ -587,6 +602,8 @@ module.exports = {
   buildFleetReading,
   buildErrorReading,
   mapChargingLabel,
+  normalizeBatteryRangeMiles,
+  readingFromVehiclePayload,
   resetFleetClientState,
   resolveVin,
 };

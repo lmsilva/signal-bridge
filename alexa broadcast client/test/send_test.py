@@ -525,6 +525,7 @@ def build_payload(args) -> dict:
                 "label": "Battery",
                 "source": "fleet-api",
                 "status": "ok",
+                # Both keys — fleet readings mirror these so older/newer clients agree.
                 "batteryRange": 214,
                 "rangeMiles": 214,
                 "chargeLimit": 80,

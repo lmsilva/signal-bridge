@@ -18,6 +18,7 @@ test('buildTeslaBatteryPayload includes fleet-api battery fields', () => {
     chargingState: 'Charging',
     chargingLabel: 'Charging',
     batteryRange: 210,
+    rangeMiles: 210,
   };
 
   const payload = buildTeslaBatteryPayload(event, {}, { battery });
@@ -27,6 +28,9 @@ test('buildTeslaBatteryPayload includes fleet-api battery fields', () => {
   assert.equal(payload.battery.percent, 78);
   assert.equal(payload.battery.source, 'fleet-api');
   assert.equal(payload.battery.chargingLabel, 'Charging');
+  // Display clients need remaining range — both keys for older/newer readers.
+  assert.equal(payload.battery.batteryRange, 210);
+  assert.equal(payload.battery.rangeMiles, 210);
 });
 
 test('buildTeslaBatteryPayload forwards rate-limit error metadata', () => {
