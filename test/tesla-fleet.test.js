@@ -93,6 +93,53 @@ test('buildFleetReading normalizes percent and charging label', () => {
   assert.equal(reading.chargingLabel, 'Charging');
   assert.equal(reading.source, 'fleet-api');
   assert.equal(reading.status, 'ok');
+  assert.equal(reading.batteryRange, 210);
+  assert.equal(reading.rangeMiles, 210);
+});
+
+test('buildFleetReading rounds fractional range and mirrors rangeMiles', () => {
+  const { normalizeBatteryRangeMiles } = require('../src/tesla-fleet-client');
+  assert.equal(normalizeBatteryRangeMiles(161.56), 162);
+  assert.equal(normalizeBatteryRangeMiles(0), null);
+  assert.equal(normalizeBatteryRangeMiles(null), null);
+
+  const reading = buildFleetReading({
+    percent: 63,
+    chargingState: 'Disconnected',
+    batteryRange: 161.56,
+  });
+  assert.equal(reading.batteryRange, 162);
+  assert.equal(reading.rangeMiles, 162);
+});
+
+test('readingFromVehiclePayload falls back to ideal_battery_range', () => {
+  const { readingFromVehiclePayload } = require('../src/tesla-fleet-client');
+  const reading = readingFromVehiclePayload({
+    charge_state: {
+      battery_level: 63,
+      charging_state: 'Disconnected',
+      ideal_battery_range: 188.2,
+    },
+    display_name: 'Model Y',
+  });
+  assert.equal(reading.percent, 63);
+  assert.equal(reading.batteryRange, 188);
+  assert.equal(reading.rangeMiles, 188);
+});
+
+test('readingFromVehiclePayload prefers rated battery_range over ideal', () => {
+  const { readingFromVehiclePayload } = require('../src/tesla-fleet-client');
+  const reading = readingFromVehiclePayload({
+    charge_state: {
+      battery_level: 59,
+      battery_range: 161.56,
+      est_battery_range: 155.1,
+      ideal_battery_range: 188.2,
+      charging_state: 'Disconnected',
+    },
+  });
+  assert.equal(reading.batteryRange, 162);
+  assert.equal(reading.rangeMiles, 162);
 });
 
 test('buildErrorReading maps rate limit and auth errors', () => {

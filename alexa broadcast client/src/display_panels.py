@@ -22,7 +22,9 @@ from src.paths import asset_path
 from src.text_marquee import MarqueeLine
 from src.payload_utils import (
     battery_level_color,
+    coalesce_battery_range_miles,
     format_battery_percent,
+    format_battery_range_miles,
     format_chip_timestamp,
     format_duration,
     format_indoor_location,
@@ -4173,8 +4175,7 @@ class TeslaBatteryPanel(BasePanel):
     def _draw_battery_specs(self, x, y, w, percent_text, percent, color, battery, *, portrait):
         from src.design_system import INK, INK_2, LINE
         title, body, label = self.shell.section_title_font, self.shell.body_font, self.shell.forecast_label_font
-        range_value = battery.get("batteryRange", battery.get("rangeMiles"))
-        range_text = f"{range_value} mi" if range_value not in (None, "") else "— mi"
+        range_text = format_battery_range_miles(coalesce_battery_range_miles(battery))
         self._track(self.canvas.create_text(x, y, anchor="nw", text=percent_text, fill=INK, font=title))
         self._track(self.canvas.create_text(x, y + title.metrics("linespace") + 4, anchor="nw", text=range_text, fill=INK_2, font=body))
         gauge_y = y + title.metrics("linespace") + body.metrics("linespace") + 22
@@ -4849,7 +4850,8 @@ class TeslaDashboardPanel(BasePanel):
         label_h = label_font.metrics("linespace")
 
         self._panel_card(x, y, width, height)
-        headline = f"⚡ {percent if percent is not None else '—'}% · {battery.get('rangeMiles') if battery.get('rangeMiles') is not None else '—'} mi"
+        range_label = format_battery_range_miles(coalesce_battery_range_miles(battery)).replace(" mi", "")
+        headline = f"⚡ {percent if percent is not None else '—'}% · {range_label} mi"
         plug_label = battery.get("chargingLabel") or ("Charging" if charging else "Not plugged in")
         pad_top = 12
         self._track(

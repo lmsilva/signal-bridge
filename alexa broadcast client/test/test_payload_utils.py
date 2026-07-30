@@ -8,7 +8,9 @@ from src.payload_utils import (
     air_quality_band_label,
     format_air_quality_location,
     battery_level_color,
+    coalesce_battery_range_miles,
     format_battery_percent,
+    format_battery_range_miles,
     format_limit_reset_time,
     format_freshness_sec,
     format_cached_time_label,
@@ -61,6 +63,15 @@ class PayloadUtilsTests(unittest.TestCase):
 
     def test_battery_helpers(self):
         self.assertEqual(format_battery_percent(78), "78%")
+        # Explicit null must not block the rangeMiles alias (dict.get default pitfall).
+        self.assertEqual(
+            coalesce_battery_range_miles({"batteryRange": None, "rangeMiles": 171.4}),
+            171,
+        )
+        self.assertEqual(coalesce_battery_range_miles({"batteryRange": 161.56}), 162)
+        self.assertIsNone(coalesce_battery_range_miles({"batteryRange": None}))
+        self.assertEqual(format_battery_range_miles(162), "162 mi")
+        self.assertEqual(format_battery_range_miles(None), "— mi")
         self.assertEqual(parse_spoken_battery_percent("your battery is 80 percent"), 80)
         self.assertEqual(battery_level_color(0), "#ef4444")
         self.assertEqual(battery_level_color(100), "#22c55e")

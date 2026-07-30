@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-29 (keyboard Space + press flash)
+**Last updated:** 2026-07-29 (Tesla battery range miles)
 
 ---
 
@@ -386,13 +386,13 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (575 tests)
+npm test                    # bridge only (578 tests)
 run_all_tests.bat           # repo root — bridge + Windows client (573 + 317)
 ```
 
 Bridge tests in `test/*.test.js` — includes **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration + broadcast ASR dedupe), `web-command-payloads` (progressive route loading/failed), `qr-image-cache`, `route-query`/`route-fetch` (OSRM AbortSignal + 12s timeout), `guest-photobooth`, `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth`, `display-registry`, `music-info` (Signal preferred skip), `activity-fields` (`customerParts`/`responseParts`).
 
-Client tests in `alexa broadcast client/test/test_*.py` — 319 tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
+Client tests in `alexa broadcast client/test/test_*.py` — 322 tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 ---
@@ -494,6 +494,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-07-29: **Tesla battery overlay shows remaining miles** — fleet readings round/normalize `battery_range`/`est`/`ideal` into both `batteryRange` and `rangeMiles` (older clients only read the latter); dashboard-cache fallback copies range too. Deploy: `./recreate.sh` + restart/rebuild display client.
 
 - 2026-07-29: **Admin keyboard Space + press feedback** — Space was sent as `' '` and `buildInputKeyPayload` trimmed it to empty → toast "Missing key"; now sends/normalizes to `Space`. Keys flash a `.pressed` accent state on pointerdown/click (CSS `:active` alone is unreliable on phones). Cache-bust `?v=signal21`.
 

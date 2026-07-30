@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from src.display_panels import TeslaBatteryPanel
 
@@ -17,6 +18,66 @@ class TeslaBatteryBarHeightTests(unittest.TestCase):
             self.assertEqual(
                 TeslaBatteryPanel.battery_bar_height(linespace, portrait=True), 72,
             )
+
+
+class TeslaBatteryRangeLabelTests(unittest.TestCase):
+    def _make_panel(self):
+        panel = TeslaBatteryPanel.__new__(TeslaBatteryPanel)
+        panel._item_ids = []
+        panel._track = lambda item_id: item_id
+        panel.canvas = mock.MagicMock()
+        panel.shell = mock.MagicMock()
+        panel.shell.section_title_font = mock.MagicMock()
+        panel.shell.section_title_font.metrics.return_value = 36
+        panel.shell.body_font = mock.MagicMock()
+        panel.shell.body_font.metrics.return_value = 22
+        panel.shell.forecast_label_font = mock.MagicMock()
+        panel.CARD = "#141F35"
+        panel.INNER = "#0a111e"
+        return panel
+
+    def test_draw_battery_specs_shows_rounded_miles(self):
+        panel = self._make_panel()
+        with mock.patch.object(panel, "_draw_ticked_gauge"):
+            panel._draw_battery_specs(
+                0, 0, 400, "63%", 63, "#6EE7A8",
+                {"batteryRange": 161.56}, portrait=True,
+            )
+        texts = [
+            call.kwargs.get("text")
+            for call in panel.canvas.create_text.call_args_list
+            if call.kwargs.get("text")
+        ]
+        self.assertIn("162 mi", texts)
+        self.assertNotIn("— mi", texts)
+
+    def test_draw_battery_specs_uses_range_miles_when_battery_range_null(self):
+        panel = self._make_panel()
+        with mock.patch.object(panel, "_draw_ticked_gauge"):
+            panel._draw_battery_specs(
+                0, 0, 400, "63%", 63, "#6EE7A8",
+                {"batteryRange": None, "rangeMiles": 188}, portrait=True,
+            )
+        texts = [
+            call.kwargs.get("text")
+            for call in panel.canvas.create_text.call_args_list
+            if call.kwargs.get("text")
+        ]
+        self.assertIn("188 mi", texts)
+
+    def test_draw_battery_specs_placeholder_when_range_missing(self):
+        panel = self._make_panel()
+        with mock.patch.object(panel, "_draw_ticked_gauge"):
+            panel._draw_battery_specs(
+                0, 0, 400, "63%", 63, "#6EE7A8",
+                {"percent": 63}, portrait=True,
+            )
+        texts = [
+            call.kwargs.get("text")
+            for call in panel.canvas.create_text.call_args_list
+            if call.kwargs.get("text")
+        ]
+        self.assertIn("— mi", texts)
 
 
 class TeslaBatteryStatusBitsTests(unittest.TestCase):

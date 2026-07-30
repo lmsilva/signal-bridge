@@ -767,6 +767,41 @@ def format_battery_percent(value: int | float | None) -> str:
     return f"{max(0, min(100, numeric))}%"
 
 
+def coalesce_battery_range_miles(battery: dict | None) -> int | None:
+    """Pick the first usable remaining-range value from a battery payload.
+
+    Bridge fleet readings send ``batteryRange`` (and ``rangeMiles`` as an alias).
+    Explicit JSON ``null`` must not block falling through to the alias — unlike
+    ``dict.get("batteryRange", default)``, which only uses the default when the
+    key is missing.
+    """
+    if not isinstance(battery, dict):
+        return None
+    for key in ("batteryRange", "rangeMiles", "estBatteryRange", "idealBatteryRange"):
+        raw = battery.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            numeric = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if numeric > 0:
+            return int(round(numeric))
+    return None
+
+
+def format_battery_range_miles(value: int | float | None) -> str:
+    if value in (None, ""):
+        return "— mi"
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "— mi"
+    if numeric <= 0:
+        return "— mi"
+    return f"{int(round(numeric))} mi"
+
+
 def format_limit_reset_time(value: str | None) -> str:
     parsed = parse_iso_timestamp(value or "")
     if not parsed:
