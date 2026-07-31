@@ -860,6 +860,7 @@ def build_payload(args) -> dict:
         }
 
     if args.type == "guest-photobooth":
+        pin = str(getattr(args, "pin", None) or "123456").strip()
         return {
             "version": 2,
             "type": "guest.photobooth",
@@ -870,6 +871,8 @@ def build_payload(args) -> dict:
             "guestPhotobooth": {
                 "title": "Guest Snaps",
                 "subtitle": "Two quick scans to share a photo",
+                "accessPin": pin,
+                "accessPinHint": "Enter this PIN on your phone",
                 "wifi": {
                     "content": "WIFI:T:WPA;S:Home Network;P:letmein123;;",
                     "ssid": "Home Network",
@@ -1087,7 +1090,7 @@ def main():
     )
     parser.add_argument("--percent", type=int, default=78, help="Battery percent for --type tesla-battery")
     parser.add_argument("--url", default="https://example.com", help="Page for --type web-open")
-    parser.add_argument("--pin", default="1234", help="PIN for --type display-auth")
+    parser.add_argument("--pin", default="123456", help="PIN for --type display-auth")
     parser.add_argument("--message", default="This is a test broadcast message", help="Broadcast message body")
     parser.add_argument("--text", default="hunter2", help="Full string for --type input-text")
     parser.add_argument(

@@ -25,7 +25,7 @@
     "certHosts": [],
     "controlAuth": {
       "enabled": true,
-      "pinDigits": 4,
+      "pinDigits": 6,
       "pinDisplaySeconds": null,
       "sessionMinutes": 30
     }

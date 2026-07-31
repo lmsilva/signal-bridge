@@ -194,6 +194,23 @@ test('buildGuestPhotoboothPayload includes wifi + booth QR content', () => {
   assert.equal(payload.guestPhotobooth.booth.content, 'https://192.168.1.50:47810/');
   assert.match(payload.guestPhotobooth.booth.hint, /Already on Wi/i);
   assert.match(payload.guestPhotobooth.wifi.hint, /Scan to connect/i);
+  assert.equal(payload.guestPhotobooth.accessPin, undefined);
+});
+
+test('buildGuestPhotoboothPayload includes accessPin when provided', () => {
+  const payload = buildGuestPhotoboothPayload(
+    { device: 'Kitchen', query: 'open guest snaps' },
+    {},
+    {
+      ssid: 'Home',
+      password: 'pw',
+      boothUrl: 'https://192.168.1.50:47810/',
+      accessPin: '654321',
+      accessPinHint: 'Enter this PIN on your phone',
+    },
+  );
+  assert.equal(payload.guestPhotobooth.accessPin, '654321');
+  assert.match(payload.guestPhotobooth.accessPinHint, /PIN/i);
 });
 
 test('buildGuestPhotoboothPayload rejects incomplete settings', () => {

@@ -8,6 +8,7 @@ const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { createListener } = require('./listener');
 const { createWebServer } = require('./web-server');
+const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { installRefreshPatch } = require('./auth-refresh-patch');
 
 function registerShutdown(log) {
@@ -48,7 +49,8 @@ async function main() {
   const config = loadConfig();
   const log = createLogger(config);
   installRefreshPatch({ log });
-  const listener = createListener({ config, log });
+  const guestSnapsAuth = createGuestSnapsAuth(config, log);
+  const listener = createListener({ config, log, guestSnapsAuth });
 
   registerShutdown(log);
 
@@ -70,6 +72,7 @@ async function main() {
       recordSteamPresence: listener.recordSteamPresence,
       getSteamStatus: listener.getSteamStatus,
       steamNowPlaying: listener.steamNowPlaying,
+      guestSnapsAuth,
     });
     webServer.start().catch((error) => {
       // The control page is a convenience — never take the listener down

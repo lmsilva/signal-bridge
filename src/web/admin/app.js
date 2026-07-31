@@ -9,6 +9,8 @@
   const ALL_DISPLAYS = '*';
   const STORAGE_TARGET_KEY = 'displayControl.targetId';
   const STORAGE_TOKEN_PREFIX = 'displayControl.token.';
+  // Keep in sync with DEFAULT_PIN_DIGITS in display-control-auth.js.
+  const CONTROL_PIN_DIGITS = 6;
 
   // APIs live at the server root (`/api/...`). Root-absolute URLs ignore
   // <base href="/admin/"> so admin pages can sit under /admin/ safely.
@@ -1717,7 +1719,7 @@
       $('pin-sheet').hidden = true;
       throw error;
     }
-    $('pin-sheet-hint').textContent = 'A PIN is on the display now — enter it below.';
+    $('pin-sheet-hint').textContent = `A ${CONTROL_PIN_DIGITS}-digit PIN is on the display now — enter it below.`;
     return true;
   }
 
@@ -1830,7 +1832,7 @@
   });
   $('pin-sheet-input')?.addEventListener('input', (e) => {
     const el = e.target;
-    el.value = String(el.value || '').replace(/\D/g, '').slice(0, 4);
+    el.value = String(el.value || '').replace(/\D/g, '').slice(0, CONTROL_PIN_DIGITS);
     clearPinSheetError();
   });
 

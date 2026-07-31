@@ -183,6 +183,43 @@ body {
   cursor: not-allowed;
 }
 
+.booth-secondary {
+  appearance: none;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.booth-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.booth-pin-input {
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-align: center;
+}
+
+.booth-pin-input.is-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25);
+}
+
 .booth-status {
   min-height: 1.4em;
   margin: 4px 2px 0;

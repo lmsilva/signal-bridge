@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 
-const DEFAULT_PIN_DIGITS = 4;
+const DEFAULT_PIN_DIGITS = 6;
 // Keep in sync with CONTROL_TOKEN_TTL_MS in web/app.js — the phone locks the
 // UI after 1h and the bridge rejects the token at the same age.
 const DEFAULT_SESSION_MINUTES = 60;
@@ -151,6 +151,7 @@ function createDisplayControlAuth(config = {}, log = console) {
         ? new Date(challenge.expiresAt).toISOString()
         : null,
       pinDisplaySeconds: pinDisplaySeconds(),
+      pinDigits,
       sessionMinutes: Math.round(sessionMs / 60000),
     };
   }

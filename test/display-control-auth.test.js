@@ -14,8 +14,10 @@ test('control auth challenge verify and session gate', () => {
 
   const challenge = auth.startChallenge('disp-1');
   assert.equal(challenge.displayId, 'disp-1');
-  assert.match(challenge.pin, /^\d{4}$/);
+  assert.equal(auth.pinDigits, 6);
+  assert.match(challenge.pin, /^\d{6}$/);
   assert.equal(auth.publicChallengeView(challenge).pin, undefined);
+  assert.equal(auth.getStatus('disp-1', '').pinDigits, 6);
 
   const payload = buildDisplayAuthPinPayload({
     pin: challenge.pin,
@@ -24,7 +26,7 @@ test('control auth challenge verify and session gate', () => {
   assert.equal(payload.type, 'display.auth');
   assert.equal(payload.auth.pin, challenge.pin);
 
-  const wrong = auth.verifyPin('disp-1', '0000');
+  const wrong = auth.verifyPin('disp-1', '000000');
   assert.match(wrong.error, /Incorrect PIN/);
 
   const ok = auth.verifyPin('disp-1', challenge.pin);
@@ -33,6 +35,14 @@ test('control auth challenge verify and session gate', () => {
   assert.equal(auth.assertAuthorized('disp-2', ok.token).ok, false);
   assert.equal(auth.assertAuthorized('*', ok.token).ok, false);
   assert.equal(auth.assertAuthorized('disp-1', 'bad').code, 'control_auth_required');
+});
+
+test('control auth pinDigits config override still pads to requested length', () => {
+  const auth = createDisplayControlAuth({
+    webServer: { controlAuth: { enabled: true, pinDigits: 4 } },
+  }, { info() {} });
+  assert.equal(auth.pinDigits, 4);
+  assert.match(auth.startChallenge('disp-4').pin, /^\d{4}$/);
 });
 
 test('display auth ok payload flashes Authenticated briefly', () => {

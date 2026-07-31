@@ -17,10 +17,10 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | Area | What you get |
 |------|----------------|
 | **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
-| **Signal (web UI)** | Guest photo booth at `https://<NAS_IP>:47810/` — party guests share photos to a display. Full admin UI at `https://<NAS_IP>:47810/admin/` (password from `ADMIN_PASSWORD` in `.env`) — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth, Slideshow Manager |
+| **Signal (web UI)** | Guest photo booth at `https://<NAS_IP>:47810/` — PIN-gated (6-digit code rotates every 24h; shown on the Guest Snaps display overlay; Request PIN pushes that overlay). Full admin UI at `https://<NAS_IP>:47810/admin/` (password from `ADMIN_PASSWORD` in `.env`) — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth, Slideshow Manager |
 | **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); Signal lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
-| **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 4-digit PIN appears on that screen; enter it on the phone to unlock for ~1 hour |
+| **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 6-digit PIN appears on that screen; enter it on the phone to unlock for ~1 hour |
 
 ---
 
