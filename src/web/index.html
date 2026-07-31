@@ -10,18 +10,27 @@
   <title>Guest Snaps</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="booth.css?v=1">
+  <link rel="stylesheet" href="booth.css?v=2">
 </head>
 <body>
   <header class="booth-header">
     <img class="booth-logo" src="/logo.png" width="36" height="36" alt="">
     <div>
       <h1>Guest Snaps</h1>
-      <p>Share a photo with us</p>
+      <p id="booth-subtitle">Share a photo with us</p>
     </div>
   </header>
 
-  <main class="booth-main">
+  <main class="booth-main" id="booth-login">
+    <p class="booth-hint" id="login-hint">Enter the 6-digit PIN shown on the display.</p>
+    <input id="guest-pin-input" class="booth-pin-input" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="••••••" aria-label="Guest Snaps PIN">
+    <p class="booth-status" id="login-status" role="status"></p>
+    <button type="button" class="booth-send" id="btn-guest-unlock">Unlock</button>
+    <button type="button" class="booth-secondary" id="btn-request-pin">Request PIN</button>
+    <p class="booth-hint" id="request-pin-hint">Have the display nearby? Request PIN shows the Guest Snaps page with the current code.</p>
+  </main>
+
+  <main class="booth-main" id="booth-app" hidden>
     <label class="booth-label" for="display-select">Show on</label>
     <select id="display-select" class="booth-select" aria-label="Target display">
       <option value="">Looking for displays…</option>
@@ -47,6 +56,7 @@
     </button>
 
     <button type="button" class="booth-send" id="btn-send" disabled>Send to display</button>
+    <button type="button" class="booth-secondary" id="btn-guest-lock">Lock booth</button>
     <p class="booth-status" id="booth-status" role="status"></p>
   </main>
 
@@ -54,6 +64,6 @@
     Photos are saved to the party slideshow for the host.
   </footer>
 
-  <script src="booth.js?v=1"></script>
+  <script src="booth.js?v=2"></script>
 </body>
 </html>

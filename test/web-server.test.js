@@ -146,6 +146,7 @@ async function startTestServer(options = {}) {
       || ((device) => timerPolls.push(device)),
     requestAlarmPoll: options.requestAlarmPoll
       || ((device) => alarmPolls.push(device)),
+    guestSnapsAuth: options.guestSnapsAuth || null,
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
@@ -666,9 +667,11 @@ test('control PIN unlock gates input and power', async () => {
     assert.ok(pinPayload);
     const pin = pinPayload.payload.auth.pin;
 
+    assert.match(pin, /^\d{6}$/);
+
     const bad = await postJson(base, '/api/displays/auth/verify', {
       targetId: 'disp-pin',
-      pin: '0000',
+      pin: '000000',
     });
     assert.equal(bad.status, 403);
     assert.equal(bad.body.code, 'control_auth_incorrect_pin');
@@ -964,6 +967,18 @@ test('weather and shopping-list quick-push tiles feed synthetic events into the 
   } finally {
     webServer.stop();
   }
+});
+
+test('admin control PIN sheet expects a 6-digit code', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(html, /6-digit code/);
+  assert.match(html, /id="pin-sheet-input"[^>]*maxlength="6"/);
+  assert.match(html, /id="pin-sheet-input"[^>]*pattern="\[0-9\]\{6\}"/);
+  assert.match(html, /styles\.css\?v=signal22/);
+  assert.match(html, /app\.js\?v=signal22/);
+  assert.match(js, /CONTROL_PIN_DIGITS\s*=\s*6/);
+  assert.match(js, /\.slice\(0,\s*CONTROL_PIN_DIGITS\)/);
 });
 
 test('admin on-screen keyboard sends Space and flashes pressed keys', () => {
@@ -1433,7 +1448,7 @@ test('guest booth is served at / and admin shell redirects without a session', a
   }
 });
 
-test('admin login cookie unlocks protected APIs; guests can still push photos', async () => {
+test('admin login cookie unlocks protected APIs; photo push needs guest or admin', async () => {
   const { webServer, base, sent } = await startTestServer({ autoLogin: false });
   try {
     const denied = await request(`${base}/api/status`);
@@ -1447,11 +1462,17 @@ test('admin login cookie unlocks protected APIs; guests can still push photos', 
     assert.equal(status.status, 200);
     assert.equal(status.body.ok, true);
 
-    // Photo push stays public (no admin cookie).
-    const push = await postJson(base, '/api/qr/push', {
+    // Photo push is no longer public without a guest/admin session.
+    const pushDenied = await postJson(base, '/api/qr/push', {
       mode: 'photo',
       url: 'https://example.com/party.jpg',
     }, null);
+    assert.equal(pushDenied.status, 401);
+
+    const push = await postJson(base, '/api/qr/push', {
+      mode: 'photo',
+      url: 'https://example.com/party.jpg',
+    }, cookie);
     assert.equal(push.status, 200);
     assert.equal(sent.at(-1)?.qr?.qrType, 'photo');
 
@@ -1472,12 +1493,96 @@ test('admin login cookie unlocks protected APIs; guests can still push photos', 
   }
 });
 
+test('guest snaps PIN login unlocks photo upload; request-pin pushes overlay', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-guest-pin-'));
+  const config = makeConfig({
+    ROOT: dataDir,
+    guestSnapsPinPath: path.join(dataDir, 'guest-snaps-pin.json'),
+    guestPhotobooth: {
+      ssid: 'PartyWiFi',
+      password: 'secret',
+      boothUrl: 'https://192.168.1.10:47810/',
+      displaySeconds: 90,
+    },
+  });
+  // Seed env so resolveGuestPhotoboothSettings sees Wi-Fi + URL.
+  const prev = {
+    ssid: process.env.GUEST_WIFI_SSID,
+    pass: process.env.GUEST_WIFI_PASSWORD,
+    url: process.env.GUEST_PHOTOBOOTH_URL,
+  };
+  process.env.GUEST_WIFI_SSID = 'PartyWiFi';
+  process.env.GUEST_WIFI_PASSWORD = 'secret';
+  process.env.GUEST_PHOTOBOOTH_URL = 'https://192.168.1.10:47810/';
+
+  const { createGuestSnapsAuth } = require('../src/guest-snaps-auth');
+  const guestSnapsAuth = createGuestSnapsAuth(config, silentLog);
+  const pin = guestSnapsAuth.ensureCurrentPin().pin;
+  const sent = [];
+  const { webServer, base } = await startTestServer({
+    config,
+    autoLogin: false,
+    guestSnapsAuth,
+    deliverTargetedPayload: (payload, targetId) => {
+      sent.push({ payload, targetId });
+      return { target: { id: targetId }, isAll: true };
+    },
+  });
+  try {
+    const deniedUpload = await postJson(base, '/api/qr/image-upload', {
+      imageDataUrl: TINY_PNG_DATA_URL,
+    }, null);
+    assert.equal(deniedUpload.status, 401);
+
+    const session = await getJson(base, '/api/guest/session');
+    assert.equal(session.status, 200);
+    assert.equal(session.body.authenticated, false);
+    assert.equal(session.body.pinDigits, 6);
+
+    const badPin = await postJson(base, '/api/guest/login', { pin: '000000' }, null);
+    assert.equal(badPin.status, 401);
+
+    const login = await postJson(base, '/api/guest/login', { pin }, null);
+    assert.equal(login.status, 200);
+    const setCookie = login.headers['set-cookie'];
+    const guestCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0];
+    assert.match(guestCookie, /signal_guest=/);
+
+    const upload = await postJson(base, '/api/qr/image-upload', {
+      imageDataUrl: TINY_PNG_DATA_URL,
+    }, guestCookie);
+    assert.equal(upload.status, 200);
+
+    const reqPin = await postJson(base, '/api/guest/request-pin', {}, null);
+    assert.equal(reqPin.status, 200);
+    assert.equal(reqPin.body.pin, undefined);
+    assert.ok(reqPin.body.expiresAt);
+    const overlay = sent.find((s) => s.payload?.type === 'guest.photobooth');
+    assert.ok(overlay);
+    assert.match(overlay.payload.guestPhotobooth.accessPin, /^\d{6}$/);
+    assert.equal(overlay.targetId, '*');
+  } finally {
+    webServer.stop();
+    if (prev.ssid == null) delete process.env.GUEST_WIFI_SSID;
+    else process.env.GUEST_WIFI_SSID = prev.ssid;
+    if (prev.pass == null) delete process.env.GUEST_WIFI_PASSWORD;
+    else process.env.GUEST_WIFI_PASSWORD = prev.pass;
+    if (prev.url == null) delete process.env.GUEST_PHOTOBOOTH_URL;
+    else process.env.GUEST_PHOTOBOOTH_URL = prev.url;
+  }
+});
+
 test('guest booth HTML/JS exist at the web root', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/booth.js'), 'utf8');
   assert.match(html, /id="display-select"/);
   assert.match(html, /id="btn-send"/);
+  assert.match(html, /id="booth-login"/);
+  assert.match(html, /id="btn-request-pin"/);
+  assert.match(html, /id="guest-pin-input"/);
   assert.match(html, /booth\.js/);
+  assert.match(js, /\/api\/guest\/login/);
+  assert.match(js, /\/api\/guest\/request-pin/);
   assert.match(js, /\/api\/qr\/image-upload/);
   assert.match(js, /mode:\s*'photo'/);
   // Same friendly label fields as the admin picker (not displayName / raw id).

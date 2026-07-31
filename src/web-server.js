@@ -30,8 +30,10 @@ const {
   buildQrDisplayPayload,
   buildWifiQrContent,
   buildPhotoSlideshowPayload,
+  buildGuestPhotoboothPayload,
 } = require('./udp-payload');
 const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
+const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { getIndoorLocations } = require('./indoor-locations');
 const { ALL_TARGET_ID } = require('./display-registry');
 const {
@@ -231,6 +233,7 @@ function createWebServer({
   recordSteamPresence = null,
   getSteamStatus = null,
   steamNowPlaying = null,
+  guestSnapsAuth: guestSnapsAuthInjected = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -249,6 +252,7 @@ function createWebServer({
   const staticRoot = webRoot || path.join(__dirname, 'web');
   const controlAuth = createDisplayControlAuth(config, log);
   const adminAuth = createWebAdminAuth(config, log);
+  const guestSnapsAuth = guestSnapsAuthInjected || createGuestSnapsAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
   const slideshowSettings = createSlideshowSettings(config, log);
   let server = null;
@@ -523,6 +527,147 @@ function createWebServer({
       return false;
     }
     return true;
+  }
+
+  /** Guest booth photo APIs: guest session OR admin session. */
+  function requireGuestOrAdmin(req, res) {
+    if (adminAuth.assertAuthorized(req).ok) {
+      return true;
+    }
+    const gate = guestSnapsAuth.assertAuthorized(req);
+    if (!gate.ok) {
+      sendJson(res, gate.status || 401, {
+        ok: false,
+        error: gate.error,
+        code: gate.code,
+      });
+      return false;
+    }
+    return true;
+  }
+
+  function sendGuestAuthFailure(result, res) {
+    const headers = {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    };
+    if (result.retryAfterSec > 0) {
+      headers['Retry-After'] = String(result.retryAfterSec);
+    }
+    const payload = {
+      ok: false,
+      error: result.error,
+      code: result.code,
+    };
+    if (result.retryAfterSec > 0) {
+      payload.retryAfterSec = result.retryAfterSec;
+    }
+    res.writeHead(result.status || 401, headers);
+    res.end(JSON.stringify(payload));
+  }
+
+  function handleGuestSession(req, res) {
+    const info = guestSnapsAuth.getPublicPinInfo();
+    const session = guestSnapsAuth.sessionFromRequest(req);
+    sendJson(res, 200, {
+      ok: true,
+      authenticated: Boolean(session.ok),
+      configured: Boolean(info.configured),
+      pinDigits: info.pinDigits,
+      expiresAt: session.ok
+        ? new Date(session.expiresAt).toISOString()
+        : info.expiresAt,
+      code: session.ok ? undefined : session.code,
+    });
+  }
+
+  function handleGuestLogin(body, req, res) {
+    const result = guestSnapsAuth.login(body?.pin, req);
+    if (!result.ok) {
+      sendGuestAuthFailure(result, res);
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': result.setCookie,
+    });
+    res.end(JSON.stringify({
+      ok: true,
+      expiresAt: new Date(result.expiresAt).toISOString(),
+    }));
+  }
+
+  function handleGuestLogout(req, res) {
+    const result = guestSnapsAuth.logout(req);
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': result.setCookie,
+    });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  function handleGuestRequestPin(req, res) {
+    const settings = resolveGuestPhotoboothSettings(config);
+    if (!settings.configured) {
+      sendJson(res, 503, {
+        ok: false,
+        error: 'Guest Snaps is not configured — set GUEST_WIFI_SSID and GUEST_PHOTOBOOTH_URL in .env',
+        code: 'guest_not_configured',
+      });
+      return;
+    }
+    const result = guestSnapsAuth.beginRequestPin(req);
+    if (!result.ok) {
+      sendGuestAuthFailure(result, res);
+      return;
+    }
+    const pinInfo = result.display;
+    const payload = buildGuestPhotoboothPayload(
+      {
+        device: 'Signal',
+        trigger: 'guest-request-pin',
+        query: 'request guest snaps pin',
+        timestamp: Date.now(),
+        targetId: '*',
+      },
+      config,
+      {
+        ...settings,
+        accessPin: pinInfo?.accessPin,
+        accessPinHint: pinInfo?.accessPinHint,
+      },
+    );
+    if (!payload) {
+      sendJson(res, 500, { ok: false, error: 'Could not build Guest Snaps overlay' });
+      return;
+    }
+    if (typeof deliverTargetedPayload === 'function') {
+      deliverTargetedPayload(payload, '*');
+    } else if (typeof sendUdpPayload === 'function') {
+      sendUdpPayload(payload);
+    } else if (typeof recordVoiceEvent === 'function') {
+      // Fallback: synthetic voice path (also fans out to all displays).
+      recordVoiceEvent({
+        kind: 'guest-photobooth',
+        device: 'Signal',
+        query: 'request guest snaps pin',
+        trigger: 'guest-request-pin',
+        timestamp: Date.now(),
+        targetId: '*',
+      });
+    } else {
+      sendJson(res, 503, { ok: false, error: 'Push unavailable — listener not ready' });
+      return;
+    }
+    log.info('Guest Snaps PIN requested for display', { expiresAt: result.expiresAt });
+    // Never include the PIN in the phone response.
+    sendJson(res, 200, {
+      ok: true,
+      expiresAt: result.expiresAt,
+      pinDigits: result.pinDigits,
+    });
   }
 
   function handleAdminLogin(body, req, res) {
@@ -1018,8 +1163,12 @@ function createWebServer({
 
   function handleQrPush(req, body, res) {
     const mode = String(body?.mode || '').trim().toLowerCase();
-    // Guests may only push photo QRs; URL/Wi-Fi require an admin session.
-    if (mode !== 'photo' && !adminAuth.assertAuthorized(req).ok) {
+    // Photo pushes need a Guest Snaps PIN session (or admin); URL/Wi-Fi admin-only.
+    if (mode === 'photo') {
+      if (!requireGuestOrAdmin(req, res)) {
+        return;
+      }
+    } else if (!adminAuth.assertAuthorized(req).ok) {
       sendJson(res, 401, {
         ok: false,
         error: 'Admin login required to push URL or Wi-Fi QR codes',
@@ -1685,6 +1834,10 @@ function createWebServer({
           handleAdminSession(req, res);
           return;
         }
+        if (pathname === '/api/guest/session') {
+          handleGuestSession(req, res);
+          return;
+        }
         if (pathname === '/api/displays') {
           handleDisplaysList(res);
           return;
@@ -1743,7 +1896,20 @@ function createWebServer({
           handleAdminLogout(req, res);
           return;
         }
+        if (pathname === '/api/guest/login') {
+          handleGuestLogin(body, req, res);
+          return;
+        }
+        if (pathname === '/api/guest/logout') {
+          handleGuestLogout(req, res);
+          return;
+        }
+        if (pathname === '/api/guest/request-pin') {
+          handleGuestRequestPin(req, res);
+          return;
+        }
         if (pathname === '/api/qr/image-upload') {
+          if (!requireGuestOrAdmin(req, res)) return;
           handleQrImageUpload(body, res);
           return;
         }

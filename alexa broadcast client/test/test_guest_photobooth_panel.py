@@ -44,6 +44,11 @@ class GuestPhotoboothLayoutTests(unittest.TestCase):
         payload = {"type": "guest.photobooth", "displaySeconds": 180}
         self.assertEqual(effective_display_seconds(payload, config), 180)
 
+    def test_pin_band_reserved_when_access_pin_present(self):
+        self.assertEqual(GuestPhotoboothPanel.pin_band_height(1.0, has_pin=True), 110)
+        self.assertEqual(GuestPhotoboothPanel.pin_band_height(1.0, has_pin=False), 0)
+        self.assertEqual(GuestPhotoboothPanel.pin_band_height(2.0, has_pin=True), 220)
+
 
 class SmartHomeLayoutTests(unittest.TestCase):
     def test_portrait_puts_breathing_room_under_icon(self):

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-30 (Steam description scroll half-speed)
+**Last updated:** 2026-07-30 (Guest Snaps booth PIN on overlay)
 
 ---
 
@@ -117,7 +117,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `input.pointer` / `input.key` | **Command:** remote mouse — move/click/wheel all via Win32 `SendInput` (`pynput` only as fallback) / keyboard (`pynput`) |
 | `input.text` | **Command:** full-string keyboard input — `text.{value, pressEnter}` typed in one shot via `pynput` `Controller.type()` (Unicode-safe), optional trailing Enter key |
 | `qr.display` | `QrPanel` — URL/Wi‑Fi: large centered QR under shared chrome; photo uploads (`qrType: "photo"` or `/qr-images/` URL): same full-bleed shared-photos page as the slideshow (upload mode — `SHARED PHOTO` pill, draining progress rail, “Dismisses in Xs” in the bar; shell title/backdrop/countdown hidden) |
-| `guest.photobooth` | `GuestPhotoboothPanel` — owns NETWORK/SSID + GUEST SNAPS chrome; dual bordered QR plates (Wi‑Fi join + guest booth URL) stack in portrait and pair side-by-side in landscape; portrait content clears the dismiss footer; display seconds bypass `maxDisplaySeconds` |
+| `guest.photobooth` | `GuestPhotoboothPanel` — owns NETWORK/SSID + GUEST SNAPS chrome; booth access PIN band under header when `accessPin` is set; dual bordered QR plates (Wi‑Fi join + guest booth URL) stack in portrait and pair side-by-side in landscape; portrait content clears the dismiss footer; display seconds bypass `maxDisplaySeconds` |
 | `photo.slideshow` | `PhotoSlideshowPanel` — plays through `slideshow.photos[]` once at `slideshow.secondsPerPhoto` (default 5) via the shared-photos page (edge-weighted dominant-hue mat that avoids muddy brown, large print-bordered stage, **elapsed-fill L→R / T→B** progress rail, bottom QR plate “Scan to open”); shell title/backdrop/countdown hidden — status shows `NEXT IN Xs` / `LAST PHOTO`; auto-dismiss still fires after one pass |
 | `route-planner.query` | `RoutePlannerPanel` — draws its own full-size container (shared chrome title/backdrop hidden, same convention as `tesla-dashboard.query`); instant header (origin → destination, distance, duration, "Driving Estimate"/"Flight-Path Estimate" badge) from the payload's `origin`/`destination`/`distanceMiles`/`durationMin`/`mode`/`route.geometry`; 5 tiles start as spinners and fill in independently off-thread: map (OSM tiles zoomed to fit both points + route line/dashed great-circle + pins), 2× Wikipedia place-facts, 2× current weather; a "Local Times" strip (now at origin, now at destination, est. arrival) renders once both weather fetches land (uses `utcOffsetSeconds`) |
 
@@ -207,13 +207,13 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only (325 tests)
+test\run_tests.bat              # client unit tests only (326 tests)
 ```
 
 From repo root (bridge + client):
 
 ```powershell
-..\run_all_tests.bat            # bridge + client (325 client)
+..\run_all_tests.bat            # bridge + client (326 client)
 ```
 
 **Unit tests:** `test/test_listener.py` (UDP accept/filter + `_rinfo` + LAN crypto), `test_overlay_countdown.py` (`_format_remaining`, slideshow/Steam countdown blanking, `_stop_timers`), `test_broadcast_panel.py` (chip/message viewport top), `test_music_panel.py` (empty state / "Nothing playing"), `test_paths.py` (`ensure_config_file`), `test_display_announce.py` (ASCII announce log, hostname/`steamAppId`), `test_payload_utils.py` (incl. Tesla fleet + `format_limit_reset_time`, `qr.display`/`photo.slideshow`/`route-planner.query` display types, `input.text` command type, `title_for_payload` photo QR), `test_config.py` (incl. `photo.slideshow` + `guest.photobooth` + `route-planner.query` bypassing `maxDisplaySeconds`, `shoppingList` merge), `test_weather_fetch.py`, `test_main.py` (timer routing, fired payload build, display seconds, `qr.display`/`photo.slideshow` visibility, UTF-8 console reconfigure), `test_web_overlay.py` (URL pre-flight, host command build, web/system/steam-close command routing, friendly error payload), `test_qr_panel.py` (`QrPanel._build_qr_image` sizing vs target, empty-content fallback — skipped if `qrcode` isn't installed), `test_photo_slideshow_panel.py` (`PhotoSlideshowPanel._fetch_photo` download/thumbnail sizing, SSL-verify-failure fallback + memoization, `_is_ssl_failure`, `show()` normalizing `{url,uploadedAt}`/bare-string photo entries, `_advance()` stopping after the last photo instead of wrapping), `test_text_marquee.py` (`MarqueeLine` — fits-statically vs. overflows-and-scrolls branch, full pause/scroll/pause/reset tick cycle, `stop()` cancels the pending tick), `test_map_fetch.py` (`map_tiles` tile/SSL helpers + `zoom_to_fit`/pixel projection), `test_place_facts.py` (`fetch_place_summary` incl. MediaWiki search fallback + disambiguation/blank-extract/SSL-fallback handling), `test_route_planner_panel.py` (footer clear, progressive loading/failed status copy, map/weather wait-for-coords, `_compute_tile_boxes`, `_apply_facts`, formatting helpers), `test_shopping_list_panel.py` (density ladder + paging settings clamps), `test_steam_now_playing_panel.py` (timed landscape dismiss clear, layout, artwork cache/fetch, footer players, elapsed tick, last-played date), `test_tesla_battery_panel.py` (`battery_bar_height`, stale/refreshing `_status_bits`), `test_display_remote.py` (incl. `handle_text` full-string typing, optional Enter, broken-pynput survival).
@@ -262,6 +262,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-07-30: **Guest Snaps overlay shows booth access PIN** — `GuestPhotoboothPanel` reserves a PIN band under the header for `guestPhotobooth.accessPin` (bridge 24h rotating code). Suite: **326 client**. Restart or portable rebuild required.
 - 2026-07-30: **Steam description scrolls at half speed** — description `MessageScrollController` uses `DESC_SCROLL_SPEED_FACTOR` (0.5× `scrollPixelsPerSecond`, default 14 pps) so long blurbs are readable; broadcast scroll unchanged. Suite: **325 client**. Restart or portable rebuild required.
 - 2026-07-29: **Steam description pinned above screenshots** — layout returns an explicit `desc` band (not leftover under tags); copy embeds via `canvas.create_window` + clipped nested canvas so it cannot wrap into the shot row. Tests cover pinned geometry + create_window bounds. Suite: **324 client**. Restart or portable rebuild required.
 - 2026-07-29: **Tesla battery range no longer shows "— mi"** — `coalesce_battery_range_miles` / `format_battery_range_miles` read `batteryRange` or `rangeMiles` (null no longer blocks the alias). Specs draw rounded whole miles. Suite: **322 client**. Restart or portable rebuild required.

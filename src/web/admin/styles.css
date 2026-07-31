@@ -187,9 +187,9 @@ body {
   border: 1px solid var(--line);
   background: var(--bg-elev-2);
   color: var(--text);
-  font-size: 1.6rem;
+  font-size: 1.55rem;
   font-weight: 700;
-  letter-spacing: 0.35em;
+  letter-spacing: 0.28em;
   text-align: center;
 }
 

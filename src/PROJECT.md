@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-30 (Guest Snaps camera-roll picker)
+**Last updated:** 2026-07-30 (Guest Snaps PIN auth)
 
 ---
 
@@ -71,6 +71,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth voice queries from history |
 | `src/guest-photobooth.js` | Match "open guest snaps" (dual-QR welcome) + "open guest snaps slideshow" (Shared Photo Slideshow; ASR "slide show" / legacy "slideshow guest snaps") + legacy "guest photobooth"; `photosToSlideshowEntries` builds absolute `/qr-images/…` URLs; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
+| `src/guest-snaps-auth.js` | Rotating 24h 6-digit Guest Snaps booth PIN (`data/guest-snaps-pin.json`); `signal_guest` session until PIN expiry; progressive IP lockout; PIN only for UDP overlay / never in phone JSON |
 | `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery` + incomplete-ASR `looksLikeRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, incl. incomplete "distance from PLACE" → wait for TTS; `spokenHasRouteAnswer` for orphan miles TTS; dedupe comma-joined ASR + strip query tails from place names) |
 | `src/route-fetch.js` | Free/no-key route data: OSRM driving route (`fetchDrivingRoute`) with great-circle "flight" fallback (`greatCircleEstimate`) when no drivable route exists |
 | `src/music-info.js` | Detect "play \<song\>" (`matchesMusicQuery`), "what song is playing" (`matchesNowPlayingQuery` — apostrophe-less ASR + spoken-answer fallback), and "next"/"skip" (`matchesMusicSkipQuery`); `fetchNowPlaying` / `fetchNowPlayingHousehold` / `resolveMusicQueryNowPlaying` (idle/unknown preferred like web `Signal` → skip preferred retries, scan household PLAYING then PAUSED + parse spoken "X by Y"); `fetchNowPlayingAfterSkip`; `isMusicPlayerContent` gates out flash briefing/news/Audible; `emptyNowPlaying` only when nothing is playing anywhere |
@@ -386,13 +387,13 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (579 tests)
-run_all_tests.bat           # repo root — bridge + Windows client (579 + 325)
+npm test                    # bridge only (589 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (589 + 326)
 ```
 
-Bridge tests in `test/*.test.js` — includes **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration + broadcast ASR dedupe), `web-command-payloads` (progressive route loading/failed), `qr-image-cache`, `route-query`/`route-fetch` (OSRM AbortSignal + 12s timeout), `guest-photobooth`, `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth` (guest booth file input must not set `capture`), `display-registry`, `music-info` (Signal preferred skip), `activity-fields` (`customerParts`/`responseParts`).
+Bridge tests in `test/*.test.js` — includes **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration + broadcast ASR dedupe), `web-command-payloads` (progressive route loading/failed), `qr-image-cache`, `route-query`/`route-fetch` (OSRM AbortSignal + 12s timeout), `guest-photobooth`, `guest-snaps-auth` (24h 6-digit booth PIN + lockout), `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth` (guest booth PIN gate; admin PIN sheet 6 digits), `display-control-auth` (default 6-digit PIN), `display-registry`, `music-info` (Signal preferred skip), `activity-fields` (`customerParts`/`responseParts`).
 
-Client tests in `alexa broadcast client/test/test_*.py` — 325 tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
+Client tests in `alexa broadcast client/test/test_*.py` — 326 tests; see client `PROJECT.md` Testing section. Install via `requirements-test.txt` (pulls `requirements.txt`).
 
 **Before commit/push:** always run `run_all_tests.bat` and fix failures first (see `.cursor/rules/project-docs.mdc`).
 ---
@@ -440,11 +441,11 @@ Served by the listener at **`https://<NAS_IP or hostname>:47810/`** (config `web
 
 | URL | Who | What |
 |-----|-----|------|
-| `/` | Guests | Photo booth — pick a display (or all), take/choose a photo, push `qr.display` photo mode; upload also saves to the shared photo cache |
+| `/` | Guests | Photo booth — **6-digit PIN gate** (rotates every 24h; PIN shown on `guest.photobooth` overlay). After unlock: pick a display, take/choose a photo, push `qr.display` photo mode |
 | `/admin/` | Host | Full SPA (Push / Remote / Control / Slideshow / Settings), gated by `ADMIN_PASSWORD` (.env) via login form + HTTP-only session cookie |
 | `/admin/login.html` | Host | Admin password form |
 
-Public APIs: `GET /api/displays` (+ events SSE), `POST /api/qr/image-upload`, `POST /api/qr/push` (**photo mode only**), `GET /qr-images/*`. Everything else requires an admin session. If `ADMIN_PASSWORD` is unset, admin APIs fail closed (503).
+Public APIs: `GET /api/displays` (+ events SSE), `GET /api/guest/session`, `POST /api/guest/login|logout|request-pin`, `GET /qr-images/*`. Photo upload/push require a **guest** (`signal_guest`) or **admin** session. Everything else requires an admin session. If `ADMIN_PASSWORD` is unset, admin APIs fail closed (503).
 
 **Reverse-proxy subpaths:** the SPA uses a dynamic `<base href>` (from `location.pathname`) plus relative asset/API URLs, so a path-stripping proxy (e.g. public `/signal/` → bridge `/`) works without hardcoding a prefix. Prefer a trailing slash on the public mount URL.
 
@@ -457,14 +458,18 @@ Public APIs: `GET /api/displays` (+ events SSE), `POST /api/qr/image-upload`, `P
 | `GET /api/displays` | Known displays from `display.announce` registry (`id` unique; `label` disambiguates duplicate names) |
 | `GET /api/displays/events` | SSE stream — pushes `displays` events whenever the registry changes |
 | `POST /api/displays/discover` | Broadcast `display.discover`, wait ~2.5s for re-announces, prune silent displays; returns `{ displays, removedIds }` |
-| `POST /api/displays/auth/start` | Show 4-digit PIN on selected display (`display.auth`); required before mouse/keyboard/power |
+| `POST /api/displays/auth/start` | Show 6-digit PIN on selected display (`display.auth`); required before mouse/keyboard/power |
 | `POST /api/displays/auth/verify` | `{targetId,pin}` → `controlToken` session for that display |
 | `POST /api/displays/auth/status` | Unlock / challenge status for a display |
+| `GET /api/guest/session` | Guest booth auth status (`authenticated`, `expiresAt`, `pinDigits`) — never includes the PIN |
+| `POST /api/guest/login` | `{pin}` → `signal_guest` cookie until the daily PIN expires; progressive IP lockout on failures |
+| `POST /api/guest/logout` | Clear guest session cookie |
+| `POST /api/guest/request-pin` | Push `guest.photobooth` (with current PIN) to all displays; phone response omits the PIN |
 | `POST /api/push/tesla-dashboard` / `tesla-battery` | Synthetic event (`trigger: "web-api"`) through `listener.recordVoiceEvent`; body may include `targetId` |
 | `POST /api/push/weather` / `shopping-list` | Synthetic voice-query event (`trigger: "web-api"`) through `listener.recordVoiceEvent`, same as if Alexa had been asked — cached weather/shopping data is served immediately |
 | `POST /api/push/air-quality` | Synthetic `air-quality` event (`show indoor air quality`) → multi-monitor indoor AQ overlay |
 | `POST /api/push/indoor-temperature` | Synthetic `indoor-temperature` event for the first configured indoor sensor (or "temperature inside") |
-| `POST /api/push/guest-photobooth` | Guest Snaps dual-QR welcome on **all displays**; **503** if Wi‑Fi/booth URL not configured |
+| `POST /api/push/guest-photobooth` | Guest Snaps dual-QR welcome + booth access PIN on **all displays**; **503** if Wi‑Fi/booth URL not configured |
 | `POST /api/push/timers` | Calls `listener.requestTimerPoll()` for an immediate Amazon notifications poll → UDP `timer.snapshot`; **503** if the hook isn't wired (older listener) |
 | `POST /api/push/alarms` | Calls `listener.requestAlarmPoll()` for an immediate Amazon alarms poll → UDP alarm snapshot; **503** if the hook isn't wired |
 | `POST /api/push/url` `{url,targetId?}` | Validate → UDP `web.open` (unicast when one display selected) |
@@ -494,6 +499,10 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-07-30: **Guest Snaps PIN auth** — rotating 24h 6-digit booth PIN (`guest-snaps-auth.js`, `data/guest-snaps-pin.json`); shown on `guest.photobooth` overlay; `/` login + Request PIN; photo upload/push need `signal_guest` or admin cookie; admin-style IP lockout on bad PINs. Suite: **589 bridge / 326 client**. Deploy: `./recreate.sh` + restart/rebuild display client.
+
+- 2026-07-30: **Control/Remote unlock PIN is 6 digits** — default `webServer.controlAuth.pinDigits` is now 6 (was 4); admin PIN sheet maxlength/hint/cache-bust `?v=signal22` match. Override still via `pinDigits` (4–8). Deploy: `./recreate.sh` + hard-refresh admin.
 
 - 2026-07-30: **Guest Snaps phone picker allows camera roll** — removed `capture="environment"` from the booth file input so mobile browsers offer Take Photo *or* choose from library (PC file picker unchanged). Suite: **579 bridge / 325 client**. Deploy: `./recreate.sh` (or reload static `/`).
 
@@ -588,8 +597,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 - 2026-07-23: **PIN sheet above keyboard** — PIN unlock sheet is centered (not bottom-docked) and tracks `visualViewport` `--keyboard-inset` so the phone keyboard cannot cover the PIN field; viewport uses `interactive-widget=resizes-content`.
 - 2026-07-23: **Consistent lock + standard touchpad** — Remote tab hides power actions behind the same "Display locked" panel as Control; unlock expires 1h after PIN entry on both sides (`CONTROL_TOKEN_TTL_MS` in `app.js`, `sessionMinutes` default 60) and the header lock icon now locks on tap when unlocked; touchpad gains standard two-finger gestures — tap = right click, slide = scroll (wheel via `input.pointer`) — nudge arrow buttons removed.
 - 2026-07-22: **Signal Bridge branding** — product renamed from Alexa Broadcast Bridge; phone UI title **Signal** with logo/favicon; README hero uses `docs/signal-bridge-logo.png`.
-- 2026-07-22: **PIN UX + stale display prune** — wrong PIN shows inline error on the control sheet (`control_auth_incorrect_pin`); successful verify sends `display.auth` with `auth.status: ok` (1s Authenticated flash); registry **removes** displays that miss re-announce (~12 min / 2 heartbeats); web PIN hint omits timeout (client may differ) and locks input to 4 digits.
-- 2026-07-21: **Display id + PIN unlock** — duplicate `displayName` values stay unique via per-machine `display.id` / picker `label` (`Name · ab12`); mouse/keyboard/power require on-screen 4-digit PIN (`display.auth`) then a per-display `controlToken`.
+- 2026-07-22: **PIN UX + stale display prune** — wrong PIN shows inline error on the control sheet (`control_auth_incorrect_pin`); successful verify sends `display.auth` with `auth.status: ok` (1s Authenticated flash); registry **removes** displays that miss re-announce (~12 min / 2 heartbeats); web PIN hint omits timeout (client may differ) and locks input length to `pinDigits` (default 6).
+- 2026-07-21: **Display id + PIN unlock** — duplicate `displayName` values stay unique via per-machine `display.id` / picker `label` (`Name · ab12`); mouse/keyboard/power require on-screen PIN (`display.auth`, now 6 digits by default) then a per-display `controlToken`.
 - 2026-07-21: **Control keyboard Shift vs Caps** — Shift one-shots the next key; Caps latches letters only; SPA JS/CSS served `no-store` + mtime cache-bust (phones were caching sticky-Shift keyboard logic).
 - 2026-07-21: **Docs — full feature map** — root `README.md` / `DOCKER.md` / client `README.md` cover display announce, control page, WebView2 browser, remote input; `package.json` description updated.
 - 2026-07-21: **Control tab iPhone layout** — solid sticky display bar (no hint bleed), always-visible touchpad + nudge arrows, CSS-grid keyboard that stays aligned on narrow screens, scroll-to-top on tab switch.

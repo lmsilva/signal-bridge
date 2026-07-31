@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal21">
+  <link rel="stylesheet" href="styles.css?v=signal22">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -512,8 +512,8 @@
   <div class="sheet-backdrop" id="pin-sheet" hidden>
     <div class="sheet">
       <div class="sheet-title">Enter display PIN</div>
-      <p class="hint" id="pin-sheet-hint">Look at the display for a 4-digit code.</p>
-      <input id="pin-sheet-input" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="••••" aria-label="PIN code">
+      <p class="hint" id="pin-sheet-hint">Look at the display for a 6-digit code.</p>
+      <input id="pin-sheet-input" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="••••••" aria-label="PIN code">
       <p class="pin-sheet-error" id="pin-sheet-error" hidden role="alert"></p>
       <div class="sheet-actions">
         <button class="btn btn-outline" id="pin-sheet-cancel">Cancel</button>
@@ -530,6 +530,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal21"></script>
+  <script src="app.js?v=signal22"></script>
 </body>
 </html>

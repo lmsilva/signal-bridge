@@ -1,19 +1,33 @@
-/* Guest photo booth — public / */
+/* Guest photo booth — PIN-gated / */
 (() => {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
   const ALL_DISPLAYS = '*';
   const STORAGE_TARGET_KEY = 'signalBooth.targetId';
+  const PIN_DIGITS = 6;
 
   let selectedPhotoDataUrl = null;
   let displayEvents = null;
+  let authenticated = false;
+  let pinDigits = PIN_DIGITS;
 
-  function setStatus(message, kind) {
-    const el = $('booth-status');
+  function setStatus(elId, message, kind) {
+    const el = $(elId);
+    if (!el) return;
     el.textContent = message || '';
     el.classList.toggle('is-good', kind === 'good');
     el.classList.toggle('is-bad', kind === 'bad');
+  }
+
+  function setBoothStatus(message, kind) {
+    setStatus('booth-status', message, kind);
+  }
+
+  function setLoginStatus(message, kind) {
+    setStatus('login-status', message, kind);
+    const input = $('guest-pin-input');
+    input?.classList.toggle('is-invalid', kind === 'bad');
   }
 
   async function apiPost(route, body = {}) {
@@ -30,17 +44,67 @@
       data = null;
     }
     if (!response.ok) {
-      throw new Error(data?.error || `Request failed (${response.status})`);
+      const err = new Error(data?.error || `Request failed (${response.status})`);
+      err.status = response.status;
+      err.code = data?.code;
+      err.retryAfterSec = data?.retryAfterSec;
+      throw err;
     }
     return data || {};
   }
 
   async function apiGet(route) {
     const response = await fetch(route, { cache: 'no-store', credentials: 'same-origin' });
-    if (!response.ok) {
-      throw new Error(`Request failed (${response.status})`);
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
     }
-    return response.json();
+    if (!response.ok) {
+      const err = new Error(data?.error || `Request failed (${response.status})`);
+      err.status = response.status;
+      err.code = data?.code;
+      throw err;
+    }
+    return data || {};
+  }
+
+  function showLogin() {
+    authenticated = false;
+    $('booth-login').hidden = false;
+    $('booth-app').hidden = true;
+    $('booth-subtitle').textContent = 'Enter the PIN from the display';
+    $('guest-pin-input').value = '';
+    setLoginStatus('');
+    setTimeout(() => $('guest-pin-input')?.focus(), 50);
+  }
+
+  function showApp() {
+    authenticated = true;
+    $('booth-login').hidden = true;
+    $('booth-app').hidden = false;
+    $('booth-subtitle').textContent = 'Share a photo with us';
+    setBoothStatus('');
+    refreshDisplays();
+    startDisplayEvents();
+  }
+
+  async function refreshSession() {
+    try {
+      const session = await apiGet('/api/guest/session');
+      pinDigits = Number(session.pinDigits) || PIN_DIGITS;
+      $('guest-pin-input').maxLength = pinDigits;
+      $('login-hint').textContent = `Enter the ${pinDigits}-digit PIN shown on the display.`;
+      if (session.authenticated) {
+        showApp();
+        return true;
+      }
+    } catch {
+      // fall through to login
+    }
+    showLogin();
+    return false;
   }
 
   function selectedTargetId() {
@@ -65,6 +129,7 @@
 
   function renderDisplays(displays) {
     const select = $('display-select');
+    if (!select) return;
     const previous = select.value || rememberedTarget();
     const list = Array.isArray(displays) ? displays : [];
     select.innerHTML = '';
@@ -80,7 +145,7 @@
 
     for (const display of list) {
       const opt = document.createElement('option');
-      opt.value = display.id; // unique id — label is name only
+      opt.value = display.id;
       const label = display.label || display.name || display.id;
       opt.textContent = display.stale ? `${label} (offline?)` : label;
       select.appendChild(opt);
@@ -105,6 +170,7 @@
   }
 
   async function refreshDisplays() {
+    if (!authenticated) return;
     try {
       const result = await apiGet('/api/displays');
       renderDisplays(result.displays || result || []);
@@ -116,7 +182,9 @@
   function startDisplayEvents() {
     if (displayEvents) {
       displayEvents.close();
+      displayEvents = null;
     }
+    if (!authenticated) return;
     try {
       displayEvents = new EventSource('/api/displays/events');
       displayEvents.addEventListener('displays', (event) => {
@@ -162,45 +230,84 @@
       $('photo-preview').hidden = false;
       $('btn-pick-photo').hidden = true;
       $('btn-send').disabled = false;
-      setStatus('');
+      setBoothStatus('');
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      setStatus('Could not read that photo', 'bad');
+      setBoothStatus('Could not read that photo', 'bad');
     };
     img.src = objectUrl;
   }
 
-  $('display-select').addEventListener('change', () => {
+  async function unlockWithPin() {
+    const pin = String($('guest-pin-input')?.value || '').replace(/\D/g, '');
+    if (!pin) {
+      setLoginStatus('Enter the PIN shown on the display', 'bad');
+      return;
+    }
+    $('btn-guest-unlock').disabled = true;
+    setLoginStatus('Checking…');
+    try {
+      await apiPost('/api/guest/login', { pin });
+      setLoginStatus('Unlocked', 'good');
+      showApp();
+    } catch (error) {
+      if (error.status === 429 && error.retryAfterSec) {
+        setLoginStatus(error.message || `Try again in ${error.retryAfterSec}s`, 'bad');
+      } else {
+        setLoginStatus(error.message || 'Incorrect PIN', 'bad');
+      }
+      $('guest-pin-input').value = '';
+      $('guest-pin-input').focus();
+    } finally {
+      $('btn-guest-unlock').disabled = false;
+    }
+  }
+
+  async function requestPinOnDisplay() {
+    const btn = $('btn-request-pin');
+    btn.disabled = true;
+    setLoginStatus('Asking the display to show the PIN…');
+    try {
+      await apiPost('/api/guest/request-pin', {});
+      setLoginStatus('Look at the display for the PIN', 'good');
+    } catch (error) {
+      setLoginStatus(error.message || 'Could not request PIN', 'bad');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  $('display-select')?.addEventListener('change', () => {
     persistTarget(selectedTargetId());
     $('display-hint').textContent = selectedTargetId() === ALL_DISPLAYS
       ? 'Sending to every Signal display on the network.'
       : 'Sending to the selected display only.';
   });
 
-  $('btn-pick-photo').addEventListener('click', () => {
+  $('btn-pick-photo')?.addEventListener('click', () => {
     $('photo-file').value = '';
     $('photo-file').click();
   });
 
-  $('photo-file').addEventListener('change', () => {
+  $('photo-file')?.addEventListener('change', () => {
     const file = $('photo-file').files && $('photo-file').files[0];
     loadPhotoFile(file);
   });
 
-  $('btn-photo-clear').addEventListener('click', () => {
+  $('btn-photo-clear')?.addEventListener('click', () => {
     resetPhotoPicker();
-    setStatus('');
+    setBoothStatus('');
   });
 
-  $('btn-send').addEventListener('click', async () => {
+  $('btn-send')?.addEventListener('click', async () => {
     if (!selectedPhotoDataUrl) {
-      setStatus('Choose a photo first', 'bad');
+      setBoothStatus('Choose a photo first', 'bad');
       return;
     }
     const button = $('btn-send');
     button.disabled = true;
-    setStatus('Sending…');
+    setBoothStatus('Sending…');
     try {
       const upload = await apiPost('/api/qr/image-upload', {
         imageDataUrl: selectedPhotoDataUrl,
@@ -212,15 +319,60 @@
         label: 'Scan to save this photo',
         targetId: selectedTargetId(),
       });
-      setStatus('Photo sent — thanks!', 'good');
+      setBoothStatus('Photo sent — thanks!', 'good');
       resetPhotoPicker();
     } catch (error) {
-      setStatus(error.message || 'Could not send the photo', 'bad');
+      if (error.status === 401) {
+        setBoothStatus('Session expired — enter the PIN again', 'bad');
+        showLogin();
+        return;
+      }
+      setBoothStatus(error.message || 'Could not send the photo', 'bad');
       button.disabled = !selectedPhotoDataUrl;
     }
   });
 
-  refreshDisplays();
-  startDisplayEvents();
-  setInterval(refreshDisplays, 60000);
+  $('btn-guest-unlock')?.addEventListener('click', () => {
+    unlockWithPin();
+  });
+
+  $('btn-request-pin')?.addEventListener('click', () => {
+    requestPinOnDisplay();
+  });
+
+  $('btn-guest-lock')?.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/guest/logout', {});
+    } catch {
+      // still lock the UI
+    }
+    resetPhotoPicker();
+    if (displayEvents) {
+      displayEvents.close();
+      displayEvents = null;
+    }
+    showLogin();
+  });
+
+  $('guest-pin-input')?.addEventListener('input', (e) => {
+    const el = e.target;
+    el.value = String(el.value || '').replace(/\D/g, '').slice(0, pinDigits);
+    setLoginStatus('');
+  });
+
+  $('guest-pin-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      unlockWithPin();
+    }
+  });
+
+  refreshSession().then((ok) => {
+    if (ok) {
+      setInterval(refreshDisplays, 60000);
+    } else {
+      setInterval(() => {
+        if (authenticated) refreshDisplays();
+      }, 60000);
+    }
+  });
 })();

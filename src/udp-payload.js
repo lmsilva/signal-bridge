@@ -657,6 +657,10 @@ function buildGuestPhotoboothPayload(event, config, settings) {
     || Number(config?.guestPhotobooth?.defaultDisplaySeconds)
     || 180;
 
+  const accessPin = String(settings?.accessPin || '').replace(/\D/g, '');
+  const accessPinHint = String(settings?.accessPinHint || '').trim()
+    || (accessPin ? 'Enter this PIN on your phone' : '');
+
   return {
     version: 2,
     type: 'guest.photobooth',
@@ -668,6 +672,7 @@ function buildGuestPhotoboothPayload(event, config, settings) {
     guestPhotobooth: {
       title: 'Guest Snaps',
       subtitle: 'Two quick scans to share a photo',
+      ...(accessPin ? { accessPin, accessPinHint } : {}),
       wifi: {
         content: wifiContent,
         ssid: String(settings.ssid || '').trim(),

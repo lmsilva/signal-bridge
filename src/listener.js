@@ -51,6 +51,7 @@ const {
   resolveGuestPhotoboothSettings,
   photosToSlideshowEntries,
 } = require('./guest-photobooth');
+const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createSlideshowSettings } = require('./slideshow-settings');
 const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
@@ -123,8 +124,10 @@ const PUSH_DOWN_POLL_MS = 15 * 1000;
 const HEALTH_LOG_MS = 5 * 60 * 1000;
 const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
-function createListener({ config, log }) {
+function createListener({ config, log, guestSnapsAuth = null } = {}) {
   const alexa = new Alexa();
+  // Shared with the web server when index.js injects one; otherwise local.
+  const snapsAuth = guestSnapsAuth || createGuestSnapsAuth(config, log);
   const legacyBroadcastLogPaths = [
     path.join(config.ROOT, 'broadcast.txt'),
     path.join(config.ROOT, 'data', 'broadcast.txt'),
@@ -1036,7 +1039,14 @@ function createListener({ config, log }) {
       // Party welcome always fans out to every display, ignoring any single-target
       // selection from the admin quick-push picker.
       event = { ...event, targetId: '*' };
-      payload = buildGuestPhotoboothPayload(event, config, settings);
+      const pinInfo = snapsAuth.getPinForDisplay();
+      payload = buildGuestPhotoboothPayload(event, config, {
+        ...settings,
+        ...(pinInfo ? {
+          accessPin: pinInfo.accessPin,
+          accessPinHint: pinInfo.accessPinHint,
+        } : {}),
+      });
       if (!payload) {
         log.warn('Guest photo booth payload build failed', { query: event.query });
         return;
@@ -1642,6 +1652,7 @@ function createListener({ config, log }) {
     steamNowPlaying: () => steamNowPlaying,
     recordSteamPresence: (body) => steamNowPlaying?.recordPresence(body),
     getSteamStatus: () => steamNowPlaying?.statusSnapshot?.() || null,
+    guestSnapsAuth: snapsAuth,
   };
 }
 

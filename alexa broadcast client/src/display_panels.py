@@ -6136,7 +6136,7 @@ class AuthPinPanel(BasePanel):
         authenticated = status in ("ok", "authenticated", "success")
         pin = str(auth.get("pin") or "").strip()
         if not pin and not authenticated:
-            pin = "----"
+            pin = "------"
 
         center_x = layout.content_x + layout.content_width // 2
         area_top = layout.message_area_top
@@ -6570,6 +6570,8 @@ class GuestPhotoboothPanel(BasePanel):
         wifi = data.get("wifi") or {}
         booth = data.get("booth") or {}
         ssid = str(wifi.get("ssid") or "Guest Wi‑Fi").strip()
+        access_pin = str(data.get("accessPin") or "").strip()
+        access_hint = str(data.get("accessPinHint") or "Enter this PIN on your phone").strip()
         screen_w = int(getattr(self.shell, "screen_w", self.canvas.winfo_width()))
         screen_h = int(getattr(self.shell, "screen_h", self.canvas.winfo_height()))
         chrome = page_chrome(screen_w, screen_h, timed=True)
@@ -6579,18 +6581,52 @@ class GuestPhotoboothPanel(BasePanel):
         )
         # Extra bottom inset so the lower card border clears the raised dismiss footer.
         footer_clear = int(round(18 * chrome.u))
+        pin_band = self.pin_band_height(chrome.u, has_pin=bool(access_pin))
+        content_top = chrome.content_top + pin_band
+        if access_pin:
+            self._draw_access_pin_band(
+                chrome.content_x, chrome.content_top, chrome.content_w, pin_band,
+                access_pin, access_hint, u=chrome.u,
+            )
         geo = self.compute_card_geometry(
             int(chrome.content_w),
-            int(max(360, chrome.content_bottom - chrome.content_top - footer_clear)),
+            int(max(360, chrome.content_bottom - content_top - footer_clear)),
             chrome.portrait, u=chrome.u,
         )
         for index, (step, card) in enumerate(zip((wifi, booth), geo["cards"]), start=1):
             self._draw_guest_redesign_card(
-                chrome.content_x + card["x"], chrome.content_top + card["y"],
+                chrome.content_x + card["x"], content_top + card["y"],
                 geo["card_w"], geo["card_h"], geo["plate"], geo["qr_size"], step,
                 index=index, ssid=ssid,
                 qr_attr="_wifi_qr_image" if index == 1 else "_booth_qr_image",
             )
+
+    @staticmethod
+    def pin_band_height(u: float = 1.0, *, has_pin: bool = True) -> int:
+        """Reserved strip under the page header for the booth access PIN."""
+        if not has_pin:
+            return 0
+        return int(round(110 * float(u or 1.0)))
+
+    def _draw_access_pin_band(self, x, y, w, h, pin, hint, *, u=1.0):
+        from src.design_system import ACCENT, INK, INK_2
+
+        cx = x + w / 2
+        pin_font = getattr(self.shell, "hero_font", None) or self.shell.chip_value_font
+        hint_font = self.shell.forecast_label_font
+        label_font = self.shell.chip_label_font
+        self._track(self.canvas.create_text(
+            cx, y + int(round(8 * u)), anchor="n",
+            text="BOOTH PIN", fill=ACCENT, font=label_font,
+        ))
+        self._track(self.canvas.create_text(
+            cx, y + int(round(h * 0.42)), anchor="center",
+            text=pin, fill=INK, font=pin_font,
+        ))
+        self._track(self.canvas.create_text(
+            cx, y + h - int(round(10 * u)), anchor="s",
+            text=hint, fill=INK_2, font=hint_font,
+        ))
 
     def _draw_guest_redesign_card(self, x, y, w, h, plate, qr_size, step, *, index, ssid, qr_attr):
         from src.design_system import ACCENT, INK, INK_2, LINE
