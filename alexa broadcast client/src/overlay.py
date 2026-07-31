@@ -33,6 +33,7 @@ from src.dismiss_footer import DismissFooter, footer_height
 from src.page_header import paint_page_header
 from src.payload_utils import resolve_display_type, title_for_display_type, title_for_payload
 from src.steam_now_playing_panel import SteamNowPlayingPanel
+from src.psn_now_playing_panel import PsnNowPlayingPanel
 from src.weather_fetch import enrich_weather_payload
 
 
@@ -145,6 +146,7 @@ class OverlayWindow:
             "photo.slideshow": PhotoSlideshowPanel(self.root, self.shell, self.config),
             "route-planner.query": RoutePlannerPanel(self.root, self.shell, self.config),
             "steam.now-playing": SteamNowPlayingPanel(self.root, self.shell, self.config),
+            "psn.now-playing": PsnNowPlayingPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
@@ -420,6 +422,7 @@ class OverlayWindow:
             "route-planner.query",
             "guest.photobooth",
             "steam.now-playing",
+            "psn.now-playing",
             "photo.slideshow",
             "weather.query",
             "timer.snapshot",
@@ -485,6 +488,8 @@ class OverlayWindow:
         if self._is_shared_photo_qr_active():
             return True
         if self._active_panel_key == "steam.now-playing" and self._display_seconds <= 0:
+            return True
+        if self._active_panel_key == "psn.now-playing" and self._display_seconds <= 0:
             return True
         return False
 

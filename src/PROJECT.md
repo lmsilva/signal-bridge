@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-30 (Guest Snaps PIN auth)
+**Last updated:** 2026-07-30 (PSN Now Playing)
 
 ---
 
@@ -62,6 +62,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set |
 | `src/lan-crypto.js` | Shared-secret **AES-256-GCM** for bridge↔display UDP (`LAN_UDP_SECRET` / `udpBroadcast.sharedSecret`); protocol v3 envelope `{v,alg,n,c}`; SHA-256 key derive; stamps `sentAt` at seal; ±120s freshness on `sentAt` (not Alexa activity `timestamp`) |
 | `src/steam-*.js` | Steam Now Playing: config/session/OpenID auth (callback requires one-time `state` from admin start), Web API + store appdetails, presence allowlist, poller with interrupt-suppress, UDP builders |
+| `src/psn-*.js` | PSN Now Playing (unofficial `psn-api`): NPSSO → tokens in `data/psn-session.json`, `getBasicPresence` poller, played-games/trophy enrich, fail-soft Chihiro Store Plan B (`psn-store.js` — description + real screenshots + stars), Admin NPSSO paste + manual preview, UDP `psn.now-playing` |
 | `src/activity-fields.js` | Harvest summary/response/allText from all `voiceHistoryRecordItems` types (app routines often skip ASR) |
 | `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
 | `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
@@ -347,6 +348,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `guest.photobooth` | Alexa **"open guest snaps"** (legacy: guest photobooth) — dual-QR **Guest Snaps** welcome on **all displays**: `guestPhotobooth.{wifi,booth}` with Wi‑Fi `WIFI:T:…` + booth URL; client owns chrome (no duplicate shell title), portrait stack with a dedicated "then" band between cards |
 | `photo.slideshow` | Alexa **"open guest snaps slideshow"** (also "guest snaps slideshow" / legacy "slideshow guest snaps") **or** Push tab "Shared Photo Slideshow" — `slideshow.{photos[], secondsPerPhoto}`; `photos` is every photo in the QR image cache as `{url, uploadedAt}` (photos never expire — see `qr-image-cache.js`), ordered by the bridge per the persisted Settings-tab preference (`recent`\|`oldest`\|`random`); `displaySeconds` = `photos.length * secondsPerPhoto` so the whole set gets shown once. Voice path fans out to **all displays**. Client plays through the list once (does not loop). Timer/alarm **followup** polls after a prior “show timers/alarms” stay silent unless something changed (so they do not steal the slideshow); the client also ignores soft timer/alarm list refreshes while `photo.slideshow` / `guest.photobooth` is up (still yields to explicit show / fired) |
 | `steam.now-playing` | Auto: persistent game card from (1) Steam profile **`gameid`**, else (2) fresh local presence `steamAppId`, else (3) OwnedGames activity that **advanced past an idle baseline** and is within `STEAM_INFER_FROM_RECENT_SEC` (default 180) — baseline is seeded on boot and updated on every session end so quit-time `rtime` cannot reopen the overlay. Recent-led sessions end after `STEAM_RECENT_PLAY_STAGNANT_SEC` (default 150) without playtime/rtime growth. `STEAM_REQUIRE_PRESENCE=0` (default) shows for any PC. Manual Auth preview may use OwnedGames last-played (dismissible). Close via `steam.now-playing.close` |
+| `psn.now-playing` | Auto: persistent card while PSN `getBasicPresence` reports `gameTitleInfoList` (PS5/PS4). Enriched with playtime/last-played from `getUserPlayedGames` + best-effort trophies by title name. Manual Auth preview / last-played is dismissible. Close via `psn.now-playing.close`. **Unofficial API** — NPSSO auth; can break if Sony changes endpoints |
 | `route-planner.query` | "How far is Moab from here" / … — progressive UDP: (1) skeleton with place names (`status: loading`), (2) geocoded coords (still loading; client starts map/weather), (3) distance/duration/geometry (`status: ready`) or `failed`. Origin/destination geocode in **parallel** (≤3 lookups, 10s abort) + OSRM (12s abort → great-circle flight). `displaySeconds` = **max(180, 2× default)** (override `routePlanner.displaySeconds`). Client still fetches map/facts/weather tiles independently |
 
 Optional `target: { id }` or `{ all: true }` on outbound commands for unicast vs broadcast delivery (`display-registry.resolveDelivery`).
@@ -499,6 +501,16 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-07-30: **Admin Settings layout** — Authentication cards first (filled 2-col grid); Slideshow config moved to the bottom as a full-width card with order + time side-by-side on landscape. PSN card links to account login + NPSSO cookie URL. Cache-bust `?v=signal24`. Hard-refresh admin.
+
+- 2026-07-30: **Steam/PSN Auth push honors selected display** — manual Now Playing / Last Played used broadcast-only UDP and ignored the picker’s unicast host (other Push tiles did not). Intermittent “toast OK, nothing on poster” on flaky broadcast LANs. Deploy: `./recreate.sh`.
+
+- 2026-07-30: **PSN Store Chihiro Plan B** — fail-soft `psn-store.js` resolves `titleId` → Full Game product for `long_desc`, real `mediaList.screenshots`, star rating, ESRB label (cached 6h; never breaks Now Playing). Concept key-art no longer used as screenshots. Client shows Store blurb when present + adaptive 1–3 gallery. Deploy: `./recreate.sh` + restart/rebuild display client.
+
+- 2026-07-30: **PSN Now Playing enrichment + dedicated client layout** — bridge fills `statusLine`, concept-media gallery, `progressLabel`/`playCount` (no Steam store blurb / concurrent players); client panel owns PSN bands/footer. Deploy: `./recreate.sh` + restart/rebuild display client.
+
+- 2026-07-30: **PSN Now Playing** — unofficial `psn-api` poller (`psn-config` / `psn-session` / `psn-api` / `psn-now-playing`); Admin Settings NPSSO paste + Now Playing/Last Played push; UDP `psn.now-playing` (+ close); interrupt suppress shared with Steam. Caveats: NPSSO is secret-like; enable activity sharing; PS3 limited. Suite: **599 bridge / 329 client**. Deploy: `./recreate.sh` + restart/rebuild display client.
 
 - 2026-07-30: **Guest Snaps PIN auth** — rotating 24h 6-digit booth PIN (`guest-snaps-auth.js`, `data/guest-snaps-pin.json`); shown on `guest.photobooth` overlay; `/` login + Request PIN; photo upload/push need `signal_guest` or admin cookie; admin-style IP lockout on bad PINs. Suite: **589 bridge / 326 client**. Deploy: `./recreate.sh` + restart/rebuild display client.
 

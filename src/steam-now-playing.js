@@ -688,7 +688,7 @@ function createSteamNowPlaying({
         : (requirePresence ? null : 'Showing for any PC (Steam account in-game)');
   }
 
-  async function pushManualPreview({ device = 'Signal' } = {}) {
+  async function pushManualPreview({ device = 'Signal', send } = {}) {
     const creds = getCredentials();
     if (!creds.apiKey || !creds.steamId) {
       return {
@@ -765,7 +765,10 @@ function createSteamNowPlaying({
     if (!payload) {
       return { ok: false, error: 'Failed to build Steam display payload' };
     }
-    sendUdpPayload(payload);
+    // Prefer admin-targeted unicast (same as other Push tiles). Broadcast-only
+    // delivery is flaky on many LANs when a specific display is selected.
+    const emit = typeof send === 'function' ? send : sendUdpPayload;
+    emit(payload);
     log?.info?.('Steam Now Playing manual preview pushed', {
       mode,
       appId: reading.appId,

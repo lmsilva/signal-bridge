@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-07-30 (Guest Snaps booth PIN on overlay)
+**Last updated:** 2026-07-30 (PSN dedicated Now Playing layout)
 
 ---
 
@@ -39,7 +39,8 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/lan_crypto.py` | Shared-secret AES-256-GCM seal/open for UDP (`udpSecret` must match bridge `LAN_UDP_SECRET`); stamps `sentAt` at seal; ±120s freshness on `sentAt` |
 | `src/design_system.py` | Shared tokens (`#0B1730` bg, ink/accent/status, Steam + print-border colours) + `design_u` / `page_chrome()` (header 32–116, content 136→footer) |
 | `src/page_header.py` | Shared 3-column header (left / pill / right); used by overlay shell + Shared Photos |
-| `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `steam.now-playing` / close |
+| `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `steam.now-playing` / close; `SOURCE_CHIP` / `PAYLOAD_KEY` overridable |
+| `src/psn_now_playing_panel.py` | Dedicated PSN Now Playing — shares Steam artwork fetch helpers only; owns status-line (no store blurb), concept-media gallery, footer `PLAYTIME`/`TROPHIES`/`PROGRESS` (no concurrent players); collapses empty bands into a larger hero |
 | `src/dismiss_footer.py` | Shared dismiss footer — compact full-bleed band (64u) + draining rail + fixed-width “Dismisses in …” slot; used by `overlay.py` for every timed page except shared-photos / persistent Steam |
 | `src/shared_photos_page.py` | Shared Photos (spec v2) — portrait stack or landscape stage + vertical rail + sidebar (§11); photo-sampled mat + print border + QR plate; used by `PhotoSlideshowPanel` and photo-mode `QrPanel` |
 | `src/overlay.py` | Fullscreen shell: flat `#0B1730` surface, shared `page_header` + `DismissFooter`, `page_chrome` content zone; hides shared chrome for panels that own it (Tesla mission, route planner, guest photobooth, Steam, shared photos) |
@@ -261,6 +262,12 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-07-30: **PSN Store description + real screenshots** — panel shows Chihiro `shortDescription` when the bridge sends it; status line stays above; gallery still sizes to 1–3. Restart or portable rebuild required.
+
+- 2026-07-30: **PSN gallery sizes to 1–3 shots** — no empty third placeholder when the API only returns two images; 0 shots still expands the hero. Restart or portable rebuild required.
+
+- 2026-07-30: **PSN Now Playing dedicated layout** — status line + concept-media gallery + `PLAYTIME`/`TROPHIES`/`PROGRESS` footer (no empty Steam blurb / PLAYING NOW); shares Steam artwork fetch helpers only. Smoke: `send_test.py --type psn-now-playing`. Restart or portable rebuild required.
 
 - 2026-07-30: **Guest Snaps overlay shows booth access PIN** — `GuestPhotoboothPanel` reserves a PIN band under the header for `guestPhotobooth.accessPin` (bridge 24h rotating code). Suite: **326 client**. Restart or portable rebuild required.
 - 2026-07-30: **Steam description scrolls at half speed** — description `MessageScrollController` uses `DESC_SCROLL_SPEED_FACTOR` (0.5× `scrollPixelsPerSecond`, default 14 pps) so long blurbs are readable; broadcast scroll unchanged. Suite: **325 client**. Restart or portable rebuild required.

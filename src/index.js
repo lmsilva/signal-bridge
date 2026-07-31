@@ -72,6 +72,8 @@ async function main() {
       recordSteamPresence: listener.recordSteamPresence,
       getSteamStatus: listener.getSteamStatus,
       steamNowPlaying: listener.steamNowPlaying,
+      getPsnStatus: listener.getPsnStatus,
+      psnNowPlaying: listener.psnNowPlaying,
       guestSnapsAuth,
     });
     webServer.start().catch((error) => {

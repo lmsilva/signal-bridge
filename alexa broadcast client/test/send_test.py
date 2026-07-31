@@ -1003,6 +1003,58 @@ def build_payload(args) -> dict:
             "trigger": "test",
         }
 
+    if args.type == "psn-now-playing":
+        started = datetime.now(timezone.utc) - timedelta(minutes=42)
+        return {
+            "version": 2,
+            "type": "psn.now-playing",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 0,
+            "persistent": True,
+            "trigger": "test",
+            "psn": {
+                "titleId": "PPSA01325_00",
+                "name": "Astro's Playroom",
+                "mode": "playing",
+                "platform": "PS5",
+                "shortDescription": "",
+                "statusLine": "Playing now · on PS5 · as Tester · 4 sessions",
+                "developers": [],
+                "publishers": [],
+                "releaseYear": None,
+                "tags": ["PS5"],
+                "posterCandidates": [
+                    "https://image.api.playstation.com/vulcan/ap/rnd/202010/2617/example.jpg",
+                ],
+                "headerImage": None,
+                "screenshots": [
+                    "https://image.api.playstation.com/vulcan/ap/rnd/202010/2617/banner1.jpg",
+                    "https://image.api.playstation.com/vulcan/ap/rnd/202010/2617/banner2.jpg",
+                ],
+                "playtimeLabel": "12.5 h",
+                "playtimeForeverMin": 750,
+                "playCount": 4,
+                "progressLabel": "61%",
+                "trophies": {"earned": 28, "total": 46, "available": True, "progress": 61},
+                "achievements": {"earned": 28, "total": 46, "available": True},
+                "startedAt": started.isoformat().replace("+00:00", "Z"),
+                "lastPlayedAt": None,
+                "elapsedSec": 42 * 60,
+                "onlineId": "Tester",
+            },
+        }
+
+    if args.type == "psn-now-playing-close":
+        return {
+            "version": 2,
+            "type": "psn.now-playing.close",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 0,
+            "trigger": "test",
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -1084,7 +1136,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "music", "route-planner", "route-planner-flight"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "music", "route-planner", "route-planner-flight"],
         default="broadcast",
         help="Payload type to send",
     )

@@ -93,6 +93,7 @@ const {
   resolveIndoorQueryLocation,
 } = require('./indoor-temperature');
 const { createSteamNowPlaying } = require('./steam-now-playing');
+const { createPsnNowPlaying } = require('./psn-now-playing');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 
@@ -101,7 +102,12 @@ function shouldSuppressSteamForPayload(payload) {
   if (!type) {
     return false;
   }
-  if (type === 'steam.now-playing' || type === 'steam.now-playing.close') {
+  if (
+    type === 'steam.now-playing'
+    || type === 'steam.now-playing.close'
+    || type === 'psn.now-playing'
+    || type === 'psn.now-playing.close'
+  ) {
     return false;
   }
   // Control / meta traffic must not kill the game card.
@@ -115,6 +121,9 @@ function shouldSuppressSteamForPayload(payload) {
   }
   return true;
 }
+
+/** Same interrupt rules as Steam — keep one helper name for both pollers. */
+const shouldSuppressNowPlayingForPayload = shouldSuppressSteamForPayload;
 const HISTORY_LOOKBACK_MS = 2 * 60 * 1000;
 const PERIODIC_LOOKBACK_MS = 15 * 60 * 1000;
 const PERIODIC_POLL_MS = 60 * 1000;
@@ -141,6 +150,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   });
   const displayRegistry = createDisplayRegistry(config, log);
   let steamNowPlaying = null;
+  let psnNowPlaying = null;
   const udpBroadcaster = createUdpBroadcaster(config, log, {
     onMessage: (payload, rinfo) => {
       if (payload?.type !== 'display.announce') {
@@ -226,8 +236,9 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   }
 
   function sendUdpPayload(payload, options = {}) {
-    if (shouldSuppressSteamForPayload(payload)) {
+    if (shouldSuppressNowPlayingForPayload(payload)) {
       steamNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
+      psnNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
     }
     return udpBroadcaster.send(payload, options);
   }
@@ -1625,6 +1636,13 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         });
         steamNowPlaying.start();
 
+        psnNowPlaying = createPsnNowPlaying({
+          config,
+          log,
+          sendUdpPayload,
+        });
+        psnNowPlaying.start();
+
         resolve(alexa);
       });
     });
@@ -1652,6 +1670,8 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     steamNowPlaying: () => steamNowPlaying,
     recordSteamPresence: (body) => steamNowPlaying?.recordPresence(body),
     getSteamStatus: () => steamNowPlaying?.statusSnapshot?.() || null,
+    psnNowPlaying: () => psnNowPlaying,
+    getPsnStatus: () => psnNowPlaying?.statusSnapshot?.() || null,
     guestSnapsAuth: snapsAuth,
   };
 }
@@ -1659,4 +1679,5 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
 module.exports = {
   createListener,
   shouldSuppressSteamForPayload,
+  shouldSuppressNowPlayingForPayload,
 };

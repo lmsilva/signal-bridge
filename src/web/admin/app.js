@@ -600,6 +600,38 @@
       }
     }
 
+    // PSN auth status
+    const psnPill = $('psn-status-pill');
+    const psnDetail = $('psn-status-detail');
+    const psn = status.psn || {};
+    if (!psn.configured) {
+      pillState(psnPill, 'warn', 'Link account');
+      if (psnDetail) {
+        psnDetail.textContent = 'Paste an NPSSO cookie below to link PlayStation Network.';
+      }
+    } else if (psn.status === 'playing') {
+      pillState(psnPill, 'ok', 'Now playing');
+      if (psnDetail) {
+        psnDetail.textContent = `Playing${psn.onlineId ? ` as ${psn.onlineId}` : ''}`
+          + (psn.session?.suppressed ? ' (suppressed by another overlay)' : '');
+      }
+    } else if (psn.status === 'suppressed') {
+      pillState(psnPill, 'warn', 'Suppressed');
+      if (psnDetail) {
+        psnDetail.textContent = 'Game still running — overlay hidden until restore or a new session.';
+      }
+    } else if (psn.status === 'auth_error' || psn.status === 'api_error') {
+      pillState(psnPill, 'bad', 'Auth error');
+      if (psnDetail) {
+        psnDetail.textContent = psn.message || 'PSN token/API failed — paste a fresh NPSSO.';
+      }
+    } else {
+      pillState(psnPill, 'ok', 'Ready');
+      if (psnDetail) {
+        psnDetail.textContent = `Linked${psn.onlineId ? ` as ${psn.onlineId}` : ''}. Watching PSN presence (PS5/PS4).`;
+      }
+    }
+
     if (steamAuth.status === 'success' && steamFollowup && !steamFollowup.hidden) {
       steamFollowup.hidden = true;
       toast('Steam account linked', 'good');
@@ -1955,6 +1987,61 @@
       const result = await apiPost('/api/push/steam-now-playing', withTarget());
       const label = result.mode === 'last-played' ? 'Last played' : 'Now playing';
       toast(`${label}: ${result.name || 'Steam'} (dismisses automatically)`, 'good');
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-psn-auth')?.addEventListener('click', async () => {
+    const button = $('btn-psn-auth');
+    const input = $('psn-npsso-input');
+    if (!button || !input) {
+      return;
+    }
+    const npsso = String(input.value || '').trim();
+    if (!npsso) {
+      toast('Paste your NPSSO cookie first', 'bad');
+      return;
+    }
+    button.disabled = true;
+    try {
+      await apiPost('/api/auth/psn/link', { npsso });
+      input.value = '';
+      toast('PlayStation linked', 'good');
+      pollStatus();
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-psn-clear')?.addEventListener('click', async () => {
+    const button = $('btn-psn-clear');
+    if (!button) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      await apiPost('/api/auth/psn/clear', {});
+      toast('PSN session cleared', 'good');
+      pollStatus();
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-psn-test-push')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/psn-now-playing', withTarget());
+      const label = result.mode === 'last-played' ? 'Last played' : 'Now playing';
+      toast(`${label}: ${result.name || 'PSN'} (dismisses automatically)`, 'good');
     } catch (error) {
       toast(error.message, 'bad');
     } finally {
