@@ -402,6 +402,27 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertFalse(panel.needs_scroll)
         self.assertFalse(panel.scroller.needs_scroll)
 
+    def test_description_scroll_speed_is_half_global(self):
+        panel = self._make_draw_panel()
+        boxes = {
+            "meta": (0, 50, 800, 280),
+            "desc": (0, 292, 800, 420),
+            "shots": (0, 430, 800, 560),
+            "desc_h": 128,
+            "tags_h": 40,
+        }
+        steam = {
+            "name": "Game",
+            "shortDescription": "Long blurb. " * 40,
+            "screenshots": ["http://a"],
+        }
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
+            panel._draw_meta(boxes, steam)
+        self.assertAlmostEqual(panel.scroller._pixels_per_second(), 14.0)
+        # Global broadcast config stays unchanged.
+        self.assertEqual(panel.config["scrollPixelsPerSecond"], 28)
+
     def test_description_viewport_stays_above_screenshots(self):
         """Regression: unclipped create_text painted over the screenshot row."""
         panel = self._make_draw_panel()

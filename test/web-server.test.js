@@ -1484,6 +1484,16 @@ test('guest booth HTML/JS exist at the web root', () => {
   assert.match(js, /display\.label\s*\|\|\s*display\.name/);
 });
 
+test('guest booth photo picker does not force camera capture', () => {
+  // capture=environment opens the camera only on iOS/Android and skips the
+  // camera-roll / Files chooser — contradicts "Take or choose a photo".
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  assert.match(html, /id="photo-file"[^>]*type="file"/);
+  assert.match(html, /id="photo-file"[^>]*accept="image\/\*"/);
+  assert.doesNotMatch(html, /id="photo-file"[^>]*\bcapture\b/);
+  assert.match(html, /Take or choose a photo/);
+});
+
 test('admin login page and logout control exist', () => {
   const login = fs.readFileSync(path.join(__dirname, '../src/web/admin/login.html'), 'utf8');
   const admin = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');

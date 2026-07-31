@@ -33,7 +33,8 @@
       <button type="button" class="booth-clear" id="btn-photo-clear" aria-label="Clear photo">×</button>
     </div>
 
-    <input id="photo-file" type="file" accept="image/*" capture="environment" hidden>
+    <!-- No capture=… — that forces the camera on phones and blocks the camera roll. -->
+    <input id="photo-file" type="file" accept="image/*" hidden>
 
     <button type="button" class="booth-pick" id="btn-pick-photo">
       <span class="booth-pick-icon" aria-hidden="true">
