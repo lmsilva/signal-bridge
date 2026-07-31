@@ -142,6 +142,8 @@ class SteamNowPlayingPanel(BasePanel):
     HERO_BLUR_BRIGHTNESS = 0.5
     TAG_PILL_H = 40
     TAG_FONT_GAP = 16
+    # Steam blurbs are longer than broadcast chips — half the global scroll rate.
+    DESC_SCROLL_SPEED_FACTOR = 0.5
 
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
@@ -725,8 +727,13 @@ class SteamNowPlayingPanel(BasePanel):
         # on_finish hides when a timed session waits for one full scroll cycle
         # after the dismiss timer (same contract as BroadcastPanel).
         on_finish = getattr(getattr(self.shell, "overlay", None), "hide", lambda: None)
+        scroll_config = dict(self.config)
+        base_pps = float(scroll_config.get("scrollPixelsPerSecond", 28) or 28)
+        scroll_config["scrollPixelsPerSecond"] = max(
+            1.0, base_pps * float(self.DESC_SCROLL_SPEED_FACTOR),
+        )
         scroller = MessageScrollController(
-            viewport, text_id, self.config, self.root, on_finish=on_finish,
+            viewport, text_id, scroll_config, self.root, on_finish=on_finish,
         )
         needs_scroll = scroller.configure(
             desc, center_x=0, viewport_height=viewport_h,
