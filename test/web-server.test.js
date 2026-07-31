@@ -975,8 +975,8 @@ test('admin control PIN sheet expects a 6-digit code', () => {
   assert.match(html, /6-digit code/);
   assert.match(html, /id="pin-sheet-input"[^>]*maxlength="6"/);
   assert.match(html, /id="pin-sheet-input"[^>]*pattern="\[0-9\]\{6\}"/);
-  assert.match(html, /styles\.css\?v=signal22/);
-  assert.match(html, /app\.js\?v=signal22/);
+  assert.match(html, /styles\.css\?v=signal25/);
+  assert.match(html, /app\.js\?v=signal25/);
   assert.match(js, /CONTROL_PIN_DIGITS\s*=\s*6/);
   assert.match(js, /\.slice\(0,\s*CONTROL_PIN_DIGITS\)/);
 });

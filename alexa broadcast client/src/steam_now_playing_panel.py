@@ -136,6 +136,9 @@ class SteamNowPlayingPanel(BasePanel):
     PILL_BG = STEAM_TAG_BG
     FOOTER_LINE = STEAM_LINE
     DESC_BG = STEAM_BG
+    SOURCE_CHIP = "STEAM"
+    PAYLOAD_KEY = "steam"
+    DEFAULT_TITLE = "Steam Game"
     # Spec §3.2: 32px crisp inset so corner ticks never touch the poster.
     HERO_FG_PAD = 32
     HERO_BLUR_RADIUS = 8
@@ -254,7 +257,7 @@ class SteamNowPlayingPanel(BasePanel):
         }
 
     def _render(self, payload: dict):
-        steam = payload.get("steam") or {}
+        steam = payload.get(self.PAYLOAD_KEY) or payload.get("steam") or {}
         self._steam = steam
         started = steam.get("startedAt")
         self._started_at = parse_iso_timestamp(started) if started else None
@@ -579,7 +582,7 @@ class SteamNowPlayingPanel(BasePanel):
         tag_font = self._tag_font()
         chips = []
         if include_source:
-            chips.append(("STEAM", True))
+            chips.append((str(self.SOURCE_CHIP or "STEAM"), True))
         for tag in (tags or [])[:4]:
             chips.append((str(tag), False))
         for label, is_source in chips:
@@ -613,7 +616,7 @@ class SteamNowPlayingPanel(BasePanel):
         muted = self.config.get("mutedTextColor", "#94a3b8")
         tags = list(steam.get("tags") or [])[:4]
         mx0, my0, mx1, my1 = boxes["meta"]
-        title = str(steam.get("name") or "Steam Game")
+        title = str(steam.get("name") or self.DEFAULT_TITLE)
         developers = steam.get("developers") or []
         year = steam.get("releaseYear")
         credit_bits = []

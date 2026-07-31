@@ -50,6 +50,17 @@ const {
   readSteamAuthStatus,
 } = require('./steam-session');
 const { fetchPlayerSummary } = require('./steam-api');
+const {
+  exchangeNpssoForSession,
+} = require('./psn-api');
+const {
+  resolvePsnCredentials,
+  savePsnSession,
+  clearPsnSession,
+  markPsnAuthStatus,
+  clearPsnAuthStatus,
+  readPsnAuthStatus,
+} = require('./psn-session');
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
@@ -233,6 +244,8 @@ function createWebServer({
   recordSteamPresence = null,
   getSteamStatus = null,
   steamNowPlaying = null,
+  getPsnStatus = null,
+  psnNowPlaying = null,
   guestSnapsAuth: guestSnapsAuthInjected = null,
   scheduleRestart,
   webRoot,
@@ -442,7 +455,15 @@ function createWebServer({
       }
     }
     try {
-      const result = await controller.pushManualPreview({ device: deviceFrom(body) });
+      const result = await controller.pushManualPreview({
+        device: deviceFrom(body),
+        send: (payload) => {
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId);
+          }
+          return sendUdpPayload(payload);
+        },
+      });
       if (!result?.ok) {
         sendJson(res, 400, { ok: false, error: result?.error || 'Steam preview failed' });
         return;
@@ -450,6 +471,89 @@ function createWebServer({
       log.info('Steam Now Playing manual preview', {
         mode: result.mode,
         appId: result.appId,
+        name: result.name,
+        targetId,
+      });
+      sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handlePsnAuthLink(body, res) {
+    const npsso = String(body?.npsso || body?.NPSSO || '').trim();
+    if (!npsso) {
+      sendJson(res, 400, { ok: false, error: 'Paste your NPSSO cookie value' });
+      return;
+    }
+    try {
+      const tokens = await exchangeNpssoForSession(npsso);
+      const existing = resolvePsnCredentials(config.psn).session || {};
+      const session = savePsnSession(config.psn.sessionPath, {
+        ...existing,
+        ...tokens,
+        // Never persist the NPSSO itself.
+        linkedAt: new Date().toISOString(),
+      });
+      clearPsnAuthStatus(config.psn);
+      markPsnAuthStatus(config.psn, {
+        status: 'ok',
+        message: 'PSN linked via NPSSO',
+      });
+      log.info('PSN account linked via NPSSO');
+      sendJson(res, 200, {
+        ok: true,
+        linkedAt: session.linkedAt,
+        expiresAt: session.expiresAt || null,
+      });
+    } catch (error) {
+      const message = error?.message || String(error);
+      markPsnAuthStatus(config.psn, { status: 'auth_error', message });
+      sendJson(res, 400, { ok: false, error: message });
+    }
+  }
+
+  function handlePsnAuthClear(_body, res) {
+    try {
+      clearPsnSession(config.psn?.sessionPath);
+      clearPsnAuthStatus(config.psn);
+      sendJson(res, 200, { ok: true });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handlePsnNowPlayingPush(body, res) {
+    const controller = typeof psnNowPlaying === 'function' ? psnNowPlaying() : psnNowPlaying;
+    if (!controller?.pushManualPreview) {
+      sendJson(res, 503, { ok: false, error: 'PSN Now Playing is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    try {
+      const result = await controller.pushManualPreview({
+        device: deviceFrom(body),
+        send: (payload) => {
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId);
+          }
+          return sendUdpPayload(payload);
+        },
+      });
+      if (!result?.ok) {
+        sendJson(res, 400, { ok: false, error: result?.error || 'PSN preview failed' });
+        return;
+      }
+      log.info('PSN Now Playing manual preview', {
+        mode: result.mode,
+        titleId: result.titleId,
         name: result.name,
         targetId,
       });
@@ -1747,6 +1851,27 @@ function createWebServer({
           error: steamAuth.error,
         },
       },
+      psn: (() => {
+        const psnLive = (typeof getPsnStatus === 'function' ? getPsnStatus() : null) || {};
+        const psnCreds = resolvePsnCredentials(config.psn || {});
+        let psnFileStatus = null;
+        try {
+          psnFileStatus = readPsnAuthStatus(config.psn);
+        } catch {
+          psnFileStatus = null;
+        }
+        return {
+          enabled: config.psn?.enabled !== false,
+          configured: Boolean(psnCreds.configured),
+          onlineId: psnCreds.onlineId || psnLive.onlineId || null,
+          accountId: psnCreds.accountId || psnLive.accountId || null,
+          status: psnLive.status || psnFileStatus?.status || (
+            !psnCreds.configured ? 'not_linked' : 'idle'
+          ),
+          message: psnLive.message || psnFileStatus?.message || null,
+          session: psnLive.session || null,
+        };
+      })(),
       displays: {
         count: displayRegistry?.list?.()?.length || 0,
         online: (displayRegistry?.list?.() || []).filter((d) => !d.stale).length,
@@ -2027,6 +2152,15 @@ function createWebServer({
             return;
           case '/api/push/steam-now-playing':
             await handleSteamNowPlayingPush(body, res);
+            return;
+          case '/api/auth/psn/link':
+            await handlePsnAuthLink(body, res);
+            return;
+          case '/api/auth/psn/clear':
+            handlePsnAuthClear(body, res);
+            return;
+          case '/api/push/psn-now-playing':
+            await handlePsnNowPlayingPush(body, res);
             return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });

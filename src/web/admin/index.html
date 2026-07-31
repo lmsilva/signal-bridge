@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal22">
+  <link rel="stylesheet" href="styles.css?v=signal25">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -339,35 +339,6 @@
     <!-- ========================== SETTINGS TAB ========================== -->
     <section class="tab-panel" id="tab-settings">
       <div class="card-grid">
-        <div class="section-label">Slideshow</div>
-        <div class="card">
-          <label class="field-label">Playback order</label>
-          <div class="segmented" id="slideshow-order-tabs">
-            <button type="button" class="segmented-btn active" data-order="recent">Newest first</button>
-            <button type="button" class="segmented-btn" data-order="oldest">Oldest first</button>
-            <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
-          </div>
-          <p class="hint">Controls the order photos play in for the Shared Photo Slideshow.</p>
-
-          <label class="field-label field-label-spaced" for="slideshow-seconds-slider">Time per photo</label>
-          <div class="slider-row">
-            <input
-              type="range"
-              id="slideshow-seconds-slider"
-              min="5"
-              max="60"
-              step="1"
-              value="5"
-              aria-valuemin="5"
-              aria-valuemax="60"
-              aria-valuenow="5"
-              aria-label="Seconds per slideshow photo"
-            >
-            <span class="slider-value" id="slideshow-seconds-value">5s</span>
-          </div>
-          <p class="hint">How long each photo stays on screen (5–60 seconds).</p>
-        </div>
-
         <div class="section-label">Authentication</div>
 
         <div class="card">
@@ -412,6 +383,61 @@
           </button>
           <p class="hint" id="steam-test-hint">Pushes whatever is playing now (skips the theater PC check). If idle, shows last played — dismissible.</p>
           <p class="hint" id="steam-api-key-hint">API key comes from <code>STEAM_API_KEY</code> in <code>.env</code> only. Overlay shows when this Steam account is in-game on any PC (no software needed on the gaming machine).</p>
+        </div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">PlayStation</div>
+            <span class="status-pill" id="psn-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="psn-status-detail">Checking session…</p>
+          <label class="field-label" for="psn-npsso-input">NPSSO cookie</label>
+          <input class="field-input" id="psn-npsso-input" type="password" autocomplete="off" placeholder="Paste NPSSO value from ca.account.sony.com" />
+          <button class="btn btn-accent btn-block" id="btn-psn-auth" style="margin-top:10px">Authenticate PSN</button>
+          <button class="btn btn-outline btn-block" id="btn-psn-clear" style="margin-top:8px">Clear PSN session</button>
+          <button class="btn btn-outline btn-block" id="btn-psn-test-push" style="margin-top:12px">
+            Now Playing / Last Played
+          </button>
+          <p class="hint" id="psn-link-hint">
+            <a href="https://id.sonyentertainmentnetwork.com/id/management_ca/" target="_blank" rel="noopener">Log in to PSN</a>
+            and get
+            <a href="https://ca.account.sony.com/api/v1/ssocookie" target="_blank" rel="noopener">NPSSO cookie here</a>.
+          </p>
+          <p class="hint" id="psn-test-hint">Uses unofficial PSN APIs — treat the NPSSO like a password. Enable activity sharing on the console/account. PS5/PS4 best; PS3 limited.</p>
+        </div>
+
+        <div class="section-label">Slideshow</div>
+        <div class="card slideshow-settings-card">
+          <div class="slideshow-settings-row">
+            <div class="slideshow-settings-col">
+              <label class="field-label">Playback order</label>
+              <div class="segmented" id="slideshow-order-tabs">
+                <button type="button" class="segmented-btn active" data-order="recent">Newest first</button>
+                <button type="button" class="segmented-btn" data-order="oldest">Oldest first</button>
+                <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
+              </div>
+              <p class="hint">Controls the order photos play in for the Shared Photo Slideshow.</p>
+            </div>
+            <div class="slideshow-settings-col">
+              <label class="field-label" for="slideshow-seconds-slider">Time per photo</label>
+              <div class="slider-row">
+                <input
+                  type="range"
+                  id="slideshow-seconds-slider"
+                  min="5"
+                  max="60"
+                  step="1"
+                  value="5"
+                  aria-valuemin="5"
+                  aria-valuemax="60"
+                  aria-valuenow="5"
+                  aria-label="Seconds per slideshow photo"
+                >
+                <span class="slider-value" id="slideshow-seconds-value">5s</span>
+              </div>
+              <p class="hint">How long each photo stays on screen (5–60 seconds).</p>
+            </div>
+          </div>
         </div>
 
         <p class="hint" id="bridge-meta"></p>
@@ -530,6 +556,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal22"></script>
+  <script src="app.js?v=signal25"></script>
 </body>
 </html>

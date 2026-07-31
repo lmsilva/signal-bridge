@@ -500,6 +500,13 @@ button.app-title:focus-visible {
   margin: 12px 4px 0;
 }
 
+.hint a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.hint a:active { color: var(--accent-press); }
+
 /* ---------- QR code generator ---------- */
 
 .segmented {
@@ -744,6 +751,14 @@ textarea.field-input.text-input-area {
 }
 
 .auth-followup { margin-top: 12px; }
+
+/* Settings → Slideshow: stacked on phone; side-by-side under landscape media query. */
+.slideshow-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.slideshow-settings-col { min-width: 0; }
 
 /* ---------- Tab bar ---------- */
 
@@ -1351,8 +1366,21 @@ textarea.field-input.text-input-area {
   }
 
   #tab-settings .section-label,
-  #tab-settings .hint {
+  #tab-settings > .card-grid > .hint,
+  #tab-settings .slideshow-settings-card {
     grid-column: 1 / -1;
+  }
+
+  #tab-settings .slideshow-settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 28px;
+    align-items: start;
+  }
+
+  #tab-settings .slideshow-settings-col .field-label-spaced,
+  #tab-settings .slideshow-settings-col .field-label {
+    margin-top: 0;
   }
 
   .sheet-backdrop { align-items: center; }

@@ -988,6 +988,94 @@ function buildSteamNowPlayingClosePayload({
   };
 }
 
+function buildPsnNowPlayingPayload(reading, config, {
+  device = 'Signal',
+  trigger = 'psn-now-playing',
+  timestamp = Date.now(),
+  mode = 'playing',
+  dismissible = false,
+} = {}) {
+  if (!reading?.name) {
+    return null;
+  }
+  const trophies = reading.trophies || reading.achievements || {};
+  const playMode = mode === 'last-played' ? 'last-played' : 'playing';
+  const isDismissible = Boolean(dismissible) || playMode === 'last-played';
+  const startedMs = reading.startedAt
+    || reading.lastPlayedAt
+    || timestamp;
+  return {
+    version: 2,
+    type: 'psn.now-playing',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: isDismissible ? displaySeconds(config) : 0,
+    persistent: !isDismissible,
+    trigger,
+    psn: {
+      titleId: reading.titleId || null,
+      name: reading.name,
+      mode: playMode,
+      platform: reading.platform || null,
+      // Prefer statusLine on the client — PSN has no Steam store description.
+      shortDescription: reading.shortDescription || '',
+      statusLine: reading.statusLine || '',
+      developers: reading.developers || [],
+      publishers: reading.publishers || [],
+      releaseYear: reading.releaseYear || null,
+      tags: Array.isArray(reading.tags) ? reading.tags.slice(0, 6) : [],
+      posterCandidates: Array.isArray(reading.posterCandidates)
+        ? reading.posterCandidates.slice(0, 12)
+        : [],
+      headerImage: reading.headerImage || null,
+      screenshots: Array.isArray(reading.screenshots) ? reading.screenshots.slice(0, 3) : [],
+      playtimeLabel: reading.playtimeLabel || null,
+      playtimeForeverMin: reading.playtimeForeverMin ?? null,
+      playCount: reading.playCount ?? null,
+      progressLabel: reading.progressLabel || null,
+      starRating: reading.starRating ?? null,
+      starRatingCount: reading.starRatingCount ?? null,
+      contentRating: reading.contentRating || null,
+      storeProductId: reading.storeProductId || null,
+      trophies: {
+        earned: trophies.earned ?? null,
+        total: trophies.total ?? null,
+        available: Boolean(trophies.available),
+        progress: trophies.progress ?? null,
+      },
+      achievements: {
+        earned: trophies.earned ?? null,
+        total: trophies.total ?? null,
+        available: Boolean(trophies.available),
+      },
+      startedAt: new Date(startedMs).toISOString(),
+      lastPlayedAt: reading.lastPlayedAt
+        ? new Date(reading.lastPlayedAt).toISOString()
+        : null,
+      firstPlayedAt: reading.firstPlayedAt
+        ? new Date(reading.firstPlayedAt).toISOString()
+        : null,
+      elapsedSec: Number(reading.elapsedSec) || 0,
+      onlineId: reading.onlineId || null,
+    },
+  };
+}
+
+function buildPsnNowPlayingClosePayload({
+  device = 'Signal',
+  trigger = 'psn-now-playing-close',
+  timestamp = Date.now(),
+} = {}, _config) {
+  return {
+    version: 2,
+    type: 'psn.now-playing.close',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: 0,
+    trigger,
+  };
+}
+
 module.exports = {
   buildBroadcastPayload,
   buildTimeQueryPayload,
@@ -1019,6 +1107,8 @@ module.exports = {
   buildGuestPhotoboothPayload,
   buildSteamNowPlayingPayload,
   buildSteamNowPlayingClosePayload,
+  buildPsnNowPlayingPayload,
+  buildPsnNowPlayingClosePayload,
   buildWifiQrContent,
   displaySeconds,
   timerDisplaySeconds,

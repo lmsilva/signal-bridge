@@ -20,6 +20,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "alexa-remote2": "^8.0.4"
+    "alexa-remote2": "^8.0.4",
+    "psn-api": "^2.18.0"
   }
 }
