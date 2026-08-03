@@ -329,9 +329,11 @@ class TriviaPanel(BasePanel):
     """Owns its chrome: full-bleed artwork, own title, own countdown ring."""
 
     # §6.6 type ramp, in design units (multiplied by `u`).
-    QUESTION_U_PORTRAIT = (72, 56)
+    # Portrait has far more height than the copy needs, so it runs a step above
+    # landscape rather than leaving the surplus as empty artwork.
+    QUESTION_U_PORTRAIT = (84, 62)
     QUESTION_U_LANDSCAPE = (64, 48)
-    OPTION_U_PORTRAIT = (44, 36)
+    OPTION_U_PORTRAIT = (52, 42)
     OPTION_U_LANDSCAPE = (40, 32)
     CHIP_U = 20
     COUNTDOWN_U = 32
@@ -530,8 +532,10 @@ class TriviaPanel(BasePanel):
         progress = (x0, attribution[1] - progress_h, x1, attribution[1])
         body_top = pips[3] + gap
         body_bottom = progress[1] - gap
-        # Options take the lower ~55% so a long question can grow upward.
-        options_h = (body_bottom - body_top) * 0.55
+        # Options take the lower ~60% so a long question can grow upward. The
+        # tiles are the part of the card people read from across the room, so
+        # portrait's spare height goes to them rather than above the question.
+        options_h = (body_bottom - body_top) * 0.60
         options = (x0, body_bottom - options_h, x1, body_bottom)
         question = (x0, body_top, x1, options[1] - gap)
         return {

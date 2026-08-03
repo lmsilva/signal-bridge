@@ -200,6 +200,26 @@ class GeometryTests(unittest.TestCase):
         hero_without = without["hero"][3] - without["hero"][1]
         self.assertGreaterEqual(hero_without, hero_with)
 
+    def test_portrait_spends_its_surplus_height_instead_of_pooling_it(self):
+        panel = make_panel()
+        boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_desc=True)
+        # Regression: the hero is width-capped and every other band is a fixed
+        # ramp, which used to leave a ~600px void between desc and the stats.
+        self.assertGreater(
+            boxes["desc"][3] - boxes["desc"][1],
+            YoutubeNowPlayingPanel.DESC_MIN_PORTRAIT,
+        )
+        for above, below in (("header", "hero"), ("bar", "title"),
+                            ("title", "channel"), ("channel", "desc"),
+                            ("desc", "stats")):
+            gap = boxes[below][1] - boxes[above][3]
+            self.assertLessEqual(
+                gap, YoutubeNowPlayingPanel.GAP_MAX_PORTRAIT + 1,
+                f"{above}→{below} gap of {gap:.0f}px is dead space",
+            )
+        # The position bar is the hero's scrubber and stays against it.
+        self.assertLessEqual(boxes["bar"][1] - boxes["hero"][3], 12)
+
     def test_landscape_puts_the_hero_left_and_the_text_right(self):
         panel = make_panel()
         boxes = panel._compute_landscape_boxes(60, 40, 1860, 1040, u=1.0, has_desc=True)
@@ -479,7 +499,21 @@ class MetaTests(unittest.TestCase):
     def test_a_long_description_uses_the_scrolling_viewport(self):
         panel = self._meta(make_payload(description="A long pitch. " * 40))
         self.assertIsNotNone(panel.scroller)
+        panel.canvas.create_window.assert_called()
+
+    def test_a_description_taller_than_its_band_is_marked_for_scrolling(self):
+        panel = make_panel()
+        panel.canvas.create_window = MagicMock(return_value=9)
+        # The height has to be stated outright: a headless canvas reports the
+        # same bbox for any string, so measuring the real portrait band would
+        # only be asserting how tall that band happens to be.
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 1000, 400)
+            panel._place_description_viewport(
+                "A long pitch. " * 40, 40, 100, 1040, 120,
+            )
         self.assertTrue(panel.needs_scroll)
+        self.assertTrue(panel.scroller.needs_scroll)
 
     def test_an_absent_description_draws_nothing_in_its_band(self):
         panel = self._meta(make_payload(description=""))

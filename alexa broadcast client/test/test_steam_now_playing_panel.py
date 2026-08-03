@@ -109,15 +109,21 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertAlmostEqual(hero[2] - hero[0], 1000)
         self.assertGreater(hero[3] - hero[1], 400)
 
-    def test_portrait_stage_is_fixed_geometry(self):
+    def test_portrait_stage_absorbs_the_leftover_height(self):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
         boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_shots=True)
         hero_h = boxes["hero"][3] - boxes["hero"][1]
         shots_h = boxes["shots"][3] - boxes["shots"][1]
         footer_h = boxes["footer"][3] - boxes["footer"][1]
-        self.assertAlmostEqual(hero_h, 1100, delta=1)
-        self.assertAlmostEqual(shots_h, 183, delta=1)
+        # The stage flexes between its bounds rather than being pinned to one
+        # size, so the bands below it can keep their full design height.
+        self.assertGreater(hero_h, SteamNowPlayingPanel.STAGE_MIN_PORTRAIT)
+        self.assertLessEqual(hero_h, SteamNowPlayingPanel.STAGE_MAX_PORTRAIT)
+        self.assertAlmostEqual(shots_h, SteamNowPlayingPanel.SHOTS_H_PORTRAIT, delta=1)
         self.assertAlmostEqual(footer_h, 101, delta=1)
+        # The meta row is sized to title + tags, never padded with the surplus.
+        meta_h = boxes["meta"][3] - boxes["meta"][1]
+        self.assertLess(meta_h, boxes["title_h"] + boxes["tags_h"] + 40)
         # Meta (title/tags) → desc → shots — desc never enters the shot row.
         self.assertGreaterEqual(boxes["meta"][1], boxes["hero"][3])
         self.assertLessEqual(boxes["meta"][3], boxes["desc"][1] + 0.1)
@@ -130,7 +136,10 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
         boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_shots=True)
         self.assertEqual(boxes["desc"][3], boxes["shots"][1])
-        self.assertAlmostEqual(boxes["desc"][3] - boxes["desc"][1], 128, delta=1)
+        self.assertAlmostEqual(
+            boxes["desc"][3] - boxes["desc"][1],
+            SteamNowPlayingPanel.DESC_H_PORTRAIT, delta=1,
+        )
         # Title/tags meta must end strictly above the desc band.
         self.assertLess(boxes["meta"][3], boxes["desc"][1] + 0.1)
 

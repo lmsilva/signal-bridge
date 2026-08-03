@@ -147,6 +147,13 @@ class SteamNowPlayingPanel(BasePanel):
     TAG_FONT_GAP = 16
     # Steam blurbs are longer than broadcast chips — half the global scroll rate.
     DESC_SCROLL_SPEED_FACTOR = 0.5
+    # Portrait bands. The stage is mostly blurred backdrop once a wide capsule is
+    # contained inside it, so it yields height to the blurb and the shot row —
+    # both of which show strictly more content as their band grows.
+    DESC_H_PORTRAIT = 272
+    SHOTS_H_PORTRAIT = 248
+    STAGE_MIN_PORTRAIT = 400
+    STAGE_MAX_PORTRAIT = 1100
 
     ENRICH_SPINNER_MS = 45
 
@@ -386,11 +393,10 @@ class SteamNowPlayingPanel(BasePanel):
         """
         u = float(u or 1.0)
         header_h = 84 * u
-        stage_h = 1100 * u
         title_h = 74 * u
         tags_h = 40 * u
-        desc_h = 128 * u
-        shots_h = (183 * u) if has_shots else 0
+        desc_h = self.DESC_H_PORTRAIT * u
+        shots_h = (self.SHOTS_H_PORTRAIT * u) if has_shots else 0
         footer_h = 101 * u
         g_header = 20 * u
         g_stage = 24 * u
@@ -401,14 +407,19 @@ class SteamNowPlayingPanel(BasePanel):
 
         header = (x0, y0, x1, y0 + header_h)
         hero_top = y0 + header_h + g_header
-        # If the column is shorter than the design canvas, scale the stage down
-        # so nothing overlaps the footer / screenshots.
+        # The stage is the flexible band and everything under it is sized to its
+        # own content, so a tall column grows the artwork rather than padding the
+        # title row — and a short one shrinks the artwork instead of pushing copy
+        # through the footer.
+        meta_h = title_h + g_title + tags_h
         fixed_below = (
-            g_stage + title_h + g_title + tags_h + g_tags + g_desc + desc_h
+            g_stage + meta_h + g_tags + g_desc + desc_h
             + (g_shots + shots_h if has_shots else 0) + footer_h
         )
-        max_stage = max(400 * u, (y1 - hero_top) - fixed_below)
-        stage_h = min(stage_h, max_stage)
+        stage_h = max(
+            self.STAGE_MIN_PORTRAIT * u,
+            min(self.STAGE_MAX_PORTRAIT * u, (y1 - hero_top) - fixed_below),
+        )
         hero = (x0, hero_top, x1, hero_top + stage_h)
 
         footer_top = y1 - footer_h

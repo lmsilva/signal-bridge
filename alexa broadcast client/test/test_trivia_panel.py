@@ -170,6 +170,19 @@ class GeometryTests(unittest.TestCase):
         self.assertGreaterEqual(boxes["chip"][1], chrome.content_top)
         self.assertLessEqual(boxes["attribution"][3], chrome.content_bottom)
 
+    def test_portrait_gives_the_answer_tiles_the_larger_share(self):
+        chrome = page_chrome(1080, 1920)
+        boxes = TriviaPanel.compute_portrait_boxes(chrome)
+        question_h = boxes["question"][3] - boxes["question"][1]
+        options_h = boxes["options"][3] - boxes["options"][1]
+        self.assertGreater(options_h, question_h)
+        # Four tiles must stay big enough to read from across the room.
+        tiles = TriviaPanel.compute_option_tiles(boxes["options"], 4, chrome.u)
+        self.assertGreater(tiles[0][3] - tiles[0][1], 180 * chrome.u)
+        # And the enlarged question ramp still fits four lines in its band.
+        hi, _lo = TriviaPanel.QUESTION_U_PORTRAIT
+        self.assertLess(hi * 1.4 * 4 * chrome.u, question_h)
+
     def test_landscape_puts_the_options_in_a_second_column(self):
         chrome = page_chrome(1920, 1080)
         boxes = TriviaPanel.compute_landscape_boxes(chrome)
