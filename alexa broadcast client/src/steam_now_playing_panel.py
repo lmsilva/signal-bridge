@@ -148,6 +148,8 @@ class SteamNowPlayingPanel(BasePanel):
     # Steam blurbs are longer than broadcast chips — half the global scroll rate.
     DESC_SCROLL_SPEED_FACTOR = 0.5
 
+    ENRICH_SPINNER_MS = 45
+
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
         self.needs_scroll = False
@@ -164,13 +166,100 @@ class SteamNowPlayingPanel(BasePanel):
         self._hero_image_id = None
         self._hero_glow_id = None
         self._shot_ids = []
+        self._enrich_spinner_arcs: list[tuple[int, int]] = []
+        self._enrich_spinner_job = None
+        self._enrich_spinner_angle = 0.0
 
     def hide(self):
         self._fetch_token += 1
         self._stop_elapsed_tick()
+        self._stop_enrich_spinner()
         self._clear_description_viewport()
         self._photo_refs = []
         super().hide()
+
+    @staticmethod
+    def _enrich_pending(card: dict | None) -> bool:
+        return bool((card or {}).get("enrichPending"))
+
+    def _stop_enrich_spinner(self):
+        if self._enrich_spinner_job is not None:
+            try:
+                self.root.after_cancel(self._enrich_spinner_job)
+            except Exception:
+                pass
+            self._enrich_spinner_job = None
+        self._enrich_spinner_arcs = []
+
+    def _schedule_enrich_spinner(self):
+        if self._enrich_spinner_job is not None:
+            return
+        if not self._enrich_spinner_arcs:
+            return
+        self._enrich_spinner_job = self.root.after(
+            self.ENRICH_SPINNER_MS, self._tick_enrich_spinner,
+        )
+
+    def _tick_enrich_spinner(self):
+        self._enrich_spinner_job = None
+        if not self.visible or not self._enrich_spinner_arcs:
+            return
+        self._enrich_spinner_angle = (self._enrich_spinner_angle - 9) % 360
+        for arc1, arc2 in self._enrich_spinner_arcs:
+            try:
+                self.canvas.itemconfigure(arc1, start=self._enrich_spinner_angle)
+                self.canvas.itemconfigure(arc2, start=self._enrich_spinner_angle + 180)
+            except Exception:
+                pass
+        self._schedule_enrich_spinner()
+
+    def _draw_enrich_spinner(self, cx: float, cy: float, radius: float):
+        """Route-planner-style dual-arc spinner for pending enrich bands."""
+        accent = self.config.get("accentColor", self.ACCENT)
+        radius = max(8.0, float(radius))
+        arc1 = self.canvas.create_arc(
+            cx - radius, cy - radius, cx + radius, cy + radius,
+            start=self._enrich_spinner_angle, extent=100, style=tk.ARC,
+            outline=accent, width=max(2, int(radius / 5)),
+        )
+        arc2 = self.canvas.create_arc(
+            cx - radius, cy - radius, cx + radius, cy + radius,
+            start=self._enrich_spinner_angle + 180, extent=60, style=tk.ARC,
+            outline=accent, width=max(2, int(radius / 6)),
+        )
+        self._item_ids.extend([arc1, arc2])
+        self._enrich_spinner_arcs.append((arc1, arc2))
+        self._schedule_enrich_spinner()
+
+    def _draw_loading_band(self, box) -> bool:
+        """Centered spinner inside a reserved description / meta band."""
+        if not box:
+            return False
+        x0, y0, x1, y1 = box
+        height = y1 - y0
+        width = x1 - x0
+        if height < 20 or width < 20:
+            return False
+        radius = max(12.0, min(22.0, height / 4.0, width / 10.0))
+        self._draw_enrich_spinner((x0 + x1) / 2, (y0 + y1) / 2, radius)
+        return True
+
+    def _draw_loading_shot_row(self, shots_box, *, count: int = 3):
+        """Reserve screenshot plates with a spinner in each cell."""
+        if not shots_box:
+            return
+        x0, y0, x1, y1 = shots_box
+        if y1 <= y0 + 8:
+            return
+        count = max(1, min(3, int(count or 3)))
+        gap = 12
+        cell_w = (x1 - x0 - gap * (count - 1)) / count
+        radius = max(10.0, min(18.0, (y1 - y0) / 4.0, cell_w / 5.0))
+        for i in range(count):
+            sx0 = x0 + i * (cell_w + gap)
+            sx1 = sx0 + cell_w
+            self._round_rect(sx0, y0, sx1, y1, 0, fill="#101b2d", outline=STEAM_LINE)
+            self._draw_enrich_spinner((sx0 + sx1) / 2, (y0 + y1) / 2, radius)
 
     def _clear_description_viewport(self):
         if self.scroller:
@@ -261,10 +350,13 @@ class SteamNowPlayingPanel(BasePanel):
         self._steam = steam
         started = steam.get("startedAt")
         self._started_at = parse_iso_timestamp(started) if started else None
+        self._stop_enrich_spinner()
 
         rect = self._content_rect()
         self._draw_background(0, 0, rect["screen_w"], rect["screen_h"])
-        has_shots = bool(steam.get("screenshots"))
+        # Library-tour thin cards reserve the screenshot row while enrich runs
+        # so the layout does not jump when screenshots arrive.
+        has_shots = bool(steam.get("screenshots")) or self._enrich_pending(steam)
         if rect["portrait"]:
             self._layout_boxes = self._compute_portrait_boxes(
                 rect["x0"], rect["y0"], rect["x1"], rect["y1"],
@@ -708,8 +800,15 @@ class SteamNowPlayingPanel(BasePanel):
                 hard_floor = min(hard_floor, float(shots_box[1]))
             dy1 = min(hard_floor, dy0 + reserved_desc)
             dx0, dx1 = mx0, mx1
-        desc = str(steam.get("shortDescription") or "")
-        self._place_description_viewport(desc, dx0, dy0, dx1, max(0, int(dy1 - dy0)))
+        desc = str(steam.get("shortDescription") or "").strip()
+        enrich_pending = self._enrich_pending(steam)
+        if desc:
+            self._place_description_viewport(desc, dx0, dy0, dx1, max(0, int(dy1 - dy0)))
+        elif enrich_pending:
+            self._clear_description_viewport()
+            self._draw_loading_band((dx0, dy0, dx1, dy1))
+        else:
+            self._clear_description_viewport()
 
         if shots_separate and shots:
             self._draw_shot_placeholders(shots_box, shots)
@@ -721,6 +820,8 @@ class SteamNowPlayingPanel(BasePanel):
         if shots_separate and shots:
             sx0, sy0, sx1, sy1 = shots_box
             self._place_screenshot_row(shots, sx0, sy0, sx1, sy1)
+        elif shots_separate and enrich_pending and shots_box[3] > shots_box[1] + 20:
+            self._draw_loading_shot_row(shots_box)
 
     def _place_description_viewport(
         self, desc: str, x0: float, y0: float, x1: float, height: int, *, font=None,
@@ -809,15 +910,20 @@ class SteamNowPlayingPanel(BasePanel):
         muted = self.config.get("mutedTextColor", "#94a3b8")
         fx0, fy0, fx1, fy1 = boxes["footer"]
         self._item_ids.append(self.canvas.create_line(fx0, fy0, fx1, fy0, fill=self.FOOTER_LINE))
+        enrich_pending = self._enrich_pending(steam)
         achievements = steam.get("achievements") or {}
         playtime = steam.get("playtimeLabel") or "—"
         if achievements.get("available") and achievements.get("earned") is not None:
             ach_text = f"{achievements.get('earned')} / {achievements.get('total') or '?'}"
+        elif enrich_pending:
+            ach_text = None  # spinner while Store enrich loads
         else:
             ach_text = "—"
         players = steam.get("currentPlayers")
         if players is not None:
             players_text = f"{int(players):,}"
+        elif enrich_pending:
+            players_text = None
         else:
             players_text = "—"
         cols = (
@@ -840,10 +946,13 @@ class SteamNowPlayingPanel(BasePanel):
                 cx, label_y, anchor="n", text=label, fill=muted,
                 font=self.shell.chip_label_font,
             ))
-            self._item_ids.append(self.canvas.create_text(
-                cx, value_y, anchor="n", text=value, fill=text,
-                font=self.shell.chip_value_font,
-            ))
+            if value is None:
+                self._draw_enrich_spinner(cx, value_y + 10, 9)
+            else:
+                self._item_ids.append(self.canvas.create_text(
+                    cx, value_y, anchor="n", text=value, fill=text,
+                    font=self.shell.chip_value_font,
+                ))
 
     def _schedule_elapsed_tick(self):
         self._stop_elapsed_tick()

@@ -44,12 +44,15 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         self._steam = psn
         started = psn.get("startedAt")
         self._started_at = parse_iso_timestamp(started) if started else None
+        self._stop_enrich_spinner()
 
         rect = self._content_rect()
         self._draw_background(0, 0, rect["screen_w"], rect["screen_h"])
         shots = [u for u in (psn.get("screenshots") or []) if u][:3]
-        has_shots = bool(shots)
-        has_desc = bool(str(psn.get("shortDescription") or "").strip())
+        enrich_pending = self._enrich_pending(psn)
+        # Thin library-tour cards reserve desc + gallery while Chihiro enrich runs.
+        has_shots = bool(shots) or enrich_pending
+        has_desc = bool(str(psn.get("shortDescription") or "").strip()) or enrich_pending
         has_status = bool(str(psn.get("statusLine") or "").strip())
         if rect["portrait"]:
             self._layout_boxes = self._compute_portrait_boxes(
@@ -221,10 +224,13 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
 
         desc = str(psn.get("shortDescription") or "").strip()
         desc_box = boxes.get("desc")
+        enrich_pending = self._enrich_pending(psn)
         self._clear_description_viewport()
         if desc and desc_box and desc_box[3] > desc_box[1] + 20:
             dx0, dy0, dx1, dy1 = desc_box
             self._place_description_viewport(desc, dx0, dy0, dx1, max(0, int(dy1 - dy0)))
+        elif enrich_pending and desc_box and desc_box[3] > desc_box[1] + 20:
+            self._draw_loading_band(desc_box)
 
         shots = [u for u in (psn.get("screenshots") or []) if u][:3]
         shots_box = boxes.get("shots") or (0, 0, 0, 0)
@@ -232,6 +238,8 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         if shots and shots_box[3] > shots_box[1] + 20:
             sx0, sy0, sx1, sy1 = shots_box
             self._place_screenshot_row(shots, sx0, sy0, sx1, sy1)
+        elif enrich_pending and shots_box[3] > shots_box[1] + 20:
+            self._draw_loading_shot_row(shots_box)
 
     def _place_screenshot_row(self, shots, x0, y0, x1, y1):
         """Size cells to the real count (1–3) — never leave empty placeholder plates."""
@@ -256,10 +264,13 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         fx0, fy0, fx1, fy1 = boxes["footer"]
         self._item_ids.append(self.canvas.create_line(fx0, fy0, fx1, fy0, fill=self.FOOTER_LINE))
 
+        enrich_pending = self._enrich_pending(psn)
         trophies = psn.get("trophies") or psn.get("achievements") or {}
         playtime = psn.get("playtimeLabel") or "—"
         if trophies.get("available") and trophies.get("earned") is not None:
             trophy_text = f"{trophies.get('earned')} / {trophies.get('total') or '?'}"
+        elif enrich_pending:
+            trophy_text = None
         else:
             trophy_text = "—"
 
@@ -274,8 +285,11 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
             else:
                 progress = "—"
         if not progress:
-            # Fall back to platform when trophy % is unavailable.
-            progress = str(psn.get("platform") or "—")
+            if enrich_pending:
+                progress = None
+            else:
+                # Fall back to platform when trophy % is unavailable.
+                progress = str(psn.get("platform") or "—")
 
         cols = (
             ("PLAYTIME", playtime),
@@ -296,10 +310,13 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
                 cx, label_y, anchor="n", text=label, fill=muted,
                 font=self.shell.chip_label_font,
             ))
-            self._item_ids.append(self.canvas.create_text(
-                cx, value_y, anchor="n", text=value, fill=text,
-                font=self.shell.chip_value_font,
-            ))
+            if value is None:
+                self._draw_enrich_spinner(cx, value_y + 10, 9)
+            else:
+                self._item_ids.append(self.canvas.create_text(
+                    cx, value_y, anchor="n", text=value, fill=text,
+                    font=self.shell.chip_value_font,
+                ))
 
     def _draw_tags(self, tags, tx0, ty0, tx1, ty1, *, include_source: bool = True):
         """PSN source chip + platform tags (never painted on artwork)."""

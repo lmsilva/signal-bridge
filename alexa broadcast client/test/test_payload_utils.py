@@ -26,6 +26,7 @@ from src.payload_utils import (
     is_command_payload,
     is_display_payload,
     normalize_condition,
+    parse_iso_timestamp,
     parse_spoken_air_quality,
     parse_spoken_battery_percent,
     parse_spoken_indoor,
@@ -413,6 +414,15 @@ class PayloadUtilsTests(unittest.TestCase):
             format_music_progress_label(229, 97),
             "Length 3m49s - 1m37s left",
         )
+
+    def test_parse_iso_timestamp_accepts_epoch_ms(self):
+        # Library-tour seeds pass Steam lastPlayedAt as ms — must not crash.
+        dt = parse_iso_timestamp(1_700_000_000_000)
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.tzinfo, timezone.utc)
+        self.assertEqual(parse_iso_timestamp("2023-11-14T22:13:20+00:00").year, 2023)
+        self.assertIsNone(parse_iso_timestamp(None))
+        self.assertIsNone(parse_iso_timestamp(0))
 
     def test_normalize_condition(self):
         self.assertEqual(normalize_condition("mostly cloudy"), "cloudy")

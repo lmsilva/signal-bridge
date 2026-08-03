@@ -11,8 +11,8 @@
       "tone": 0.8,
       "accent": "#8BB7FF",
       "files": {
-        "portrait": "general-knowledge-portrait.webp",
-        "landscape": "general-knowledge-landscape.webp"
+        "portrait": "general-knowledge-portrait.jpg",
+        "landscape": "general-knowledge-landscape.jpg"
       },
       "minContrastVsWhite": 5.11
     },
@@ -24,8 +24,8 @@
       "tone": 0.8,
       "accent": "#FF9F51",
       "files": {
-        "portrait": "books-portrait.webp",
-        "landscape": "books-landscape.webp"
+        "portrait": "books-portrait.jpg",
+        "landscape": "books-landscape.jpg"
       },
       "minContrastVsWhite": 5.09
     },
@@ -37,8 +37,8 @@
       "tone": 0.9,
       "accent": "#FF97B2",
       "files": {
-        "portrait": "film-portrait.webp",
-        "landscape": "film-landscape.webp"
+        "portrait": "film-portrait.jpg",
+        "landscape": "film-landscape.jpg"
       },
       "minContrastVsWhite": 5.06
     },
@@ -50,8 +50,8 @@
       "tone": 0.97,
       "accent": "#E897FF",
       "files": {
-        "portrait": "music-portrait.webp",
-        "landscape": "music-landscape.webp"
+        "portrait": "music-portrait.jpg",
+        "landscape": "music-landscape.jpg"
       },
       "minContrastVsWhite": 5.23
     },
@@ -63,8 +63,8 @@
       "tone": 0.75,
       "accent": "#FF94C6",
       "files": {
-        "portrait": "musicals-theatre-portrait.webp",
-        "landscape": "musicals-theatre-landscape.webp"
+        "portrait": "musicals-theatre-portrait.jpg",
+        "landscape": "musicals-theatre-landscape.jpg"
       },
       "minContrastVsWhite": 5.16
     },
@@ -76,8 +76,8 @@
       "tone": 0.65,
       "accent": "#C8A6FF",
       "files": {
-        "portrait": "television-portrait.webp",
-        "landscape": "television-landscape.webp"
+        "portrait": "television-portrait.jpg",
+        "landscape": "television-landscape.jpg"
       },
       "minContrastVsWhite": 5.13
     },
@@ -89,8 +89,8 @@
       "tone": 1.0,
       "accent": "#00CCBD",
       "files": {
-        "portrait": "video-games-portrait.webp",
-        "landscape": "video-games-landscape.webp"
+        "portrait": "video-games-portrait.jpg",
+        "landscape": "video-games-landscape.jpg"
       },
       "minContrastVsWhite": 5.06
     },
@@ -102,8 +102,8 @@
       "tone": 1.0,
       "accent": "#FF9E6D",
       "files": {
-        "portrait": "board-games-portrait.webp",
-        "landscape": "board-games-landscape.webp"
+        "portrait": "board-games-portrait.jpg",
+        "landscape": "board-games-landscape.jpg"
       },
       "minContrastVsWhite": 5.1
     },
@@ -115,8 +115,8 @@
       "tone": 0.95,
       "accent": "#00D16C",
       "files": {
-        "portrait": "science-nature-portrait.webp",
-        "landscape": "science-nature-landscape.webp"
+        "portrait": "science-nature-portrait.jpg",
+        "landscape": "science-nature-landscape.jpg"
       },
       "minContrastVsWhite": 5.19
     },
@@ -128,8 +128,8 @@
       "tone": 0.95,
       "accent": "#00C7E8",
       "files": {
-        "portrait": "computers-portrait.webp",
-        "landscape": "computers-landscape.webp"
+        "portrait": "computers-portrait.jpg",
+        "landscape": "computers-landscape.jpg"
       },
       "minContrastVsWhite": 5.09
     },
@@ -141,8 +141,8 @@
       "tone": 1.0,
       "accent": "#B9ABFF",
       "files": {
-        "portrait": "mathematics-portrait.webp",
-        "landscape": "mathematics-landscape.webp"
+        "portrait": "mathematics-portrait.jpg",
+        "landscape": "mathematics-landscape.jpg"
       },
       "minContrastVsWhite": 5.09
     },
@@ -154,8 +154,8 @@
       "tone": 0.95,
       "accent": "#E6AD00",
       "files": {
-        "portrait": "mythology-portrait.webp",
-        "landscape": "mythology-landscape.webp"
+        "portrait": "mythology-portrait.jpg",
+        "landscape": "mythology-landscape.jpg"
       },
       "minContrastVsWhite": 5.13
     },
@@ -167,8 +167,8 @@
       "tone": 0.85,
       "accent": "#7BCB00",
       "files": {
-        "portrait": "sports-portrait.webp",
-        "landscape": "sports-landscape.webp"
+        "portrait": "sports-portrait.jpg",
+        "landscape": "sports-landscape.jpg"
       },
       "minContrastVsWhite": 5.06
     },
@@ -180,8 +180,8 @@
       "tone": 0.65,
       "accent": "#00CE9F",
       "files": {
-        "portrait": "geography-portrait.webp",
-        "landscape": "geography-landscape.webp"
+        "portrait": "geography-portrait.jpg",
+        "landscape": "geography-landscape.jpg"
       },
       "minContrastVsWhite": 5.07
     },
@@ -193,8 +193,8 @@
       "tone": 0.6,
       "accent": "#FBA300",
       "files": {
-        "portrait": "history-portrait.webp",
-        "landscape": "history-landscape.webp"
+        "portrait": "history-portrait.jpg",
+        "landscape": "history-landscape.jpg"
       },
       "minContrastVsWhite": 5.09
     },
@@ -206,8 +206,8 @@
       "tone": 0.6,
       "accent": "#A6B1FF",
       "files": {
-        "portrait": "politics-portrait.webp",
-        "landscape": "politics-landscape.webp"
+        "portrait": "politics-portrait.jpg",
+        "landscape": "politics-landscape.jpg"
       },
       "minContrastVsWhite": 5.13
     },
@@ -219,8 +219,8 @@
       "tone": 0.95,
       "accent": "#FF9B8F",
       "files": {
-        "portrait": "art-portrait.webp",
-        "landscape": "art-landscape.webp"
+        "portrait": "art-portrait.jpg",
+        "landscape": "art-landscape.jpg"
       },
       "minContrastVsWhite": 5.19
     },
@@ -232,8 +232,8 @@
       "tone": 0.75,
       "accent": "#CAB800",
       "files": {
-        "portrait": "celebrities-portrait.webp",
-        "landscape": "celebrities-landscape.webp"
+        "portrait": "celebrities-portrait.jpg",
+        "landscape": "celebrities-landscape.jpg"
       },
       "minContrastVsWhite": 5.18
     },
@@ -245,8 +245,8 @@
       "tone": 0.65,
       "accent": "#39D139",
       "files": {
-        "portrait": "animals-portrait.webp",
-        "landscape": "animals-landscape.webp"
+        "portrait": "animals-portrait.jpg",
+        "landscape": "animals-landscape.jpg"
       },
       "minContrastVsWhite": 5.07
     },
@@ -258,8 +258,8 @@
       "tone": 0.57,
       "accent": "#28C3FF",
       "files": {
-        "portrait": "vehicles-portrait.webp",
-        "landscape": "vehicles-landscape.webp"
+        "portrait": "vehicles-portrait.jpg",
+        "landscape": "vehicles-landscape.jpg"
       },
       "minContrastVsWhite": 5.16
     },
@@ -271,8 +271,8 @@
       "tone": 0.65,
       "accent": "#FF99A1",
       "files": {
-        "portrait": "comics-portrait.webp",
-        "landscape": "comics-landscape.webp"
+        "portrait": "comics-portrait.jpg",
+        "landscape": "comics-landscape.jpg"
       },
       "minContrastVsWhite": 5.08
     },
@@ -284,8 +284,8 @@
       "tone": 0.75,
       "accent": "#00C9D5",
       "files": {
-        "portrait": "gadgets-portrait.webp",
-        "landscape": "gadgets-landscape.webp"
+        "portrait": "gadgets-portrait.jpg",
+        "landscape": "gadgets-landscape.jpg"
       },
       "minContrastVsWhite": 5.05
     },
@@ -297,8 +297,8 @@
       "tone": 0.95,
       "accent": "#FF91DD",
       "files": {
-        "portrait": "anime-manga-portrait.webp",
-        "landscape": "anime-manga-landscape.webp"
+        "portrait": "anime-manga-portrait.jpg",
+        "landscape": "anime-manga-landscape.jpg"
       },
       "minContrastVsWhite": 5.15
     },
@@ -310,8 +310,8 @@
       "tone": 1.0,
       "accent": "#AFC000",
       "files": {
-        "portrait": "cartoons-portrait.webp",
-        "landscape": "cartoons-landscape.webp"
+        "portrait": "cartoons-portrait.jpg",
+        "landscape": "cartoons-landscape.jpg"
       },
       "minContrastVsWhite": 5.13
     },
@@ -323,8 +323,8 @@
       "tone": 0.7,
       "accent": "#FF9C83",
       "files": {
-        "portrait": "food-drink-portrait.webp",
-        "landscape": "food-drink-landscape.webp"
+        "portrait": "food-drink-portrait.jpg",
+        "landscape": "food-drink-landscape.jpg"
       },
       "minContrastVsWhite": 5.1
     },
@@ -336,8 +336,8 @@
       "tone": 0.65,
       "accent": "#FF8BFB",
       "files": {
-        "portrait": "society-culture-portrait.webp",
-        "landscape": "society-culture-landscape.webp"
+        "portrait": "society-culture-portrait.jpg",
+        "landscape": "society-culture-landscape.jpg"
       },
       "minContrastVsWhite": 5.08
     }

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-02 (Trivia sources + artwork fetch)
+**Last updated:** 2026-08-02 (Trivia artwork LAN-first + bundled pack)
 
 ---
 
@@ -39,8 +39,8 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/lan_crypto.py` | Shared-secret AES-256-GCM seal/open for UDP (`udpSecret` must match bridge `LAN_UDP_SECRET`); stamps `sentAt` at seal; ±120s freshness on `sentAt` |
 | `src/design_system.py` | Shared tokens (`#0B1730` bg, ink/accent/status, Steam + print-border colours) + `design_u` / `page_chrome()` (header 32–116, content 136→footer) |
 | `src/page_header.py` | Shared 3-column header (left / pill / right); used by overlay shell + Shared Photos |
-| `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `steam.now-playing` / close; `SOURCE_CHIP` / `PAYLOAD_KEY` overridable |
-| `src/psn_now_playing_panel.py` | Dedicated PSN Now Playing — shares Steam artwork fetch helpers only; owns status-line (no store blurb), concept-media gallery, footer `PLAYTIME`/`TROPHIES`/`PROGRESS` (no concurrent players); collapses empty bands into a larger hero |
+| `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `enrichPending` reserves desc/shots/footer and spins dual-arc placeholders until library-tour enrich lands; `steam.now-playing` / close; `SOURCE_CHIP` / `PAYLOAD_KEY` overridable |
+| `src/psn_now_playing_panel.py` | Dedicated PSN Now Playing — shares Steam artwork fetch helpers only; owns status-line + Store description when present, concept-media gallery, footer `PLAYTIME`/`TROPHIES`/`PROGRESS` (no concurrent players); collapses empty bands into a larger hero unless `enrichPending` (library tour) reserves them with spinners |
 | `src/dismiss_footer.py` | Shared dismiss footer — compact full-bleed band (64u) + draining rail + fixed-width “Dismisses in …” slot; used by `overlay.py` for every timed page except shared-photos / persistent Steam |
 | `src/shared_photos_page.py` | Shared Photos (spec v2) — portrait stack or landscape stage + vertical rail + sidebar (§11); photo-sampled mat + print border + QR plate; used by `PhotoSlideshowPanel` and photo-mode `QrPanel` |
 | `src/overlay.py` | Fullscreen shell: flat `#0B1730` surface, shared `page_header` + `DismissFooter`, `page_chrome` content zone; hides shared chrome for panels that own it (Tesla mission, route planner, guest photobooth, Steam, shared photos) |
@@ -263,7 +263,17 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-02: **Trivia category artwork is LAN-first and ships with the client** — rounds painted the flat colour field because the HTTP fetch never landed. `artwork_url_candidates` now emits `bridgeHosts` rewrites *before* the payload host, downloads and cache entries must start with real image magic bytes (an HTML error page is discarded and the poisoned cache file deleted), and the 52-file pack is bundled at `assets/trivia-artwork/{categoryId}-{portrait|landscape}.jpg` as a last-resort fallback. A total miss logs one warning to stderr. Portable rebuild required; clear `trivia-artwork-cache/` once on the poster PC.
+
+- 2026-08-02: **Library tour shows spinners while card enrich loads** — thin seed cards used to paint empty description/screenshot/footer slots, then jump when `/api/library-tour/card` returned. Thin payloads now set `enrichPending`; Steam/PSN panels reserve those bands and draw Route-Planner-style dual-arc spinners until enrich arrives (or fails, which clears the flag). Portable rebuild required.
+
 - 2026-08-02: **Trivia footer reads `Sources: A | B`; artwork fetch hardened** — licence parentheticals are stripped; credit is `Sources: Open Trivia DB | The Trivia API`. Artwork download tries unverified HTTPS for self-signed bridges, rewrites failed hosts via `bridgeHosts`, and stacks the webp above the colour field with `tag_raise`. Portable rebuild required.
+
+- 2026-08-02: **Trivia artwork fetch prefers JPEG** — bridge now serves `.jpg` category backgrounds; the panel tries `.jpg`/`.png`/`.webp` and `bridgeHosts` rewrites so a portable build without WebP still paints the patterned art (not only the solid colour field). Clear `trivia-artwork-cache/` after upgrade. Portable rebuild required.
+
+- 2026-08-02: **Library tour enrich keeps PSN posters + safe timestamps** — `_apply_enriched` normalizes epoch `lastPlayedAt`/`startedAt` to ISO and merges playlist `imageUrl`/poster candidates into the nested card so PSN art is not lost when Chihiro enrich is thin. Portable rebuild required.
+
+- 2026-08-02: **Library tour no longer blanks the display on seed paint** — seed/playlist rows carry Steam `lastPlayedAt` as epoch ms; `parse_iso_timestamp` crashed on int `.replace`, so the overlay failed after a successful push. Timestamp parsing accepts epoch ms/seconds; thin fallback cards convert to ISO before driving nested Steam/PSN panels. Playlist/card HTTP tries unverified HTTPS and rewrites via `bridgeHosts` (same pattern as trivia artwork). Portable rebuild required.
 
 - 2026-08-02: **Library tour starts instantly at 700+ games** — UDP start is seed-only (`tourId` + first game). Panel fetches the full playlist over HTTP, paints the seed card immediately (Steam poster URLs derived locally from `appId`), enriches via `/api/library-tour/card`, and prefetches the next two titles. One-pass scheduled tours still stop after the last game. Portable rebuild required.
 

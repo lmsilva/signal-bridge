@@ -15,9 +15,22 @@ const { EventEmitter } = require('events');
 const DEFAULT_CONFIRM_SECONDS = 5;
 const RESTART_BACKOFF_MS = [1000, 2000, 5000, 15000, 30000, 60000];
 const REQUEST_TIMEOUT_MS = 30000;
+/**
+ * Apple TV often flickers Stopped between sparse Playing ticks (60–90s apart).
+ * A short grace cleared provisional/active before confirm could fire, so auto
+ * push never started and the Settings button fell back to stale history.
+ * Keep the session alive across a full slow-tick gap.
+ */
+const STOP_GRACE_MS = 120000;
+/** When confirm is due but the device is still Stopped/ad, retry this often. */
+const CONFIRM_RETRY_MS = 2000;
+/** Content scrubber past this point means a pre-roll ad has ended. */
+const AD_CLEAR_POSITION_SECONDS = 3;
 
 /** States that mean "a human is actually watching this right now". */
 const PLAYING_STATES = new Set(['Playing']);
+/** Still the current video for manual preview / status (not auto-push). */
+const CURRENT_STATES = new Set(['Playing', 'Starting', 'Buffering', 'Advertisement', 'Paused']);
 /**
  * Lounge position ticks are often 30–90s apart on Apple TV. Cap below a scrub
  * (minutes jumped in one event) but above a slow tick — the old 60s ceiling
@@ -32,6 +45,7 @@ function createYoutubeLounge({
   spawnImpl = spawn,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  getConfirmSeconds = null,
 } = {}) {
   const emitter = new EventEmitter();
   const youtubeConfig = config?.youtube || {};
@@ -68,6 +82,8 @@ function createYoutubeLounge({
         deviceId,
         provisional: null,
         provisionalSince: null,
+        confirmTimer: null,
+        stopTimer: null,
         active: null,
         state: 'Stopped',
         position: 0,
@@ -88,8 +104,61 @@ function createYoutubeLounge({
   }
 
   function confirmSeconds() {
+    if (typeof getConfirmSeconds === 'function') {
+      const fromStore = Number(getConfirmSeconds());
+      if (Number.isFinite(fromStore) && fromStore >= 0) {
+        return fromStore;
+      }
+    }
     const value = Number(config?.youtube?.confirmSeconds);
     return Number.isFinite(value) && value >= 0 ? value : DEFAULT_CONFIRM_SECONDS;
+  }
+
+  function clearConfirmTimer(device) {
+    if (device.confirmTimer) {
+      clearTimer(device.confirmTimer);
+      device.confirmTimer = null;
+    }
+  }
+
+  function clearStopTimer(device) {
+    if (device.stopTimer) {
+      clearTimer(device.stopTimer);
+      device.stopTimer = null;
+    }
+  }
+
+  /**
+   * Apple TV position ticks are often 60–90s apart. Without a wall-clock timer,
+   * confirm only runs on the next Lounge event — auto-push can wait a minute
+   * or never fire if the agent goes quiet after the first now-playing.
+   */
+  function scheduleConfirm(device, waitMs = null) {
+    clearConfirmTimer(device);
+    if (!device.provisional) {
+      return;
+    }
+    const delay = waitMs != null
+      ? Math.max(0, Math.round(waitMs))
+      : Math.max(0, Math.round(confirmSeconds() * 1000));
+    device.confirmTimer = setTimer(() => {
+      device.confirmTimer = null;
+      confirmIfDue(device);
+    }, delay);
+    device.confirmTimer?.unref?.();
+  }
+
+  function maybeClearStuckAd(device) {
+    // Agent sometimes reports ad start and never ad end. Once the content
+    // scrubber has clearly advanced, the pre-roll/mid-roll is over.
+    if (
+      device.adPlaying
+      && PLAYING_STATES.has(device.state)
+      && Number(device.position) >= AD_CLEAR_POSITION_SECONDS
+    ) {
+      device.adPlaying = false;
+      device.adFromEvent = false;
+    }
   }
 
   // ------------------------------------------------------------- process
@@ -298,6 +367,8 @@ function createYoutubeLounge({
   }
 
   function finishSession(device, reason) {
+    clearStopTimer(device);
+    clearConfirmTimer(device);
     const session = device.active;
     if (!session) {
       return;
@@ -322,40 +393,72 @@ function createYoutubeLounge({
     device.maxPosition = 0;
     const completed = durationSeconds > 0
       && (watched >= durationSeconds * 0.9 || positionSeconds >= durationSeconds * 0.9);
+    const endedAt = now();
+    const wallSeconds = session.startedAt
+      ? Math.max(0, (endedAt - session.startedAt) / 1000)
+      : 0;
     emitter.emit('stopped', {
       deviceId: device.deviceId,
       videoId: session.videoId,
       startedAt: new Date(session.startedAt).toISOString(),
-      endedAt: new Date(now()).toISOString(),
+      endedAt: new Date(endedAt).toISOString(),
       watchedSeconds: watched,
       positionSeconds,
       durationSeconds,
       completed,
       reason,
+      // Downstream skips recording flicker sessions that never really played.
+      wallSeconds,
     });
+  }
+
+  function scheduleStop(device, reason) {
+    clearStopTimer(device);
+    device.stopTimer = setTimer(() => {
+      device.stopTimer = null;
+      if (device.state === 'Stopped' || !CURRENT_STATES.has(device.state)) {
+        clearConfirmTimer(device);
+        device.provisional = null;
+        device.provisionalSince = null;
+        device.adPlaying = false;
+        device.adFromEvent = false;
+        finishSession(device, reason);
+      }
+    }, STOP_GRACE_MS);
+    device.stopTimer?.unref?.();
   }
 
   function confirmIfDue(device) {
     if (!device.provisional || device.active?.videoId === device.provisional) {
       return;
     }
-    // Never start a session on an ad: ads are not the video (§12.9).
-    if (device.adPlaying) {
-      return;
-    }
-    if (!PLAYING_STATES.has(device.state)) {
-      return;
-    }
-    const elapsed = (now() - device.provisionalSince) / 1000;
+    maybeClearStuckAd(device);
+    const elapsed = (now() - (device.provisionalSince || now())) / 1000;
     if (elapsed < confirmSeconds()) {
+      // Timer may have been cleared by a Stopped flicker — keep the deadline.
+      if (!device.confirmTimer) {
+        scheduleConfirm(device, Math.max(0, (confirmSeconds() - elapsed) * 1000));
+      }
       return;
     }
+    // Never start a session on an ad: ads are not the video (§12.9).
+    // Apple TV also parks in Stopped between sparse Playing ticks — retry soon.
+    if (device.adPlaying || !PLAYING_STATES.has(device.state)) {
+      if (!device.confirmTimer) {
+        scheduleConfirm(device, CONFIRM_RETRY_MS);
+      }
+      return;
+    }
+    clearConfirmTimer(device);
+    clearStopTimer(device);
     const videoId = device.provisional;
     device.provisional = null;
     device.provisionalSince = null;
     device.watchedSeconds = 0;
     device.maxPosition = Math.max(0, device.position || 0);
-    device.lastPosition = device.position;
+    // Null baseline so the first post-confirm tick establishes position without
+    // counting 0→firstSample as watched (timer confirm often fires at position 0).
+    device.lastPosition = null;
     device.active = { videoId, startedAt: now() };
     emitter.emit('started', {
       deviceId: device.deviceId,
@@ -369,6 +472,7 @@ function createYoutubeLounge({
     const device = deviceState(message.deviceId);
     device.connected = true;
     device.lastSeenAt = now();
+    clearStopTimer(device);
     if (Number.isFinite(Number(message.durationSeconds)) && Number(message.durationSeconds) > 0) {
       device.durationSeconds = Number(message.durationSeconds);
     }
@@ -383,6 +487,7 @@ function createYoutubeLounge({
         device.state = message.state;
       }
       applyPosition(device, message.position, previousState);
+      maybeClearStuckAd(device);
       if (device.active) {
         emitter.emit('progress', progressFor(device));
       }
@@ -396,6 +501,7 @@ function createYoutubeLounge({
       // A new video means whatever ad preceded it has finished.
       device.adPlaying = false;
       device.adFromEvent = false;
+      scheduleConfirm(device);
     }
     if (message.state) {
       device.state = message.state;
@@ -405,6 +511,7 @@ function createYoutubeLounge({
       device.position = position;
       device.maxPosition = Math.max(device.maxPosition || 0, position);
     }
+    maybeClearStuckAd(device);
     confirmIfDue(device);
   }
 
@@ -421,27 +528,26 @@ function createYoutubeLounge({
     applyPosition(device, message.position, previousState);
 
     if (device.state === 'Stopped') {
-      device.provisional = null;
-      device.provisionalSince = null;
-      // Nothing is playing, so a stale ad flag must not outlive the session
-      // and wedge the next one.
-      device.adPlaying = false;
-      device.adFromEvent = false;
-      finishSession(device, 'stopped');
+      // Debounce — Apple TV often flickers Stopped between sparse Playing ticks.
+      scheduleStop(device, 'stopped');
       return;
     }
+    clearStopTimer(device);
     if (device.state === 'Advertisement') {
       // Hold the current card rather than swapping in ad metadata (§12.9).
       device.adPlaying = true;
       return;
     }
-    // The Lounge reports `Playing` during an ad as well, so a state change
-    // alone cannot clear an ad the agent told us about outright — only the
-    // matching `ad` event can (§12.9).
+    // Inferred ads clear on Playing; event-sourced ads clear once the scrubber
+    // has clearly advanced (agent often never sends ad:false on Apple TV).
     if (device.adPlaying && !device.adFromEvent && PLAYING_STATES.has(device.state)) {
       device.adPlaying = false;
     }
+    maybeClearStuckAd(device);
     confirmIfDue(device);
+    if (device.provisional && !device.active && PLAYING_STATES.has(device.state)) {
+      scheduleConfirm(device);
+    }
     if (device.active) {
       emitter.emit('progress', progressFor(device));
     }
@@ -449,11 +555,25 @@ function createYoutubeLounge({
 
   function onAd(message) {
     const device = deviceState(message.deviceId);
+    device.connected = true;
+    device.lastSeenAt = now();
     device.adPlaying = message.playing === true;
     device.adFromEvent = device.adPlaying;
+    const contentVideoId = String(message.contentVideoId || '').trim();
+    // Pre-roll ads often arrive before now-playing — seed provisional from the
+    // content id so manual preview / confirm have something to work with.
+    if (contentVideoId && !device.active && device.provisional !== contentVideoId) {
+      device.provisional = contentVideoId;
+      device.provisionalSince = now();
+      scheduleConfirm(device);
+    }
     if (device.adPlaying && device.provisional) {
       // An ad before the video starts must not tick down the confirm window.
       device.provisionalSince = now();
+      scheduleConfirm(device);
+    }
+    if (!device.adPlaying) {
+      confirmIfDue(device);
     }
   }
 
@@ -468,6 +588,8 @@ function createYoutubeLounge({
 
   function onDisconnected(message) {
     const device = deviceState(message.deviceId);
+    clearConfirmTimer(device);
+    clearStopTimer(device);
     device.connected = false;
     device.provisional = null;
     device.provisionalSince = null;
@@ -501,6 +623,53 @@ function createYoutubeLounge({
         startedAt: new Date(device.active.startedAt).toISOString(),
       }))
       .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  }
+
+  /**
+   * Best-effort "what is on this TV right now" for manual preview / admin.
+   * Includes confirmed and provisional videoIds even while Apple TV flickers
+   * Stopped — clearing those made the Settings button air stale history.
+   */
+  function currentPlayback() {
+    const rows = [];
+    for (const device of devices.values()) {
+      if (device.active) {
+        rows.push({
+          ...progressFor(device),
+          videoId: device.active.videoId,
+          startedAt: new Date(device.active.startedAt).toISOString(),
+          provisional: false,
+        });
+        continue;
+      }
+      if (device.provisional) {
+        rows.push({
+          deviceId: device.deviceId,
+          videoId: device.provisional,
+          state: device.state,
+          positionSeconds: Math.round(device.position),
+          durationSeconds: Math.round(device.durationSeconds),
+          watchedSeconds: 0,
+          adPlaying: device.adPlaying,
+          startedAt: device.provisionalSince
+            ? new Date(device.provisionalSince).toISOString()
+            : new Date(now()).toISOString(),
+          provisional: true,
+        });
+      }
+    }
+    return rows.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  }
+
+  /**
+   * Ask linked screens to re-emit now-playing (Apple TV is often silent until
+   * polled). Manual preview uses this so the button is not stuck on history.
+   */
+  async function pollNowPlaying(deviceId = null) {
+    if (deviceId) {
+      return request({ cmd: 'poll', deviceId: String(deviceId) });
+    }
+    return request({ cmd: 'poll-all' });
   }
 
   /**
@@ -546,7 +715,8 @@ function createYoutubeLounge({
         deviceId: device.deviceId,
         connected: device.connected,
         state: device.state,
-        videoId: device.active?.videoId || null,
+        videoId: device.active?.videoId || device.provisional || null,
+        provisional: Boolean(device.provisional && !device.active),
         adPlaying: device.adPlaying,
         lastSeenAt: device.lastSeenAt ? new Date(device.lastSeenAt).toISOString() : null,
       })),
@@ -564,7 +734,9 @@ function createYoutubeLounge({
     pairWithScreenId: (deviceId, screenId) => request({ cmd: 'pair-screen', deviceId, screenId }),
     discover: (timeout = 5) => request({ cmd: 'discover', timeout }),
     refreshDevice: (device) => request({ cmd: 'refresh', device }),
+    pollNowPlaying,
     activeSessions,
+    currentPlayback,
     snapshot,
     unavailableReason,
 
@@ -576,6 +748,9 @@ function createYoutubeLounge({
 
 module.exports = {
   DEFAULT_CONFIRM_SECONDS,
+  STOP_GRACE_MS,
+  CONFIRM_RETRY_MS,
+  AD_CLEAR_POSITION_SECONDS,
   MAX_PLAY_DELTA_SECONDS,
   PLAYING_STATES,
   createYoutubeLounge,

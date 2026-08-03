@@ -1796,19 +1796,60 @@
   })();
 
   // ---------------------------------------------- Library tour settings
+  // Steam and PSN keep independent sort + seconds (not shared).
 
-  let libraryTourSecondsPerGame = 60;
+  const libraryTourPrefs = {
+    steam: { secondsPerGame: 60, sort: 'recent' },
+    psn: { secondsPerGame: 60, sort: 'recent' },
+  };
 
-  function setLibraryTourSecondsUi(seconds) {
+  function libraryTourPlatform(el) {
+    const fromSelf = el?.dataset?.platform;
+    if (fromSelf === 'steam' || fromSelf === 'psn') return fromSelf;
+    const fromParent = el?.closest?.('[data-platform]')?.dataset?.platform;
+    if (fromParent === 'steam' || fromParent === 'psn') return fromParent;
+    return 'steam';
+  }
+
+  function setLibraryTourSecondsUi(platform, seconds) {
+    const key = platform === 'psn' ? 'psn' : 'steam';
     const value = Math.max(5, Math.min(300, Math.round(Number(seconds) || 60)));
-    libraryTourSecondsPerGame = value;
-    document.querySelectorAll('.library-tour-seconds-slider').forEach((slider) => {
+    libraryTourPrefs[key].secondsPerGame = value;
+    const slider = $(`${key}-library-tour-seconds-slider`);
+    const label = $(`${key}-library-tour-seconds-value`);
+    if (slider) {
       slider.value = String(value);
       slider.setAttribute('aria-valuenow', String(value));
+    }
+    if (label) label.textContent = `${value}s`;
+  }
+
+  function setLibraryTourSortUi(platform, sort) {
+    const key = platform === 'psn' ? 'psn' : 'steam';
+    const value = ['recent', 'oldest', 'random'].includes(sort) ? sort : 'recent';
+    libraryTourPrefs[key].sort = value;
+    const tabs = $(`${key}-library-tour-order-tabs`);
+    tabs?.querySelectorAll('.segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.order === value);
     });
-    document.querySelectorAll('.library-tour-seconds-value').forEach((label) => {
-      label.textContent = `${value}s`;
-    });
+  }
+
+  function applyLibraryTourSettings(settings) {
+    if (settings?.steam) {
+      setLibraryTourSecondsUi('steam', settings.steam.secondsPerGame ?? 60);
+      setLibraryTourSortUi('steam', settings.steam.sort ?? 'recent');
+    } else if (settings?.secondsPerGame != null || settings?.sort != null) {
+      // Legacy shared API shape — seed both until the bridge is redeployed.
+      setLibraryTourSecondsUi('steam', settings.secondsPerGame ?? 60);
+      setLibraryTourSortUi('steam', settings.sort ?? 'recent');
+      setLibraryTourSecondsUi('psn', settings.secondsPerGame ?? 60);
+      setLibraryTourSortUi('psn', settings.sort ?? 'recent');
+      return;
+    }
+    if (settings?.psn) {
+      setLibraryTourSecondsUi('psn', settings.psn.secondsPerGame ?? 60);
+      setLibraryTourSortUi('psn', settings.psn.sort ?? 'recent');
+    }
   }
 
   async function refreshLibraryTourCounts() {
@@ -1837,21 +1878,47 @@
 
   document.querySelectorAll('.library-tour-seconds-slider').forEach((slider) => {
     slider.addEventListener('input', () => {
-      setLibraryTourSecondsUi(slider.value);
+      setLibraryTourSecondsUi(libraryTourPlatform(slider), slider.value);
     });
     slider.addEventListener('change', async () => {
-      const previous = libraryTourSecondsPerGame;
+      const platform = libraryTourPlatform(slider);
+      const previous = libraryTourPrefs[platform].secondsPerGame;
       const secondsPerGame = Math.max(
         5,
         Math.min(300, Math.round(Number(slider.value) || 60)),
       );
-      setLibraryTourSecondsUi(secondsPerGame);
+      setLibraryTourSecondsUi(platform, secondsPerGame);
       try {
-        const result = await apiPost('/api/library-tour/settings', { secondsPerGame });
-        setLibraryTourSecondsUi(result.secondsPerGame ?? secondsPerGame);
+        const result = await apiPost('/api/library-tour/settings', {
+          platform,
+          secondsPerGame,
+        });
+        applyLibraryTourSettings(result);
+        if (result.secondsPerGame != null) {
+          setLibraryTourSecondsUi(platform, result.secondsPerGame);
+        }
       } catch (error) {
-        setLibraryTourSecondsUi(previous);
+        setLibraryTourSecondsUi(platform, previous);
         toast(error.message || 'Could not save library tour timing', 'bad');
+      }
+    });
+  });
+
+  document.querySelectorAll('.library-tour-order-tabs .segmented-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const platform = libraryTourPlatform(btn);
+      const previous = libraryTourPrefs[platform].sort;
+      const sort = btn.dataset.order || 'recent';
+      setLibraryTourSortUi(platform, sort);
+      try {
+        const result = await apiPost('/api/library-tour/settings', { platform, sort });
+        applyLibraryTourSettings(result);
+        if (result.sort != null) {
+          setLibraryTourSortUi(platform, result.sort);
+        }
+      } catch (error) {
+        setLibraryTourSortUi(platform, previous);
+        toast(error.message || 'Could not save library tour order', 'bad');
       }
     });
   });
@@ -1859,7 +1926,7 @@
   (async () => {
     try {
       const result = await apiGet('/api/library-tour/settings');
-      setLibraryTourSecondsUi(result.secondsPerGame ?? 60);
+      applyLibraryTourSettings(result);
     } catch {
       // Fresh bridge — keep defaults.
     }
@@ -3719,7 +3786,8 @@
     button.disabled = true;
     try {
       const result = await apiPost('/api/push/steam-library-tour', withTarget({
-        secondsPerGame: libraryTourSecondsPerGame,
+        secondsPerGame: libraryTourPrefs.steam.secondsPerGame,
+        sort: libraryTourPrefs.steam.sort,
       }));
       toast(`Steam library tour started (${result.count || 0} games)`, 'good');
       refreshLibraryTourCounts();
@@ -3735,7 +3803,8 @@
     button.disabled = true;
     try {
       const result = await apiPost('/api/push/psn-library-tour', withTarget({
-        secondsPerGame: libraryTourSecondsPerGame,
+        secondsPerGame: libraryTourPrefs.psn.secondsPerGame,
+        sort: libraryTourPrefs.psn.sort,
       }));
       toast(`PSN library tour started (${result.count || 0} games)`, 'good');
       refreshLibraryTourCounts();

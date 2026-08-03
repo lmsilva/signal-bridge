@@ -27,6 +27,8 @@ function makeConfig(dir) {
       enabled: true,
       loungeEnabled: true,
       apiKey: 'test-key',
+      // Unit tests use a fake lounge — no need to wait for NDJSON events.
+      pollSettleMs: 0,
       devicesPath: path.join(dir, 'devices.json'),
       settingsPath: path.join(dir, 'settings.json'),
       cachePath: path.join(dir, 'cache.json'),
@@ -63,6 +65,7 @@ const VIDEO = {
 function fakeLounge() {
   const emitter = new EventEmitter();
   const sessions = [];
+  const current = [];
   return {
     on: (event, handler) => emitter.on(event, handler),
     off: (event, handler) => emitter.off(event, handler),
@@ -75,9 +78,12 @@ function fakeLounge() {
     pairWithScreenId: async (id) => ({ ok: true, screenId: `screen-${id}`, authState: { t: 2 } }),
     discover: async () => ({ ok: true, devices: [{ address: '192.168.1.42', screenId: 'screen-x', server: 'AppleTV/1' }] }),
     refreshDevice: async () => ({ ok: true }),
+    pollNowPlaying: async () => ({ ok: true }),
     activeSessions: () => sessions,
+    currentPlayback: () => (current.length ? current : sessions),
     snapshot: () => ({ running: true, ready: true, loungeAvailable: true, devices: [] }),
     _sessions: sessions,
+    _current: current,
   };
 }
 
@@ -389,6 +395,29 @@ test('a manual push falls back to last played when nothing is on', async () => {
   assert.equal(result.mode, 'last-played');
   assert.equal(sent[0].youtube.mode, 'last-played');
   assert.equal(sent[0].persistent, false, 'a preview must dismiss itself');
+});
+
+test('a manual push prefers a provisional Lounge video over stale history', async () => {
+  const { service, store, lounge } = makeService();
+  store.recordSession({
+    deviceId: 'tv-1', videoId: 'yesterday', watchedSeconds: 600,
+    startedAt: '2026-08-01T20:00:00Z', endedAt: '2026-08-01T20:10:00Z', completed: false,
+  });
+  lounge._current.push({
+    deviceId: 'tv-1',
+    videoId: 'abc',
+    startedAt: '2026-08-02T20:00:00Z',
+    provisional: true,
+    state: 'Playing',
+  });
+
+  const sent = [];
+  const result = await service.pushManualPreview({ send: (payload) => sent.push(payload) });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'playing');
+  assert.equal(result.videoId, 'abc');
+  assert.equal(sent[0].youtube.mode, 'playing');
 });
 
 test('asking for now-playing when nothing is on is an error, not a stale card', async () => {

@@ -74,13 +74,21 @@ function createTriviaService({
   /**
    * Origin the display should fetch category artwork from.
    *
-   * Prefer a public HTTPS origin (GUEST_PHOTOBOOTH_URL / Signal domain) when
-   * set — the display can verify a real cert. Fall back to the LAN
-   * PROXY_OWN_IP:47810 origin (self-signed; the client tolerates that).
+   * Prefer the LAN origin: displays sit on the same network as the bridge, and
+   * routing them out through a public hostname (CDN in front of the Signal
+   * domain) is a slower path that can answer differently to the client's plain
+   * `urllib` fetch than it does to a browser. The public origin stays as a
+   * fallback for a bridge with no PROXY_OWN_IP.
    */
   function artworkBaseUrl() {
     if (config.trivia?.artworkBaseUrl) {
       return String(config.trivia.artworkBaseUrl).replace(/\/+$/, '');
+    }
+    const host = config.proxyOwnIp || config.webServer?.publicHost || null;
+    if (host) {
+      const scheme = config.webServer?.https === false ? 'http' : 'https';
+      const port = config.webServer?.port || 47810;
+      return `${scheme}://${host}:${port}`;
     }
     const guestUrl = String(
       process.env.GUEST_PHOTOBOOTH_URL
@@ -95,16 +103,10 @@ function createTriviaService({
           return `${parsed.protocol}//${parsed.host}`.replace(/\/+$/, '');
         }
       } catch {
-        // Fall through to LAN origin.
+        // No usable origin at all — the client falls back to its bundled pack.
       }
     }
-    const host = config.proxyOwnIp || config.webServer?.publicHost || null;
-    if (!host) {
-      return '';
-    }
-    const scheme = config.webServer?.https === false ? 'http' : 'https';
-    const port = config.webServer?.port || 47810;
-    return `${scheme}://${host}:${port}`;
+    return '';
   }
 
   /**

@@ -669,6 +669,24 @@ class SteamFooterAndChromeTests(unittest.TestCase):
         panel.root.after.assert_called_once_with(1_000, mock.ANY)
         self.assertEqual(panel._tick_job, 99)
 
+    def test_enrich_pending_draws_loading_shot_row(self):
+        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
+        panel.config = {"accentColor": "#38bdf8"}
+        panel.ACCENT = "#38bdf8"
+        panel.canvas = mock.MagicMock()
+        panel.canvas.create_arc = mock.MagicMock(side_effect=range(10, 40))
+        panel.root = mock.MagicMock()
+        panel.root.after = mock.MagicMock(return_value=7)
+        panel._item_ids = []
+        panel._enrich_spinner_arcs = []
+        panel._enrich_spinner_job = None
+        panel._enrich_spinner_angle = 0.0
+        panel._round_rect = mock.MagicMock()
+        panel._draw_loading_shot_row((0, 0, 300, 100), count=3)
+        self.assertEqual(panel._round_rect.call_count, 3)
+        self.assertEqual(len(panel._enrich_spinner_arcs), 3)
+        panel.root.after.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main()

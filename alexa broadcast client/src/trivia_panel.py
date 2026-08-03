@@ -15,12 +15,13 @@ from __future__ import annotations
 import hashlib
 import io
 import ssl
+import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 try:
     from PIL import Image, ImageTk
@@ -30,7 +31,7 @@ except ImportError:
 
 from src.design_system import INK, INK_2, INK_3, design_u, page_chrome
 from src.display_panels import BasePanel
-from src.paths import app_root
+from src.paths import app_root, asset_path
 
 # Frozen builds hit the bridge's self-signed cert; once unverified works, keep it.
 _unverified_ssl = False
@@ -52,8 +53,43 @@ def trivia_artwork_cache_path(url: str) -> Path:
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:40]
     ext = Path(urlsplit(text).path).suffix.lower()
     if ext not in {".webp", ".png", ".jpg", ".jpeg"}:
-        ext = ".img"
+        ext = ".jpg"
     return trivia_artwork_cache_dir() / f"{digest}{ext}"
+
+
+ARTWORK_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def trivia_artwork_asset_path(category_id: str, portrait: bool) -> Path | None:
+    """Bundled copy of the category pack, used when the bridge is unreachable."""
+    key = str(category_id or "").strip().lower()
+    if not key:
+        return None
+    orientation = "portrait" if portrait else "landscape"
+    for ext in ARTWORK_EXTENSIONS:
+        candidate = asset_path(Path("trivia-artwork") / f"{key}-{orientation}{ext}")
+        try:
+            if candidate.exists():
+                return candidate
+        except Exception:
+            continue
+    return None
+
+
+def looks_like_image(data: bytes) -> bool:
+    """Reject captive-portal HTML and error pages before they poison the cache."""
+    blob = bytes(data or b"")
+    if len(blob) < 12:
+        return False
+    if blob[:2] == b"\xff\xd8":
+        return True
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return True
+    if blob[:6] in (b"GIF87a", b"GIF89a"):
+        return True
+    return False
 
 
 def _is_ssl_failure(error: BaseException) -> bool:
@@ -95,43 +131,92 @@ def format_trivia_sources(sources) -> str:
     return "Sources: " + " | ".join(names)
 
 
-def artwork_url_candidates(url: str, config: dict | None = None) -> list[str]:
-    """Primary artwork URL plus LAN bridgeHosts rewrites when the host fails."""
+def _with_alt_image_extensions(url: str) -> list[str]:
+    """Prefer JPEG (portable Pillow builds often lack WebP), then other formats."""
     text = str(url or "").strip()
     if not text:
         return []
-    out = [text]
     try:
         parts = urlsplit(text)
     except Exception:
-        return out
-    if not parts.scheme or not parts.path:
-        return out
-    hosts = []
-    for host in (config or {}).get("bridgeHosts") or []:
-        host = str(host or "").strip()
-        if host and host not in hosts:
-            hosts.append(host)
-    for host in hosts:
-        # Keep the bridge HTTPS port when rewriting a public hostname to LAN.
-        port = parts.port
-        if port:
-            netloc = f"{host}:{port}"
-        elif parts.scheme == "https":
-            netloc = f"{host}:47810"
-        else:
-            netloc = host
-        rewritten = f"{parts.scheme}://{netloc}{parts.path}"
-        if parts.query:
-            rewritten += f"?{parts.query}"
-        if rewritten not in out:
-            out.append(rewritten)
-        # Self-signed LAN often only answers on https; still try http last.
-        if parts.scheme == "https":
-            http_netloc = f"{host}:47810" if not parts.port or parts.port == 443 else f"{host}:{parts.port}"
-            http_url = f"http://{http_netloc}{parts.path}"
-            if http_url not in out:
-                out.append(http_url)
+        return [text]
+    path = parts.path or ""
+    lower = path.lower()
+    stem = path
+    for ext in (".webp", ".png", ".jpeg", ".jpg"):
+        if lower.endswith(ext):
+            stem = path[: -len(ext)]
+            break
+    ordered_exts = [".jpg", ".jpeg", ".png", ".webp"]
+    # Keep the original extension first so a correct URL wins, then try JPEG.
+    original_ext = Path(path).suffix.lower()
+    if original_ext in ordered_exts:
+        ordered_exts = [original_ext] + [ext for ext in ordered_exts if ext != original_ext]
+    out = []
+    for ext in ordered_exts:
+        new_path = f"{stem}{ext}"
+        rebuilt = urlunsplit((parts.scheme, parts.netloc, new_path, parts.query, parts.fragment))
+        if rebuilt not in out:
+            out.append(rebuilt)
+    return out or [text]
+
+
+def artwork_url_candidates(url: str, config: dict | None = None) -> list[str]:
+    """LAN `bridgeHosts` rewrites first, then the URL the bridge sent.
+
+    Displays live on the bridge's LAN, so a `bridgeHosts` address is both the
+    shortest path and the one least likely to be answered by something other
+    than the bridge (a CDN or a captive portal in front of the public host).
+    """
+    text = str(url or "").strip()
+    if not text:
+        return []
+    seeds = _with_alt_image_extensions(text)
+    out = []
+    for seed in seeds:
+        try:
+            parts = urlsplit(seed)
+        except Exception:
+            if seed not in out:
+                out.append(seed)
+            continue
+        if not parts.scheme or not parts.path:
+            if seed not in out:
+                out.append(seed)
+            continue
+        hosts = []
+        for host in (config or {}).get("bridgeHosts") or []:
+            host = str(host or "").strip()
+            if host and host not in hosts:
+                hosts.append(host)
+        for host in hosts:
+            # Keep the bridge HTTPS port when rewriting a public hostname to LAN.
+            port = parts.port
+            if port:
+                netloc = f"{host}:{port}"
+            elif parts.scheme == "https":
+                netloc = f"{host}:47810"
+            else:
+                netloc = host
+            rewritten = f"{parts.scheme}://{netloc}{parts.path}"
+            if parts.query:
+                rewritten += f"?{parts.query}"
+            if rewritten not in out:
+                out.append(rewritten)
+            # Self-signed LAN often only answers on https; still try http last.
+            if parts.scheme == "https":
+                http_netloc = (
+                    f"{host}:47810"
+                    if not parts.port or parts.port == 443
+                    else f"{host}:{parts.port}"
+                )
+                http_url = f"http://{http_netloc}{parts.path}"
+                if parts.query:
+                    http_url += f"?{parts.query}"
+                if http_url not in out:
+                    out.append(http_url)
+        if seed not in out:
+            out.append(seed)
     return out
 
 
@@ -797,14 +882,16 @@ class TriviaPanel(BasePanel):
         self._draw_gradient_fallback(geometry, card)
 
         artwork = card.get("artwork") or {}
-        url = artwork.get("portrait" if geometry["portrait"] else "landscape")
-        if not url or Image is None:
+        portrait = bool(geometry["portrait"])
+        url = artwork.get("portrait" if portrait else "landscape")
+        # A missing URL is still worth a pass when the bundled pack has the art.
+        if Image is None or not (url or trivia_artwork_asset_path(key, portrait)):
             return
         self._fetch_token += 1
         token = self._fetch_token
         threading.Thread(
             target=self._fetch_artwork,
-            args=(token, url, geometry["screen_w"], geometry["screen_h"]),
+            args=(token, url, geometry["screen_w"], geometry["screen_h"], key, portrait),
             daemon=True,
         ).start()
 
@@ -884,32 +971,51 @@ class TriviaPanel(BasePanel):
             self.canvas.tag_lower(item)
             self._fallback_ids.append(item)
 
-    def _fetch_artwork(self, token, url, width, height):
-        image = self._load_or_download(url, width, height, config=self.config)
+    def _fetch_artwork(self, token, url, width, height, category_id=None, portrait=True):
+        image = self._load_or_download(
+            url, width, height,
+            config=self.config, category_id=category_id, portrait=portrait,
+        )
         if image is None:
             return
         self.root.after(0, lambda: self._apply_artwork(token, image))
 
     @classmethod
-    def _load_or_download(cls, url, width, height, config=None):
-        global _unverified_ssl
+    def _load_or_download(cls, url, width, height, config=None, category_id=None, portrait=True):
         if Image is None:
             return None
         for candidate in artwork_url_candidates(url, config):
             image = cls._load_one_url(candidate, width, height)
             if image is not None:
                 return image
+        image = cls._load_local_artwork(category_id, portrait, width, height)
+        if image is not None:
+            return image
+        print(
+            "Trivia artwork unavailable over HTTP and from the bundled pack "
+            f"(category={category_id or '?'}, url={url or 'none'})",
+            file=sys.stderr, flush=True,
+        )
         return None
+
+    @classmethod
+    def _load_local_artwork(cls, category_id, portrait, width, height):
+        path = trivia_artwork_asset_path(category_id, portrait)
+        if path is None:
+            return None
+        try:
+            return cls._scale_cover(Image.open(path).convert("RGB"), width, height)
+        except Exception:
+            return None
 
     @classmethod
     def _load_one_url(cls, url, width, height):
         global _unverified_ssl
         cache_file = trivia_artwork_cache_path(url)
         if cache_file.exists():
-            try:
-                return cls._scale_cover(Image.open(cache_file).convert("RGB"), width, height)
-            except Exception:
-                pass
+            cached = cls._decode_cached(cache_file, width, height)
+            if cached is not None:
+                return cached
         try:
             request = urllib.request.Request(
                 url, headers={"User-Agent": "alexa-broadcast-client/1.0"},
@@ -953,13 +1059,33 @@ class TriviaPanel(BasePanel):
                     continue
             if data is None:
                 raise last_error or RuntimeError("artwork download failed")
+            # An HTML error page caches just as happily as a JPEG and then wins
+            # every later attempt, so nothing but real image bytes is kept.
+            if not looks_like_image(data):
+                raise RuntimeError(f"artwork response was not an image ({url})")
+            image = cls._scale_cover(Image.open(io.BytesIO(data)).convert("RGB"), width, height)
             try:
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
                 cache_file.write_bytes(data)
             except Exception:
                 pass
+            return image
+        except Exception:
+            return None
+
+    @classmethod
+    def _decode_cached(cls, cache_file, width, height):
+        """Return the cached image, discarding the file when it is not one."""
+        try:
+            data = cache_file.read_bytes()
+            if not looks_like_image(data):
+                raise RuntimeError("cached artwork is not an image")
             return cls._scale_cover(Image.open(io.BytesIO(data)).convert("RGB"), width, height)
         except Exception:
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
             return None
 
     @staticmethod

@@ -435,7 +435,9 @@ function createCommandRegistry(deps = {}) {
     'steam.library-tour': (params) => {
       const count = Number(call(getSteamLibraryCount) || 0);
       const prefs = call(getLibraryTourSettings) || {};
-      const seconds = Number(params?.secondsPerGame ?? prefs.secondsPerGame ?? 60);
+      const seconds = Number(
+        params?.secondsPerGame ?? prefs.steam?.secondsPerGame ?? prefs.secondsPerGame ?? 60,
+      );
       if (!Number.isFinite(count) || count <= 0 || !Number.isFinite(seconds) || seconds <= 0) {
         return null;
       }
@@ -444,7 +446,9 @@ function createCommandRegistry(deps = {}) {
     'psn.library-tour': (params) => {
       const count = Number(call(getPsnLibraryCount) || 0);
       const prefs = call(getLibraryTourSettings) || {};
-      const seconds = Number(params?.secondsPerGame ?? prefs.secondsPerGame ?? 60);
+      const seconds = Number(
+        params?.secondsPerGame ?? prefs.psn?.secondsPerGame ?? prefs.secondsPerGame ?? 60,
+      );
       if (!Number.isFinite(count) || count <= 0 || !Number.isFinite(seconds) || seconds <= 0) {
         return null;
       }

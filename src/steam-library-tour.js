@@ -12,14 +12,19 @@ const { buildGameLibraryTourPayload, buildSteamNowPlayingPayload } = require('./
 const { createSteamLibraryCache } = require('./steam-library-cache');
 const { createLibraryTourSessions } = require('./library-tour-sessions');
 
-function sortGames(games, sort = 'name') {
+function sortGames(games, sort = 'recent') {
   const list = [...(games || [])];
   switch (sort) {
-    case 'playtime':
-      list.sort((a, b) => (Number(b.playtimeForeverMin) || 0) - (Number(a.playtimeForeverMin) || 0));
-      break;
-    case 'recent':
-      list.sort((a, b) => (Number(b.lastPlayedAt) || 0) - (Number(a.lastPlayedAt) || 0));
+    case 'oldest':
+      // Oldest last-played first; never-played titles stay at the end.
+      list.sort((a, b) => {
+        const aTime = Number(a.lastPlayedAt) || 0;
+        const bTime = Number(b.lastPlayedAt) || 0;
+        if (!aTime && !bTime) return 0;
+        if (!aTime) return 1;
+        if (!bTime) return -1;
+        return aTime - bTime;
+      });
       break;
     case 'random':
       for (let i = list.length - 1; i > 0; i -= 1) {
@@ -27,10 +32,11 @@ function sortGames(games, sort = 'name') {
         [list[i], list[j]] = [list[j], list[i]];
       }
       break;
+    case 'recent':
     default:
-      list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, {
-        sensitivity: 'base',
-      }));
+      // Newest first (slideshow "Newest first"). Never-played (0) sink to the end.
+      list.sort((a, b) => (Number(b.lastPlayedAt) || 0) - (Number(a.lastPlayedAt) || 0));
+      break;
   }
   return list;
 }
@@ -46,9 +52,30 @@ function toPlaylistGames(games) {
   }));
 }
 
+/**
+ * Origin the display uses for playlist + card enrich HTTP.
+ * Prefer a public HTTPS origin (GUEST_PHOTOBOOTH_URL) when set — real cert —
+ * then fall back to PROXY_OWN_IP:47810 (self-signed; client tolerates that).
+ */
 function resolveCardBaseUrl(config = {}) {
   if (config.libraryTour?.cardBaseUrl) {
     return String(config.libraryTour.cardBaseUrl).replace(/\/+$/, '');
+  }
+  const guestUrl = String(
+    process.env.GUEST_PHOTOBOOTH_URL
+    || config.guestPhotobooth?.url
+    || config.guestPhotobooth?.publicOrigin
+    || '',
+  ).trim();
+  if (guestUrl) {
+    try {
+      const parsed = new URL(guestUrl);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return `${parsed.protocol}//${parsed.host}`.replace(/\/+$/, '');
+      }
+    } catch {
+      // Fall through to LAN origin.
+    }
   }
   const host = config.proxyOwnIp || config.webServer?.publicHost || null;
   if (!host) {
@@ -153,18 +180,25 @@ function createSteamLibraryTour({
     return fetchAndCache();
   }
 
+  function prefs() {
+    if (typeof tourSettings?.getFor === 'function') {
+      return tourSettings.getFor('steam') || {};
+    }
+    return tourSettings?.get?.()?.steam || tourSettings?.get?.() || {};
+  }
+
   async function preview() {
     const loaded = await loadGames({ preferCache: true, allowNetwork: true });
-    const prefs = tourSettings?.get?.() || {};
-    const sorted = sortGames(loaded.games, prefs.sort);
+    const tourPrefs = prefs();
+    const sorted = sortGames(loaded.games, tourPrefs.sort);
     lastCount = sorted.length;
     return {
       ok: loaded.ok,
       error: loaded.error || null,
       count: sorted.length,
       configured: Boolean(credentials().steamId),
-      sort: prefs.sort || 'name',
-      secondsPerGame: prefs.secondsPerGame || 60,
+      sort: tourPrefs.sort || 'recent',
+      secondsPerGame: tourPrefs.secondsPerGame || 60,
       fromCache: Boolean(loaded.fromCache),
     };
   }
@@ -305,9 +339,9 @@ function createSteamLibraryTour({
     if (!loaded.ok) {
       return { ok: false, error: loaded.error || 'Steam library unavailable' };
     }
-    const prefs = tourSettings?.get?.() || {};
-    const perGame = secondsPerGame ?? prefs.secondsPerGame ?? 60;
-    const order = sort || prefs.sort || 'name';
+    const tourPrefs = prefs();
+    const perGame = secondsPerGame ?? tourPrefs.secondsPerGame ?? 60;
+    const order = sort || tourPrefs.sort || 'recent';
     const sorted = sortGames(loaded.games, order);
     const playlist = toPlaylistGames(sorted);
     if (!playlist.length) {

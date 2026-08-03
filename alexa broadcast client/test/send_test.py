@@ -1156,8 +1156,8 @@ def build_payload(args) -> dict:
                 "accent": accent,
                 "background": background,
                 "artwork": {
-                    "portrait": f"{base}/{category_id}-portrait.webp",
-                    "landscape": f"{base}/{category_id}-landscape.webp",
+                    "portrait": f"{base}/{category_id}-portrait.jpg",
+                    "landscape": f"{base}/{category_id}-landscape.jpg",
                 },
             }
             for i, (category_id, label, accent, background, difficulty, text, answers, correct)

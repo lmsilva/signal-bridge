@@ -58,7 +58,7 @@ let cached = null;
 
 function artworkFile(categories, id, orientation) {
   const entry = categories.find((category) => category.id === id);
-  return entry?.files?.[orientation] || `${id}-${orientation}.webp`;
+  return entry?.files?.[orientation] || `${id}-${orientation}.jpg`;
 }
 
 function loadArtworkManifest() {

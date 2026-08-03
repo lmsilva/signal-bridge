@@ -8,11 +8,17 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import timezone
+from urllib.parse import urlsplit
 
 from src.design_system import INK_2, INK_3, design_u, page_chrome
 from src.display_panels import BasePanel
+from src.payload_utils import parse_iso_timestamp
 from src.psn_now_playing_panel import PsnNowPlayingPanel
 from src.steam_now_playing_panel import SteamNowPlayingPanel
+
+# Frozen builds hit the bridge's self-signed cert; once unverified works, keep it.
+_unverified_ssl = False
 
 
 def clamp_seconds_per_game(value) -> int:
@@ -44,40 +50,110 @@ def steam_poster_candidates(app_id: str) -> list[str]:
     return [f"{base}/{app_id}/{asset}" for base in bases for asset in assets]
 
 
-def _http_get_json(url: str, timeout: float = 30) -> dict | None:
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    contexts: list = [None]
+def bridge_url_candidates(url: str, config: dict | None = None) -> list[str]:
+    """Primary bridge URL plus LAN bridgeHosts rewrites (same idea as trivia artwork)."""
+    text = str(url or "").strip()
+    if not text:
+        return []
+    out = [text]
     try:
-        contexts.append(ssl._create_unverified_context())
+        parts = urlsplit(text)
     except Exception:
-        pass
-    for ctx in contexts:
-        try:
-            kwargs = {"timeout": timeout}
-            if ctx is not None:
-                kwargs["context"] = ctx
-            with urllib.request.urlopen(req, **kwargs) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
-            continue
+        return out
+    if not parts.scheme or not parts.path:
+        return out
+    hosts = []
+    for host in (config or {}).get("bridgeHosts") or []:
+        host = str(host or "").strip()
+        if host and host not in hosts:
+            hosts.append(host)
+    for host in hosts:
+        port = parts.port
+        if port:
+            netloc = f"{host}:{port}"
+        elif parts.scheme == "https":
+            netloc = f"{host}:47810"
+        else:
+            netloc = host
+        rewritten = f"{parts.scheme}://{netloc}{parts.path}"
+        if parts.query:
+            rewritten += f"?{parts.query}"
+        if rewritten not in out:
+            out.append(rewritten)
+        if parts.scheme == "https":
+            http_netloc = (
+                f"{host}:47810"
+                if not parts.port or parts.port == 443
+                else f"{host}:{parts.port}"
+            )
+            http_url = f"http://{http_netloc}{parts.path}"
+            if parts.query:
+                http_url += f"?{parts.query}"
+            if http_url not in out:
+                out.append(http_url)
+    return out
+
+
+def iso_timestamp(value) -> str | None:
+    """Normalize epoch ms / ISO strings for nested Steam/PSN panels."""
+    dt = parse_iso_timestamp(value)
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _http_get_json(url: str, timeout: float = 30, config: dict | None = None) -> dict | None:
+    global _unverified_ssl
+    for candidate in bridge_url_candidates(url, config):
+        req = urllib.request.Request(candidate, headers={"Accept": "application/json"})
+        contexts: list = []
+        if _unverified_ssl or str(candidate).lower().startswith("https://"):
+            try:
+                contexts.append(ssl._create_unverified_context())
+            except Exception:
+                pass
+        contexts.append(None)
+        for ctx in contexts:
+            try:
+                kwargs = {"timeout": timeout}
+                if ctx is not None:
+                    kwargs["context"] = ctx
+                with urllib.request.urlopen(req, **kwargs) as resp:
+                    if ctx is not None:
+                        _unverified_ssl = True
+                    return json.loads(resp.read().decode("utf-8"))
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+                continue
     return None
 
 
-def fetch_library_playlist(card_base_url: str, playlist_path: str) -> list[dict] | None:
+def fetch_library_playlist(
+    card_base_url: str,
+    playlist_path: str,
+    config: dict | None = None,
+) -> list[dict] | None:
     base = str(card_base_url or "").rstrip("/")
     path = str(playlist_path or "").strip()
     if not base or not path:
         return None
     if not path.startswith("/"):
         path = f"/{path}"
-    data = _http_get_json(f"{base}{path}", timeout=45)
+    data = _http_get_json(f"{base}{path}", timeout=45, config=config)
     if not data or not data.get("ok"):
         return None
     games = data.get("games")
     return games if isinstance(games, list) else None
 
 
-def fetch_library_card(card_base_url: str, platform: str, game_id: str, name: str = "") -> dict | None:
+def fetch_library_card(
+    card_base_url: str,
+    platform: str,
+    game_id: str,
+    name: str = "",
+    config: dict | None = None,
+) -> dict | None:
     """GET /api/library-tour/card — returns the steam/psn object or None."""
     base = str(card_base_url or "").rstrip("/")
     if not base or not game_id:
@@ -87,7 +163,7 @@ def fetch_library_card(card_base_url: str, platform: str, game_id: str, name: st
         "id": game_id,
         **({"name": name} if name else {}),
     })
-    data = _http_get_json(f"{base}/api/library-tour/card?{query}", timeout=20)
+    data = _http_get_json(f"{base}/api/library-tour/card?{query}", timeout=20, config=config)
     if not data or not data.get("ok"):
         return None
     key = "psn" if platform == "psn" else "steam"
@@ -240,7 +316,11 @@ class GameLibraryTourPanel(BasePanel):
         self._status_ids = [item]
 
     def _load_playlist_worker(self, token: int):
-        games = fetch_library_playlist(self._card_base_url, self._playlist_path)
+        games = fetch_library_playlist(
+            self._card_base_url,
+            self._playlist_path,
+            config=self.config,
+        )
         self.root.after(0, lambda: self._apply_playlist(token, games))
 
     def _apply_playlist(self, token: int, games: list | None):
@@ -367,12 +447,17 @@ class GameLibraryTourPanel(BasePanel):
             posters.insert(0, game["imageUrl"])
         return posters
 
-    def _thin_fallback_card(self, game: dict) -> dict:
+    def _thin_fallback_card(self, game: dict, *, enrich_pending: bool = True) -> dict:
         key = "psn" if self._platform == "psn" else "steam"
         posters = self._poster_candidates_for(game)
+        # Seed/playlist rows use epoch ms — convert so nested NP panels never
+        # see raw ints (parse_iso_timestamp also tolerates them as a backstop).
+        last_played = iso_timestamp(game.get("lastPlayedAt"))
         card = {
             "name": game.get("name") or "Unknown",
             "mode": "library-tour",
+            # Nested Steam/PSN panels reserve desc/shots/footer and spin while True.
+            "enrichPending": bool(enrich_pending),
             "shortDescription": "",
             "tags": list(game.get("tags") or []),
             "posterCandidates": posters,
@@ -380,8 +465,8 @@ class GameLibraryTourPanel(BasePanel):
             "screenshots": [],
             "playtimeLabel": game.get("playtimeLabel"),
             "playtimeForeverMin": game.get("playtimeForeverMin"),
-            "lastPlayedAt": game.get("lastPlayedAt"),
-            "startedAt": game.get("lastPlayedAt"),
+            "lastPlayedAt": last_played,
+            "startedAt": last_played,
             "achievements": {"earned": None, "total": None, "available": False},
             "trophies": {"earned": None, "total": None, "available": False},
         }
@@ -413,7 +498,13 @@ class GameLibraryTourPanel(BasePanel):
             token = self._fetch_token
 
             def worker(gid=game_id, gname=game.get("name") or "", t=token):
-                card = fetch_library_card(self._card_base_url, self._platform, gid, gname)
+                card = fetch_library_card(
+                    self._card_base_url,
+                    self._platform,
+                    gid,
+                    gname,
+                    config=self.config,
+                )
                 self.root.after(0, lambda: self._store_prefetch(t, gid, card))
 
             threading.Thread(target=worker, daemon=True).start()
@@ -451,6 +542,7 @@ class GameLibraryTourPanel(BasePanel):
                         self._platform,
                         current.get("id") or "",
                         current.get("name") or "",
+                        config=self.config,
                     )
                     self.root.after(0, lambda: self._apply_enriched(token, current, card))
 
@@ -461,21 +553,36 @@ class GameLibraryTourPanel(BasePanel):
     def _apply_enriched(self, token: int, game: dict, card: dict | None, *, from_cache: bool = False):
         if token != self._fetch_token or not self.visible:
             return
+        key = "psn" if self._platform == "psn" else "steam"
         if not card:
+            # Enrich failed — keep the thin card but drop spinners.
+            self._active_card_panel().show(self._thin_fallback_card(game, enrich_pending=False))
+            self._paint_status_overlay()
             return
         card = {**card, "mode": "library-tour"}
+        card.pop("enrichPending", None)
         game_id = game.get("id") or ""
         if game_id and not from_cache:
             self._enrich_cache[game_id] = card
-        key = "psn" if self._platform == "psn" else "steam"
         if not card.get("playtimeLabel") and game.get("playtimeLabel"):
             card["playtimeLabel"] = game.get("playtimeLabel")
         if card.get("playtimeForeverMin") is None and game.get("playtimeForeverMin") is not None:
             card["playtimeForeverMin"] = game.get("playtimeForeverMin")
         if not card.get("lastPlayedAt") and game.get("lastPlayedAt"):
-            card["lastPlayedAt"] = game.get("lastPlayedAt")
+            card["lastPlayedAt"] = iso_timestamp(game.get("lastPlayedAt"))
+        elif card.get("lastPlayedAt"):
+            card["lastPlayedAt"] = iso_timestamp(card.get("lastPlayedAt")) or card.get("lastPlayedAt")
+        if card.get("startedAt"):
+            card["startedAt"] = iso_timestamp(card.get("startedAt")) or card.get("startedAt")
         # Ensure posters exist even when enrich omitted them.
-        if not card.get("posterCandidates"):
-            card["posterCandidates"] = self._poster_candidates_for(game)
+        posters = list(card.get("posterCandidates") or [])
+        for url in self._poster_candidates_for(game):
+            if url and url not in posters:
+                posters.append(url)
+        if game.get("imageUrl") and game["imageUrl"] not in posters:
+            posters.insert(0, game["imageUrl"])
+        card["posterCandidates"] = posters
+        if not card.get("headerImage") and posters:
+            card["headerImage"] = posters[0]
         self._active_card_panel().show({key: card})
         self._paint_status_overlay()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from src.config import effective_display_seconds
@@ -14,7 +16,9 @@ from src.trivia_panel import (
     build_phase_plan,
     fit_text_font,
     format_trivia_sources,
+    looks_like_image,
     mix_hex,
+    trivia_artwork_asset_path,
     trivia_artwork_cache_path,
     wrap_text,
 )
@@ -348,23 +352,75 @@ class ArtworkTests(unittest.TestCase):
             "https://signal.example/trivia-artwork/a.webp",
             {"bridgeHosts": ["192.168.1.10"]},
         )
-        self.assertEqual(urls[0], "https://signal.example/trivia-artwork/a.webp")
+        self.assertIn("https://signal.example/trivia-artwork/a.webp", urls)
+        self.assertIn("https://signal.example/trivia-artwork/a.jpg", urls)
         self.assertIn("https://192.168.1.10:47810/trivia-artwork/a.webp", urls)
+        self.assertIn("https://192.168.1.10:47810/trivia-artwork/a.jpg", urls)
+
+    def test_lan_hosts_are_tried_before_the_public_host(self):
+        urls = artwork_url_candidates(
+            "https://signal.example/trivia-artwork/a.webp",
+            {"bridgeHosts": ["192.168.200.3"]},
+        )
+        self.assertEqual(urls[0], "https://192.168.200.3:47810/trivia-artwork/a.webp")
+        self.assertLess(
+            urls.index("https://192.168.200.3:47810/trivia-artwork/a.webp"),
+            urls.index("https://signal.example/trivia-artwork/a.webp"),
+        )
+
+    def test_candidates_without_bridge_hosts_keep_the_payload_url_first(self):
+        urls = artwork_url_candidates("https://signal.example/trivia-artwork/a.webp", {})
+        self.assertEqual(urls[0], "https://signal.example/trivia-artwork/a.webp")
+
+    def test_only_real_image_bytes_count_as_artwork(self):
+        self.assertTrue(looks_like_image(b"\xff\xd8\xff\xe0" + b"\x00" * 16))
+        self.assertTrue(looks_like_image(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16))
+        self.assertTrue(looks_like_image(b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 8))
+        self.assertFalse(looks_like_image(b"<!DOCTYPE html><html>nope</html>"))
+        self.assertFalse(looks_like_image(b""))
+
+    def test_a_poisoned_cache_entry_is_discarded_instead_of_reused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_file = Path(tmp) / "poison.jpg"
+            cache_file.write_bytes(b"<!DOCTYPE html><html>error page</html>")
+            self.assertIsNone(TriviaPanel._decode_cached(cache_file, 100, 100))
+            self.assertFalse(cache_file.exists(), "html cache poison must be deleted")
+
+    def test_the_bundled_pack_paints_when_every_download_fails(self):
+        sentinel = object()
+        with patch.object(TriviaPanel, "_load_one_url", return_value=None), \
+                patch.object(TriviaPanel, "_load_local_artwork", return_value=sentinel) as local, \
+                patch("src.trivia_panel.Image", object()):
+            image = TriviaPanel._load_or_download(
+                "https://bridge/trivia-artwork/science-portrait.jpg",
+                1080, 1920, config={}, category_id="science", portrait=True,
+            )
+        self.assertIs(image, sentinel)
+        local.assert_called_once_with("science", True, 1080, 1920)
+
+    def test_the_bundled_pack_resolves_per_category_and_orientation(self):
+        portrait = trivia_artwork_asset_path("science-nature", True)
+        landscape = trivia_artwork_asset_path("science-nature", False)
+        self.assertIsNotNone(portrait, "the client ships the category pack")
+        self.assertIsNotNone(landscape)
+        self.assertNotEqual(portrait, landscape)
+        self.assertIsNone(trivia_artwork_asset_path("", True))
+        self.assertIsNone(trivia_artwork_asset_path("not-a-category", True))
 
     def test_the_cache_path_is_stable_and_keeps_the_extension(self):
-        url = "https://bridge/trivia-artwork/science-portrait.webp"
+        url = "https://bridge/trivia-artwork/science-portrait.jpg"
         first = trivia_artwork_cache_path(url)
         self.assertEqual(first, trivia_artwork_cache_path(url))
-        self.assertEqual(first.suffix, ".webp")
+        self.assertEqual(first.suffix, ".jpg")
 
     def test_different_orientations_cache_separately(self):
-        portrait = trivia_artwork_cache_path("https://b/science-portrait.webp")
-        landscape = trivia_artwork_cache_path("https://b/science-landscape.webp")
+        portrait = trivia_artwork_cache_path("https://b/science-portrait.jpg")
+        landscape = trivia_artwork_cache_path("https://b/science-landscape.jpg")
         self.assertNotEqual(portrait.name, landscape.name)
 
     def test_an_odd_url_still_produces_a_safe_filename(self):
         path = trivia_artwork_cache_path("https://b/art?id=1&x=2")
-        self.assertEqual(path.suffix, ".img")
+        self.assertEqual(path.suffix, ".jpg")
         self.assertNotIn("?", path.name)
 
     def test_the_gradient_fallback_blends_between_its_two_ends(self):

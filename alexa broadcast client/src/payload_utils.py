@@ -164,11 +164,44 @@ def processing_stage_message(stages: list | None, elapsed_sec: float) -> str:
     return message
 
 
-def parse_iso_timestamp(value: str) -> datetime | None:
-    if not value:
+def parse_iso_timestamp(value) -> datetime | None:
+    """Parse ISO-8601 strings or unix epoch seconds/milliseconds.
+
+    Library-tour seed rows carry ``lastPlayedAt`` as epoch ms from Steam/PSN
+    caches. Treating those as ISO strings used to crash the overlay
+    (``int`` has no ``.replace``) so the display stayed blank after a successful
+    push.
+    """
+    if value is None or value is False:
         return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, (int, float)):
+        try:
+            epoch = float(value)
+        except (TypeError, ValueError):
+            return None
+        if epoch <= 0:
+            return None
+        # Steam/PSN library rows use milliseconds; short values are seconds.
+        if epoch > 1e12:
+            epoch /= 1000.0
+        try:
+            return datetime.fromtimestamp(epoch, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit() or (
+        text.replace(".", "", 1).isdigit() and text.count(".") <= 1
+    ):
+        try:
+            return parse_iso_timestamp(float(text))
+        except (TypeError, ValueError):
+            return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return None
 

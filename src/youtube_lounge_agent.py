@@ -19,6 +19,8 @@ stdin  — one JSON command per line:
     {"cmd": "pair-screen", "id": ..., "screenId": "..."}
     {"cmd": "discover", "id": ..., "timeout": 5}
     {"cmd": "refresh", "id": ..., "device": {...}}
+    {"cmd": "poll", "id": ..., "deviceId": "..."}
+    {"cmd": "poll-all", "id": ...}
     {"cmd": "shutdown"}
 
 stdout — one JSON event per line:
@@ -26,7 +28,7 @@ stdout — one JSON event per line:
     {"event": "result", "id": ..., "ok": true, "data": {...}}
     {"event": "now-playing", "deviceId": ..., "videoId": ..., "durationSeconds": ...}
     {"event": "state", "deviceId": ..., "state": "Playing", "position": 12.4}
-    {"event": "ad", "deviceId": ..., "playing": true}
+    {"event": "ad", "deviceId": ..., "playing": true, "contentVideoId": "..."}
     {"event": "up-next", "deviceId": ..., "videoId": ...}
     {"event": "auth", "deviceId": ..., "authState": {...}, "expiry": ...}
     {"event": "disconnected", "deviceId": ...}
@@ -109,8 +111,13 @@ def state_name(state: Any) -> str:
 
 
 def ad_is_playing(state: Any) -> bool:
-    """An ad occupies the screen unless the player has stopped it."""
-    return state_name(state) not in {"Stopped", "Unknown"}
+    """True only while Lounge reports an active ad player state.
+
+    Older logic treated anything except Stopped/Unknown as an ad, so a sticky
+    or missing ad-end event wedged detection forever (no auto-push, manual
+    preview fell back to stale history).
+    """
+    return state_name(state) in {"Playing", "Buffering", "Starting", "Advertisement"}
 
 
 def parse_auth_state(value: Any) -> Optional[dict]:
@@ -178,23 +185,22 @@ class BridgeListener(EventListener):  # type: ignore[misc]
             }
         )
 
+    def _emit_ad(self, event: Any) -> None:
+        payload: Dict[str, Any] = {
+            "event": "ad",
+            "deviceId": self.device_id,
+            "playing": ad_is_playing(getattr(event, "ad_state", None)),
+        }
+        content_id = getattr(event, "content_video_id", None)
+        if content_id:
+            payload["contentVideoId"] = str(content_id)
+        emit(payload)
+
     async def ad_playing_changed(self, event: Any) -> None:
-        emit(
-            {
-                "event": "ad",
-                "deviceId": self.device_id,
-                "playing": ad_is_playing(getattr(event, "ad_state", None)),
-            }
-        )
+        self._emit_ad(event)
 
     async def ad_state_changed(self, event: Any) -> None:
-        emit(
-            {
-                "event": "ad",
-                "deviceId": self.device_id,
-                "playing": ad_is_playing(getattr(event, "ad_state", None)),
-            }
-        )
+        self._emit_ad(event)
 
     async def autoplay_up_next_changed(self, event: Any) -> None:
         video_id = getattr(event, "video_id", None)
@@ -360,6 +366,12 @@ class Agent:
                     "screenName": screen_name_of(api),
                     "screenDeviceName": screen_device_name_of(api),
                 })
+                # Apple TV often stays silent until asked — seed current video
+                # before the long-lived subscribe loop blocks this task.
+                try:
+                    await api.get_now_playing()
+                except Exception as error:
+                    log("warn", f"Initial now-playing poll for {device_id} failed: {error}")
                 await api.subscribe()
         except asyncio.CancelledError:
             raise
@@ -478,6 +490,24 @@ class Agent:
             self._emit_auth(device_id, api)
             return {"ok": True}
 
+    async def poll(self, device_id: str) -> Dict[str, Any]:
+        """Ask a connected screen to re-emit now-playing / state."""
+        session = self.sessions.get(str(device_id))
+        api = session.get("api") if session else None
+        if api is None:
+            return {"ok": False, "error": "not-connected"}
+        try:
+            await api.get_now_playing()
+            return {"ok": True}
+        except Exception as error:
+            return {"ok": False, "error": str(error)}
+
+    async def poll_all(self) -> Dict[str, Any]:
+        results = []
+        for device_id in list(self.sessions):
+            results.append({"deviceId": device_id, **(await self.poll(device_id))})
+        return {"ok": True, "devices": results}
+
     # -------------------------------------------------------------- driver
 
     async def handle(self, message: Dict[str, Any]) -> None:
@@ -515,6 +545,10 @@ class Agent:
                 result = await self.discover(float(message.get("timeout") or 5))
             elif command == "refresh":
                 result = await self.refresh(message.get("device") or {})
+            elif command == "poll":
+                result = await self.poll(str(message.get("deviceId") or ""))
+            elif command == "poll-all":
+                result = await self.poll_all()
             else:
                 result = {"ok": False, "error": f"unknown command: {command}"}
         except Exception as error:

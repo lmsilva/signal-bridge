@@ -5,6 +5,8 @@ const { PassThrough } = require('stream');
 
 const {
   DEFAULT_CONFIRM_SECONDS,
+  STOP_GRACE_MS,
+  CONFIRM_RETRY_MS,
   createYoutubeLounge,
 } = require('../src/youtube-lounge');
 
@@ -98,6 +100,12 @@ function playFor(h, { deviceId = 'tv-1', videoId = 'abc', seconds = 10, duration
   });
   h.advance(seconds);
   h.feed({ event: 'state', deviceId, state: 'Playing', position: seconds, durationSeconds: duration });
+}
+
+/** Feed Stopped and wait out the Apple TV flicker grace window. */
+function settleStop(h, { deviceId = 'tv-1', position = 0 } = {}) {
+  h.feed({ event: 'state', deviceId, state: 'Stopped', position });
+  h.advance((STOP_GRACE_MS / 1000) + 0.1);
 }
 
 // ----------------------------------------------------------------- process
@@ -252,6 +260,22 @@ test('a zero confirm window starts the session on the first event', () => {
   assert.equal(h.events.started.length, 1);
 });
 
+test('confirm timer starts a session without a later Lounge tick', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'abc',
+    position: 0, durationSeconds: 600, state: 'Playing',
+  });
+  assert.deepEqual(h.events.started, []);
+
+  // Apple TV often goes quiet for 60–90s — wall-clock confirm must still fire.
+  h.advance(5);
+  assert.equal(h.events.started.length, 1);
+  assert.equal(h.events.started[0].videoId, 'abc');
+});
+
 // -------------------------------------------------------- ad suppression
 
 test('an ad before the video restarts the confirm window', () => {
@@ -306,6 +330,23 @@ test('a session never starts while an ad is on screen', () => {
   assert.deepEqual(h.events.started, []);
 });
 
+test('content scrubber advancing clears a stuck ad flag', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'abc',
+    position: 0, durationSeconds: 600, state: 'Playing',
+  });
+  h.feed({ event: 'ad', deviceId: 'tv-1', playing: true });
+  h.advance(6);
+  // Agent never sent ad:false, but content has clearly started.
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 8 });
+
+  assert.equal(h.events.started.length, 1);
+  assert.equal(h.lounge.snapshot().devices[0].adPlaying, false);
+});
+
 test('an ad flag left set by a silent agent does not wedge the next video', () => {
   const h = harness({ confirmSeconds: 5 });
   h.lounge.start();
@@ -345,7 +386,7 @@ test('watched time comes from position deltas, so pausing cannot inflate it', ()
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 16 });
   h.advance(5);
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 21 });
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 21 });
+  settleStop(h, { position: 21 });
 
   const [stopped] = h.events.stopped;
   assert.equal(stopped.watchedSeconds, 15, 'only played seconds count');
@@ -361,7 +402,7 @@ test('a seek forward is not counted as watched time', () => {
   // Jump half an hour ahead: a delta of 1800s is a scrub, not viewing.
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 1810 });
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 1815 });
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 1815 });
+  settleStop(h, { position: 1815 });
 
   // Scrubs do not inflate the delta total; the scrubber position is stored
   // separately so the last-played card can still say how far into the video.
@@ -379,7 +420,7 @@ test('slow Lounge ticks still accumulate watched time', () => {
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 10 });
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 100 });
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 190 });
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 190 });
+  settleStop(h, { position: 190 });
 
   assert.equal(h.events.stopped[0].watchedSeconds, 184);
   assert.equal(h.events.stopped[0].positionSeconds, 190);
@@ -391,7 +432,7 @@ test('a sparse stream that only reports the final position still records watch t
   playFor(h, { seconds: 6, duration: 600 });
 
   // One Stopped sample at 4 minutes — no intermediate Playing ticks after confirm.
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 240 });
+  settleStop(h, { position: 240 });
 
   assert.equal(h.events.stopped[0].positionSeconds, 240);
   assert.equal(h.events.stopped[0].watchedSeconds, 240);
@@ -404,7 +445,7 @@ test('a seek backwards does not drive watched time negative', () => {
 
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 20 });
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 5 });
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 5 });
+  settleStop(h, { position: 5 });
 
   assert.ok(h.events.stopped[0].watchedSeconds >= 0);
   assert.equal(h.events.stopped[0].watchedSeconds, 14);
@@ -418,7 +459,7 @@ test('watching to the end marks the session complete', () => {
   for (let position = 10; position <= 100; position += 10) {
     h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position });
   }
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 100 });
+  settleStop(h, { position: 100 });
 
   const [stopped] = h.events.stopped;
   assert.equal(stopped.completed, true);
@@ -431,9 +472,78 @@ test('abandoning a video early does not mark it complete', () => {
   playFor(h, { seconds: 6, duration: 600 });
 
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 30 });
-  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 30 });
+  settleStop(h, { position: 30 });
 
   assert.equal(h.events.stopped[0].completed, false);
+});
+
+test('a brief Stopped flicker does not end the session', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+  playFor(h, { seconds: 6 });
+
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 20 });
+  assert.equal(h.events.stopped.length, 0, 'grace window must absorb the flicker');
+
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 22 });
+  h.advance(2);
+  assert.equal(h.events.stopped.length, 0);
+  assert.equal(h.lounge.activeSessions().length, 1);
+});
+
+test('Apple TV sparse Stopped ticks do not clear provisional before confirm', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'live-id',
+    position: 0, durationSeconds: 600, state: 'Playing',
+  });
+  // Typical Apple TV pattern: one Playing sample, then Stopped for ~60s.
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 1 });
+  h.advance(30);
+  assert.deepEqual(h.events.started, [], 'confirm needs Playing, not just elapsed wall time');
+  assert.equal(h.lounge.currentPlayback()[0]?.videoId, 'live-id');
+
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 30 });
+  h.advance(CONFIRM_RETRY_MS / 1000);
+  assert.equal(h.events.started.length, 1);
+  assert.equal(h.events.started[0].videoId, 'live-id');
+});
+
+test('currentPlayback keeps a Stopped provisional during the stop grace', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'live-id',
+    position: 12, durationSeconds: 600, state: 'Playing',
+  });
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 12 });
+
+  const current = h.lounge.currentPlayback();
+  assert.equal(current.length, 1);
+  assert.equal(current[0].videoId, 'live-id');
+  assert.equal(current[0].provisional, true);
+});
+
+test('an ad contentVideoId seeds provisional before now-playing', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'ad', deviceId: 'tv-1', playing: true, contentVideoId: 'content-1',
+  });
+  assert.equal(h.lounge.currentPlayback()[0]?.videoId, 'content-1');
+
+  h.feed({ event: 'ad', deviceId: 'tv-1', playing: false, contentVideoId: 'content-1' });
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'content-1',
+    position: 0, durationSeconds: 600, state: 'Playing',
+  });
+  h.advance(6);
+  assert.equal(h.events.started.length, 1);
+  assert.equal(h.events.started[0].videoId, 'content-1');
 });
 
 // ------------------------------------------------------ session boundaries
@@ -478,9 +588,26 @@ test('stopping twice emits one stop, not two', () => {
 
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 30 });
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 30 });
+  h.advance((STOP_GRACE_MS / 1000) + 0.1);
   h.feed({ event: 'disconnected', deviceId: 'tv-1' });
 
   assert.equal(h.events.stopped.length, 1);
+});
+
+test('currentPlayback exposes provisional video before confirm', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'live-id',
+    position: 0, durationSeconds: 600, state: 'Playing',
+  });
+
+  const current = h.lounge.currentPlayback();
+  assert.equal(current.length, 1);
+  assert.equal(current[0].videoId, 'live-id');
+  assert.equal(current[0].provisional, true);
+  assert.deepEqual(h.lounge.activeSessions(), []);
 });
 
 // ------------------------------------------------------------ active list
