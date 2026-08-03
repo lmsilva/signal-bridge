@@ -32,7 +32,10 @@ const {
   buildPhotoSlideshowPayload,
   buildGuestPhotoboothPayload,
 } = require('./udp-payload');
-const { resolveGuestPhotoboothSettings } = require('./guest-photobooth');
+const {
+  resolveGuestPhotoboothSettings,
+  photosToSlideshowEntries,
+} = require('./guest-photobooth');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { getIndoorLocations } = require('./indoor-locations');
 const { ALL_TARGET_ID } = require('./display-registry');
@@ -64,6 +67,14 @@ const {
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
+const { createCommandRegistry } = require('./command-registry');
+const { createDisplayScheduler } = require('./display-scheduler');
+const {
+  ARTWORK_ROUTE_PREFIX: TRIVIA_ARTWORK_ROUTE_PREFIX,
+} = require('./trivia-categories');
+
+/** Cached YouTube thumbnails and channel avatars, served from `data/`. */
+const YOUTUBE_IMAGE_ROUTE_PREFIX = '/youtube-images/';
 const {
   createSlideshowSettings,
   VALID_ORDERS,
@@ -71,6 +82,13 @@ const {
   MAX_SECONDS_PER_PHOTO,
   clampSecondsPerPhoto,
 } = require('./slideshow-settings');
+const {
+  createLibraryTourSettings,
+  VALID_SORTS,
+  MIN_SECONDS_PER_GAME,
+  MAX_SECONDS_PER_GAME,
+  clampSecondsPerGame,
+} = require('./library-tour-settings');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -93,6 +111,9 @@ const MIME_TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
@@ -246,6 +267,16 @@ function createWebServer({
   steamNowPlaying = null,
   getPsnStatus = null,
   psnNowPlaying = null,
+  getYoutubeStatus = null,
+  youtubeNowPlaying = null,
+  trivia = null,
+  getTriviaStatus = null,
+  displayBusy = null,
+  libraryTourSettings: libraryTourSettingsInjected = null,
+  steamLibraryTour = null,
+  psnLibraryTour = null,
+  getSteamLibraryCount = null,
+  getPsnLibraryCount = null,
   guestSnapsAuth: guestSnapsAuthInjected = null,
   scheduleRestart,
   webRoot,
@@ -268,6 +299,28 @@ function createWebServer({
   const guestSnapsAuth = guestSnapsAuthInjected || createGuestSnapsAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
   const slideshowSettings = createSlideshowSettings(config, log);
+  const libraryTourSettings = libraryTourSettingsInjected || createLibraryTourSettings(config, log);
+  const commandRegistry = createCommandRegistry({
+    log,
+    getSteamStatus,
+    getPsnStatus,
+    getSteamLibraryCount: () => {
+      if (typeof getSteamLibraryCount === 'function') {
+        return getSteamLibraryCount();
+      }
+      return steamLibraryTourService()?.libraryCount?.() || 0;
+    },
+    getPsnLibraryCount: () => {
+      if (typeof getPsnLibraryCount === 'function') {
+        return getPsnLibraryCount();
+      }
+      return psnLibraryTourService()?.libraryCount?.() || 0;
+    },
+    getLibraryTourSettings: () => libraryTourSettings.get(),
+    getYoutubeStatus: () => getYoutubeStatus?.() || youtubeService()?.statusSnapshot?.() || null,
+    getTriviaStatus: () => getTriviaStatus?.() || triviaService()?.statusSnapshot?.() || null,
+    getPhotoCount: () => qrImageCache.list().length,
+  });
   let server = null;
   let redirectServer = null;
 
@@ -457,6 +510,7 @@ function createWebServer({
     try {
       const result = await controller.pushManualPreview({
         device: deviceFrom(body),
+        requestedMode: previewModeFrom(body),
         send: (payload) => {
           if (typeof deliverTargetedPayload === 'function') {
             return deliverTargetedPayload(payload, targetId);
@@ -540,6 +594,7 @@ function createWebServer({
     try {
       const result = await controller.pushManualPreview({
         device: deviceFrom(body),
+        requestedMode: previewModeFrom(body),
         send: (payload) => {
           if (typeof deliverTargetedPayload === 'function') {
             return deliverTargetedPayload(payload, targetId);
@@ -596,6 +651,673 @@ function createWebServer({
       return ALL_TARGET_ID;
     }
     return String(body.targetId).trim();
+  }
+
+  /* ------------------------------------------------------------------ Trivia */
+
+  function triviaService() {
+    return typeof trivia === 'function' ? trivia() : trivia;
+  }
+
+  // ------------------------------------------------------------- YouTube
+
+  function youtubeService() {
+    return typeof youtubeNowPlaying === 'function' ? youtubeNowPlaying() : youtubeNowPlaying;
+  }
+
+  function steamLibraryTourService() {
+    return typeof steamLibraryTour === 'function' ? steamLibraryTour() : steamLibraryTour;
+  }
+
+  function psnLibraryTourService() {
+    return typeof psnLibraryTour === 'function' ? psnLibraryTour() : psnLibraryTour;
+  }
+
+  /** Every YouTube route needs the service; fail the same way in one place. */
+  function withYoutube(res, handler) {
+    const service = youtubeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'YouTube is not available' });
+      return undefined;
+    }
+    return handler(service);
+  }
+
+  function handleYoutubeSettingsGet(res) {
+    withYoutube(res, (service) => {
+      sendJson(res, 200, { ok: true, settings: service.store.getSettings() });
+    });
+  }
+
+  function handleYoutubeSettingsPut(body, res) {
+    withYoutube(res, (service) => {
+      sendJson(res, 200, { ok: true, settings: service.store.updateSettings(body || {}) });
+    });
+  }
+
+  function handleYoutubeDevicesGet(res) {
+    withYoutube(res, (service) => {
+      sendJson(res, 200, { ok: true, devices: service.store.publicDevices() });
+    });
+  }
+
+  async function handleYoutubeDiscover(res) {
+    return withYoutube(res, async (service) => {
+      const result = await service.discover();
+      // A missing detection agent is this bridge being unequipped, not a bad
+      // answer from the TVs — 503 so it reads as "set this up first".
+      const status = result.ok ? 200 : (result.unavailable ? 503 : 502);
+      sendJson(res, status, result);
+    });
+  }
+
+  async function handleYoutubeLink(body, res) {
+    return withYoutube(res, async (service) => {
+      const result = await service.linkDevice({
+        label: body?.label ? String(body.label) : null,
+        pairingCode: body?.pairingCode ? String(body.pairingCode) : null,
+        screenId: body?.screenId ? String(body.screenId) : null,
+      });
+      sendJson(res, result.ok ? 201 : 400, result);
+    });
+  }
+
+  function handleYoutubeDeviceUpdate(id, body, res) {
+    withYoutube(res, (service) => {
+      const device = service.store.getDevice(id);
+      if (!device) {
+        sendJson(res, 404, { ok: false, error: 'Unknown device' });
+        return;
+      }
+      // Only the two user-editable fields; tokens are never accepted over HTTP.
+      service.store.saveDevice({
+        ...device,
+        label: body?.label != null ? String(body.label) : device.label,
+        enabled: body?.enabled != null ? body.enabled !== false : device.enabled,
+      });
+      sendJson(res, 200, {
+        ok: true,
+        device: service.store.publicDevices().find((entry) => entry.id === String(id)),
+      });
+    });
+  }
+
+  function handleYoutubeDeviceDelete(id, res) {
+    withYoutube(res, (service) => {
+      const removed = service.store.removeDevice(id);
+      sendJson(res, removed ? 200 : 404, {
+        ok: removed,
+        ...(removed ? {} : { error: 'Unknown device' }),
+      });
+    });
+  }
+
+  async function handleYoutubeRelink(id, res) {
+    return withYoutube(res, async (service) => {
+      const result = await service.relinkDevice(id);
+      sendJson(res, result.ok ? 200 : 400, result);
+    });
+  }
+
+  function handleYoutubeNowPlayingGet(res) {
+    withYoutube(res, (service) => {
+      const status = service.statusSnapshot();
+      sendJson(res, 200, {
+        ok: true,
+        playing: status.playing,
+        sessions: status.sessions,
+        lastPlayed: status.lastPlayed,
+      });
+    });
+  }
+
+  function handleYoutubeHistory(query, res) {
+    withYoutube(res, (service) => {
+      sendJson(res, 200, {
+        ok: true,
+        sessions: service.store.history({
+          limit: Math.min(200, Number(query.get('limit')) || 20),
+          deviceId: query.get('deviceId') || null,
+        }),
+      });
+    });
+  }
+
+  async function handleYoutubeVideoGet(videoId, res) {
+    return withYoutube(res, async (service) => {
+      try {
+        sendJson(res, 200, { ok: true, video: await service.api.resolveVideo(videoId) });
+      } catch (error) {
+        sendJson(res, 502, { ok: false, error: error?.message || String(error) });
+      }
+    });
+  }
+
+  function handleYoutubeCacheStats(res) {
+    withYoutube(res, (service) => {
+      sendJson(res, 200, { ok: true, ...service.api.stats() });
+    });
+  }
+
+  function handleYoutubeCacheClear(query, res) {
+    withYoutube(res, (service) => {
+      sendJson(res, 200, { ok: true, ...service.api.clear(query.get('scope') || 'all') });
+    });
+  }
+
+  /** Save an API key from the admin page, then prove it works in one round trip. */
+  async function handleYoutubeApiKeySave(body, res) {
+    const key = String(body?.apiKey || '').trim();
+    if (!key) {
+      sendJson(res, 400, { ok: false, error: 'Paste a YouTube Data API key' });
+      return undefined;
+    }
+    const envKey = String(process.env.YOUTUBE_API_KEY || '').trim();
+    if (envKey) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'YOUTUBE_API_KEY is already set in .env and takes precedence. '
+          + 'Update or remove it in .env — this screen does not rewrite .env.',
+        source: 'env',
+      });
+      return undefined;
+    }
+    // Probe before writing so a bad paste does not clobber a working key.
+    config.youtube = { ...(config.youtube || {}), apiKey: key, apiKeySource: 'session' };
+    return withYoutube(res, async (service) => {
+      try {
+        // "Me at the zoo" — the oldest video on YouTube, and the least likely
+        // to ever be deleted, so a failure here means the key, not the video.
+        const [probe] = await service.api.fetchVideos(['jNQXAC9IVRw']);
+        if (!probe?.core) {
+          sendJson(res, 400, {
+            ok: false,
+            error: 'The key was accepted but returned no data',
+          });
+          return;
+        }
+        const { saveYoutubeApiKey } = require('./youtube-credentials');
+        const credentialsPath = config.youtube.credentialsPath
+          || require('./youtube-credentials').defaultCredentialsPath(config.ROOT);
+        saveYoutubeApiKey(credentialsPath, key);
+        config.youtube = {
+          ...(config.youtube || {}),
+          apiKey: key,
+          apiKeySource: 'session',
+          credentialsPath,
+        };
+        sendJson(res, 200, { ok: true, source: 'session' });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+      }
+    });
+  }
+
+  async function handleYoutubeNowPlayingPush(body, res) {
+    const service = youtubeService();
+    if (!service?.pushManualPreview) {
+      sendJson(res, 503, { ok: false, error: 'YouTube is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    try {
+      const result = await service.pushManualPreview({
+        device: deviceFrom(body),
+        requestedMode: previewModeFrom(body),
+        deviceId: body?.deviceId ? String(body.deviceId) : null,
+        videoId: body?.videoId ? String(body.videoId) : null,
+        send: (payload) => {
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId);
+          }
+          return sendUdpPayload(payload);
+        },
+      });
+      if (!result?.ok) {
+        sendJson(res, 400, { ok: false, error: result?.error || 'YouTube preview failed' });
+        return;
+      }
+      log.info('YouTube manual preview', { mode: result.mode, videoId: result.videoId, targetId });
+      sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  /**
+   * Serve a cached thumbnail or avatar. Unauthenticated like the other image
+   * routes so the display client can fetch without a session, and read-only
+   * against a fixed directory with a strict filename pattern.
+   */
+  function handleYoutubeImageServe(pathname, res) {
+    const service = youtubeService();
+    const name = path.basename(decodeURIComponent(pathname));
+    const dir = config.youtube?.thumbnailCachePath;
+    if (!service || !dir || !/^[a-f0-9]{40}\.(jpg|png|webp)$/i.test(name)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const filePath = path.join(dir, name);
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/jpeg',
+      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=604800',
+      ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+
+  function triviaOverridesFrom(body) {
+    const overrides = {};
+    if (body?.count != null && body.count !== '') {
+      overrides.count = Number(body.count);
+    }
+    if (Array.isArray(body?.categoryIds) && body.categoryIds.length) {
+      overrides.categoryIds = body.categoryIds.map(String);
+    }
+    if (body?.difficulty) {
+      overrides.difficulty = String(body.difficulty);
+    }
+    for (const key of ['questionSeconds', 'answerSeconds']) {
+      if (body?.[key] != null && body[key] !== '') {
+        overrides[key] = Number(body[key]);
+      }
+    }
+    return overrides;
+  }
+
+  function handleTriviaStatus(res) {
+    const service = triviaService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Trivia is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleTriviaCategories(res) {
+    const service = triviaService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Trivia is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, categories: service.categoriesWithCounts() });
+  }
+
+  function handleTriviaSettingsGet(res) {
+    const service = triviaService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Trivia is not available' });
+      return;
+    }
+    const settings = service.settings.get();
+    sendJson(res, 200, {
+      ok: true,
+      settings,
+      roundDurationSeconds: service.estimateDuration(),
+    });
+  }
+
+  function handleTriviaSettingsPut(body, res) {
+    const service = triviaService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Trivia is not available' });
+      return;
+    }
+    const result = service.settings.update(body || {});
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    sendJson(res, 200, {
+      ...result,
+      roundDurationSeconds: service.estimateDuration(),
+    });
+  }
+
+  /**
+   * Start a replenishment pass and answer straight away.
+   *
+   * A full pass walks every enabled category at one call per six seconds, so
+   * awaiting it holds the request open for minutes — long enough for the
+   * browser or any intermediary to give up and report a bare failure. The pool
+   * already reports `refilling`, so the settings card polls for the outcome.
+   */
+  function handleTriviaRefill(res) {
+    const service = triviaService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Trivia is not available' });
+      return;
+    }
+    service.pool.refill({ force: true }).then(
+      (result) => {
+        if (result?.error) {
+          log.warn('Trivia refill finished with an error', result.error);
+        }
+      },
+      (error) => log.warn('Trivia refill threw', error?.message || error),
+    );
+    sendJson(res, 202, {
+      ok: true,
+      started: true,
+      status: service.statusSnapshot(),
+    });
+  }
+
+  function handleTriviaPush(body, res) {
+    const service = triviaService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Trivia is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    const result = service.push(triviaOverridesFrom(body), {
+      device: deviceFrom(body),
+      triggeredBy: String(body?.triggeredBy || 'manual'),
+      send: (payload) => {
+        if (typeof deliverTargetedPayload === 'function') {
+          return deliverTargetedPayload(payload, targetId);
+        }
+        return sendUdpPayload(payload);
+      },
+    });
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    sendJson(res, 202, { ...result, targetId });
+  }
+
+  // ------------------------------------------------- Display Scheduler
+
+  /**
+   * Fire a registry command the same way the admin Push tile does.
+   *
+   * A scheduled airing goes through the identical handler as a manual push —
+   * a parallel dispatch path would drift the moment one of them is fixed. The
+   * handlers speak HTTP, so a capturing shim stands in for `res`.
+   */
+  async function airCommand(commandId, params = {}, { device = 'Scheduler' } = {}) {
+    const command = commandRegistry.get(commandId);
+    if (!command) {
+      throw new Error(`Unknown command: ${commandId}`);
+    }
+    let captured = { status: 0, body: null };
+    const res = {
+      writeHead(status) { captured.status = status; },
+      end(data) {
+        try {
+          captured.body = data ? JSON.parse(data) : null;
+        } catch {
+          captured.body = null;
+        }
+      },
+      setHeader() {},
+    };
+    // Scheduler airings always go to every display: a rule has no notion of a
+    // selected target, and "all" is what an ambient page wants anyway.
+    const body = { ...(command.body || {}), ...params, device, targetId: 'all', triggeredBy: 'scheduler' };
+
+    switch (commandId) {
+      case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
+      case 'tesla.battery': handleTeslaPush('tesla-battery', body, res); break;
+      case 'alexa.weather':
+        handleVoiceQueryPush('weather', 'what is the weather', 'weather-query', body, res); break;
+      case 'alexa.shopping-list':
+        handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res); break;
+      case 'alexa.timers': handleTimersPush(body, res); break;
+      case 'alexa.alarms': handleAlarmsPush(body, res); break;
+      case 'alexa.air-quality':
+        handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res); break;
+      case 'alexa.now-playing':
+        handleVoiceQueryPush('music', "what's playing", 'music-query', body, res); break;
+      case 'signal.slideshow': handlePhotoSlideshowPush(body, res); break;
+      case 'signal.guest-snaps': handleGuestPhotoboothPush(body, res); break;
+      case 'steam.now-playing':
+        // Push tiles post an empty body (auto). Scheduler rules must not: a
+        // "now playing" rule that quietly airs last-played is a different page.
+        await handleSteamNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+      case 'steam.last-played':
+        await handleSteamNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+      case 'steam.library-tour':
+        await handleSteamLibraryTourPush(body, res); break;
+      case 'psn.now-playing':
+        await handlePsnNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+      case 'psn.last-played':
+        await handlePsnNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+      case 'psn.library-tour':
+        await handlePsnLibraryTourPush(body, res); break;
+      case 'youtube.now-playing':
+        await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+      case 'youtube.last-played':
+        await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+      case 'trivia.show': handleTriviaPush(body, res); break;
+      default:
+        throw new Error(`Command "${commandId}" has no scheduler dispatch`);
+    }
+
+    if (captured.status >= 400) {
+      throw new Error(captured.body?.error || `Push failed (${captured.status})`);
+    }
+    return captured.body;
+  }
+
+  const scheduler = createDisplayScheduler({
+    config,
+    log,
+    commandRegistry,
+    isBusy: () => Boolean(displayBusy?.isBusy?.()),
+    timeZone: config.voiceEvents?.localTimeZone || null,
+    air: (rule) => airCommand(rule.commandId, rule.params, { device: 'Scheduler' }),
+  });
+
+  function schedulerRules() {
+    return scheduler.rules.all().map((rule) => scheduler.describeRule(rule));
+  }
+
+  function handleSchedulerStatus(res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...scheduler.status(),
+      display: displayBusy?.snapshot?.() || { busy: false },
+    });
+  }
+
+  function handleSchedulerRulesGet(res) {
+    sendJson(res, 200, { ok: true, rules: schedulerRules() });
+  }
+
+  function handleSchedulerRuleCreate(body, res) {
+    if (!commandRegistry.get(String(body?.commandId || ''))) {
+      sendJson(res, 400, { ok: false, error: 'Unknown commandId' });
+      return;
+    }
+    const rule = scheduler.rules.add(body || {});
+    sendJson(res, 201, { ok: true, rule: scheduler.describeRule(rule) });
+  }
+
+  function handleSchedulerRuleUpdate(id, body, res) {
+    const rule = scheduler.rules.update(id, body || {});
+    if (!rule) {
+      sendJson(res, 404, { ok: false, error: 'Unknown rule' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, rule: scheduler.describeRule(rule) });
+  }
+
+  function handleSchedulerRuleDelete(id, res) {
+    const removed = scheduler.rules.remove(id);
+    sendJson(res, removed ? 200 : 404, {
+      ok: removed,
+      ...(removed ? {} : { error: 'Unknown rule' }),
+    });
+  }
+
+  async function handleSchedulerRuleAir(id, res) {
+    const rule = scheduler.rules.get(id);
+    if (!rule) {
+      sendJson(res, 404, { ok: false, error: 'Unknown rule' });
+      return;
+    }
+    try {
+      const event = await scheduler.airRule(rule, { manual: true });
+      if (event?.outcome === 'aired') {
+        sendJson(res, 202, { ok: true, event });
+        return;
+      }
+      // Always name the reason. A bare status code here reads as a bridge fault
+      // when it is nearly always the command declining — nothing to show yet,
+      // a service not linked, an expired session.
+      sendJson(res, 502, {
+        ok: false,
+        error: event?.detail || `${rule.label || rule.commandId} could not air`,
+        event,
+      });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleSchedulerRuleReset(id, res) {
+    const rule = scheduler.rules.update(id, {
+      nextEvalAt: new Date().toISOString(),
+      lastAiredAt: null,
+      airingsToday: 0,
+      pending: false,
+      pendingSince: null,
+    });
+    if (!rule) {
+      sendJson(res, 404, { ok: false, error: 'Unknown rule' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, rule: scheduler.describeRule(rule) });
+  }
+
+  function windowMsFrom(value) {
+    const map = { '6h': 6, '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
+    return (map[String(value || '24h')] || 24) * 3600 * 1000;
+  }
+
+  function handleSchedulerActivity(query, res) {
+    const to = query.get('to') || new Date().toISOString();
+    const from = query.get('from')
+      || new Date(Date.parse(to) - windowMsFrom(query.get('window'))).toISOString();
+    sendJson(res, 200, {
+      ok: true,
+      from,
+      to,
+      events: scheduler.activity.query({
+        from,
+        to,
+        ruleId: query.get('ruleId') || undefined,
+        outcomes: query.get('outcomes') ? query.get('outcomes').split(',') : undefined,
+        limit: Math.min(20000, Number(query.get('limit')) || 5000),
+      }),
+      rules: schedulerRules(),
+    });
+  }
+
+  function handleSchedulerStats(query, res) {
+    const windowMs = windowMsFrom(query.get('window'));
+    const to = new Date();
+    const from = new Date(to.getTime() - windowMs);
+    sendJson(res, 200, {
+      ok: true,
+      window: query.get('window') || '24h',
+      stats: scheduler.activity.stats({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        ruleId: query.get('ruleId') || undefined,
+      }),
+      // Sparklines want a fixed 7-day series regardless of the stat window.
+      daily: scheduler.activity.dailySeries({ days: 7, ruleId: query.get('ruleId') || undefined }),
+      rules: schedulerRules(),
+    });
+  }
+
+  function handleSchedulerHeatmap(query, res) {
+    sendJson(res, 200, {
+      ok: true,
+      rows: scheduler.activity.heatmap({
+        days: Math.min(60, Math.max(1, Number(query.get('days')) || 14)),
+        ruleId: query.get('ruleId') || undefined,
+      }),
+    });
+  }
+
+  /** PUT/POST/DELETE under `/api/display-scheduler/` (display-scheduler.md §10). */
+  async function handleSchedulerWrite(method, pathname, body, res) {
+    const tail = pathname.slice('/api/display-scheduler/'.length);
+
+    if (tail === 'settings' && (method === 'PUT' || method === 'POST')) {
+      const previouslyActive = scheduler.settings.active;
+      const settingsNow = scheduler.updateSettings(body || {});
+      // Pause is the panic button when guests are over: it must take effect the
+      // instant it is pressed, including cutting a round already on screen.
+      if (previouslyActive && !settingsNow.active) {
+        scheduler.reportInterruption();
+      }
+      sendJson(res, 200, { ok: true, settings: settingsNow });
+      return;
+    }
+    if (tail === 'rules' && method === 'POST') {
+      handleSchedulerRuleCreate(body, res);
+      return;
+    }
+    if (tail === 'simulate' && method === 'POST') {
+      handleSchedulerSimulate(body, res);
+      return;
+    }
+
+    const match = /^rules\/([^/]+)(?:\/(air|reset))?$/.exec(tail);
+    if (match) {
+      const [, id, action] = match;
+      if (action === 'air' && method === 'POST') { await handleSchedulerRuleAir(id, res); return; }
+      if (action === 'reset' && method === 'POST') { handleSchedulerRuleReset(id, res); return; }
+      if (!action && method === 'PUT') { handleSchedulerRuleUpdate(id, body, res); return; }
+      if (!action && method === 'DELETE') { handleSchedulerRuleDelete(id, res); return; }
+    }
+    sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+  }
+
+  function handleSchedulerSimulate(body, res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...scheduler.simulate({
+        hours: Math.min(168, Math.max(1, Number(body?.hours) || 24)),
+        runs: Math.min(1000, Math.max(1, Number(body?.runs) || 200)),
+        seed: Number(body?.seed) || 1,
+      }),
+    });
+  }
+
+  // Steam/PSN previews default to `auto` (fall back to last played) because
+  // that is what the admin test button has always done. Scheduler rules send
+  // an explicit mode so a "now playing" rule cannot air a last-played card.
+  function previewModeFrom(body) {
+    const mode = String(body?.mode || '').trim();
+    return mode === 'now-playing' || mode === 'last-played' ? mode : 'auto';
   }
 
   function controlTokenFrom(req, body) {
@@ -1469,8 +2191,217 @@ function createWebServer({
     });
   }
 
+  function handleLibraryTourSettingsGet(res) {
+    const settings = libraryTourSettings.get();
+    sendJson(res, 200, {
+      ok: true,
+      secondsPerGame: settings.secondsPerGame,
+      secondsPerGameMin: MIN_SECONDS_PER_GAME,
+      secondsPerGameMax: MAX_SECONDS_PER_GAME,
+      sort: settings.sort,
+      sorts: VALID_SORTS,
+    });
+  }
+
+  function handleLibraryTourSettingsUpdate(body, res) {
+    const patch = {};
+    if (body && Object.prototype.hasOwnProperty.call(body, 'secondsPerGame')) {
+      patch.secondsPerGame = body.secondsPerGame;
+    }
+    if (body && Object.prototype.hasOwnProperty.call(body, 'sort')) {
+      patch.sort = body.sort;
+    }
+    const result = libraryTourSettings.update(patch);
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    log.info('Library tour settings updated', {
+      secondsPerGame: result.secondsPerGame,
+      sort: result.sort,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      secondsPerGame: result.secondsPerGame,
+      secondsPerGameMin: MIN_SECONDS_PER_GAME,
+      secondsPerGameMax: MAX_SECONDS_PER_GAME,
+      sort: result.sort,
+      sorts: VALID_SORTS,
+    });
+  }
+
+  async function handleSteamLibraryTourPreview(res) {
+    const service = steamLibraryTourService();
+    if (!service?.preview) {
+      sendJson(res, 503, { ok: false, error: 'Steam library tour is not available' });
+      return;
+    }
+    try {
+      const result = await service.preview();
+      sendJson(res, result.ok ? 200 : 400, { ok: Boolean(result.ok), ...result });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handlePsnLibraryTourPreview(res) {
+    const service = psnLibraryTourService();
+    if (!service?.preview) {
+      sendJson(res, 503, { ok: false, error: 'PSN library tour is not available' });
+      return;
+    }
+    try {
+      const result = await service.preview();
+      sendJson(res, result.ok ? 200 : 400, { ok: Boolean(result.ok), ...result });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleSteamLibraryTourPush(body, res) {
+    const service = steamLibraryTourService();
+    if (!service?.pushTour) {
+      sendJson(res, 503, { ok: false, error: 'Steam library tour is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    try {
+      const fromScheduler = body?.triggeredBy === 'scheduler';
+      const result = await service.pushTour({
+        device: deviceFrom(body),
+        secondsPerGame: body?.secondsPerGame,
+        sort: body?.sort,
+        // Manual Start tour loops; a scheduled airing walks the library once.
+        loop: body?.loop != null ? body.loop !== false : !fromScheduler,
+        trigger: fromScheduler ? 'steam-library-tour-scheduler' : 'steam-library-tour',
+        send: (payload, sendOptions = {}) => {
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId, sendOptions);
+          }
+          return sendUdpPayload(payload, sendOptions);
+        },
+      });
+      if (!result?.ok) {
+        sendJson(res, 400, { ok: false, error: result?.error || 'Steam library tour failed' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handlePsnLibraryTourPush(body, res) {
+    const service = psnLibraryTourService();
+    if (!service?.pushTour) {
+      sendJson(res, 503, { ok: false, error: 'PSN library tour is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    try {
+      const fromScheduler = body?.triggeredBy === 'scheduler';
+      const result = await service.pushTour({
+        device: deviceFrom(body),
+        secondsPerGame: body?.secondsPerGame,
+        sort: body?.sort,
+        loop: body?.loop != null ? body.loop !== false : !fromScheduler,
+        trigger: fromScheduler ? 'psn-library-tour-scheduler' : 'psn-library-tour',
+        send: (payload, sendOptions = {}) => {
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId, sendOptions);
+          }
+          return sendUdpPayload(payload, sendOptions);
+        },
+      });
+      if (!result?.ok) {
+        sendJson(res, 400, { ok: false, error: result?.error || 'PSN library tour failed' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleLibraryTourCard(query, res) {
+    const platform = String(query.get('platform') || '').trim().toLowerCase();
+    const id = String(query.get('id') || '').trim();
+    if (!id) {
+      sendJson(res, 400, { ok: false, error: 'id is required' });
+      return;
+    }
+    if (platform !== 'steam' && platform !== 'psn') {
+      sendJson(res, 400, { ok: false, error: 'platform must be steam or psn' });
+      return;
+    }
+    try {
+      if (platform === 'steam') {
+        const service = steamLibraryTourService();
+        if (!service?.enrichCard) {
+          sendJson(res, 503, { ok: false, error: 'Steam library tour is not available' });
+          return;
+        }
+        const result = await service.enrichCard(id);
+        sendJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+      const service = psnLibraryTourService();
+      if (!service?.enrichCard) {
+        sendJson(res, 503, { ok: false, error: 'PSN library tour is not available' });
+        return;
+      }
+      const result = await service.enrichCard(id, { name: query.get('name') || null });
+      sendJson(res, result.ok ? 200 : 400, result);
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleLibraryTourPlaylist(tourId, res) {
+    const id = String(tourId || '').trim();
+    if (!id) {
+      sendJson(res, 400, { ok: false, error: 'tourId is required' });
+      return;
+    }
+    const steam = steamLibraryTourService()?.getPlaylist?.(id);
+    const psn = psnLibraryTourService()?.getPlaylist?.(id);
+    const session = steam || psn;
+    if (!session) {
+      sendJson(res, 404, { ok: false, error: 'Unknown or expired library tour' });
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      tourId: session.tourId,
+      platform: session.platform,
+      secondsPerGame: session.secondsPerGame,
+      loop: session.loop,
+      count: session.games.length,
+      games: session.games,
+    });
+  }
+
   function handlePhotoSlideshowPush(body, res) {
-    const photos = Array.isArray(body?.photos) ? body.photos : [];
+    // The admin UI sends the list it already has on screen. Every other caller
+    // — the scheduler, a bare API call — just means "show the slideshow", so
+    // fall back to the shared cache the way the voice path does.
+    const photos = Array.isArray(body?.photos) && body.photos.length
+      ? body.photos
+      : photosToSlideshowEntries(qrImageCache.list(), config);
     const secondsPerPhoto = body?.secondsPerPhoto != null
       ? clampSecondsPerPhoto(body.secondsPerPhoto)
       : slideshowSettings.getSecondsPerPhoto();
@@ -1482,7 +2413,16 @@ function createWebServer({
       order: slideshowSettings.getOrder(),
     });
     if (!payload) {
-      sendJson(res, 400, { ok: false, error: 'No shared photos to show — share one via the Slideshow Manager first' });
+      // Photos in the cache but no payload means the URLs could not be built,
+      // which is a configuration problem and needs a different fix from
+      // "nobody has shared a photo yet".
+      const stored = qrImageCache.list().length;
+      sendJson(res, 400, {
+        ok: false,
+        error: stored
+          ? `${stored} shared photo(s) found but their URLs could not be built — set PROXY_OWN_IP so the display can reach them`
+          : 'No shared photos to show — share one via the Slideshow Manager first',
+      });
       return;
     }
     log.info('Photo slideshow pushed to display', {
@@ -1872,6 +2812,32 @@ function createWebServer({
           session: psnLive.session || null,
         };
       })(),
+      youtube: (() => {
+        const live = (typeof getYoutubeStatus === 'function' ? getYoutubeStatus() : null)
+          || youtubeService()?.statusSnapshot?.()
+          || null;
+        if (!live) {
+          return { enabled: config.youtube?.enabled !== false, configured: false, status: 'idle' };
+        }
+        return {
+          enabled: live.enabled,
+          configured: live.configured,
+          hasApiKey: live.hasApiKey,
+          apiKeySource: live.apiKeySource || config.youtube?.apiKeySource || null,
+          playing: live.playing,
+          deviceLabel: live.deviceLabel,
+          deviceCount: live.devices.length,
+          // A revoked link is the one YouTube failure a human has to fix, so
+          // it gets its own status rather than hiding inside a message (§8.3).
+          status: live.needsRelink.length
+            ? 'needs_relink'
+            : (!live.configured ? 'not_linked' : (live.playing ? 'playing' : 'idle')),
+          message: live.needsRelink.length
+            ? `${live.needsRelink.join(', ')} needs re-linking`
+            : live.message,
+          quotaUsedToday: live.cache?.quotaUsedToday ?? 0,
+        };
+      })(),
       displays: {
         count: displayRegistry?.list?.()?.length || 0,
         online: (displayRegistry?.list?.() || []).filter((d) => !d.stale).length,
@@ -1937,6 +2903,48 @@ function createWebServer({
     fs.createReadStream(filePath).pipe(res);
   }
 
+  /**
+   * Category backgrounds for the trivia panel.
+   *
+   * Unauthenticated on purpose — the display client is not a browser and holds
+   * no admin cookie. An admin-uploaded replacement in `data/trivia-artwork/`
+   * shadows the shipped file of the same name, so a custom background needs no
+   * code change. Cached for a day rather than forever so a replacement lands
+   * without the display holding a stale image indefinitely.
+   */
+  function handleTriviaArtworkServe(pathname, res) {
+    const name = path.basename(decodeURIComponent(pathname));
+    if (!/^[a-z0-9-]+\.(webp|png|jpe?g)$/i.test(name)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const root = config.ROOT || path.resolve(__dirname, '..');
+    const overrideDir = path.resolve(root, 'data/trivia-artwork');
+    // Prefer admin overrides, then the shipped pack, then the editable
+    // generator output under `dev assets/` (source checkouts only — Docker
+    // images only contain `src/web/trivia-artwork`).
+    const candidates = [
+      path.join(overrideDir, name),
+      path.join(__dirname, 'web', 'trivia-artwork', name),
+      path.join(root, 'dev assets', 'trivia-category-artwork', name),
+    ];
+    const filePath = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/webp',
+      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=86400',
+      ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+
   function serveStaticForRequest(req, pathname, res) {
     if (isAdminHtmlPath(pathname) && !adminAuth.assertAuthorized(req).ok) {
       redirectToAdminLogin(res, pathname === '/admin/index.html' ? '/admin/' : pathname);
@@ -1975,10 +2983,78 @@ function createWebServer({
           handleQrImageServe(pathname, res);
           return;
         }
+        if (pathname.startsWith(TRIVIA_ARTWORK_ROUTE_PREFIX)) {
+          handleTriviaArtworkServe(pathname, res);
+          return;
+        }
+        if (pathname.startsWith(YOUTUBE_IMAGE_ROUTE_PREFIX)) {
+          handleYoutubeImageServe(pathname, res);
+          return;
+        }
         // Admin-only JSON APIs
         if (pathname === '/api/status') {
           if (!requireAdminSession(req, res)) return;
           sendJson(res, 200, buildStatus());
+          return;
+        }
+        if (pathname === '/api/commands') {
+          if (!requireAdminSession(req, res)) return;
+          sendJson(res, 200, { ok: true, commands: commandRegistry.list() });
+          return;
+        }
+        if (pathname.startsWith('/api/display-scheduler/')) {
+          if (!requireAdminSession(req, res)) return;
+          const tail = pathname.slice('/api/display-scheduler/'.length);
+          const query = reqUrl.searchParams;
+          if (tail === 'settings') {
+            sendJson(res, 200, { ok: true, settings: scheduler.settings });
+            return;
+          }
+          if (tail === 'rules') { handleSchedulerRulesGet(res); return; }
+          if (tail === 'status') { handleSchedulerStatus(res); return; }
+          if (tail === 'activity') { handleSchedulerActivity(query, res); return; }
+          if (tail === 'stats') { handleSchedulerStats(query, res); return; }
+          if (tail === 'heatmap') { handleSchedulerHeatmap(query, res); return; }
+          sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+          return;
+        }
+        if (pathname === '/api/trivia/pool/status') {
+          if (!requireAdminSession(req, res)) return;
+          handleTriviaStatus(res);
+          return;
+        }
+        if (pathname === '/api/trivia/categories') {
+          if (!requireAdminSession(req, res)) return;
+          handleTriviaCategories(res);
+          return;
+        }
+        if (pathname === '/api/trivia/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleTriviaSettingsGet(res);
+          return;
+        }
+        if (pathname.startsWith('/api/youtube/')) {
+          if (!requireAdminSession(req, res)) return;
+          const tail = pathname.slice('/api/youtube/'.length);
+          const query = reqUrl.searchParams;
+          if (tail === 'settings') { handleYoutubeSettingsGet(res); return; }
+          if (tail === 'devices') { handleYoutubeDevicesGet(res); return; }
+          if (tail === 'now-playing') { handleYoutubeNowPlayingGet(res); return; }
+          if (tail === 'history') { handleYoutubeHistory(query, res); return; }
+          if (tail === 'cache/stats') { handleYoutubeCacheStats(res); return; }
+          const videoMatch = /^videos\/([\w-]{6,20})$/.exec(tail);
+          if (videoMatch) { await handleYoutubeVideoGet(videoMatch[1], res); return; }
+          const deviceMatch = /^devices\/([^/]+)\/status$/.exec(tail);
+          if (deviceMatch) {
+            const service = youtubeService();
+            const device = service?.store.publicDevices()
+              .find((entry) => entry.id === deviceMatch[1]);
+            sendJson(res, device ? 200 : 404, device
+              ? { ok: true, device }
+              : { ok: false, error: 'Unknown device' });
+            return;
+          }
+          sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
           return;
         }
         if (pathname === '/api/photos') {
@@ -1996,12 +3072,72 @@ function createWebServer({
           handleSlideshowSettingsGet(res);
           return;
         }
+        // Display clients fetch playlists + rich cards during a tour — no admin
+        // session (same trust model as trivia artwork / QR image URLs on the LAN).
+        if (pathname === '/api/library-tour/card') {
+          await handleLibraryTourCard(reqUrl.searchParams, res);
+          return;
+        }
+        if (pathname.startsWith('/api/library-tour/playlist/')) {
+          const tourId = pathname.slice('/api/library-tour/playlist/'.length);
+          handleLibraryTourPlaylist(tourId, res);
+          return;
+        }
+        if (pathname === '/api/library-tour/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleLibraryTourSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/library-tour/steam') {
+          if (!requireAdminSession(req, res)) return;
+          await handleSteamLibraryTourPreview(res);
+          return;
+        }
+        if (pathname === '/api/library-tour/psn') {
+          if (!requireAdminSession(req, res)) return;
+          await handlePsnLibraryTourPreview(res);
+          return;
+        }
         // Login page + guest booth + shared logos are public; admin shell needs a session.
         if (isAdminLoginPath(pathname) || !pathname.startsWith('/admin')) {
           serveStatic(pathname, res);
           return;
         }
         serveStaticForRequest(req, pathname, res);
+        return;
+      }
+
+      // Scheduler rules and YouTube devices are the bridge's only REST-shaped
+      // collections, so PUT/DELETE are routed here rather than folded into POST.
+      if (req.method === 'PUT' || req.method === 'DELETE') {
+        const isScheduler = pathname.startsWith('/api/display-scheduler/');
+        const isYoutube = pathname.startsWith('/api/youtube/');
+        if (!isScheduler && !isYoutube) {
+          res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('Method not allowed');
+          return;
+        }
+        if (!requireAdminSession(req, res)) return;
+        const body = req.method === 'PUT' ? await readJsonBody(req, MAX_BODY_BYTES) : {};
+        if (isScheduler) {
+          await handleSchedulerWrite(req.method, pathname, body, res);
+          return;
+        }
+        const tail = pathname.slice('/api/youtube/'.length);
+        if (tail === 'settings' && req.method === 'PUT') {
+          handleYoutubeSettingsPut(body, res);
+          return;
+        }
+        const deviceMatch = /^devices\/([^/]+)$/.exec(tail);
+        if (deviceMatch) {
+          if (req.method === 'PUT') {
+            handleYoutubeDeviceUpdate(deviceMatch[1], body, res);
+          } else {
+            handleYoutubeDeviceDelete(deviceMatch[1], res);
+          }
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
         return;
       }
 
@@ -2050,6 +3186,31 @@ function createWebServer({
         // Everything else requires an admin session.
         if (!requireAdminSession(req, res)) {
           return;
+        }
+
+        if (pathname.startsWith('/api/display-scheduler/')) {
+          await handleSchedulerWrite(req.method, pathname, body, res);
+          return;
+        }
+
+        if (pathname.startsWith('/api/youtube/')) {
+          const tail = pathname.slice('/api/youtube/'.length);
+          if (tail === 'devices/discover') { await handleYoutubeDiscover(res); return; }
+          if (tail === 'devices/link') { await handleYoutubeLink(body, res); return; }
+          if (tail === 'api-key') { await handleYoutubeApiKeySave(body, res); return; }
+          if (tail === 'cache/clear') { handleYoutubeCacheClear(reqUrl.searchParams, res); return; }
+          const relinkMatch = /^devices\/([^/]+)\/relink$/.exec(tail);
+          if (relinkMatch) { await handleYoutubeRelink(relinkMatch[1], res); return; }
+          sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+          return;
+        }
+
+        // A human pressed a button. Manual is the highest precedence tier (§6),
+        // so hold the scheduler off for a full global gap rather than yanking
+        // the page away. `airCommand` calls the handlers directly and so never
+        // reaches here, which is what keeps scheduled airings out of this.
+        if (pathname.startsWith('/api/push/') || pathname === '/api/qr/push') {
+          scheduler.noteManualPush();
         }
 
         switch (pathname) {
@@ -2104,6 +3265,15 @@ function createWebServer({
             return;
           case '/api/slideshow/settings':
             handleSlideshowSettingsUpdate(body, res);
+            return;
+          case '/api/library-tour/settings':
+            handleLibraryTourSettingsUpdate(body, res);
+            return;
+          case '/api/push/steam-library-tour':
+            await handleSteamLibraryTourPush(body, res);
+            return;
+          case '/api/push/psn-library-tour':
+            await handlePsnLibraryTourPush(body, res);
             return;
           case '/api/push/url':
             await handleUrlPush(body, res);
@@ -2161,6 +3331,18 @@ function createWebServer({
             return;
           case '/api/push/psn-now-playing':
             await handlePsnNowPlayingPush(body, res);
+            return;
+          case '/api/push/youtube-now-playing':
+            await handleYoutubeNowPlayingPush(body, res);
+            return;
+          case '/api/push/trivia':
+            handleTriviaPush(body, res);
+            return;
+          case '/api/trivia/settings':
+            handleTriviaSettingsPut(body, res);
+            return;
+          case '/api/trivia/pool/refill':
+            handleTriviaRefill(res);
             return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
@@ -2261,10 +3443,15 @@ function createWebServer({
       }
     }
 
+    // The tick loop lives with the web server because every airing goes through
+    // the same push handlers the admin UI calls.
+    scheduler.start();
+
     return controlServer;
   }
 
   function stop() {
+    scheduler.stop();
     closeTeslaCallbackServer({ force: true });
     for (const target of [server, redirectServer]) {
       if (!target) {
@@ -2286,6 +3473,8 @@ function createWebServer({
     start,
     stop,
     buildStatus,
+    scheduler,
+    airCommand,
   };
 }
 

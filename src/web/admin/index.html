@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal25">
+  <link rel="stylesheet" href="styles.css?v=signal35">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -66,83 +66,18 @@
     <section class="tab-panel active" id="tab-push">
       <div class="card-grid">
 
+        <!-- Tiles are rendered from GET /api/commands (src/command-registry.js)
+             so the Push grid, the scheduler rule editor and the push routes
+             can never drift apart. See app.js → renderPushGrid(). -->
         <div class="section-label">Tesla</div>
-        <div class="card-row">
-          <button class="push-card" id="btn-tesla-dashboard">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6.5 10.5 9 8l3 3 3.5-3.5L18 10"/></svg>
-            </span>
-            <span class="push-card-title">Tesla Dashboard</span>
-            <span class="push-card-sub">Map, climate, tires &amp; more</span>
-          </button>
-          <button class="push-card" id="btn-tesla-battery">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7.5" width="17" height="9" rx="2"/><path d="M21.5 10.5v3"/><path d="M6 10.5v3M9.5 10.5v3M13 10.5v3"/></svg>
-            </span>
-            <span class="push-card-title">Tesla Battery</span>
-            <span class="push-card-sub">Charge level &amp; status</span>
-          </button>
-        </div>
+        <div class="card-row" id="push-row-tesla" data-push-row="Tesla"></div>
 
+        <!-- Steam / PSN / YouTube sit next to Trivia as one auto-mode tile each
+             (live session if there is one, otherwise last played) — the same
+             behaviour as the Settings test buttons. -->
         <div class="section-label">Quick Push</div>
-        <div class="card-row card-row-quad">
-          <button type="button" class="push-card push-card-photo" id="btn-push-photo-slideshow">
-            <span class="push-icon push-icon-photo">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
-            </span>
-            <span class="push-card-title">Shared Photo Slideshow</span>
-            <span class="push-card-sub">Play every <span class="push-booth-link" data-booth-link role="link" tabindex="0">uploaded photo</span></span>
-          </button>
-          <button class="push-card" id="btn-push-weather">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 12.1 3.5 3.5 0 0 0 7.5 18Z"/></svg>
-            </span>
-            <span class="push-card-title">Weather Forecast</span>
-            <span class="push-card-sub">Current conditions &amp; outlook</span>
-          </button>
-          <button class="push-card" id="btn-push-shopping-list">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h14l-1.5 9h-11z"/><path d="M6 6 5 3H3"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="16.5" cy="19" r="1.5"/></svg>
-            </span>
-            <span class="push-card-title">Shopping List</span>
-            <span class="push-card-sub">Everything on the list now</span>
-          </button>
-          <button class="push-card" id="btn-push-timers">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>
-            </span>
-            <span class="push-card-title">Active Timers</span>
-            <span class="push-card-sub">Everything running now</span>
-          </button>
-          <button class="push-card" id="btn-push-guest-snaps">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><path d="M5.5 7h3M7 5.5v3"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M15 17h4M17 15v4"/><path d="M13 7h4M17 3v4M3 17h4M7 13v4"/></svg>
-            </span>
-            <span class="push-card-title">Guest Snaps</span>
-            <span class="push-card-sub">Wi‑Fi + booth QR welcome</span>
-          </button>
-          <button class="push-card" id="btn-push-air-quality">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14c2.5-1.5 4-1.5 6.5 0s4 1.5 6.5 0 4-1.5 6.5 0"/><path d="M4 9c2.5-1.5 4-1.5 6.5 0s4 1.5 6.5 0 4-1.5 6.5 0"/><path d="M4 19c2.5-1.5 4-1.5 6.5 0s4 1.5 6.5 0"/></svg>
-            </span>
-            <span class="push-card-title">Indoor Air Quality</span>
-            <span class="push-card-sub">All monitors right now</span>
-          </button>
-          <button class="push-card" id="btn-push-now-playing">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/></svg>
-            </span>
-            <span class="push-card-title">Now Playing</span>
-            <span class="push-card-sub">Whatever Alexa is playing</span>
-          </button>
-          <button class="push-card" id="btn-push-alarms">
-            <span class="push-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/><path d="M12 3v1"/></svg>
-            </span>
-            <span class="push-card-title">Show Alarms</span>
-            <span class="push-card-sub">Everything scheduled now</span>
-          </button>
-        </div>
+        <div class="card-row card-row-quad" id="push-row-quick"
+             data-push-row="Signal,Alexa,Trivia,Steam,PSN,YouTube"></div>
 
         <div class="push-columns">
           <div class="push-column">
@@ -311,6 +246,121 @@
       </div>
     </section>
 
+    <!-- ========================= SCHEDULER TAB ========================= -->
+    <section class="tab-panel" id="tab-scheduler">
+      <div class="card-grid">
+        <div class="sched-head">
+          <div class="segmented" id="sched-view-tabs">
+            <button type="button" class="segmented-btn active" data-sched-view="rules">Rules</button>
+            <button type="button" class="segmented-btn" data-sched-view="activity">Activity</button>
+          </div>
+          <label class="sched-toggle">
+            <input type="checkbox" id="sched-active">
+            <span id="sched-active-label">Paused</span>
+          </label>
+        </div>
+
+        <!-- ---------------------------- Rules view ---------------------------- -->
+        <div id="sched-view-rules">
+          <div class="card sched-nextup-card">
+            <div class="sched-nextup" id="sched-nextup">Loading…</div>
+            <p class="hint">Automatically shows pages when the display is idle. It is the lowest-priority source — it never interrupts a live page, a manual push, or a page still counting down.</p>
+          </div>
+
+          <div id="sched-rule-list"></div>
+
+          <div class="card sched-add-card">
+            <label class="field-label" for="sched-add-command">Add a rule</label>
+            <select class="field-input" id="sched-add-command"></select>
+            <button class="btn btn-accent btn-block" id="btn-sched-add" style="margin-top:10px">Add rule</button>
+          </div>
+
+          <div class="section-label">Global settings</div>
+          <div class="card">
+            <div class="trivia-settings-row">
+              <div class="trivia-settings-col">
+                <label class="field-label" for="sched-min-gap">Minimum gap between airings</label>
+                <div class="slider-row">
+                  <input type="range" id="sched-min-gap" min="0" max="60" step="1" value="5" aria-label="Minimum minutes between scheduled airings">
+                  <span class="slider-value" id="sched-min-gap-value">5m</span>
+                </div>
+                <p class="hint">Also applied after a manual push, so the scheduler never takes the display straight back.</p>
+              </div>
+              <div class="trivia-settings-col">
+                <label class="field-label" for="sched-tick">Tick interval</label>
+                <div class="slider-row">
+                  <input type="range" id="sched-tick" min="5" max="60" step="5" value="30" aria-label="Scheduler tick seconds">
+                  <span class="slider-value" id="sched-tick-value">30s</span>
+                </div>
+                <p class="hint">How often rules are considered. This is the resolution of the whole scheduler.</p>
+              </div>
+            </div>
+            <div class="trivia-settings-row">
+              <div class="trivia-settings-col">
+                <label class="trivia-check"><input type="checkbox" id="sched-quiet-enabled" checked><span>Quiet hours</span></label>
+                <div class="sched-quiet-row">
+                  <input class="field-input" id="sched-quiet-start" type="time" value="23:00" aria-label="Quiet hours start">
+                  <span class="sched-quiet-sep">to</span>
+                  <input class="field-input" id="sched-quiet-end" type="time" value="07:00" aria-label="Quiet hours end">
+                </div>
+              </div>
+              <div class="trivia-settings-col">
+                <label class="field-label" for="sched-retention">Keep activity history for</label>
+                <div class="slider-row">
+                  <input type="range" id="sched-retention" min="1" max="90" step="1" value="30" aria-label="History retention days">
+                  <span class="slider-value" id="sched-retention-value">30d</span>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-outline btn-block" id="btn-sched-simulate" style="margin-top:12px">Simulate next 24 hours</button>
+            <div id="sched-simulation" hidden></div>
+          </div>
+        </div>
+
+        <!-- --------------------------- Activity view -------------------------- -->
+        <div id="sched-view-activity" hidden>
+          <div class="sched-stat-strip" id="sched-stats"></div>
+
+          <div class="card sched-timeline-card">
+            <div class="sched-timeline-head">
+              <div class="section-label" style="margin:0">Timeline</div>
+              <div class="sched-timeline-controls">
+                <label class="trivia-check"><input type="checkbox" id="sched-show-skips" checked><span>Show skips</span></label>
+                <div class="segmented" id="sched-range-tabs">
+                  <button type="button" class="segmented-btn" data-range="6h">6h</button>
+                  <button type="button" class="segmented-btn" data-range="12h">12h</button>
+                  <button type="button" class="segmented-btn active" data-range="24h">24h</button>
+                  <button type="button" class="segmented-btn" data-range="7d">7d</button>
+                </div>
+              </div>
+            </div>
+            <div class="sched-timeline-scroll">
+              <svg class="sched-timeline" id="sched-timeline" role="img" aria-label="Scheduler activity timeline"></svg>
+            </div>
+            <div class="sched-legend">
+              <span><i class="sched-key sched-key-aired"></i>aired</span>
+              <span><i class="sched-key sched-key-dice"></i>rolled &amp; lost</span>
+              <span><i class="sched-key sched-key-tiebreak"></i>lost tie-break</span>
+              <span><i class="sched-key sched-key-blocked"></i>blocked</span>
+              <span><i class="sched-key sched-key-error"></i>error</span>
+              <span><i class="sched-key sched-key-quiet"></i>quiet hours</span>
+            </div>
+            <p class="hint" id="sched-timeline-empty" hidden></p>
+          </div>
+
+          <div class="card sched-inspector" id="sched-inspector" hidden></div>
+
+          <div class="section-label">Per rule</div>
+          <div id="sched-rule-stats"></div>
+
+          <div class="section-label">Patterns (last 14 days)</div>
+          <div class="card">
+            <div class="sched-heatmap" id="sched-heatmap"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ========================= SLIDESHOW TAB ========================= -->
     <section class="tab-panel" id="tab-slideshow">
       <div class="card-grid">
@@ -318,6 +368,7 @@
 
         <div class="card slideshow-toolbar-card">
           <div class="slideshow-toolbar">
+            <button type="button" class="btn btn-accent" id="btn-slideshow-push">Show on display</button>
             <button type="button" class="btn btn-outline" id="btn-slideshow-select">Select</button>
             <div class="slideshow-toolbar-selecting" id="slideshow-toolbar-selecting" hidden>
               <button type="button" class="btn btn-outline" id="btn-slideshow-select-all">Select All</button>
@@ -382,6 +433,16 @@
             Now Playing / Last Played
           </button>
           <p class="hint" id="steam-test-hint">Pushes whatever is playing now (skips the theater PC check). If idle, shows last played — dismissible.</p>
+          <p class="hint" id="steam-library-count">Library: checking…</p>
+          <label class="field-label" for="steam-library-tour-seconds-slider">Seconds per game (shared)</label>
+          <div class="slider-row">
+            <input type="range" class="library-tour-seconds-slider" id="steam-library-tour-seconds-slider"
+                   min="5" max="300" step="5" value="60" aria-label="Seconds per library tour game" />
+            <span class="slider-value library-tour-seconds-value" id="steam-library-tour-seconds-value">60s</span>
+          </div>
+          <button class="btn btn-outline btn-block" id="btn-steam-library-tour" style="margin-top:10px">
+            Start library tour
+          </button>
           <p class="hint" id="steam-api-key-hint">API key comes from <code>STEAM_API_KEY</code> in <code>.env</code> only. Overlay shows when this Steam account is in-game on any PC (no software needed on the gaming machine).</p>
         </div>
 
@@ -404,6 +465,151 @@
             <a href="https://ca.account.sony.com/api/v1/ssocookie" target="_blank" rel="noopener">NPSSO cookie here</a>.
           </p>
           <p class="hint" id="psn-test-hint">Uses unofficial PSN APIs — treat the NPSSO like a password. Enable activity sharing on the console/account. PS5/PS4 best; PS3 limited.</p>
+          <p class="hint" id="psn-library-count">Library: checking…</p>
+          <label class="field-label" for="psn-library-tour-seconds-slider">Seconds per game (shared)</label>
+          <div class="slider-row">
+            <input type="range" class="library-tour-seconds-slider" id="psn-library-tour-seconds-slider"
+                   min="5" max="300" step="5" value="60" aria-label="Seconds per library tour game" />
+            <span class="slider-value library-tour-seconds-value" id="psn-library-tour-seconds-value">60s</span>
+          </div>
+          <button class="btn btn-outline btn-block" id="btn-psn-library-tour" style="margin-top:10px">
+            Start library tour
+          </button>
+        </div>
+
+        <div class="section-label">YouTube</div>
+        <div class="card youtube-settings-card" id="youtube-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Now Playing</div>
+            <span class="status-pill" id="youtube-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="youtube-status-detail">Loading…</p>
+
+          <div class="settings-columns settings-columns-3">
+            <div class="settings-col">
+              <label class="field-label">Linked TVs</label>
+              <div class="yt-device-list" id="youtube-devices"></div>
+              <p class="hint" id="youtube-devices-empty">
+                No TVs linked yet. On the Apple TV open YouTube, go to
+                <strong>Settings → Link with TV code</strong>, then paste the 12-digit code below.
+              </p>
+
+              <div class="yt-link-row">
+                <input class="field-input" id="youtube-pair-code" type="text" inputmode="numeric"
+                       autocomplete="off" placeholder="TV code (e.g. 123 456 789 012)" />
+                <input class="field-input" id="youtube-pair-label" type="text"
+                       autocomplete="off" placeholder="Name (e.g. Movie Theater)" />
+              </div>
+              <button class="btn btn-accent btn-block" id="btn-youtube-link" style="margin-top:8px">Link TV</button>
+              <button class="btn btn-outline btn-block" id="btn-youtube-discover" style="margin-top:8px">Scan the network</button>
+              <div class="yt-discovered" id="youtube-discovered" hidden></div>
+
+              <label class="field-label" style="margin-top:14px">When two TVs are playing</label>
+              <div class="segmented" id="youtube-multi-device">
+                <button type="button" class="segmented-btn active" data-mode="most-recent">Most recent</button>
+                <button type="button" class="segmented-btn" data-mode="preferred">Preferred TV</button>
+              </div>
+              <select class="field-input" id="youtube-preferred-device" style="margin-top:8px" hidden></select>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label" for="youtube-api-key">Data API key</label>
+              <input class="field-input" id="youtube-api-key" type="password" autocomplete="off"
+                     placeholder="Paste a YouTube Data API v3 key" />
+              <button class="btn btn-outline btn-block" id="btn-youtube-api-key" style="margin-top:8px">Save and test key</button>
+              <p class="hint">
+                Create one in the
+                <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud console</a>.
+                Titles, thumbnails and stats need it; playback detection does not.
+              </p>
+
+              <div class="yt-quota" id="youtube-quota"></div>
+              <button class="btn btn-outline btn-block" id="btn-youtube-cache-clear" style="margin-top:8px">Clear metadata cache</button>
+              <button class="btn btn-outline btn-block" id="btn-youtube-test-push" style="margin-top:8px">
+                Now Playing / Last Played
+              </button>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label">Card contents</label>
+              <label class="trivia-check"><input type="checkbox" id="youtube-show-description" checked><span>Description</span></label>
+              <label class="trivia-check"><input type="checkbox" id="youtube-show-subscribers" checked><span>Subscriber count</span></label>
+              <label class="trivia-check"><input type="checkbox" id="youtube-show-dislikes" checked><span>Estimated dislikes</span></label>
+              <label class="trivia-check"><input type="checkbox" id="youtube-show-shorts"><span>Shorts (under 60s)</span></label>
+
+              <label class="field-label" style="margin-top:12px" for="youtube-confirm-seconds">Confirm playback after</label>
+              <div class="slider-row">
+                <input type="range" id="youtube-confirm-seconds" min="0" max="30" step="1" value="5" aria-label="Seconds of playback before the card appears">
+                <span class="slider-value" id="youtube-confirm-seconds-value">5s</span>
+              </div>
+              <p class="hint">Stops a card appearing while you scroll the home screen.</p>
+
+              <label class="field-label" style="margin-top:10px" for="youtube-description-lines">Description lines</label>
+              <div class="slider-row">
+                <input type="range" id="youtube-description-lines" min="1" max="6" step="1" value="3" aria-label="Description lines on the card">
+                <span class="slider-value" id="youtube-description-lines-value">3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label">Trivia</div>
+        <div class="card trivia-settings-card" id="trivia-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Question pool</div>
+            <span class="status-pill" id="trivia-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="trivia-status-detail">Loading pool…</p>
+
+          <div class="settings-columns settings-columns-3">
+            <div class="settings-col">
+              <label class="field-label">Sources</label>
+              <div class="trivia-check-row" id="trivia-providers"></div>
+              <p class="hint" id="trivia-attribution-hint"></p>
+
+              <label class="field-label" style="margin-top:12px">Difficulty</label>
+              <div class="trivia-check-row" id="trivia-difficulties"></div>
+
+              <label class="field-label" style="margin-top:12px">Question types</label>
+              <div class="trivia-check-row" id="trivia-types"></div>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label" for="trivia-count-slider">Questions per round</label>
+              <div class="slider-row">
+                <input type="range" id="trivia-count-slider" min="1" max="10" step="1" value="5" aria-label="Questions per trivia round">
+                <span class="slider-value" id="trivia-count-value">5</span>
+              </div>
+              <p class="hint">Round length: <strong id="trivia-round-length">—</strong></p>
+
+              <label class="field-label" style="margin-top:10px" for="trivia-question-seconds">Question time</label>
+              <div class="slider-row">
+                <input type="range" id="trivia-question-seconds" min="5" max="45" step="1" value="15" aria-label="Seconds per trivia question">
+                <span class="slider-value" id="trivia-question-seconds-value">15s</span>
+              </div>
+
+              <label class="field-label" style="margin-top:10px" for="trivia-answer-seconds">Answer time</label>
+              <div class="slider-row">
+                <input type="range" id="trivia-answer-seconds" min="3" max="30" step="1" value="7" aria-label="Seconds per trivia answer reveal">
+                <span class="slider-value" id="trivia-answer-seconds-value">7s</span>
+              </div>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label">Round shape</label>
+              <label class="trivia-check"><input type="checkbox" id="trivia-show-intro" checked><span>Show intro card</span></label>
+              <label class="trivia-check"><input type="checkbox" id="trivia-show-summary" checked><span>Show summary card</span></label>
+              <label class="trivia-check"><input type="checkbox" id="trivia-shuffle-categories" checked><span>Spread questions across categories</span></label>
+              <p class="hint">Off keeps a whole round inside one category.</p>
+
+              <button class="btn btn-outline btn-block" id="btn-trivia-refill" style="margin-top:12px">Fetch more questions now</button>
+              <p class="hint">The bridge tops the pool up on its own; sources rate-limit, so a full pass takes a few minutes and runs in the background.</p>
+            </div>
+          </div>
+
+          <label class="field-label" style="margin-top:14px">Categories</label>
+          <div class="trivia-category-grid" id="trivia-categories"></div>
+          <p class="hint" id="trivia-starved-hint" hidden></p>
         </div>
 
         <div class="section-label">Slideshow</div>
@@ -457,6 +663,10 @@
     <button class="tab-btn" data-tab="control" id="tab-btn-control" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/><circle cx="9" cy="11" r="1.2"/><path d="M14 9.5h3M14 12.5h2"/></svg>
       <span>Control</span>
+    </button>
+    <button class="tab-btn" data-tab="scheduler">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <span>Scheduler</span>
     </button>
     <button class="tab-btn" data-tab="slideshow">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
@@ -515,9 +725,10 @@
       </div>
       <p class="lightbox-counter" id="lightbox-counter"></p>
       <p class="lightbox-uploaded-at" id="lightbox-uploaded-at"></p>
-      <div class="sheet-actions">
+      <div class="sheet-actions sheet-actions-lightbox">
         <button class="btn btn-outline" id="btn-lightbox-cancel">Close</button>
-        <button class="btn btn-danger" id="btn-lightbox-delete">Delete Photo</button>
+        <button class="btn btn-danger" id="btn-lightbox-delete">Delete</button>
+        <button class="btn btn-accent" id="btn-lightbox-push">Show on display</button>
       </div>
     </div>
   </div>
@@ -556,6 +767,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal25"></script>
+  <script src="app.js?v=signal35"></script>
 </body>
 </html>

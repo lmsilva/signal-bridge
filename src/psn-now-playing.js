@@ -12,12 +12,22 @@ const {
   fetchPlayedTitles,
   enrichPsnTitle,
   findPlayedTitle,
+  psnReadingIsThin,
 } = require('./psn-api');
+
+/**
+ * PSN publishes a title's library entry, playtime and trophy set some way into
+ * the session, not at launch — so the first enrichment almost always comes back
+ * bare. Re-check on this schedule (ms after the previous look) until the card
+ * is complete or we run out of patience.
+ */
+const REENRICH_DELAYS_MS = [45_000, 90_000, 180_000, 300_000, 600_000];
 const { resolvePsnCredentials, markPsnAuthStatus } = require('./psn-session');
 const {
   buildPsnNowPlayingPayload,
   buildPsnNowPlayingClosePayload,
 } = require('./udp-payload');
+const { createPsnLibraryCache } = require('./psn-library-cache');
 
 function createPsnNowPlaying({
   config,
@@ -33,6 +43,7 @@ function createPsnNowPlaying({
     fetchPlayedTitles,
     enrichPsnTitle,
   };
+  const libraryCache = createPsnLibraryCache(config, log);
 
   let timer = null;
   let running = false;
@@ -45,6 +56,8 @@ function createPsnNowPlaying({
    *   pushed: boolean,
    *   lastPushAt: number,
    *   details: object | null,
+   *   enrichAttempts: number,
+   *   nextEnrichAt: number,
    * }} */
   let session = null;
   let lastError = null;
@@ -93,11 +106,20 @@ function createPsnNowPlaying({
     };
   }
 
+  function cacheReading(reading) {
+    try {
+      libraryCache.rememberTitleFromReading(reading);
+    } catch {
+      // Cache is best-effort.
+    }
+  }
+
   function pushOpen(reading) {
     const payload = buildPsnNowPlayingPayload(reading, config);
     if (!payload) {
       return;
     }
+    cacheReading(reading);
     sendUdpPayload(payload);
     if (session) {
       session.pushed = true;
@@ -127,7 +149,60 @@ function createPsnNowPlaying({
       pushed: false,
       lastPushAt: 0,
       details: null,
+      enrichAttempts: 0,
+      nextEnrichAt: 0,
     };
+  }
+
+  /** How many of the four optional bands this reading can actually fill. */
+  function readingFillCount(reading) {
+    return [
+      String(reading?.shortDescription || '').trim(),
+      (reading?.screenshots || []).length,
+      reading?.playtimeLabel,
+      reading?.trophies?.available,
+    ].filter(Boolean).length;
+  }
+
+  async function refreshThinReading(auth, game) {
+    if (!session?.details || !psnReadingIsThin(session.details)) {
+      return;
+    }
+    if (session.enrichAttempts >= REENRICH_DELAYS_MS.length || now() < session.nextEnrichAt) {
+      return;
+    }
+    const attempt = session.enrichAttempts;
+    session.enrichAttempts += 1;
+    session.nextEnrichAt = now()
+      + REENRICH_DELAYS_MS[Math.min(attempt + 1, REENRICH_DELAYS_MS.length - 1)];
+
+    let reading;
+    try {
+      reading = await helpers.enrichPsnTitle(auth.authorization, auth.accountId, game, {
+        onlineId: auth.onlineId || lastOnlineId,
+        mode: 'playing',
+      });
+    } catch (error) {
+      lastError = error?.message || String(error);
+      return;
+    }
+    // Only redraw when the wait actually bought something — a re-push that
+    // changes nothing just restarts the card's animation on screen.
+    if (!reading?.name || readingFillCount(reading) <= readingFillCount(session.details)) {
+      return;
+    }
+    log?.info?.('PSN Now Playing enriched', {
+      titleId: reading.titleId,
+      attempt: attempt + 1,
+    });
+    cacheReading(reading);
+    pushOpen({
+      ...reading,
+      startedAt: session.startedAt,
+      elapsedSec: Math.max(0, Math.round((now() - session.startedAt) / 1000)),
+      onlineId: auth.onlineId || lastOnlineId || reading.onlineId,
+      mode: 'playing',
+    });
   }
 
   function endSession(reason) {
@@ -272,7 +347,9 @@ function createPsnNowPlaying({
     }
 
     if (session.pushed && session.details?.titleId === titleId) {
-      // Refresh elapsed only — avoid spamming UDP every poll.
+      // Refresh elapsed only — avoid spamming UDP every poll — but do go back
+      // for the details PSN had not published yet when the session opened.
+      await refreshThinReading(auth, game);
       lastStatus = 'playing';
       return;
     }
@@ -319,11 +396,19 @@ function createPsnNowPlaying({
     };
 
     pushOpen(reading);
+    session.nextEnrichAt = now() + REENRICH_DELAYS_MS[0];
     lastStatus = 'playing';
     markPsnAuthStatus(psnConfig, { status: 'ok', message: null });
   }
 
-  async function pushManualPreview({ device = 'Signal', send } = {}) {
+  /**
+   * @param {Object} [options]
+   * @param {'auto'|'now-playing'|'last-played'} [options.requestedMode] `auto`
+   *   (the admin test button) falls back to the last played title when nothing
+   *   is running. The scheduler asks for one specific mode so a `psn.now-playing`
+   *   rule can never quietly air a last-played card instead.
+   */
+  async function pushManualPreview({ device = 'Signal', send, requestedMode = 'auto' } = {}) {
     const creds = getCredentials();
     if (!creds.configured) {
       return { ok: false, error: 'PSN is not linked — paste an NPSSO cookie first' };
@@ -338,11 +423,16 @@ function createPsnNowPlaying({
 
     let mode = 'playing';
     let game = null;
-    try {
-      const presence = await helpers.fetchBasicPresence(auth.authorization, auth.accountId);
-      game = presence?.game || null;
-    } catch (error) {
-      return { ok: false, error: error?.message || String(error) };
+    if (requestedMode !== 'last-played') {
+      try {
+        const presence = await helpers.fetchBasicPresence(auth.authorization, auth.accountId);
+        game = presence?.game || null;
+      } catch (error) {
+        return { ok: false, error: error?.message || String(error) };
+      }
+      if (!game?.titleId && requestedMode === 'now-playing') {
+        return { ok: false, error: 'Nothing is playing on PSN right now' };
+      }
     }
 
     let playedTitles = [];
@@ -387,6 +477,8 @@ function createPsnNowPlaying({
     if (!reading) {
       return { ok: false, error: 'Could not load PSN title details' };
     }
+
+    cacheReading(reading);
 
     const played = findPlayedTitle(playedTitles, game.titleId, game.name);
     reading = {

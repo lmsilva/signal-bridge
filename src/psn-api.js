@@ -153,7 +153,13 @@ function formatPlaytimeHours(minutes) {
   if (!Number.isFinite(Number(minutes)) || Number(minutes) < 0) {
     return null;
   }
-  const hours = Number(minutes) / 60;
+  const mins = Number(minutes);
+  // PSN reports a freshly launched game as PT0S, and "0.0 h" reads as a bug
+  // rather than as a new game — stay in minutes until there is an hour to show.
+  if (mins < 60) {
+    return `${Math.round(mins)} min`;
+  }
+  const hours = mins / 60;
   if (hours < 10) {
     return `${hours.toFixed(1)} h`;
   }
@@ -198,47 +204,67 @@ async function fetchBasicPresence(authorization, accountId, {
 
 async function fetchPlayedTitles(authorization, accountId, {
   api = getPsnApi(),
-  limit = 50,
+  limit = 100,
+  maxTitles = 500,
 } = {}) {
   if (typeof api.getUserPlayedGames !== 'function') {
     return [];
   }
-  const response = await api.getUserPlayedGames(authorization, accountId || 'me', {
-    limit,
-    offset: 0,
-  });
-  const titles = Array.isArray(response?.titles) ? response.titles : [];
-  return titles.map((title) => {
-    const playMin = parseIsoDurationToMinutes(title.playDuration);
-    const lastPlayedAt = title.lastPlayedDateTime
-      ? Date.parse(title.lastPlayedDateTime)
-      : NaN;
-    const firstPlayedAt = title.firstPlayedDateTime
-      ? Date.parse(title.firstPlayedDateTime)
-      : NaN;
-    const conceptImages = collectConceptImageUrls(title);
-    const screenshotUrl = title.media?.screenshotUrl || null;
-    return {
-      titleId: String(title.titleId || '').trim(),
-      name: String(title.localizedName || title.name || '').trim(),
-      imageUrl: title.localizedImageUrl || title.imageUrl || null,
-      category: title.category || null,
-      service: title.service || null,
-      conceptId: title.concept?.id ?? null,
-      playCount: Number.isFinite(Number(title.playCount)) ? Number(title.playCount) : null,
-      playtimeForeverMin: playMin,
-      playtimeLabel: formatPlaytimeHours(playMin),
-      lastPlayedAt: Number.isFinite(lastPlayedAt) ? lastPlayedAt : null,
-      firstPlayedAt: Number.isFinite(firstPlayedAt) ? firstPlayedAt : null,
-      screenshotUrl,
-      conceptImages,
-      // Only real stills — concept banners/key-art look like cover variants.
-      galleryUrls: uniqueUrls([
+  const out = [];
+  let offset = 0;
+  const pageSize = Math.max(1, Number(limit) || 100);
+  while (out.length < maxTitles) {
+    const response = await api.getUserPlayedGames(authorization, accountId || 'me', {
+      limit: pageSize,
+      offset,
+    });
+    const titles = Array.isArray(response?.titles) ? response.titles : [];
+    if (!titles.length) {
+      break;
+    }
+    for (const title of titles) {
+      const playMin = parseIsoDurationToMinutes(title.playDuration);
+      const lastPlayedAt = title.lastPlayedDateTime
+        ? Date.parse(title.lastPlayedDateTime)
+        : NaN;
+      const firstPlayedAt = title.firstPlayedDateTime
+        ? Date.parse(title.firstPlayedDateTime)
+        : NaN;
+      const conceptImages = collectConceptImageUrls(title);
+      const screenshotUrl = title.media?.screenshotUrl || null;
+      out.push({
+        titleId: String(title.titleId || '').trim(),
+        name: String(title.localizedName || title.name || '').trim(),
+        imageUrl: title.localizedImageUrl || title.imageUrl || null,
+        category: title.category || null,
+        service: title.service || null,
+        conceptId: title.concept?.id ?? null,
+        playCount: Number.isFinite(Number(title.playCount)) ? Number(title.playCount) : null,
+        playtimeForeverMin: playMin,
+        playtimeLabel: formatPlaytimeHours(playMin),
+        lastPlayedAt: Number.isFinite(lastPlayedAt) ? lastPlayedAt : null,
+        firstPlayedAt: Number.isFinite(firstPlayedAt) ? firstPlayedAt : null,
         screenshotUrl,
-        ...conceptImages,
-      ]),
-    };
-  }).filter((row) => row.titleId || row.name);
+        conceptImages,
+        genres: collectConceptGenres(title),
+        galleryUrls: uniqueUrls([
+          screenshotUrl,
+          ...conceptImages,
+        ]),
+        posterCandidates: uniqueUrls([
+          title.localizedImageUrl,
+          title.imageUrl,
+        ]),
+      });
+    }
+    if (titles.length < pageSize) {
+      break;
+    }
+    offset += titles.length;
+  }
+  return out
+    .filter((row) => row.titleId || row.name)
+    .slice(0, maxTitles);
 }
 
 function uniqueUrls(urls) {
@@ -273,6 +299,39 @@ function collectConceptImageUrls(title) {
     .filter(Boolean);
 }
 
+/** Concept genres arrive either as plain strings or as `{ value }` rows. */
+function collectConceptGenres(title) {
+  const genres = title?.concept?.genres;
+  if (!Array.isArray(genres)) {
+    return [];
+  }
+  const out = [];
+  for (const genre of genres) {
+    const label = String(typeof genre === 'string' ? genre : (genre?.value || genre?.name || '')).trim();
+    if (label && !out.some((seen) => seen.toLowerCase() === label.toLowerCase())) {
+      out.push(label);
+    }
+  }
+  return out;
+}
+
+/**
+ * Does this reading still have gaps worth another look?
+ *
+ * PSN builds a title's library entry and its trophy set *after* the game
+ * launches, so enriching once at session start reliably produces an empty card.
+ * The poller re-enriches while this is true.
+ */
+function psnReadingIsThin(reading) {
+  if (!reading) {
+    return true;
+  }
+  return !String(reading.shortDescription || '').trim()
+    || !(reading.screenshots || []).length
+    || !reading.playtimeLabel
+    || !reading.trophies?.available;
+}
+
 function buildPsnStatusLine({
   platform = null,
   onlineId = null,
@@ -281,7 +340,9 @@ function buildPsnStatusLine({
   starRating = null,
 } = {}) {
   const bits = [];
-  bits.push(mode === 'last-played' ? 'Last played' : 'Playing now');
+  bits.push(
+    mode === 'last-played' || mode === 'library-tour' ? 'Last played' : 'Playing now',
+  );
   if (platform) {
     bits.push(`on ${String(platform).toUpperCase()}`);
   }
@@ -396,6 +457,7 @@ async function enrichPsnTitle(authorization, accountId, presenceGame, {
   onlineId = null,
   mode = 'playing',
   storeEnrichment = null,
+  gameLookup = null,
   skipStore = false,
 } = {}) {
   if (!presenceGame?.titleId && !presenceGame?.name) {
@@ -433,6 +495,8 @@ async function enrichPsnTitle(authorization, accountId, presenceGame, {
   let starRatingCount = null;
   let contentRating = null;
   let publishers = [];
+  let developers = [];
+  let releaseYear = null;
   let storeProductId = null;
 
   // Chihiro Plan B — cached; soft-fails. Prefer Store screenshots + blurb.
@@ -470,6 +534,35 @@ async function enrichPsnTitle(authorization, accountId, presenceGame, {
     }
   }
 
+  // Plan C — the PlayStation Store no longer describes every game it sells, so
+  // borrow the blurb (and stills, if PSN gave us none) from the same game on
+  // Steam. PlayStation art always wins where we have it.
+  if (!skipStore && (!shortDescription || !screenshots.length)) {
+    try {
+      const { lookupGameByName } = require('./game-lookup');
+      const alt = gameLookup || await lookupGameByName(presenceGame.name || played?.name || '');
+      if (alt) {
+        if (!shortDescription && alt.shortDescription) {
+          shortDescription = alt.shortDescription;
+        }
+        if (!screenshots.length && alt.screenshots?.length) {
+          screenshots = uniqueUrls(alt.screenshots).slice(0, 3);
+        }
+        if (!developers.length && alt.developers?.length) {
+          developers = alt.developers.slice(0, 2);
+        }
+        if (!publishers.length && alt.publishers?.length) {
+          publishers = alt.publishers.slice(0, 2);
+        }
+        if (!releaseYear && alt.releaseYear) {
+          releaseYear = alt.releaseYear;
+        }
+      }
+    } catch {
+      // Still optional — the card renders without these bands.
+    }
+  }
+
   const statusLine = buildPsnStatusLine({
     platform,
     onlineId,
@@ -495,6 +588,14 @@ async function enrichPsnTitle(authorization, accountId, presenceGame, {
       tags.push(shortRating);
     }
   }
+  for (const genre of played?.genres || []) {
+    if (tags.length >= 5) {
+      break;
+    }
+    if (!tags.some((tag) => tag.toLowerCase() === genre.toLowerCase())) {
+      tags.push(genre);
+    }
+  }
 
   return {
     titleId: presenceGame.titleId || played?.titleId || null,
@@ -502,9 +603,9 @@ async function enrichPsnTitle(authorization, accountId, presenceGame, {
     platform,
     shortDescription,
     statusLine,
-    developers: [],
+    developers,
     publishers,
-    releaseYear: null,
+    releaseYear,
     tags,
     posterCandidates,
     headerImage: posterCandidates[0] || null,
@@ -549,6 +650,8 @@ module.exports = {
   findPlayedTitle,
   enrichPsnTitle,
   collectConceptImageUrls,
+  collectConceptGenres,
+  psnReadingIsThin,
   buildPsnStatusLine,
   formatTrophyProgress,
   uniqueUrls,

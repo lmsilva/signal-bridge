@@ -57,6 +57,9 @@ class BroadcastClientApp:
             "route-planner.query",
             "steam.now-playing",
             "psn.now-playing",
+            "youtube.now-playing",
+            "trivia.round",
+            "game.library-tour",
         }
     )
 
@@ -199,6 +202,9 @@ class BroadcastClientApp:
                 self.overlay.dismiss_immediately()
         elif command_type == "psn.now-playing.close":
             if self.overlay and self.overlay.active_display_type == "psn.now-playing":
+                self.overlay.dismiss_immediately()
+        elif command_type == "youtube.now-playing.close":
+            if self.overlay and self.overlay.active_display_type == "youtube.now-playing":
                 self.overlay.dismiss_immediately()
         elif command_type == "system.command":
             self._run_system_command((payload.get("system") or {}).get("action"))

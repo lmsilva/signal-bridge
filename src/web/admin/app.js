@@ -672,44 +672,103 @@
     }
   });
 
-  // ------------------------------------------------------------ Tesla push
+  // --------------------------------------------------------- Push grid
 
-  async function pushTesla(kind, button) {
+  // Tile artwork keyed by CommandDescriptor.icon. The bridge owns *what* can be
+  // pushed (src/command-registry.js); this file owns what it looks like.
+  const PUSH_ICONS = {
+    'tesla-dashboard': '<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6.5 10.5 9 8l3 3 3.5-3.5L18 10"/>',
+    'tesla-battery': '<rect x="2.5" y="7.5" width="17" height="9" rx="2"/><path d="M21.5 10.5v3"/><path d="M6 10.5v3M9.5 10.5v3M13 10.5v3"/>',
+    photo: '<rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/>',
+    weather: '<path d="M7.5 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 12.1 3.5 3.5 0 0 0 7.5 18Z"/>',
+    'shopping-list': '<path d="M6 6h14l-1.5 9h-11z"/><path d="M6 6 5 3H3"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="16.5" cy="19" r="1.5"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/>',
+    'guest-snaps': '<rect x="3" y="3" width="8" height="8" rx="1.5"/><path d="M5.5 7h3M7 5.5v3"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M15 17h4M17 15v4"/><path d="M13 7h4M17 3v4M3 17h4M7 13v4"/>',
+    'air-quality': '<path d="M4 14c2.5-1.5 4-1.5 6.5 0s4 1.5 6.5 0 4-1.5 6.5 0"/><path d="M4 9c2.5-1.5 4-1.5 6.5 0s4 1.5 6.5 0 4-1.5 6.5 0"/><path d="M4 19c2.5-1.5 4-1.5 6.5 0s4 1.5 6.5 0"/>',
+    'now-playing': '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/>',
+    alarm: '<path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/><path d="M12 3v1"/>',
+    trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.2 2.5c-.5.2-.7.6-.7 1.1v.5"/><path d="M12 16.6v.4"/>',
+    youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
+    steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
+    psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
+  };
+
+  function pushIconSvg(icon) {
+    const body = PUSH_ICONS[icon] || PUSH_ICONS['now-playing'];
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function pushCardElementId(commandId) {
+    return `btn-push-${String(commandId).replace(/\./g, '-')}`;
+  }
+
+  // The slideshow tile's subtitle carries an inline link to the guest booth.
+  const PUSH_SUBTITLE_HTML = {
+    'signal.slideshow': 'Play every <span class="push-booth-link" data-booth-link role="link" tabindex="0">uploaded photo</span>',
+  };
+
+  let pushCommands = [];
+
+  function renderPushGrid(commands) {
+    pushCommands = (commands || []).filter((command) => command.pushable);
+    document.querySelectorAll('[data-push-row]').forEach((row) => {
+      const groups = String(row.dataset.pushRow || '').split(',').map((g) => g.trim());
+      const mine = pushCommands.filter((command) => groups.includes(command.group));
+      row.innerHTML = mine.map((command) => {
+        const sub = PUSH_SUBTITLE_HTML[command.id] || escapeHtml(command.subtitle);
+        const extraClass = command.id === 'signal.slideshow' ? ' push-card-photo' : '';
+        const iconClass = command.id === 'signal.slideshow' ? ' push-icon-photo' : '';
+        return `<button type="button" class="push-card${extraClass}"`
+          + ` id="${pushCardElementId(command.id)}" data-command-id="${escapeHtml(command.id)}">`
+          + `<span class="push-icon${iconClass}">${pushIconSvg(command.icon)}</span>`
+          + `<span class="push-card-title">${escapeHtml(command.title)}</span>`
+          + `<span class="push-card-sub">${sub}</span>`
+          + '</button>';
+      }).join('');
+      row.hidden = mine.length === 0;
+    });
+  }
+
+  async function loadPushGrid() {
+    try {
+      const { commands } = await apiGet('/api/commands');
+      renderPushGrid(commands);
+    } catch (error) {
+      // A failed load leaves the rows empty rather than showing dead tiles.
+      console.warn('Could not load push commands', error);
+    }
+  }
+
+  // ------------------------------------------------------------- Push actions
+
+  async function runPush(command, button) {
     button.classList.add('busy');
     try {
-      await apiPost(`/api/push/tesla-${kind}`, withTarget());
-      toast(`Tesla ${kind} sent`, 'good');
+      if (command.id === 'signal.slideshow') {
+        const { photos } = await apiGet('/api/photos');
+        if (!photos || !photos.length) {
+          toast('No shared photos yet — share one via QR Code → Photo first', 'bad');
+          return;
+        }
+        const entries = photosToSlideshowEntries(photos);
+        await apiPost(command.route, withTarget({ photos: entries }));
+        toast(`Slideshow sent (${entries.length} photo${entries.length === 1 ? '' : 's'})`, 'good');
+        return;
+      }
+      await apiPost(command.route, withTarget({ ...(command.body || {}) }));
+      toast(`${command.title} sent`, 'good');
     } catch (error) {
       toast(error.message, 'bad');
     } finally {
       setTimeout(() => button.classList.remove('busy'), 900);
     }
   }
-
-  $('btn-tesla-dashboard').addEventListener('click', (e) => pushTesla('dashboard', e.currentTarget));
-  $('btn-tesla-battery').addEventListener('click', (e) => pushTesla('battery', e.currentTarget));
-
-  // ------------------------------------------------------- Quick push tiles
-
-  async function pushSimple(route, label, button) {
-    button.classList.add('busy');
-    try {
-      await apiPost(route, withTarget());
-      toast(`${label} sent`, 'good');
-    } catch (error) {
-      toast(error.message, 'bad');
-    } finally {
-      setTimeout(() => button.classList.remove('busy'), 900);
-    }
-  }
-
-  $('btn-push-weather')?.addEventListener('click', (e) => pushSimple('/api/push/weather', 'Weather forecast', e.currentTarget));
-  $('btn-push-shopping-list')?.addEventListener('click', (e) => pushSimple('/api/push/shopping-list', 'Shopping list', e.currentTarget));
-  $('btn-push-timers')?.addEventListener('click', (e) => pushSimple('/api/push/timers', 'Active timers', e.currentTarget));
-  $('btn-push-guest-snaps')?.addEventListener('click', (e) => pushSimple('/api/push/guest-photobooth', 'Guest Snaps', e.currentTarget));
-  $('btn-push-air-quality')?.addEventListener('click', (e) => pushSimple('/api/push/air-quality', 'Indoor air quality', e.currentTarget));
-  $('btn-push-now-playing')?.addEventListener('click', (e) => pushSimple('/api/push/now-playing', 'Now playing', e.currentTarget));
-  $('btn-push-alarms')?.addEventListener('click', (e) => pushSimple('/api/push/alarms', 'Alarms', e.currentTarget));
 
   // Resolve cached photos to the enriched {url, uploadedAt} shape the bridge
   // uses to order the slideshow per the Settings tab's persisted preference.
@@ -725,34 +784,30 @@
     window.open('/', '_blank', 'noopener,noreferrer');
   }
 
-  $('btn-push-photo-slideshow')?.addEventListener('click', async (e) => {
-    // "uploaded photo" opens the guest booth in a new tab (same as login page).
+  // One delegated listener rather than one per tile — tiles are re-rendered
+  // whenever the registry reloads, which would strip per-node handlers.
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest?.('[data-command-id]');
+    if (!card) {
+      return;
+    }
     if (e.target.closest('[data-booth-link]')) {
       e.preventDefault();
       openGuestPhotoBooth();
       return;
     }
-    const button = e.currentTarget;
-    button.classList.add('busy');
-    try {
-      const { photos } = await apiGet('/api/photos');
-      if (!photos || !photos.length) {
-        toast('No shared photos yet — share one via QR Code → Photo first', 'bad');
-        return;
-      }
-      const entries = photosToSlideshowEntries(photos);
-      await apiPost('/api/push/photo-slideshow', withTarget({ photos: entries }));
-      toast(`Slideshow sent (${entries.length} photo${entries.length === 1 ? '' : 's'})`, 'good');
-    } catch (error) {
-      toast(error.message, 'bad');
-    } finally {
-      setTimeout(() => button.classList.remove('busy'), 900);
+    const command = pushCommands.find((c) => c.id === card.dataset.commandId);
+    if (command) {
+      runPush(command, card);
     }
   });
 
   // Keyboard activation for the inline booth link (role=link inside the tile).
-  $('btn-push-photo-slideshow')?.querySelector('[data-booth-link]')?.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') {
+      return;
+    }
+    if (!e.target.closest?.('[data-booth-link]')) {
       return;
     }
     e.preventDefault();
@@ -1554,6 +1609,56 @@
     }
   });
 
+  async function pushSlideshowEntries(entries, emptyMessage) {
+    if (!entries.length) {
+      toast(emptyMessage, 'bad');
+      return;
+    }
+    await apiPost('/api/push/photo-slideshow', withTarget({ photos: entries }));
+    toast(
+      entries.length === 1
+        ? 'Photo sent to display'
+        : `Slideshow sent (${entries.length} photos)`,
+      'good',
+    );
+  }
+
+  $('btn-slideshow-push')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    try {
+      const entries = photosToSlideshowEntries(slideshowPhotos);
+      await pushSlideshowEntries(
+        entries,
+        'No shared photos yet — share one via QR Code → Photo first',
+      );
+    } catch (error) {
+      toast(error.message || 'Could not push slideshow', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-lightbox-push')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    const photo = lightboxPhotoAt(lightboxIndex);
+    if (!photo) {
+      toast('No photo open', 'bad');
+      return;
+    }
+    button.disabled = true;
+    try {
+      await pushSlideshowEntries(
+        photosToSlideshowEntries([photo]),
+        'No photo open',
+      );
+    } catch (error) {
+      toast(error.message || 'Could not push photo', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   $('photo-delete-cancel')?.addEventListener('click', closeDeleteConfirm);
   $('photo-delete-sheet')?.addEventListener('click', (e) => {
     if (e.target === $('photo-delete-sheet')) {
@@ -1689,6 +1794,1566 @@
       // Keep the default UI state — a fresh bridge with no settings file yet.
     }
   })();
+
+  // ---------------------------------------------- Library tour settings
+
+  let libraryTourSecondsPerGame = 60;
+
+  function setLibraryTourSecondsUi(seconds) {
+    const value = Math.max(5, Math.min(300, Math.round(Number(seconds) || 60)));
+    libraryTourSecondsPerGame = value;
+    document.querySelectorAll('.library-tour-seconds-slider').forEach((slider) => {
+      slider.value = String(value);
+      slider.setAttribute('aria-valuenow', String(value));
+    });
+    document.querySelectorAll('.library-tour-seconds-value').forEach((label) => {
+      label.textContent = `${value}s`;
+    });
+  }
+
+  async function refreshLibraryTourCounts() {
+    const steamEl = $('steam-library-count');
+    const psnEl = $('psn-library-count');
+    try {
+      const [steam, psn] = await Promise.all([
+        apiGet('/api/library-tour/steam'),
+        apiGet('/api/library-tour/psn'),
+      ]);
+      if (steamEl) {
+        steamEl.textContent = steam.ok && steam.count != null
+          ? `Library: ${steam.count} game${steam.count === 1 ? '' : 's'}`
+          : (steam.error || 'Library unavailable');
+      }
+      if (psnEl) {
+        psnEl.textContent = psn.ok && psn.count != null
+          ? `Library: ${psn.count} game${psn.count === 1 ? '' : 's'}`
+          : (psn.error || 'Library unavailable');
+      }
+    } catch {
+      if (steamEl) steamEl.textContent = 'Library: unavailable';
+      if (psnEl) psnEl.textContent = 'Library: unavailable';
+    }
+  }
+
+  document.querySelectorAll('.library-tour-seconds-slider').forEach((slider) => {
+    slider.addEventListener('input', () => {
+      setLibraryTourSecondsUi(slider.value);
+    });
+    slider.addEventListener('change', async () => {
+      const previous = libraryTourSecondsPerGame;
+      const secondsPerGame = Math.max(
+        5,
+        Math.min(300, Math.round(Number(slider.value) || 60)),
+      );
+      setLibraryTourSecondsUi(secondsPerGame);
+      try {
+        const result = await apiPost('/api/library-tour/settings', { secondsPerGame });
+        setLibraryTourSecondsUi(result.secondsPerGame ?? secondsPerGame);
+      } catch (error) {
+        setLibraryTourSecondsUi(previous);
+        toast(error.message || 'Could not save library tour timing', 'bad');
+      }
+    });
+  });
+
+  (async () => {
+    try {
+      const result = await apiGet('/api/library-tour/settings');
+      setLibraryTourSecondsUi(result.secondsPerGame ?? 60);
+    } catch {
+      // Fresh bridge — keep defaults.
+    }
+    refreshLibraryTourCounts();
+  })();
+
+  // -------------------------------------------------- Display Scheduler
+
+  const SCHED_ROUTE = '/api/display-scheduler';
+  const IMPORTANCE_OPTIONS = [
+    [1, 'Background — yields to almost everything'],
+    [2, 'Low'],
+    [3, 'Normal (default)'],
+    [4, 'High'],
+    [5, 'Featured — wins most contests'],
+  ];
+  const INTERVAL_CHOICES = [
+    [300, '5 min'], [600, '10 min'], [900, '15 min'], [1800, '30 min'],
+    [2700, '45 min'], [3600, '1 hr'], [7200, '2 hr'], [10800, '3 hr'],
+    [21600, '6 hr'], [43200, '12 hr'],
+  ];
+  const OUTCOME_LABELS = {
+    aired: 'Aired',
+    'lost-dice': 'Rolled and lost',
+    'lost-tiebreak': 'Lost the tie-break',
+    'expired-pending': 'Pending expired',
+    'blocked-guard': 'No content to show',
+    'blocked-cooldown': 'In cooldown',
+    'blocked-window': 'Outside its window',
+    'blocked-cap': 'Hit its daily cap',
+    'blocked-display': 'Display was busy',
+    'blocked-quiet-hours': 'Quiet hours',
+    'blocked-global-gap': 'Too soon after the last airing',
+    error: 'Error',
+    disabled: 'Disabled',
+  };
+
+  let schedRules = [];
+  let schedSettings = null;
+  let schedCommands = [];
+  let schedRange = '24h';
+  let schedEvents = [];
+  let schedSaveTimers = new Map();
+
+  function formatDuration(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    if (total < 60) return `${total}s`;
+    const minutes = Math.round(total / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
+  }
+
+  function relativeTime(iso) {
+    if (!iso) return 'never';
+    const delta = Math.round((Date.parse(iso) - Date.now()) / 1000);
+    const abs = Math.abs(delta);
+    const text = formatDuration(abs);
+    return delta >= 0 ? `in ${text}` : `${text} ago`;
+  }
+
+  // ------------------------------------------------------- rules view
+
+  function renderSchedRules() {
+    const host = $('sched-rule-list');
+    if (!host) return;
+    if (!schedRules.length) {
+      host.innerHTML = '<div class="card"><p class="hint">No rules yet. '
+        + 'Add one below to let the display program itself when nothing else is on.</p></div>';
+      return;
+    }
+    // Order carries no meaning by design (§9), so sort by something useful:
+    // enabled first, then by how often each rule expects to air.
+    const sorted = [...schedRules].sort((a, b) => (
+      Number(b.enabled) - Number(a.enabled) || b.expectedPerDay - a.expectedPerDay
+    ));
+    host.innerHTML = sorted.map(schedRuleCardHtml).join('');
+  }
+
+  function schedCommandById(commandId) {
+    return schedCommands.find((entry) => entry.id === commandId) || null;
+  }
+
+  function schedRuleParamsHtml(rule) {
+    const command = schedCommandById(rule.commandId);
+    const defs = Array.isArray(command?.params) ? command.params : [];
+    if (!defs.length) return '';
+    const params = rule.params || {};
+    const fields = defs.map((def) => {
+      const key = def.key;
+      const value = params[key] ?? '';
+      if (def.type === 'enum' && Array.isArray(def.values)) {
+        const options = def.values.map((entry) => (
+          `<option value="${escapeHtml(entry)}"${entry === value ? ' selected' : ''}>${escapeHtml(entry)}</option>`
+        )).join('');
+        return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
+          + `<select class="field-input" data-sched-param="${escapeHtml(key)}">`
+          + `<option value="">default</option>${options}</select>`;
+      }
+      const min = def.min != null ? ` min="${def.min}"` : '';
+      const max = def.max != null ? ` max="${def.max}"` : '';
+      return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
+        + `<input class="field-input" type="number"${min}${max} data-sched-param="${escapeHtml(key)}"`
+        + ` value="${escapeHtml(value === '' || value == null ? '' : String(value))}" placeholder="default">`;
+    }).join('');
+    return `<div class="sched-field-row" style="margin-top:8px">${fields}</div>`;
+  }
+
+  function schedRuleCardHtml(rule) {
+    const gap = rule.gapProfile || {};
+    const gapText = gap.typicalSeconds
+      ? `typical gap ${formatDuration(gap.typicalSeconds)}`
+        + (gap.occasionalSeconds > gap.typicalSeconds
+          ? `, occasionally ${formatDuration(gap.occasionalSeconds)}+` : '')
+      : 'never airs at 0%';
+    const intervalOptions = INTERVAL_CHOICES.map(([value, label]) => (
+      `<option value="${value}"${value === rule.intervalSeconds ? ' selected' : ''}>${label}</option>`
+    )).join('');
+    const importanceOptions = IMPORTANCE_OPTIONS.map(([value, label]) => (
+      `<option value="${value}"${value === rule.importance ? ' selected' : ''}>${escapeHtml(label)}</option>`
+    )).join('');
+
+    return `<div class="card sched-rule" data-rule-id="${escapeHtml(rule.id)}">
+      <div class="sched-rule-head">
+        <i class="sched-dot" style="background:${escapeHtml(rule.color)}"></i>
+        <span class="sched-rule-name${rule.broken ? ' is-broken' : ''}">${escapeHtml(rule.label)}${
+      rule.broken ? ' — command no longer exists' : ''}</span>
+        <div class="sched-rule-controls">
+          <input type="checkbox" data-sched-field="enabled"${rule.enabled ? ' checked' : ''} aria-label="Enable rule">
+          <button type="button" class="btn btn-outline btn-sm" data-sched-action="air">Air now</button>
+          <button type="button" class="btn btn-outline btn-sm" data-sched-action="delete" aria-label="Delete rule">✕</button>
+        </div>
+      </div>
+      <div class="sched-field-row">
+        <label class="field-label" for="int-${escapeHtml(rule.id)}">Every</label>
+        <select class="field-input" id="int-${escapeHtml(rule.id)}" data-sched-field="intervalSeconds">${intervalOptions}</select>
+      </div>
+      ${schedRuleParamsHtml(rule)}
+      <div class="slider-row">
+        <input type="range" min="0" max="100" step="5" value="${rule.probability}"
+               data-sched-field="probability" aria-label="Probability">
+        <span class="slider-value" data-sched-readout="probability">${rule.probability}%</span>
+      </div>
+      <div class="sched-readout">
+        <strong>≈ ${rule.expectedPerDay}×/day</strong> · ${escapeHtml(gapText)}${
+      rule.estimatedDurationSeconds
+        ? ` · runs ${formatDuration(rule.estimatedDurationSeconds)}` : ''}
+      </div>
+      ${rule.durationWarning ? `<div class="sched-warning">⚠ ${escapeHtml(rule.durationWarning)}</div>` : ''}
+      ${rule.guard === 'requires-content' ? '<div class="sched-readout">Only when there is something to show</div>' : ''}
+      <details class="sched-advanced">
+        <summary>Advanced</summary>
+        <div class="sched-field-row" style="margin-top:8px">
+          <label class="field-label">Importance</label>
+          <select class="field-input" data-sched-field="importance">${importanceOptions}</select>
+          <label class="field-label">Max per day</label>
+          <input class="field-input" type="number" min="1" max="200" data-sched-field="maxPerDay"
+                 value="${rule.maxPerDay ?? ''}" placeholder="no limit">
+          <label class="field-label">Cooldown (min)</label>
+          <input class="field-input" type="number" min="0" max="1440" data-sched-field="cooldownMinutes"
+                 value="${rule.cooldownSeconds ? Math.round(rule.cooldownSeconds / 60) : ''}" placeholder="none">
+          <label class="field-label">Jitter (%)</label>
+          <input class="field-input" type="number" min="0" max="50" data-sched-field="jitterPercent"
+                 value="${rule.jitterPercent ?? ''}" placeholder="0">
+        </div>
+        ${rule.commandSupportsContentCheck === false ? '' : `<label class="trivia-check" style="margin-top:8px">
+          <input type="checkbox" data-sched-field="guard"${rule.guard === 'requires-content' ? ' checked' : ''}>
+          <span>Only air when there is content</span></label>`}
+        <p class="hint">Importance biases contests; it cannot starve another rule.
+          For "always this one first", raise its probability or shorten its interval instead.</p>
+      </details>
+    </div>`;
+  }
+
+  function schedRulePatchFrom(card) {
+    const value = (field) => card.querySelector(`[data-sched-field="${field}"]`);
+    const num = (field) => {
+      const input = value(field);
+      const raw = input ? String(input.value).trim() : '';
+      return raw === '' ? null : Number(raw);
+    };
+    const cooldownMinutes = num('cooldownMinutes');
+    const params = {};
+    card.querySelectorAll('[data-sched-param]').forEach((input) => {
+      const key = input.dataset.schedParam;
+      if (!key) return;
+      const raw = String(input.value ?? '').trim();
+      if (raw === '') return;
+      if (input.tagName === 'SELECT') {
+        params[key] = raw;
+        return;
+      }
+      const asNum = Number(raw);
+      params[key] = Number.isFinite(asNum) ? asNum : raw;
+    });
+    return {
+      enabled: value('enabled')?.checked !== false,
+      intervalSeconds: Number(value('intervalSeconds')?.value) || 2700,
+      probability: Number(value('probability')?.value) || 0,
+      importance: Number(value('importance')?.value) || 3,
+      maxPerDay: num('maxPerDay'),
+      cooldownSeconds: cooldownMinutes == null ? null : cooldownMinutes * 60,
+      jitterPercent: num('jitterPercent'),
+      guard: value('guard') ? (value('guard').checked ? 'requires-content' : null) : undefined,
+      params,
+    };
+  }
+
+  async function saveSchedRule(ruleId, card) {
+    try {
+      const result = await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, {
+        method: 'PUT', body: schedRulePatchFrom(card),
+      });
+      const index = schedRules.findIndex((rule) => rule.id === ruleId);
+      if (index >= 0) {
+        schedRules[index] = result.rule;
+      }
+      renderSchedRules();
+    } catch (error) {
+      toast(error.message || 'Could not save rule', 'bad');
+      await loadSchedRules();
+    }
+  }
+
+  function queueSchedRuleSave(ruleId, card) {
+    clearTimeout(schedSaveTimers.get(ruleId));
+    schedSaveTimers.set(ruleId, setTimeout(() => saveSchedRule(ruleId, card), 400));
+  }
+
+  async function apiFetch(route, { method = 'GET', body = null } = {}) {
+    const options = { method, credentials: 'same-origin', headers: {} };
+    if (body != null) {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
+    const response = await fetch(route, options);
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+    if (!response.ok || data?.ok === false) {
+      throw new Error(data?.error || `Request failed (${response.status})`);
+    }
+    return data;
+  }
+
+  async function loadSchedRules() {
+    const result = await apiFetch(`${SCHED_ROUTE}/rules`);
+    schedRules = result.rules || [];
+    renderSchedRules();
+  }
+
+  function renderSchedSettings(settings) {
+    schedSettings = settings;
+    const toggle = $('sched-active');
+    if (toggle) toggle.checked = settings.active === true;
+    const label = $('sched-active-label');
+    if (label) {
+      label.textContent = settings.active ? 'Active' : 'Paused';
+      label.parentElement?.classList.toggle('is-active', settings.active === true);
+    }
+    setTriviaSlider('sched-min-gap', 'sched-min-gap-value',
+      Math.round(settings.globalMinGapSeconds / 60), 'm');
+    setTriviaSlider('sched-tick', 'sched-tick-value', settings.tickSeconds, 's');
+    setTriviaSlider('sched-retention', 'sched-retention-value', settings.historyRetentionDays, 'd');
+    setChecked('sched-quiet-enabled', Boolean(settings.quietHours));
+    if (settings.quietHours) {
+      const start = $('sched-quiet-start');
+      const end = $('sched-quiet-end');
+      if (start) start.value = settings.quietHours.start;
+      if (end) end.value = settings.quietHours.end;
+    }
+  }
+
+  function readSchedSettingsForm() {
+    const quietOn = $('sched-quiet-enabled')?.checked !== false;
+    return {
+      active: $('sched-active')?.checked === true,
+      globalMinGapSeconds: Number($('sched-min-gap')?.value || 5) * 60,
+      tickSeconds: Number($('sched-tick')?.value || 30),
+      historyRetentionDays: Number($('sched-retention')?.value || 30),
+      quietHours: quietOn
+        ? { start: $('sched-quiet-start')?.value || '23:00', end: $('sched-quiet-end')?.value || '07:00' }
+        : null,
+    };
+  }
+
+  async function saveSchedSettings() {
+    try {
+      const result = await apiFetch(`${SCHED_ROUTE}/settings`, {
+        method: 'PUT', body: readSchedSettingsForm(),
+      });
+      renderSchedSettings(result.settings);
+    } catch (error) {
+      toast(error.message || 'Could not save scheduler settings', 'bad');
+    }
+  }
+
+  async function refreshSchedStatus() {
+    try {
+      const status = await apiFetch(`${SCHED_ROUTE}/status`);
+      const nextUp = $('sched-nextup');
+      if (nextUp) {
+        if (!status.active) {
+          nextUp.textContent = 'Paused — nothing will air automatically';
+        } else if (status.inQuietHours) {
+          nextUp.textContent = 'Quiet hours — nothing will air until they end';
+        } else if (status.nextUp) {
+          nextUp.textContent = `Next up: ${status.nextUp.label} ${relativeTime(status.nextUp.dueAt)}`;
+        } else {
+          nextUp.textContent = 'No enabled rules';
+        }
+      }
+      return status;
+    } catch {
+      return null;
+    }
+  }
+
+  function renderSchedCommandPicker() {
+    const select = $('sched-add-command');
+    if (!select) return;
+    const groups = new Map();
+    for (const command of schedCommands.filter((entry) => entry.schedulable)) {
+      if (!groups.has(command.group)) groups.set(command.group, []);
+      groups.get(command.group).push(command);
+    }
+    select.innerHTML = [...groups.entries()].map(([group, commands]) => (
+      `<optgroup label="${escapeHtml(group)}">${commands.map((command) => (
+        `<option value="${escapeHtml(command.id)}">${escapeHtml(command.title)}</option>`
+      )).join('')}</optgroup>`
+    )).join('');
+  }
+
+  // ---------------------------------------------------- activity view
+
+  function renderSchedStats(status, stats) {
+    const host = $('sched-stats');
+    if (!host) return;
+    const airings = status?.airingsToday ?? 0;
+    const evals = status?.evaluationsToday ?? 0;
+    const hit = status?.hitRate == null ? '—' : `${Math.round(status.hitRate * 100)}%`;
+    const cells = [
+      [airings, 'airings today'],
+      [evals, 'evaluations'],
+      [hit, 'hit rate'],
+      [status?.nextUp ? formatDuration(status.nextUp.inSeconds) : '—',
+        status?.nextUp ? status.nextUp.label : 'next up'],
+      [status?.lastAiringAt ? relativeTime(status.lastAiringAt) : '—', 'last aired'],
+    ];
+    host.innerHTML = cells.map(([value, label]) => (
+      `<div class="sched-stat"><div class="sched-stat-value">${escapeHtml(String(value))}</div>`
+      + `<div class="sched-stat-label">${escapeHtml(label)}</div></div>`
+    )).join('');
+  }
+
+  const SCHED_LANE_H = 32;
+  const SCHED_LANE_GAP = 8;
+  const SCHED_LABEL_W = 120;
+
+  /**
+   * Hand-rolled inline SVG. The timeline is not a standard chart type — no
+   * charting library is bundled and forcing this into a scatter plot would cost
+   * more than the ~60 lines below.
+   */
+  function renderSchedTimeline(events, rules, { fromMs, toMs, showSkips }) {
+    const svg = $('sched-timeline');
+    const empty = $('sched-timeline-empty');
+    if (!svg) return;
+    const lanes = rules.filter((rule) => rule.enabled || events.some((e) => e.ruleId === rule.id));
+    const width = 900;
+    const height = Math.max(60, lanes.length * (SCHED_LANE_H + SCHED_LANE_GAP) + 34);
+    const plotW = width - SCHED_LABEL_W - 12;
+    const x = (ms) => SCHED_LABEL_W + ((ms - fromMs) / Math.max(1, toMs - fromMs)) * plotW;
+
+    if (!lanes.length) {
+      svg.innerHTML = '';
+      svg.setAttribute('viewBox', '0 0 10 10');
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = 'No rules yet — add one on the Rules tab and activity will appear here.';
+      }
+      return;
+    }
+
+    const parts = [];
+    // Quiet-hours bands under everything, so "nothing fired at 3am" reads as a
+    // deliberate window rather than a mystery.
+    if (schedSettings?.quietHours) {
+      for (const [start, end] of quietBands(fromMs, toMs, schedSettings.quietHours)) {
+        parts.push(`<rect x="${x(start).toFixed(1)}" y="0" width="${Math.max(0, x(end) - x(start)).toFixed(1)}" `
+          + `height="${lanes.length * (SCHED_LANE_H + SCHED_LANE_GAP)}" fill="rgba(150,200,255,0.08)"/>`);
+      }
+    }
+
+    lanes.forEach((rule, index) => {
+      const top = index * (SCHED_LANE_H + SCHED_LANE_GAP);
+      const cy = top + SCHED_LANE_H / 2;
+      parts.push(`<line x1="${SCHED_LABEL_W}" y1="${cy}" x2="${width - 12}" y2="${cy}" `
+        + 'stroke="rgba(150,200,255,0.18)" stroke-width="1"/>');
+      parts.push(`<text x="0" y="${cy + 4}" fill="#A4ACC0" font-size="11">`
+        + `${escapeHtml(truncate(rule.label, 18))}</text>`);
+
+      for (const event of events.filter((entry) => entry.ruleId === rule.id)) {
+        const at = Date.parse(event.at);
+        if (at < fromMs || at > toMs) continue;
+        const blocked = event.outcome.startsWith('blocked-');
+        if (!showSkips && event.outcome !== 'aired') continue;
+        const px = x(at);
+        const attrs = `data-event-id="${escapeHtml(event.id)}" class="sched-mark" style="cursor:pointer"`;
+        if (event.outcome === 'aired' && event.durationSeconds > 60) {
+          // A variable-duration round is a block of time in which nothing else
+          // could air; drawing it to scale is what makes the gaps legible.
+          const w = Math.max(3, x(at + event.durationSeconds * 1000) - px);
+          parts.push(`<rect ${attrs} x="${px.toFixed(1)}" y="${(cy - 6).toFixed(1)}" width="${w.toFixed(1)}" `
+            + `height="12" rx="2" fill="${escapeHtml(rule.color)}"`
+            + `${event.interrupted ? ' stroke="#F2F7FF" stroke-dasharray="3 2"' : ''}/>`);
+        } else if (event.outcome === 'aired') {
+          parts.push(`<circle ${attrs} cx="${px.toFixed(1)}" cy="${cy}" r="5" fill="${escapeHtml(rule.color)}"/>`);
+        } else if (event.outcome === 'lost-dice') {
+          parts.push(`<circle ${attrs} cx="${px.toFixed(1)}" cy="${cy}" r="3.5" fill="none" `
+            + `stroke="${escapeHtml(rule.color)}" stroke-width="1.5"/>`);
+        } else if (event.outcome === 'error') {
+          parts.push(`<path ${attrs} d="M${px.toFixed(1)} ${cy - 4} l4 7 l-8 0 Z" fill="#FF7A6B"/>`);
+        } else if (blocked) {
+          parts.push(`<path ${attrs} d="M${(px - 3).toFixed(1)} ${cy - 3} l6 6 M${(px + 3).toFixed(1)} ${cy - 3} l-6 6" `
+            + 'stroke="#6B7388" stroke-width="1.4" opacity="0.5"/>');
+        } else {
+          // lost-tiebreak / expired-pending: half circle.
+          parts.push(`<path ${attrs} d="M${px.toFixed(1)} ${cy - 3.5} a3.5 3.5 0 0 1 0 7 Z" `
+            + `fill="${escapeHtml(rule.color)}"/>`);
+        }
+      }
+    });
+
+    const axisY = lanes.length * (SCHED_LANE_H + SCHED_LANE_GAP) + 16;
+    for (let i = 0; i <= 4; i += 1) {
+      const ms = fromMs + ((toMs - fromMs) * i) / 4;
+      parts.push(`<text x="${x(ms).toFixed(1)}" y="${axisY}" fill="#6B7388" font-size="10" `
+        + `text-anchor="middle">${new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</text>`);
+    }
+    // Now marker at the right edge.
+    parts.push(`<line x1="${x(toMs).toFixed(1)}" y1="0" x2="${x(toMs).toFixed(1)}" y2="${axisY - 12}" `
+      + 'stroke="#5FD0FF" stroke-width="1.5"/>');
+
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('height', String(height));
+    svg.innerHTML = parts.join('');
+    if (empty) {
+      empty.hidden = events.length > 0;
+      empty.textContent = events.length
+        ? ''
+        : 'No activity in this window yet. Tap a rule on the Rules tab to see when it is next due.';
+    }
+  }
+
+  function quietBands(fromMs, toMs, quietHours) {
+    const bands = [];
+    const toMinutes = (value) => {
+      const [h, m] = String(value).split(':').map(Number);
+      return h * 60 + m;
+    };
+    const start = toMinutes(quietHours.start);
+    const end = toMinutes(quietHours.end);
+    const day = new Date(fromMs);
+    day.setHours(0, 0, 0, 0);
+    for (let d = day.getTime() - 86400000; d <= toMs; d += 86400000) {
+      const s = d + start * 60000;
+      const e = d + (end > start ? end : end + 1440) * 60000;
+      if (e > fromMs && s < toMs) {
+        bands.push([Math.max(s, fromMs), Math.min(e, toMs)]);
+      }
+    }
+    return bands;
+  }
+
+  function truncate(text, max) {
+    const value = String(text || '');
+    return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+  }
+
+  function showSchedInspector(eventId) {
+    const host = $('sched-inspector');
+    const event = schedEvents.find((entry) => entry.id === eventId);
+    if (!host || !event) return;
+    const rule = schedRules.find((entry) => entry.id === event.ruleId);
+    const rows = [
+      ['Rule', rule?.label || event.ruleId],
+      ['When', new Date(event.at).toLocaleString()],
+      ['Outcome', OUTCOME_LABELS[event.outcome] || event.outcome],
+    ];
+    if (event.rolledValue != null) {
+      rows.push(['Dice', `rolled ${event.rolledValue} against ${rule?.probability ?? '?'}%`]);
+    }
+    if (event.score != null) {
+      rows.push(['Score', event.score.toFixed(2)]);
+    }
+    if (event.competingRuleIds?.length > 1) {
+      // The payoff feature: "why didn't the slideshow show at 3pm" in two clicks.
+      rows.push(['Competed against', event.competingRuleIds
+        .filter((id) => id !== event.ruleId)
+        .map((id) => schedRules.find((entry) => entry.id === id)?.label || id)
+        .join(', ')]);
+    }
+    if (event.durationSeconds != null) {
+      rows.push(['On screen', formatDuration(event.durationSeconds)
+        + (event.interrupted ? ' (interrupted)' : '')]);
+    }
+    if (event.detail) {
+      rows.push(['Detail', event.detail]);
+    }
+    host.hidden = false;
+    host.innerHTML = '<div class="section-label" style="margin:0 0 4px">Event</div><dl>'
+      + rows.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd>`).join('')
+      + '</dl>';
+  }
+
+  function renderSchedRuleStats(stats, daily) {
+    const host = $('sched-rule-stats');
+    if (!host) return;
+    if (!stats.length) {
+      host.innerHTML = '<div class="card"><p class="hint">No evaluations in this window yet.</p></div>';
+      return;
+    }
+    const hours = { '6h': 6, '12h': 12, '24h': 24, '7d': 168 }[schedRange] || 24;
+    host.innerHTML = stats.map((entry) => {
+      const rule = schedRules.find((item) => item.id === entry.ruleId);
+      const expected = Math.round((rule?.expectedPerDay || 0) * (hours / 24) * 10) / 10;
+      const scale = Math.max(expected, entry.aired, 1);
+      const skip = entry.dominantSkip;
+      return `<div class="card sched-rule">
+        <div class="sched-rule-head">
+          <i class="sched-dot" style="background:${escapeHtml(rule?.color || '#5FD0FF')}"></i>
+          <span class="sched-rule-name">${escapeHtml(rule?.label || entry.ruleId)}</span>
+        </div>
+        <div class="sched-readout">expected ≈${expected} · actual <strong>${entry.aired}</strong>
+          · hit ${entry.hitRate == null ? '—' : `${Math.round(entry.hitRate * 100)}%`}
+          ${entry.avgGapSeconds ? `· avg gap ${formatDuration(entry.avgGapSeconds)}` : ''}
+          ${entry.longestGapSeconds ? `· longest ${formatDuration(entry.longestGapSeconds)}` : ''}</div>
+        <div class="sched-evsa">
+          <div class="sched-evsa-fill" style="width:${Math.min(100, (entry.aired / scale) * 100)}%;
+               background:${escapeHtml(rule?.color || '#5FD0FF')}"></div>
+          <div class="sched-evsa-marker" style="left:${Math.min(100, (expected / scale) * 100)}%"></div>
+        </div>
+        ${sparklineHtml(daily?.[entry.ruleId], rule?.color)}
+        ${skip && skip.outcome !== 'aired' && skip.count > entry.aired
+    ? `<div class="sched-warning">⚠ ${skip.count} skipped — ${escapeHtml(
+      (OUTCOME_LABELS[skip.outcome] || skip.outcome).toLowerCase(),
+    )}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function sparklineHtml(series, color) {
+    if (!Array.isArray(series) || !series.length) return '';
+    const max = Math.max(1, ...series);
+    const step = 100 / series.length;
+    const bars = series.map((value, index) => {
+      const h = (value / max) * 100;
+      return `<rect x="${(index * step + step * 0.15).toFixed(2)}" y="${(100 - h).toFixed(2)}" `
+        + `width="${(step * 0.7).toFixed(2)}" height="${h.toFixed(2)}" fill="${escapeHtml(color || '#5FD0FF')}"/>`;
+    }).join('');
+    return `<svg class="sched-spark" viewBox="0 0 100 100" preserveAspectRatio="none">${bars}</svg>`;
+  }
+
+  function renderSchedHeatmap(rows) {
+    const host = $('sched-heatmap');
+    if (!host) return;
+    const max = Math.max(1, ...rows.flatMap((row) => row.hours));
+    const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const header = `<tr><th></th>${Array.from({ length: 24 }, (_, h) => (
+      `<th>${h % 2 === 0 ? String(h).padStart(2, '0') : ''}</th>`
+    )).join('')}</tr>`;
+    const body = rows.map((row) => {
+      const cells = row.hours.map((count) => {
+        if (!count) return '<td class="sched-heat-0"></td>';
+        // Five steps of a single hue; zero is an outline so "none" and "few"
+        // are never confused.
+        const step = Math.ceil((count / max) * 5);
+        return `<td style="background:rgba(95,208,255,${(step * 0.18).toFixed(2)})" title="${count}"></td>`;
+      }).join('');
+      return `<tr><th>${names[row.weekday]}</th>${cells}</tr>`;
+    }).join('');
+    host.innerHTML = `<table>${header}${body}</table>`;
+  }
+
+  async function loadSchedActivity() {
+    const status = await refreshSchedStatus();
+    try {
+      const [activity, stats, heatmap] = await Promise.all([
+        apiFetch(`${SCHED_ROUTE}/activity?window=${schedRange}`),
+        apiFetch(`${SCHED_ROUTE}/stats?window=${schedRange}`),
+        apiFetch(`${SCHED_ROUTE}/heatmap?days=14`),
+      ]);
+      schedEvents = activity.events || [];
+      schedRules = activity.rules || schedRules;
+      renderSchedStats(status, stats.stats);
+      renderSchedTimeline(schedEvents, schedRules, {
+        fromMs: Date.parse(activity.from),
+        toMs: Date.parse(activity.to),
+        showSkips: $('sched-show-skips')?.checked !== false,
+      });
+      renderSchedRuleStats(stats.stats || [], stats.daily || {});
+      renderSchedHeatmap(heatmap.rows || []);
+    } catch (error) {
+      toast(error.message || 'Could not load scheduler activity', 'bad');
+    }
+  }
+
+  // ------------------------------------------------------------ wiring
+
+  const schedPanel = $('tab-scheduler');
+  if (schedPanel) {
+    schedPanel.addEventListener('change', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const card = target.closest('[data-rule-id]');
+      if (card && (target.dataset.schedField || target.dataset.schedParam)) {
+        queueSchedRuleSave(card.dataset.ruleId, card);
+        return;
+      }
+      if (target.closest('#sched-view-rules') || target.id === 'sched-active') {
+        if (target.id === 'sched-show-skips') return;
+        await saveSchedSettings();
+        return;
+      }
+      if (target.id === 'sched-show-skips') {
+        await loadSchedActivity();
+      }
+    });
+
+    schedPanel.addEventListener('input', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== 'range') return;
+      const readout = target.parentElement?.querySelector('[data-sched-readout], .slider-value');
+      if (!readout) return;
+      if (target.dataset.schedField === 'probability') {
+        readout.textContent = `${target.value}%`;
+      } else if (target.id === 'sched-min-gap') {
+        readout.textContent = `${target.value}m`;
+      } else if (target.id === 'sched-tick') {
+        readout.textContent = `${target.value}s`;
+      } else if (target.id === 'sched-retention') {
+        readout.textContent = `${target.value}d`;
+      }
+    });
+
+    schedPanel.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const mark = target.closest('[data-event-id]');
+      if (mark) {
+        showSchedInspector(mark.dataset.eventId);
+        return;
+      }
+
+      const viewBtn = target.closest('[data-sched-view]');
+      if (viewBtn) {
+        const view = viewBtn.dataset.schedView;
+        document.querySelectorAll('#sched-view-tabs .segmented-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn === viewBtn);
+        });
+        $('sched-view-rules').hidden = view !== 'rules';
+        $('sched-view-activity').hidden = view !== 'activity';
+        if (view === 'activity') await loadSchedActivity();
+        return;
+      }
+
+      const rangeBtn = target.closest('[data-range]');
+      if (rangeBtn) {
+        schedRange = rangeBtn.dataset.range;
+        document.querySelectorAll('#sched-range-tabs .segmented-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn === rangeBtn);
+        });
+        await loadSchedActivity();
+        return;
+      }
+
+      const action = target.closest('[data-sched-action]')?.dataset.schedAction;
+      const card = target.closest('[data-rule-id]');
+      if (action && card) {
+        const ruleId = card.dataset.ruleId;
+        try {
+          if (action === 'air') {
+            await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}/air`, { method: 'POST' });
+            toast('Aired', 'ok');
+          } else if (action === 'delete') {
+            await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
+          }
+          await loadSchedRules();
+          await refreshSchedStatus();
+        } catch (error) {
+          toast(error.message || 'Action failed', 'bad');
+        }
+      }
+    });
+
+    $('btn-sched-add')?.addEventListener('click', async () => {
+      const commandId = $('sched-add-command')?.value;
+      if (!commandId) return;
+      try {
+        await apiFetch(`${SCHED_ROUTE}/rules`, {
+          method: 'POST',
+          body: { commandId, intervalSeconds: 2700, probability: 90 },
+        });
+        await loadSchedRules();
+        await refreshSchedStatus();
+      } catch (error) {
+        toast(error.message || 'Could not add rule', 'bad');
+      }
+    });
+
+    $('btn-sched-simulate')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const host = $('sched-simulation');
+      button.disabled = true;
+      try {
+        const result = await apiFetch(`${SCHED_ROUTE}/simulate`, {
+          method: 'POST', body: { hours: 24, runs: 200 },
+        });
+        if (host) {
+          host.hidden = false;
+          host.innerHTML = '<p class="hint" style="margin-top:12px">Forecast for the next 24 hours — '
+            + `average of ${result.runs} runs. Scheduling is stochastic, so a real day will differ.</p>`
+            + result.perRule.map((entry) => (
+              `<div class="sched-readout"><i class="sched-dot" style="background:${escapeHtml(entry.color)};`
+              + `display:inline-block;margin-right:6px"></i>${escapeHtml(entry.label)}: `
+              + `<strong>≈${entry.simulated}</strong> airings (expected ${entry.expected})</div>`
+            )).join('');
+        }
+      } catch (error) {
+        toast(error.message || 'Could not run the simulation', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.querySelector('.tab-btn[data-tab="scheduler"]')?.addEventListener('click', async () => {
+      await refreshSchedStatus();
+      if (!$('sched-view-activity')?.hidden) {
+        await loadSchedActivity();
+      }
+    });
+
+    (async () => {
+      try {
+        const [settings, commands] = await Promise.all([
+          apiFetch(`${SCHED_ROUTE}/settings`),
+          apiFetch('/api/commands'),
+        ]);
+        renderSchedSettings(settings.settings);
+        schedCommands = commands.commands || [];
+        renderSchedCommandPicker();
+        await loadSchedRules();
+        await refreshSchedStatus();
+      } catch {
+        // Scheduler unavailable on this bridge — leave the tab in its empty state.
+      }
+    })();
+  }
+
+  // ------------------------------------------ Settings → YouTube
+
+  const YOUTUBE_ROUTE = '/api/youtube';
+  const YOUTUBE_DEVICE_STATUS = {
+    linked: 'Linked',
+    refreshing: 'Linking…',
+    'needs-relink': 'Needs re-linking',
+    unreachable: 'Not reachable',
+  };
+
+  let youtubeSettings = null;
+  let youtubeDevices = [];
+  let youtubeSaveTimer = null;
+
+  function renderYoutubeDevices(devices) {
+    youtubeDevices = devices || [];
+    const list = $('youtube-devices');
+    const empty = $('youtube-devices-empty');
+    if (!list) {
+      return;
+    }
+    list.innerHTML = youtubeDevices.map((device) => {
+      const state = device.enabled === false ? 'off' : (device.status || 'linked');
+      const detail = device.enabled === false
+        ? 'Paused'
+        : (device.statusDetail || YOUTUBE_DEVICE_STATUS[device.status] || 'Linked');
+      const seen = device.lastSeenAt ? ` · seen ${relativeTime(device.lastSeenAt)}` : '';
+      return `<div class="yt-device" data-device-id="${escapeHtml(device.id)}">
+        <span class="yt-dot is-${escapeHtml(state)}"></span>
+        <div class="yt-device-main">
+          <div class="yt-device-name">${escapeHtml(device.label)}</div>
+          <div class="yt-device-sub">${escapeHtml(detail)}${seen}</div>
+        </div>
+        <div class="yt-device-actions">
+          <button class="btn btn-outline" data-yt-action="toggle">${device.enabled === false ? 'Resume' : 'Pause'}</button>
+          <button class="btn btn-outline" data-yt-action="relink">Re-link</button>
+          <button class="btn btn-outline" data-yt-action="remove">Remove</button>
+        </div>
+      </div>`;
+    }).join('');
+    if (empty) {
+      empty.hidden = youtubeDevices.length > 0;
+    }
+    renderYoutubePreferredDevice();
+  }
+
+  function renderYoutubePreferredDevice() {
+    const select = $('youtube-preferred-device');
+    if (!select) {
+      return;
+    }
+    const preferred = youtubeSettings?.multiDevice === 'preferred';
+    select.hidden = !preferred || youtubeDevices.length === 0;
+    select.innerHTML = youtubeDevices.map((device) => {
+      const selected = device.id === youtubeSettings?.preferredDeviceId ? ' selected' : '';
+      return `<option value="${escapeHtml(device.id)}"${selected}>${escapeHtml(device.label)}</option>`;
+    }).join('');
+  }
+
+  function renderYoutubeQuota(cache) {
+    const box = $('youtube-quota');
+    if (!box) {
+      return;
+    }
+    if (!cache) {
+      box.innerHTML = '';
+      return;
+    }
+    const used = Number(cache.quotaUsedToday || 0);
+    const limit = Number(cache.quotaLimit || 10000);
+    const hitRate = cache.hitRate == null ? null : Math.round(cache.hitRate * 100);
+    box.innerHTML = [
+      `<span class="${used > limit * 0.8 ? 'is-high' : ''}">Quota today <strong>${used.toLocaleString()}</strong> / ${limit.toLocaleString()}</span>`,
+      `<span>Cached <strong>${Number(cache.videos || 0).toLocaleString()}</strong> videos, <strong>${Number(cache.channels || 0).toLocaleString()}</strong> channels</span>`,
+      hitRate == null ? '' : `<span>Cache hits <strong>${hitRate}%</strong></span>`,
+    ].filter(Boolean).join('');
+  }
+
+  function renderYoutubeSettings(settings) {
+    youtubeSettings = settings;
+    setChecked('youtube-show-description', settings.showDescription);
+    setChecked('youtube-show-subscribers', settings.showSubscribers);
+    setChecked('youtube-show-dislikes', settings.showDislikes);
+    setChecked('youtube-show-shorts', settings.showShorts);
+    setTriviaSlider('youtube-confirm-seconds', 'youtube-confirm-seconds-value', settings.confirmSeconds, 's');
+    setTriviaSlider('youtube-description-lines', 'youtube-description-lines-value', settings.descriptionLines, '');
+    document.querySelectorAll('#youtube-multi-device .segmented-btn').forEach((button) => {
+      button.classList.toggle('active', button.dataset.mode === settings.multiDevice);
+    });
+    renderYoutubePreferredDevice();
+  }
+
+  function renderYoutubeStatus(status) {
+    const pill = $('youtube-status-pill');
+    const detail = $('youtube-status-detail');
+    if (!pill || !detail) {
+      return;
+    }
+    let tone = 'warn';
+    let label = 'Not linked';
+    let text = 'Link the TV that runs YouTube to show what is playing.';
+
+    if (status.enabled === false) {
+      tone = 'off';
+      label = 'Off';
+      text = 'The YouTube agent is disabled on this bridge.';
+    } else if (status.lounge?.unavailableReason) {
+      // Say this up front — without it, linking and scanning both fail with
+      // nothing on the card to explain why.
+      tone = 'bad';
+      label = 'Agent down';
+      text = status.lounge.unavailableReason;
+    } else if (status.needsRelink?.length) {
+      tone = 'bad';
+      label = 'Needs re-linking';
+      text = `YouTube dropped the link for ${status.needsRelink.join(', ')}.`;
+    } else if (!status.configured) {
+      // Keeps the default copy.
+    } else if (!status.hasApiKey) {
+      label = 'No API key';
+      text = 'Playback is detected, but titles and stats need a Data API key.';
+    } else if (status.playing) {
+      tone = 'ok';
+      label = 'Playing';
+      text = `Playing on ${status.deviceLabel || 'a linked TV'}.`;
+    } else {
+      tone = 'ok';
+      label = 'Watching';
+      const last = status.lastPlayed?.title;
+      text = last ? `Idle — last played "${last}".` : 'Idle — nothing playing right now.';
+    }
+    pill.textContent = label;
+    pill.className = `status-pill is-${tone}`;
+    detail.textContent = text;
+    renderYoutubeQuota(status.cache);
+  }
+
+  function readYoutubeForm() {
+    const active = document.querySelector('#youtube-multi-device .segmented-btn.active');
+    return {
+      showDescription: $('youtube-show-description')?.checked !== false,
+      showSubscribers: $('youtube-show-subscribers')?.checked !== false,
+      showDislikes: $('youtube-show-dislikes')?.checked !== false,
+      showShorts: $('youtube-show-shorts')?.checked === true,
+      confirmSeconds: Number($('youtube-confirm-seconds')?.value ?? 5),
+      descriptionLines: Number($('youtube-description-lines')?.value ?? 3),
+      multiDevice: active?.dataset.mode || 'most-recent',
+      preferredDeviceId: $('youtube-preferred-device')?.value || null,
+    };
+  }
+
+  async function saveYoutubeSettings() {
+    if (!youtubeSettings) {
+      return;
+    }
+    try {
+      const result = await apiFetch(`${YOUTUBE_ROUTE}/settings`, {
+        method: 'PUT', body: readYoutubeForm(),
+      });
+      renderYoutubeSettings(result.settings);
+    } catch (error) {
+      toast(error.message || 'Could not save YouTube settings', 'bad');
+    }
+  }
+
+  function queueYoutubeSave() {
+    clearTimeout(youtubeSaveTimer);
+    youtubeSaveTimer = setTimeout(saveYoutubeSettings, 400);
+  }
+
+  async function refreshYoutubeDevices() {
+    const result = await apiFetch(`${YOUTUBE_ROUTE}/devices`);
+    renderYoutubeDevices(result.devices);
+  }
+
+  async function refreshYoutubeStatus() {
+    try {
+      const status = await apiGet('/api/status');
+      if (status?.youtube) {
+        renderYoutubeStatus(status.youtube);
+      }
+    } catch {
+      // The status poll will try again.
+    }
+  }
+
+  async function loadYoutubeSettings() {
+    const card = $('youtube-settings-card');
+    if (!card) {
+      return;
+    }
+    try {
+      const settings = await apiFetch(`${YOUTUBE_ROUTE}/settings`);
+      renderYoutubeSettings(settings.settings);
+      await refreshYoutubeDevices();
+      await refreshYoutubeStatus();
+    } catch {
+      // YouTube not wired up on this bridge — hide the card rather than
+      // leaving a permanently broken one on the page.
+      card.hidden = true;
+      const label = card.previousElementSibling;
+      if (label?.classList.contains('section-label')) {
+        label.hidden = true;
+      }
+    }
+  }
+
+  async function linkYoutubeDevice({ pairingCode = null, screenId = null, label = null } = {}) {
+    const button = $('btn-youtube-link');
+    if (button) button.disabled = true;
+    try {
+      await apiFetch(`${YOUTUBE_ROUTE}/devices/link`, {
+        method: 'POST', body: { pairingCode, screenId, label },
+      });
+      const code = $('youtube-pair-code');
+      const name = $('youtube-pair-label');
+      if (code) code.value = '';
+      if (name) name.value = '';
+      const found = $('youtube-discovered');
+      if (found) {
+        found.hidden = true;
+        found.innerHTML = '';
+      }
+      await refreshYoutubeDevices();
+      await refreshYoutubeStatus();
+      toast('TV linked', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not link that TV', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  const youtubeCard = $('youtube-settings-card');
+  if (youtubeCard) {
+    youtubeCard.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (target.matches('input[type="checkbox"]')) {
+        target.closest('.trivia-check')?.classList.toggle('is-off', !target.checked);
+        queueYoutubeSave();
+      } else if (target.matches('input[type="range"], select')) {
+        queueYoutubeSave();
+      }
+    });
+    youtubeCard.addEventListener('input', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === 'range') {
+        const label = $(`${target.id}-value`);
+        if (label) {
+          label.textContent = target.id === 'youtube-description-lines'
+            ? target.value
+            : `${target.value}s`;
+        }
+      }
+    });
+
+    youtubeCard.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const mode = target.closest('#youtube-multi-device .segmented-btn');
+      if (mode) {
+        document.querySelectorAll('#youtube-multi-device .segmented-btn').forEach((button) => {
+          button.classList.toggle('active', button === mode);
+        });
+        const select = $('youtube-preferred-device');
+        if (select) {
+          select.hidden = mode.dataset.mode !== 'preferred' || youtubeDevices.length === 0;
+        }
+        await saveYoutubeSettings();
+        return;
+      }
+
+      const pick = target.closest('[data-yt-screen-id]');
+      if (pick) {
+        await linkYoutubeDevice({
+          screenId: pick.dataset.ytScreenId,
+          label: pick.dataset.ytName || null,
+        });
+        return;
+      }
+
+      const action = target.dataset.ytAction;
+      const row = target.closest('[data-device-id]');
+      if (!action || !row) {
+        return;
+      }
+      const id = encodeURIComponent(row.dataset.deviceId);
+      const device = youtubeDevices.find((entry) => entry.id === row.dataset.deviceId);
+      target.disabled = true;
+      try {
+        if (action === 'toggle') {
+          await apiFetch(`${YOUTUBE_ROUTE}/devices/${id}`, {
+            method: 'PUT', body: { enabled: device?.enabled === false },
+          });
+        } else if (action === 'relink') {
+          await apiFetch(`${YOUTUBE_ROUTE}/devices/${id}/relink`, { method: 'POST' });
+          toast('Re-linked', 'ok');
+        } else if (action === 'remove') {
+          await apiFetch(`${YOUTUBE_ROUTE}/devices/${id}`, { method: 'DELETE' });
+        }
+        await refreshYoutubeDevices();
+        await refreshYoutubeStatus();
+      } catch (error) {
+        toast(error.message || 'Action failed', 'bad');
+      } finally {
+        target.disabled = false;
+      }
+    });
+
+    // YouTube shows the code as "123 456 789 012" — keep that grouping while
+    // the user types so a pasted or keyed 12-digit string never looks wrong.
+    function formatYoutubePairCode(raw) {
+      const digits = String(raw || '').replace(/\D/g, '').slice(0, 12);
+      return digits.replace(/(\d{3})(?=\d)/g, '$1 ');
+    }
+
+    $('youtube-pair-code')?.addEventListener('input', (event) => {
+      const input = event.currentTarget;
+      const formatted = formatYoutubePairCode(input.value);
+      if (input.value === formatted) {
+        return;
+      }
+      // Digits-only cursor: spaces before the caret do not count, so regrouping
+      // never jumps the insertion point past the digit the user just typed.
+      const digitsBefore = String(input.value.slice(0, input.selectionStart || 0))
+        .replace(/\D/g, '').length;
+      input.value = formatted;
+      let cursor = 0;
+      let seen = 0;
+      while (cursor < formatted.length && seen < digitsBefore) {
+        if (/\d/.test(formatted[cursor])) {
+          seen += 1;
+        }
+        cursor += 1;
+      }
+      input.setSelectionRange(cursor, cursor);
+    });
+
+    $('btn-youtube-link')?.addEventListener('click', () => {
+      const code = String($('youtube-pair-code')?.value || '').replace(/\s+/g, '');
+      if (!code) {
+        toast('Paste the TV code from YouTube on the TV', 'bad');
+        return;
+      }
+      linkYoutubeDevice({
+        pairingCode: code,
+        label: String($('youtube-pair-label')?.value || '').trim() || null,
+      });
+    });
+
+    $('btn-youtube-discover')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const box = $('youtube-discovered');
+      button.disabled = true;
+      button.textContent = 'Scanning…';
+      try {
+        const result = await apiFetch(`${YOUTUBE_ROUTE}/devices/discover`, { method: 'POST' });
+        const devices = (result.devices || []).filter((entry) => !entry.alreadyLinked);
+        if (box) {
+          box.hidden = devices.length === 0;
+          box.innerHTML = devices.map((entry) => `<button class="btn btn-outline btn-block"
+            data-yt-screen-id="${escapeHtml(entry.screenId || '')}"
+            data-yt-name="${escapeHtml(entry.name || '')}"
+            ${entry.screenId ? '' : 'disabled'}>
+            Link ${escapeHtml(entry.name || entry.address || 'this TV')}
+          </button>`).join('');
+        }
+        if (!devices.length) {
+          toast(result.devices?.length ? 'Every TV found is already linked' : 'No YouTube TVs found', 'warn');
+        }
+      } catch (error) {
+        toast(error.message || 'Scan failed', 'bad');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Scan the network';
+      }
+    });
+
+    $('btn-youtube-api-key')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const input = $('youtube-api-key');
+      const key = String(input?.value || '').trim();
+      if (!key) {
+        toast('Paste a YouTube Data API key', 'bad');
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Testing…';
+      try {
+        await apiFetch(`${YOUTUBE_ROUTE}/api-key`, { method: 'POST', body: { apiKey: key } });
+        if (input) input.value = '';
+        await refreshYoutubeStatus();
+        toast('API key works', 'ok');
+      } catch (error) {
+        toast(error.message || 'The key was rejected', 'bad');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Save and test key';
+      }
+    });
+
+    $('btn-youtube-test-push')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await apiPost('/api/push/youtube-now-playing', withTarget());
+        const label = result.mode === 'last-played' ? 'Last played' : 'Now playing';
+        toast(`${label}: ${result.title || 'YouTube'} (dismisses automatically)`, 'good');
+      } catch (error) {
+        toast(error.message, 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    $('btn-youtube-cache-clear')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await apiFetch(`${YOUTUBE_ROUTE}/cache/clear`, { method: 'POST' });
+        renderYoutubeQuota(result);
+        toast('Cache cleared', 'ok');
+      } catch (error) {
+        toast(error.message || 'Could not clear the cache', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    loadYoutubeSettings();
+  }
+
+  // ------------------------------------------- Settings → Trivia
+
+  const TRIVIA_PROVIDER_LABELS = {
+    opentdb: 'Open Trivia DB',
+    'the-trivia-api': 'The Trivia API',
+  };
+  const TRIVIA_DIFFICULTIES = ['easy', 'medium', 'hard'];
+  const TRIVIA_TYPES = [
+    ['multiple', 'Multiple choice'],
+    ['boolean', 'True / false'],
+  ];
+
+  let triviaSettings = null;
+  let triviaSaveTimer = null;
+
+  function formatRoundLength(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const minutes = Math.floor(total / 60);
+    const rest = total % 60;
+    if (!minutes) {
+      return `${rest}s`;
+    }
+    return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+  }
+
+  function triviaCheckbox(name, value, label, checked, extraHtml = '') {
+    return `<label class="trivia-check${checked ? '' : ' is-off'}">`
+      + `<input type="checkbox" data-trivia-list="${name}" value="${escapeHtml(value)}"${checked ? ' checked' : ''}>`
+      + `<span>${escapeHtml(label)}</span>${extraHtml}</label>`;
+  }
+
+  function renderTriviaSettings(settings, providers) {
+    triviaSettings = settings;
+    const providerBox = $('trivia-providers');
+    if (providerBox) {
+      providerBox.innerHTML = (providers || []).map((provider) => triviaCheckbox(
+        'enabledProviders', provider.id,
+        TRIVIA_PROVIDER_LABELS[provider.id] || provider.id,
+        settings.enabledProviders.includes(provider.id),
+      )).join('');
+    }
+    const attributionHint = $('trivia-attribution-hint');
+    if (attributionHint) {
+      // Attribution is a licence condition, so show which one is in force.
+      const active = (providers || []).filter((provider) => provider.enabled);
+      attributionHint.textContent = active.length
+        ? `Credited on screen: ${active.map((provider) => provider.attribution?.label || provider.id).join(' · ')}`
+        : 'Enable at least one source or the pool cannot restock.';
+    }
+
+    const difficultyBox = $('trivia-difficulties');
+    if (difficultyBox) {
+      difficultyBox.innerHTML = TRIVIA_DIFFICULTIES.map((level) => triviaCheckbox(
+        'enabledDifficulties', level, level[0].toUpperCase() + level.slice(1),
+        settings.enabledDifficulties.includes(level),
+      )).join('');
+    }
+    const typeBox = $('trivia-types');
+    if (typeBox) {
+      typeBox.innerHTML = TRIVIA_TYPES.map(([id, label]) => triviaCheckbox(
+        'enabledTypes', id, label, settings.enabledTypes.includes(id),
+      )).join('');
+    }
+
+    setTriviaSlider('trivia-count-slider', 'trivia-count-value', settings.questionsPerSession, '');
+    setTriviaSlider('trivia-question-seconds', 'trivia-question-seconds-value', settings.questionSeconds, 's');
+    setTriviaSlider('trivia-answer-seconds', 'trivia-answer-seconds-value', settings.answerSeconds, 's');
+    setChecked('trivia-show-intro', settings.showIntroCard);
+    setChecked('trivia-show-summary', settings.showSummaryCard);
+    setChecked('trivia-shuffle-categories', settings.shuffleCategories);
+  }
+
+  function setTriviaSlider(sliderId, labelId, value, suffix) {
+    const slider = $(sliderId);
+    const label = $(labelId);
+    if (slider) {
+      slider.value = String(value);
+      slider.setAttribute('aria-valuenow', String(value));
+    }
+    if (label) {
+      label.textContent = `${value}${suffix}`;
+    }
+  }
+
+  function setChecked(id, value) {
+    const input = $(id);
+    if (input) {
+      input.checked = value !== false;
+    }
+  }
+
+  function renderTriviaCategories(categories) {
+    const grid = $('trivia-categories');
+    if (!grid) {
+      return;
+    }
+    grid.innerHTML = (categories || []).map((category) => triviaCheckbox(
+      'enabledCategoryIds', category.id, category.label, category.enabled,
+      `<span class="trivia-category-count${category.starved ? ' is-starved' : ''}">${category.count}</span>`,
+    )).join('');
+
+    const starved = (categories || []).filter((c) => c.enabled && c.starved);
+    const hint = $('trivia-starved-hint');
+    if (hint) {
+      hint.hidden = starved.length === 0;
+      hint.textContent = starved.length
+        ? `Thin on questions: ${starved.map((c) => c.label).join(', ')}. `
+          + 'Rounds still air — the pool widens its search rather than running short.'
+        : '';
+    }
+  }
+
+  function renderTriviaStatus(status) {
+    const pill = $('trivia-status-pill');
+    const detail = $('trivia-status-detail');
+    const size = Number(status?.size || 0);
+    const available = Number(status?.available || 0);
+    const target = Number(status?.settings?.poolTargetSize || 0);
+    if (pill) {
+      const ready = status?.hasContent;
+      pill.textContent = status?.refilling ? 'Restocking…' : (ready ? `${available} ready` : 'Stocking');
+      pill.className = `status-pill ${ready ? 'ok' : 'warn'}`;
+    }
+    if (detail) {
+      // `available` excludes recently-served questions, so it is usually lower
+      // than the raw cache size — showing both avoids a confusing "3 ready of 300".
+      const bits = [`${available} eligible of ${size} cached (target ${target})`];
+      if (status?.categoryTarget) {
+        bits.push(`${status.categoryTarget} per category`);
+      }
+      if (status?.lastRefillAt) {
+        bits.push(`last topped up ${new Date(status.lastRefillAt).toLocaleTimeString()}`);
+      }
+      if (status?.lastError) {
+        bits.push(`last error: ${status.lastError}`);
+      }
+      detail.textContent = bits.join(' · ');
+    }
+    const length = $('trivia-round-length');
+    if (length) {
+      length.textContent = formatRoundLength(status?.roundDurationSeconds);
+    }
+  }
+
+  function collectTriviaList(name) {
+    return Array.from(
+      document.querySelectorAll(`input[data-trivia-list="${name}"]:checked`),
+    ).map((input) => input.value);
+  }
+
+  function readTriviaForm() {
+    return {
+      enabledProviders: collectTriviaList('enabledProviders'),
+      enabledDifficulties: collectTriviaList('enabledDifficulties'),
+      enabledTypes: collectTriviaList('enabledTypes'),
+      enabledCategoryIds: collectTriviaList('enabledCategoryIds'),
+      questionsPerSession: Number($('trivia-count-slider')?.value || 5),
+      questionSeconds: Number($('trivia-question-seconds')?.value || 15),
+      answerSeconds: Number($('trivia-answer-seconds')?.value || 7),
+      showIntroCard: $('trivia-show-intro')?.checked !== false,
+      showSummaryCard: $('trivia-show-summary')?.checked !== false,
+      shuffleCategories: $('trivia-shuffle-categories')?.checked !== false,
+    };
+  }
+
+  async function saveTriviaSettings() {
+    if (!triviaSettings) {
+      return;
+    }
+    try {
+      const result = await apiPost('/api/trivia/settings', readTriviaForm());
+      triviaSettings = result.settings || triviaSettings;
+      const length = $('trivia-round-length');
+      if (length) {
+        length.textContent = formatRoundLength(result.roundDurationSeconds);
+      }
+      // Category counts are judged against questionsPerSession, so a slider
+      // move can turn a healthy category amber.
+      await refreshTriviaCategories();
+    } catch (error) {
+      toast(error.message || 'Could not save trivia settings', 'bad');
+      await loadTriviaSettings();
+    }
+  }
+
+  function queueTriviaSave() {
+    // Dragging a slider fires continuously; one save at the end is enough.
+    clearTimeout(triviaSaveTimer);
+    triviaSaveTimer = setTimeout(saveTriviaSettings, 400);
+  }
+
+  async function refreshTriviaCategories() {
+    try {
+      const result = await apiGet('/api/trivia/categories');
+      renderTriviaCategories(result.categories);
+    } catch {
+      // Leave the last-rendered list in place.
+    }
+  }
+
+  let triviaWatchTimer = null;
+
+  /** Poll the pool while a replenishment pass runs, then stop on its own. */
+  function watchTriviaRefill({ tries = 40 } = {}) {
+    clearTimeout(triviaWatchTimer);
+    if (tries <= 0) {
+      return;
+    }
+    triviaWatchTimer = setTimeout(async () => {
+      try {
+        const status = await apiGet('/api/trivia/pool/status');
+        renderTriviaStatus(status);
+        await refreshTriviaCategories();
+        if (status.refilling) {
+          watchTriviaRefill({ tries: tries - 1 });
+        } else if (status.lastError) {
+          toast(status.lastError, 'warn');
+        }
+      } catch {
+        // Stop quietly — the card refreshes whenever the tab is opened.
+      }
+    }, 5000);
+  }
+
+  async function loadTriviaSettings() {
+    const card = $('trivia-settings-card');
+    if (!card) {
+      return;
+    }
+    try {
+      const status = await apiGet('/api/trivia/pool/status');
+      renderTriviaSettings(status.settings, status.providers);
+      renderTriviaStatus(status);
+      await refreshTriviaCategories();
+      if (status.refilling) {
+        watchTriviaRefill();
+      }
+    } catch {
+      // Trivia not wired up on this bridge — hide the card rather than showing
+      // a permanently broken one.
+      card.hidden = true;
+      const label = card.previousElementSibling;
+      if (label?.classList.contains('section-label')) {
+        label.hidden = true;
+      }
+    }
+  }
+
+  const triviaCard = $('trivia-settings-card');
+  if (triviaCard) {
+    triviaCard.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (target.matches('input[type="checkbox"]')) {
+        target.closest('.trivia-check')?.classList.toggle('is-off', !target.checked);
+        queueTriviaSave();
+      } else if (target.matches('input[type="range"]')) {
+        queueTriviaSave();
+      }
+    });
+    triviaCard.addEventListener('input', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === 'range') {
+        const isCount = target.id === 'trivia-count-slider';
+        const label = $(isCount ? 'trivia-count-value' : `${target.id}-value`);
+        if (label) {
+          label.textContent = `${target.value}${isCount ? '' : 's'}`;
+        }
+      }
+    });
+    $('btn-trivia-refill')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await apiPost('/api/trivia/pool/refill', {});
+        renderTriviaStatus(result.status);
+        // The sources allow one call every six seconds, so a pass over every
+        // category runs for minutes. Watch it from here rather than holding the
+        // request open for the whole thing.
+        toast('Restocking — this takes a few minutes', 'ok');
+        watchTriviaRefill();
+      } catch (error) {
+        toast(error.message || 'Could not fetch questions', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    loadTriviaSettings();
+  }
 
   // Banner when opened over plain HTTP (camera QR will not work on iOS).
   if (!isSecureForCamera()) {
@@ -2042,6 +3707,38 @@
       const result = await apiPost('/api/push/psn-now-playing', withTarget());
       const label = result.mode === 'last-played' ? 'Last played' : 'Now playing';
       toast(`${label}: ${result.name || 'PSN'} (dismisses automatically)`, 'good');
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-steam-library-tour')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/steam-library-tour', withTarget({
+        secondsPerGame: libraryTourSecondsPerGame,
+      }));
+      toast(`Steam library tour started (${result.count || 0} games)`, 'good');
+      refreshLibraryTourCounts();
+    } catch (error) {
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-psn-library-tour')?.addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/psn-library-tour', withTarget({
+        secondsPerGame: libraryTourSecondsPerGame,
+      }));
+      toast(`PSN library tour started (${result.count || 0} games)`, 'good');
+      refreshLibraryTourCounts();
     } catch (error) {
       toast(error.message, 'bad');
     } finally {
@@ -2588,6 +4285,7 @@
     }
   }
 
+  loadPushGrid();
   refreshDisplays({ quiet: true });
   startDisplayEvents();
   startPolling();

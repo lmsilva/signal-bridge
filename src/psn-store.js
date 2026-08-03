@@ -11,6 +11,23 @@
 
 const DEFAULT_TIMEOUT_MS = 4500;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+// Chihiro answers 204 for products it no longer serves, which is indistinguishable
+// from a title Sony has simply not indexed yet — retry those sooner than a hit.
+const MISS_CACHE_TTL_MS = 30 * 60 * 1000;
+
+// A product id names its own storefront: EP6959-… is European, UP0177-… American.
+// Asking the wrong region is a reliable way to get nothing back.
+const REGION_BY_PREFIX = {
+  EP: { country: 'GB', lang: 'en' },
+  UP: { country: 'US', lang: 'en' },
+  JP: { country: 'JP', lang: 'ja' },
+  HP: { country: 'HK', lang: 'en' },
+};
+
+function regionForProductId(productId) {
+  const prefix = String(productId || '').trim().slice(0, 2).toUpperCase();
+  return REGION_BY_PREFIX[prefix] || null;
+}
 
 /** @type {Map<string, { at: number, value: object|null }>} */
 const cache = new Map();
@@ -82,10 +99,14 @@ async function fetchJson(url, {
       },
       signal: controller?.signal,
     });
-    if (!res?.ok) {
+    if (!res?.ok || res.status === 204) {
       return null;
     }
-    return await res.json();
+    const body = await res.text();
+    if (!body || !body.trim()) {
+      return null;
+    }
+    return JSON.parse(body);
   } catch {
     return null;
   } finally {
@@ -174,7 +195,7 @@ async function fetchStoreEnrichmentForTitle({
   }
   const cached = cache.get(key);
   const nowMs = typeof now === 'function' ? now() : now;
-  if (cached && (nowMs - cached.at) < CACHE_TTL_MS) {
+  if (cached && (nowMs - cached.at) < (cached.value ? CACHE_TTL_MS : MISS_CACHE_TTL_MS)) {
     return cached.value;
   }
 
@@ -206,11 +227,24 @@ async function fetchStoreEnrichmentForTitle({
       return null;
     }
 
-    const product = await fetchJson(chihiroContainerUrl(productId, { country, lang }), {
-      timeoutMs,
-      fetchImpl,
-    });
-    const value = parseProductEnrichment(product);
+    // Try the requested storefront first, then the one the product id belongs to.
+    const regions = [{ country, lang }];
+    const home = regionForProductId(productId);
+    if (home && (home.country !== country || home.lang !== lang)) {
+      regions.push(home);
+    }
+
+    let value = null;
+    for (const region of regions) {
+      const product = await fetchJson(chihiroContainerUrl(productId, region), {
+        timeoutMs,
+        fetchImpl,
+      });
+      value = parseProductEnrichment(product);
+      if (value) {
+        break;
+      }
+    }
     cache.set(key, { at: nowMs, value });
     return value;
   } catch {
@@ -227,10 +261,12 @@ module.exports = {
   stripHtml,
   cleanStoreDescription,
   chihiroContainerUrl,
+  regionForProductId,
   pickFullGameProductId,
   parseProductEnrichment,
   fetchStoreEnrichmentForTitle,
   clearStoreEnrichmentCache,
   DEFAULT_TIMEOUT_MS,
   CACHE_TTL_MS,
+  MISS_CACHE_TTL_MS,
 };

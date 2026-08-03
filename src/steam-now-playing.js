@@ -688,7 +688,14 @@ function createSteamNowPlaying({
         : (requirePresence ? null : 'Showing for any PC (Steam account in-game)');
   }
 
-  async function pushManualPreview({ device = 'Signal', send } = {}) {
+  /**
+   * @param {Object} [options]
+   * @param {'auto'|'now-playing'|'last-played'} [options.requestedMode] `auto`
+   *   (the admin test button) falls back to the most recently played game when
+   *   nothing is running. The scheduler asks for one specific mode so a
+   *   `steam.now-playing` rule can never quietly air a last-played card instead.
+   */
+  async function pushManualPreview({ device = 'Signal', send, requestedMode = 'auto' } = {}) {
     const creds = getCredentials();
     if (!creds.apiKey || !creds.steamId) {
       return {
@@ -710,8 +717,12 @@ function createSteamNowPlaying({
     }
 
     let mode = 'playing';
-    let appId = summary.gameId;
+    let appId = requestedMode === 'last-played' ? null : summary.gameId;
     let lastPlayedAt = null;
+
+    if (!appId && requestedMode === 'now-playing') {
+      return { ok: false, error: 'Nothing is playing on Steam right now' };
+    }
 
     if (!appId) {
       let top;

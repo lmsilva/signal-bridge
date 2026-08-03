@@ -11,6 +11,7 @@ const {
   resolveStaticPath,
   computeWebBasePath,
 } = require('../src/web-server');
+const { COMMANDS } = require('../src/command-registry');
 
 // Plain non-pooled requests: global fetch keeps pooled keep-alive sockets per
 // origin, and Windows can hand a later test server the same ephemeral port a
@@ -147,6 +148,8 @@ async function startTestServer(options = {}) {
     requestAlarmPoll: options.requestAlarmPoll
       || ((device) => alarmPolls.push(device)),
     guestSnapsAuth: options.guestSnapsAuth || null,
+    trivia: options.trivia || null,
+    youtubeNowPlaying: options.youtubeNowPlaying || null,
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
@@ -975,10 +978,173 @@ test('admin control PIN sheet expects a 6-digit code', () => {
   assert.match(html, /6-digit code/);
   assert.match(html, /id="pin-sheet-input"[^>]*maxlength="6"/);
   assert.match(html, /id="pin-sheet-input"[^>]*pattern="\[0-9\]\{6\}"/);
-  assert.match(html, /styles\.css\?v=signal25/);
-  assert.match(html, /app\.js\?v=signal25/);
+  assert.match(html, /styles\.css\?v=signal35/);
+  assert.match(html, /app\.js\?v=signal35/);
+  assert.match(html, /sheet-actions-lightbox/);
+  assert.match(html, /id="btn-lightbox-push"/);
   assert.match(js, /CONTROL_PIN_DIGITS\s*=\s*6/);
   assert.match(js, /\.slice\(0,\s*CONTROL_PIN_DIGITS\)/);
+});
+
+test('admin Settings has a trivia card driven by the trivia API', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  // Containers the renderer fills; the markup itself carries no category list.
+  for (const id of [
+    'trivia-settings-card', 'trivia-providers', 'trivia-difficulties', 'trivia-types',
+    'trivia-categories', 'trivia-status-pill', 'trivia-round-length', 'btn-trivia-refill',
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  assert.doesNotMatch(html, /data-trivia-list=/, '26 categories must be rendered, not hardcoded');
+
+  assert.match(js, /\/api\/trivia\/pool\/status/);
+  assert.match(js, /\/api\/trivia\/categories/);
+  assert.match(js, /\/api\/trivia\/settings/);
+  assert.match(js, /\/api\/trivia\/pool\/refill/);
+  // Starvation must surface as a visible warning, not a silent air-time failure.
+  assert.match(js, /trivia-starved-hint/);
+  assert.match(js, /is-starved/);
+  assert.match(css, /\.trivia-category-count\.is-starved/);
+});
+
+test('the wide Settings cards span the grid and column up inside', () => {
+  // Half-width made these two metres tall with an empty column beside them,
+  // which is what "the settings page is disorganised" was about.
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  for (const card of ['youtube-settings-card', 'trivia-settings-card']) {
+    assert.match(
+      css,
+      new RegExp(`#tab-settings \\.${card}[^{]*\\{[^}]*grid-column: 1 / -1`),
+      `${card} must span both columns`,
+    );
+  }
+  // Their contents run as columns, so the extra width is actually used.
+  assert.match(html, /class="settings-columns settings-columns-3"/);
+  assert.match(css, /\.settings-columns-3 \{ grid-template-columns: repeat\(3, 1fr\); \}/);
+});
+
+test('the refill button answers immediately instead of holding the request open', async () => {
+  // Sources allow one call every six seconds, so a pass over every category
+  // runs for minutes. Awaiting it here used to hold the HTTP request open long
+  // enough for the browser to give up and report a bare failure with nothing
+  // to act on.
+  let settle = null;
+  const refilling = new Promise((resolve) => { settle = resolve; });
+  const trivia = {
+    pool: { refill: () => refilling },
+    statusSnapshot: () => ({ size: 0, available: 0, refilling: true }),
+  };
+  const { webServer, base } = await startTestServer({ trivia: () => trivia });
+  try {
+    const started = Date.now();
+    const response = await postJson(base, '/api/trivia/pool/refill', {});
+    assert.equal(response.status, 202);
+    assert.equal(response.body.started, true);
+    assert.ok(Date.now() - started < 1000, 'the response must not wait for the pass');
+    // The card watches the pool for the outcome.
+    assert.equal(response.body.status.refilling, true);
+  } finally {
+    settle({ ok: true, added: 0 });
+    webServer.stop();
+  }
+});
+
+test('a YouTube scan with no detection agent explains what to do about it', async () => {
+  // The reason matters: "no TVs found" and "this container has no Python in it"
+  // look identical from the settings page but need completely different fixes.
+  const youtube = {
+    discover: async () => ({
+      ok: false,
+      unavailable: true,
+      error: 'The YouTube detection agent is not running.'
+        + ' Python is not in this image — rebuild it (./recreate.sh --build).',
+    }),
+  };
+  const { webServer, base } = await startTestServer({ youtubeNowPlaying: youtube });
+  try {
+    const response = await postJson(base, '/api/youtube/devices/discover', {});
+    // 503, not 502: the bridge is not equipped for this yet, the TVs are fine.
+    assert.equal(response.status, 503);
+    assert.match(response.body.error, /rebuild/i);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('admin Settings has a YouTube card for linking, keys and cache', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  for (const id of [
+    'youtube-settings-card', 'youtube-status-pill', 'youtube-devices', 'youtube-pair-code',
+    'btn-youtube-link', 'btn-youtube-discover', 'youtube-discovered', 'youtube-api-key',
+    'btn-youtube-api-key', 'youtube-quota', 'btn-youtube-cache-clear', 'youtube-multi-device',
+    'youtube-preferred-device', 'btn-youtube-test-push',
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  // Devices are runtime state; the markup must not enumerate them.
+  assert.doesNotMatch(html, /data-device-id="/, 'devices must be rendered from the API');
+
+  for (const route of [
+    '/api/youtube/settings', '/api/youtube/devices', '/api/youtube/devices/link',
+    '/api/youtube/devices/discover', '/api/youtube/api-key', '/api/youtube/cache/clear',
+  ]) {
+    assert.ok(
+      js.includes(route) || js.includes(route.replace('/api/youtube', '${YOUTUBE_ROUTE}')),
+      `admin app.js never calls ${route}`,
+    );
+  }
+  // Re-link and remove are the two recovery paths a revoked token needs.
+  assert.match(js, /relink/);
+  assert.match(js, /method: 'DELETE'/);
+  assert.match(css, /\.yt-dot\.is-needs-relink/);
+});
+
+test('admin has a Scheduler tab with a rules view and an activity view', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  assert.match(html, /data-tab="scheduler"/);
+  assert.match(html, /id="tab-scheduler"/);
+  for (const id of [
+    'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'btn-sched-add',
+    'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
+    'sched-stats', 'sched-timeline', 'sched-show-skips', 'sched-inspector',
+    'sched-rule-stats', 'sched-heatmap',
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
+  // Rules are runtime data; the markup must not enumerate them.
+  assert.doesNotMatch(html, /data-rule-id="/, 'rules must be rendered from the API');
+
+  for (const route of [
+    '/api/display-scheduler/settings', '/api/display-scheduler/rules',
+    '/api/display-scheduler/status', '/api/display-scheduler/activity',
+    '/api/display-scheduler/stats', '/api/display-scheduler/heatmap',
+    '/api/display-scheduler/simulate',
+  ]) {
+    const tail = route.slice('/api/display-scheduler'.length);
+    assert.ok(
+      js.includes(route) || js.includes(`SCHED_ROUTE}${tail}`),
+      `admin app never calls ${route}`,
+    );
+  }
+  // The command picker must come from the registry, not a hardcoded list.
+  assert.match(js, /renderSchedCommandPicker/);
+  assert.match(js, /'\/api\/commands'/);
+  // Timeline is hand-rolled SVG — no charting library is bundled.
+  assert.match(js, /function renderSchedTimeline/);
+  assert.match(js, /quietBands/);
+  assert.match(css, /\.sched-timeline\b/);
+  assert.match(css, /\.sched-heat-0/);
 });
 
 test('admin on-screen keyboard sends Space and flashes pressed keys', () => {
@@ -1016,17 +1182,78 @@ test('admin home logo goes to Push; Steam return opens Settings', () => {
 });
 
 test('control page Quick Push includes Guest Snaps and companion tiles', () => {
+  // Tiles come from the command registry now, not static markup — the HTML only
+  // supplies the rows the renderer fills.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
-  assert.match(html, /id="btn-push-guest-snaps"/);
-  assert.match(html, /id="btn-push-air-quality"/);
-  assert.match(html, /id="btn-push-now-playing"/);
-  assert.match(html, /id="btn-push-alarms"/);
+  assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
+  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,Steam,PSN,YouTube"/);
+  assert.doesNotMatch(html, /id="push-row-playing"/);
   assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
+
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
-  assert.match(js, /\/api\/push\/guest-photobooth/);
-  assert.match(js, /\/api\/push\/air-quality/);
-  assert.match(js, /\/api\/push\/now-playing/);
-  assert.match(js, /\/api\/push\/alarms/);
+  assert.match(js, /apiGet\('\/api\/commands'\)/);
+  assert.match(js, /function renderPushGrid\(/);
+
+  const pushable = COMMANDS.filter((command) => command.pushable).map((c) => c.id);
+  for (const id of [
+    'signal.guest-snaps', 'alexa.air-quality', 'alexa.now-playing', 'alexa.alarms',
+    'alexa.weather', 'alexa.shopping-list', 'alexa.timers', 'signal.slideshow',
+    'tesla.dashboard', 'tesla.battery',
+  ]) {
+    assert.ok(pushable.includes(id), `${id} should be a pushable command`);
+  }
+});
+
+test('Steam, PSN and YouTube share one auto-mode push tile each next to Trivia', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const rows = [...html.matchAll(/data-push-row="([^"]+)"/g)]
+    .flatMap((match) => match[1].split(',').map((g) => g.trim()));
+
+  // A group listed in two rows would render its tiles twice.
+  assert.equal(new Set(rows).size, rows.length, 'each group belongs to exactly one row');
+
+  for (const id of ['steam.now-playing', 'psn.now-playing', 'youtube.now-playing']) {
+    const command = COMMANDS.find((entry) => entry.id === id);
+    assert.ok(command.pushable, `${id} needs a push tile`);
+    assert.ok(rows.includes(command.group), `${command.group} has no row to render into`);
+    // Empty body → the push handler's `auto` path (live session, else last played).
+    assert.equal(command.body?.mode, undefined);
+  }
+  for (const id of ['steam.last-played', 'psn.last-played', 'youtube.last-played']) {
+    const command = COMMANDS.find((entry) => entry.id === id);
+    assert.equal(command.pushable, false, `${id} stays scheduler-only`);
+    assert.equal(command.body.mode, 'last-played');
+  }
+});
+
+test('the YouTube TV code input regroups digits while typing', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(js, /function formatYoutubePairCode\(/);
+  assert.match(js, /youtube-pair-code[\s\S]*?addEventListener\('input'/);
+  assert.match(js, /\(\\d\{3\}\)\(\?=\\d\)/);
+});
+
+test('GET /api/commands returns the registry', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const response = await getJson(base, '/api/commands');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.ok, true);
+    const ids = response.body.commands.map((command) => command.id);
+    assert.deepEqual(ids, COMMANDS.map((command) => command.id));
+
+    const weather = response.body.commands.find((c) => c.id === 'alexa.weather');
+    assert.equal(weather.route, '/api/push/weather');
+    assert.equal(weather.title, 'Weather Forecast');
+    assert.equal(weather.pushable, true);
+    assert.equal(weather.estimatedDurationSeconds, 60);
+    // Descriptors must be JSON-safe — no functions survive the round trip.
+    assert.ok(response.body.commands.every(
+      (command) => Object.values(command).every((value) => typeof value !== 'function'),
+    ));
+  } finally {
+    await webServer.stop();
+  }
 });
 
 test('air-quality and now-playing quick-push tiles feed synthetic events', async () => {

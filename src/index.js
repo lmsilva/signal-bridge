@@ -74,6 +74,16 @@ async function main() {
       steamNowPlaying: listener.steamNowPlaying,
       getPsnStatus: listener.getPsnStatus,
       psnNowPlaying: listener.psnNowPlaying,
+      getYoutubeStatus: listener.getYoutubeStatus,
+      youtubeNowPlaying: listener.youtubeNowPlaying,
+      trivia: listener.trivia,
+      getTriviaStatus: listener.getTriviaStatus,
+      displayBusy: listener.displayBusy,
+      libraryTourSettings: listener.libraryTourSettings(),
+      steamLibraryTour: listener.steamLibraryTour,
+      psnLibraryTour: listener.psnLibraryTour,
+      getSteamLibraryCount: listener.getSteamLibraryCount,
+      getPsnLibraryCount: listener.getPsnLibraryCount,
       guestSnapsAuth,
     });
     webServer.start().catch((error) => {

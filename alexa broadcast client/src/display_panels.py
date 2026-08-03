@@ -6514,6 +6514,10 @@ class GuestPhotoboothPanel(BasePanel):
 
     ACCENT = "#5FD0FF"
     QR_FRAME = "#FFFFFF"
+    # Historical reserve — the band never reports less, so card geometry below
+    # is unchanged. The cap stops a long PIN stack eating the QR plates.
+    PIN_BAND_MIN_H = 110
+    PIN_BAND_MAX_H = 168
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
@@ -6581,12 +6585,19 @@ class GuestPhotoboothPanel(BasePanel):
         )
         # Extra bottom inset so the lower card border clears the raised dismiss footer.
         footer_clear = int(round(18 * chrome.u))
-        pin_band = self.pin_band_height(chrome.u, has_pin=bool(access_pin))
+        pin_fonts = self._pin_band_fonts(chrome.u) if access_pin else None
+        pin_metrics = (
+            self.measure_pin_band(*pin_fonts, u=chrome.u) if pin_fonts else None
+        )
+        pin_band = self.pin_band_height(
+            chrome.u, has_pin=bool(access_pin), metrics=pin_metrics,
+        )
         content_top = chrome.content_top + pin_band
         if access_pin:
             self._draw_access_pin_band(
                 chrome.content_x, chrome.content_top, chrome.content_w, pin_band,
                 access_pin, access_hint, u=chrome.u,
+                metrics=pin_metrics, fonts=pin_fonts,
             )
         geo = self.compute_card_geometry(
             int(chrome.content_w),
@@ -6602,31 +6613,159 @@ class GuestPhotoboothPanel(BasePanel):
             )
 
     @staticmethod
-    def pin_band_height(u: float = 1.0, *, has_pin: bool = True) -> int:
-        """Reserved strip under the page header for the booth access PIN."""
+    def pin_band_height(u: float = 1.0, *, has_pin: bool = True, metrics=None) -> int:
+        """Reserved strip under the page header for the booth access PIN.
+
+        Pass `metrics` from `measure_pin_band` for the real measured height;
+        without it this returns the minimum reserve, which is what callers that
+        only need to know whether space is set aside should use.
+        """
         if not has_pin:
             return 0
-        return int(round(110 * float(u or 1.0)))
+        if metrics:
+            return int(metrics["height"])
+        return int(round(GuestPhotoboothPanel.PIN_BAND_MIN_H * float(u or 1.0)))
 
-    def _draw_access_pin_band(self, x, y, w, h, pin, hint, *, u=1.0):
+    @staticmethod
+    def pin_band_fonts(u: float = 1.0, *, title_family: str = "Segoe UI"):
+        """Caption / PIN / hint fonts sized in vmin units so they track `u`.
+
+        The shell's `hero_font` is a fixed 42-48pt regardless of panel size, so
+        it cannot be used here — on a small display its line box is taller than
+        the whole band.
+        """
+        caption = tkfont.Font(family="Consolas", size=max(9, int(round(18 * u))))
+        hint = tkfont.Font(family=title_family, size=max(9, int(round(20 * u))))
+        pin = tkfont.Font(
+            family="Consolas", size=max(20, int(round(58 * u))), weight="bold",
+        )
+        return caption, pin, hint
+
+    @staticmethod
+    def measure_pin_band(caption_font, pin_font, hint_font, u: float = 1.0) -> dict:
+        """Stack caption / PIN / hint by measured linespace so none can overlap.
+
+        Shrinks `pin_font` in place until the stack fits `PIN_BAND_MAX_H`, so
+        pass fonts from `pin_band_fonts` rather than shared shell fonts.
+        """
+        u = float(u or 1.0)
+        pad = max(6.0, 8 * u)
+        gap = max(4.0, 8 * u)
+        max_h = GuestPhotoboothPanel.PIN_BAND_MAX_H * u
+
+        def linespace(font, fallback):
+            try:
+                return int(font.metrics("linespace"))
+            except Exception:
+                return int(fallback)
+
+        cap_h = linespace(caption_font, round(22 * u))
+        hint_h = linespace(hint_font, round(24 * u))
+        pin_h = linespace(pin_font, round(70 * u))
+        # Step by point size, not by linespace — several consecutive sizes can
+        # share a linespace, so bailing on the first flat step stops too early.
+        while cap_h + gap + pin_h + gap + hint_h + 2 * pad > max_h:
+            try:
+                size = int(pin_font.cget("size"))
+            except Exception:
+                break
+            if size <= 20:
+                break
+            pin_font.configure(size=size - 1)
+            pin_h = linespace(pin_font, pin_h)
+        block = cap_h + gap + pin_h + gap + hint_h
+        height = int(round(max(
+            GuestPhotoboothPanel.PIN_BAND_MIN_H * u, block + 2 * pad,
+        )))
+        top = (height - block) / 2
+        return {
+            "height": height,
+            "caption_y": top,
+            "caption_h": cap_h,
+            "pin_y": top + cap_h + gap,
+            "pin_h": pin_h,
+            "hint_y": top + cap_h + gap + pin_h + gap,
+            "hint_h": hint_h,
+            "gap": gap,
+            "pad": pad,
+        }
+
+    def _pin_band_fonts(self, u: float):
+        title_family = (self.config or {}).get("titleFontFamily", "Segoe UI")
+        try:
+            return self.pin_band_fonts(u, title_family=title_family)
+        except Exception:
+            return (
+                self.shell.chip_label_font,
+                getattr(self.shell, "hero_font", None) or self.shell.chip_value_font,
+                self.shell.forecast_label_font,
+            )
+
+    def _draw_access_pin_band(
+        self, x, y, w, h, pin, hint, *, u=1.0, metrics=None, fonts=None,
+    ):
         from src.design_system import ACCENT, INK, INK_2
 
         cx = x + w / 2
-        pin_font = getattr(self.shell, "hero_font", None) or self.shell.chip_value_font
-        hint_font = self.shell.forecast_label_font
-        label_font = self.shell.chip_label_font
+        if fonts is None:
+            fonts = self._pin_band_fonts(u)
+        label_font, pin_font, hint_font = fonts
+        if metrics is None:
+            metrics = self.measure_pin_band(label_font, pin_font, hint_font, u=u)
+        # All three anchor "n" off measured offsets — a centre anchor lets the
+        # PIN's line box climb back over the caption.
         self._track(self.canvas.create_text(
-            cx, y + int(round(8 * u)), anchor="n",
+            cx, y + metrics["caption_y"], anchor="n",
             text="BOOTH PIN", fill=ACCENT, font=label_font,
         ))
         self._track(self.canvas.create_text(
-            cx, y + int(round(h * 0.42)), anchor="center",
+            cx, y + metrics["pin_y"], anchor="n",
             text=pin, fill=INK, font=pin_font,
         ))
         self._track(self.canvas.create_text(
-            cx, y + h - int(round(10 * u)), anchor="s",
+            cx, y + metrics["hint_y"], anchor="n",
             text=hint, fill=INK_2, font=hint_font,
         ))
+
+    @staticmethod
+    def layout_caption_runs(runs):
+        """Lay mixed-size text runs on one shared baseline.
+
+        Drawing "Network" and the SSID from a common top edge lines up the two
+        fonts by their ascenders, which makes the smaller run look like it is
+        floating above the larger one. Typography aligns on the baseline, so the
+        offsets are measured rather than assumed equal.
+
+        `runs` is a sequence of (font, text, fill). Returns the band's width and
+        height plus a per-run `dx`/`dy` offset for an "nw" anchor.
+        """
+        placed = []
+        widths = []
+        ascents = []
+        descents = []
+        for font, text, _fill in runs:
+            widths.append(font.measure(text))
+            ascents.append(font.metrics("ascent"))
+            descents.append(font.metrics("descent"))
+        baseline = max(ascents) if ascents else 0
+        dx = 0
+        for width, ascent in zip(widths, ascents):
+            placed.append({"dx": dx, "dy": baseline - ascent})
+            dx += width
+        return {
+            "width": dx,
+            "height": baseline + (max(descents) if descents else 0),
+            "runs": placed,
+        }
+
+    def _draw_caption_runs(self, runs, *, center_x, top):
+        layout = self.layout_caption_runs(runs)
+        left = center_x - layout["width"] / 2
+        for (font, text, fill), place in zip(runs, layout["runs"]):
+            self._track(self.canvas.create_text(
+                left + place["dx"], top + place["dy"],
+                anchor="nw", text=text, fill=fill, font=font,
+            ))
 
     def _draw_guest_redesign_card(self, x, y, w, h, plate, qr_size, step, *, index, ssid, qr_attr):
         from src.design_system import ACCENT, INK, INK_2, LINE
@@ -6649,7 +6788,13 @@ class GuestPhotoboothPanel(BasePanel):
             x + pad + mono.measure(number) + 14, header_y, anchor="nw",
             text=heading, fill=INK, font=heading_font,
         ))
-        caption_h = caption_font.metrics("linespace")
+        caption_runs = (
+            [(caption_font, "Network ", INK_2), (mono, ssid, ACCENT)] if index == 1
+            else [(caption_font, "Already connected? Start here", INK_2)]
+        )
+        # The SSID is set in the larger mono face, so reserving only the small
+        # caption's line height would let it spill past the card edge.
+        caption_h = self.layout_caption_runs(caption_runs)["height"]
         plate_budget = min(
             w - 2 * pad,
             h - 3 * pad - caption_h - heading_font.metrics("linespace"),
@@ -6675,23 +6820,7 @@ class GuestPhotoboothPanel(BasePanel):
                 text="QR unavailable", fill=INK_2, font=caption_font,
             ))
         caption_y = min(y + h - pad - caption_h, plate_y + plate_size + pad)
-        if index == 1:
-            prefix = "Network "
-            total_w = caption_font.measure(prefix) + mono.measure(ssid)
-            left = x + w / 2 - total_w / 2
-            self._track(self.canvas.create_text(
-                left, caption_y, anchor="nw", text=prefix, fill=INK_2, font=caption_font,
-            ))
-            self._track(self.canvas.create_text(
-                left + caption_font.measure(prefix), caption_y,
-                anchor="nw", text=ssid, fill=ACCENT, font=mono,
-            ))
-        else:
-            self._track(self.canvas.create_text(
-                x + w / 2, caption_y, anchor="n",
-                text="Already connected? Start here",
-                fill=INK_2, font=caption_font,
-            ))
+        self._draw_caption_runs(caption_runs, center_x=x + w / 2, top=caption_y)
 
 
 class PhotoSlideshowPanel(BasePanel):

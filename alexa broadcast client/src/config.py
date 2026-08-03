@@ -103,6 +103,22 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
             return 0
         return min(max(requested, 1), config["maxDisplaySeconds"])
 
+    if payload.get("type") == "youtube.now-playing":
+        if payload.get("persistent") is True:
+            return 0
+        return min(max(requested, 1), config["maxDisplaySeconds"])
+
+    if payload.get("type") == "trivia.round":
+        # The bridge sizes this to the whole sequence (intro + n×(question +
+        # answer) + summary). Clamping would cut the round off mid-question.
+        return max(requested, 1)
+
+    if payload.get("type") == "game.library-tour":
+        # Client loops posters locally; bridge marks persistent with displaySeconds 0.
+        if payload.get("persistent") is True:
+            return 0
+        return max(requested, 1)
+
     if payload.get("persistent") is True:
         # Stay until an explicit close or another overlay replaces it.
         return 0
