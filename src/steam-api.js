@@ -187,6 +187,28 @@ async function fetchAppDetails(appId) {
   };
 }
 
+/**
+ * Store search by name. Used to borrow artwork and blurbs for games the
+ * PlayStation Store no longer describes — Steam is keyless here and carries
+ * real gameplay stills rather than cover crops.
+ */
+async function searchStoreApps(term, { countryCode = 'us' } = {}) {
+  const query = String(term || '').trim();
+  if (!query) {
+    return [];
+  }
+  const url = `${STORE_HOST}/api/storesearch/?term=${encodeURIComponent(query)}`
+    + `&cc=${encodeURIComponent(countryCode)}&l=en`;
+  const json = await httpsGetJson(url);
+  const items = Array.isArray(json?.items) ? json.items : [];
+  return items
+    .map((item) => ({
+      appId: Number(item?.id),
+      name: String(item?.name || '').trim(),
+    }))
+    .filter((item) => Number.isFinite(item.appId) && item.appId > 0 && item.name);
+}
+
 async function fetchRecentlyPlayedGames(apiKey, steamId, { count = 5 } = {}) {
   const url = `${API_HOST}/IPlayerService/GetRecentlyPlayedGames/v1/?key=${encodeURIComponent(apiKey)}`
     + `&steamid=${encodeURIComponent(steamId)}&count=${encodeURIComponent(count)}`;
@@ -213,6 +235,30 @@ async function fetchRecentlyPlayedGames(apiKey, steamId, { count = 5 } = {}) {
  * (privacy lag, brand-new launches, some titles). GetRecentlyPlayedGames also
  * omits rtime and sorts by 2-week playtime — OwnedGames is the reliable signal.
  */
+/**
+ * Full owned library from GetOwnedGames — no rtime filter, no slice.
+ */
+async function fetchOwnedGames(apiKey, steamId) {
+  const url = `${API_HOST}/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}`
+    + `&steamid=${encodeURIComponent(steamId)}`
+    + '&include_played_free_games=1&include_appinfo=1';
+  const json = await httpsGetJson(url);
+  const games = Array.isArray(json?.response?.games) ? json.response.games : [];
+  return games.map((game) => {
+    const appId = Number(game.appid);
+    return {
+      appId,
+      name: game.name || `App ${appId}`,
+      playtimeForeverMin: Number.isFinite(Number(game.playtime_forever))
+        ? Number(game.playtime_forever)
+        : null,
+      lastPlayedAt: Number.isFinite(Number(game.rtime_last_played)) && Number(game.rtime_last_played) > 0
+        ? Number(game.rtime_last_played) * 1000
+        : null,
+    };
+  }).filter((game) => Number.isFinite(game.appId) && game.appId > 0);
+}
+
 async function fetchMostRecentlyPlayedOwnedGames(apiKey, steamId, { limit = 8 } = {}) {
   const url = `${API_HOST}/IPlayerService/GetOwnedGames/v1/?key=${encodeURIComponent(apiKey)}`
     + `&steamid=${encodeURIComponent(steamId)}`
@@ -350,9 +396,11 @@ module.exports = {
   libraryCapsuleUrls,
   fetchPlayerSummary,
   fetchRecentlyPlayedGames,
+  fetchOwnedGames,
   fetchMostRecentlyPlayedOwnedGames,
   fetchMostRecentlyPlayedOwnedGame,
   fetchAppDetails,
+  searchStoreApps,
   fetchOwnedGamePlaytime,
   fetchAchievementProgress,
   fetchCurrentPlayers,

@@ -463,7 +463,12 @@ class SteamNowPlayingPanel(BasePanel):
         return item
 
     def _is_last_played(self):
-        return str(self._steam.get("mode") or "playing") == "last-played"
+        mode = str(self._steam.get("mode") or "playing")
+        # Library tour cards reuse last-played chrome (WHEN / AGO), not ELAPSED.
+        return mode in ("last-played", "library-tour")
+
+    def _is_library_tour(self):
+        return str(self._steam.get("mode") or "") == "library-tour"
 
     def _fmt_last_played_date(self, dt):
         if not dt:
@@ -489,16 +494,30 @@ class SteamNowPlayingPanel(BasePanel):
         mid_x = (hx0 + hx1) / 2
         cy = (hy0 + hy1) / 2
         last_played = self._is_last_played()
+        library_tour = self._is_library_tour()
         start_dt = self._started_at
         if last_played:
             last_raw = self._steam.get("lastPlayedAt") or self._steam.get("startedAt")
             start_dt = parse_iso_timestamp(last_raw) if last_raw else start_dt
-        left_label = "WHEN" if last_played else "START TIME"
-        left_value = self._fmt_last_played_date(start_dt) if last_played else self._fmt_clock(start_dt)
-        badge = "LAST PLAYED" if last_played else "NOW PLAYING"
-        badge_outline = self.ACCENT if last_played else "#e2e8f0"
+        playtime = str(self._steam.get("playtimeLabel") or "").strip()
+        if library_tour and playtime:
+            left_label = "PLAYTIME"
+            left_value = playtime
+        elif last_played:
+            left_label = "WHEN"
+            left_value = self._fmt_last_played_date(start_dt)
+        else:
+            left_label = "START TIME"
+            left_value = self._fmt_clock(start_dt)
+        if library_tour:
+            badge = "LIBRARY"
+        elif last_played:
+            badge = "LAST PLAYED"
+        else:
+            badge = "NOW PLAYING"
+        badge_outline = self.ACCENT if (last_played or library_tour) else "#e2e8f0"
         badge_fill = "#0b1220"
-        badge_text = self.ACCENT if last_played else text
+        badge_text = self.ACCENT if (last_played or library_tour) else text
         badge_font = (
             getattr(self.shell, "section_label_font", None)
             or getattr(self.shell, "body_font", None)
@@ -531,7 +550,11 @@ class SteamNowPlayingPanel(BasePanel):
             mid_x, cy, anchor="center", text=badge, fill=badge_text,
             font=badge_font,
         ))
-        if last_played:
+        if library_tour:
+            right_label = "IN LIBRARY"
+            right_value = self.format_ago(start_dt) if start_dt else "—"
+            self._elapsed_value_id = None
+        elif last_played:
             right_label = "LAST PLAYED"
             right_value = self.format_ago(start_dt)
             self._elapsed_value_id = None
@@ -547,7 +570,7 @@ class SteamNowPlayingPanel(BasePanel):
             font=self.shell.chip_value_font,
         )
         self._item_ids.append(value_id)
-        if not last_played:
+        if not last_played and not library_tour:
             self._elapsed_value_id = value_id
 
         x0, y0, x1, y1 = boxes["hero"]
@@ -699,7 +722,9 @@ class SteamNowPlayingPanel(BasePanel):
             sx0, sy0, sx1, sy1 = shots_box
             self._place_screenshot_row(shots, sx0, sy0, sx1, sy1)
 
-    def _place_description_viewport(self, desc: str, x0: float, y0: float, x1: float, height: int):
+    def _place_description_viewport(
+        self, desc: str, x0: float, y0: float, x1: float, height: int, *, font=None,
+    ):
         """Clipped description band; long text loops via MessageScrollController.
 
         Embedded with ``canvas.create_window`` (not root ``place``) so the band
@@ -711,7 +736,7 @@ class SteamNowPlayingPanel(BasePanel):
 
         body_width = max(40, int(x1 - x0))
         viewport_h = max(1, int(height))
-        desc_font = getattr(self.shell, "body_font", None) or self.shell.chip_label_font
+        desc_font = font or getattr(self.shell, "body_font", None) or self.shell.chip_label_font
         # Parent the nested canvas to the overlay canvas so create_window clips
         # correctly inside the panel coordinate space.
         viewport = tk.Canvas(

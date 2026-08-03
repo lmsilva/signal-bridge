@@ -34,6 +34,9 @@ from src.page_header import paint_page_header
 from src.payload_utils import resolve_display_type, title_for_display_type, title_for_payload
 from src.steam_now_playing_panel import SteamNowPlayingPanel
 from src.psn_now_playing_panel import PsnNowPlayingPanel
+from src.youtube_now_playing_panel import YoutubeNowPlayingPanel
+from src.trivia_panel import TriviaPanel
+from src.game_library_tour_panel import GameLibraryTourPanel
 from src.weather_fetch import enrich_weather_payload
 
 
@@ -147,6 +150,9 @@ class OverlayWindow:
             "route-planner.query": RoutePlannerPanel(self.root, self.shell, self.config),
             "steam.now-playing": SteamNowPlayingPanel(self.root, self.shell, self.config),
             "psn.now-playing": PsnNowPlayingPanel(self.root, self.shell, self.config),
+            "youtube.now-playing": YoutubeNowPlayingPanel(self.root, self.shell, self.config),
+            "trivia.round": TriviaPanel(self.root, self.shell, self.config),
+            "game.library-tour": GameLibraryTourPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
@@ -423,6 +429,9 @@ class OverlayWindow:
             "guest.photobooth",
             "steam.now-playing",
             "psn.now-playing",
+            "youtube.now-playing",
+            "trivia.round",
+            "game.library-tour",
             "photo.slideshow",
             "weather.query",
             "timer.snapshot",
@@ -485,11 +494,15 @@ class OverlayWindow:
         """Shared-photos pages keep their own rails; persistent Steam has no timer."""
         if self._active_panel_key == "photo.slideshow":
             return True
+        if self._active_panel_key == "game.library-tour":
+            return True
         if self._is_shared_photo_qr_active():
             return True
         if self._active_panel_key == "steam.now-playing" and self._display_seconds <= 0:
             return True
         if self._active_panel_key == "psn.now-playing" and self._display_seconds <= 0:
+            return True
+        if self._active_panel_key == "youtube.now-playing" and self._display_seconds <= 0:
             return True
         return False
 

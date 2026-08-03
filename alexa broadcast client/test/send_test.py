@@ -1055,6 +1055,136 @@ def build_payload(args) -> dict:
             "trigger": "test",
         }
 
+    if args.type in (
+        "youtube-now-playing", "youtube-last-played",
+        "youtube-live", "youtube-minimal",
+    ):
+        base = f"http://{args.host}:8080/youtube-images"
+        started = datetime.now(timezone.utc) - timedelta(minutes=12, seconds=4)
+        live = args.type == "youtube-live"
+        # `youtube-minimal` is the degraded case: a private or deleted video,
+        # hidden subscriber count, no description and no dislike estimate.
+        minimal = args.type == "youtube-minimal"
+        last_played = args.type == "youtube-last-played"
+        return {
+            "version": 2,
+            "type": "youtube.now-playing",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 60 if last_played else 0,
+            "persistent": not last_played,
+            "trigger": "test",
+            "youtube": {
+                "videoId": "dQw4w9WgXcQ",
+                "mode": "last-played" if last_played else "playing",
+                "title": (
+                    "Untitled"
+                    if minimal
+                    else "How the Voyager Probes Still Phone Home After 47 Years"
+                ),
+                "description": (
+                    ""
+                    if minimal
+                    else "A look at the Deep Space Network and the engineering that keeps "
+                         "a 1977 spacecraft in contact across 24 billion kilometres."
+                ),
+                "descriptionLines": 3,
+                "channelTitle": "Veritasium",
+                "subscriberCount": None if minimal else 16_832_904,
+                "viewCount": None if minimal else 4_218_774,
+                "likeCount": None if minimal else 312_401,
+                "dislikeCount": None if minimal else 1_204,
+                "dislikeEstimated": not minimal,
+                "publishedAt": None if minimal else "2024-03-12T14:00:00Z",
+                "durationSeconds": 0 if live else 1711,
+                "live": live,
+                "liveBroadcastContent": "live" if live else "none",
+                "concurrentViewers": 18_402 if live else None,
+                "metadataMissing": minimal,
+                "thumbnailUrl": f"{base}/sample-thumbnail.jpg",
+                "thumbnailWidth": 1280,
+                "thumbnailHeight": 720,
+                "avatarUrl": None if minimal else f"{base}/sample-avatar.jpg",
+                "deviceLabel": "Living Room Apple TV",
+                "positionSeconds": None if last_played else 724,
+                "watchedSeconds": 1450 if last_played else None,
+                "completed": False if last_played else None,
+                "startedAt": started.isoformat().replace("+00:00", "Z"),
+                "endedAt": _iso_now() if last_played else None,
+            },
+        }
+
+    if args.type == "youtube-now-playing-close":
+        return {
+            "version": 2,
+            "type": "youtube.now-playing.close",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": 0,
+            "trigger": "test",
+        }
+
+    if args.type in ("trivia", "trivia-boolean", "trivia-single"):
+        base = f"http://{args.host}:8080/trivia-artwork"
+        specs = [
+            ("science", "Science", "#8BB7FF", "#0E1A2C", "medium",
+             "Which planet in our solar system has the shortest day?",
+             ["Mercury", "Jupiter", "Earth", "Neptune"], 1),
+            ("history", "History", "#E8B04B", "#231A0E", "hard",
+             "The Treaty of Westphalia, which ended the Thirty Years' War "
+             "and reshaped the political map of Europe, was signed in which year?",
+             ["1618", "1648", "1701", "1789"], 1),
+            ("film", "Film & TV", "#FF8FA3", "#2A1119", "easy",
+             "Who directed Jaws?", ["Steven Spielberg", "George Lucas",
+                                    "Ridley Scott", "Martin Scorsese"], 0),
+        ]
+        if args.type == "trivia-boolean":
+            specs = [(cid, label, accent, bg, diff, text, ["True", "False"], 0)
+                     for cid, label, accent, bg, diff, text, _, _ in specs]
+        if args.type == "trivia-single":
+            specs = specs[:1]
+        questions = [
+            {
+                "id": f"test-{i}",
+                "categoryId": category_id,
+                "categoryLabel": label,
+                "difficulty": difficulty,
+                "type": "boolean" if len(answers) == 2 else "multiple",
+                "text": text,
+                "answers": answers,
+                "correctIndex": correct,
+                "accent": accent,
+                "background": background,
+                "artwork": {
+                    "portrait": f"{base}/{category_id}-portrait.webp",
+                    "landscape": f"{base}/{category_id}-landscape.webp",
+                },
+            }
+            for i, (category_id, label, accent, background, difficulty, text, answers, correct)
+            in enumerate(specs)
+        ]
+        show_summary = len(questions) > 1
+        total = 4 + len(questions) * (15 + 7) + (6 if show_summary else 0)
+        return {
+            "version": 2,
+            "type": "trivia.round",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": total,
+            "trigger": "test",
+            "trivia": {
+                "roundId": "test-round",
+                "questions": questions,
+                "questionSeconds": 15,
+                "answerSeconds": 7,
+                "introSeconds": 4,
+                "summarySeconds": 6,
+                "showIntro": True,
+                "showSummary": show_summary,
+                "attribution": ["Open Trivia DB", "The Trivia API"],
+            },
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -1136,7 +1266,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "music", "route-planner", "route-planner-flight"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single"],
         default="broadcast",
         help="Payload type to send",
     )

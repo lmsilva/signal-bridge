@@ -3,6 +3,7 @@ const path = require('path');
 const { resolveTeslaFleetConfig } = require('./tesla-config');
 const { resolveSteamConfig } = require('./steam-config');
 const { resolvePsnConfig } = require('./psn-config');
+const { resolveYoutubeConfig } = require('./youtube-config');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -140,6 +141,7 @@ function loadConfig() {
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);
   config.steam = resolveSteamConfig({ ...config, ROOT }, fileConfig);
   config.psn = resolvePsnConfig({ ...config, ROOT }, fileConfig);
+  config.youtube = resolveYoutubeConfig({ ...config, ROOT }, fileConfig);
 
   // Admin UI password (/admin). Prefer env; optional config.webServer.adminPassword.
   config.webServer = {

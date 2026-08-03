@@ -760,6 +760,314 @@ textarea.field-input.text-input-area {
 }
 .slideshow-settings-col { min-width: 0; }
 
+/* Settings → Trivia. Same stacked-then-two-column shape as Slideshow. */
+.trivia-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+}
+.trivia-settings-col { min-width: 0; }
+
+/*
+ * Shared column primitive for the wide settings cards.
+ *
+ * The YouTube and Trivia cards carry far more controls than an auth card, so
+ * on a phone they stack and on anything wider they run as columns inside one
+ * full-width card. Half-width would leave them a metre tall with an empty
+ * column alongside.
+ */
+.settings-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 14px;
+}
+.settings-col { min-width: 0; }
+.settings-col > .field-label:first-child { margin-top: 0; }
+
+.trivia-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.trivia-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.trivia-check input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.trivia-check.is-off > span { color: var(--muted); }
+
+/* 26 categories: a dense grid beats a 26-row list on a phone. */
+.trivia-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+
+.trivia-category-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-left: auto;
+  padding-left: 8px;
+}
+/* Starvation is a number, not a silent failure at air time. */
+.trivia-category-count.is-starved { color: var(--warn, #f5c453); font-weight: 700; }
+
+/* ---------- YouTube ---------- */
+
+.yt-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.yt-device-list:empty { display: none; }
+
+.yt-device {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.03));
+}
+
+.yt-device-main { min-width: 0; width: 100%; }
+.yt-device-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.25;
+  word-break: break-word;
+}
+.yt-device-sub { color: var(--muted); font-size: 0.8rem; }
+
+/* The dot carries the state at a glance; the text explains it on tap. */
+.yt-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--muted);
+}
+.yt-dot.is-linked { background: var(--good, #6ee7a8); }
+.yt-dot.is-refreshing { background: var(--accent); }
+.yt-dot.is-needs-relink { background: var(--bad, #ff7676); }
+.yt-dot.is-unreachable { background: var(--warn, #f5c453); }
+.yt-dot.is-off { background: var(--line); }
+
+.yt-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.yt-device-actions .btn { padding: 6px 10px; font-size: 0.8rem; }
+
+.yt-link-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.yt-discovered {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.yt-quota {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.yt-quota strong { color: var(--text); }
+.yt-quota .is-high { color: var(--warn, #f5c453); }
+
+/* ---------- Display Scheduler ---------- */
+
+.sched-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sched-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.sched-toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+.sched-toggle.is-active > span { color: var(--good, #6ee7a8); }
+
+.sched-nextup {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sched-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sched-rule-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The colour dot is the rule's identity across timeline, cards and heatmap. */
+.sched-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.sched-rule-name { font-weight: 700; flex: 1; min-width: 0; }
+.sched-rule-name.is-broken { color: var(--bad, #ff7a6b); }
+
+.sched-rule-controls { display: flex; align-items: center; gap: 8px; }
+
+.sched-readout {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sched-readout strong { color: var(--text); }
+.sched-warning { color: var(--warn, #f5c453); font-size: 0.85rem; }
+
+.sched-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.sched-advanced { margin-top: 8px; }
+.sched-advanced > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+  list-style: none;
+}
+.sched-advanced > summary::-webkit-details-marker { display: none; }
+.sched-advanced > summary::before { content: '▸ '; }
+.sched-advanced[open] > summary::before { content: '▾ '; }
+
+.sched-quiet-row { display: flex; align-items: center; gap: 10px; }
+.sched-quiet-row .field-input { flex: 1; min-width: 0; }
+.sched-quiet-sep { color: var(--muted); font-size: 0.85rem; }
+
+/* Stat strip: tabular figures so live updates don't make numbers jitter. */
+.sched-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.sched-stat {
+  background: var(--card, #141f35);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.sched-stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.sched-stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+.sched-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.sched-timeline-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* Below ~900px the timeline scrolls at a fixed lane height rather than
+   compressing — a squashed swimlane is unreadable. */
+.sched-timeline-scroll { overflow-x: auto; overflow-y: hidden; }
+.sched-timeline { display: block; min-width: 560px; width: 100%; }
+
+.sched-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.sched-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sched-key { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
+.sched-key-dice { background: transparent; border: 2px solid var(--accent); }
+.sched-key-tiebreak { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border: 1px solid var(--accent); }
+.sched-key-blocked { border-radius: 0; background: var(--muted); opacity: 0.6; height: 2px; }
+.sched-key-error { background: var(--bad, #ff7a6b); border-radius: 2px; }
+.sched-key-quiet { background: rgba(150, 200, 255, 0.14); border-radius: 2px; }
+
+.sched-inspector { font-size: 0.9rem; }
+.sched-inspector dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 8px 0 0; }
+.sched-inspector dt { color: var(--muted); }
+.sched-inspector dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Expected vs actual reads faster as one bar than as two numbers. */
+.sched-evsa {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin: 6px 0;
+}
+.sched-evsa-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
+.sched-evsa-marker { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); }
+
+.sched-spark { display: block; height: 24px; width: 100%; }
+
+.sched-heatmap { overflow-x: auto; }
+.sched-heatmap table { border-collapse: separate; border-spacing: 2px; font-size: 0.7rem; }
+.sched-heatmap th { color: var(--muted); font-weight: 600; padding: 0 2px; }
+.sched-heatmap td { width: 14px; height: 14px; border-radius: 3px; }
+/* "No data" and "very few" must be distinguishable, so zero is an outline. */
+.sched-heat-0 { background: transparent; border: 1px solid var(--line); }
+
+@media (min-width: 720px) {
+  .sched-stat-strip { grid-template-columns: repeat(5, 1fr); }
+}
+
 /* ---------- Tab bar ---------- */
 
 .tab-bar {
@@ -1074,6 +1382,18 @@ textarea.field-input.text-input-area {
    asymmetric labels (e.g. "Push to Display") and made a plain "Delete"
    button look oversized next to "Cancel". */
 .sheet-actions-confirm { grid-template-columns: 1fr 1fr; }
+/* Photo lightbox: Close | Delete | Show on display — one row, no wrap gap. */
+.sheet-actions-lightbox {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 8px;
+}
+.sheet-actions-lightbox .btn {
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
 
 .sheet-scanner { max-width: 560px; }
 
@@ -1362,26 +1682,44 @@ textarea.field-input.text-input-area {
   #tab-settings .card-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    align-items: start;
+    /* Stretch, not start: two cards side by side with different amounts of
+       copy otherwise leave a ragged notch between them. */
+    align-items: stretch;
   }
 
+  /* Cards with more than a status line and a button take the full width and
+     column up internally, rather than sitting half-width and metres tall. */
   #tab-settings .section-label,
   #tab-settings > .card-grid > .hint,
-  #tab-settings .slideshow-settings-card {
+  #tab-settings .slideshow-settings-card,
+  #tab-settings .youtube-settings-card,
+  #tab-settings .trivia-settings-card {
     grid-column: 1 / -1;
   }
 
-  #tab-settings .slideshow-settings-row {
+  #tab-settings .slideshow-settings-row,
+  #tab-settings .trivia-settings-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px 28px;
     align-items: start;
   }
 
+  .settings-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 28px;
+    align-items: start;
+  }
+  .settings-columns-3 { grid-template-columns: 1fr 1fr; }
+
   #tab-settings .slideshow-settings-col .field-label-spaced,
   #tab-settings .slideshow-settings-col .field-label {
     margin-top: 0;
   }
+
+  .yt-link-row { flex-direction: row; }
+  .yt-link-row .field-input { flex: 1; min-width: 0; }
 
   .sheet-backdrop { align-items: center; }
   .sheet { border-radius: 20px; border-bottom: 1px solid var(--line); }
@@ -1395,6 +1733,10 @@ textarea.field-input.text-input-area {
   .push-columns { flex-direction: row; align-items: flex-start; }
   .push-column { flex: 1; min-width: 0; }
   .card-row-quad { grid-template-columns: repeat(4, 1fr); }
+
+  /* Three columns fit once the card is this wide; below it two read better
+     than three cramped ones. */
+  .settings-columns-3 { grid-template-columns: repeat(3, 1fr); }
 
   .push-card {
     min-width: 0;

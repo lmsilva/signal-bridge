@@ -1,0 +1,618 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { EventEmitter } = require('events');
+
+const { createYoutubeNowPlaying, SHORT_MAX_SECONDS } = require('../src/youtube-now-playing');
+const { createYoutubeStore, sanitiseSettings } = require('../src/youtube-settings');
+const { createSecretBox } = require('../src/secret-box');
+const {
+  buildYoutubeNowPlayingPayload,
+  buildYoutubeNowPlayingClosePayload,
+} = require('../src/udp-payload');
+const { createCommandRegistry } = require('../src/command-registry');
+
+function tempDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'yt-svc-'));
+}
+
+function makeConfig(dir) {
+  return {
+    udpBroadcast: { defaultDisplaySeconds: 45, maxDisplaySeconds: 300 },
+    proxyOwnIp: '192.168.1.50',
+    webServer: { port: 47810, https: true },
+    youtube: {
+      enabled: true,
+      loungeEnabled: true,
+      apiKey: 'test-key',
+      devicesPath: path.join(dir, 'devices.json'),
+      settingsPath: path.join(dir, 'settings.json'),
+      cachePath: path.join(dir, 'cache.json'),
+      historyPath: path.join(dir, 'history.json'),
+      thumbnailCachePath: path.join(dir, 'thumbs'),
+    },
+  };
+}
+
+const VIDEO = {
+  videoId: 'abc',
+  missing: false,
+  degraded: false,
+  title: 'How the Voyager Probes Still Phone Home',
+  descriptionClean: 'A look at the Deep Space Network.',
+  publishedAt: '2024-03-12T14:00:00Z',
+  durationSeconds: 1711,
+  liveBroadcastContent: 'none',
+  channelId: 'UC-veritasium',
+  channelTitle: 'Veritasium',
+  subscriberCount: 16832904,
+  hiddenSubscriberCount: false,
+  viewCount: 4218774,
+  likeCount: 312401,
+  dislikeCount: 1204,
+  concurrentViewers: null,
+  thumbnailFile: 'a'.repeat(40) + '.jpg',
+  thumbnailWidth: 1280,
+  thumbnailHeight: 720,
+  avatarFile: 'b'.repeat(40) + '.jpg',
+};
+
+/** A lounge double: the same event surface, no process and no protocol. */
+function fakeLounge() {
+  const emitter = new EventEmitter();
+  const sessions = [];
+  return {
+    on: (event, handler) => emitter.on(event, handler),
+    off: (event, handler) => emitter.off(event, handler),
+    start: () => {},
+    stop: () => {},
+    emit: (event, payload) => emitter.emit(event, payload),
+    connectDevice: async () => ({ ok: true, screenName: 'Theater' }),
+    disconnectDevice: async () => ({ ok: true }),
+    pairWithCode: async (id) => ({ ok: true, screenId: `screen-${id}`, authState: { t: 1 } }),
+    pairWithScreenId: async (id) => ({ ok: true, screenId: `screen-${id}`, authState: { t: 2 } }),
+    discover: async () => ({ ok: true, devices: [{ address: '192.168.1.42', screenId: 'screen-x', server: 'AppleTV/1' }] }),
+    refreshDevice: async () => ({ ok: true }),
+    activeSessions: () => sessions,
+    snapshot: () => ({ running: true, ready: true, loungeAvailable: true, devices: [] }),
+    _sessions: sessions,
+  };
+}
+
+function fakeApi(overrides = {}) {
+  const resolved = [];
+  return {
+    resolved,
+    resolveVideo: async (videoId, options) => {
+      resolved.push({ videoId, options });
+      if (overrides.resolveVideo) {
+        return overrides.resolveVideo(videoId, options);
+      }
+      return { ...VIDEO, videoId };
+    },
+    prefetchVideo: async (videoId) => {
+      resolved.push({ videoId, prefetch: true });
+      return true;
+    },
+    stats: () => ({ videos: 1, channels: 1, quotaUsedToday: 3, quotaLimit: 10000, hasApiKey: true }),
+    clear: () => ({ videos: 0, channels: 0 }),
+    pruneThumbnails: () => 0,
+    flush: () => {},
+  };
+}
+
+function makeService(extra = {}) {
+  const dir = tempDir();
+  const config = makeConfig(dir);
+  const sent = [];
+  const lounge = extra.lounge || fakeLounge();
+  const api = extra.api || fakeApi();
+  const store = createYoutubeStore({
+    config,
+    secretBox: createSecretBox({ keyPath: path.join(dir, 'secret.key') }),
+  });
+  const service = createYoutubeNowPlaying({
+    config,
+    sendUdpPayload: (payload) => sent.push(payload),
+    lounge,
+    api,
+    store,
+    ...extra.options,
+  });
+  return { service, sent, lounge, api, store, config, dir };
+}
+
+// ------------------------------------------------------------- the payload
+
+test('a playing card is persistent and carries everything the panel needs', () => {
+  const payload = buildYoutubeNowPlayingPayload(VIDEO, makeConfig(tempDir()), {
+    mode: 'playing',
+    deviceLabel: 'Movie Theater',
+    imageBaseUrl: 'https://192.168.1.50:47810',
+    settings: sanitiseSettings({}),
+    session: { startedAt: '2026-08-02T20:00:00Z', positionSeconds: 724 },
+  });
+
+  assert.equal(payload.type, 'youtube.now-playing');
+  assert.equal(payload.version, 2);
+  assert.equal(payload.persistent, true);
+  assert.equal(payload.displaySeconds, 0, 'a live session holds until playback stops');
+  assert.equal(payload.youtube.mode, 'playing');
+  assert.equal(payload.youtube.positionSeconds, 724);
+  assert.equal(payload.youtube.watchedSeconds, null);
+  assert.equal(payload.youtube.deviceLabel, 'Movie Theater');
+  assert.equal(payload.youtube.durationSeconds, 1711);
+  assert.equal(
+    payload.youtube.thumbnailUrl,
+    `https://192.168.1.50:47810/youtube-images/${VIDEO.thumbnailFile}`,
+  );
+  assert.match(payload.youtube.avatarUrl, /\/youtube-images\//);
+});
+
+test('a last-played card is dismissible and reports watched time instead of position', () => {
+  const payload = buildYoutubeNowPlayingPayload(VIDEO, makeConfig(tempDir()), {
+    mode: 'last-played',
+    settings: sanitiseSettings({ dismissSeconds: 90 }),
+    session: {
+      watchedSeconds: 1450,
+      positionSeconds: 1450,
+      completed: false,
+      endedAt: '2026-08-02T20:30:00Z',
+    },
+  });
+
+  assert.equal(payload.persistent, false);
+  assert.equal(payload.displaySeconds, 90);
+  assert.equal(payload.youtube.mode, 'last-played');
+  assert.equal(payload.youtube.watchedSeconds, 1450);
+  assert.equal(payload.youtube.positionSeconds, 1450);
+  assert.equal(payload.youtube.completed, false);
+  assert.equal(payload.youtube.endedAt, '2026-08-02T20:30:00Z');
+});
+
+test('a last-played card prefers scrubber position for the Watched X of Y line', () => {
+  const payload = buildYoutubeNowPlayingPayload(VIDEO, makeConfig(tempDir()), {
+    mode: 'last-played',
+    settings: sanitiseSettings({ dismissSeconds: 90 }),
+    session: { watchedSeconds: 9, positionSeconds: 724, completed: false },
+  });
+  assert.equal(payload.youtube.watchedSeconds, 724);
+  assert.equal(payload.youtube.positionSeconds, 724);
+});
+
+test('the dislike figure is always flagged as an estimate', () => {
+  const payload = buildYoutubeNowPlayingPayload(VIDEO, makeConfig(tempDir()), {
+    settings: sanitiseSettings({}),
+  });
+  assert.equal(payload.youtube.dislikeCount, 1204);
+  assert.equal(payload.youtube.dislikeEstimated, true);
+
+  const without = buildYoutubeNowPlayingPayload({ ...VIDEO, dislikeCount: null }, makeConfig(tempDir()), {
+    settings: sanitiseSettings({}),
+  });
+  assert.equal(without.youtube.dislikeCount, null);
+  assert.equal(without.youtube.dislikeEstimated, false);
+});
+
+test('the display toggles actually suppress their fields', () => {
+  const payload = buildYoutubeNowPlayingPayload(VIDEO, makeConfig(tempDir()), {
+    settings: sanitiseSettings({
+      showDescription: false, showSubscribers: false, showDislikes: false,
+    }),
+  });
+  assert.equal(payload.youtube.description, '');
+  assert.equal(payload.youtube.subscriberCount, null);
+  assert.equal(payload.youtube.dislikeCount, null);
+});
+
+test('a hidden subscriber count is omitted even with the toggle on', () => {
+  const payload = buildYoutubeNowPlayingPayload(
+    { ...VIDEO, hiddenSubscriberCount: true, subscriberCount: 0 },
+    makeConfig(tempDir()),
+    { settings: sanitiseSettings({}) },
+  );
+  assert.equal(payload.youtube.subscriberCount, null);
+});
+
+test('a live stream carries its viewer count and no duration bar', () => {
+  const payload = buildYoutubeNowPlayingPayload(
+    {
+      ...VIDEO, liveBroadcastContent: 'live', durationSeconds: 0, concurrentViewers: 18402,
+    },
+    makeConfig(tempDir()),
+    { settings: sanitiseSettings({}) },
+  );
+  assert.equal(payload.youtube.live, true);
+  assert.equal(payload.youtube.concurrentViewers, 18402);
+  assert.equal(payload.youtube.durationSeconds, 0);
+});
+
+test('a video with no metadata still produces a card', () => {
+  const payload = buildYoutubeNowPlayingPayload(
+    { videoId: 'gone', missing: true, title: 'Untitled' },
+    makeConfig(tempDir()),
+    { settings: sanitiseSettings({}) },
+  );
+  assert.equal(payload.youtube.metadataMissing, true);
+  assert.equal(payload.youtube.title, 'Untitled');
+  assert.equal(payload.youtube.thumbnailUrl, null);
+});
+
+test('a payload without a video id is refused rather than half-built', () => {
+  assert.equal(buildYoutubeNowPlayingPayload(null, makeConfig(tempDir())), null);
+  assert.equal(buildYoutubeNowPlayingPayload({}, makeConfig(tempDir())), null);
+});
+
+test('the close payload is a bare command', () => {
+  const payload = buildYoutubeNowPlayingClosePayload({ trigger: 'test' }, makeConfig(tempDir()));
+  assert.equal(payload.type, 'youtube.now-playing.close');
+  assert.equal(payload.displaySeconds, 0);
+  assert.equal(payload.trigger, 'test');
+});
+
+// ---------------------------------------------------------- session → card
+
+test('a confirmed session sends a card, and stopping closes it', async () => {
+  const { service, sent, lounge, store } = makeService();
+  service.start();
+
+  lounge.emit('started', {
+    deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z', durationSeconds: 1711,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'youtube.now-playing');
+  assert.equal(sent[0].youtube.videoId, 'abc');
+
+  lounge.emit('stopped', {
+    deviceId: 'tv-1', videoId: 'abc', watchedSeconds: 900,
+    startedAt: '2026-08-02T20:00:00Z', endedAt: '2026-08-02T20:15:00Z', completed: false,
+  });
+
+  assert.equal(sent.at(-1).type, 'youtube.now-playing.close');
+  assert.equal(store.history()[0].videoId, 'abc', 'the session is kept as history');
+});
+
+test('a Short is suppressed unless the setting asks for it', async () => {
+  const short = { ...VIDEO, durationSeconds: 42, liveBroadcastContent: 'none' };
+  const { service, sent, lounge, store } = makeService({
+    api: fakeApi({ resolveVideo: async () => short }),
+  });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sent.length, 0);
+  assert.ok(short.durationSeconds < SHORT_MAX_SECONDS);
+
+  store.updateSettings({ showShorts: true });
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'def', startedAt: '2026-08-02T20:01:00Z' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sent.length, 1);
+});
+
+test('a live stream is never mistaken for a Short', async () => {
+  const live = { ...VIDEO, durationSeconds: 0, liveBroadcastContent: 'live' };
+  const { service, sent, lounge } = makeService({
+    api: fakeApi({ resolveVideo: async () => live }),
+  });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].youtube.live, true);
+});
+
+test('a metadata failure is recorded and does not send a broken card', async () => {
+  const { service, sent, lounge } = makeService({
+    api: fakeApi({
+      resolveVideo: async () => {
+        throw new Error('quota exceeded');
+      },
+    }),
+  });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(sent.length, 0);
+  assert.match(service.statusSnapshot().message, /quota exceeded/);
+});
+
+test('a stop for a video that is not on screen closes nothing', async () => {
+  const { service, sent, lounge } = makeService();
+  service.start();
+
+  lounge.emit('stopped', {
+    deviceId: 'tv-1', videoId: 'never-aired', watchedSeconds: 5,
+    startedAt: '2026-08-02T20:00:00Z', endedAt: '2026-08-02T20:00:05Z',
+  });
+
+  assert.deepEqual(sent, []);
+});
+
+test('the autoplay prefetch reaches the API client', async () => {
+  const { service, lounge, api } = makeService();
+  service.start();
+
+  lounge.emit('prefetch', { deviceId: 'tv-1', videoId: 'next-one' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(api.resolved.some((entry) => entry.videoId === 'next-one' && entry.prefetch));
+});
+
+// ------------------------------------------------------------- multi-device
+
+test('the most-recent TV wins by default', async () => {
+  const { service, lounge } = makeService();
+  lounge._sessions.push(
+    { deviceId: 'living-room', videoId: 'older', startedAt: '2026-08-02T20:00:00Z' },
+    { deviceId: 'theater', videoId: 'newer', startedAt: '2026-08-02T20:10:00Z' },
+  );
+
+  const result = await service.pushManualPreview({ send: () => {} });
+  assert.equal(result.videoId, 'newer');
+});
+
+test('a preferred TV wins even when another started later', async () => {
+  const { service, lounge, store } = makeService();
+  store.saveDevice({ id: 'living-room', label: 'Living Room' });
+  store.updateSettings({ multiDevice: 'preferred', preferredDeviceId: 'living-room' });
+  lounge._sessions.push(
+    { deviceId: 'living-room', videoId: 'older', startedAt: '2026-08-02T20:00:00Z' },
+    { deviceId: 'theater', videoId: 'newer', startedAt: '2026-08-02T20:10:00Z' },
+  );
+
+  const result = await service.pushManualPreview({ send: () => {} });
+  assert.equal(result.videoId, 'older');
+});
+
+// ------------------------------------------------------------ manual push
+
+test('a manual push falls back to last played when nothing is on', async () => {
+  const { service, store } = makeService();
+  store.recordSession({
+    deviceId: 'tv-1', videoId: 'yesterday', watchedSeconds: 600,
+    startedAt: '2026-08-01T20:00:00Z', endedAt: '2026-08-01T20:10:00Z', completed: false,
+  });
+
+  const sent = [];
+  const result = await service.pushManualPreview({ send: (payload) => sent.push(payload) });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'last-played');
+  assert.equal(sent[0].youtube.mode, 'last-played');
+  assert.equal(sent[0].persistent, false, 'a preview must dismiss itself');
+});
+
+test('asking for now-playing when nothing is on is an error, not a stale card', async () => {
+  const { service } = makeService();
+  const result = await service.pushManualPreview({ requestedMode: 'now-playing', send: () => {} });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Nothing is playing/);
+});
+
+test('with no history at all the push explains itself', async () => {
+  const { service } = makeService();
+  const result = await service.pushManualPreview({ send: () => {} });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /no watch history/);
+});
+
+test('a manual push is always dismissible even while a video is playing', async () => {
+  const { service, lounge } = makeService();
+  lounge._sessions.push({ deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+
+  const sent = [];
+  await service.pushManualPreview({ send: (payload) => sent.push(payload) });
+
+  assert.equal(sent[0].persistent, false);
+  assert.ok(sent[0].displaySeconds > 0);
+});
+
+// ---------------------------------------------------------- device linking
+
+test('linking stores the device with its token encrypted at rest', async () => {
+  const { service, store, config } = makeService();
+
+  const result = await service.linkDevice({ label: 'Movie Theater', pairingCode: '123456789012' });
+  assert.equal(result.ok, true);
+
+  const [device] = store.publicDevices();
+  assert.equal(device.label, 'Movie Theater');
+  assert.equal(device.hasToken, true);
+  assert.equal(device.authState, undefined, 'the token must never leave the bridge');
+
+  const raw = fs.readFileSync(config.youtube.devicesPath, 'utf8');
+  assert.doesNotMatch(raw, /"t":\s*1/, 'the token must not be readable on disk');
+});
+
+test('a failed link leaves no half-created device behind', async () => {
+  const lounge = fakeLounge();
+  lounge.pairWithCode = async () => ({ ok: false, error: 'code-expired' });
+  const { service, store } = makeService({ lounge });
+
+  const result = await service.linkDevice({ label: 'Bad', pairingCode: '000' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /expired/);
+  assert.deepEqual(store.publicDevices(), []);
+});
+
+test('a link that fails because the agent is broken says what is broken', async () => {
+  const lounge = fakeLounge();
+  lounge.pairWithCode = async () => ({ ok: false, error: 'pyytlounge-missing' });
+  lounge.unavailableReason = () => 'The bridge could not load the pyytlounge library. (ImportError: …)';
+  const { service } = makeService({ lounge });
+
+  const result = await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /ImportError/);
+});
+
+test('a revoked link surfaces as needs-relink rather than silence', async () => {
+  const lounge = fakeLounge();
+  lounge.connectDevice = async () => ({ ok: false, error: 'needs-relink' });
+  const { service, store } = makeService({ lounge });
+
+  await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });
+
+  const [device] = store.publicDevices();
+  assert.equal(device.status, 'needs-relink');
+  assert.deepEqual(service.statusSnapshot().needsRelink, ['Theater']);
+});
+
+test('a refreshed token records when it expires so it is not refreshed every pass', async () => {
+  const { service, lounge, store } = makeService();
+  await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });
+  service.start();
+  const [device] = store.publicDevices();
+
+  lounge.emit('auth', {
+    deviceId: device.id,
+    authState: { version: 0, screenId: 'screen-x', loungeIdToken: 'fresh' },
+    expiry: 1785000000,
+  });
+
+  assert.equal(store.publicDevices()[0].tokenExpiry, 1785000000);
+});
+
+test('discovery marks TVs that are already linked', async () => {
+  const { service, store } = makeService();
+  store.saveDevice({ id: 'existing', label: 'Theater', screenId: 'screen-x' });
+
+  const result = await service.discover();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.devices[0].alreadyLinked, true);
+  assert.equal(result.devices[0].name, 'AppleTV/1');
+});
+
+test('removing a device forgets it entirely', async () => {
+  const { service, store } = makeService();
+  await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });
+  const [device] = store.publicDevices();
+
+  assert.equal(store.removeDevice(device.id), true);
+  assert.deepEqual(store.publicDevices(), []);
+  assert.equal(store.removeDevice(device.id), false);
+});
+
+// ---------------------------------------------------------------- history
+
+test('history is capped so the file cannot grow without bound', () => {
+  const { store } = makeService();
+  store.updateSettings({ historyLimit: 10 });
+
+  for (let i = 0; i < 40; i += 1) {
+    store.recordSession({
+      deviceId: 'tv-1', videoId: `v${i}`, watchedSeconds: 60,
+      startedAt: new Date(Date.parse('2026-08-02T00:00:00Z') + i * 60000).toISOString(),
+      endedAt: new Date(Date.parse('2026-08-02T00:01:00Z') + i * 60000).toISOString(),
+    });
+  }
+
+  const history = store.history({ limit: 100 });
+  assert.ok(history.length <= 10, `history grew to ${history.length}`);
+  assert.equal(history[0].videoId, 'v39', 'newest first');
+});
+
+test('last played can be scoped to one TV', () => {
+  const { store } = makeService();
+  store.recordSession({
+    deviceId: 'theater', videoId: 'theater-one', watchedSeconds: 60,
+    startedAt: '2026-08-02T20:00:00Z', endedAt: '2026-08-02T20:05:00Z',
+  });
+  store.recordSession({
+    deviceId: 'living-room', videoId: 'living-one', watchedSeconds: 60,
+    startedAt: '2026-08-02T21:00:00Z', endedAt: '2026-08-02T21:05:00Z',
+  });
+
+  assert.equal(store.lastPlayed().videoId, 'living-one');
+  assert.equal(store.lastPlayed('theater').videoId, 'theater-one');
+});
+
+// ---------------------------------------------------------------- settings
+
+test('settings are clamped to sane values rather than trusted', () => {
+  const settings = sanitiseSettings({
+    descriptionLines: 99,
+    confirmSeconds: -4,
+    dismissSeconds: 100000,
+    historyLimit: 1,
+    multiDevice: 'whatever',
+  });
+
+  assert.equal(settings.descriptionLines, 6);
+  assert.equal(settings.confirmSeconds, 0);
+  assert.equal(settings.dismissSeconds, 600);
+  assert.equal(settings.historyLimit, 10);
+  assert.equal(settings.multiDevice, 'most-recent');
+});
+
+test('settings survive a reload from disk', () => {
+  const { store, config } = makeService();
+  store.updateSettings({ showDislikes: false, dismissSeconds: 120 });
+
+  const reopened = createYoutubeStore({ config });
+  assert.equal(reopened.getSettings().showDislikes, false);
+  assert.equal(reopened.getSettings().dismissSeconds, 120);
+});
+
+// ------------------------------------------------------------ registration
+
+test('both YouTube commands are registered and content-checked correctly', () => {
+  const registry = createCommandRegistry({
+    getYoutubeStatus: () => ({ playing: true, videoId: 'abc' }),
+  });
+  const commands = registry.list();
+
+  const nowPlaying = commands.find((command) => command.id === 'youtube.now-playing');
+  const lastPlayed = commands.find((command) => command.id === 'youtube.last-played');
+
+  assert.ok(nowPlaying, 'youtube.now-playing must be registered');
+  assert.ok(lastPlayed, 'youtube.last-played must be registered');
+  assert.equal(nowPlaying.schedulable, true);
+  assert.equal(nowPlaying.supportsContentCheck, true);
+  assert.equal(nowPlaying.variableDuration, false);
+  assert.equal(nowPlaying.route, '/api/push/youtube-now-playing');
+  // Push tile posts no mode (auto); the scheduler forces one by command id.
+  assert.equal(nowPlaying.body?.mode, undefined);
+  assert.equal(nowPlaying.pushable, true);
+  assert.equal(lastPlayed.body.mode, 'last-played');
+  assert.equal(lastPlayed.pushable, false);
+  assert.equal(lastPlayed.supportsContentCheck, false);
+});
+
+test('the content check follows whether a video is actually playing', () => {
+  const playing = createCommandRegistry({ getYoutubeStatus: () => ({ playing: true }) });
+  const idle = createCommandRegistry({ getYoutubeStatus: () => ({ playing: false }) });
+
+  assert.equal(playing.hasContent('youtube.now-playing'), true);
+  assert.equal(idle.hasContent('youtube.now-playing'), false);
+});
+
+test('the status snapshot reports enough to render the settings card', async () => {
+  const { service, store } = makeService();
+  await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });
+
+  const status = service.statusSnapshot();
+  assert.equal(status.enabled, true);
+  assert.equal(status.configured, true);
+  assert.equal(status.hasApiKey, true);
+  assert.equal(status.playing, false);
+  assert.equal(status.devices.length, 1);
+  assert.ok(status.cache);
+  assert.ok(status.settings);
+  assert.deepEqual(status.needsRelink, []);
+  assert.equal(store.publicDevices()[0].label, 'Theater');
+});

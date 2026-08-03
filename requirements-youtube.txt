@@ -1,0 +1,11 @@
+# YouTube Lounge sidecar (src/youtube_lounge_agent.py).
+#
+# There is no official API for detecting YouTube playback and no Node client
+# for the undocumented Lounge API, so this one dependency justifies a Python
+# process inside the bridge image. Everything else — credentials, caching,
+# history, display — stays in Node.
+#
+# Pinned to the 3.x line: 3.0 moved `State` off `pyytlounge.wrapper` and changed
+# every listener callback to take a typed event object, so a 2.x install cannot
+# run `youtube_lounge_agent.py`.
+pyytlounge>=3.3,<4

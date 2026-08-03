@@ -94,6 +94,13 @@ const {
 } = require('./indoor-temperature');
 const { createSteamNowPlaying } = require('./steam-now-playing');
 const { createPsnNowPlaying } = require('./psn-now-playing');
+const { createLibraryTourSettings } = require('./library-tour-settings');
+const { createLibraryTourSessions } = require('./library-tour-sessions');
+const { createSteamLibraryTour } = require('./steam-library-tour');
+const { createPsnLibraryTour } = require('./psn-library-tour');
+const { createYoutubeNowPlaying } = require('./youtube-now-playing');
+const { createTriviaService } = require('./trivia-service');
+const { createDisplayBusy } = require('./display-busy');
 
 const VOLUME_POLL_DELAY_MS = 2000;
 
@@ -107,6 +114,10 @@ function shouldSuppressSteamForPayload(payload) {
     || type === 'steam.now-playing.close'
     || type === 'psn.now-playing'
     || type === 'psn.now-playing.close'
+    // YouTube is the same tier-3 live-event class as a game launch
+    // (youtube.md §9.3), so it neither suppresses nor is suppressed by one.
+    || type === 'youtube.now-playing'
+    || type === 'youtube.now-playing.close'
   ) {
     return false;
   }
@@ -151,6 +162,13 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   const displayRegistry = createDisplayRegistry(config, log);
   let steamNowPlaying = null;
   let psnNowPlaying = null;
+  let libraryTourSettings = null;
+  let libraryTourSessions = null;
+  let steamLibraryTour = null;
+  let psnLibraryTour = null;
+  let youtubeNowPlaying = null;
+  let trivia = null;
+  const displayBusy = createDisplayBusy({ log });
   const udpBroadcaster = createUdpBroadcaster(config, log, {
     onMessage: (payload, rinfo) => {
       if (payload?.type !== 'display.announce') {
@@ -203,6 +221,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   // ("open guest snaps slideshow") without a bridge restart.
   const qrImageCache = createQrImageCache(config, log);
   const slideshowSettings = createSlideshowSettings(config, log);
+  libraryTourSettings = createLibraryTourSettings(config, log);
 
   function persistBridgeState() {
     saveBridgeState(config.bridgeStatePath, parser.getState());
@@ -240,16 +259,23 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
       steamNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
       psnNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
     }
+    // Every page the bridge sends marks the display busy, whatever put it
+    // there. The scheduler is the lowest-priority source in the system and must
+    // never interrupt a page that is still counting down (scheduler §6).
+    displayBusy.noteSent(payload, {
+      holdSeconds: options.holdSeconds,
+      source: options.source || 'event',
+    });
     return udpBroadcaster.send(payload, options);
   }
 
-  function deliverTargetedPayload(payload, targetId) {
+  function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
     const delivery = displayRegistry.resolveDelivery(targetId);
     if (delivery.error && !delivery.isAll) {
       return delivery;
     }
     const out = attachTarget(payload, delivery.target);
-    sendUdpPayload(out, delivery.sendOptions);
+    sendUdpPayload(out, { ...(delivery.sendOptions || {}), ...(extraSendOptions || {}) });
     return delivery;
   }
 
@@ -1643,6 +1669,37 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         });
         psnNowPlaying.start();
 
+        libraryTourSessions = createLibraryTourSessions();
+        steamLibraryTour = createSteamLibraryTour({
+          config,
+          log,
+          sendUdpPayload,
+          settings: libraryTourSettings,
+          sessions: libraryTourSessions,
+        });
+        psnLibraryTour = createPsnLibraryTour({
+          config,
+          log,
+          sendUdpPayload,
+          settings: libraryTourSettings,
+          sessions: libraryTourSessions,
+        });
+        // Warm library caches so "Start tour" is a cache hit, not a Valve round-trip.
+        steamLibraryTour.warmCount?.().catch(() => {});
+        psnLibraryTour.warmCount?.().catch(() => {});
+
+        youtubeNowPlaying = createYoutubeNowPlaying({
+          config,
+          log,
+          sendUdpPayload,
+        });
+        youtubeNowPlaying.start();
+
+        // The pool has to be stocking before the first push, so start it with
+        // the pollers rather than lazily on first use.
+        trivia = createTriviaService({ config, log, sendUdpPayload });
+        trivia.start();
+
         resolve(alexa);
       });
     });
@@ -1672,6 +1729,18 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     getSteamStatus: () => steamNowPlaying?.statusSnapshot?.() || null,
     psnNowPlaying: () => psnNowPlaying,
     getPsnStatus: () => psnNowPlaying?.statusSnapshot?.() || null,
+    libraryTourSettings: () => libraryTourSettings,
+    steamLibraryTour: () => steamLibraryTour,
+    psnLibraryTour: () => psnLibraryTour,
+    getSteamLibraryCount: () => steamLibraryTour?.libraryCount?.() || 0,
+    getPsnLibraryCount: () => psnLibraryTour?.libraryCount?.() || 0,
+    youtubeNowPlaying: () => youtubeNowPlaying,
+    getYoutubeStatus: () => youtubeNowPlaying?.statusSnapshot?.() || null,
+    trivia: () => trivia,
+    getTriviaStatus: () => trivia?.statusSnapshot?.() || null,
+    // The Display Scheduler's §6 precedence check. Fed by every sendUdpPayload,
+    // so it covers manual pushes, live events and scheduled airings alike.
+    displayBusy,
     guestSnapsAuth: snapsAuth,
   };
 }

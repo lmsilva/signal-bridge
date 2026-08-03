@@ -1,0 +1,463 @@
+const path = require('path');
+
+const { createYoutubeLounge } = require('./youtube-lounge');
+const { createYoutubeApi } = require('./youtube-api');
+const { createYoutubeStore } = require('./youtube-settings');
+const { createSecretBox } = require('./secret-box');
+const {
+  buildYoutubeNowPlayingPayload,
+  buildYoutubeNowPlayingClosePayload,
+} = require('./udp-payload');
+
+/**
+ * The YouTube feature, assembled.
+ *
+ * Detection (`youtube-lounge`), metadata (`youtube-api`) and persistence
+ * (`youtube-settings`) are deliberately separate and none of them know about
+ * the display. This module is the only place they meet: it turns a confirmed
+ * playback session into a card, keeps history, and answers the content check
+ * the command registry and Display Scheduler ask.
+ */
+
+const SHORT_MAX_SECONDS = 60;
+const TOKEN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function createYoutubeNowPlaying({
+  config,
+  log = null,
+  sendUdpPayload = () => {},
+  now = () => Date.now(),
+  lounge: injectedLounge = null,
+  api: injectedApi = null,
+  store: injectedStore = null,
+} = {}) {
+  const youtubeConfig = config?.youtube || {};
+  const secretBox = createSecretBox({
+    keyPath: path.resolve(path.dirname(youtubeConfig.devicesPath || '.'), 'secret.key'),
+  });
+
+  const store = injectedStore || createYoutubeStore({ config, secretBox, log });
+  const api = injectedApi || createYoutubeApi({ config, log, now });
+  const lounge = injectedLounge || createYoutubeLounge({ config, log, now });
+
+  let refreshTimer = null;
+  let pruneTimer = null;
+  let lastError = null;
+  let started = false;
+  // videoId → resolved metadata for the currently airing card, so a progress
+  // tick or a manual push does not re-resolve what we just fetched.
+  let airing = null;
+
+  function imageBaseUrl() {
+    if (youtubeConfig.imageBaseUrl) {
+      return String(youtubeConfig.imageBaseUrl).replace(/\/+$/, '');
+    }
+    const host = config.proxyOwnIp || config.webServer?.publicHost || null;
+    if (!host) {
+      return '';
+    }
+    const scheme = config.webServer?.https === false ? 'http' : 'https';
+    const port = config.webServer?.port || 47810;
+    return `${scheme}://${host}:${port}`;
+  }
+
+  function deviceLabelFor(deviceId) {
+    return store.getDevice(deviceId)?.label || null;
+  }
+
+  function isSuppressedShort(video) {
+    if (store.getSettings().showShorts) {
+      return false;
+    }
+    // A Short is usually over before the card renders (§12.10). Live streams
+    // report a zero duration, so they must not be caught by this.
+    return video.durationSeconds > 0
+      && video.durationSeconds < SHORT_MAX_SECONDS
+      && video.liveBroadcastContent === 'none';
+  }
+
+  // ------------------------------------------------------ session handling
+
+  async function onStarted(event) {
+    const settings = store.getSettings();
+    let video;
+    try {
+      video = await api.resolveVideo(event.videoId, {
+        includeDislikes: settings.showDislikes,
+      });
+    } catch (error) {
+      lastError = error?.message || String(error);
+      log?.warn?.('Could not resolve a YouTube video', lastError);
+      return;
+    }
+    if (isSuppressedShort(video)) {
+      log?.info?.(`Suppressing a YouTube Short (${event.videoId})`);
+      return;
+    }
+    airing = { videoId: event.videoId, deviceId: event.deviceId, video };
+    const payload = buildYoutubeNowPlayingPayload(video, config, {
+      trigger: 'youtube-lounge',
+      mode: 'playing',
+      deviceLabel: deviceLabelFor(event.deviceId),
+      imageBaseUrl: imageBaseUrl(),
+      settings,
+      session: { startedAt: event.startedAt, positionSeconds: 0 },
+    });
+    if (payload) {
+      sendUdpPayload(payload);
+    }
+  }
+
+  function onStopped(event) {
+    store.recordSession(event);
+    if (airing?.videoId === event.videoId) {
+      airing = null;
+      sendUdpPayload(buildYoutubeNowPlayingClosePayload({ trigger: 'youtube-lounge-stop' }, config));
+    }
+  }
+
+  function onPrefetch(event) {
+    api.prefetchVideo(event.videoId).catch(() => {});
+  }
+
+  // ------------------------------------------------------- device linking
+
+  async function connectDevice(device) {
+    if (!device?.enabled) {
+      return { ok: false, error: 'Device is disabled' };
+    }
+    const result = await lounge.connectDevice({
+      id: device.id,
+      screenId: device.screenId,
+      authState: device.authState,
+    });
+    // A revoked link is a real, recurring event and must surface as a status
+    // the user can act on, never a silent failure (§8.3).
+    store.markDeviceStatus(
+      device.id,
+      result.ok ? 'linked' : (result.error === 'needs-relink' ? 'needs-relink' : 'unreachable'),
+      result.ok ? null : result.error,
+    );
+    if (result.ok && (result.screenName || result.screenDeviceName)) {
+      store.saveDevice({
+        ...store.getDevice(device.id),
+        screenName: result.screenName,
+        screenDeviceName: result.screenDeviceName,
+      });
+    }
+    return result;
+  }
+
+  async function connectAll() {
+    for (const device of store.listDevices()) {
+      if (!device.enabled) {
+        continue;
+      }
+      try {
+        // One dead link must not stop the others from connecting (§12.13).
+        await connectDevice(device);
+      } catch (error) {
+        log?.warn?.(`YouTube device ${device.label} failed to connect`, error?.message || error);
+      }
+    }
+  }
+
+  async function linkDevice({ label, pairingCode = null, screenId = null } = {}) {
+    const draft = store.saveDevice({ label: label || 'YouTube device', status: 'refreshing' });
+    const result = pairingCode
+      ? await lounge.pairWithCode(draft.id, pairingCode)
+      : await lounge.pairWithScreenId(draft.id, screenId);
+
+    if (!result.ok) {
+      store.removeDevice(draft.id);
+      return {
+        ok: false,
+        error: result.error === 'code-expired'
+          ? 'That code has expired — get a fresh one from the TV'
+          // The agent knows why it cannot run; repeating a generic sentence
+          // here would throw that away and leave nothing to act on.
+          : (result.error === 'pyytlounge-missing'
+            ? (lounge.unavailableReason?.() || result.detail || 'The YouTube agent could not start')
+            : result.error || 'Could not link that device'),
+      };
+    }
+
+    const saved = store.saveDevice({
+      id: draft.id,
+      label: label || result.screenName || 'YouTube device',
+      screenId: result.screenId || screenId,
+      screenName: result.screenName,
+      screenDeviceName: result.screenDeviceName,
+      authState: result.authState ? JSON.stringify(result.authState) : null,
+      status: 'linked',
+    });
+    await connectDevice(store.getDevice(saved.id));
+    return { ok: true, device: store.publicDevices().find((entry) => entry.id === saved.id) };
+  }
+
+  async function relinkDevice(id) {
+    const device = store.getDevice(id);
+    if (!device) {
+      return { ok: false, error: 'Unknown device' };
+    }
+    if (!device.screenId) {
+      return { ok: false, error: 'No screen ID stored — link the device again with a TV code' };
+    }
+    // §8.3 layer 2: a known screen ID re-pairs with no code and no human.
+    const result = await lounge.pairWithScreenId(device.id, device.screenId);
+    if (!result.ok) {
+      store.markDeviceStatus(device.id, 'needs-relink', result.error);
+      return { ok: false, error: 'YouTube refused the re-link — pair again with a TV code' };
+    }
+    store.saveDevice({
+      ...device,
+      authState: result.authState ? JSON.stringify(result.authState) : device.authState,
+      status: 'linked',
+      statusDetail: null,
+    });
+    await connectDevice(store.getDevice(device.id));
+    return { ok: true };
+  }
+
+  async function discover() {
+    const result = await lounge.discover(5);
+    if (!result.ok) {
+      return result;
+    }
+    const linked = new Set(store.listDevices().map((device) => device.screenId).filter(Boolean));
+    return {
+      ok: true,
+      devices: (result.devices || []).map((entry) => ({
+        ...entry,
+        // "Apple TV 4K · 192.168.1.42" comes from the SSDP SERVER header.
+        name: entry.server?.split(' ')[0] || entry.address,
+        alreadyLinked: Boolean(entry.screenId && linked.has(entry.screenId)),
+      })),
+    };
+  }
+
+  /** Refresh at 80% of remaining token lifetime; entirely invisible (§8.3). */
+  async function refreshTokens() {
+    for (const device of store.listDevices()) {
+      if (!device.enabled || !device.authState) {
+        continue;
+      }
+      const expiry = Number(device.tokenExpiry) || 0;
+      if (expiry && now() < expiry * 1000 - (expiry * 1000 - now()) * 0.2) {
+        continue;
+      }
+      const result = await lounge.refreshDevice({
+        id: device.id,
+        screenId: device.screenId,
+        authState: device.authState,
+      });
+      if (!result.ok) {
+        store.markDeviceStatus(device.id, 'needs-relink', result.error);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------- pushing
+
+  /** Which device wins when two rooms are playing at once (§7). */
+  function pickSession(sessions, requestedDeviceId = null) {
+    if (!sessions.length) {
+      return null;
+    }
+    if (requestedDeviceId) {
+      return sessions.find((entry) => entry.deviceId === requestedDeviceId) || null;
+    }
+    const settings = store.getSettings();
+    if (settings.multiDevice === 'preferred' && settings.preferredDeviceId) {
+      const preferred = sessions.find((entry) => entry.deviceId === settings.preferredDeviceId);
+      if (preferred) {
+        return preferred;
+      }
+    }
+    // Most recent wins. Sorted here rather than trusting the detector's order,
+    // so the rule holds whatever produced the list.
+    return [...sessions].sort(
+      (a, b) => Date.parse(b.startedAt || 0) - Date.parse(a.startedAt || 0),
+    )[0];
+  }
+
+  /**
+   * @param {Object} [options]
+   * @param {'auto'|'now-playing'|'last-played'} [options.requestedMode] `auto`
+   *   (the admin test button) falls back to the last video watched. The
+   *   scheduler asks for one mode so a `youtube.now-playing` rule cannot
+   *   quietly air a last-played card instead.
+   */
+  async function pushManualPreview({
+    device = 'Signal',
+    send,
+    requestedMode = 'auto',
+    deviceId = null,
+    videoId = null,
+  } = {}) {
+    const settings = store.getSettings();
+    const emit = typeof send === 'function' ? send : sendUdpPayload;
+
+    let mode = 'playing';
+    let session = null;
+    let targetVideoId = videoId;
+    let targetDeviceId = deviceId;
+
+    if (!targetVideoId && requestedMode !== 'last-played') {
+      session = pickSession(lounge.activeSessions(), deviceId);
+      targetVideoId = session?.videoId || null;
+      targetDeviceId = session?.deviceId || deviceId;
+      if (!targetVideoId && requestedMode === 'now-playing') {
+        return { ok: false, error: 'Nothing is playing on YouTube right now' };
+      }
+    }
+
+    if (!targetVideoId) {
+      const previous = store.lastPlayed(deviceId);
+      if (!previous) {
+        return { ok: false, error: 'Nothing playing right now, and no watch history yet' };
+      }
+      mode = 'last-played';
+      targetVideoId = previous.videoId;
+      targetDeviceId = previous.deviceId;
+      session = previous;
+    }
+
+    let video;
+    try {
+      video = await api.resolveVideo(targetVideoId, { includeDislikes: settings.showDislikes });
+    } catch (error) {
+      return { ok: false, error: error?.message || String(error) };
+    }
+
+    const payload = buildYoutubeNowPlayingPayload(video, config, {
+      device,
+      trigger: 'youtube-manual-preview',
+      mode,
+      dismissible: true,
+      deviceLabel: deviceLabelFor(targetDeviceId),
+      imageBaseUrl: imageBaseUrl(),
+      settings,
+      session,
+    });
+    if (!payload) {
+      return { ok: false, error: 'Failed to build the YouTube display payload' };
+    }
+    emit(payload);
+    log?.info?.('YouTube manual preview pushed', { mode, videoId: targetVideoId, title: video.title });
+    return {
+      ok: true,
+      mode,
+      videoId: targetVideoId,
+      title: video.title,
+      displaySeconds: payload.displaySeconds,
+    };
+  }
+
+  // -------------------------------------------------------------- status
+
+  function statusSnapshot() {
+    const sessions = lounge.activeSessions();
+    const devices = store.publicDevices();
+    const chosen = pickSession(sessions);
+    return {
+      enabled: youtubeConfig.enabled !== false,
+      configured: devices.length > 0,
+      hasApiKey: Boolean(String(config?.youtube?.apiKey || '').trim()),
+      apiKeySource: config?.youtube?.apiKeySource || null,
+      // The command registry's content check keys off this one boolean.
+      playing: Boolean(chosen),
+      videoId: chosen?.videoId || null,
+      deviceId: chosen?.deviceId || null,
+      deviceLabel: chosen ? deviceLabelFor(chosen.deviceId) : null,
+      sessions,
+      devices,
+      needsRelink: devices.filter((entry) => entry.status === 'needs-relink').map((e) => e.label),
+      lounge: lounge.snapshot(),
+      cache: api.stats(),
+      settings: store.getSettings(),
+      lastPlayed: store.lastPlayed(),
+      message: lastError,
+    };
+  }
+
+  // --------------------------------------------------------------- control
+
+  function start() {
+    if (started || youtubeConfig.enabled === false) {
+      return;
+    }
+    started = true;
+    lounge.on('started', (event) => {
+      onStarted(event).catch((error) => log?.warn?.('YouTube start failed', error?.message || error));
+    });
+    lounge.on('stopped', onStopped);
+    lounge.on('prefetch', onPrefetch);
+    lounge.on('ready', () => {
+      connectAll().catch((error) => log?.warn?.('YouTube connect failed', error?.message || error));
+    });
+    lounge.on('auth', (event) => {
+      const device = store.getDevice(event.deviceId);
+      if (device && event.authState) {
+        store.saveDevice({
+          ...device,
+          authState: JSON.stringify(event.authState),
+          // Without this every pass of `refreshTokens` re-refreshes a token
+          // that is still good for weeks.
+          tokenExpiry: Number(event.expiry) || device.tokenExpiry || null,
+        });
+      }
+    });
+    lounge.start();
+
+    refreshTimer = setInterval(() => {
+      refreshTokens().catch((error) => log?.warn?.('YouTube token refresh failed', error?.message || error));
+    }, TOKEN_REFRESH_INTERVAL_MS);
+    refreshTimer.unref?.();
+
+    pruneTimer = setInterval(() => {
+      const removed = api.pruneThumbnails();
+      if (removed) {
+        log?.info?.(`Pruned ${removed} stale YouTube thumbnail(s)`);
+      }
+    }, PRUNE_INTERVAL_MS);
+    pruneTimer.unref?.();
+  }
+
+  function stop() {
+    started = false;
+    clearInterval(refreshTimer);
+    clearInterval(pruneTimer);
+    refreshTimer = null;
+    pruneTimer = null;
+    lounge.stop();
+    api.flush();
+  }
+
+  return {
+    start,
+    stop,
+    store,
+    api,
+    lounge,
+    linkDevice,
+    relinkDevice,
+    discover,
+    connectDevice,
+    refreshTokens,
+    pushManualPreview,
+    statusSnapshot,
+    hasContent: () => lounge.activeSessions().length > 0,
+    imageBaseUrl,
+
+    // Test seams
+    _onStarted: onStarted,
+    _onStopped: onStopped,
+  };
+}
+
+module.exports = {
+  SHORT_MAX_SECONDS,
+  createYoutubeNowPlaying,
+};

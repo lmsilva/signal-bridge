@@ -21,6 +21,7 @@ alexa broadcast client/dist/**
 !alexa broadcast client/dist/send-test.exe
 alexa broadcast client/build/
 alexa broadcast client/map-tiles/
+alexa broadcast client/trivia-artwork-cache/
 alexa broadcast client/map-errors.log
 **/__pycache__/
 *.pyc

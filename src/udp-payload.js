@@ -10,6 +10,7 @@ const {
   buildAirQualityReading,
   resolveAirQualityQueryLocation,
 } = require('./air-quality');
+const { getCategory: getTriviaCategory } = require('./trivia-categories');
 
 function displaySeconds(config, override) {
   const value = Number(override);
@@ -913,6 +914,96 @@ function buildTimerSnapshotPayload({
   };
 }
 
+function thinLibraryTourGame(game) {
+  // Keep UDP / seed rows tiny — no poster URL lists (those blow past MTU at
+  // library scale). The client builds Steam CDN candidates from appId; PSN
+  // gets a single imageUrl when we have one.
+  const id = String(game?.id || game?.appId || game?.titleId || '').trim();
+  const name = String(game?.name || '').trim();
+  if (!id || !name) {
+    return null;
+  }
+  const imageUrl = game.imageUrl
+    || (Array.isArray(game.posterCandidates) ? game.posterCandidates[0] : null)
+    || null;
+  return {
+    id,
+    name,
+    playtimeLabel: game.playtimeLabel || null,
+    playtimeForeverMin: Number.isFinite(Number(game.playtimeForeverMin))
+      ? Number(game.playtimeForeverMin)
+      : null,
+    lastPlayedAt: game.lastPlayedAt || null,
+    imageUrl: imageUrl || null,
+  };
+}
+
+/**
+ * Start a library tour.
+ *
+ * Prefer session mode (`tourId` + `count`): UDP stays a few hundred bytes and
+ * the display pulls the playlist over HTTP. Inline `games` is only for tiny
+ * smoke tests / legacy callers — never ship a 700-game list on the wire.
+ */
+function buildGameLibraryTourPayload({
+  platform = 'steam',
+  games,
+  seedGames,
+  tourId = '',
+  count = null,
+  secondsPerGame = 60,
+  device = 'Signal',
+  trigger = 'library-tour',
+  timestamp = Date.now(),
+  loop = true,
+  cardBaseUrl = '',
+} = {}) {
+  const sessionId = String(tourId || '').trim();
+  const seed = (Array.isArray(seedGames) ? seedGames : [])
+    .map(thinLibraryTourGame)
+    .filter(Boolean)
+    .slice(0, 1);
+  const inline = (Array.isArray(games) ? games : [])
+    .map(thinLibraryTourGame)
+    .filter(Boolean);
+  const total = Number.isFinite(Number(count)) && Number(count) > 0
+    ? Math.round(Number(count))
+    : (sessionId ? Math.max(seed.length, inline.length) : inline.length);
+  if (!sessionId && !inline.length) {
+    return null;
+  }
+  if (sessionId && total <= 0 && !seed.length) {
+    return null;
+  }
+  const perGame = Math.max(5, Math.min(300, Math.round(Number(secondsPerGame) || 60)));
+  const looping = loop !== false;
+  const gameCount = sessionId ? Math.max(total, seed.length) : inline.length;
+  // One scheduled pass has a real end; a manual tour loops until interrupted.
+  const passSeconds = gameCount * perGame;
+  const base = String(cardBaseUrl || '').replace(/\/+$/, '');
+  return {
+    version: 2,
+    type: 'game.library-tour',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: looping ? 0 : passSeconds,
+    persistent: looping,
+    trigger,
+    gameTour: {
+      platform: platform === 'psn' ? 'psn' : 'steam',
+      secondsPerGame: perGame,
+      loop: looping,
+      cardBaseUrl: base,
+      tourId: sessionId || null,
+      count: gameCount,
+      playlistPath: sessionId ? `/api/library-tour/playlist/${sessionId}` : null,
+      // Seed = first title for immediate paint while the playlist HTTP lands.
+      // Inline full list only when there is no session (tests / tiny libraries).
+      games: sessionId ? seed : inline,
+    },
+  };
+}
+
 function buildSteamNowPlayingPayload(reading, config, {
   device = 'Signal',
   trigger = 'steam-now-playing',
@@ -924,8 +1015,12 @@ function buildSteamNowPlayingPayload(reading, config, {
     return null;
   }
   const achievements = reading.achievements || {};
-  const playMode = mode === 'last-played' ? 'last-played' : 'playing';
-  const isDismissible = Boolean(dismissible) || playMode === 'last-played';
+  const playMode = mode === 'last-played' || mode === 'library-tour'
+    ? mode
+    : 'playing';
+  const isDismissible = Boolean(dismissible)
+    || playMode === 'last-played'
+    || playMode === 'library-tour';
   const startedMs = reading.startedAt
     || reading.lastPlayedAt
     || timestamp;
@@ -999,8 +1094,12 @@ function buildPsnNowPlayingPayload(reading, config, {
     return null;
   }
   const trophies = reading.trophies || reading.achievements || {};
-  const playMode = mode === 'last-played' ? 'last-played' : 'playing';
-  const isDismissible = Boolean(dismissible) || playMode === 'last-played';
+  const playMode = mode === 'last-played' || mode === 'library-tour'
+    ? mode
+    : 'playing';
+  const isDismissible = Boolean(dismissible)
+    || playMode === 'last-played'
+    || playMode === 'library-tour';
   const startedMs = reading.startedAt
     || reading.lastPlayedAt
     || timestamp;
@@ -1076,7 +1175,226 @@ function buildPsnNowPlayingClosePayload({
   };
 }
 
+/**
+ * A whole trivia round in one packet (trivia.md §6.1).
+ *
+ * The client sequences intro → Q1 → A1 → … → summary locally rather than
+ * waiting on a packet per card: UDP is unreliable and one dropped mid-round
+ * datagram would freeze the display on a question with no answer. Everything
+ * needed to render every card — including per-question artwork URLs and accent
+ * colours — travels up front.
+ *
+ * `artworkBaseUrl` is the bridge's own origin so the display can fetch the
+ * category backgrounds over HTTP and disk-cache them; the payload itself stays
+ * a few kilobytes.
+ */
+function buildTriviaRoundPayload({
+  questions = [],
+  settings = {},
+  overrides = {},
+  artworkBaseUrl = '',
+  device = 'Signal',
+  timestamp = Date.now(),
+  trigger = 'trivia-api',
+  triggeredBy = 'manual',
+  sessionId = null,
+  attribution = [],
+  durationSeconds = null,
+} = {}, config = {}) {
+  if (!Array.isArray(questions) || !questions.length) {
+    return null;
+  }
+
+  const questionSeconds = Number(overrides.questionSeconds) || settings.questionSeconds || 15;
+  const answerSeconds = Number(overrides.answerSeconds) || settings.answerSeconds || 7;
+  const count = questions.length;
+  // A single-question round has no progress to show and nothing to summarise.
+  const showIntro = settings.showIntroCard !== false;
+  const showSummary = settings.showSummaryCard !== false && count > 1;
+  const introSeconds = showIntro ? (Number(settings.introSeconds) || 4) : 0;
+  const summarySeconds = showSummary ? (Number(settings.summarySeconds) || 6) : 0;
+  const total = Number(durationSeconds)
+    || Math.round(introSeconds + count * (questionSeconds + answerSeconds) + summarySeconds);
+
+  const base = String(artworkBaseUrl || '').replace(/\/+$/, '');
+  const cards = questions.map((question, index) => {
+    const category = getTriviaCategory(question.categoryId) || {};
+    const answers = shuffleAnswers(question);
+    return {
+      index,
+      id: question.id,
+      categoryId: question.categoryId,
+      categoryLabel: question.categoryLabel || category.label || question.categoryId,
+      difficulty: question.difficulty,
+      type: question.type,
+      text: question.text,
+      answers,
+      correctIndex: answers.indexOf(question.correctAnswer),
+      funFact: question.funFact || null,
+      accent: category.accent || '#8BB7FF',
+      background: category.background || '#101820',
+      artwork: category.artwork
+        ? {
+          portrait: base + category.artwork.portrait,
+          landscape: base + category.artwork.landscape,
+        }
+        : null,
+      provider: question.provider,
+    };
+  });
+
+  return {
+    version: 2,
+    type: 'trivia.round',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    // The overlay must persist for the whole sequence, not one card.
+    displaySeconds: total,
+    trigger,
+    trivia: {
+      sessionId: sessionId || `trivia-${new Date(timestamp).getTime()}`,
+      triggeredBy,
+      questionCount: count,
+      questionSeconds,
+      answerSeconds,
+      showIntro,
+      showSummary,
+      introSeconds,
+      summarySeconds,
+      totalDurationSeconds: total,
+      // Licence condition, not a courtesy (trivia.md §2.5).
+      attribution: attribution.length
+        ? attribution
+        : [...new Set(questions.map((question) => question.provider))],
+      questions: cards,
+    },
+  };
+}
+
+/**
+ * Deterministic-per-call answer order. Booleans keep True/False order so the
+ * two-tile layout always reads the same way; multiple choice is shuffled so the
+ * correct answer is not always in the same slot.
+ */
+function shuffleAnswers(question) {
+  const incorrect = (question.incorrectAnswers || []).map(String);
+  if (question.type === 'boolean') {
+    return ['True', 'False'];
+  }
+  const all = [String(question.correctAnswer), ...incorrect];
+  for (let i = all.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+  return all;
+}
+
+/**
+ * A YouTube now-playing / last-played card (youtube.md §4).
+ *
+ * Thumbnails and channel avatars are served from the bridge rather than
+ * `i.ytimg.com`: hotlinking at render time breaks offline, adds latency to
+ * every paint, and hammers Google for no reason (§6.5). The payload carries
+ * only the cached filename plus the origin to fetch it from.
+ */
+function buildYoutubeNowPlayingPayload(video, config, {
+  device = 'Signal',
+  trigger = 'youtube-now-playing',
+  timestamp = Date.now(),
+  mode = 'playing',
+  dismissible = false,
+  deviceLabel = null,
+  imageBaseUrl = '',
+  settings = {},
+  session = null,
+} = {}) {
+  if (!video?.videoId) {
+    return null;
+  }
+  const playMode = mode === 'last-played' ? 'last-played' : 'playing';
+  const isDismissible = Boolean(dismissible) || playMode === 'last-played';
+  const base = String(imageBaseUrl || '').replace(/\/+$/, '');
+  const imageUrl = (file) => (file && base ? `${base}/youtube-images/${file}` : null);
+  const isLive = video.liveBroadcastContent === 'live' || video.liveBroadcastContent === 'upcoming';
+
+  const seconds = Number(settings.dismissSeconds) > 0
+    ? Math.round(Number(settings.dismissSeconds))
+    : displaySeconds(config);
+
+  return {
+    version: 2,
+    type: 'youtube.now-playing',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: isDismissible ? seconds : 0,
+    persistent: !isDismissible,
+    trigger,
+    youtube: {
+      videoId: video.videoId,
+      mode: playMode,
+      title: video.title || 'YouTube',
+      // Already cleaned and cached by the API client; the client only clamps.
+      description: settings.showDescription === false ? '' : (video.descriptionClean || ''),
+      descriptionLines: Number(settings.descriptionLines) || 3,
+      channelTitle: video.channelTitle || '',
+      // Hidden counts are omitted entirely rather than shown as zero (§4.5).
+      subscriberCount: settings.showSubscribers === false || video.hiddenSubscriberCount
+        ? null
+        : (video.subscriberCount ?? null),
+      viewCount: video.viewCount ?? null,
+      likeCount: video.likeCount ?? null,
+      dislikeCount: settings.showDislikes === false ? null : (video.dislikeCount ?? null),
+      // RYD is archived data plus extrapolation — never present it as hard.
+      dislikeEstimated: video.dislikeCount != null,
+      publishedAt: video.publishedAt || null,
+      durationSeconds: Math.round(Number(video.durationSeconds) || 0),
+      live: isLive,
+      liveBroadcastContent: video.liveBroadcastContent || 'none',
+      concurrentViewers: isLive ? (video.concurrentViewers ?? null) : null,
+      metadataMissing: Boolean(video.missing),
+      thumbnailUrl: imageUrl(video.thumbnailFile),
+      thumbnailWidth: video.thumbnailWidth || null,
+      thumbnailHeight: video.thumbnailHeight || null,
+      avatarUrl: imageUrl(video.avatarFile),
+      deviceLabel: deviceLabel || null,
+      positionSeconds: playMode === 'playing'
+        ? Math.round(Number(session?.positionSeconds) || 0)
+        : Math.round(Number(session?.positionSeconds) || 0) || null,
+      // Last-played mockup is "Watched 24:10 of 28:31" — that is scrubber
+      // progress through the video, not the pause-aware attention total.
+      watchedSeconds: playMode === 'last-played'
+        ? Math.round(
+          Number(session?.positionSeconds)
+            || Number(session?.watchedSeconds)
+            || 0,
+        )
+        : null,
+      completed: playMode === 'last-played' ? Boolean(session?.completed) : null,
+      startedAt: session?.startedAt || new Date(timestamp).toISOString(),
+      endedAt: session?.endedAt || null,
+    },
+  };
+}
+
+function buildYoutubeNowPlayingClosePayload({
+  device = 'Signal',
+  trigger = 'youtube-now-playing-close',
+  timestamp = Date.now(),
+} = {}, _config) {
+  return {
+    version: 2,
+    type: 'youtube.now-playing.close',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: 0,
+    trigger,
+  };
+}
+
 module.exports = {
+  buildTriviaRoundPayload,
+  buildYoutubeNowPlayingPayload,
+  buildYoutubeNowPlayingClosePayload,
   buildBroadcastPayload,
   buildTimeQueryPayload,
   buildWeatherQueryPayload,
@@ -1100,6 +1418,8 @@ module.exports = {
   buildInputKeyPayload,
   buildInputTextPayload,
   buildPhotoSlideshowPayload,
+  buildGameLibraryTourPayload,
+  thinLibraryTourGame,
   buildRoutePlannerPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,

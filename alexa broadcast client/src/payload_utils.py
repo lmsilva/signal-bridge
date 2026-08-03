@@ -27,6 +27,9 @@ DISPLAY_TYPES = (
     "route-planner.query",
     "steam.now-playing",
     "psn.now-playing",
+    "youtube.now-playing",
+    "trivia.round",
+    "game.library-tour",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -41,6 +44,7 @@ COMMAND_TYPES = (
     "display.discover",
     "steam.now-playing.close",
     "psn.now-playing.close",
+    "youtube.now-playing.close",
 )
 
 # Bridge discovery / heartbeats — never shown as overlays.
@@ -123,6 +127,9 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "route-planner.query": ("Alexa", "Route Planner"),
         "steam.now-playing": ("Steam", "Now Playing"),
         "psn.now-playing": ("PlayStation", "Now Playing"),
+        "youtube.now-playing": ("YouTube", "Now Playing"),
+        "trivia.round": ("Signal", "Trivia"),
+        "game.library-tour": ("Signal", "Library Tour"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 
