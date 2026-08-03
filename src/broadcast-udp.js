@@ -130,7 +130,10 @@ function createUdpBroadcaster(config, log, { onMessage } = {}) {
 
   /**
    * @param {object} payload
-   * @param {{ host?: string }} [options] - when host is set, unicast only to that IP
+   * @param {{ host?: string, hosts?: string[] }} [options]
+   *   - `host`: unicast only to that IP
+   *   - `hosts`: unicast to each IP (scheduler "all displays"), then also
+   *     broadcast so any unregistered listener still has a chance
    */
   async function send(payload, options = {}) {
     if (!settings.enabled) {
@@ -142,13 +145,32 @@ function createUdpBroadcaster(config, log, { onMessage } = {}) {
       const wire = encodeOutbound(payload, lanSecret);
       const body = Buffer.from(JSON.stringify(wire), 'utf8');
       const unicastHost = options.host ? String(options.host).trim() : '';
+      const hostList = Array.isArray(options.hosts)
+        ? [...new Set(options.hosts.map((host) => String(host || '').trim()).filter(Boolean))]
+        : [];
 
-      const deliveries = unicastHost
-        ? [{ host: unicastHost, label: 'unicast' }]
-        : [
+      let deliveries;
+      if (unicastHost) {
+        deliveries = [{ host: unicastHost, label: 'unicast' }];
+      } else if (hostList.length) {
+        deliveries = [
+          ...hostList.map((host) => ({ host, label: 'unicast' })),
           { host: '255.255.255.255', label: 'broadcast' },
           ...settings.targets.map((host) => ({ host, label: 'target' })),
         ];
+        // De-dupe in case a configured target matches a registered display.
+        const seen = new Set();
+        deliveries = deliveries.filter((entry) => {
+          if (seen.has(entry.host)) return false;
+          seen.add(entry.host);
+          return true;
+        });
+      } else {
+        deliveries = [
+          { host: '255.255.255.255', label: 'broadcast' },
+          ...settings.targets.map((host) => ({ host, label: 'target' })),
+        ];
+      }
 
       for (const target of deliveries) {
         await new Promise((resolveSend) => {

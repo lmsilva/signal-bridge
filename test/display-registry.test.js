@@ -38,7 +38,33 @@ test('display registry upserts announce and resolves unicast delivery', () => {
     const all = registry.resolveDelivery(ALL_TARGET_ID);
     assert.equal(all.isAll, true);
     assert.deepEqual(all.target, { all: true });
-    assert.deepEqual(all.sendOptions, {});
+    assert.deepEqual(all.sendOptions, { hosts: ['192.168.1.50'] });
+  } finally {
+    registry.stop();
+  }
+});
+
+test('resolveDelivery for all fans out to every registered display host', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'disp-reg-'));
+  const registry = createDisplayRegistry({ ROOT: root }, { warn() {}, info() {} });
+  try {
+    registry.upsertFromAnnounce({
+      type: 'display.announce',
+      display: { id: 'disp-a', name: 'A', port: 47832 },
+    }, { address: '192.168.1.10', port: 50000 });
+    registry.upsertFromAnnounce({
+      type: 'display.announce',
+      display: { id: 'disp-b', name: 'B', port: 47832 },
+    }, { address: '192.168.1.20', port: 50000 });
+    // Duplicate host must collapse.
+    registry.upsertFromAnnounce({
+      type: 'display.announce',
+      display: { id: 'disp-c', name: 'C', port: 47832 },
+    }, { address: '192.168.1.10', port: 50000 });
+
+    const all = registry.resolveDelivery('all');
+    assert.equal(all.isAll, true);
+    assert.deepEqual(all.sendOptions.hosts.sort(), ['192.168.1.10', '192.168.1.20']);
   } finally {
     registry.stop();
   }

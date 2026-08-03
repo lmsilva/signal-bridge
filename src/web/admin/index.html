@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal37">
+  <link rel="stylesheet" href="styles.css?v=signal38">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -254,17 +254,17 @@
             <button type="button" class="segmented-btn active" data-sched-view="rules">Rules</button>
             <button type="button" class="segmented-btn" data-sched-view="activity">Activity</button>
           </div>
-          <label class="sched-toggle">
+          <label class="sched-toggle" title="When on, rules air automatically while the display is idle">
             <input type="checkbox" id="sched-active">
-            <span id="sched-active-label">Paused</span>
+            <span id="sched-active-label">Off</span>
           </label>
         </div>
 
         <!-- ---------------------------- Rules view ---------------------------- -->
         <div id="sched-view-rules">
-          <div class="card sched-nextup-card">
+          <div class="card sched-nextup-card" id="sched-nextup-card">
             <div class="sched-nextup" id="sched-nextup">Loading…</div>
-            <p class="hint">Automatically shows pages when the display is idle. It is the lowest-priority source — it never interrupts a live page, a manual push, or a page still counting down.</p>
+            <p class="hint" id="sched-nextup-hint">Automatically shows pages when the display is idle. It is the lowest-priority source — it never interrupts a live page, a manual push, or a page still counting down.</p>
           </div>
 
           <div id="sched-rule-list"></div>
@@ -781,6 +781,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal37"></script>
+  <script src="app.js?v=signal38"></script>
 </body>
 </html>

@@ -929,6 +929,9 @@ textarea.field-input.text-input-area {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.sched-nextup-card.is-paused .sched-nextup {
+  color: var(--warn, #f5c453);
+}
 
 .sched-rule {
   display: flex;
