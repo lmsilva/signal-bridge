@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-02 (Trivia artwork LAN-first + bundled pack)
+**Last updated:** 2026-08-03 (Trivia paints bundled art immediately)
 
 ---
 
@@ -262,6 +262,10 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-03: **Trivia paints bundled category art immediately** — HTTP fetch to the bridge was leaving the wall on a flat colour field. The panel now applies `assets/trivia-artwork/{id}-{portrait|landscape}.jpg` synchronously on paint (local-first), then refreshes from HTTP in the background. Portable rebuild required; clear `trivia-artwork-cache/` once on the poster PC.
+
+- 2026-08-02: **YouTube now-playing scrubber keeps walking** — the position bar and `4:11 / 10:19` caption used to freeze at the Lounge snapshot in the UDP payload. While `mode=playing` (not live / last-played), the panel now advances `positionSeconds` by wall clock every second and grows the red fill up to `durationSeconds`. Portable rebuild required.
 
 - 2026-08-02: **Trivia category artwork is LAN-first and ships with the client** — rounds painted the flat colour field because the HTTP fetch never landed. `artwork_url_candidates` now emits `bridgeHosts` rewrites *before* the payload host, downloads and cache entries must start with real image magic bytes (an HTML error page is discarded and the poisoned cache file deleted), and the 52-file pack is bundled at `assets/trivia-artwork/{categoryId}-{portrait|landscape}.jpg` as a last-resort fallback. A total miss logs one warning to stderr. Portable rebuild required; clear `trivia-artwork-cache/` once on the poster PC.
 

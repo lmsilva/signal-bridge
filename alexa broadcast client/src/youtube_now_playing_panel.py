@@ -72,6 +72,41 @@ def format_position(seconds) -> str:
     return f"{minutes}:{secs:02d}"
 
 
+def live_position_seconds(
+    base_position,
+    duration,
+    *,
+    anchored_at: datetime | None,
+    now: datetime | None = None,
+) -> int:
+    """Scrubber position that keeps walking while the overlay is up.
+
+    Lounge only samples occasionally, so the UDP payload's `positionSeconds` is
+    a snapshot. From the moment the card paints, advance that snapshot by wall
+    clock until it hits `duration` (or forever when duration is unknown).
+    """
+    try:
+        base = max(0, int(round(float(base_position or 0))))
+    except (TypeError, ValueError):
+        base = 0
+    try:
+        length = max(0, int(round(float(duration or 0))))
+    except (TypeError, ValueError):
+        length = 0
+    if anchored_at is None:
+        return min(base, length) if length > 0 else base
+    clock = now or datetime.now(timezone.utc)
+    if anchored_at.tzinfo is None and clock.tzinfo is not None:
+        anchored_at = anchored_at.replace(tzinfo=timezone.utc)
+    elif anchored_at.tzinfo is not None and clock.tzinfo is None:
+        clock = clock.replace(tzinfo=timezone.utc)
+    elapsed = max(0.0, (clock - anchored_at).total_seconds())
+    position = int(round(base + elapsed))
+    if length > 0:
+        return min(position, length)
+    return max(0, position)
+
+
 def last_played_watched_seconds(yt: dict | None) -> int:
     """Seconds to show on a last-played card ("Watched X of Y").
 
@@ -142,13 +177,19 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
         self._yt = {}
         self._avatar_id = None
         self._position_fill_id = None
+        self._position_caption_id = None
         self._position_track = None
+        self._position_base = 0
+        self._position_duration = 0
+        self._position_anchored_at = None
+        self._position_tick_job = None
         self._marquees: list[MarqueeLine] = []
 
     def hide(self):
         for marquee in self._marquees:
             marquee.stop()
         self._marquees = []
+        self._stop_position_tick()
         super().hide()
 
     # -------------------------------------------------------------- render
@@ -182,6 +223,7 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
         self._draw_stats(self._layout_boxes, yt)
         self._start_image_fetches(yt)
         self._schedule_elapsed_tick()
+        self._schedule_position_tick()
 
     # ------------------------------------------------------------ geometry
 
@@ -410,13 +452,20 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
         """Progress bar while playing; a static "watched" line afterwards.
 
         A live stream has no meaningful position, so the bar is replaced by the
-        concurrent viewer count (§4.5).
+        concurrent viewer count (§4.5). While now-playing, the fill and counter
+        keep walking with the wall clock so a long-lived overlay does not freeze
+        at the snapshot Lounge happened to report.
         """
+        self._stop_position_tick()
         bx0, by0, bx1, by1 = boxes["bar"]
         u = float(boxes.get("u") or 1)
         text = self.config.get("textColor", "#f8fafc")
         self._position_fill_id = None
+        self._position_caption_id = None
         self._position_track = None
+        self._position_base = 0
+        self._position_duration = 0
+        self._position_anchored_at = None
 
         if by1 <= by0 + 4:
             return
@@ -451,8 +500,21 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
             ))
             return
 
-        position = int(yt.get("positionSeconds") or 0)
-        caption = f"{format_position(position)} / {format_position(duration)}" if duration else ""
+        try:
+            base_position = int(round(float(yt.get("positionSeconds") or 0)))
+        except (TypeError, ValueError):
+            base_position = 0
+        self._position_base = max(0, base_position)
+        self._position_duration = max(0, duration)
+        self._position_anchored_at = datetime.now(timezone.utc)
+        position = live_position_seconds(
+            self._position_base, self._position_duration,
+            anchored_at=self._position_anchored_at,
+        )
+        caption = (
+            f"{format_position(position)} / {format_position(duration)}"
+            if duration else format_position(position)
+        )
         try:
             caption_w = int(label_font.measure(caption)) + int(18 * u) if caption else 0
         except Exception:
@@ -467,15 +529,76 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
         if duration > 0:
             fraction = max(0.0, min(1.0, position / duration))
             fill_x1 = bx0 + (track_x1 - bx0) * fraction
-            if fill_x1 > bx0:
-                self._position_fill_id = self._round_rect(
-                    bx0, bar_cy - bar_h / 2, fill_x1, bar_cy + bar_h / 2, 0,
-                    fill=self.ACCENT, outline="",
-                )
+            # Always allocate a fill item so the tick can grow it from zero.
+            self._position_fill_id = self._round_rect(
+                bx0, bar_cy - bar_h / 2, max(bx0, fill_x1), bar_cy + bar_h / 2, 0,
+                fill=self.ACCENT, outline="",
+            )
         if caption:
-            self._item_ids.append(self.canvas.create_text(
+            self._position_caption_id = self.canvas.create_text(
                 bx1, bar_cy, anchor="e", text=caption, fill=text, font=label_font,
-            ))
+            )
+            self._item_ids.append(self._position_caption_id)
+
+    def _stop_position_tick(self):
+        if self._position_tick_job is not None:
+            try:
+                self.root.after_cancel(self._position_tick_job)
+            except Exception:
+                pass
+            self._position_tick_job = None
+
+    def _schedule_position_tick(self):
+        """Advance the scrubber once a second while a now-playing card is up."""
+        self._stop_position_tick()
+        if (
+            self._is_last_played()
+            or self._yt.get("live")
+            or self._position_track is None
+            or self._position_anchored_at is None
+        ):
+            return
+
+        def tick():
+            if not self.visible or self._position_track is None:
+                self._position_tick_job = None
+                return
+            self._apply_live_position()
+            # Keep ticking at the end so a late duration update is not needed;
+            # the helper caps at duration so the bar simply sits full.
+            self._position_tick_job = self.root.after(1_000, tick)
+
+        self._position_tick_job = self.root.after(1_000, tick)
+
+    def _apply_live_position(self, now=None):
+        track = self._position_track
+        if not track:
+            return
+        bx0, by0, track_x1, by1 = track
+        duration = self._position_duration
+        position = live_position_seconds(
+            self._position_base, duration,
+            anchored_at=self._position_anchored_at,
+            now=now,
+        )
+        if duration > 0 and self._position_fill_id is not None:
+            fraction = max(0.0, min(1.0, position / duration))
+            fill_x1 = bx0 + (track_x1 - bx0) * fraction
+            try:
+                self.canvas.coords(
+                    self._position_fill_id, bx0, by0, max(bx0, fill_x1), by1,
+                )
+            except Exception:
+                pass
+        if self._position_caption_id is not None:
+            caption = (
+                f"{format_position(position)} / {format_position(duration)}"
+                if duration else format_position(position)
+            )
+            try:
+                self.canvas.itemconfigure(self._position_caption_id, text=caption)
+            except Exception:
+                pass
 
     # ------------------------------------------------------- title / meta
 

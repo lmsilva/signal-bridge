@@ -398,6 +398,19 @@ class ArtworkTests(unittest.TestCase):
         self.assertIs(image, sentinel)
         local.assert_called_once_with("science", True, 1080, 1920)
 
+    def test_the_bundled_pack_is_preferred_over_http(self):
+        sentinel = object()
+        with patch.object(TriviaPanel, "_load_local_artwork", return_value=sentinel) as local, \
+                patch.object(TriviaPanel, "_load_one_url") as download, \
+                patch("src.trivia_panel.Image", object()):
+            image = TriviaPanel._load_or_download(
+                "https://bridge/trivia-artwork/science-portrait.jpg",
+                1080, 1920, config={}, category_id="science", portrait=True,
+            )
+        self.assertIs(image, sentinel)
+        local.assert_called_once()
+        download.assert_not_called()
+
     def test_the_bundled_pack_resolves_per_category_and_orientation(self):
         portrait = trivia_artwork_asset_path("science-nature", True)
         landscape = trivia_artwork_asset_path("science-nature", False)

@@ -276,6 +276,19 @@ test('confirm timer starts a session without a later Lounge tick', () => {
   assert.equal(h.events.started[0].videoId, 'abc');
 });
 
+test('Buffering past the confirm window still starts a session', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'abc',
+    position: 0, durationSeconds: 600, state: 'Buffering',
+  });
+  h.advance(5);
+  assert.equal(h.events.started.length, 1);
+  assert.equal(h.events.started[0].videoId, 'abc');
+});
+
 // -------------------------------------------------------- ad suppression
 
 test('an ad before the video restarts the confirm window', () => {

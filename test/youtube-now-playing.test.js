@@ -314,6 +314,35 @@ test('a live stream is never mistaken for a Short', async () => {
   assert.equal(sent[0].youtube.live, true);
 });
 
+test('a push still airs when Lounge cleared active during metadata resolve', async () => {
+  const devices = new Map();
+  devices.set('tv-1', { active: null, provisional: null });
+  const lounge = fakeLounge();
+  lounge._devices = () => devices;
+  const { service, sent } = makeService({ lounge });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].youtube.videoId, 'abc');
+});
+
+test('a push is skipped only when Lounge moved on to a different video', async () => {
+  const devices = new Map();
+  devices.set('tv-1', { active: { videoId: 'other' }, provisional: null });
+  const lounge = fakeLounge();
+  lounge._devices = () => devices;
+  const { service, sent } = makeService({ lounge });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(sent.length, 0);
+});
+
 test('a metadata failure is recorded and does not send a broken card', async () => {
   const { service, sent, lounge } = makeService({
     api: fakeApi({

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -19,6 +20,7 @@ from src.youtube_now_playing_panel import (
     format_position,
     format_upload_date,
     last_played_watched_seconds,
+    live_position_seconds,
 )
 
 
@@ -340,6 +342,64 @@ class PositionBandTests(unittest.TestCase):
         ))
         self.assertIsNone(panel._position_fill_id)
         self.assertIn("18.4K watching now", drawn_text(panel))
+
+    def test_live_position_advances_from_the_payload_snapshot(self):
+        anchored = datetime(2026, 8, 2, 20, 30, 0, tzinfo=timezone.utc)
+        self.assertEqual(
+            live_position_seconds(251, 619, anchored_at=anchored, now=anchored),
+            251,
+        )
+        self.assertEqual(
+            live_position_seconds(
+                251, 619,
+                anchored_at=anchored,
+                now=anchored + timedelta(seconds=3),
+            ),
+            254,
+        )
+
+    def test_live_position_stops_at_the_video_duration(self):
+        anchored = datetime(2026, 8, 2, 20, 30, 0, tzinfo=timezone.utc)
+        self.assertEqual(
+            live_position_seconds(
+                600, 619,
+                anchored_at=anchored,
+                now=anchored + timedelta(seconds=60),
+            ),
+            619,
+        )
+
+    def test_the_position_tick_rewrites_the_caption_and_fill(self):
+        panel = make_panel()
+        panel.visible = True
+        boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_desc=True)
+        panel._yt = make_payload(positionSeconds=251, durationSeconds=619)
+        panel._draw_position(boxes, panel._yt)
+        panel._position_anchored_at = datetime(2026, 8, 2, 20, 30, 0, tzinfo=timezone.utc)
+        panel._apply_live_position(
+            now=datetime(2026, 8, 2, 20, 30, 5, tzinfo=timezone.utc),
+        )
+        panel.canvas.itemconfigure.assert_called()
+        caption = panel.canvas.itemconfigure.call_args.kwargs.get("text")
+        if caption is None and len(panel.canvas.itemconfigure.call_args) > 1:
+            caption = panel.canvas.itemconfigure.call_args[1].get("text")
+        self.assertEqual(caption, "4:16 / 10:19")
+        panel.canvas.coords.assert_called()
+        coords = panel.canvas.coords.call_args.args
+        track = panel._position_track
+        expected_fill = track[0] + (track[2] - track[0]) * (256 / 619)
+        # coords(id, x0, y0, x1, y1) — the live fill ends at args[3].
+        self.assertAlmostEqual(coords[3], expected_fill, delta=1)
+
+    def test_last_played_does_not_schedule_a_position_tick(self):
+        panel = make_panel()
+        panel.visible = True
+        panel._yt = make_payload(mode="last-played", watchedSeconds=100)
+        boxes = panel._compute_portrait_boxes(40, 40, 1040, 1880, u=1.0, has_desc=True)
+        panel._draw_position(boxes, panel._yt)
+        panel._schedule_position_tick()
+        self.assertIsNone(panel._position_tick_job)
+        panel.root.after.assert_not_called()
 
 
 class ChromeTests(unittest.TestCase):
