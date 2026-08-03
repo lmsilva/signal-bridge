@@ -259,9 +259,18 @@ function createDisplayRegistry(config, log = console) {
     const raw = targetId == null ? '' : String(targetId).trim();
     const isAll = !raw || raw === ALL_TARGET_ID || raw.toLowerCase() === 'all';
     if (isAll) {
+      // Prefer unicast to every known display. Limited broadcast (255.255.255.255)
+      // often never reaches a poster PC on real LANs / Docker host networking,
+      // while the Push tab's selected-display unicast does — so "Air now" looked
+      // broken for scheduler rules that fan out to "all".
+      const hosts = [...new Set(
+        list({ skipPrune: true })
+          .map((entry) => String(entry.host || '').trim())
+          .filter(Boolean),
+      )];
       return {
         target: { all: true },
-        sendOptions: {},
+        sendOptions: hosts.length ? { hosts } : {},
         entry: null,
         isAll: true,
       };

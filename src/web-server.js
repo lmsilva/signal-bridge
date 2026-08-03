@@ -1077,7 +1077,7 @@ function createWebServer({
     };
     // Scheduler airings always go to every display: a rule has no notion of a
     // selected target, and "all" is what an ambient page wants anyway.
-    const body = { ...(command.body || {}), ...params, device, targetId: 'all', triggeredBy: 'scheduler' };
+    const body = { ...(command.body || {}), ...params, device, targetId: '*', triggeredBy: 'scheduler' };
 
     switch (commandId) {
       case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
@@ -1119,6 +1119,9 @@ function createWebServer({
 
     if (captured.status >= 400) {
       throw new Error(captured.body?.error || `Push failed (${captured.status})`);
+    }
+    if (!captured.status) {
+      throw new Error(`Command "${commandId}" produced no response`);
     }
     return captured.body;
   }

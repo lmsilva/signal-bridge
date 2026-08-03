@@ -2188,7 +2188,9 @@
     if (toggle) toggle.checked = settings.active === true;
     const label = $('sched-active-label');
     if (label) {
-      label.textContent = settings.active ? 'Active' : 'Paused';
+      // Label the ON state — "Paused" on an unchecked switch reads as the
+      // control's name and makes the status banner look like boilerplate.
+      label.textContent = settings.active ? 'On' : 'Off';
       label.parentElement?.classList.toggle('is-active', settings.active === true);
     }
     setTriviaSlider('sched-min-gap', 'sched-min-gap-value',
@@ -2232,6 +2234,8 @@
     try {
       const status = await apiFetch(`${SCHED_ROUTE}/status`);
       const nextUp = $('sched-nextup');
+      const hint = $('sched-nextup-hint');
+      const card = $('sched-nextup-card');
       if (nextUp) {
         if (!status.active) {
           nextUp.textContent = 'Paused — nothing will air automatically';
@@ -2242,6 +2246,15 @@
         } else {
           nextUp.textContent = 'No enabled rules';
         }
+      }
+      // The paused / quiet-hours lines are the status. Hide the always-on
+      // "what the scheduler is" hint so it cannot be read as a second paused.
+      if (hint) {
+        hint.hidden = !status.active || Boolean(status.inQuietHours);
+      }
+      if (card) {
+        card.classList.toggle('is-paused', !status.active);
+        card.classList.toggle('is-quiet', Boolean(status.active && status.inQuietHours));
       }
       return status;
     } catch {
@@ -2615,8 +2628,15 @@
         const ruleId = card.dataset.ruleId;
         try {
           if (action === 'air') {
-            await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}/air`, { method: 'POST' });
-            toast('Aired', 'ok');
+            const rule = schedRules.find((entry) => entry.id === ruleId);
+            const button = target.closest('[data-sched-action="air"]');
+            if (button instanceof HTMLButtonElement) button.disabled = true;
+            try {
+              await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}/air`, { method: 'POST' });
+              toast(`${rule?.label || 'Rule'} aired`, 'good');
+            } finally {
+              if (button instanceof HTMLButtonElement) button.disabled = false;
+            }
           } else if (action === 'delete') {
             await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
           }

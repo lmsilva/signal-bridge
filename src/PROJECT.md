@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-03 (YouTube confirm race + trivia local-first art)
+**Last updated:** 2026-08-03 (Scheduler pause UX + Air-now unicast)
 
 ---
 
@@ -502,6 +502,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-03: **Scheduler pause banner only when paused; Air now unicasts to every display** — the Rules card always showed a bold "Paused — …" style status next to a toggle labelled "Paused" when off, which read as boilerplate rather than state. Toggle is now On/Off; the paused/quiet banner is the only place that word appears, and the educational hint hides while paused. Separately, scheduler "all displays" delivery only UDP-broadcast to `255.255.255.255`, which often never reaches the poster PC while Push-tab unicast does — `resolveDelivery('*'|'all')` now fans out `hosts` to every registered display (plus broadcast). Cache-bust `?v=signal38`. Deploy: `./recreate.sh`.
 
 - 2026-08-03: **YouTube auto-push survives resolve races and Apple TV Buffering** — Lounge was confirming sessions (history filled) but the UDP card was dropped when `active` cleared during Data API resolve (`Skipping YouTube push — already stopped`). Push now only skips when Lounge moved on to a *different* videoId. Confirm also accepts `Buffering`/`Starting` after `confirmSeconds`, not only `Playing`. Deploy: `./recreate.sh` (src bind-mounted). Tests: `test/youtube-now-playing.test.js`, `test/youtube-lounge.test.js`.
 
