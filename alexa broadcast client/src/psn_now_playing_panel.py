@@ -30,7 +30,7 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
     ACCENT = DS_ACCENT
     STATUS_H_PORTRAIT = 44
     STATUS_H_LANDSCAPE = 48
-    DESC_H_PORTRAIT = 128
+    DESC_H_PORTRAIT = 272
     DESC_H_LANDSCAPE = 200
 
     def __init__(self, root, shell, config):
@@ -76,12 +76,11 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         """Hero grows when gallery/description absent; desc band only when Store text exists."""
         u = float(u or 1.0)
         header_h = 84 * u
-        stage_h = 1100 * u
         title_h = 74 * u
         tags_h = 40 * u
         status_h = (self.STATUS_H_PORTRAIT * u) if has_status else 0
         desc_h = (self.DESC_H_PORTRAIT * u) if has_desc else 0
-        shots_h = (183 * u) if has_shots else 0
+        shots_h = (self.SHOTS_H_PORTRAIT * u) if has_shots else 0
         footer_h = 101 * u
         g_header = 20 * u
         g_stage = 24 * u
@@ -93,17 +92,19 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
 
         header = (x0, y0, x1, y0 + header_h)
         hero_top = y0 + header_h + g_header
+        # Every band below the stage is sized to its own content, so the stage
+        # simply takes what is left: absent Store copy or a missing gallery grows
+        # the artwork, and a short column shrinks it, with no padded meta row.
+        meta_h = title_h + g_title + tags_h
         fixed_below = (
-            g_stage + title_h + g_title + tags_h + g_tags
+            g_stage + meta_h + g_tags
             + g_status + status_h + g_desc + desc_h
             + (g_shots + shots_h if has_shots else 0) + footer_h
         )
-        max_stage = max(400 * u, (y1 - hero_top) - fixed_below)
-        if not has_desc:
-            max_stage += self.DESC_H_PORTRAIT * u
-        if not has_shots:
-            max_stage += 183 * u + 22 * u
-        stage_h = min(stage_h + (0 if has_shots else 80 * u), max_stage)
+        stage_h = max(
+            self.STAGE_MIN_PORTRAIT * u,
+            min(self.STAGE_MAX_PORTRAIT * u, (y1 - hero_top) - fixed_below),
+        )
         hero = (x0, hero_top, x1, hero_top + stage_h)
 
         footer_top = y1 - footer_h

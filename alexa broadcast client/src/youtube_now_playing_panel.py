@@ -172,6 +172,13 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
     AVATAR_DIAMETER = 52
     POSITION_BAR_H = 8
 
+    # Portrait description band: the floor keeps a couple of lines on a short
+    # column, the ceiling stops a tall one turning the card into a wall of copy.
+    DESC_MIN_PORTRAIT = 140
+    DESC_MAX_PORTRAIT = 460
+    HERO_MIN_PORTRAIT = 200
+    GAP_MAX_PORTRAIT = 48
+
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
         self._yt = {}
@@ -233,47 +240,82 @@ class YoutubeNowPlayingPanel(SteamNowPlayingPanel):
         The hero height is derived from the column width, never chosen: a 16:9
         box whose height is guessed will letterbox, and a letterboxed thumbnail
         on a wall display looks like a bug.
+
+        Because the hero is width-capped and every other band is text at a fixed
+        ramp, a tall portrait column ends up with height nobody claimed. Left
+        alone that surplus collects in one place — a ~600px void above the stat
+        tiles — so it is handed out deliberately instead.
         """
         u = float(u or 1.0)
         width = max(1.0, x1 - x0)
+        height = max(1.0, y1 - y0)
         header_h = 84 * u
-        hero_h = width / THUMBNAIL_ASPECT
         bar_h = 34 * u
         title_h = 72 * u
         channel_h = 64 * u
         # An empty description must close the gap, not leave a hole (§4.5).
-        desc_h = (140 * u) if has_desc else 0
+        desc_h = (self.DESC_MIN_PORTRAIT * u) if has_desc else 0
         stats_h = 118 * u
         upload_h = 34 * u
         device_h = 30 * u
 
         g = 18 * u
-        g_desc = g if has_desc else 0
+        # header→hero, hero→bar, bar→title, title→channel, channel→desc, desc→stats
+        gaps = [g, 10 * u, g, g, (g if has_desc else 0), g]
+        bands = (
+            header_h + bar_h + title_h + channel_h + desc_h
+            + stats_h + upload_h + device_h
+        )
 
         # The hero is the one flexible band: everything else is text at a fixed
         # ramp, so a short screen shrinks the picture rather than the words.
-        fixed = (
-            header_h + g + bar_h + g + title_h + g + channel_h
-            + g_desc + desc_h + g + stats_h + upload_h + device_h + g
+        hero_h = max(
+            self.HERO_MIN_PORTRAIT * u,
+            min(width / THUMBNAIL_ASPECT, height - bands - sum(gaps)),
         )
-        hero_h = max(200 * u, min(hero_h, (y1 - y0) - fixed))
+
+        slack = height - (bands + sum(gaps) + hero_h)
+        # Spend the surplus on copy before air: the description is a clipped
+        # scrolling viewport, so a taller band is simply more of it on screen.
+        if slack > 0 and has_desc:
+            grow = max(0.0, min(slack, self.DESC_MAX_PORTRAIT * u - desc_h))
+            desc_h += grow
+            slack -= grow
+        # Then let the stack breathe, up to a ceiling. Index 1 is skipped: the
+        # position bar is the hero's scrubber and has to stay against it.
+        loose = [i for i, gap in enumerate(gaps) if gap > 0 and i != 1]
+        if slack > 0 and loose:
+            room = sum(max(0.0, self.GAP_MAX_PORTRAIT * u - gaps[i]) for i in loose)
+            grow = min(slack, room)
+            if room > 0:
+                for i in loose:
+                    gaps[i] += grow * (self.GAP_MAX_PORTRAIT * u - gaps[i]) / room
+            slack -= grow
+        # Anything still unclaimed goes back to the copy, or — with no
+        # description to grow — spreads out rather than pooling above the stats.
+        if slack > 0:
+            if has_desc:
+                desc_h += slack
+            elif loose:
+                for i in loose:
+                    gaps[i] += slack / len(loose)
 
         cursor = y0
         header = (x0, cursor, x1, cursor + header_h)
-        cursor += header_h + g
+        cursor = header[3] + gaps[0]
         # Keep 16:9 by narrowing rather than squashing when height is the limit.
         hero_w = min(width, hero_h * THUMBNAIL_ASPECT)
         hero_x0 = x0 + (width - hero_w) / 2
         hero = (hero_x0, cursor, hero_x0 + hero_w, cursor + hero_h)
-        cursor += hero_h + 10 * u
+        cursor = hero[3] + gaps[1]
         bar = (x0, cursor, x1, cursor + bar_h)
-        cursor += bar_h + g
+        cursor = bar[3] + gaps[2]
         title = (x0, cursor, x1, cursor + title_h)
-        cursor += title_h + g
+        cursor = title[3] + gaps[3]
         channel = (x0, cursor, x1, cursor + channel_h)
-        cursor += channel_h + g_desc
+        cursor = channel[3] + gaps[4]
         desc = (x0, cursor, x1, cursor + desc_h)
-        cursor += desc_h + g
+        cursor = desc[3] + gaps[5]
 
         device_top = y1 - device_h
         upload_top = device_top - upload_h
