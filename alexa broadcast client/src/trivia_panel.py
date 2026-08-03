@@ -889,6 +889,13 @@ class TriviaPanel(BasePanel):
             return
         self._fetch_token += 1
         token = self._fetch_token
+        # Paint the bundled pack immediately when present — HTTP is best-effort
+        # and must never leave the wall on a flat colour field for seconds.
+        local = self._load_local_artwork(
+            key, portrait, geometry["screen_w"], geometry["screen_h"],
+        )
+        if local is not None:
+            self._apply_artwork(token, local)
         threading.Thread(
             target=self._fetch_artwork,
             args=(token, url, geometry["screen_w"], geometry["screen_h"], key, portrait),
@@ -972,11 +979,22 @@ class TriviaPanel(BasePanel):
             self._fallback_ids.append(item)
 
     def _fetch_artwork(self, token, url, width, height, category_id=None, portrait=True):
-        image = self._load_or_download(
-            url, width, height,
-            config=self.config, category_id=category_id, portrait=portrait,
-        )
+        # HTTP first here: `_paint_artwork` may already have applied the bundled
+        # pack synchronously. A successful download refreshes the disk cache and
+        # replaces the image; a miss falls back to the pack again.
+        image = None
+        for candidate in artwork_url_candidates(url, self.config):
+            image = self._load_one_url(candidate, width, height)
+            if image is not None:
+                break
         if image is None:
+            image = self._load_local_artwork(category_id, portrait, width, height)
+        if image is None:
+            print(
+                "Trivia artwork unavailable over HTTP and from the bundled pack "
+                f"(category={category_id or '?'}, url={url or 'none'})",
+                file=sys.stderr, flush=True,
+            )
             return
         self.root.after(0, lambda: self._apply_artwork(token, image))
 
@@ -984,13 +1002,16 @@ class TriviaPanel(BasePanel):
     def _load_or_download(cls, url, width, height, config=None, category_id=None, portrait=True):
         if Image is None:
             return None
+        # Bundled pack first: the poster PC often cannot reach the bridge the
+        # same way curl can (self-signed HTTPS / captive DNS), and the art is
+        # already on disk after a portable build.
+        image = cls._load_local_artwork(category_id, portrait, width, height)
+        if image is not None:
+            return image
         for candidate in artwork_url_candidates(url, config):
             image = cls._load_one_url(candidate, width, height)
             if image is not None:
                 return image
-        image = cls._load_local_artwork(category_id, portrait, width, height)
-        if image is not None:
-            return image
         print(
             "Trivia artwork unavailable over HTTP and from the bundled pack "
             f"(category={category_id or '?'}, url={url or 'none'})",

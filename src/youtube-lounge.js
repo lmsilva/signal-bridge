@@ -29,6 +29,12 @@ const AD_CLEAR_POSITION_SECONDS = 3;
 
 /** States that mean "a human is actually watching this right now". */
 const PLAYING_STATES = new Set(['Playing']);
+/**
+ * Apple TV often sits in Buffering/Starting for several seconds after a pick
+ * (and between sparse Playing ticks). Treat those as confirmable so a session
+ * can start without waiting for the next Playing event 60–90s later.
+ */
+const CONFIRMABLE_STATES = new Set(['Playing', 'Buffering', 'Starting']);
 /** Still the current video for manual preview / status (not auto-push). */
 const CURRENT_STATES = new Set(['Playing', 'Starting', 'Buffering', 'Advertisement', 'Paused']);
 /**
@@ -443,7 +449,8 @@ function createYoutubeLounge({
     }
     // Never start a session on an ad: ads are not the video (§12.9).
     // Apple TV also parks in Stopped between sparse Playing ticks — retry soon.
-    if (device.adPlaying || !PLAYING_STATES.has(device.state)) {
+    // Buffering/Starting count as confirmable; only true Stopped/Paused/Ad wait.
+    if (device.adPlaying || !CONFIRMABLE_STATES.has(device.state)) {
       if (!device.confirmTimer) {
         scheduleConfirm(device, CONFIRM_RETRY_MS);
       }
@@ -753,5 +760,6 @@ module.exports = {
   AD_CLEAR_POSITION_SECONDS,
   MAX_PLAY_DELTA_SECONDS,
   PLAYING_STATES,
+  CONFIRMABLE_STATES,
   createYoutubeLounge,
 };

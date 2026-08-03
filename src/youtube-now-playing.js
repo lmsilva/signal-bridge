@@ -101,16 +101,19 @@ function createYoutubeNowPlaying({
       log?.info?.(`Suppressing a YouTube Short (${event.videoId})`);
       return;
     }
-    // Resolve can outlive a flicker Stopped — skip only when the lounge still
-    // tracks this device and it has clearly moved on (tests use a fake lounge
-    // without `_devices`, so they always air).
+    // Resolve can outlive a flicker Stopped. Only abandon the push when Lounge
+    // has clearly moved on to a *different* video — a cleared active/provisional
+    // (or stop-grace) still means this video is what just confirmed, and history
+    // already proves we used to drop the card entirely in that window.
     const deviceMap = lounge._devices?.();
     if (deviceMap && typeof deviceMap.get === 'function') {
       const device = deviceMap.get(event.deviceId);
-      const currentId = device?.active?.videoId || device?.provisional || null;
-      if (!device || currentId !== event.videoId) {
-        log?.info?.(`Skipping YouTube push — ${event.videoId} already stopped before resolve finished`);
-        return;
+      if (device) {
+        const currentId = device.active?.videoId || device.provisional || null;
+        if (currentId && currentId !== event.videoId) {
+          log?.info?.(`Skipping YouTube push — ${event.videoId} already replaced by ${currentId}`);
+          return;
+        }
       }
     }
     airing = { videoId: event.videoId, deviceId: event.deviceId, video };

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-02 (Trivia artwork LAN origin)
+**Last updated:** 2026-08-03 (YouTube confirm race + trivia local-first art)
 
 ---
 
@@ -502,6 +502,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-03: **YouTube auto-push survives resolve races and Apple TV Buffering** — Lounge was confirming sessions (history filled) but the UDP card was dropped when `active` cleared during Data API resolve (`Skipping YouTube push — already stopped`). Push now only skips when Lounge moved on to a *different* videoId. Confirm also accepts `Buffering`/`Starting` after `confirmSeconds`, not only `Playing`. Deploy: `./recreate.sh` (src bind-mounted). Tests: `test/youtube-now-playing.test.js`, `test/youtube-lounge.test.js`.
 
 - 2026-08-02: **Trivia artwork URLs point at the LAN bridge first** — `artworkBaseUrl()` in `src/trivia-service.js` preferred `GUEST_PHOTOBOOTH_URL` (the public Signal domain), so the display fetched category art through the public hostname and often landed on the solid colour fallback instead of the patterned field. It now prefers `https://{PROXY_OWN_IP}:{webServer.port}`, with the public origin only as a fallback when no LAN IP is configured; `config.trivia.artworkBaseUrl` still overrides both. Tests: `test/trivia-payload.test.js`. Deploy: `./recreate.sh`.
 
