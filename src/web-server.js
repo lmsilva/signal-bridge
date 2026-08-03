@@ -2195,16 +2195,16 @@ function createWebServer({
     const settings = libraryTourSettings.get();
     sendJson(res, 200, {
       ok: true,
-      secondsPerGame: settings.secondsPerGame,
+      steam: settings.steam,
+      psn: settings.psn,
       secondsPerGameMin: MIN_SECONDS_PER_GAME,
       secondsPerGameMax: MAX_SECONDS_PER_GAME,
-      sort: settings.sort,
       sorts: VALID_SORTS,
     });
   }
 
   function handleLibraryTourSettingsUpdate(body, res) {
-    const patch = {};
+    const patch = { platform: body?.platform };
     if (body && Object.prototype.hasOwnProperty.call(body, 'secondsPerGame')) {
       patch.secondsPerGame = body.secondsPerGame;
     }
@@ -2217,15 +2217,19 @@ function createWebServer({
       return;
     }
     log.info('Library tour settings updated', {
+      platform: result.platform,
       secondsPerGame: result.secondsPerGame,
       sort: result.sort,
     });
     sendJson(res, 200, {
       ok: true,
+      platform: result.platform,
       secondsPerGame: result.secondsPerGame,
+      sort: result.sort,
+      steam: result.steam,
+      psn: result.psn,
       secondsPerGameMin: MIN_SECONDS_PER_GAME,
       secondsPerGameMax: MAX_SECONDS_PER_GAME,
-      sort: result.sort,
       sorts: VALID_SORTS,
     });
   }
@@ -2921,15 +2925,33 @@ function createWebServer({
     }
     const root = config.ROOT || path.resolve(__dirname, '..');
     const overrideDir = path.resolve(root, 'data/trivia-artwork');
-    // Prefer admin overrides, then the shipped pack, then the editable
-    // generator output under `dev assets/` (source checkouts only — Docker
-    // images only contain `src/web/trivia-artwork`).
-    const candidates = [
-      path.join(overrideDir, name),
-      path.join(__dirname, 'web', 'trivia-artwork', name),
-      path.join(root, 'dev assets', 'trivia-category-artwork', name),
+    // Prefer admin overrides, then the shipped pack (JPEG), then the editable
+    // generator output under `dev assets/` (source checkouts — often still webp).
+    // Also try sibling extensions so an old client asking for .webp still hits
+    // the new .jpg pack (and vice versa during transition).
+    const stem = name.replace(/\.(webp|png|jpe?g)$/i, '');
+    const extOrder = [path.extname(name).toLowerCase(), '.jpg', '.jpeg', '.png', '.webp']
+      .filter((ext, index, all) => ext && all.indexOf(ext) === index);
+    const directories = [
+      overrideDir,
+      path.join(__dirname, 'web', 'trivia-artwork'),
+      // No spaces — mirror pack for Docker/host mounts that choke on "dev assets".
+      path.join(root, 'dev-assets', 'trivia-category-artwork'),
+      path.join(root, 'dev assets', 'trivia-category-artwork'),
     ];
-    const filePath = candidates.find((candidate) => fs.existsSync(candidate));
+    let filePath = null;
+    for (const dir of directories) {
+      for (const ext of extOrder) {
+        const candidate = path.join(dir, `${stem}${ext}`);
+        if (fs.existsSync(candidate)) {
+          filePath = candidate;
+          break;
+        }
+      }
+      if (filePath) {
+        break;
+      }
+    }
     if (!filePath) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
@@ -2937,7 +2959,7 @@ function createWebServer({
     }
     const stat = fs.statSync(filePath);
     res.writeHead(200, {
-      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/webp',
+      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/jpeg',
       'Content-Length': stat.size,
       'Cache-Control': 'public, max-age=86400',
       ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,

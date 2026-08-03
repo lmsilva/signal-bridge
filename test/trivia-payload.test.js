@@ -342,7 +342,7 @@ test('trivia reports no content when the service is not wired up', () => {
   assert.equal(registry.hasContent('trivia.show'), false);
 });
 
-test('artworkBaseUrl prefers GUEST_PHOTOBOOTH_URL over the LAN origin', () => {
+test('artworkBaseUrl prefers the LAN origin over GUEST_PHOTOBOOTH_URL', () => {
   const previous = process.env.GUEST_PHOTOBOOTH_URL;
   process.env.GUEST_PHOTOBOOTH_URL = 'https://signal.example.com/booth';
   try {
@@ -354,6 +354,27 @@ test('artworkBaseUrl prefers GUEST_PHOTOBOOTH_URL over the LAN origin', () => {
         webServer: { port: 47810, https: true },
         trivia: {},
       },
+      log: silentLog,
+      sendUdpPayload: () => {},
+      providers: [],
+    });
+    assert.equal(service.statusSnapshot().artworkBaseUrl, 'https://192.168.1.10:47810');
+  } finally {
+    if (previous === undefined) {
+      delete process.env.GUEST_PHOTOBOOTH_URL;
+    } else {
+      process.env.GUEST_PHOTOBOOTH_URL = previous;
+    }
+  }
+});
+
+test('artworkBaseUrl falls back to the public origin without a LAN IP', () => {
+  const previous = process.env.GUEST_PHOTOBOOTH_URL;
+  process.env.GUEST_PHOTOBOOTH_URL = 'https://signal.example.com/booth';
+  try {
+    const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'trivia-art-url-'));
+    const service = createTriviaService({
+      config: { ROOT, webServer: { port: 47810, https: true }, trivia: {} },
       log: silentLog,
       sendUdpPayload: () => {},
       providers: [],

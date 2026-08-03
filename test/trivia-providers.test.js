@@ -72,8 +72,8 @@ test('the canonical registry has exactly 26 categories', () => {
 
 test('every category has artwork for both orientations', () => {
   for (const category of listCategories()) {
-    assert.match(category.artwork.portrait, /^\/trivia-artwork\/.+-portrait\.webp$/);
-    assert.match(category.artwork.landscape, /^\/trivia-artwork\/.+-landscape\.webp$/);
+    assert.match(category.artwork.portrait, /^\/trivia-artwork\/.+-portrait\.jpg$/);
+    assert.match(category.artwork.landscape, /^\/trivia-artwork\/.+-landscape\.jpg$/);
     assert.match(category.accent, /^#[0-9A-Fa-f]{6}$/);
     assert.match(category.background, /^#[0-9A-Fa-f]{6}$/);
   }

@@ -3,13 +3,15 @@ from unittest.mock import patch
 
 from src.game_library_tour_panel import (
     GameLibraryTourPanel,
+    bridge_url_candidates,
     clamp_seconds_per_game,
     fetch_library_card,
     fetch_library_playlist,
+    iso_timestamp,
     normalize_tour_game,
     steam_poster_candidates,
 )
-from src.payload_utils import resolve_display_type, title_for_display_type
+from src.payload_utils import parse_iso_timestamp, resolve_display_type, title_for_display_type
 
 
 class GameLibraryTourPanelTests(unittest.TestCase):
@@ -134,6 +136,83 @@ class GameLibraryTourPanelTests(unittest.TestCase):
             )
         self.assertEqual(len(games), 2)
         self.assertEqual(games[0]["name"], "A")
+
+    def test_thin_fallback_converts_epoch_ms_last_played(self):
+        panel = GameLibraryTourPanel.__new__(GameLibraryTourPanel)
+        panel._platform = "steam"
+        panel._poster_candidates_for = lambda game: ["https://cdn.example/p.jpg"]
+        payload = panel._thin_fallback_card({
+            "id": "570",
+            "name": "Dota 2",
+            "lastPlayedAt": 1_700_000_000_000,
+            "playtimeLabel": "12 hrs",
+        })
+        steam = payload["steam"]
+        self.assertIsInstance(steam["lastPlayedAt"], str)
+        self.assertIsInstance(steam["startedAt"], str)
+        # Nested Steam panel path used to crash on int.lastPlayedAt.replace
+        self.assertIsNotNone(parse_iso_timestamp(steam["lastPlayedAt"]))
+        self.assertIsNotNone(parse_iso_timestamp(1_700_000_000_000))
+        self.assertTrue(iso_timestamp(1_700_000_000_000).endswith("Z"))
+        self.assertTrue(steam["enrichPending"])
+
+    def test_thin_fallback_can_drop_enrich_pending(self):
+        panel = GameLibraryTourPanel.__new__(GameLibraryTourPanel)
+        panel._platform = "psn"
+        panel._poster_candidates_for = lambda game: []
+        payload = panel._thin_fallback_card(
+            {"id": "CUSA1", "name": "Astro"},
+            enrich_pending=False,
+        )
+        self.assertFalse(payload["psn"]["enrichPending"])
+
+    def test_apply_enriched_clears_pending_flag(self):
+        shown = []
+        panel = GameLibraryTourPanel.__new__(GameLibraryTourPanel)
+        panel.visible = True
+        panel._fetch_token = 1
+        panel._platform = "psn"
+        panel._enrich_cache = {}
+        panel._poster_candidates_for = lambda game: []
+        panel._paint_status_overlay = lambda: None
+        panel._active_card_panel = lambda: type(
+            "P", (), {"show": lambda self, payload: shown.append(payload)}
+        )()
+        panel._apply_enriched(
+            1,
+            {"id": "CUSA1", "name": "Astro"},
+            {"name": "Astro", "shortDescription": "Fun", "screenshots": ["a.jpg"]},
+        )
+        self.assertEqual(len(shown), 1)
+        self.assertNotIn("enrichPending", shown[0]["psn"])
+        self.assertEqual(shown[0]["psn"]["shortDescription"], "Fun")
+
+    def test_apply_enriched_failure_drops_spinners(self):
+        shown = []
+        panel = GameLibraryTourPanel.__new__(GameLibraryTourPanel)
+        panel.visible = True
+        panel._fetch_token = 1
+        panel._platform = "steam"
+        panel._enrich_cache = {}
+        panel._poster_candidates_for = lambda game: ["https://cdn.example/p.jpg"]
+        panel._paint_status_overlay = lambda: None
+        panel._active_card_panel = lambda: type(
+            "P", (), {"show": lambda self, payload: shown.append(payload)}
+        )()
+        panel._apply_enriched(1, {"id": "570", "name": "Dota 2"}, None)
+        self.assertEqual(len(shown), 1)
+        self.assertFalse(shown[0]["steam"]["enrichPending"])
+
+    def test_bridge_url_candidates_rewrites_via_bridge_hosts(self):
+        urls = bridge_url_candidates(
+            "https://signal.example.com/api/library-tour/playlist/abc",
+            {"bridgeHosts": ["192.168.1.10"]},
+        )
+        self.assertEqual(urls[0], "https://signal.example.com/api/library-tour/playlist/abc")
+        self.assertIn(
+            "https://192.168.1.10:47810/api/library-tour/playlist/abc",
+            urls,
+        )
 
 
 if __name__ == "__main__":

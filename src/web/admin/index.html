@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal35">
+  <link rel="stylesheet" href="styles.css?v=signal37">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -434,10 +434,17 @@
           </button>
           <p class="hint" id="steam-test-hint">Pushes whatever is playing now (skips the theater PC check). If idle, shows last played — dismissible.</p>
           <p class="hint" id="steam-library-count">Library: checking…</p>
-          <label class="field-label" for="steam-library-tour-seconds-slider">Seconds per game (shared)</label>
+          <label class="field-label">Library tour order</label>
+          <div class="segmented library-tour-order-tabs" id="steam-library-tour-order-tabs" data-platform="steam">
+            <button type="button" class="segmented-btn active" data-order="recent">Newest first</button>
+            <button type="button" class="segmented-btn" data-order="oldest">Oldest first</button>
+            <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
+          </div>
+          <label class="field-label" for="steam-library-tour-seconds-slider" style="margin-top:12px">Seconds per game</label>
           <div class="slider-row">
             <input type="range" class="library-tour-seconds-slider" id="steam-library-tour-seconds-slider"
-                   min="5" max="300" step="5" value="60" aria-label="Seconds per library tour game" />
+                   min="5" max="300" step="5" value="60" data-platform="steam"
+                   aria-label="Seconds per Steam library tour game" />
             <span class="slider-value library-tour-seconds-value" id="steam-library-tour-seconds-value">60s</span>
           </div>
           <button class="btn btn-outline btn-block" id="btn-steam-library-tour" style="margin-top:10px">
@@ -466,10 +473,17 @@
           </p>
           <p class="hint" id="psn-test-hint">Uses unofficial PSN APIs — treat the NPSSO like a password. Enable activity sharing on the console/account. PS5/PS4 best; PS3 limited.</p>
           <p class="hint" id="psn-library-count">Library: checking…</p>
-          <label class="field-label" for="psn-library-tour-seconds-slider">Seconds per game (shared)</label>
+          <label class="field-label">Library tour order</label>
+          <div class="segmented library-tour-order-tabs" id="psn-library-tour-order-tabs" data-platform="psn">
+            <button type="button" class="segmented-btn active" data-order="recent">Newest first</button>
+            <button type="button" class="segmented-btn" data-order="oldest">Oldest first</button>
+            <button type="button" class="segmented-btn" data-order="random">Shuffle</button>
+          </div>
+          <label class="field-label" for="psn-library-tour-seconds-slider" style="margin-top:12px">Seconds per game</label>
           <div class="slider-row">
             <input type="range" class="library-tour-seconds-slider" id="psn-library-tour-seconds-slider"
-                   min="5" max="300" step="5" value="60" aria-label="Seconds per library tour game" />
+                   min="5" max="300" step="5" value="60" data-platform="psn"
+                   aria-label="Seconds per PSN library tour game" />
             <span class="slider-value library-tour-seconds-value" id="psn-library-tour-seconds-value">60s</span>
           </div>
           <button class="btn btn-outline btn-block" id="btn-psn-library-tour" style="margin-top:10px">
@@ -767,6 +781,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal35"></script>
+  <script src="app.js?v=signal37"></script>
 </body>
 </html>

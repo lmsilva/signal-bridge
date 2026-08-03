@@ -47,6 +47,54 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         self.assertEqual(no_extras["status"][3], no_extras["status"][1])
         self.assertEqual(no_extras["desc"][3], no_extras["desc"][1])
 
+    def test_enrich_pending_reserves_desc_and_shots(self):
+        """Library-tour thin cards must not collapse bands while enrich spins."""
+        root = MagicMock()
+        shell = MagicMock()
+        shell.overlay = MagicMock()
+        shell.overlay.screen_w = 1080
+        shell.overlay.screen_h = 1920
+        shell.overlay._display_seconds = 0
+        shell.chip_label_font = MagicMock()
+        shell.chip_label_font.measure = MagicMock(return_value=40)
+        shell.chip_value_font = MagicMock()
+        shell.section_title_font = MagicMock()
+        shell.section_title_font.metrics = MagicMock(return_value=32)
+        shell.body_font = MagicMock()
+        panel = PsnNowPlayingPanel(root, shell, {"textColor": "#fff", "accentColor": "#38bdf8"})
+        panel.canvas = MagicMock()
+        panel.canvas.create_rectangle = MagicMock(return_value=1)
+        panel.canvas.create_text = MagicMock(return_value=2)
+        panel.canvas.create_line = MagicMock(return_value=3)
+        panel.canvas.create_image = MagicMock(return_value=5)
+        panel.canvas.create_arc = MagicMock(side_effect=range(100, 200))
+        panel._item_ids = []
+        panel._widgets = []
+        panel._round_rect = MagicMock()
+        panel._start_image_fetches = MagicMock()
+        panel._schedule_elapsed_tick = MagicMock()
+        panel._draw_chrome = MagicMock()
+        panel._place_description_viewport = MagicMock()
+
+        panel._render({
+            "type": "psn.now-playing",
+            "psn": {
+                "name": "Astro Bot",
+                "mode": "library-tour",
+                "enrichPending": True,
+                "statusLine": "In library",
+                "shortDescription": "",
+                "screenshots": [],
+                "playtimeLabel": "2.0 h",
+            },
+        })
+        boxes = panel._layout_boxes
+        self.assertGreater(boxes["desc"][3] - boxes["desc"][1], 20)
+        self.assertGreater(boxes["shots"][3] - boxes["shots"][1], 20)
+        panel._place_description_viewport.assert_not_called()
+        self.assertGreaterEqual(panel.canvas.create_arc.call_count, 4)
+        self.assertTrue(panel._enrich_spinner_arcs)
+
     def test_screenshot_row_sizes_to_available_count(self):
         root = MagicMock()
         shell = MagicMock()

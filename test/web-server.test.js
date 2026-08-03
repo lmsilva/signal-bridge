@@ -978,8 +978,11 @@ test('admin control PIN sheet expects a 6-digit code', () => {
   assert.match(html, /6-digit code/);
   assert.match(html, /id="pin-sheet-input"[^>]*maxlength="6"/);
   assert.match(html, /id="pin-sheet-input"[^>]*pattern="\[0-9\]\{6\}"/);
-  assert.match(html, /styles\.css\?v=signal35/);
-  assert.match(html, /app\.js\?v=signal35/);
+  // The cache-bust tag moves with every UI change; assert it is present and
+  // consistent rather than pinning a version this test would have to chase.
+  const cacheTag = html.match(/styles\.css\?v=(signal\d+)/);
+  assert.ok(cacheTag, 'styles.css must carry a signal cache-bust tag');
+  assert.match(html, new RegExp(`app\\.js\\?v=${cacheTag[1]}`));
   assert.match(html, /sheet-actions-lightbox/);
   assert.match(html, /id="btn-lightbox-push"/);
   assert.match(js, /CONTROL_PIN_DIGITS\s*=\s*6/);

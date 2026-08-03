@@ -235,14 +235,17 @@ test('library tour duration is count × secondsPerGame', () => {
   const registry = createCommandRegistry({
     getSteamLibraryCount: () => 704,
     getPsnLibraryCount: () => 40,
-    getLibraryTourSettings: () => ({ secondsPerGame: 60, sort: 'name' }),
+    getLibraryTourSettings: () => ({
+      steam: { secondsPerGame: 60, sort: 'recent' },
+      psn: { secondsPerGame: 45, sort: 'random' },
+    }),
   });
   assert.equal(registry.estimateDuration('steam.library-tour'), 704 * 60);
   assert.equal(
     registry.estimateDuration('steam.library-tour', { secondsPerGame: 30 }),
     704 * 30,
   );
-  assert.equal(registry.estimateDuration('psn.library-tour'), 40 * 60);
+  assert.equal(registry.estimateDuration('psn.library-tour'), 40 * 45);
   assert.equal(registry.hasContent('steam.library-tour'), true);
   assert.equal(registry.hasContent('psn.library-tour'), true);
 });

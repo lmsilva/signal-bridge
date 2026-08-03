@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-02 (Trivia sources + artwork origin)
+**Last updated:** 2026-08-02 (Trivia artwork LAN origin)
 
 ---
 
@@ -502,6 +502,18 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-02: **Trivia artwork URLs point at the LAN bridge first** — `artworkBaseUrl()` in `src/trivia-service.js` preferred `GUEST_PHOTOBOOTH_URL` (the public Signal domain), so the display fetched category art through the public hostname and often landed on the solid colour fallback instead of the patterned field. It now prefers `https://{PROXY_OWN_IP}:{webServer.port}`, with the public origin only as a fallback when no LAN IP is configured; `config.trivia.artworkBaseUrl` still overrides both. Tests: `test/trivia-payload.test.js`. Deploy: `./recreate.sh`.
+
+- 2026-08-02: **YouTube detection survives Apple TV Stopped flicker** — Lounge often emits `Stopped` between 60–90s Playing ticks. The old 1.5s stop grace cleared provisional/active before the 5s confirm could finish, so auto-push never started and Settings “Now Playing / Last Played” fell back to stale history. Stop grace is now 120s; confirm retries while parked in Stopped/ad; `currentPlayback` keeps provisional/active during that grace; agent polls `get_now_playing` after connect and on manual preview (`poll` / `poll-all`); ad events forward `contentVideoId`. Deploy: `./recreate.sh --build` (Python agent). Tests: `test/youtube-lounge.test.js`, `test/youtube-now-playing.test.js`.
+
+- 2026-08-02: **Steam vs PSN library tour settings are independent** — Admin “Library tour order” / “Seconds per game” were one shared state (labels said “(shared)”), so changing Steam Shuffle flipped PSN too. Persist per platform in `data/library-tour-settings.json` as `{ steam: { sort, secondsPerGame }, psn: {…} }` (legacy shared file seeds both). API `POST /api/library-tour/settings` requires `platform`; tours/`getFor` use that platform’s prefs. Cache-bust `?v=signal37`. Tests: `test/library-tour.test.js`, `test/command-registry.test.js`. Deploy: `./recreate.sh`.
+
+- 2026-08-02: **Trivia category artwork ships as JPEG** — portable Pillow builds often fail on `.webp`, leaving only the solid category colour (exactly what the display showed). All 52 files in `src/web/trivia-artwork/` are now `.jpg`; `trivia-categories.json` / defaults point at JPEG. `/trivia-artwork/` resolves sibling extensions (old `.webp` URLs still find the `.jpg`) and also checks `dev-assets/` (no spaces) before `dev assets/`. Client tries alternate extensions + `bridgeHosts` rewrites. Deploy: `./recreate.sh` + portable client rebuild; clear `trivia-artwork-cache/` on the poster PC if old broken webp blobs linger.
+
+- 2026-08-02: **PSN library tour + YouTube live detection** — PSN tour used the wrong `getPurchasedGames` contract (always 0 purchased), never persisted a full library to disk, and let `example.com` fixture art overwrite PlayStation CDN URLs (blank PSN cards). Fixed GraphQL mapping, Steam-style disk warm/`setLibrary`, merge prefers real art, enrich thin-fallback. YouTube: wall-clock confirm timer (Apple TV sparse ticks), `confirmSeconds` from settings store, stuck-ad clear when content position advances, 1.5s Stopped grace, `currentPlayback()` so manual Now Playing uses provisional/live video instead of stale history; skip recording flicker sessions. Cache-bust `?v=signal36`. Tests: `test/library-tour.test.js`, `test/youtube-lounge.test.js`, `test/youtube-now-playing.test.js`. Deploy: `./recreate.sh --build` (Python agent) + portable client rebuild.
+
+- 2026-08-02: **Steam library tour blank display + slideshow-style order** — seed cards carried epoch-ms `lastPlayedAt`, and the client's `parse_iso_timestamp` crashed on `.replace` so a successful "704 games" push painted nothing. Client now accepts epoch ms/seconds; thin seed cards convert to ISO before nesting Steam/PSN panels. Library tour sort settings match slideshow: **Newest first / Oldest first / Shuffle** (`recent`/`oldest`/`random`, default `recent`) via shared segmented controls on the Steam/PSN Settings cards (`data/library-tour-settings.json`). `cardBaseUrl` prefers `GUEST_PHOTOBOOTH_URL` like trivia artwork; the client rewrites playlist/card fetches through `bridgeHosts`. Cache-bust `?v=signal36`. Tests: `test/library-tour.test.js`, client `test_payload_utils` / `test_game_library_tour_panel`. Deploy: `./recreate.sh` + **portable client rebuild**.
 
 - 2026-08-02: **Trivia on-screen credit is source names only; artwork prefers the public Signal origin** — provider labels drop the `(CC BY-…)` clutter (`Open Trivia DB` / `The Trivia API`; licence URLs stay on the provider object). `artworkBaseUrl` uses `GUEST_PHOTOBOOTH_URL` when set (verified HTTPS to `/trivia-artwork/`) before falling back to `PROXY_OWN_IP:47810`. Artwork serve also checks `dev assets/trivia-category-artwork/` after `data/` overrides and `src/web/trivia-artwork/`.
 

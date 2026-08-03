@@ -39,7 +39,13 @@ function createYoutubeNowPlaying({
 
   const store = injectedStore || createYoutubeStore({ config, secretBox, log });
   const api = injectedApi || createYoutubeApi({ config, log, now });
-  const lounge = injectedLounge || createYoutubeLounge({ config, log, now });
+  const lounge = injectedLounge || createYoutubeLounge({
+    config,
+    log,
+    now,
+    // Admin confirm-seconds slider lives in youtube-settings.json — not config.js.
+    getConfirmSeconds: () => store.getSettings().confirmSeconds,
+  });
 
   let refreshTimer = null;
   let pruneTimer = null;
@@ -95,6 +101,18 @@ function createYoutubeNowPlaying({
       log?.info?.(`Suppressing a YouTube Short (${event.videoId})`);
       return;
     }
+    // Resolve can outlive a flicker Stopped — skip only when the lounge still
+    // tracks this device and it has clearly moved on (tests use a fake lounge
+    // without `_devices`, so they always air).
+    const deviceMap = lounge._devices?.();
+    if (deviceMap && typeof deviceMap.get === 'function') {
+      const device = deviceMap.get(event.deviceId);
+      const currentId = device?.active?.videoId || device?.provisional || null;
+      if (!device || currentId !== event.videoId) {
+        log?.info?.(`Skipping YouTube push — ${event.videoId} already stopped before resolve finished`);
+        return;
+      }
+    }
     airing = { videoId: event.videoId, deviceId: event.deviceId, video };
     const payload = buildYoutubeNowPlayingPayload(video, config, {
       trigger: 'youtube-lounge',
@@ -110,7 +128,14 @@ function createYoutubeNowPlaying({
   }
 
   function onStopped(event) {
-    store.recordSession(event);
+    const wall = Number(event.wallSeconds);
+    const meaningful = (Number.isFinite(wall) ? wall : 0) >= 2
+      || Number(event.watchedSeconds) > 0
+      || Number(event.positionSeconds) > 0;
+    // Flicker sessions (confirm then immediate Stopped) used to poison last-played.
+    if (meaningful) {
+      store.recordSession(event);
+    }
     if (airing?.videoId === event.videoId) {
       airing = null;
       sendUdpPayload(buildYoutubeNowPlayingClosePayload({ trigger: 'youtube-lounge-stop' }, config));
@@ -305,7 +330,28 @@ function createYoutubeNowPlaying({
     let targetDeviceId = deviceId;
 
     if (!targetVideoId && requestedMode !== 'last-played') {
-      session = pickSession(lounge.activeSessions(), deviceId);
+      // Apple TV often goes quiet between ticks — ask Lounge for a fresh
+      // now-playing before deciding the TV is idle and falling back to history.
+      if (typeof lounge.pollNowPlaying === 'function') {
+        try {
+          await lounge.pollNowPlaying(deviceId);
+          const settleMs = Number(youtubeConfig.pollSettleMs);
+          await new Promise((resolve) => setTimeout(
+            resolve,
+            Number.isFinite(settleMs) ? Math.max(0, settleMs) : 500,
+          ));
+        } catch (error) {
+          log?.warn?.('YouTube now-playing poll failed', error?.message || error);
+        }
+      }
+      // Prefer confirmed Playing, then any current/provisional Lounge video —
+      // otherwise the admin button silently airs stale history while the TV
+      // is already on something else.
+      const live = typeof lounge.currentPlayback === 'function'
+        ? lounge.currentPlayback()
+        : lounge.activeSessions();
+      session = pickSession(live, deviceId)
+        || pickSession(lounge.activeSessions(), deviceId);
       targetVideoId = session?.videoId || null;
       targetDeviceId = session?.deviceId || deviceId;
       if (!targetVideoId && requestedMode === 'now-playing') {
@@ -322,6 +368,8 @@ function createYoutubeNowPlaying({
       targetVideoId = previous.videoId;
       targetDeviceId = previous.deviceId;
       session = previous;
+    } else if (session?.provisional) {
+      mode = 'playing';
     }
 
     let video;

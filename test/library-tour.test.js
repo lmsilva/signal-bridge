@@ -24,17 +24,84 @@ describe('library tour settings', () => {
     assert.equal(clampSecondsPerGame('nope'), 60);
   });
 
-  it('persists sort and secondsPerGame', () => {
+  it('persists per-platform sort and secondsPerGame', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'library-tour-'));
     const settings = createLibraryTourSettings({
       ROOT: root,
       libraryTourSettingsPath: path.join(root, 'data/library-tour-settings.json'),
     });
-    const result = settings.update({ secondsPerGame: 45, sort: 'playtime' });
-    assert.equal(result.ok, true);
-    assert.equal(settings.get().secondsPerGame, 45);
-    assert.equal(settings.get().sort, 'playtime');
+    const steam = settings.update({ platform: 'steam', secondsPerGame: 45, sort: 'oldest' });
+    assert.equal(steam.ok, true);
+    assert.equal(settings.getFor('steam').secondsPerGame, 45);
+    assert.equal(settings.getFor('steam').sort, 'oldest');
+    // PSN stays at defaults until touched.
+    assert.equal(settings.getFor('psn').secondsPerGame, 60);
+    assert.equal(settings.getFor('psn').sort, 'recent');
+
+    const psn = settings.update({ platform: 'psn', sort: 'random' });
+    assert.equal(psn.ok, true);
+    assert.equal(settings.getFor('psn').sort, 'random');
+    assert.equal(settings.getFor('steam').sort, 'oldest');
+
+    assert.equal(settings.update({ sort: 'recent' }).ok, false);
     assert.equal(normalizeSort('random'), 'random');
+    assert.equal(normalizeSort('recent'), 'recent');
+    // Legacy name/playtime map onto Newest first.
+    assert.equal(normalizeSort('name'), 'recent');
+    assert.equal(normalizeSort('playtime'), 'recent');
+  });
+
+  it('migrates legacy shared settings onto both platforms', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'library-tour-legacy-'));
+    const file = path.join(root, 'data/library-tour-settings.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ secondsPerGame: 90, sort: 'random' }), 'utf8');
+    const settings = createLibraryTourSettings({
+      ROOT: root,
+      libraryTourSettingsPath: file,
+    });
+    assert.equal(settings.getFor('steam').secondsPerGame, 90);
+    assert.equal(settings.getFor('steam').sort, 'random');
+    assert.equal(settings.getFor('psn').secondsPerGame, 90);
+    assert.equal(settings.getFor('psn').sort, 'random');
+  });
+});
+
+describe('library tour sortGames', () => {
+  const { sortGames, resolveCardBaseUrl } = require('../src/steam-library-tour');
+
+  it('orders by newest / oldest lastPlayedAt', () => {
+    const games = [
+      { id: '1', name: 'Old', lastPlayedAt: 1000 },
+      { id: '2', name: 'New', lastPlayedAt: 3000 },
+      { id: '3', name: 'Mid', lastPlayedAt: 2000 },
+      { id: '4', name: 'Never', lastPlayedAt: null },
+    ];
+    assert.deepEqual(
+      sortGames(games, 'recent').map((game) => game.id),
+      ['2', '3', '1', '4'],
+    );
+    assert.deepEqual(
+      sortGames(games, 'oldest').map((game) => game.id),
+      ['1', '3', '2', '4'],
+    );
+  });
+
+  it('prefers GUEST_PHOTOBOOTH_URL origin for cardBaseUrl', () => {
+    const previous = process.env.GUEST_PHOTOBOOTH_URL;
+    process.env.GUEST_PHOTOBOOTH_URL = 'https://signal.example.com/guest/';
+    try {
+      assert.equal(
+        resolveCardBaseUrl({ proxyOwnIp: '10.0.0.5', webServer: { port: 47810 } }),
+        'https://signal.example.com',
+      );
+    } finally {
+      if (previous == null) {
+        delete process.env.GUEST_PHOTOBOOTH_URL;
+      } else {
+        process.env.GUEST_PHOTOBOOTH_URL = previous;
+      }
+    }
   });
 });
 
@@ -323,5 +390,114 @@ describe('steam library tour push', () => {
     assert.equal(COMMANDS.some((command) => (
       command.id === 'steam.library-tour' && command.schedulable
     )), true);
+  });
+});
+
+describe('psn library tour', () => {
+  const { createPsnLibraryTour, fetchPurchasedTitles } = require('../src/psn-library-tour');
+  const { createPsnLibraryCache } = require('../src/psn-library-cache');
+
+  it('maps getPurchasedGames GraphQL shape', async () => {
+    const titles = await fetchPurchasedTitles({ accessToken: 't' }, 'me', {
+      api: {
+        async getPurchasedGames(auth, options) {
+          assert.equal(auth.accessToken, 't');
+          assert.equal(options.size, 50);
+          assert.equal(options.start, 0);
+          return {
+            data: {
+              purchasedTitlesRetrieve: {
+                games: [
+                  {
+                    titleId: 'PPSA1_00',
+                    name: 'Astro',
+                    image: { url: 'https://image.api.playstation.com/a.png' },
+                  },
+                ],
+              },
+            },
+          };
+        },
+      },
+    });
+    assert.equal(titles.length, 1);
+    assert.equal(titles[0].titleId, 'PPSA1_00');
+    assert.equal(titles[0].imageUrl, 'https://image.api.playstation.com/a.png');
+  });
+
+  it('does not let example.com cache art overwrite PlayStation CDN URLs', () => {
+    const cache = createPsnLibraryCache({ ROOT: fs.mkdtempSync(path.join(os.tmpdir(), 'psn-merge-')) });
+    const merged = cache.mergeLists(
+      [{ titleId: 'PPSA1_00', name: 'Astro', imageUrl: 'https://example.com/fake.png' }],
+      [{
+        titleId: 'PPSA1_00',
+        name: 'Astro',
+        imageUrl: 'https://image.api.playstation.com/real.png',
+        lastPlayedAt: 1_700_000_000_000,
+      }],
+    );
+    assert.equal(merged[0].imageUrl, 'https://image.api.playstation.com/real.png');
+  });
+
+  it('pushes a PSN session tour from disk cache without network', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'psn-lib-tour-'));
+    const sessionPath = path.join(root, 'psn-session.json');
+    fs.writeFileSync(sessionPath, JSON.stringify({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      accountId: 'me',
+      onlineId: 'tester',
+    }));
+    const cache = createPsnLibraryCache({
+      ROOT: root,
+      psnLibraryCachePath: path.join(root, 'psn-library-cache.json'),
+    });
+    cache.setLibrary([
+      {
+        titleId: 'PPSA1_00',
+        name: 'Astro',
+        imageUrl: 'https://image.api.playstation.com/a.png',
+        lastPlayedAt: 1_700_000_000_000,
+      },
+      {
+        titleId: 'PPSA2_00',
+        name: 'Precinct',
+        imageUrl: 'https://image.api.playstation.com/b.png',
+        lastPlayedAt: 1_600_000_000_000,
+      },
+    ]);
+    const sent = [];
+    const tour = createPsnLibraryTour({
+      config: {
+        psn: { sessionPath },
+        proxyOwnIp: '10.0.0.5',
+        webServer: { port: 47810, https: false },
+        psnLibraryCachePath: path.join(root, 'psn-library-cache.json'),
+      },
+      log: null,
+      cache,
+      sendUdpPayload: (payload) => sent.push(payload),
+      apiHelpers: {
+        // Background refresh may fire after disk warm — must not break the push.
+        ensurePsnAuth: async () => {
+          throw new Error('background refresh auth failure is fine');
+        },
+        fetchPlayedTitles: async () => [],
+        fetchPurchasedTitles: async () => [],
+        enrichPsnTitle: async () => null,
+      },
+    });
+    const result = await tour.pushTour({
+      secondsPerGame: 30,
+      send: (payload) => sent.push(payload),
+    });
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.count, 2);
+    assert.equal(result.fromCache, true);
+    assert.equal(sent[0].gameTour.platform, 'psn');
+    assert.equal(sent[0].gameTour.games.length, 1);
+    assert.ok(sent[0].gameTour.games[0].imageUrl.includes('playstation.com'));
+    // Newest first — Astro has the newer lastPlayedAt.
+    assert.equal(sent[0].gameTour.games[0].name, 'Astro');
   });
 });
