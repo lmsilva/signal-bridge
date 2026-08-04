@@ -37,6 +37,7 @@ from src.display_panels import BasePanel
 from src.message_scroll import MessageScrollController
 from src.payload_utils import parse_iso_timestamp
 from src.paths import app_root
+from src.text_marquee import MarqueeLine
 
 # Frozen builds / bridge self-signed certs: once unverified works, stick with it.
 _unverified_ssl = False
@@ -176,14 +177,53 @@ class SteamNowPlayingPanel(BasePanel):
         self._enrich_spinner_arcs: list[tuple[int, int]] = []
         self._enrich_spinner_job = None
         self._enrich_spinner_angle = 0.0
+        self._marquees: list[MarqueeLine] = []
 
     def hide(self):
         self._fetch_token += 1
         self._stop_elapsed_tick()
         self._stop_enrich_spinner()
+        self._stop_title_marquees()
         self._clear_description_viewport()
         self._photo_refs = []
         super().hide()
+
+    def _stop_title_marquees(self):
+        for marquee in self._marquees:
+            marquee.stop()
+        self._marquees = []
+
+    def _place_title_marquee(self, text, x0, y0, x1, y1, font, fill):
+        """Single-line game title; scrolls horizontally when it outruns the band.
+
+        Same contract as YouTube / music: if it fits, sit still; if not, pause →
+        scroll → pause → reset. Never ellipsis or clip mid-glyph.
+        """
+        self._stop_title_marquees()
+        width = max(40, int(x1 - x0))
+        try:
+            line_h = int(font.metrics("linespace"))
+        except Exception:
+            line_h = 40
+        height = max(line_h + 4, min(max(1, int(y1 - y0)), line_h + 12))
+        y = int(y0 + max(0, ((y1 - y0) - height) / 2))
+        marquee = MarqueeLine(self.root)
+        self._marquees.append(marquee)
+        viewport = marquee.build(
+            parent=self.canvas,
+            text=text,
+            font=font,
+            fill=fill,
+            width=width,
+            height=height,
+            bg=STEAM_BG,
+            center=False,
+        )
+        win_id = self.canvas.create_window(
+            int(x0), y, anchor="nw", window=viewport, width=width, height=height,
+        )
+        self._item_ids.append(win_id)
+        self._widgets.append(viewport)
 
     @staticmethod
     def _enrich_pending(card: dict | None) -> bool:
@@ -770,18 +810,18 @@ class SteamNowPlayingPanel(BasePanel):
 
         title_font = getattr(self.shell, "section_title_font", None) or self.shell.chip_value_font
         credit_font = self.shell.chip_label_font
-        self._item_ids.append(self.canvas.create_text(
-            mx0, my0 + 2, anchor="nw", text=title, fill=text,
-            font=title_font,
-        ))
         try:
             title_h = int(title_font.metrics("linespace"))
             title_w = int(title_font.measure(title))
         except Exception:
             title_h = 32
             title_w = 200
+        title_line_h = title_h
 
-        # Mockup: developer · year flush to the right edge of the meta column.
+        # Mockup: developer · year flush to the right edge of the meta column
+        # when the title leaves room; otherwise under the title so the marquee
+        # can own the full width.
+        title_right = mx1
         if credit:
             try:
                 credit_ls = int(credit_font.metrics("linespace"))
@@ -789,18 +829,23 @@ class SteamNowPlayingPanel(BasePanel):
             except Exception:
                 credit_ls = 14
                 credit_w = 120
-            # Only share the title row when there is clear space after the title.
             if title_w + credit_w + 24 < (mx1 - mx0):
                 self._item_ids.append(self.canvas.create_text(
                     mx1, my0 + 2 + max(0, (title_h - credit_ls) // 2),
                     anchor="ne", text=credit, fill=muted, font=credit_font,
                 ))
+                title_right = mx1 - credit_w - 24
             else:
                 self._item_ids.append(self.canvas.create_text(
                     mx0, my0 + title_h + 4, anchor="nw", text=credit, fill=muted,
                     font=credit_font,
                 ))
                 title_h += credit_ls + 4
+
+        self._place_title_marquee(
+            title, mx0, my0, title_right, my0 + title_line_h,
+            title_font, text,
+        )
 
         tags_top = my0 + title_h + self.TAG_FONT_GAP
         tags_h = int(boxes.get("tags_h") or self.TAG_PILL_H)
