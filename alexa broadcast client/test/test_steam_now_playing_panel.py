@@ -363,7 +363,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a", "http://b", "http://c"],
             "tags": ["Shared/Split Screen PvP", "Online PvP", "PvP", "Full controller support"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 500)
             panel._draw_meta(layout, steam)
         meta_top = layout["meta"][1]
@@ -398,7 +399,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a", "http://b", "http://c"],
             "tags": ["PvP", "Co-op"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             # Taller than the reserved 128px band → must scroll, not overflow.
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
             panel._draw_meta(boxes, steam)
@@ -452,7 +454,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "shortDescription": "Short blurb.",
             "screenshots": ["http://a"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 200, 40)
             panel._draw_meta(boxes, steam)
         self.assertIsNotNone(panel.scroller)
@@ -473,7 +476,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "shortDescription": "Long blurb. " * 40,
             "screenshots": ["http://a"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
             panel._draw_meta(boxes, steam)
         self.assertAlmostEqual(panel.scroller._pixels_per_second(), 14.0)
@@ -496,7 +500,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a", "http://b", "http://c"],
             "tags": ["PvP"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 500)
             panel._draw_meta(boxes, steam)
             height = canvas_cls.call_args.kwargs.get("height")
@@ -526,7 +531,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a", "http://b", "http://c"],
             "tags": ["PvP", "Co-op", "Action", "Indie"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 500)
             panel._draw_meta(layout, steam)
             height = canvas_cls.call_args.kwargs.get("height")
@@ -550,7 +556,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "shortDescription": "Long text. " * 40,
             "screenshots": ["http://a"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
             panel._draw_meta(boxes, steam)
             scroller = panel.scroller
@@ -561,9 +568,43 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertIsNone(panel._desc_viewport)
         self.assertIsNone(panel._desc_window_id)
         self.assertFalse(panel.needs_scroll)
+        self.assertEqual(panel._marquees, [])
         self.assertEqual(scroller._state, "idle")
         viewport.destroy.assert_called()
         panel.canvas.delete.assert_any_call(win_id)
+
+    def test_long_title_uses_marquee_not_main_canvas_text(self):
+        """Regression: Uncharted-length titles were clipped mid-word on the wall."""
+        panel = self._make_draw_panel()
+        panel.shell.section_title_font.measure.return_value = 1200
+        boxes = {
+            "meta": (0, 50, 800, 280),
+            "desc": (0, 292, 800, 420),
+            "shots": (0, 430, 800, 560),
+            "desc_h": 128,
+            "tags_h": 40,
+        }
+        long_name = "Uncharted™: The Nathan Drake Collection"
+        steam = {
+            "name": long_name,
+            "shortDescription": "Short.",
+            "screenshots": ["http://a"],
+            "tags": ["Adventure"],
+        }
+        with mock.patch("src.text_marquee.tk.Canvas") as title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            title_canvas.return_value.bbox.return_value = (0, 0, 40, 40)
+            canvas_cls.return_value.bbox.return_value = (0, 0, 200, 40)
+            panel._draw_meta(boxes, steam)
+        title_on_canvas = [
+            call for call in panel.canvas.create_text.call_args_list
+            if long_name in str(call.kwargs.get("text", ""))
+            or (len(call.args) >= 3 and long_name in str(call.args[2]))
+        ]
+        self.assertEqual(title_on_canvas, [])
+        self.assertEqual(len(panel._marquees), 1)
+        self.assertEqual(panel._marquees[0]._state, "start_pause")
+        panel.canvas.create_window.assert_called()
 
     def test_credit_is_right_aligned_on_title_row(self):
         panel = self._make_draw_panel()
@@ -582,7 +623,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "screenshots": ["http://a"],
             "tags": ["PvP"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 200, 40)
             panel._draw_meta(boxes, steam)
         found = False
@@ -613,7 +655,8 @@ class SteamNowPlayingClientTests(unittest.TestCase):
             "shortDescription": "Desc line. " * 40,
             "screenshots": ["http://a"],
         }
-        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+        with mock.patch("src.text_marquee.tk.Canvas") as _title_canvas, \
+             mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
             canvas_cls.return_value.bbox.return_value = (0, 0, 800, 400)
             panel._draw_meta(boxes, steam)
             viewport = canvas_cls.return_value

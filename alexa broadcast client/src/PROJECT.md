@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Steam/PSN tags never overlap description)
+**Last updated:** 2026-08-04 (Steam/PSN long titles marquee)
 
 ---
 
@@ -262,6 +262,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Steam/PSN long titles marquee** — library-tour names wider than the meta column (e.g. Uncharted™: The Nathan Drake Collection) were clipped mid-word by bare `create_text`. Both panels now use the shared `MarqueeLine` (same pause→scroll→pause loop as YouTube/music). Steam still right-aligns developer·year when the title leaves room; otherwise credit drops under and the marquee owns the full width. Portable rebuild required.
 
 - 2026-08-04: **Steam/PSN tags never overlap the description** — tag pills used `max(22, remaining)` for height, so a long title + developer credit that left 9–21px above the meta floor still painted 22px chips into the blurb (visible on library tour cards like Micro Machines). Pill height is now strictly capped by the box; the row is skipped when there is no readable room; portrait meta reserves a credit line so the tag row is not squeezed; PSN gets the same clamp against status/desc. Portable rebuild required.
 

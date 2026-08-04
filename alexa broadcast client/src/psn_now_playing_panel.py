@@ -197,14 +197,16 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         title = str(psn.get("name") or self.DEFAULT_TITLE)
 
         title_font = getattr(self.shell, "section_title_font", None) or self.shell.chip_value_font
-        self._item_ids.append(self.canvas.create_text(
-            mx0, my0 + 2, anchor="nw", text=title, fill=text,
-            font=title_font,
-        ))
         try:
             title_h = int(title_font.metrics("linespace"))
         except Exception:
             title_h = 32
+        # Long PSN Store names (™ Collection, remasters, …) must scroll — never
+        # clip mid-word the way a bare create_text used to.
+        self._place_title_marquee(
+            title, mx0, my0, mx1, my0 + title_h,
+            title_font, text,
+        )
 
         tags_top = my0 + title_h + self.TAG_FONT_GAP
         tags_h = int(boxes.get("tags_h") or self.TAG_PILL_H)

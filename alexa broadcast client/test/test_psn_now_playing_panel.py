@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 from unittest.mock import MagicMock
 
 from src.psn_now_playing_panel import PsnNowPlayingPanel
@@ -60,6 +61,7 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         shell.chip_value_font = MagicMock()
         shell.section_title_font = MagicMock()
         shell.section_title_font.metrics = MagicMock(return_value=32)
+        shell.section_title_font.measure = MagicMock(return_value=120)
         shell.body_font = MagicMock()
         panel = PsnNowPlayingPanel(root, shell, {"textColor": "#fff", "accentColor": "#38bdf8"})
         panel.canvas = MagicMock()
@@ -67,6 +69,7 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         panel.canvas.create_text = MagicMock(return_value=2)
         panel.canvas.create_line = MagicMock(return_value=3)
         panel.canvas.create_image = MagicMock(return_value=5)
+        panel.canvas.create_window = MagicMock(return_value=6)
         panel.canvas.create_arc = MagicMock(side_effect=range(100, 200))
         panel._item_ids = []
         panel._widgets = []
@@ -76,18 +79,20 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         panel._draw_chrome = MagicMock()
         panel._place_description_viewport = MagicMock()
 
-        panel._render({
-            "type": "psn.now-playing",
-            "psn": {
-                "name": "Astro Bot",
-                "mode": "library-tour",
-                "enrichPending": True,
-                "statusLine": "In library",
-                "shortDescription": "",
-                "screenshots": [],
-                "playtimeLabel": "2.0 h",
-            },
-        })
+        with mock.patch("src.text_marquee.tk.Canvas") as title_canvas:
+            title_canvas.return_value.bbox.return_value = (0, 0, 40, 40)
+            panel._render({
+                "type": "psn.now-playing",
+                "psn": {
+                    "name": "Astro Bot",
+                    "mode": "library-tour",
+                    "enrichPending": True,
+                    "statusLine": "In library",
+                    "shortDescription": "",
+                    "screenshots": [],
+                    "playtimeLabel": "2.0 h",
+                },
+            })
         boxes = panel._layout_boxes
         self.assertGreater(boxes["desc"][3] - boxes["desc"][1], 20)
         self.assertGreater(boxes["shots"][3] - boxes["shots"][1], 20)
@@ -153,6 +158,7 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         shell.chip_value_font = MagicMock()
         shell.section_title_font = MagicMock()
         shell.section_title_font.metrics = MagicMock(return_value=32)
+        shell.section_title_font.measure = MagicMock(return_value=120)
         shell.body_font = MagicMock()
         panel = PsnNowPlayingPanel(root, shell, {"textColor": "#fff"})
         panel.canvas = MagicMock()
@@ -160,6 +166,7 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         panel.canvas.create_text = MagicMock(return_value=2)
         panel.canvas.create_line = MagicMock(return_value=3)
         panel.canvas.create_image = MagicMock(return_value=5)
+        panel.canvas.create_window = MagicMock(return_value=6)
         panel._item_ids = []
         panel._widgets = []
         panel._round_rect = MagicMock()
@@ -170,21 +177,23 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         panel._draw_footer = MagicMock()
         panel._place_screenshot_row = MagicMock()
 
-        panel._render({
-            "type": "psn.now-playing",
-            "psn": {
-                "name": "Split Fiction",
-                "platform": "PS5",
-                "tags": ["PS5"],
-                "statusLine": "Playing now · on PS5 · as Tester",
-                "mode": "playing",
-                "startedAt": "2026-07-28T12:00:00Z",
-                "screenshots": ["https://example.com/a.jpg"],
-                "trophies": {"earned": 0, "total": 21, "available": True, "progress": 0},
-                "progressLabel": "0%",
-                "playtimeLabel": "2.0 h",
-            },
-        })
+        with mock.patch("src.text_marquee.tk.Canvas") as title_canvas:
+            title_canvas.return_value.bbox.return_value = (0, 0, 40, 40)
+            panel._render({
+                "type": "psn.now-playing",
+                "psn": {
+                    "name": "Split Fiction",
+                    "platform": "PS5",
+                    "tags": ["PS5"],
+                    "statusLine": "Playing now · on PS5 · as Tester",
+                    "mode": "playing",
+                    "startedAt": "2026-07-28T12:00:00Z",
+                    "screenshots": ["https://example.com/a.jpg"],
+                    "trophies": {"earned": 0, "total": 21, "available": True, "progress": 0},
+                    "progressLabel": "0%",
+                    "playtimeLabel": "2.0 h",
+                },
+            })
         self.assertEqual(panel.SOURCE_CHIP, "PSN")
         self.assertEqual(panel.PAYLOAD_KEY, "psn")
         panel._clear_description_viewport.assert_called()
@@ -195,6 +204,49 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
             if c.kwargs.get("text")
         ]
         self.assertIn("Playing now · on PS5 · as Tester", status_texts)
+
+    def test_long_title_uses_marquee_not_main_canvas_text(self):
+        """Library-tour titles like Uncharted must scroll, never clip mid-word."""
+        root = MagicMock()
+        shell = MagicMock()
+        shell.chip_label_font = MagicMock()
+        shell.chip_label_font.measure = MagicMock(return_value=40)
+        shell.chip_label_font.metrics = MagicMock(return_value=14)
+        shell.chip_value_font = MagicMock()
+        shell.section_title_font = MagicMock()
+        shell.section_title_font.metrics = MagicMock(return_value=32)
+        shell.section_title_font.measure = MagicMock(return_value=1200)
+        shell.body_font = MagicMock()
+        panel = PsnNowPlayingPanel(root, shell, {"textColor": "#fff", "mutedTextColor": "#888"})
+        panel.canvas = MagicMock()
+        panel.canvas.create_window = MagicMock(return_value=9)
+        panel._item_ids = []
+        panel._widgets = []
+        panel._round_rect = MagicMock()
+        long_name = "Uncharted™: The Nathan Drake Collection"
+        boxes = {
+            "meta": (40, 900, 1040, 1100),
+            "status": (40, 1108, 1040, 1140),
+            "desc": (40, 1150, 1040, 1400),
+            "tags_h": 40,
+            "title_h": 104,
+        }
+        with mock.patch("src.text_marquee.tk.Canvas") as title_canvas:
+            title_canvas.return_value.bbox.return_value = (0, 0, 40, 40)
+            panel._draw_meta(boxes, {
+                "name": long_name,
+                "tags": ["PSN", "PS4", "Adventure"],
+                "statusLine": "Last played · on PS4",
+                "shortDescription": "Experience one of the most revered…",
+            })
+        title_on_canvas = [
+            call for call in panel.canvas.create_text.call_args_list
+            if long_name in str(call.kwargs.get("text", ""))
+        ]
+        self.assertEqual(title_on_canvas, [])
+        self.assertEqual(len(panel._marquees), 1)
+        self.assertEqual(panel._marquees[0]._state, "start_pause")
+        panel.canvas.create_window.assert_called()
 
 
 if __name__ == "__main__":
