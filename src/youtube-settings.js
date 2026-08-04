@@ -225,13 +225,45 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
       durationSeconds: Math.max(0, Math.round(Number(session.durationSeconds) || 0)),
       completed: session.completed === true,
     };
+    // Upsert by the session start: onStarted writes a seed row so a container
+    // restart cannot erase the watch, and onStopped refreshes the same row
+    // with the final watched/position totals.
+    const existing = sessions.findIndex((row) => (
+      row.videoId === entry.videoId
+      && row.deviceId === entry.deviceId
+      && row.startedAt === entry.startedAt
+    ));
+    let next;
+    if (existing >= 0) {
+      const merged = {
+        ...sessions[existing],
+        ...entry,
+        id: sessions[existing].id || entry.id,
+        // Never let a later seed wipe a larger watched total already recorded.
+        watchedSeconds: Math.max(
+          Number(sessions[existing].watchedSeconds) || 0,
+          entry.watchedSeconds,
+        ),
+        positionSeconds: Math.max(
+          Number(sessions[existing].positionSeconds) || 0,
+          entry.positionSeconds,
+        ),
+      };
+      next = [merged, ...sessions.filter((_, index) => index !== existing)];
+    } else {
+      next = [entry, ...sessions];
+    }
     // Newest first: `last-played` is the only reader and always wants the head.
-    historyFile.write({ sessions: [entry, ...sessions].slice(0, settings.historyLimit) });
-    return entry;
+    historyFile.write({ sessions: next.slice(0, settings.historyLimit) });
+    return next[0];
   }
 
   function lastPlayed(deviceId = null) {
     return history({ limit: 1, deviceId })[0] || null;
+  }
+
+  function hasHistory(deviceId = null) {
+    return Boolean(lastPlayed(deviceId));
   }
 
   return {
@@ -246,6 +278,7 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
     history,
     recordSession,
     lastPlayed,
+    hasHistory,
   };
 }
 

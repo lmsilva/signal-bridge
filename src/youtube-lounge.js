@@ -341,6 +341,19 @@ function createYoutubeLounge({
       clearTimer(restartTimer);
       restartTimer = null;
     }
+    // Flush confirmed sessions to history *before* killing the agent.
+    // `./recreate.sh` otherwise drops in-memory watches with no `stopped`
+    // event, which is how last-played used to go empty after a rebuild.
+    for (const device of devices.values()) {
+      clearStopTimer(device);
+      clearConfirmTimer(device);
+      if (device.active) {
+        finishSession(device, 'shutdown');
+      }
+      device.provisional = null;
+      device.provisionalSince = null;
+      device.connected = false;
+    }
     send({ cmd: 'shutdown' });
     child?.kill?.();
     child = null;

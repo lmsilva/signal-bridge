@@ -508,6 +508,17 @@ function createYoutubeApi({
     };
   }
 
+  /**
+   * Recently resolved videos, newest first. Used to rebuild last-played when
+   * history was lost to a mid-watch container restart (metadata survives on disk).
+   */
+  function recentVideos({ limit = 20 } = {}) {
+    return Object.values(cache.videos || {})
+      .filter((video) => video?.videoId)
+      .sort((a, b) => Date.parse(b.fetchedAt || 0) - Date.parse(a.fetchedAt || 0))
+      .slice(0, Math.max(1, Number(limit) || 20));
+  }
+
   function clear(scope = 'all') {
     if (scope === 'stats') {
       cache.stats = {};
@@ -528,6 +539,7 @@ function createYoutubeApi({
     cacheImage,
     pruneThumbnails,
     stats: stats0,
+    recentVideos,
     clear,
     flush,
     thumbnailFileFor,

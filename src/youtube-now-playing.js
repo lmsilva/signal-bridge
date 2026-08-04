@@ -101,6 +101,19 @@ function createYoutubeNowPlaying({
       log?.info?.(`Suppressing a YouTube Short (${event.videoId})`);
       return;
     }
+    // Seed history as soon as a session confirms. Waiting for `stopped` alone
+    // meant `./recreate.sh` (or any container kill) erased every in-flight
+    // watch — metadata cache survived on disk, last-played did not.
+    store.recordSession({
+      videoId: event.videoId,
+      deviceId: event.deviceId,
+      startedAt: event.startedAt,
+      endedAt: event.startedAt,
+      watchedSeconds: 0,
+      positionSeconds: 0,
+      durationSeconds: event.durationSeconds || video.durationSeconds || 0,
+      completed: false,
+    });
     // Resolve can outlive a flicker Stopped. Only abandon the push when Lounge
     // has clearly moved on to a *different* video — a cleared active/provisional
     // (or stop-grace) still means this video is what just confirmed, and history
@@ -134,8 +147,10 @@ function createYoutubeNowPlaying({
     const wall = Number(event.wallSeconds);
     const meaningful = (Number.isFinite(wall) ? wall : 0) >= 2
       || Number(event.watchedSeconds) > 0
-      || Number(event.positionSeconds) > 0;
-    // Flicker sessions (confirm then immediate Stopped) used to poison last-played.
+      || Number(event.positionSeconds) > 0
+      // A confirmed session that already seeded history still deserves a final
+      // row even when Lounge never delivered a scrubber sample.
+      || Boolean(event.startedAt && event.videoId);
     if (meaningful) {
       store.recordSession(event);
     }
@@ -143,6 +158,42 @@ function createYoutubeNowPlaying({
       airing = null;
       sendUdpPayload(buildYoutubeNowPlayingClosePayload({ trigger: 'youtube-lounge-stop' }, config));
     }
+  }
+
+  /**
+   * Rebuild last-played from the metadata cache when history is empty.
+   *
+   * `./recreate.sh` never touches `./data`, but history used to live only in
+   * memory until a session stopped — so a rebuild mid-watch left an empty
+   * history file next to a full `youtube-cache.json`. Prefer the real watch
+   * log when it exists; otherwise recover the most recently resolved videos.
+   */
+  function recoverHistoryFromCache() {
+    if (store.hasHistory?.() || store.lastPlayed()) {
+      return 0;
+    }
+    const recent = typeof api.recentVideos === 'function' ? api.recentVideos({ limit: 20 }) : [];
+    if (!recent.length) {
+      return 0;
+    }
+    const fallbackDeviceId = store.listDevices()[0]?.id || 'unknown';
+    // Oldest first so each prepend leaves the newest video at the head.
+    const chronological = [...recent].reverse();
+    for (const video of chronological) {
+      const at = video.fetchedAt || new Date().toISOString();
+      store.recordSession({
+        videoId: video.videoId,
+        deviceId: fallbackDeviceId,
+        startedAt: at,
+        endedAt: at,
+        watchedSeconds: 0,
+        positionSeconds: 0,
+        durationSeconds: video.durationSeconds || 0,
+        completed: false,
+      });
+    }
+    log?.info?.(`Recovered ${chronological.length} YouTube history entr${chronological.length === 1 ? 'y' : 'ies'} from the metadata cache`);
+    return chronological.length;
   }
 
   function onPrefetch(event) {
@@ -419,6 +470,7 @@ function createYoutubeNowPlaying({
       apiKeySource: config?.youtube?.apiKeySource || null,
       // The command registry's content check keys off this one boolean.
       playing: Boolean(chosen),
+      hasHistory: Boolean(store.lastPlayed()),
       videoId: chosen?.videoId || null,
       deviceId: chosen?.deviceId || null,
       deviceLabel: chosen ? deviceLabelFor(chosen.deviceId) : null,
@@ -440,6 +492,7 @@ function createYoutubeNowPlaying({
       return;
     }
     started = true;
+    recoverHistoryFromCache();
     lounge.on('started', (event) => {
       onStarted(event).catch((error) => log?.warn?.('YouTube start failed', error?.message || error));
     });
@@ -499,12 +552,13 @@ function createYoutubeNowPlaying({
     refreshTokens,
     pushManualPreview,
     statusSnapshot,
-    hasContent: () => lounge.activeSessions().length > 0,
+    hasContent: () => lounge.activeSessions().length > 0 || Boolean(store.lastPlayed()),
     imageBaseUrl,
 
     // Test seams
     _onStarted: onStarted,
     _onStopped: onStopped,
+    _recoverHistoryFromCache: recoverHistoryFromCache,
   };
 }
 

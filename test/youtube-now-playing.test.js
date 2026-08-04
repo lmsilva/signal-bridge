@@ -103,6 +103,9 @@ function fakeApi(overrides = {}) {
       return true;
     },
     stats: () => ({ videos: 1, channels: 1, quotaUsedToday: 3, quotaLimit: 10000, hasApiKey: true }),
+    recentVideos: (opts) => (overrides.recentVideos
+      ? overrides.recentVideos(opts)
+      : []),
     clear: () => ({ videos: 0, channels: 0 }),
     pruneThumbnails: () => 0,
     flush: () => {},
@@ -272,6 +275,8 @@ test('a confirmed session sends a card, and stopping closes it', async () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].type, 'youtube.now-playing');
   assert.equal(sent[0].youtube.videoId, 'abc');
+  assert.equal(store.history()[0].videoId, 'abc', 'history is seeded on confirm, before stop');
+  assert.equal(store.history().length, 1);
 
   lounge.emit('stopped', {
     deviceId: 'tv-1', videoId: 'abc', watchedSeconds: 900,
@@ -279,7 +284,41 @@ test('a confirmed session sends a card, and stopping closes it', async () => {
   });
 
   assert.equal(sent.at(-1).type, 'youtube.now-playing.close');
-  assert.equal(store.history()[0].videoId, 'abc', 'the session is kept as history');
+  assert.equal(store.history().length, 1, 'stop upserts the same session rather than duplicating');
+  assert.equal(store.history()[0].watchedSeconds, 900);
+});
+
+test('an empty history is rebuilt from the metadata cache on start', () => {
+  const { service, store } = makeService({
+    api: fakeApi({
+      recentVideos: () => ([
+        { videoId: 'newer', fetchedAt: '2026-08-03T05:00:00Z', durationSeconds: 100 },
+        { videoId: 'older', fetchedAt: '2026-08-03T04:00:00Z', durationSeconds: 200 },
+      ]),
+    }),
+  });
+  assert.equal(store.history().length, 0);
+  service.start();
+  assert.equal(store.history().length, 2);
+  assert.equal(store.lastPlayed().videoId, 'newer');
+});
+
+test('a non-empty history is left alone when recovering from the cache', () => {
+  const { service, store } = makeService({
+    api: fakeApi({
+      recentVideos: () => ([
+        { videoId: 'cached', fetchedAt: '2026-08-03T05:00:00Z', durationSeconds: 100 },
+      ]),
+    }),
+  });
+  store.recordSession({
+    videoId: 'real-watch', deviceId: 'tv-1',
+    startedAt: '2026-08-03T03:00:00Z', endedAt: '2026-08-03T03:10:00Z',
+    watchedSeconds: 600,
+  });
+  service.start();
+  assert.equal(store.history().length, 1);
+  assert.equal(store.lastPlayed().videoId, 'real-watch');
 });
 
 test('a Short is suppressed unless the setting asks for it', async () => {
@@ -648,7 +687,7 @@ test('both YouTube commands are registered and content-checked correctly', () =>
   assert.equal(nowPlaying.pushable, true);
   assert.equal(lastPlayed.body.mode, 'last-played');
   assert.equal(lastPlayed.pushable, false);
-  assert.equal(lastPlayed.supportsContentCheck, false);
+  assert.equal(lastPlayed.supportsContentCheck, true);
 });
 
 test('the content check follows whether a video is actually playing', () => {
