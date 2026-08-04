@@ -318,8 +318,8 @@ const COMMANDS = [
     body: { mode: 'last-played' },
     pushable: false,
     schedulable: true,
-    // Always has content once any history exists (youtube.md §9.2).
-    supportsContentCheck: false,
+    // Empty history used to look "ready" and Air now returned a cryptic 502.
+    supportsContentCheck: true,
     variableDuration: false,
     defaultDurationSeconds: 60,
   },
@@ -400,6 +400,10 @@ function createCommandRegistry(deps = {}) {
     'youtube.now-playing': () => {
       const status = call(getYoutubeStatus);
       return Boolean(status?.playing);
+    },
+    'youtube.last-played': () => {
+      const status = call(getYoutubeStatus);
+      return Boolean(status?.hasHistory || status?.lastPlayed);
     },
     'trivia.show': (params) => {
       const status = call(getTriviaStatus);

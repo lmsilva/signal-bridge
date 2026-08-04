@@ -169,6 +169,21 @@ test('an agent that exits mid-video closes the session rather than stranding it'
   assert.deepEqual(h.lounge.activeSessions(), []);
 });
 
+test('a deliberate stop flushes the active session before killing the agent', () => {
+  // Regression: ./recreate.sh used to kill the container with confirmed
+  // sessions still in memory and no stopped event, wiping last-played.
+  const h = harness();
+  h.lounge.start();
+  playFor(h, { seconds: 6 });
+  assert.equal(h.events.started.length, 1);
+
+  h.lounge.stop();
+
+  assert.equal(h.events.stopped.length, 1);
+  assert.equal(h.events.stopped[0].reason, 'shutdown');
+  assert.deepEqual(h.lounge.activeSessions(), []);
+});
+
 test('a request answers when the sidecar replies, and reports a dead agent', async () => {
   const h = harness();
   h.lounge.start();

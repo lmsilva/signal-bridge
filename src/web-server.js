@@ -1189,10 +1189,10 @@ function createWebServer({
         sendJson(res, 202, { ok: true, event });
         return;
       }
-      // Always name the reason. A bare status code here reads as a bridge fault
-      // when it is nearly always the command declining — nothing to show yet,
-      // a service not linked, an expired session.
-      sendJson(res, 502, {
+      // Soft decline — nothing to show, not linked, empty history. Use 409 so a
+      // reverse proxy / CDN does not replace the JSON body the way many do for
+      // upstream 502, which left the admin toast as a bare "Request failed (502)".
+      sendJson(res, 409, {
         ok: false,
         error: event?.detail || `${rule.label || rule.commandId} could not air`,
         event,

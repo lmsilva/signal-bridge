@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-03 (Scheduler pause UX + Air-now unicast)
+**Last updated:** 2026-08-04 (YouTube history survives recreate; Air-now 409)
 
 ---
 
@@ -502,6 +502,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-04: **YouTube history survives recreate; Air now declines with 409** — history was only written on Lounge `stopped`, so `./recreate.sh` (which does **not** wipe `./data`) still erased last-played by killing in-memory sessions. Confirmed watches now seed `data/youtube-history.json` immediately; stop upserts the same row; Lounge `stop()` flushes active sessions before killing the agent; an empty history is rebuilt from `youtube-cache.json` on start. Scheduler soft declines use HTTP **409** (not 502) so a reverse proxy cannot strip the JSON error into a bare "Request failed (502)". `youtube.last-played` now has a real content check. Deploy: `./recreate.sh` (src bind-mounted; history already re-seeded from cache on disk).
 
 - 2026-08-03: **Scheduler pause banner only when paused; Air now unicasts to every display** — the Rules card always showed a bold "Paused — …" style status next to a toggle labelled "Paused" when off, which read as boilerplate rather than state. Toggle is now On/Off; the paused/quiet banner is the only place that word appears, and the educational hint hides while paused. Separately, scheduler "all displays" delivery only UDP-broadcast to `255.255.255.255`, which often never reaches the poster PC while Push-tab unicast does — `resolveDelivery('*'|'all')` now fans out `hosts` to every registered display (plus broadcast). Cache-bust `?v=signal38`. Deploy: `./recreate.sh`.
 

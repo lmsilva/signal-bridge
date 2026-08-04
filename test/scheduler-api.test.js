@@ -258,7 +258,7 @@ test('airing the slideshow pulls the shared photos itself', async () => {
 
     // Nothing shared yet: a clear reason, not a crash or a bare status code.
     const empty = await api(`${ROUTE}/rules/${id}/air`, { method: 'POST' });
-    assert.equal(empty.status, 502);
+    assert.equal(empty.status, 409);
     assert.match(empty.body.error, /No shared photos/);
     assert.match(empty.body.event.detail, /No shared photos/);
 
@@ -299,7 +299,7 @@ test('an unreachable host is reported as a config problem, not an empty cache', 
     });
 
     const aired = await api(`${ROUTE}/rules/${created.body.rule.id}/air`, { method: 'POST' });
-    assert.equal(aired.status, 502);
+    assert.equal(aired.status, 409);
     assert.match(aired.body.error, /PROXY_OWN_IP/);
   } finally {
     webServer.stop();
