@@ -267,7 +267,8 @@ def fit_text_font(
     text = str(text or "")
     while True:
         lines = wrap_text(font, text, max_width)
-        if len(lines) <= max_lines:
+        overflows = any(_measure(font, line) > max_width + 0.5 for line in lines)
+        if len(lines) <= max_lines and not overflows:
             return font, lines
         try:
             size = int(font.cget("size"))
@@ -284,20 +285,63 @@ def fit_text_font(
 
 
 def wrap_text(font, text: str, max_width: float) -> list[str]:
+    """Wrap on spaces; break oversized tokens on hyphens, then by glyph.
+
+    A long hyphenated word like ``computer-animated`` used to stay intact and
+    paint past the content column into the bezel / film-strip frame.
+    """
     words = str(text or "").split()
     if not words:
         return []
     lines: list[str] = []
-    current = words[0]
-    for word in words[1:]:
-        candidate = f"{current} {word}"
-        if _measure(font, candidate) <= max_width:
-            current = candidate
-        else:
-            lines.append(current)
-            current = word
-    lines.append(current)
+    current = ""
+    for word in words:
+        for piece in _split_oversized_token(font, word, max_width):
+            if not current:
+                current = piece
+                continue
+            candidate = f"{current} {piece}"
+            if _measure(font, candidate) <= max_width:
+                current = candidate
+            else:
+                lines.append(current)
+                current = piece
+    if current:
+        lines.append(current)
     return lines
+
+
+def _split_oversized_token(font, word: str, max_width: float) -> list[str]:
+    """Keep short tokens intact; carve long ones so every piece fits."""
+    word = str(word or "")
+    if not word or _measure(font, word) <= max_width:
+        return [word] if word else []
+    parts: list[str] = []
+    # Prefer natural hyphen breaks (keep the hyphen on the leading piece).
+    chunks = []
+    remaining = word
+    while "-" in remaining:
+        head, remaining = remaining.split("-", 1)
+        chunks.append(f"{head}-")
+    if remaining:
+        chunks.append(remaining)
+    if len(chunks) == 1:
+        chunks = [word]
+    for chunk in chunks:
+        if _measure(font, chunk) <= max_width:
+            parts.append(chunk)
+            continue
+        buf = ""
+        for ch in chunk:
+            trial = f"{buf}{ch}"
+            if buf and _measure(font, trial) > max_width:
+                parts.append(buf)
+                buf = ch
+            else:
+                buf = trial
+        if buf:
+            parts.append(buf)
+    return parts or [word]
 
 
 def _ellipsise(font, text: str, max_width: float) -> str:
@@ -336,6 +380,10 @@ class TriviaPanel(BasePanel):
     OPTION_U_PORTRAIT = (52, 42)
     OPTION_U_LANDSCAPE = (40, 32)
     CHIP_U = 20
+    # Extra inset inside page_chrome — portrait art (film strips, frames) needs
+    # breathing room so question lines never kiss the bezel.
+    CONTENT_INSET_PORTRAIT_U = 48
+    CONTENT_INSET_LANDSCAPE_U = 24
     COUNTDOWN_U = 32
     ATTRIBUTION_U = 13
 
@@ -509,12 +557,13 @@ class TriviaPanel(BasePanel):
             "portrait": chrome.portrait, "u": chrome.u, **boxes,
         }
 
-    @staticmethod
-    def compute_portrait_boxes(chrome) -> dict:
+    @classmethod
+    def compute_portrait_boxes(cls, chrome) -> dict:
         """Stacked: chip, question, full-width option tiles, progress row."""
         u = chrome.u
-        x0 = chrome.content_x
-        x1 = x0 + chrome.content_w
+        inset = cls.CONTENT_INSET_PORTRAIT_U * u
+        x0 = chrome.content_x + inset
+        x1 = chrome.content_x + chrome.content_w - inset
         top = chrome.content_top
         bottom = chrome.content_bottom - 16 * u
         # Attribution sits below everything, quiet and always present (§2.5).
@@ -542,16 +591,17 @@ class TriviaPanel(BasePanel):
             "option_columns": 1,
         }
 
-    @staticmethod
-    def compute_landscape_boxes(chrome) -> dict:
+    @classmethod
+    def compute_landscape_boxes(cls, chrome) -> dict:
         """Two columns: question and metadata left, option tiles right (§6.3).
 
         A wide short question box would force the type to shrink; splitting keeps
         it large.
         """
         u = chrome.u
-        x0 = chrome.content_x
-        x1 = x0 + chrome.content_w
+        inset = cls.CONTENT_INSET_LANDSCAPE_U * u
+        x0 = chrome.content_x + inset
+        x1 = chrome.content_x + chrome.content_w - inset
         top = chrome.content_top
         bottom = chrome.content_bottom - 16 * u
         gutter = 40 * u

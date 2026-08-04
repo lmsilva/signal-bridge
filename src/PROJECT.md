@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (YouTube history survives recreate; Air-now 409)
+**Last updated:** 2026-08-04 (New trivia category artwork pack)
 
 ---
 
@@ -502,6 +502,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-04: **New trivia category artwork pack** — replaced the magenta/pattern JPEGs in `src/web/trivia-artwork/` with the cinema/icon set from `dev assets/trivia-category-artwork/` (`{id}_{portrait|landscape}.png`, including `musicals-theater` → `musicals-theatre`). `/trivia-artwork/` prefers `dev assets` over the shipped pack and resolves hyphen↔underscore stems + theater/theatre aliases. Category `background` colours in `trivia-categories.json` resampled to the new art. Deploy: `./recreate.sh` + portable client rebuild; clear `trivia-artwork-cache/` on the poster PC.
 
 - 2026-08-04: **YouTube history survives recreate; Air now declines with 409** — history was only written on Lounge `stopped`, so `./recreate.sh` (which does **not** wipe `./data`) still erased last-played by killing in-memory sessions. Confirmed watches now seed `data/youtube-history.json` immediately; stop upserts the same row; Lounge `stop()` flushes active sessions before killing the agent; an empty history is rebuilt from `youtube-cache.json` on start. Scheduler soft declines use HTTP **409** (not 502) so a reverse proxy cannot strip the JSON error into a bare "Request failed (502)". `youtube.last-played` now has a real content check. Deploy: `./recreate.sh` (src bind-mounted; history already re-seeded from cache on disk).
 
