@@ -118,6 +118,37 @@ const MIME_TYPES = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
+/**
+ * Hyphen URLs (`film-portrait`) and underscore uploads (`film_portrait`),
+ * plus the American `theater` spelling used by some generator packs.
+ */
+function triviaArtworkStemVariants(stem) {
+  const base = String(stem || '');
+  const variants = [base];
+  if (base.includes('-')) {
+    variants.push(base.replace(/-(portrait|landscape)$/i, '_$1'));
+  }
+  if (base.includes('_')) {
+    variants.push(base.replace(/_(portrait|landscape)$/i, '-$1'));
+  }
+  const aliases = [];
+  for (const value of variants) {
+    if (value.includes('musicals-theatre')) {
+      aliases.push(value.replace('musicals-theatre', 'musicals-theater'));
+    }
+    if (value.includes('musicals-theater')) {
+      aliases.push(value.replace('musicals-theater', 'musicals-theatre'));
+    }
+    if (value.includes('musicals_theatre')) {
+      aliases.push(value.replace('musicals_theatre', 'musicals_theater'));
+    }
+    if (value.includes('musicals_theater')) {
+      aliases.push(value.replace('musicals_theater', 'musicals_theatre'));
+    }
+  }
+  return [...new Set([...variants, ...aliases])].filter(Boolean);
+}
+
 function validatePushUrl(url) {
   const trimmed = String(url || '').trim();
   if (!trimmed) {
@@ -2921,33 +2952,38 @@ function createWebServer({
    */
   function handleTriviaArtworkServe(pathname, res) {
     const name = path.basename(decodeURIComponent(pathname));
-    if (!/^[a-z0-9-]+\.(webp|png|jpe?g)$/i.test(name)) {
+    if (!/^[a-z0-9_-]+\.(webp|png|jpe?g)$/i.test(name)) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
       return;
     }
     const root = config.ROOT || path.resolve(__dirname, '..');
     const overrideDir = path.resolve(root, 'data/trivia-artwork');
-    // Prefer admin overrides, then the shipped pack (JPEG), then the editable
-    // generator output under `dev assets/` (source checkouts — often still webp).
-    // Also try sibling extensions so an old client asking for .webp still hits
-    // the new .jpg pack (and vice versa during transition).
+    // Prefer admin overrides, then the editable upload pack under `dev assets/`
+    // (new PNGs use `{id}_{portrait}.png`), then the shipped JPEG pack that the
+    // portable client also bundles. Sibling stems/extensions cover hyphen vs
+    // underscore names and .webp/.jpg/.png during transitions.
     const stem = name.replace(/\.(webp|png|jpe?g)$/i, '');
-    const extOrder = [path.extname(name).toLowerCase(), '.jpg', '.jpeg', '.png', '.webp']
+    const stems = triviaArtworkStemVariants(stem);
+    const extOrder = [path.extname(name).toLowerCase(), '.png', '.jpg', '.jpeg', '.webp']
       .filter((ext, index, all) => ext && all.indexOf(ext) === index);
     const directories = [
       overrideDir,
-      path.join(__dirname, 'web', 'trivia-artwork'),
-      // No spaces — mirror pack for Docker/host mounts that choke on "dev assets".
-      path.join(root, 'dev-assets', 'trivia-category-artwork'),
       path.join(root, 'dev assets', 'trivia-category-artwork'),
+      path.join(root, 'dev-assets', 'trivia-category-artwork'),
+      path.join(__dirname, 'web', 'trivia-artwork'),
     ];
     let filePath = null;
     for (const dir of directories) {
-      for (const ext of extOrder) {
-        const candidate = path.join(dir, `${stem}${ext}`);
-        if (fs.existsSync(candidate)) {
-          filePath = candidate;
+      for (const candidateStem of stems) {
+        for (const ext of extOrder) {
+          const candidate = path.join(dir, `${candidateStem}${ext}`);
+          if (fs.existsSync(candidate)) {
+            filePath = candidate;
+            break;
+          }
+        }
+        if (filePath) {
           break;
         }
       }
@@ -3512,4 +3548,5 @@ module.exports = {
   checkUrlReachable,
   isAdminHtmlPath,
   isAdminLoginPath,
+  triviaArtworkStemVariants,
 };

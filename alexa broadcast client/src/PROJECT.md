@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Trivia artwork above shell; no ghost circles)
+**Last updated:** 2026-08-04 (New trivia art pack + portrait insets)
 
 ---
 
@@ -262,6 +262,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **New trivia art pack + portrait side insets** — shipped `assets/trivia-artwork/` replaced with the cinema/icon pack from `dev assets/trivia-category-artwork/` (`{id}_{portrait}.png` → hyphen JPEGs). Portrait content gains an extra 48u inset so question lines stay clear of bezels/film-strip frames; `wrap_text` breaks oversized hyphenated tokens (`computer-animated`) instead of painting past the column. Portable rebuild required; clear `trivia-artwork-cache/` once.
 
 - 2026-08-04: **Trivia artwork above shell; no ghost circles on weather** — `TriviaPanel` used bare `tag_lower` for the category field/JPEG, which parked the art *under* the overlay's unnamed full-screen `#0B1730` rect, so rounds only ever showed navy + text. Art now stacks above `shell_bg_id`. Hide drops the field before clearing photo refs; overlay `_scrub_canvas_debris` deletes untracked leftovers between pages (the faint circle on weather after a trivia round). Smoke payloads use real `science-nature` / `film` category ids. Portable rebuild required; clear `trivia-artwork-cache/` once if old bad files linger.
 

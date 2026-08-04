@@ -170,6 +170,18 @@ class GeometryTests(unittest.TestCase):
         self.assertGreaterEqual(boxes["chip"][1], chrome.content_top)
         self.assertLessEqual(boxes["attribution"][3], chrome.content_bottom)
 
+    def test_portrait_content_keeps_symmetric_side_insets(self):
+        """Long questions must not kiss the bezel / film-strip frame."""
+        chrome = page_chrome(1080, 1920)
+        boxes = TriviaPanel.compute_portrait_boxes(chrome)
+        left = boxes["question"][0] - 0
+        right = chrome.screen_w - boxes["question"][2]
+        self.assertAlmostEqual(left, right, delta=0.5)
+        self.assertGreaterEqual(
+            left,
+            chrome.margin_x + TriviaPanel.CONTENT_INSET_PORTRAIT_U * chrome.u - 0.5,
+        )
+
     def test_portrait_gives_the_answer_tiles_the_larger_share(self):
         chrome = page_chrome(1080, 1920)
         boxes = TriviaPanel.compute_portrait_boxes(chrome)
@@ -245,6 +257,19 @@ class AutoFitTests(unittest.TestCase):
         lines = wrap_text(font, " ".join(["alpha", "beta", "gamma"] * 6), 300)
         for line in lines:
             self.assertLessEqual(font.measure(line), 300)
+
+    def test_a_hyphenated_word_breaks_instead_of_spilling_past_the_column(self):
+        font = FakeFont(72)
+        text = "What was the first feature-length computer-animated movie?"
+        lines = wrap_text(font, text, 700)
+        self.assertTrue(lines)
+        for line in lines:
+            self.assertLessEqual(font.measure(line), 700)
+        self.assertTrue(
+            any("computer-" in line or line.endswith("computer-") for line in lines)
+            or any(line == "animated" or line.startswith("animated") for line in lines),
+            lines,
+        )
 
 
 class PhaseSequencingTests(unittest.TestCase):
