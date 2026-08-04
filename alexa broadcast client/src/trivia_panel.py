@@ -369,13 +369,11 @@ class TriviaPanel(BasePanel):
     def hide(self):
         self._fetch_token += 1
         self._cancel_jobs()
+        # Delete the field while we still know the ids — nulling first left
+        # orphaned images under the shell that later pages inherited as ghosts.
+        self._drop_background()
         self._photo_refs = []
         self._artwork_key = None
-        # `super().hide()` wipes the canvas, so holding on to these ids would
-        # leave `_clear_foreground` protecting items that no longer exist.
-        self._artwork_id = None
-        self._color_id = None
-        self._fallback_ids = []
         try:
             # Restore the house canvas colour when trivia leaves the stage.
             self.canvas.configure(bg=self.config.get("overlayBackground", "#0B1730"))
@@ -912,35 +910,38 @@ class TriviaPanel(BasePanel):
             if item is not None
         ]
 
-    def _lower_background(self):
-        """Stack colour → gradient → artwork under all foreground chrome.
+    def _shell_floor_id(self):
+        """Overlay house fill — trivia art must sit above this, never under it."""
+        overlay = getattr(self.shell, "overlay", None)
+        return getattr(overlay, "shell_bg_id", None)
 
-        Prefer `tag_raise(above, below)` so the artwork cannot lose a race to
-        an opaque colour field that was lowered last.
+    def _stack_above(self, item, below):
+        """Raise `item` just above `below`, or to the canvas floor when absent."""
+        if item is None:
+            return
+        try:
+            if below is not None:
+                self.canvas.tag_raise(item, below)
+            else:
+                self.canvas.tag_lower(item)
+        except Exception:
+            pass
+
+    def _lower_background(self):
+        """Stack colour → gradient → artwork under question chrome, above shell.
+
+        Bare `tag_lower(item)` parks the field under the overlay's full-screen
+        navy rect, so the patterned JPEG never reaches the screen and can later
+        ghost through weather as a faint circle once z-order shifts.
         """
+        below = self._shell_floor_id()
+        self._stack_above(self._color_id, below)
         if self._color_id is not None:
-            try:
-                self.canvas.tag_lower(self._color_id)
-            except Exception:
-                pass
-        below = self._color_id
+            below = self._color_id
         for item in self._fallback_ids:
-            try:
-                if below is not None:
-                    self.canvas.tag_raise(item, below)
-                else:
-                    self.canvas.tag_lower(item)
-                below = item
-            except Exception:
-                pass
-        if self._artwork_id is not None:
-            try:
-                if below is not None:
-                    self.canvas.tag_raise(self._artwork_id, below)
-                else:
-                    self.canvas.tag_lower(self._artwork_id)
-            except Exception:
-                pass
+            self._stack_above(item, below)
+            below = item
+        self._stack_above(self._artwork_id, below)
 
     def _drop_background(self):
         for item in self._background_ids():
@@ -961,14 +962,15 @@ class TriviaPanel(BasePanel):
             fill=background, outline="",
         )
         self._track(item)
-        self.canvas.tag_lower(item)
         self._color_id = item
+        self._stack_above(item, self._shell_floor_id())
 
     def _draw_gradient_fallback(self, geometry, card):
         background = str(card.get("background") or self._palette["background"])
         accent = str(card.get("accent") or self._palette["accent"])
         height = geometry["screen_h"]
         bands = 24
+        below = self._color_id if self._color_id is not None else self._shell_floor_id()
         for i in range(bands):
             y0 = height * i / bands
             y1 = height * (i + 1) / bands
@@ -979,8 +981,9 @@ class TriviaPanel(BasePanel):
                 0, y0, geometry["screen_w"], y1 + 1, fill=colour, outline="",
             )
             self._track(item)
-            self.canvas.tag_lower(item)
+            self._stack_above(item, below)
             self._fallback_ids.append(item)
+            below = item
 
     def _fetch_artwork(self, token, url, width, height, category_id=None, portrait=True):
         # HTTP first here: `_paint_artwork` may already have applied the bundled

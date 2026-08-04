@@ -245,13 +245,16 @@ class OverlayWindow:
     def _build_shell(self):
         self.canvas.delete("all")
         # Flat design-system surface — no rounded card framing the chrome.
-        self.canvas.create_rectangle(
+        # Keep the id: trivia (and similar) must stack *above* this floor.
+        # A bare `tag_lower` on panel art used to slip under it and vanish.
+        self.shell_bg_id = self.canvas.create_rectangle(
             0,
             0,
             self.screen_w,
             self.screen_h,
             fill=self.config.get("overlayBackground", BG),
             outline="",
+            tags=("shell_bg",),
         )
 
         layout = self.layout
@@ -261,6 +264,7 @@ class OverlayWindow:
         self.frame_bottom = layout.message_area_bottom
         self.backdrop_frame_id = self.canvas.create_rectangle(
             0, 0, 0, 0, fill="", outline="", state="hidden",
+            tags=("shell_bg",),
         )
         self._default_title_accent_color = self.config.get("titleAccentColor", ACCENT)
         if self._default_title_accent_color in ("#38bdf8", "#0ea5e9"):
@@ -350,6 +354,7 @@ class OverlayWindow:
 
     def _finish_hide(self):
         self._stop_active_panel()
+        self._scrub_canvas_debris()
         self.root.withdraw()
         self.visible = False
         self._hide_job = None
@@ -400,6 +405,38 @@ class OverlayWindow:
             self._active_panel = None
             self._active_panel_key = None
 
+    def _scrub_canvas_debris(self):
+        """Drop untracked leftovers so the next page cannot inherit ghosts.
+
+        Panels should track every item they create, but a missed oval / image
+        (or trivia art parked under the shell) used to linger as a faint circle
+        on weather and other house-blue pages.
+        """
+        keep_tags = {"shell_bg", "overlay_chrome", "dismiss_footer"}
+        keep_ids = {
+            getattr(self, "shell_bg_id", None),
+            getattr(self, "backdrop_frame_id", None),
+            getattr(self, "title_primary_id", None),
+            getattr(self, "title_accent_id", None),
+        }
+        keep_ids.discard(None)
+        try:
+            for item in self.canvas.find_all():
+                if item in keep_ids:
+                    continue
+                try:
+                    tags = set(self.canvas.gettags(item))
+                except tk.TclError:
+                    continue
+                if tags & keep_tags:
+                    continue
+                try:
+                    self.canvas.delete(item)
+                except tk.TclError:
+                    pass
+        except tk.TclError:
+            pass
+
     @property
     def _scroller(self):
         panel = self.panels.get("broadcast")
@@ -422,6 +459,7 @@ class OverlayWindow:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
         self._stop_active_panel()
+        self._scrub_canvas_debris()
         owns_chrome = display_type in (
             "tesla-dashboard.query",
             "tesla-battery.query",

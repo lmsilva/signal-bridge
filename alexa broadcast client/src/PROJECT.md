@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Steam/PSN long titles marquee)
+**Last updated:** 2026-08-04 (Trivia artwork above shell; no ghost circles)
 
 ---
 
@@ -262,6 +262,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Trivia artwork above shell; no ghost circles on weather** — `TriviaPanel` used bare `tag_lower` for the category field/JPEG, which parked the art *under* the overlay's unnamed full-screen `#0B1730` rect, so rounds only ever showed navy + text. Art now stacks above `shell_bg_id`. Hide drops the field before clearing photo refs; overlay `_scrub_canvas_debris` deletes untracked leftovers between pages (the faint circle on weather after a trivia round). Smoke payloads use real `science-nature` / `film` category ids. Portable rebuild required; clear `trivia-artwork-cache/` once if old bad files linger.
 
 - 2026-08-04: **Steam/PSN long titles marquee** — library-tour names wider than the meta column (e.g. Uncharted™: The Nathan Drake Collection) were clipped mid-word by bare `create_text`. Both panels now use the shared `MarqueeLine` (same pause→scroll→pause loop as YouTube/music). Steam still right-aligns developer·year when the title leaves room; otherwise credit drops under and the marquee owns the full width. Portable rebuild required.
 

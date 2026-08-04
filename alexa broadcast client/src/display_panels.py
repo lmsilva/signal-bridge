@@ -1329,7 +1329,7 @@ class WeatherPanel(BasePanel):
                     cy - bite - radius * 0.25,
                     cx + bite + radius * 0.55,
                     cy + bite - radius * 0.25,
-                    fill=self.config.get("overlayBackground", "#0f172a"),
+                    fill=self.config.get("overlayBackground", "#0B1730"),
                     outline="",
                 )
             )

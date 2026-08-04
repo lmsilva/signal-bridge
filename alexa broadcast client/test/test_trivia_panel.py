@@ -455,22 +455,26 @@ class ArtworkTests(unittest.TestCase):
         self.assertEqual(mix_hex("#000000", "#FFFFFF", 0.5), "#808080")
 
     def test_artwork_is_not_refetched_between_cards_of_one_category(self):
-        panel = TriviaPanel(MagicMock(), MagicMock(), {})
+        shell = MagicMock()
+        shell.overlay = MagicMock(shell_bg_id=None)
+        panel = TriviaPanel(MagicMock(), shell, {})
         panel.canvas = MagicMock()
         panel._draw_gradient_fallback = MagicMock()
         geometry = {"portrait": True, "screen_w": 1080, "screen_h": 1920, "u": 1.0}
-        card = {"categoryId": "science", "artwork": {}, "accent": "#8BB7FF"}
+        card = {"categoryId": "science-nature", "artwork": {}, "accent": "#8BB7FF"}
         panel._paint_artwork(geometry, card)
         panel._artwork_id = 42
         panel._paint_artwork(geometry, card)
         self.assertEqual(panel._draw_gradient_fallback.call_count, 1)
 
     def test_a_new_category_repaints_the_background(self):
-        panel = TriviaPanel(MagicMock(), MagicMock(), {})
+        shell = MagicMock()
+        shell.overlay = MagicMock(shell_bg_id=None)
+        panel = TriviaPanel(MagicMock(), shell, {})
         panel.canvas = MagicMock()
         panel._draw_gradient_fallback = MagicMock()
         geometry = {"portrait": True, "screen_w": 1080, "screen_h": 1920, "u": 1.0}
-        panel._paint_artwork(geometry, {"categoryId": "science", "artwork": {}})
+        panel._paint_artwork(geometry, {"categoryId": "science-nature", "artwork": {}})
         panel._artwork_id = 42
         panel._paint_artwork(geometry, {"categoryId": "history", "artwork": {}})
         self.assertEqual(panel._draw_gradient_fallback.call_count, 2)
@@ -532,16 +536,24 @@ class ArtworkStackingTests(unittest.TestCase):
 
     GEOMETRY = {"portrait": True, "screen_w": 1080, "screen_h": 1920, "u": 1.0}
     CARD = {
-        "categoryId": "science",
+        "categoryId": "science-nature",
         "accent": "#8BB7FF",
         "background": "#101820",
-        "artwork": {"portrait": "https://bridge/trivia-artwork/science-portrait.webp"},
+        "artwork": {"portrait": "https://bridge/trivia-artwork/science-nature-portrait.jpg"},
     }
 
-    def panel(self):
-        panel = TriviaPanel(MagicMock(), MagicMock(), {})
+    def panel(self, *, with_shell=False):
+        shell = MagicMock()
+        overlay = MagicMock()
+        shell.overlay = overlay
+        panel = TriviaPanel(MagicMock(), shell, {})
         panel.canvas = StackingCanvas()
         panel.visible = True
+        if with_shell:
+            # Real overlay leaves a full-screen navy rect under everything.
+            overlay.shell_bg_id = panel.canvas.create_rectangle()
+        else:
+            overlay.shell_bg_id = None
         return panel
 
     def paint_background(self, panel):
@@ -571,6 +583,25 @@ class ArtworkStackingTests(unittest.TestCase):
             [panel.canvas.kinds[i] for i in panel.canvas.order],
             ["rect", "image"],
         )
+
+    def test_artwork_stacks_above_the_overlay_shell_not_under_it(self):
+        """Regression: bare tag_lower hid art under the house navy rect."""
+        panel = self.panel(with_shell=True)
+        shell = panel.shell.overlay.shell_bg_id
+        self.paint_background(panel)
+        with patch("src.trivia_panel.ImageTk") as image_tk:
+            image_tk.PhotoImage = FakePhotoImage
+            panel._apply_artwork(panel._fetch_token, object())
+
+        order = panel.canvas.order
+        self.assertEqual(order[0], shell)
+        self.assertEqual(order[1], panel._color_id)
+        self.assertEqual(order[2], panel._artwork_id)
+        foreground = panel._track(panel.canvas.create_text())
+        panel._lower_background()
+        order = panel.canvas.order
+        self.assertLess(order.index(shell), order.index(panel._artwork_id))
+        self.assertLess(order.index(panel._artwork_id), order.index(foreground))
 
     def test_the_artwork_sits_behind_the_question_card(self):
         panel = self.panel()
@@ -654,6 +685,34 @@ class ArtworkStackingTests(unittest.TestCase):
         self.assertIsNone(panel._artwork_id)
         self.assertIsNone(panel._color_id)
         self.assertEqual(panel._fallback_ids, [])
+        self.assertEqual(panel.canvas.order, [])
+
+
+class OverlayScrubTests(unittest.TestCase):
+    def test_scrub_keeps_shell_and_chrome_but_drops_orphans(self):
+        from src.overlay import OverlayWindow
+
+        overlay = OverlayWindow.__new__(OverlayWindow)
+        canvas = StackingCanvas()
+        overlay.canvas = canvas
+        overlay.shell_bg_id = canvas.create_rectangle()
+        overlay.backdrop_frame_id = canvas.create_rectangle()
+        overlay.title_primary_id = canvas.create_text()
+        overlay.title_accent_id = canvas.create_text()
+        orphan = canvas.create_image()
+        chrome = canvas.create_text()
+        canvas.tags = {
+            overlay.shell_bg_id: ("shell_bg",),
+            chrome: ("overlay_chrome",),
+        }
+        canvas.gettags = lambda item: canvas.tags.get(item, ())
+        canvas.find_all = lambda: list(canvas.order)
+
+        overlay._scrub_canvas_debris()
+        self.assertIn(overlay.shell_bg_id, canvas.order)
+        self.assertIn(overlay.backdrop_frame_id, canvas.order)
+        self.assertIn(chrome, canvas.order)
+        self.assertNotIn(orphan, canvas.order)
 
 
 if __name__ == "__main__":
