@@ -1126,15 +1126,16 @@ def build_payload(args) -> dict:
 
     if args.type in ("trivia", "trivia-boolean", "trivia-single"):
         base = f"http://{args.host}:8080/trivia-artwork"
+        # categoryIds must match trivia-categories.json / assets/trivia-artwork/.
         specs = [
-            ("science", "Science", "#8BB7FF", "#0E1A2C", "medium",
+            ("science-nature", "Science & Nature", "#8BB7FF", "#003F2A", "medium",
              "Which planet in our solar system has the shortest day?",
              ["Mercury", "Jupiter", "Earth", "Neptune"], 1),
             ("history", "History", "#E8B04B", "#231A0E", "hard",
              "The Treaty of Westphalia, which ended the Thirty Years' War "
              "and reshaped the political map of Europe, was signed in which year?",
              ["1618", "1648", "1701", "1789"], 1),
-            ("film", "Film & TV", "#FF8FA3", "#2A1119", "easy",
+            ("film", "Film", "#FF8FA3", "#8F0043", "easy",
              "Who directed Jaws?", ["Steven Spielberg", "George Lucas",
                                     "Ridley Scott", "Martin Scorsese"], 0),
         ]
