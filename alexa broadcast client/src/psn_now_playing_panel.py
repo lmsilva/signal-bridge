@@ -207,13 +207,22 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
             title_h = 32
 
         tags_top = my0 + title_h + self.TAG_FONT_GAP
-        self._draw_tags(
-            tags, mx0, tags_top, mx1,
-            min(my1, tags_top + int(boxes.get("tags_h") or self.TAG_PILL_H)),
-        )
+        tags_h = int(boxes.get("tags_h") or self.TAG_PILL_H)
+        # Status / desc sit below meta — never let pills spill into either.
+        tags_ceiling = float(my1)
+        status_box = boxes.get("status")
+        if status_box and status_box[3] > status_box[1]:
+            tags_ceiling = min(tags_ceiling, float(status_box[1]))
+        desc_box = boxes.get("desc")
+        if desc_box and desc_box[3] > desc_box[1]:
+            tags_ceiling = min(tags_ceiling, float(desc_box[1]))
+        if tags_top + 16 <= tags_ceiling:
+            self._draw_tags(
+                tags, mx0, tags_top, mx1,
+                min(tags_ceiling, tags_top + tags_h),
+            )
 
         status = str(psn.get("statusLine") or "").strip()
-        status_box = boxes.get("status")
         if status and status_box and status_box[3] > status_box[1] + 8:
             sx0, sy0, sx1, sy1 = status_box
             status_font = getattr(self.shell, "body_font", None) or self.shell.chip_label_font
@@ -320,13 +329,18 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
                 ))
 
     def _draw_tags(self, tags, tx0, ty0, tx1, ty1, *, include_source: bool = True):
-        """PSN source chip + platform tags (never painted on artwork)."""
-        if ty1 <= ty0 + 8:
+        """PSN source chip + platform tags (never painted on artwork).
+
+        Pill height is strictly capped by the box — never invent height that
+        would paint over the description or status line below.
+        """
+        available = float(ty1) - float(ty0)
+        if available < 16:
             return ty0
         pill_gap = 10
         x = tx0
         row_y0 = ty0
-        row_h = min(self.TAG_PILL_H, max(22, ty1 - ty0))
+        row_h = min(float(self.TAG_PILL_H), available)
         tag_font = self._tag_font()
         chips = []
         if include_source:

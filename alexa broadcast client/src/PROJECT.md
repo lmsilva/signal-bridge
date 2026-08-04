@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-03 (Portrait cards use their full height)
+**Last updated:** 2026-08-04 (Steam/PSN tags never overlap description)
 
 ---
 
@@ -262,6 +262,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Steam/PSN tags never overlap the description** — tag pills used `max(22, remaining)` for height, so a long title + developer credit that left 9–21px above the meta floor still painted 22px chips into the blurb (visible on library tour cards like Micro Machines). Pill height is now strictly capped by the box; the row is skipped when there is no readable room; portrait meta reserves a credit line so the tag row is not squeezed; PSN gets the same clamp against status/desc. Portable rebuild required.
 
 - 2026-08-03: **Portrait cards use their full height** — four panels left large bands of nothing on a 1080×1920 wall. YouTube pooled ~620px into one void above the stat tiles; its portrait stack now spends surplus height on the description viewport (`DESC_MIN_PORTRAIT` → `DESC_MAX_PORTRAIT`), then on gaps up to `GAP_MAX_PORTRAIT`, keeping the position bar against the hero. Steam/PSN made the art stage a fixed 1100u and let the meta row soak up the remainder; the stage is now the flexible band (`STAGE_MIN_PORTRAIT`…`STAGE_MAX_PORTRAIT`) and the blurb (`DESC_H_PORTRAIT` 128→272) and shot row (`SHOTS_H_PORTRAIT` 183→248) get real height. Trivia gives the answer tiles 60% of the body (was 55%) and steps portrait type up (question 72→84u, options 44→52u). Portable rebuild required.
 

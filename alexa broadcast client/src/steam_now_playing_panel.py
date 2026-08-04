@@ -394,6 +394,9 @@ class SteamNowPlayingPanel(BasePanel):
         u = float(u or 1.0)
         header_h = 84 * u
         title_h = 74 * u
+        # Long titles put developer · year on its own line under the name —
+        # reserve that credit band so the tag row is never squeezed into desc.
+        credit_h = 28 * u
         tags_h = 40 * u
         desc_h = self.DESC_H_PORTRAIT * u
         shots_h = (self.SHOTS_H_PORTRAIT * u) if has_shots else 0
@@ -411,7 +414,7 @@ class SteamNowPlayingPanel(BasePanel):
         # own content, so a tall column grows the artwork rather than padding the
         # title row — and a short one shrinks the artwork instead of pushing copy
         # through the footer.
-        meta_h = title_h + g_title + tags_h
+        meta_h = title_h + credit_h + g_title + tags_h
         fixed_below = (
             g_stage + meta_h + g_tags + g_desc + desc_h
             + (g_shots + shots_h if has_shots else 0) + footer_h
@@ -698,13 +701,19 @@ class SteamNowPlayingPanel(BasePanel):
         )
 
     def _draw_tags(self, tags, tx0, ty0, tx1, ty1, *, include_source: bool = True):
-        """Tag row: STEAM source chip first, then up to 4 genre tags. Never on art."""
-        if ty1 <= ty0 + 8:
+        """Tag row: STEAM source chip first, then up to 4 genre tags. Never on art.
+
+        The pill height is strictly `min(TAG_PILL_H, ty1 - ty0)`. A previous
+        `max(22, …)` floor painted 22px pills into the description whenever the
+        title/credit stack left less than 22px above the meta floor.
+        """
+        available = float(ty1) - float(ty0)
+        if available < 16:
             return ty0
         pill_gap = 10
         x = tx0
         row_y0 = ty0
-        row_h = min(self.TAG_PILL_H, max(22, ty1 - ty0))
+        row_h = min(float(self.TAG_PILL_H), available)
         tag_font = self._tag_font()
         chips = []
         if include_source:
@@ -794,12 +803,21 @@ class SteamNowPlayingPanel(BasePanel):
                 title_h += credit_ls + 4
 
         tags_top = my0 + title_h + self.TAG_FONT_GAP
-        tags_bottom = self._draw_tags(
-            tags, mx0, tags_top, mx1, min(my1, tags_top + int(boxes.get("tags_h") or self.TAG_PILL_H)),
-        )
+        tags_h = int(boxes.get("tags_h") or self.TAG_PILL_H)
+        desc_box = boxes.get("desc")
+        # Entire pill row must clear both the meta floor and the desc band —
+        # never paint tags over the description copy below.
+        tags_ceiling = float(my1)
+        if desc_box:
+            tags_ceiling = min(tags_ceiling, float(desc_box[1]))
+        if tags_top + 16 > tags_ceiling:
+            tags_bottom = tags_top
+        else:
+            tags_bottom = self._draw_tags(
+                tags, mx0, tags_top, mx1, min(tags_ceiling, tags_top + tags_h),
+            )
         # Pinned description band (layout `desc`) — embedded via create_window so
         # it shares the main canvas coordinate system / clip with screenshots.
-        desc_box = boxes.get("desc")
         if desc_box:
             dx0, dy0, dx1, dy1 = desc_box
         else:

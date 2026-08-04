@@ -121,9 +121,10 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         self.assertLessEqual(hero_h, SteamNowPlayingPanel.STAGE_MAX_PORTRAIT)
         self.assertAlmostEqual(shots_h, SteamNowPlayingPanel.SHOTS_H_PORTRAIT, delta=1)
         self.assertAlmostEqual(footer_h, 101, delta=1)
-        # The meta row is sized to title + tags, never padded with the surplus.
+        # Meta is title + credit + tags + small gaps — never the leftover column.
         meta_h = boxes["meta"][3] - boxes["meta"][1]
-        self.assertLess(meta_h, boxes["title_h"] + boxes["tags_h"] + 40)
+        self.assertGreater(meta_h, boxes["title_h"] + boxes["tags_h"])
+        self.assertLess(meta_h, 220)
         # Meta (title/tags) → desc → shots — desc never enters the shot row.
         self.assertGreaterEqual(boxes["meta"][1], boxes["hero"][3])
         self.assertLessEqual(boxes["meta"][3], boxes["desc"][1] + 0.1)
@@ -332,6 +333,53 @@ class SteamNowPlayingClientTests(unittest.TestCase):
         panel.visible = True
         panel.canvas = shell.content_canvas
         return panel
+
+    def test_draw_tags_never_overflows_a_tight_box(self):
+        """Regression: a 22px minimum used to paint pills over the description."""
+        panel = self._make_draw_panel()
+        panel._round_rect = mock.MagicMock(return_value=1)
+        # Only 18px of room — must shrink, never invent 22px past the floor.
+        bottom = panel._draw_tags(["PvP", "Co-op"], 0, 100, 800, 118)
+        self.assertLessEqual(bottom, 118)
+        for call in panel._round_rect.call_args_list:
+            _x0, y0, _x1, y1, *_rest = call.args
+            self.assertGreaterEqual(y0, 100)
+            self.assertLessEqual(y1, 118)
+
+    def test_draw_meta_keeps_tag_pills_above_the_description(self):
+        """Long title + credit must not push genre chips into the desc band."""
+        panel = self._make_draw_panel()
+        panel._round_rect = mock.MagicMock(return_value=1)
+        panel.shell.section_title_font.metrics.return_value = 90
+        panel.shell.section_title_font.measure.return_value = 900
+        layout = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)._compute_portrait_boxes(
+            40, 40, 1040, 1880, u=1.0, has_shots=True,
+        )
+        steam = {
+            "name": "Micro Machines World Series",
+            "developers": ["Codemasters"],
+            "releaseYear": 2017,
+            "shortDescription": "The legend is back! " * 20,
+            "screenshots": ["http://a", "http://b", "http://c"],
+            "tags": ["Shared/Split Screen PvP", "Online PvP", "PvP", "Full controller support"],
+        }
+        with mock.patch("src.steam_now_playing_panel.tk.Canvas") as canvas_cls:
+            canvas_cls.return_value.bbox.return_value = (0, 0, 800, 500)
+            panel._draw_meta(layout, steam)
+        meta_top = layout["meta"][1]
+        desc_top = layout["desc"][1]
+        # Screenshot placeholders also use _round_rect — only the tag row matters.
+        tag_rects = [
+            call.args
+            for call in panel._round_rect.call_args_list
+            if meta_top - 0.1 <= call.args[1] <= desc_top + 0.1
+        ]
+        self.assertTrue(tag_rects, "expected at least one tag pill in the meta band")
+        for _x0, y0, _x1, y1, *_rest in tag_rects:
+            self.assertLessEqual(
+                y1, desc_top + 0.1,
+                f"tag pill ({y0}..{y1}) overlaps description starting at {desc_top}",
+            )
 
     def test_long_description_scrolls_in_reserved_viewport(self):
         panel = self._make_draw_panel()
