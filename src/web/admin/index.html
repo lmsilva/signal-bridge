@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal38">
+  <link rel="stylesheet" href="styles.css?v=signal41">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -77,7 +77,7 @@
              behaviour as the Settings test buttons. -->
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad" id="push-row-quick"
-             data-push-row="Signal,Alexa,Trivia,Steam,PSN,YouTube"></div>
+             data-push-row="Signal,Alexa,Trivia,News,Steam,PSN,YouTube"></div>
 
         <div class="push-columns">
           <div class="push-column">
@@ -567,6 +567,79 @@
           </div>
         </div>
 
+        <div class="section-label">The Upside News</div>
+        <div class="card upside-news-settings-card" id="upside-news-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Positive headlines for the wall</div>
+            <span class="status-pill" id="upside-news-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="upside-news-status-detail">Loading…</p>
+
+          <div class="upside-news-period-band">
+            <label class="field-label">Period</label>
+            <div class="segmented upside-news-period-tabs" id="upside-news-period-tabs">
+              <button type="button" class="segmented-btn active" data-period="daily">Daily</button>
+              <button type="button" class="segmented-btn" data-period="weekly">Weekly</button>
+              <button type="button" class="segmented-btn" data-period="monthly">Monthly</button>
+              <button type="button" class="segmented-btn" data-period="yearly">Yearly</button>
+            </div>
+            <p class="hint" id="upside-news-period-hint">Stories published in the last 24 hours</p>
+          </div>
+
+          <div class="settings-columns settings-columns-3 upside-news-columns">
+            <div class="settings-col">
+              <label class="field-label" for="upside-news-items">How many stories</label>
+              <div class="slider-row">
+                <input type="range" id="upside-news-items" min="3" max="8" step="1" value="5" aria-label="Stories per cycle">
+                <span class="slider-value" id="upside-news-items-value">5</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="upside-news-story-seconds">Each story shows for</label>
+              <div class="slider-row">
+                <input type="range" id="upside-news-story-seconds" min="8" max="30" step="1" value="15" aria-label="Seconds per story">
+                <span class="slider-value" id="upside-news-story-seconds-value">15s</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="upside-news-loops">Loop</label>
+              <select id="upside-news-loops" class="field-input">
+                <option value="once">Once</option>
+                <option value="2">Twice</option>
+                <option value="3">Three times</option>
+                <option value="until-dismissed">Until dismissed</option>
+              </select>
+              <p class="hint">Full cycle: <strong id="upside-news-cycle-length">—</strong></p>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label">Guardian Open Platform</label>
+              <label class="trivia-check"><input type="checkbox" id="upside-news-guardian-enabled" checked><span>Use The Guardian</span></label>
+              <label class="field-label field-label-spaced" for="upside-news-api-key">API key</label>
+              <div class="upside-news-key-row">
+                <input type="password" id="upside-news-api-key" class="field-input" placeholder="Paste key, or set GUARDIAN_API_KEY in .env" autocomplete="new-password" spellcheck="false">
+                <div class="upside-news-key-actions">
+                  <button type="button" class="btn btn-outline" id="btn-upside-news-key-save">Save</button>
+                  <button type="button" class="btn btn-outline" id="btn-upside-news-key-test">Test</button>
+                </div>
+              </div>
+              <p class="hint" id="upside-news-key-hint">Env keys take precedence over a saved key. Test uses that active key unless you type a new one.</p>
+
+              <label class="field-label field-label-spaced">RSS sources</label>
+              <div class="upside-news-rss-list" id="upside-news-rss-sources"></div>
+            </div>
+
+            <div class="settings-col upside-news-display-col">
+              <label class="field-label">Display</label>
+              <div class="upside-news-display-list">
+                <label class="trivia-check"><input type="checkbox" id="upside-news-show-qr" checked><span>Show QR code to read the full story</span></label>
+                <label class="trivia-check"><input type="checkbox" id="upside-news-show-reading" checked><span>Show reading time</span></label>
+                <label class="trivia-check"><input type="checkbox" id="upside-news-show-tags"><span>Show topic tags</span></label>
+              </div>
+              <p class="hint upside-news-archive-hint" id="upside-news-archive-hint">Archive: —</p>
+              <button class="btn btn-outline btn-block" id="btn-upside-news-poll">Refresh archive now</button>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label">Trivia</div>
         <div class="card trivia-settings-card" id="trivia-settings-card">
           <div class="auth-head">
@@ -781,6 +854,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal38"></script>
+  <script src="app.js?v=signal41"></script>
 </body>
 </html>

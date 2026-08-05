@@ -36,6 +36,7 @@ from src.steam_now_playing_panel import SteamNowPlayingPanel
 from src.psn_now_playing_panel import PsnNowPlayingPanel
 from src.youtube_now_playing_panel import YoutubeNowPlayingPanel
 from src.trivia_panel import TriviaPanel
+from src.upside_news_panel import UpsideNewsPanel
 from src.game_library_tour_panel import GameLibraryTourPanel
 from src.weather_fetch import enrich_weather_payload
 
@@ -152,6 +153,7 @@ class OverlayWindow:
             "psn.now-playing": PsnNowPlayingPanel(self.root, self.shell, self.config),
             "youtube.now-playing": YoutubeNowPlayingPanel(self.root, self.shell, self.config),
             "trivia.round": TriviaPanel(self.root, self.shell, self.config),
+            "upside-news.round": UpsideNewsPanel(self.root, self.shell, self.config),
             "game.library-tour": GameLibraryTourPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
@@ -469,6 +471,7 @@ class OverlayWindow:
             "psn.now-playing",
             "youtube.now-playing",
             "trivia.round",
+            "upside-news.round",
             "game.library-tour",
             "photo.slideshow",
             "weather.query",
@@ -492,10 +495,17 @@ class OverlayWindow:
         # sparse canvas regions (Tesla battery over a movie poster, etc.).
         self._opacity_override = 1.0
 
-        panel = self.panels[display_type]
+        panel = self.panels.get(display_type)
+        if panel is None:
+            print(f"No overlay panel registered for type {display_type!r}", file=sys.stderr)
+            return
         self._active_panel = panel
         self._active_panel_key = display_type
-        panel.show(payload)
+        try:
+            panel.show(payload)
+        except Exception as error:
+            print(f"Overlay panel {display_type!r} failed: {error}", file=sys.stderr)
+            raise
         self.canvas.tag_raise("overlay_chrome")
         # Shared-photos + persistent Steam own their own chrome — hide the
         # system dismiss footer. Everything else gets it from `_start_countdown`.

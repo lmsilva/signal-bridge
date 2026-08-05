@@ -100,6 +100,7 @@ const { createSteamLibraryTour } = require('./steam-library-tour');
 const { createPsnLibraryTour } = require('./psn-library-tour');
 const { createYoutubeNowPlaying } = require('./youtube-now-playing');
 const { createTriviaService } = require('./trivia-service');
+const { createUpsideNewsService } = require('./upside-news-service');
 const { createDisplayBusy } = require('./display-busy');
 
 const VOLUME_POLL_DELAY_MS = 2000;
@@ -168,6 +169,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   let psnLibraryTour = null;
   let youtubeNowPlaying = null;
   let trivia = null;
+  let upsideNews = null;
   const displayBusy = createDisplayBusy({ log });
   const udpBroadcaster = createUdpBroadcaster(config, log, {
     onMessage: (payload, rinfo) => {
@@ -1945,6 +1947,9 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         trivia = createTriviaService({ config, log, sendUdpPayload });
         trivia.start();
 
+        upsideNews = createUpsideNewsService({ config, log, sendUdpPayload });
+        upsideNews.start();
+
         resolve(alexa);
       });
     });
@@ -1983,6 +1988,8 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     getYoutubeStatus: () => youtubeNowPlaying?.statusSnapshot?.() || null,
     trivia: () => trivia,
     getTriviaStatus: () => trivia?.statusSnapshot?.() || null,
+    upsideNews: () => upsideNews,
+    getUpsideNewsStatus: () => upsideNews?.statusSnapshot?.() || null,
     // The Display Scheduler's §6 precedence check. Fed by every sendUdpPayload,
     // so it covers manual pushes, live events and scheduled airings alike.
     displayBusy,

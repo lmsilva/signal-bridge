@@ -78,6 +78,8 @@ async function main() {
       youtubeNowPlaying: listener.youtubeNowPlaying,
       trivia: listener.trivia,
       getTriviaStatus: listener.getTriviaStatus,
+      upsideNews: listener.upsideNews,
+      getUpsideNewsStatus: listener.getUpsideNewsStatus,
       displayBusy: listener.displayBusy,
       libraryTourSettings: listener.libraryTourSettings(),
       steamLibraryTour: listener.steamLibraryTour,

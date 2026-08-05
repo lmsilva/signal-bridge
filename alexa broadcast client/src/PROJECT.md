@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (New trivia art pack + portrait insets)
+**Last updated:** 2026-08-04 (Upside News last-story timing)
 
 ---
 
@@ -262,6 +262,14 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Upside News last story** — timer drift no longer skips the final story page (index was never counted as a story; the client was holding the index when remaining < storySeconds). Shortened last page still airs; bridge adds a few seconds of overlay slack. Portable rebuild + `./recreate.sh`.
+
+- 2026-08-04: **Upside News mockup layout** — index uses `good news` / hero title / dateline with generous gap, then colour-coded cards (accent bar + number + category); story pages put copy up top with a rule under the headline and QR + “Scan to read” bottom-right in both orientations. Portable rebuild required.
+
+- 2026-08-04: **Upside News layout** — landscape stories use a wide text column + dedicated QR lane (no more left-half column / QR-over-text); index headlines wrap to 2 lines across full-width columns; portrait keeps QR below the text block with hard floor clipping so byline/attribution/ring never collide. Portable rebuild required.
+
+- 2026-08-04: **Upside News panel** — new `src/upside_news_panel.py` handles `upside-news.round`: index page (portrait single column / landscape odd-even columns) then story pages with section chip, autofit headline, standfirst, optional QR, progress pips, and full-bleed topic artwork (bundled `assets/upside-news-artwork/`, cache `upside-news-artwork-cache/`). `build_phase_plan` loops per `loopCount` (20 cycles when until-dismissed); skips mid-story when overlay time is short. Registered in `payload_utils`, `main`, `overlay` (+ `owns_chrome`), `config.effective_display_seconds` (never clamped). `send_test.py --type upside-news`. Tests: `test_upside_news_panel.py`. Portable rebuild required when bundling artwork.
 
 - 2026-08-04: **New trivia art pack + portrait side insets** — shipped `assets/trivia-artwork/` replaced with the cinema/icon pack from `dev assets/trivia-category-artwork/` (`{id}_{portrait}.png` → hyphen JPEGs). Portrait content gains an extra 48u inset so question lines stay clear of bezels/film-strip frames; `wrap_text` breaks oversized hyphenated tokens (`computer-animated`) instead of painting past the column. Portable rebuild required; clear `trivia-artwork-cache/` once.
 

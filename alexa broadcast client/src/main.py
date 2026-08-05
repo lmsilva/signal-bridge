@@ -59,6 +59,7 @@ class BroadcastClientApp:
             "psn.now-playing",
             "youtube.now-playing",
             "trivia.round",
+            "upside-news.round",
             "game.library-tour",
         }
     )
@@ -269,7 +270,15 @@ class BroadcastClientApp:
         display_type = payload.get("type")
         if display_type in self.DISPLAY_TYPES:
             return True
-        return bool(payload.get("message"))
+        if payload.get("message"):
+            return True
+        if display_type:
+            print(
+                f"Ignoring UDP payload type {display_type!r} "
+                "(not registered on this client build)",
+                file=sys.stderr,
+            )
+        return False
 
     # Displays that own a full timed pass — soft timer/alarm refreshes must not
     # steal them (bridge followup polls after "show timers/alarms" used to).

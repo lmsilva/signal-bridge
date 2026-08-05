@@ -786,6 +786,72 @@ textarea.field-input.text-input-area {
 .settings-col { min-width: 0; }
 .settings-col > .field-label:first-child { margin-top: 0; }
 
+/* ---------- The Upside News ---------- */
+
+.upside-news-period-band {
+  margin-top: 14px;
+  padding-bottom: 4px;
+}
+.upside-news-period-band > .field-label { margin-top: 0; }
+.upside-news-period-tabs {
+  margin-bottom: 8px;
+}
+.upside-news-period-tabs .segmented-btn {
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.upside-news-columns { margin-top: 18px; }
+
+.upside-news-key-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upside-news-key-row .field-input {
+  width: 100%;
+  min-width: 0;
+}
+.upside-news-key-actions {
+  display: flex;
+  gap: 8px;
+}
+.upside-news-key-actions .btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.upside-news-rss-list,
+.upside-news-display-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.upside-news-rss-list .trivia-check,
+.upside-news-display-list .trivia-check {
+  display: flex;
+  width: 100%;
+  padding: 6px 0;
+  white-space: normal;
+  line-height: 1.35;
+}
+.upside-news-archive-hint {
+  margin-top: 16px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.upside-news-display-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.upside-news-display-col #btn-upside-news-poll {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
 .trivia-check-row {
   display: flex;
   flex-wrap: wrap;
@@ -1696,7 +1762,8 @@ textarea.field-input.text-input-area {
   #tab-settings > .card-grid > .hint,
   #tab-settings .slideshow-settings-card,
   #tab-settings .youtube-settings-card,
-  #tab-settings .trivia-settings-card {
+  #tab-settings .trivia-settings-card,
+  #tab-settings .upside-news-settings-card {
     grid-column: 1 / -1;
   }
 
@@ -1740,6 +1807,15 @@ textarea.field-input.text-input-area {
   /* Three columns fit once the card is this wide; below it two read better
      than three cramped ones. */
   .settings-columns-3 { grid-template-columns: repeat(3, 1fr); }
+
+  /* API key + Save/Test sit on one line once the Sources column is wide enough. */
+  .upside-news-key-row {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .upside-news-key-row .field-input { flex: 1; }
+  .upside-news-key-actions { flex: none; }
+  .upside-news-key-actions .btn { flex: none; padding-left: 14px; padding-right: 14px; }
 
   .push-card {
     min-width: 0;

@@ -72,6 +72,9 @@ const { createDisplayScheduler } = require('./display-scheduler');
 const {
   ARTWORK_ROUTE_PREFIX: TRIVIA_ARTWORK_ROUTE_PREFIX,
 } = require('./trivia-categories');
+const {
+  ARTWORK_ROUTE_PREFIX: UPSIDE_NEWS_ARTWORK_ROUTE_PREFIX,
+} = require('./upside-news-categories');
 
 /** Cached YouTube thumbnails and channel avatars, served from `data/`. */
 const YOUTUBE_IMAGE_ROUTE_PREFIX = '/youtube-images/';
@@ -302,6 +305,8 @@ function createWebServer({
   youtubeNowPlaying = null,
   trivia = null,
   getTriviaStatus = null,
+  upsideNews = null,
+  getUpsideNewsStatus = null,
   displayBusy = null,
   libraryTourSettings: libraryTourSettingsInjected = null,
   steamLibraryTour = null,
@@ -350,6 +355,7 @@ function createWebServer({
     getLibraryTourSettings: () => libraryTourSettings.get(),
     getYoutubeStatus: () => getYoutubeStatus?.() || youtubeService()?.statusSnapshot?.() || null,
     getTriviaStatus: () => getTriviaStatus?.() || triviaService()?.statusSnapshot?.() || null,
+    getUpsideNewsStatus: () => getUpsideNewsStatus?.() || upsideNewsService()?.statusSnapshot?.() || null,
     getPhotoCount: () => qrImageCache.list().length,
   });
   let server = null;
@@ -688,6 +694,141 @@ function createWebServer({
 
   function triviaService() {
     return typeof trivia === 'function' ? trivia() : trivia;
+  }
+
+  function upsideNewsService() {
+    return typeof upsideNews === 'function' ? upsideNews() : upsideNews;
+  }
+
+  function upsideNewsOverridesFrom(body = {}) {
+    const overrides = {};
+    if (body.period != null) overrides.period = body.period;
+    if (body.items != null) overrides.items = body.items;
+    if (body.indexSeconds != null) overrides.indexSeconds = body.indexSeconds;
+    if (body.storySeconds != null) overrides.storySeconds = body.storySeconds;
+    if (body.loops != null) overrides.loops = body.loops;
+    return overrides;
+  }
+
+  function handleUpsideNewsStatus(res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleUpsideNewsSettingsGet(res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, settings: service.settings.get() });
+  }
+
+  function handleUpsideNewsSettingsPut(body, res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    try {
+      const settings = service.settings.update(body || {});
+      sendJson(res, 200, {
+        ok: true,
+        settings,
+        cycleSeconds: service.statusSnapshot().cycleSeconds,
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleUpsideNewsApiKeySave(body, res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    const apiKey = String(body?.apiKey || '').trim();
+    if (apiKey.length < 8) {
+      sendJson(res, 400, { ok: false, error: 'API key looks too short' });
+      return;
+    }
+    const result = await service.saveApiKey(apiKey);
+    if (!result.ok) {
+      sendJson(res, result.source === 'env' ? 409 : 400, result);
+      return;
+    }
+    sendJson(res, 200, result);
+  }
+
+  async function handleUpsideNewsApiKeyTest(body, res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    const result = await service.testKey(body?.apiKey);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  async function handleUpsideNewsArchivePoll(res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    sendJson(res, 202, { ok: true, started: true });
+    service.archive.poll({ force: true }).catch((error) => {
+      log.warn('Upside News archive poll failed', error?.message || error);
+    });
+  }
+
+  function handleUpsideNewsStories(query, res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    const overrides = {};
+    if (query.get('period')) overrides.period = query.get('period');
+    if (query.get('limit')) overrides.items = Number(query.get('limit'));
+    const stories = service.archive.selectStories(overrides);
+    sendJson(res, 200, { ok: true, stories, count: stories.length });
+  }
+
+  function handleUpsideNewsPush(body, res) {
+    const service = upsideNewsService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'The Upside News is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    const result = service.push(upsideNewsOverridesFrom(body), {
+      device: deviceFrom(body),
+      triggeredBy: String(body?.triggeredBy || 'manual'),
+      send: (payload) => {
+        if (typeof deliverTargetedPayload === 'function') {
+          return deliverTargetedPayload(payload, targetId);
+        }
+        return sendUdpPayload(payload);
+      },
+    });
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    sendJson(res, 202, { ...result, targetId });
   }
 
   // ------------------------------------------------------------- YouTube
@@ -1144,6 +1285,7 @@ function createWebServer({
       case 'youtube.last-played':
         await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
       case 'trivia.show': handleTriviaPush(body, res); break;
+      case 'goodnews.show': handleUpsideNewsPush(body, res); break;
       default:
         throw new Error(`Command "${commandId}" has no scheduler dispatch`);
     }
@@ -3006,6 +3148,53 @@ function createWebServer({
     fs.createReadStream(filePath).pipe(res);
   }
 
+  function handleUpsideNewsArtworkServe(pathname, res) {
+    const name = path.basename(decodeURIComponent(pathname));
+    if (!/^[a-z0-9_-]+\.(webp|png|jpe?g)$/i.test(name)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const root = config.ROOT || path.resolve(__dirname, '..');
+    const stem = name.replace(/\.(webp|png|jpe?g)$/i, '');
+    const stems = triviaArtworkStemVariants(stem);
+    const extOrder = [path.extname(name).toLowerCase(), '.jpg', '.jpeg', '.png', '.webp']
+      .filter((ext, index, all) => ext && all.indexOf(ext) === index);
+    const directories = [
+      path.resolve(root, 'data/upside-news-artwork'),
+      path.join(root, 'dev assets', 'news-topic-artwork'),
+      path.join(root, 'dev-assets', 'news-topic-artwork'),
+      path.join(__dirname, 'web', 'upside-news-artwork'),
+    ];
+    let filePath = null;
+    for (const dir of directories) {
+      for (const candidateStem of stems) {
+        for (const ext of extOrder) {
+          const candidate = path.join(dir, `${candidateStem}${ext}`);
+          if (fs.existsSync(candidate)) {
+            filePath = candidate;
+            break;
+          }
+        }
+        if (filePath) break;
+      }
+      if (filePath) break;
+    }
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/jpeg',
+      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=86400',
+      ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+
   function serveStaticForRequest(req, pathname, res) {
     if (isAdminHtmlPath(pathname) && !adminAuth.assertAuthorized(req).ok) {
       redirectToAdminLogin(res, pathname === '/admin/index.html' ? '/admin/' : pathname);
@@ -3046,6 +3235,10 @@ function createWebServer({
         }
         if (pathname.startsWith(TRIVIA_ARTWORK_ROUTE_PREFIX)) {
           handleTriviaArtworkServe(pathname, res);
+          return;
+        }
+        if (pathname.startsWith(UPSIDE_NEWS_ARTWORK_ROUTE_PREFIX)) {
+          handleUpsideNewsArtworkServe(pathname, res);
           return;
         }
         if (pathname.startsWith(YOUTUBE_IMAGE_ROUTE_PREFIX)) {
@@ -3092,6 +3285,26 @@ function createWebServer({
         if (pathname === '/api/trivia/settings') {
           if (!requireAdminSession(req, res)) return;
           handleTriviaSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/upside-news/status') {
+          if (!requireAdminSession(req, res)) return;
+          handleUpsideNewsStatus(res);
+          return;
+        }
+        if (pathname === '/api/upside-news/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleUpsideNewsSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/upside-news/stories') {
+          if (!requireAdminSession(req, res)) return;
+          handleUpsideNewsStories(reqUrl.searchParams, res);
+          return;
+        }
+        if (pathname === '/api/upside-news/archive/stats') {
+          if (!requireAdminSession(req, res)) return;
+          handleUpsideNewsStatus(res);
           return;
         }
         if (pathname.startsWith('/api/youtube/')) {
@@ -3404,6 +3617,21 @@ function createWebServer({
             return;
           case '/api/trivia/pool/refill':
             handleTriviaRefill(res);
+            return;
+          case '/api/push/upside-news':
+            handleUpsideNewsPush(body, res);
+            return;
+          case '/api/upside-news/settings':
+            handleUpsideNewsSettingsPut(body, res);
+            return;
+          case '/api/upside-news/api-key':
+            await handleUpsideNewsApiKeySave(body, res);
+            return;
+          case '/api/upside-news/sources/test':
+            await handleUpsideNewsApiKeyTest(body, res);
+            return;
+          case '/api/upside-news/archive/poll':
+            await handleUpsideNewsArchivePoll(res);
             return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });

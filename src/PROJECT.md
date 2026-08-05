@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Alexa routines for trivia / library tours / Now Playing)
+**Last updated:** 2026-08-04 (Upside News last-story slack)
 
 ---
 
@@ -66,6 +66,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/activity-fields.js` | Harvest summary/response/allText from all `voiceHistoryRecordItems` types (app routines often skip ASR) |
 | `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
 | `src/display-voice-commands.js` | Matchers for Alexa routines that push display overlays without needing Alexa’s spoken answer: trivia, Steam/PSN library tours, Steam/PSN/YouTube now-or-last-played (`requestedMode: 'auto'`) |
+| `src/upside-news-*.js` | **The Upside News** — Guardian + positive RSS archive, period selection, filters/ranking, settings, credentials (`GUARDIAN_API_KEY` / encrypted `data/guardian-credentials.json`), UDP `upside-news.round`; topic artwork under `/upside-news-artwork/` |
+| `src/web/upside-news-artwork/` | Shipped topic JPEGs (13 × portrait/landscape) for The Upside News |
 | `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
 | `tools/steam-presence-reporter/` | **Optional** fallback only — normally presence is piggybacked on the theater PC’s `display.announce` (`hostname` + `steamAppId`) |
 | `src/command-registry.js` | **Single source of truth for pushable pages.** `COMMANDS[]` descriptors (`id`, `title`, `group`, `route`, `icon`, `body`, `pushable`, `schedulable`, `supportsContentCheck`, `variableDuration`, `defaultDurationSeconds`, `params`); `createCommandRegistry(deps)` binds live state for `hasContent(id)` / `estimateDuration(id, params)`. Served at `GET /api/commands`; the admin Push grid renders from it and the Display Scheduler enumerates rules from it. `assertValid()` rejects duplicate ids and duration contradictions |
@@ -503,6 +505,14 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Upside News last-story slack** — push `displaySeconds` includes a few seconds so client timer drift does not clip the final story page. Deploy: `./recreate.sh` (+ portable client for the matching panel timing fix).
+
+- 2026-08-04: **Upside News randomised rounds** — each push draws from a scored candidate pool and shuffles; recently aired story ids are remembered in the archive so the next push prefers different headlines. Deploy: `./recreate.sh`.
+
+- 2026-08-04: **Upside News admin** — Test uses the active `.env`/saved Guardian key unless you type a new one (ignores password autofill); clearer bridge→Guardian network errors; Refresh archive button moved under Display. Deploy: `./recreate.sh` (admin assets only).
+
+- 2026-08-04: **The Upside News** — rotating positive-news panel (index → story pages) from Guardian Open Platform + curated RSS, local archive for daily/weekly/monthly/yearly, topic artwork pack, admin Settings + Push tile, scheduler command `goodnews.show` (variable duration). Env: `GUARDIAN_API_KEY` (or encrypted admin save). UDP `upside-news.round`. Deploy: `./recreate.sh` + portable client rebuild for the new panel/artwork. Tests: `test/upside-news.test.js`, client `test_upside_news_panel.py`.
 
 - 2026-08-04: **Alexa routines for trivia / library tours / Now Playing** — voice + routine-index matchers (`display-voice-commands.js`) so custom routines named Trivia, Steam/PSN Library Tour, and Steam/PSN/YouTube Now Playing or Last Played push the matching overlay. NP/LP both use `requestedMode: 'auto'` (live if playing, else last played). Platform phrases run before bare music “what’s playing”. Toggles: `voiceEvents.triviaQueries` / `*LibraryTourQueries` / `*NowPlayingQueries` (default on). Deploy: `./recreate.sh` only — display client already handles these UDP types. Tests: `test/display-voice-commands.test.js`, `test/routine-index.test.js`.
 

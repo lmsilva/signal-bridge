@@ -113,6 +113,10 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         # answer) + summary). Clamping would cut the round off mid-question.
         return max(requested, 1)
 
+    if payload.get("type") == "upside-news.round":
+        # Index + stories may loop; clamping would cut mid-story.
+        return max(requested, 1)
+
     if payload.get("type") == "game.library-tour":
         # Client loops posters locally; bridge marks persistent with displaySeconds 0.
         if payload.get("persistent") is True:
