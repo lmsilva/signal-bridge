@@ -1,0 +1,176 @@
+{
+  "generated": "procedural",
+  "licence": "Generated for this project. No third-party rights.",
+  "targetContrastVsWhite": 5.2,
+  "categories": [
+    {
+      "id": "environment",
+      "label": "Environment",
+      "pattern": "growth",
+      "background": "#00582A",
+      "tone": 0.95,
+      "accent": "#00D16C",
+      "files": {
+        "portrait": "environment-portrait.jpg",
+        "landscape": "environment-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.1
+    },
+    {
+      "id": "science",
+      "label": "Science",
+      "pattern": "lissajous",
+      "background": "#005362",
+      "tone": 0.92,
+      "accent": "#00C7E8",
+      "files": {
+        "portrait": "science-portrait.jpg",
+        "landscape": "science-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.06
+    },
+    {
+      "id": "society",
+      "label": "Society",
+      "pattern": "handshake",
+      "background": "#5B005C",
+      "tone": 0.7,
+      "accent": "#FF8BFB",
+      "files": {
+        "portrait": "society-portrait.jpg",
+        "landscape": "society-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.12
+    },
+    {
+      "id": "health",
+      "label": "Health",
+      "pattern": "pulse",
+      "background": "#8C0030",
+      "tone": 0.88,
+      "accent": "#FF99A3",
+      "files": {
+        "portrait": "health-portrait.jpg",
+        "landscape": "health-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.1
+    },
+    {
+      "id": "world",
+      "label": "World",
+      "pattern": "globe",
+      "background": "#003F71",
+      "tone": 0.8,
+      "accent": "#8BB7FF",
+      "files": {
+        "portrait": "world-portrait.jpg",
+        "landscape": "world-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.13
+    },
+    {
+      "id": "global-development",
+      "label": "Global Development",
+      "pattern": "ascend",
+      "background": "#614700",
+      "tone": 0.95,
+      "accent": "#E6AD00",
+      "files": {
+        "portrait": "global-development-portrait.jpg",
+        "landscape": "global-development-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.13
+    },
+    {
+      "id": "technology",
+      "label": "Technology",
+      "pattern": "circuit",
+      "background": "#004044",
+      "tone": 0.78,
+      "accent": "#00C9D5",
+      "files": {
+        "portrait": "technology-portrait.jpg",
+        "landscape": "technology-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.07
+    },
+    {
+      "id": "culture",
+      "label": "Culture",
+      "pattern": "ribbons",
+      "background": "#9C0018",
+      "tone": 0.95,
+      "accent": "#FF9B8F",
+      "files": {
+        "portrait": "culture-portrait.jpg",
+        "landscape": "culture-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.08
+    },
+    {
+      "id": "education",
+      "label": "Education",
+      "pattern": "textblocks",
+      "background": "#623000",
+      "tone": 0.8,
+      "accent": "#FF9F51",
+      "files": {
+        "portrait": "education-portrait.jpg",
+        "landscape": "education-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.11
+    },
+    {
+      "id": "wildlife",
+      "label": "Wildlife",
+      "pattern": "cells",
+      "background": "#003A01",
+      "tone": 0.68,
+      "accent": "#39D139",
+      "files": {
+        "portrait": "wildlife-portrait.jpg",
+        "landscape": "wildlife-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.1
+    },
+    {
+      "id": "sport",
+      "label": "Sport",
+      "pattern": "courtarcs",
+      "background": "#2A4A00",
+      "tone": 0.85,
+      "accent": "#7BCB00",
+      "files": {
+        "portrait": "sport-portrait.jpg",
+        "landscape": "sport-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.06
+    },
+    {
+      "id": "business",
+      "label": "Economy",
+      "pattern": "network",
+      "background": "#002966",
+      "tone": 0.62,
+      "accent": "#A6B1FF",
+      "files": {
+        "portrait": "business-portrait.jpg",
+        "landscape": "business-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.09
+    },
+    {
+      "id": "general",
+      "label": "Good News",
+      "pattern": "sunburst",
+      "background": "#7A2396",
+      "tone": 0.9,
+      "accent": "#E897FF",
+      "files": {
+        "portrait": "general-portrait.jpg",
+        "landscape": "general-landscape.jpg"
+      },
+      "minContrastVsWhite": 5.07
+    }
+  ]
+}

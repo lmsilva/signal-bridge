@@ -288,9 +288,31 @@ const COMMANDS = [
       { key: 'answerSeconds', label: 'Seconds per answer', type: 'number', min: 2, max: 120 },
     ],
     supportsContentCheck: true,
-    // The only multi-page command in the system: the display must stay busy for
-    // the whole sequence, so its duration is computed per invocation rather
-    // than fixed (trivia.md §8.2).
+    // Multi-page command: the display must stay busy for the whole sequence,
+    // so its duration is computed per invocation rather than fixed.
+    variableDuration: true,
+    defaultDurationSeconds: null,
+  },
+  {
+    id: 'goodnews.show',
+    title: 'The Upside News',
+    subtitle: 'Positive headlines, then each story',
+    group: 'News',
+    route: '/api/push/upside-news',
+    icon: 'news',
+    pushable: true,
+    schedulable: true,
+    params: [
+      {
+        key: 'period',
+        label: 'Period',
+        type: 'enum',
+        values: ['daily', 'weekly', 'monthly', 'yearly'],
+      },
+      { key: 'items', label: 'Stories', type: 'number', min: 3, max: 8 },
+      { key: 'storySeconds', label: 'Seconds per story', type: 'number', min: 8, max: 30 },
+    ],
+    supportsContentCheck: true,
     variableDuration: true,
     defaultDurationSeconds: null,
   },
@@ -369,6 +391,7 @@ function createCommandRegistry(deps = {}) {
     getLibraryTourSettings = null,
     getYoutubeStatus = null,
     getTriviaStatus = null,
+    getUpsideNewsStatus = null,
     getPhotoCount = null,
     log = null,
   } = deps;
@@ -413,6 +436,17 @@ function createCommandRegistry(deps = {}) {
       const need = Number(params?.count) || Number(status.questionsPerSession) || 1;
       return Number(status.available ?? status.size ?? 0) >= need;
     },
+    'goodnews.show': (params) => {
+      const status = call(getUpsideNewsStatus);
+      if (!status) {
+        return false;
+      }
+      if (status.hasContent === false) {
+        return false;
+      }
+      const need = Math.min(8, Math.max(3, Number(params?.items) || Number(status.settings?.items) || 5));
+      return Number(status.available ?? 0) >= Math.min(3, need);
+    },
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
   };
 
@@ -435,6 +469,27 @@ function createCommandRegistry(deps = {}) {
         ? 0
         : num(null, settings.summarySeconds, 6);
       return Math.round(intro + count * (question + answer) + summary);
+    },
+    'goodnews.show': (params) => {
+      const status = call(getUpsideNewsStatus) || {};
+      const settings = status.settings || {};
+      const items = Math.min(8, Math.max(3, Math.round(
+        Number(params?.items ?? settings.items) || 5,
+      )));
+      const storySeconds = Math.min(30, Math.max(8, Math.round(
+        Number(params?.storySeconds ?? settings.storySeconds) || 15,
+      )));
+      let indexSeconds = settings.indexSeconds;
+      if (params?.indexSeconds != null) {
+        indexSeconds = Number(params.indexSeconds);
+      }
+      if (!Number.isFinite(Number(indexSeconds))) {
+        indexSeconds = Math.round(4 + 1.6 * items);
+      }
+      if (Number.isFinite(Number(status.cycleSeconds)) && !params?.items && !params?.storySeconds) {
+        return Math.round(Number(status.cycleSeconds));
+      }
+      return Math.round(Number(indexSeconds) + items * storySeconds);
     },
     'steam.library-tour': (params) => {
       const count = Number(call(getSteamLibraryCount) || 0);

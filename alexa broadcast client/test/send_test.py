@@ -1186,6 +1186,81 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "upside-news":
+        base = f"http://{args.host}:8080/upside-news-artwork"
+        specs = [
+            ("science", "Science", "#8BB7FF", "#003F2A",
+             "Solar panels now power an entire village for the first time",
+             "A remote community celebrated after a crowdfunded array went live."),
+            ("health", "Health", "#6EE7A8", "#123524",
+             "Hospital volunteers delivered 10,000 care packages",
+             "Staff and neighbors packed essentials for families in recovery."),
+            ("world", "World", "#F5C453", "#3a2605",
+             "Neighbors replanted a burned forest corridor in one weekend",
+             "More than four hundred saplings went into the ground along the trail."),
+        ]
+        index_seconds, story_seconds = 12, 15
+        stories = [
+            {
+                "index": i,
+                "id": f"upside-test-{i}",
+                "headline": headline,
+                "standfirst": standfirst,
+                "sectionId": section_id,
+                "sectionName": label,
+                "accent": accent,
+                "background": background,
+                "publishedAt": _iso_now(),
+                "publishedLabel": "2h ago",
+                "readingMinutes": 3,
+                "byline": "Signal Bridge Test",
+                "sourceLabel": "The Guardian",
+                "url": f"https://example.com/upside/{i}",
+                "keywords": ["hope", "community"],
+                "artwork": {
+                    "portrait": f"{base}/{section_id}-portrait.jpg",
+                    "landscape": f"{base}/{section_id}-landscape.jpg",
+                },
+            }
+            for i, (section_id, label, accent, background, headline, standfirst)
+            in enumerate(specs)
+        ]
+        count = len(stories)
+        total = index_seconds + count * story_seconds
+        return {
+            "version": 2,
+            "type": "upside-news.round",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": total,
+            "trigger": "test",
+            "upsideNews": {
+                "sessionId": "test-upside-round",
+                "triggeredBy": "manual",
+                "title": "The Upside News",
+                "indexTitle": f"Today's {count}",
+                "period": "daily",
+                "storyCount": count,
+                "indexSeconds": index_seconds,
+                "storySeconds": story_seconds,
+                "loops": "once",
+                "loopCount": 1,
+                "cycleSeconds": total,
+                "totalDurationSeconds": total,
+                "showQr": True,
+                "showReadingTime": True,
+                "showTopicTags": False,
+                "attribution": "Guardian Open Platform · positive news RSS",
+                "indexArtwork": {
+                    "portrait": f"{base}/general-portrait.jpg",
+                    "landscape": f"{base}/general-landscape.jpg",
+                },
+                "indexAccent": "#E897FF",
+                "indexBackground": "#7A2396",
+                "stories": stories,
+            },
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -1267,7 +1342,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news"],
         default="broadcast",
         help="Payload type to send",
     )

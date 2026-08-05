@@ -688,6 +688,7 @@
     'now-playing': '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/>',
     alarm: '<path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/><path d="M12 3v1"/>',
     trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.2 2.5c-.5.2-.7.6-.7 1.1v.5"/><path d="M12 16.6v.4"/>',
+    news: '<path d="M4 5.5h12.5A2.5 2.5 0 0 1 19 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M8 9h6M8 12h6M8 15h3.5"/><path d="M19 10.5h1.5A1.5 1.5 0 0 1 22 12v5.5A1.5 1.5 0 0 1 20.5 19H19"/>',
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
     steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
     psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
@@ -3148,6 +3149,237 @@
     });
 
     loadYoutubeSettings();
+  }
+
+  // ------------------------------------------- Settings → The Upside News
+
+  const UPSIDE_PERIOD_HINTS = {
+    daily: 'Stories published in the last 24 hours',
+    weekly: 'The last 7 days, best first',
+    monthly: 'The last 30 days, best first',
+    yearly: 'The last year, best first',
+  };
+
+  function formatCycleLength(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    if (mins <= 0) return `${secs}s`;
+    return `${mins}m ${String(secs).padStart(2, '0')}s`;
+  }
+
+  function renderUpsideNewsSettings(status) {
+    const settings = status.settings || {};
+    document.querySelectorAll('#upside-news-period-tabs .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.period === settings.period);
+    });
+    const hint = $('upside-news-period-hint');
+    if (hint) hint.textContent = UPSIDE_PERIOD_HINTS[settings.period] || UPSIDE_PERIOD_HINTS.daily;
+    setTriviaSlider('upside-news-items', 'upside-news-items-value', settings.items, '');
+    setTriviaSlider('upside-news-story-seconds', 'upside-news-story-seconds-value', settings.storySeconds, 's');
+    const loops = $('upside-news-loops');
+    if (loops) loops.value = settings.loops || 'once';
+    const cycle = $('upside-news-cycle-length');
+    if (cycle) cycle.textContent = formatCycleLength(status.cycleSeconds);
+    const guardian = $('upside-news-guardian-enabled');
+    if (guardian) {
+      guardian.checked = settings.guardianEnabled !== false;
+      guardian.closest('.trivia-check')?.classList.toggle('is-off', !guardian.checked);
+    }
+    ['show-qr', 'show-reading', 'show-tags'].forEach((key) => {
+      const map = {
+        'show-qr': 'showQr',
+        'show-reading': 'showReadingTime',
+        'show-tags': 'showTopicTags',
+      };
+      const el = $(`upside-news-${key}`);
+      if (!el) return;
+      el.checked = Boolean(settings[map[key]]);
+      el.closest('.trivia-check')?.classList.toggle('is-off', !el.checked);
+    });
+    const rssHost = $('upside-news-rss-sources');
+    if (rssHost) {
+      rssHost.innerHTML = (status.rssSources || []).map((source) => (
+        `<label class="trivia-check${source.enabled ? '' : ' is-off'}">`
+        + `<input type="checkbox" name="upsideRss" value="${escapeHtml(source.id)}"${source.enabled ? ' checked' : ''}>`
+        + `<span>${escapeHtml(source.label)}</span></label>`
+      )).join('');
+    }
+    const keyHint = $('upside-news-key-hint');
+    if (keyHint) {
+      if (status.apiKeySource === 'env') {
+        keyHint.textContent = 'Using GUARDIAN_API_KEY from .env (takes precedence). Test uses that key unless you type a new one.';
+      } else if (status.hasApiKey) {
+        keyHint.textContent = 'Saved API key is on file (encrypted under data/). Test uses that key unless you type a new one.';
+      } else {
+        keyHint.textContent = 'Paste a key here, or set GUARDIAN_API_KEY in .env.';
+      }
+    }
+    const archiveHint = $('upside-news-archive-hint');
+    if (archiveHint) {
+      const archive = status.archive || {};
+      const oldest = archive.oldest
+        ? new Date(archive.oldest).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+        : '—';
+      const last = archive.lastPollAt
+        ? `${Math.max(0, Math.round((Date.now() - Date.parse(archive.lastPollAt)) / 60000))}m ago`
+        : 'never';
+      archiveHint.textContent = `Archive: ${archive.count || 0} stories · oldest ${oldest} · last poll ${last}`
+        + (archive.quotaToday ? ` · Guardian calls today ${archive.quotaToday.used}/${archive.quotaToday.limit}` : '');
+    }
+    const pill = $('upside-news-status-pill');
+    const detail = $('upside-news-status-detail');
+    if (pill) {
+      pill.textContent = status.hasContent ? 'Ready' : 'Collecting';
+      pill.className = `status-pill ${status.hasContent ? 'ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = status.hasContent
+        ? `${status.available || 0} stories ready for ${settings.period || 'daily'}`
+        : 'Archive is still filling — refresh after a poll, or check the Guardian key.';
+    }
+  }
+
+  function readUpsideNewsForm() {
+    const periodBtn = document.querySelector('#upside-news-period-tabs .segmented-btn.active');
+    const rss = [...document.querySelectorAll('input[name="upsideRss"]:checked')]
+      .map((el) => el.value);
+    return {
+      period: periodBtn?.dataset.period || 'daily',
+      items: Number($('upside-news-items')?.value || 5),
+      storySeconds: Number($('upside-news-story-seconds')?.value || 15),
+      loops: $('upside-news-loops')?.value || 'once',
+      guardianEnabled: Boolean($('upside-news-guardian-enabled')?.checked),
+      enabledRssSourceIds: rss,
+      showQr: Boolean($('upside-news-show-qr')?.checked),
+      showReadingTime: Boolean($('upside-news-show-reading')?.checked),
+      showTopicTags: Boolean($('upside-news-show-tags')?.checked),
+    };
+  }
+
+  let upsideNewsSaveTimer = null;
+  async function saveUpsideNewsSettings() {
+    try {
+      const result = await apiPost('/api/upside-news/settings', readUpsideNewsForm());
+      const cycle = $('upside-news-cycle-length');
+      if (cycle) cycle.textContent = formatCycleLength(result.cycleSeconds);
+      await loadUpsideNewsSettings();
+    } catch (error) {
+      toast(error.message || 'Could not save Upside News settings', 'bad');
+    }
+  }
+
+  function queueUpsideNewsSave() {
+    clearTimeout(upsideNewsSaveTimer);
+    upsideNewsSaveTimer = setTimeout(saveUpsideNewsSettings, 400);
+  }
+
+  async function loadUpsideNewsSettings() {
+    const card = $('upside-news-settings-card');
+    if (!card) return;
+    try {
+      const status = await apiGet('/api/upside-news/status');
+      renderUpsideNewsSettings(status);
+      card.hidden = false;
+    } catch {
+      card.hidden = true;
+      const label = card.previousElementSibling;
+      if (label?.classList.contains('section-label')) label.hidden = true;
+    }
+  }
+
+  let upsideNewsKeyEdited = false;
+  const upsideNewsCard = $('upside-news-settings-card');
+  if (upsideNewsCard) {
+    document.querySelectorAll('#upside-news-period-tabs .segmented-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#upside-news-period-tabs .segmented-btn')
+          .forEach((other) => other.classList.toggle('active', other === btn));
+        const hint = $('upside-news-period-hint');
+        if (hint) hint.textContent = UPSIDE_PERIOD_HINTS[btn.dataset.period] || '';
+        queueUpsideNewsSave();
+      });
+    });
+    upsideNewsCard.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.matches('input[type="checkbox"]')) {
+        target.closest('.trivia-check')?.classList.toggle('is-off', !target.checked);
+        queueUpsideNewsSave();
+      } else if (target.matches('select') || target.matches('input[type="range"]')) {
+        queueUpsideNewsSave();
+      }
+    });
+    upsideNewsCard.addEventListener('input', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === 'range') {
+        const isItems = target.id === 'upside-news-items';
+        const label = $(isItems ? 'upside-news-items-value' : `${target.id}-value`);
+        if (label) label.textContent = `${target.value}${isItems ? '' : 's'}`;
+      }
+    });
+    const upsideNewsKeyInput = $('upside-news-api-key');
+    // Strip password-manager autofill so the dotted field isn't mistaken for a saved key.
+    if (upsideNewsKeyInput) {
+      upsideNewsKeyInput.value = '';
+      upsideNewsKeyInput.addEventListener('input', () => {
+        upsideNewsKeyEdited = true;
+      });
+      setTimeout(() => {
+        if (!upsideNewsKeyEdited) upsideNewsKeyInput.value = '';
+      }, 250);
+    }
+    $('btn-upside-news-key-save')?.addEventListener('click', async () => {
+      const apiKey = upsideNewsKeyInput?.value || '';
+      try {
+        await apiPost('/api/upside-news/api-key', { apiKey });
+        toast('Guardian API key saved', 'ok');
+        if (upsideNewsKeyInput) upsideNewsKeyInput.value = '';
+        upsideNewsKeyEdited = false;
+        await loadUpsideNewsSettings();
+      } catch (error) {
+        toast(error.message || 'Could not save API key', 'bad');
+      }
+    });
+    $('btn-upside-news-key-test')?.addEventListener('click', async () => {
+      // Ignore password-manager autofill: only send a pasted key after the
+      // user typed. Otherwise Test exercises the active .env / saved key.
+      const typed = upsideNewsKeyEdited
+        ? String(upsideNewsKeyInput?.value || '').trim()
+        : '';
+      try {
+        const result = await apiPost(
+          '/api/upside-news/sources/test',
+          typed ? { apiKey: typed } : {},
+        );
+        const sourceLabel = {
+          env: ' (.env key)',
+          session: ' (saved key)',
+          config: ' (config key)',
+          provided: ' (pasted key)',
+        }[result.testedSource] || '';
+        toast(
+          result.ok ? `Guardian key works${sourceLabel}` : (result.error || 'Test failed'),
+          result.ok ? 'ok' : 'bad',
+        );
+      } catch (error) {
+        toast(error.message || 'Test failed', 'bad');
+      }
+    });
+    $('btn-upside-news-poll')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await apiPost('/api/upside-news/archive/poll', {});
+        toast('Archive refresh started', 'ok');
+        setTimeout(loadUpsideNewsSettings, 4000);
+      } catch (error) {
+        toast(error.message || 'Could not refresh archive', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    loadUpsideNewsSettings();
   }
 
   // ------------------------------------------- Settings → Trivia

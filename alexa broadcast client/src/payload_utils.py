@@ -29,6 +29,7 @@ DISPLAY_TYPES = (
     "psn.now-playing",
     "youtube.now-playing",
     "trivia.round",
+    "upside-news.round",
     "game.library-tour",
 )
 
@@ -129,6 +130,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "psn.now-playing": ("PlayStation", "Now Playing"),
         "youtube.now-playing": ("YouTube", "Now Playing"),
         "trivia.round": ("Signal", "Trivia"),
+        "upside-news.round": ("Signal", "The Upside News"),
         "game.library-tour": ("Signal", "Library Tour"),
     }
     return titles.get(display_type, ("Alexa", "Display"))

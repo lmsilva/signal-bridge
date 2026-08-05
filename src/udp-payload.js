@@ -11,6 +11,7 @@ const {
   resolveAirQualityQueryLocation,
 } = require('./air-quality');
 const { getCategory: getTriviaCategory } = require('./trivia-categories');
+const { resolveTopic } = require('./upside-news-categories');
 
 function displaySeconds(config, override) {
   const value = Number(override);
@@ -1271,6 +1272,113 @@ function buildTriviaRoundPayload({
   };
 }
 
+const UPSIDE_COUNT_WORDS = {
+  3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight',
+};
+
+function upsideNewsIndexTitle(period, count) {
+  const word = UPSIDE_COUNT_WORDS[count] || String(count);
+  if (period === 'weekly') {
+    return `This week's ${word}`;
+  }
+  if (period === 'monthly') {
+    return "This month's picks";
+  }
+  if (period === 'yearly') {
+    return "This year's highlights";
+  }
+  return `Today's ${word}`;
+}
+
+/**
+ * The Upside News — index page + one story page per item (goodnews.md §5).
+ * One UDP packet for the whole cycle; the client pages locally like Trivia.
+ */
+function buildUpsideNewsRoundPayload({
+  stories = [],
+  settings = {},
+  indexSeconds = 12,
+  storySeconds = 15,
+  loops = 'once',
+  loopCount = 1,
+  artworkBaseUrl = '',
+  device = 'Signal',
+  timestamp = Date.now(),
+  trigger = 'upside-news',
+  triggeredBy = 'manual',
+  sessionId = null,
+  durationSeconds = null,
+} = {}, config = {}) {
+  if (!Array.isArray(stories) || !stories.length) {
+    return null;
+  }
+  const count = Math.min(8, stories.length);
+  const cards = stories.slice(0, count).map((story, index) => {
+    const topic = resolveTopic(story.sectionId);
+    return {
+      index,
+      id: story.id,
+      headline: story.headline,
+      standfirst: story.standfirst || '',
+      sectionId: topic.id,
+      sectionName: story.sectionName || topic.label,
+      accent: story.accent || topic.accent,
+      background: story.background || topic.background,
+      publishedAt: story.publishedAt || null,
+      publishedLabel: story.publishedLabel || '',
+      readingMinutes: story.readingMinutes ?? null,
+      byline: story.byline || '',
+      sourceLabel: story.sourceLabel || 'News',
+      url: story.url || story.webUrl || null,
+      keywords: Array.isArray(story.keywords) ? story.keywords.slice(0, 3) : [],
+      artwork: story.artwork || null,
+    };
+  });
+
+  const indexSec = Math.max(6, Number(indexSeconds) || 12);
+  const storySec = Math.max(8, Number(storySeconds) || 15);
+  const oneCycle = indexSec + (count * storySec);
+  const total = Number(durationSeconds) > 0 ? Number(durationSeconds) : oneCycle;
+  const general = resolveTopic('general');
+  const base = String(artworkBaseUrl || '').replace(/\/+$/, '');
+
+  return {
+    version: 2,
+    type: 'upside-news.round',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: total,
+    trigger,
+    upsideNews: {
+      sessionId: sessionId || `upside-${new Date(timestamp).getTime()}`,
+      triggeredBy,
+      title: 'The Upside News',
+      indexTitle: upsideNewsIndexTitle(settings.period || 'daily', count),
+      period: settings.period || 'daily',
+      storyCount: count,
+      indexSeconds: indexSec,
+      storySeconds: storySec,
+      loops: loops || 'once',
+      loopCount: loopCount == null ? 1 : loopCount,
+      cycleSeconds: oneCycle,
+      totalDurationSeconds: total,
+      showQr: settings.showQr !== false,
+      showReadingTime: settings.showReadingTime !== false,
+      showTopicTags: settings.showTopicTags === true,
+      attribution: 'Guardian Open Platform · positive news RSS',
+      indexArtwork: base
+        ? {
+          portrait: `${base}/upside-news-artwork/${general.files.portrait}`,
+          landscape: `${base}/upside-news-artwork/${general.files.landscape}`,
+        }
+        : null,
+      indexAccent: general.accent,
+      indexBackground: general.background,
+      stories: cards,
+    },
+  };
+}
+
 /**
  * Deterministic-per-call answer order. Booleans keep True/False order so the
  * two-tile layout always reads the same way; multiple choice is shuffled so the
@@ -1393,6 +1501,7 @@ function buildYoutubeNowPlayingClosePayload({
 
 module.exports = {
   buildTriviaRoundPayload,
+  buildUpsideNewsRoundPayload,
   buildYoutubeNowPlayingPayload,
   buildYoutubeNowPlayingClosePayload,
   buildBroadcastPayload,

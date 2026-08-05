@@ -1019,7 +1019,11 @@ test('the wide Settings cards span the grid and column up inside', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
 
-  for (const card of ['youtube-settings-card', 'trivia-settings-card']) {
+  for (const card of [
+    'youtube-settings-card',
+    'trivia-settings-card',
+    'upside-news-settings-card',
+  ]) {
     assert.match(
       css,
       new RegExp(`#tab-settings \\.${card}[^{]*\\{[^}]*grid-column: 1 / -1`),
@@ -1029,6 +1033,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
   // Their contents run as columns, so the extra width is actually used.
   assert.match(html, /class="settings-columns settings-columns-3"/);
   assert.match(css, /\.settings-columns-3 \{ grid-template-columns: repeat\(3, 1fr\); \}/);
+  // Period control sits above the three columns so Daily…Yearly never collide
+  // with the Guardian column.
+  assert.match(html, /upside-news-period-band/);
+  assert.match(css, /\.upside-news-key-row/);
 });
 
 test('the refill button answers immediately instead of holding the request open', async () => {
@@ -1189,7 +1197,7 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   // supplies the rows the renderer fills.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
-  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,Steam,PSN,YouTube"/);
+  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,News,Steam,PSN,YouTube"/);
   assert.doesNotMatch(html, /id="push-row-playing"/);
   assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
 
