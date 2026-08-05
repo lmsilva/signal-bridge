@@ -239,5 +239,12 @@ class IndexListTopTests(unittest.TestCase):
         self.assertGreaterEqual(top, 200 + 44)
 
 
+class UpsideNewsMotionHelpersTests(unittest.TestCase):
+    def test_panel_exposes_marquee_and_scroll_helpers(self):
+        self.assertTrue(callable(getattr(UpsideNewsPanel, "_place_marquee", None)))
+        self.assertTrue(callable(getattr(UpsideNewsPanel, "_place_vertical_scroll", None)))
+        self.assertTrue(callable(getattr(UpsideNewsPanel, "_stop_text_motion", None)))
+
+
 if __name__ == "__main__":
     unittest.main()

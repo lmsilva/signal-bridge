@@ -26,13 +26,13 @@ except ImportError:
 
 from src.design_system import INK, INK_2, INK_3, page_chrome
 from src.display_panels import BasePanel
+from src.message_scroll import MessageScrollController
 from src.paths import app_root, asset_path
+from src.text_marquee import MarqueeLine
 from src.trivia_panel import (
     artwork_url_candidates,
-    fit_text_font,
     looks_like_image,
     mix_hex,
-    wrap_text,
 )
 
 _unverified_ssl = False
@@ -244,6 +244,8 @@ class UpsideNewsPanel(BasePanel):
         self._fallback_ids = []
         self._ring_ids = []
         self._countdown_text_id = None
+        self._marquees: list[MarqueeLine] = []
+        self._scrollers: list[MessageScrollController] = []
         self._palette = {
             "background": DEFAULT_INDEX_BACKGROUND,
             "accent": DEFAULT_INDEX_ACCENT,
@@ -253,6 +255,7 @@ class UpsideNewsPanel(BasePanel):
     def hide(self):
         self._fetch_token += 1
         self._cancel_jobs()
+        self._stop_text_motion()
         self._drop_background()
         self._photo_refs = []
         self._artwork_key = None
@@ -261,6 +264,103 @@ class UpsideNewsPanel(BasePanel):
         except Exception:
             pass
         super().hide()
+
+    def _stop_text_motion(self):
+        for marquee in self._marquees:
+            try:
+                marquee.stop()
+            except Exception:
+                pass
+            viewport = getattr(marquee, "viewport", None)
+            if viewport is not None:
+                try:
+                    viewport.destroy()
+                except Exception:
+                    pass
+        self._marquees = []
+        for scroller in self._scrollers:
+            try:
+                scroller.stop()
+            except Exception:
+                pass
+            viewport = getattr(scroller, "viewport", None)
+            if viewport is not None:
+                try:
+                    viewport.destroy()
+                except Exception:
+                    pass
+        self._scrollers = []
+
+    def _place_marquee(
+        self, text: str, x0, y0, x1, y1, font, fill: str, *, bg: str | None = None, center: bool = False,
+    ):
+        """Single-line horizontal marquee when text outruns its band."""
+        text = str(text or "")
+        if not text:
+            return
+        width = max(40, int(x1 - x0))
+        try:
+            line_h = int(font.metrics("linespace"))
+        except Exception:
+            line_h = 28
+        band_h = max(1, int(y1 - y0))
+        height = max(line_h + 2, min(band_h, line_h + 10))
+        y = int(y0 + max(0, (band_h - height) / 2))
+        fill_bg = bg or self._palette.get("background") or "#0B1730"
+        marquee = MarqueeLine(self.root)
+        self._marquees.append(marquee)
+        viewport = marquee.build(
+            parent=self.canvas,
+            text=text,
+            font=font,
+            fill=fill,
+            width=width,
+            height=height,
+            bg=fill_bg,
+            center=center,
+        )
+        win_id = self.canvas.create_window(
+            int(x0), y, anchor="nw", window=viewport, width=width, height=height,
+        )
+        self._item_ids.append(win_id)
+        self._widgets.append(viewport)
+
+    def _place_vertical_scroll(
+        self, text: str, x0, y0, x1, y1, font, fill: str, *, bg: str | None = None,
+    ):
+        """Clipped multi-line band; scrolls vertically when taller than the box."""
+        text = str(text or "").strip()
+        if not text:
+            return
+        width = max(40, int(x1 - x0))
+        height = max(20, int(y1 - y0))
+        fill_bg = bg or self._palette.get("background") or "#0B1730"
+        viewport = tk.Canvas(
+            self.canvas,
+            width=width,
+            height=height,
+            highlightthickness=0,
+            bd=0,
+            bg=fill_bg,
+        )
+        text_id = viewport.create_text(
+            0, 0, anchor="nw", text="", fill=fill, font=font, width=width, justify=tk.LEFT,
+        )
+        scroll_config = dict(self.config)
+        base_pps = float(scroll_config.get("scrollPixelsPerSecond", 28) or 28)
+        scroll_config["scrollPixelsPerSecond"] = max(1.0, base_pps * 0.65)
+        scroller = MessageScrollController(
+            viewport, text_id, scroll_config, self.root, on_finish=lambda: None,
+        )
+        needs_scroll = scroller.configure(text, center_x=0, viewport_height=height)
+        win_id = self.canvas.create_window(
+            int(x0), int(y0), anchor="nw", window=viewport, width=width, height=height,
+        )
+        self._item_ids.append(win_id)
+        self._widgets.append(viewport)
+        self._scrollers.append(scroller)
+        if needs_scroll:
+            scroller.start()
 
     def _cancel_jobs(self):
         for attr in ("_phase_job", "_tick_job"):
@@ -353,6 +453,7 @@ class UpsideNewsPanel(BasePanel):
         self._schedule_countdown_tick()
 
     def _paint_step(self, entry: dict):
+        self._stop_text_motion()
         self._clear_foreground()
         geometry = self.compute_geometry()
         card = self._card_for(entry)
@@ -635,33 +736,31 @@ class UpsideNewsPanel(BasePanel):
             text_x = inner_x + num_w
             text_w = max(40.0, bx1 - pad - text_x)
             headline = str(story.get("headline") or "")
-            lines = wrap_text(row_font, headline, text_w)[: self.INDEX_MAX_LINES]
-            if len(wrap_text(row_font, headline, text_w)) > self.INDEX_MAX_LINES and lines:
-                lines[-1] = self._ellipsise(row_font, lines[-1], text_w)
+            meta_h = meta_font.metrics("linespace")
+            headline_top = y + pad * 0.7
+            headline_bottom = y + draw_h - pad - meta_h - 6 * u
 
             self._track(self.canvas.create_text(
-                inner_x, y + pad * 0.7, anchor="nw",
+                inner_x, headline_top, anchor="nw",
                 text=str(number), fill=accent, font=num_font,
             ))
-            ly = y + pad * 0.7
-            for line in lines or [""]:
-                if ly + row_font.metrics("linespace") > y + draw_h - pad:
-                    break
-                self._track(self.canvas.create_text(
-                    text_x, ly, anchor="nw", text=line, fill=INK, font=row_font,
-                ))
-                ly += row_font.metrics("linespace")
+            # Full headline scrolls horizontally when it outruns the card.
+            self._place_marquee(
+                headline,
+                text_x, headline_top, bx1 - pad, max(headline_top + 8, headline_bottom),
+                row_font, INK, bg=card_fill, center=False,
+            )
 
             section = str(story.get("sectionName") or story.get("sectionId") or "").upper()
             published = str(story.get("publishedLabel") or "").strip()
             meta = "  ".join(part for part in (section, published) if part)
             if meta:
-                meta_y = y + draw_h - pad - meta_font.metrics("linespace")
-                if meta_y > ly:
-                    self._track(self.canvas.create_text(
-                        text_x, meta_y,
-                        anchor="nw", text=meta, fill=accent, font=meta_font,
-                    ))
+                meta_y = y + draw_h - pad - meta_h
+                self._place_marquee(
+                    meta,
+                    text_x, meta_y, bx1 - pad, y + draw_h - pad * 0.4,
+                    meta_font, accent, bg=card_fill, center=False,
+                )
             y += draw_h + gap
 
     def _draw_story(self, geometry, card: dict, index: int):
@@ -713,33 +812,39 @@ class UpsideNewsPanel(BasePanel):
                     pass
         meta_font = tkfont.Font(family=family, size=max(11, int(round(self.META_U * u))))
         if meta_parts:
-            self._track(self.canvas.create_text(
-                tx0 + chip_w + 18 * u, y + chip_h / 2, anchor="w",
-                text=" · ".join(meta_parts), fill=INK_2, font=meta_font,
-            ))
+            meta_text = " · ".join(meta_parts)
+            meta_x0 = tx0 + chip_w + 18 * u
+            self._place_marquee(
+                meta_text,
+                meta_x0, y, tx1 - 8 * u, y + chip_h,
+                meta_font, INK_2,
+                bg=self._palette.get("background") or "#0B1730",
+                center=False,
+            )
 
         y += chip_h + 22 * u
         text_w = max(80.0, tx1 - tx0)
         floor_y = ty1
+        fill_bg = self._palette.get("background") or "#0B1730"
 
-        hi, lo = self.HEADLINE_U_PORTRAIT if portrait else self.HEADLINE_U_LANDSCAPE
+        hi, _lo = self.HEADLINE_U_PORTRAIT if portrait else self.HEADLINE_U_LANDSCAPE
         headline_font = tkfont.Font(
             family=family, size=max(16, int(round(hi * u))), weight="bold",
         )
+        # Prefer a readable size; overflow scrolls instead of ellipsising.
+        try:
+            headline_font.configure(size=max(14, int(round(hi * u))))
+        except Exception:
+            pass
+        headline = str(card.get("headline") or "")
+        line_h = max(1, int(headline_font.metrics("linespace") or 24))
         max_headline_lines = 5 if portrait else 4
-        headline_font, headline_lines = fit_text_font(
-            headline_font, card.get("headline", ""),
-            max_width=text_w, max_lines=max_headline_lines,
-            min_size=max(14, int(round(lo * u))),
-        )
-        for line in headline_lines:
-            line_h = headline_font.metrics("linespace")
-            if y + line_h > floor_y:
-                break
-            self._track(self.canvas.create_text(
-                tx0, y, anchor="nw", text=line, fill=INK, font=headline_font,
-            ))
-            y += line_h
+        headline_band = min(max_headline_lines * line_h, max(line_h, floor_y - y - 80 * u))
+        if headline and headline_band >= line_h:
+            self._place_vertical_scroll(
+                headline, tx0, y, tx1, y + headline_band, headline_font, INK, bg=fill_bg,
+            )
+            y += headline_band
 
         # Hairline rule under the headline (mockup).
         if y + 28 * u < floor_y:
@@ -758,22 +863,10 @@ class UpsideNewsPanel(BasePanel):
                 family=family,
                 size=max(12, int(round((sf_hi if portrait else sf_lo) * u))),
             )
-            remaining_h = floor_y - y
-            line_est = max(1, int(stand_font.metrics("linespace") or 20))
-            max_stand_lines = max(1, min(5 if portrait else 4, int(remaining_h // line_est)))
-            stand_font, stand_lines = fit_text_font(
-                stand_font, standfirst,
-                max_width=text_w, max_lines=max_stand_lines,
-                min_size=max(11, int(round(16 * u))),
+            stand_h = max(20.0, floor_y - y)
+            self._place_vertical_scroll(
+                standfirst, tx0, y, tx1, y + stand_h, stand_font, INK_2, bg=fill_bg,
             )
-            for line in stand_lines:
-                line_h = stand_font.metrics("linespace")
-                if y + line_h > floor_y:
-                    break
-                self._track(self.canvas.create_text(
-                    tx0, y, anchor="nw", text=line, fill=INK_2, font=stand_font,
-                ))
-                y += line_h
 
         # Bottom credit + pips (left of QR), QR bottom-right.
         credit = credit_line(card)
@@ -786,22 +879,24 @@ class UpsideNewsPanel(BasePanel):
             byline = str(card.get("byline") or "").strip()
             source = str(card.get("sourceLabel") or "").strip()
             if byline and source and byline.lower() != source.lower():
-                self._track(self.canvas.create_text(
-                    cx0, credit_y, anchor="nw", text=byline, fill=INK, font=byline_font,
-                ))
+                self._place_marquee(
+                    byline, cx0, credit_y, cx1,
+                    credit_y + byline_font.metrics("linespace") + 4,
+                    byline_font, INK, bg=fill_bg, center=False,
+                )
                 credit_y += byline_font.metrics("linespace") + 4 * u
-                self._track(self.canvas.create_text(
-                    cx0, credit_y, anchor="nw",
-                    text=self._ellipsise(source_font, source, cx1 - cx0),
-                    fill=INK_2, font=source_font,
-                ))
+                self._place_marquee(
+                    source, cx0, credit_y, cx1,
+                    credit_y + source_font.metrics("linespace") + 4,
+                    source_font, INK_2, bg=fill_bg, center=False,
+                )
                 credit_y += source_font.metrics("linespace") + 12 * u
             else:
-                self._track(self.canvas.create_text(
-                    cx0, credit_y, anchor="nw",
-                    text=self._ellipsise(byline_font, credit, cx1 - cx0),
-                    fill=INK, font=byline_font,
-                ))
+                self._place_marquee(
+                    credit, cx0, credit_y, cx1,
+                    credit_y + byline_font.metrics("linespace") + 4,
+                    byline_font, INK, bg=fill_bg, center=False,
+                )
                 credit_y += byline_font.metrics("linespace") + 12 * u
 
         if total > 1:
@@ -922,12 +1017,13 @@ class UpsideNewsPanel(BasePanel):
         font = tkfont.Font(
             family="Consolas", size=max(8, int(round(self.ATTRIBUTION_U * u))),
         )
-        # Stay clear of the countdown ring above-right.
-        max_w = max(40.0, (x1 - x0) - 120 * u)
-        label = self._ellipsise(font, label, max_w)
-        self._track(self.canvas.create_text(
-            x0, (y0 + y1) / 2, anchor="w", text=label, fill=INK_3, font=font,
-        ))
+        # Stay clear of the countdown ring on the right.
+        self._place_marquee(
+            label, x0, y0, x1 - 120 * u, y1,
+            font, INK_3,
+            bg=self._palette.get("background") or "#0B1730",
+            center=False,
+        )
 
     def _draw_empty_round(self, geometry=None):
         if geometry is None:

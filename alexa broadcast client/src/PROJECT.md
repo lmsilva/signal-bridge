@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Upside News dateline clearance v2)
+**Last updated:** 2026-08-04 (Upside News overflow scroll)
 
 ---
 
@@ -262,6 +262,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Upside News overflow scroll** — index card headlines/meta and story credits/attribution use `MarqueeLine` when too wide; story headline + standfirst use clipped vertical `MessageScrollController` so long copy is never ellipsised away. Portable rebuild required.
 
 - 2026-08-04: **Upside News dateline clearance** — index cards use ascent/descent + a hard pad (and never start above the title band); header text is raised above cards. Portable rebuild required.
 
