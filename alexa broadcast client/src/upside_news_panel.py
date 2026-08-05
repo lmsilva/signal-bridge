@@ -159,6 +159,25 @@ def resolve_index_title(upside: dict) -> str:
     return f"Today's {word}"
 
 
+def index_list_top(
+    header_bottom: float,
+    *,
+    u: float,
+    portrait: bool,
+    title_bottom: float | None = None,
+) -> float:
+    """Y where index cards may start — always clear of the dateline.
+
+    Tk ``linespace`` can under-report on DPI-unaware Windows sessions, so we
+    add a hard design-unit pad and never start above the reserved title band.
+    """
+    pad = (48 * u) if portrait else (44 * u)
+    top = float(header_bottom) + pad
+    if title_bottom is not None:
+        top = max(top, float(title_bottom) + (20 * u))
+    return top
+
+
 def format_index_dateline(upside: dict | None = None) -> str:
     """Mockup subtitle: ``Tuesday 4 August · The Guardian``."""
     from datetime import datetime
@@ -185,8 +204,9 @@ class UpsideNewsPanel(BasePanel):
 
     # Type ramp — mockup hierarchy (brand eyebrow → hero title → cards).
     BRAND_U = 22
-    INDEX_HERO_U = (72, 64)
+    INDEX_HERO_U = (68, 56)
     INDEX_DATE_U = 22
+    INDEX_HEADER_PAD_U = (48, 44)
     INDEX_ROW_U = (30, 26)
     INDEX_META_U = 16
     INDEX_NUM_U = (48, 42)
@@ -418,8 +438,8 @@ class UpsideNewsPanel(BasePanel):
 
         attribution_h = 28 * u
         progress_h = 56 * u
-        # brand + hero + dateline + breathing room before cards
-        title_h = 250 * u
+        # brand + hero + dateline (extra room — cards measure clearance at draw)
+        title_h = 240 * u
         qr_size = min(cls.QR_PORTRAIT_U * u, (x1 - x0) * 0.36)
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
@@ -457,8 +477,8 @@ class UpsideNewsPanel(BasePanel):
 
         attribution_h = 26 * u
         progress_h = 56 * u
-        # brand + hero + dateline (Tk linespace can exceed design units)
-        title_h = 210 * u
+        # brand + hero + dateline (cards clear this via measured list_top)
+        title_h = 200 * u
         qr_size = min(cls.QR_LANDSCAPE_U * u, (x1 - x0) * 0.22)
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
@@ -505,22 +525,36 @@ class UpsideNewsPanel(BasePanel):
         )
 
         y = y0
-        self._track(self.canvas.create_text(
+        header_ids = []
+        header_ids.append(self._track(self.canvas.create_text(
             x0, y, anchor="nw", text="good news", fill=INK_2, font=brand_font,
-        ))
+        )))
         y += brand_font.metrics("linespace") + 10 * u
         hero = resolve_index_title(self._upside)
-        self._track(self.canvas.create_text(
+        header_ids.append(self._track(self.canvas.create_text(
             x0, y, anchor="nw", text=hero, fill=INK, font=hero_font,
-        ))
-        y += hero_font.metrics("linespace") + 12 * u
-        self._track(self.canvas.create_text(
+        )))
+        # Prefer ascent+descent — linespace alone can under-clear on some DPI setups.
+        hero_h = max(
+            hero_font.metrics("linespace"),
+            hero_font.metrics("ascent") + hero_font.metrics("descent") + 4,
+        )
+        y += hero_h + 14 * u
+        header_ids.append(self._track(self.canvas.create_text(
             x0, y, anchor="nw",
             text=format_index_dateline(self._upside), fill=INK_2, font=date_font,
-        ))
-        # Cards must start below the measured dateline — fixed title_h alone can
-        # undershoot real Tk linespace and clip this line under the first cards.
-        list_top = y + date_font.metrics("linespace") + (28 * u if portrait else 24 * u)
+        )))
+        date_h = max(
+            date_font.metrics("linespace"),
+            date_font.metrics("ascent") + date_font.metrics("descent") + 4,
+            int(round(self.INDEX_DATE_U * u * 1.35)),
+        )
+        list_top = index_list_top(
+            y + date_h,
+            u=u,
+            portrait=portrait,
+            title_bottom=geometry["title"][3],
+        )
         body_bottom = geometry["body"][3]
 
         stories = self._upside.get("stories") or []
@@ -538,6 +572,13 @@ class UpsideNewsPanel(BasePanel):
 
         for box, column_stories in columns:
             self._draw_index_column(box, column_stories, geometry)
+
+        # Keep header copy above any card that still collides.
+        for item in header_ids:
+            try:
+                self.canvas.tag_raise(item)
+            except Exception:
+                pass
 
         self._draw_countdown_ring(geometry, accent)
 
@@ -563,8 +604,9 @@ class UpsideNewsPanel(BasePanel):
         count = max(1, len(column_stories))
         available = max(40.0, by1 - by0)
         gap = 14 * u if portrait else 12 * u
-        card_h = min(168 * u, (available - gap * (count - 1)) / count)
-        card_h = max(96 * u, card_h)
+        # Fit the column — do not force a tall min that overflows into the header.
+        card_h = (available - gap * (count - 1)) / count
+        card_h = max(72 * u, min(148 * u, card_h))
         pad = self.CARD_PAD_U * u
         bar_w = self.ACCENT_BAR_U * u
         radius = self.CARD_RADIUS_U * u
@@ -572,17 +614,19 @@ class UpsideNewsPanel(BasePanel):
 
         y = by0
         for story in column_stories:
-            if y + card_h > by1 + 2:
+            if y + 64 * u > by1:
                 break
+            draw_h = min(card_h, max(64 * u, by1 - y))
             accent = story_accent(story, self._palette["accent"])
             number = int(story.get("index", 0)) + 1
             self._round_rect(
-                bx0, y, bx1, y + card_h,
-                radius=radius, fill=card_fill, outline=mix_hex(accent, card_fill, 0.35),
+                bx0, y, bx1, y + draw_h,
+                radius=min(radius, draw_h / 3), fill=card_fill,
+                outline=mix_hex(accent, card_fill, 0.35),
                 width=max(1, int(round(1.5 * u))),
             )
             self._track(self.canvas.create_rectangle(
-                bx0, y + radius * 0.35, bx0 + bar_w, y + card_h - radius * 0.35,
+                bx0, y + radius * 0.25, bx0 + bar_w, y + draw_h - radius * 0.25,
                 fill=accent, outline=accent,
             ))
 
@@ -596,11 +640,13 @@ class UpsideNewsPanel(BasePanel):
                 lines[-1] = self._ellipsise(row_font, lines[-1], text_w)
 
             self._track(self.canvas.create_text(
-                inner_x, y + pad, anchor="nw",
+                inner_x, y + pad * 0.7, anchor="nw",
                 text=str(number), fill=accent, font=num_font,
             ))
-            ly = y + pad
+            ly = y + pad * 0.7
             for line in lines or [""]:
+                if ly + row_font.metrics("linespace") > y + draw_h - pad:
+                    break
                 self._track(self.canvas.create_text(
                     text_x, ly, anchor="nw", text=line, fill=INK, font=row_font,
                 ))
@@ -610,11 +656,13 @@ class UpsideNewsPanel(BasePanel):
             published = str(story.get("publishedLabel") or "").strip()
             meta = "  ".join(part for part in (section, published) if part)
             if meta:
-                self._track(self.canvas.create_text(
-                    text_x, y + card_h - pad - meta_font.metrics("linespace"),
-                    anchor="nw", text=meta, fill=accent, font=meta_font,
-                ))
-            y += card_h + gap
+                meta_y = y + draw_h - pad - meta_font.metrics("linespace")
+                if meta_y > ly:
+                    self._track(self.canvas.create_text(
+                        text_x, meta_y,
+                        anchor="nw", text=meta, fill=accent, font=meta_font,
+                    ))
+            y += draw_h + gap
 
     def _draw_story(self, geometry, card: dict, index: int):
         u = geometry["u"]

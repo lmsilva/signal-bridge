@@ -12,6 +12,7 @@ from src.upside_news_panel import (
     UpsideNewsPanel,
     build_phase_plan,
     credit_line,
+    index_list_top,
     resolve_index_title,
     resolve_story_phase_seconds,
     upside_news_artwork_asset_path,
@@ -207,7 +208,7 @@ class GeometryTests(unittest.TestCase):
         left = boxes["body"]
         right = boxes["body_right"]
         self.assertGreater(right[0], left[2])
-        self.assertGreater(boxes["title"][3] - boxes["title"][1], 180 * chrome.u)
+        self.assertGreater(boxes["title"][3] - boxes["title"][1], 160 * chrome.u)
         # Index list must start below the title band (dateline lives in title).
         self.assertGreaterEqual(boxes["body"][1], boxes["title"][3])
 
@@ -225,8 +226,17 @@ class GeometryTests(unittest.TestCase):
         self.assertGreater(qr[0], (text[0] + text[2]) / 2)
         self.assertLessEqual(credit[2], qr[0])
         self.assertEqual(boxes["columns"], 1)
-        self.assertGreater(boxes["title"][3] - boxes["title"][1], 200 * chrome.u)
+        self.assertGreater(boxes["title"][3] - boxes["title"][1], 180 * chrome.u)
         self.assertGreaterEqual(boxes["body"][1], boxes["title"][3])
+
+
+class IndexListTopTests(unittest.TestCase):
+    def test_list_top_clears_dateline_and_title_band(self):
+        u = 1.0
+        # Measured dateline bottom at 200; reserved title band ends at 240.
+        top = index_list_top(200, u=u, portrait=False, title_bottom=240)
+        self.assertGreaterEqual(top, 240 + 20)
+        self.assertGreaterEqual(top, 200 + 44)
 
 
 if __name__ == "__main__":
