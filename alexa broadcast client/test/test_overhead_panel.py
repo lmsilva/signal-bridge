@@ -22,6 +22,7 @@ from src.overhead_panel import (
     label_offset_for_hex,
     motion_frozen,
     page_highlight_hexes,
+    page_seconds_remaining,
     resolve_map_label_offsets,
     roster_page_count,
     roster_page_slice,
@@ -205,6 +206,15 @@ class OverheadMotionTests(unittest.TestCase):
         text = format_list_footer(0, 4, 10, 5)
         self.assertIn("1–4 of 10", text)
         self.assertIn("next page in 5s", text)
+
+    def test_page_seconds_remaining_counts_down(self):
+        started = 1_000_000.0
+        self.assertEqual(page_seconds_remaining(8, started, now=started), 8)
+        self.assertEqual(page_seconds_remaining(8, started, now=started + 0.2), 8)
+        self.assertEqual(page_seconds_remaining(8, started, now=started + 1.0), 7)
+        self.assertEqual(page_seconds_remaining(8, started, now=started + 7.1), 1)
+        self.assertEqual(page_seconds_remaining(8, started, now=started + 8.0), 0)
+        self.assertEqual(page_seconds_remaining(8, started, now=started + 9.0), 0)
 
 
 class OverheadColorTests(unittest.TestCase):
