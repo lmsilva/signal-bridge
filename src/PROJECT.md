@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (New trivia category artwork pack)
+**Last updated:** 2026-08-04 (Alexa routines for trivia / library tours / Now Playing)
 
 ---
 
@@ -65,13 +65,14 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/psn-*.js` | PSN Now Playing (unofficial `psn-api`): NPSSO → tokens in `data/psn-session.json`, `getBasicPresence` poller, played-games/trophy enrich, fail-soft Chihiro Store Plan B (`psn-store.js` — description + real screenshots + stars), Admin NPSSO paste + manual preview, UDP `psn.now-playing` |
 | `src/activity-fields.js` | Harvest summary/response/allText from all `voiceHistoryRecordItems` types (app routines often skip ASR) |
 | `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
+| `src/display-voice-commands.js` | Matchers for Alexa routines that push display overlays without needing Alexa’s spoken answer: trivia, Steam/PSN library tours, Steam/PSN/YouTube now-or-last-played (`requestedMode: 'auto'`) |
 | `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
 | `tools/steam-presence-reporter/` | **Optional** fallback only — normally presence is piggybacked on the theater PC’s `display.announce` (`hostname` + `steamAppId`) |
 | `src/command-registry.js` | **Single source of truth for pushable pages.** `COMMANDS[]` descriptors (`id`, `title`, `group`, `route`, `icon`, `body`, `pushable`, `schedulable`, `supportsContentCheck`, `variableDuration`, `defaultDurationSeconds`, `params`); `createCommandRegistry(deps)` binds live state for `hasContent(id)` / `estimateDuration(id, params)`. Served at `GET /api/commands`; the admin Push grid renders from it and the Display Scheduler enumerates rules from it. `assertValid()` rejects duplicate ids and duration contradictions |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
-| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth voice queries from history |
+| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth/trivia/library-tour/platform-now-playing voice queries from history |
 | `src/guest-photobooth.js` | Match "open guest snaps" (dual-QR welcome) + "open guest snaps slideshow" (Shared Photo Slideshow; ASR "slide show" / legacy "slideshow guest snaps") + legacy "guest photobooth"; `photosToSlideshowEntries` builds absolute `/qr-images/…` URLs; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
 | `src/guest-snaps-auth.js` | Rotating 24h 6-digit Guest Snaps booth PIN (`data/guest-snaps-pin.json`); `signal_guest` session until PIN expiry; progressive IP lockout; PIN only for UDP overlay / never in phone JSON |
 | `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery` + incomplete-ASR `looksLikeRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, incl. incomplete "distance from PLACE" → wait for TTS; `spokenHasRouteAnswer` for orphan miles TTS; dedupe comma-joined ASR + strip query tails from place names) |
@@ -288,7 +289,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `udpBroadcast.discoveryPort` | Listen for `display.announce` (default **47833**) |
 | `sessionKeepAlive.*` | Ping/refresh/liveness/proactive intervals, `failureThreshold`, `livenessProbe` |
 | `routePlanner.displaySeconds` | Overlay dismiss for `route-planner.query` (default **max(180, 2× `udpBroadcast.defaultDisplaySeconds`)**; explicit number overrides). Separate from the standard overlay duration so map/facts tiles have time to fill in |
-| `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/teslaBatteryQueries/fetchWeather/fetchAirQuality/routeQueries` | Voice capture toggles |
+| `voiceEvents.enabled/timeQueries/weatherQueries/indoorTemperatureQueries/airQualityQueries/teslaBatteryQueries/fetchWeather/fetchAirQuality/routeQueries/triviaQueries/steamLibraryTourQueries/psnLibraryTourQueries/steamNowPlayingQueries/psnNowPlayingQueries/youtubeNowPlayingQueries` | Voice capture toggles (platform overlays default on) |
 | `voiceEvents.defaultLocation` | `{ name, latitude, longitude }` for generic/outdoor weather queries and as the implicit "here"/"home" origin for route-planner queries |
 | `indoorTemperature.coldBelowF/hotAboveF` | Comfort bands for display (defaults 68 / 74) |
 | `indoorTemperature.locations[]` | Thermostat/sensor names/aliases/`entityId` (local `data/config.json`; empty = generic built-in list) |
@@ -502,6 +503,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Alexa routines for trivia / library tours / Now Playing** — voice + routine-index matchers (`display-voice-commands.js`) so custom routines named Trivia, Steam/PSN Library Tour, and Steam/PSN/YouTube Now Playing or Last Played push the matching overlay. NP/LP both use `requestedMode: 'auto'` (live if playing, else last played). Platform phrases run before bare music “what’s playing”. Toggles: `voiceEvents.triviaQueries` / `*LibraryTourQueries` / `*NowPlayingQueries` (default on). Deploy: `./recreate.sh` only — display client already handles these UDP types. Tests: `test/display-voice-commands.test.js`, `test/routine-index.test.js`.
 
 - 2026-08-04: **New trivia category artwork pack** — replaced the magenta/pattern JPEGs in `src/web/trivia-artwork/` with the cinema/icon set from `dev assets/trivia-category-artwork/` (`{id}_{portrait|landscape}.png`, including `musicals-theater` → `musicals-theatre`). `/trivia-artwork/` prefers `dev assets` over the shipped pack and resolves hyphen↔underscore stems + theater/theatre aliases. Category `background` colours in `trivia-categories.json` resampled to the new art. Deploy: `./recreate.sh` + portable client rebuild; clear `trivia-artwork-cache/` on the poster PC.
 

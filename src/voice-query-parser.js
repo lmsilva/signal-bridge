@@ -15,6 +15,14 @@ const {
   matchesGuestPhotoboothQuery,
   matchesGuestSnapsSlideshowQuery,
 } = require('./guest-photobooth');
+const {
+  matchesTriviaQuery,
+  matchesSteamLibraryTourQuery,
+  matchesPsnLibraryTourQuery,
+  matchesSteamNowPlayingQuery,
+  matchesPsnNowPlayingQuery,
+  matchesYoutubeNowPlayingQuery,
+} = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
 const {
@@ -182,6 +190,86 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
         trigger: 'guest-photobooth-query',
         // Always fan out to every known display (party welcome screen).
         targetId: '*',
+      };
+    }
+
+    // Platform overlays before music "now playing" — "Steam Now Playing" must
+    // not fall through to Alexa music.card.
+    if (matchesTriviaQuery(matchSummary, response)) {
+      return {
+        kind: 'trivia',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'trivia-query',
+      };
+    }
+
+    if (matchesSteamLibraryTourQuery(matchSummary, response)) {
+      return {
+        kind: 'steam-library-tour',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'steam-library-tour-query',
+      };
+    }
+
+    if (matchesPsnLibraryTourQuery(matchSummary, response)) {
+      return {
+        kind: 'psn-library-tour',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'psn-library-tour-query',
+      };
+    }
+
+    if (matchesSteamNowPlayingQuery(matchSummary, response)) {
+      return {
+        kind: 'steam-now-playing',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'steam-now-playing-query',
+      };
+    }
+
+    if (matchesPsnNowPlayingQuery(matchSummary, response)) {
+      return {
+        kind: 'psn-now-playing',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'psn-now-playing-query',
+      };
+    }
+
+    if (matchesYoutubeNowPlayingQuery(matchSummary, response)) {
+      return {
+        kind: 'youtube-now-playing',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'youtube-now-playing-query',
       };
     }
 

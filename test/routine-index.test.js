@@ -11,6 +11,13 @@ test('classifyPhrase maps known overlay phrases to kinds', () => {
   assert.equal(classifyPhrase('show tesla dashboard'), 'tesla-dashboard');
   assert.equal(classifyPhrase('open guest snaps'), 'guest-photobooth');
   assert.equal(classifyPhrase('open guest snaps slideshow'), 'photo-slideshow');
+  assert.equal(classifyPhrase('Trivia'), 'trivia');
+  assert.equal(classifyPhrase('Steam Library Tour'), 'steam-library-tour');
+  assert.equal(classifyPhrase('PSN Library Tour'), 'psn-library-tour');
+  assert.equal(classifyPhrase('Steam Now Playing'), 'steam-now-playing');
+  assert.equal(classifyPhrase('Steam Last Played'), 'steam-now-playing');
+  assert.equal(classifyPhrase('PSN Now Playing'), 'psn-now-playing');
+  assert.equal(classifyPhrase('Youtube Last Played'), 'youtube-now-playing');
   assert.equal(classifyPhrase('what is the weather'), 'weather');
   assert.equal(classifyPhrase('turn on the lights'), null);
 });

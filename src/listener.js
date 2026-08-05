@@ -215,6 +215,12 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     routeQueries: config.voiceEvents?.routeQueries !== false,
     guestPhotoboothQueries: config.voiceEvents?.guestPhotoboothQueries !== false,
     photoSlideshowQueries: config.voiceEvents?.photoSlideshowQueries !== false,
+    triviaQueries: config.voiceEvents?.triviaQueries !== false,
+    steamLibraryTourQueries: config.voiceEvents?.steamLibraryTourQueries !== false,
+    psnLibraryTourQueries: config.voiceEvents?.psnLibraryTourQueries !== false,
+    steamNowPlayingQueries: config.voiceEvents?.steamNowPlayingQueries !== false,
+    psnNowPlayingQueries: config.voiceEvents?.psnNowPlayingQueries !== false,
+    youtubeNowPlayingQueries: config.voiceEvents?.youtubeNowPlayingQueries !== false,
   };
   // Photo list reloads from disk on each list(); slideshow prefs reload on
   // each getOrder()/getSecondsPerPhoto() so admin UI changes apply to voice
@@ -544,6 +550,30 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     }
 
     if (event.kind === 'photo-slideshow' && !voiceSettings.photoSlideshowQueries) {
+      return;
+    }
+
+    if (event.kind === 'trivia' && !voiceSettings.triviaQueries) {
+      return;
+    }
+
+    if (event.kind === 'steam-library-tour' && !voiceSettings.steamLibraryTourQueries) {
+      return;
+    }
+
+    if (event.kind === 'psn-library-tour' && !voiceSettings.psnLibraryTourQueries) {
+      return;
+    }
+
+    if (event.kind === 'steam-now-playing' && !voiceSettings.steamNowPlayingQueries) {
+      return;
+    }
+
+    if (event.kind === 'psn-now-playing' && !voiceSettings.psnNowPlayingQueries) {
+      return;
+    }
+
+    if (event.kind === 'youtube-now-playing' && !voiceSettings.youtubeNowPlayingQueries) {
       return;
     }
 
@@ -1062,6 +1092,221 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         status: 'ready',
       }, { phase: 'routed', mode });
       lastCaptureAt = Date.now();
+      return;
+    } else if (event.kind === 'trivia') {
+      if (!trivia?.push) {
+        log.warn('Trivia voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      const result = trivia.push({}, {
+        device: event.device || 'Signal',
+        triggeredBy: 'voice',
+        send: emitVoicePayload,
+      });
+      if (!result?.ok) {
+        log.warn('Trivia voice push failed', { query: event.query, error: result?.error });
+        return;
+      }
+      voiceEventsLog.append({
+        type: 'trivia.round',
+        device: event.device,
+        query: event.query,
+        sessionId: result.sessionId,
+      });
+      lastCaptureAt = Date.now();
+      log.info(`Voice event sent (trivia) for ${event.device}`, {
+        query: event.query,
+        sessionId: result.sessionId,
+        questions: result.questionCount,
+      });
+      return;
+    } else if (event.kind === 'steam-library-tour') {
+      if (!steamLibraryTour?.pushTour) {
+        log.warn('Steam library tour voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        const result = await steamLibraryTour.pushTour({
+          device: event.device || 'Signal',
+          trigger: 'steam-library-tour-voice',
+          loop: true,
+          send: (payload, sendOptions = {}) => {
+            sendUdpPayload(attachTarget(payload, voiceDelivery.target), {
+              ...voiceDelivery.sendOptions,
+              ...sendOptions,
+            });
+          },
+        });
+        if (!result?.ok) {
+          log.warn('Steam library tour voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: 'game.library-tour',
+          device: event.device,
+          query: event.query,
+          platform: 'steam',
+          tourId: result.tourId,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (steam-library-tour) for ${event.device}`, {
+          query: event.query,
+          tourId: result.tourId,
+          count: result.count,
+        });
+      } catch (error) {
+        log.warn('Steam library tour voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
+      return;
+    } else if (event.kind === 'psn-library-tour') {
+      if (!psnLibraryTour?.pushTour) {
+        log.warn('PSN library tour voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        const result = await psnLibraryTour.pushTour({
+          device: event.device || 'Signal',
+          trigger: 'psn-library-tour-voice',
+          loop: true,
+          send: (payload, sendOptions = {}) => {
+            sendUdpPayload(attachTarget(payload, voiceDelivery.target), {
+              ...voiceDelivery.sendOptions,
+              ...sendOptions,
+            });
+          },
+        });
+        if (!result?.ok) {
+          log.warn('PSN library tour voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: 'game.library-tour',
+          device: event.device,
+          query: event.query,
+          platform: 'psn',
+          tourId: result.tourId,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (psn-library-tour) for ${event.device}`, {
+          query: event.query,
+          tourId: result.tourId,
+          count: result.count,
+        });
+      } catch (error) {
+        log.warn('PSN library tour voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
+      return;
+    } else if (event.kind === 'steam-now-playing') {
+      if (!steamNowPlaying?.pushManualPreview) {
+        log.warn('Steam Now Playing voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        // auto: live game if Steam reports one, else last played.
+        const result = await steamNowPlaying.pushManualPreview({
+          device: event.device || 'Signal',
+          requestedMode: 'auto',
+          send: emitVoicePayload,
+        });
+        if (!result?.ok) {
+          log.warn('Steam Now Playing voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: 'steam.now-playing',
+          device: event.device,
+          query: event.query,
+          mode: result.mode,
+          appId: result.appId,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (steam-now-playing) for ${event.device}`, {
+          query: event.query,
+          mode: result.mode,
+          name: result.name,
+        });
+      } catch (error) {
+        log.warn('Steam Now Playing voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
+      return;
+    } else if (event.kind === 'psn-now-playing') {
+      if (!psnNowPlaying?.pushManualPreview) {
+        log.warn('PSN Now Playing voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        const result = await psnNowPlaying.pushManualPreview({
+          device: event.device || 'Signal',
+          requestedMode: 'auto',
+          send: emitVoicePayload,
+        });
+        if (!result?.ok) {
+          log.warn('PSN Now Playing voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: 'psn.now-playing',
+          device: event.device,
+          query: event.query,
+          mode: result.mode,
+          titleId: result.titleId,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (psn-now-playing) for ${event.device}`, {
+          query: event.query,
+          mode: result.mode,
+          name: result.name,
+        });
+      } catch (error) {
+        log.warn('PSN Now Playing voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
+      return;
+    } else if (event.kind === 'youtube-now-playing') {
+      if (!youtubeNowPlaying?.pushManualPreview) {
+        log.warn('YouTube Now Playing voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        const result = await youtubeNowPlaying.pushManualPreview({
+          device: event.device || 'Signal',
+          requestedMode: 'auto',
+          send: emitVoicePayload,
+        });
+        if (!result?.ok) {
+          log.warn('YouTube Now Playing voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: 'youtube.now-playing',
+          device: event.device,
+          query: event.query,
+          mode: result.mode,
+          videoId: result.videoId,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (youtube-now-playing) for ${event.device}`, {
+          query: event.query,
+          mode: result.mode,
+          title: result.title || result.name,
+        });
+      } catch (error) {
+        log.warn('YouTube Now Playing voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
       return;
     } else if (event.kind === 'guest-photobooth') {
       const settings = resolveGuestPhotoboothSettings(config);
