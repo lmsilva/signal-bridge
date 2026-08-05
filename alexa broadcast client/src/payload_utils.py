@@ -135,7 +135,7 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "youtube.now-playing": ("YouTube", "Now Playing"),
         "trivia.round": ("Signal", "Trivia"),
         "upside-news.round": ("Signal", "The Upside News"),
-        "wiki-common-knowledge.round": ("Signal", "Common Knowledge"),
+        "wiki-common-knowledge.round": ("Signal", "Wikipedia Common Knowledge"),
         "overhead.round": ("Signal", "Overhead"),
         "game.library-tour": ("Signal", "Library Tour"),
     }

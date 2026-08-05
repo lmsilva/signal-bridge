@@ -424,10 +424,18 @@ class OverlayWindow:
         self.canvas.tag_raise("overlay_chrome")
 
     def _stop_active_panel(self):
-        if self._active_panel:
-            self._active_panel.hide()
-            self._active_panel = None
-            self._active_panel_key = None
+        panel = self._active_panel
+        self._active_panel = None
+        self._active_panel_key = None
+        if panel is None:
+            return
+        try:
+            panel.hide()
+        except Exception as error:
+            print(f"Overlay panel hide failed: {error}", file=sys.stderr)
+
+    def _cancel_pending_dismiss(self):
+        self._dismiss_pending = False
 
     def _scrub_canvas_debris(self):
         """Drop untracked leftovers so the next page cannot inherit ghosts.
@@ -490,6 +498,10 @@ class OverlayWindow:
         if not display_type:
             return
 
+        # A deferred click-dismiss from the previous page must not tear down
+        # the page we are about to show.
+        self._cancel_pending_dismiss()
+
         if display_type == "weather.query":
             try:
                 payload = enrich_weather_payload(payload, self.config)
@@ -543,6 +555,8 @@ class OverlayWindow:
             panel.show(payload)
         except Exception as error:
             print(f"Overlay panel {display_type!r} failed: {error}", file=sys.stderr)
+            self._active_panel = None
+            self._active_panel_key = None
             raise
         self.canvas.tag_raise("overlay_chrome")
         # Shared-photos + persistent Steam own their own chrome — hide the

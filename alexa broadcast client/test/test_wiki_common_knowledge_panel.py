@@ -16,11 +16,13 @@ from src.wiki_common_knowledge_panel import (
     format_index_dateline,
     format_views_line,
     hero_box_in_region,
+    hero_image_urls,
     index_list_top,
     resolve_article_phase_seconds,
     resolve_index_title,
     should_apply_fetched_image,
     wiki_ck_artwork_asset_path,
+    wikimedia_display_url,
 )
 
 
@@ -58,7 +60,7 @@ def make_round(count=3, *, loop_count=1, index_seconds=12, article_seconds=15):
         })
     return {
         "sessionId": "test-wiki-ck",
-        "title": "Common Knowledge",
+        "title": "Wikipedia Common Knowledge",
         "indexTitle": f"What the world looked up — {count}",
         "dateline": "Wikipedia · most-read",
         "period": "daily",
@@ -87,7 +89,7 @@ class WikiCkRegistrationTests(unittest.TestCase):
         self.assertTrue(is_display_payload({"type": "wiki-common-knowledge.round"}))
         self.assertEqual(
             title_for_display_type("wiki-common-knowledge.round"),
-            ("Signal", "Common Knowledge"),
+            ("Signal", "Wikipedia Common Knowledge"),
         )
 
     def test_display_seconds_are_never_clamped_mid_round(self):
@@ -186,6 +188,26 @@ class ArtworkPathTests(unittest.TestCase):
         path = wiki_ck_artwork_asset_path("science")
         if path is not None:
             self.assertIn("science", str(path).replace("\\", "/"))
+
+
+class HeroImageUrlTests(unittest.TestCase):
+    def test_wikimedia_display_url_upsizes_thumbs(self):
+        url = wikimedia_display_url(
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Glen.jpg/220px-Glen.jpg",
+            min_width=960,
+        )
+        self.assertTrue(url.endswith("/960px-Glen.jpg"))
+
+    def test_hero_image_urls_prefer_thumb_over_original(self):
+        urls = hero_image_urls({
+            "thumbnailUrl": (
+                "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Glen.jpg/220px-Glen.jpg"
+            ),
+            "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Glen_Huge.tif",
+        })
+        self.assertTrue(urls)
+        self.assertIn("960px-Glen.jpg", urls[0])
+        self.assertTrue(any("lossy-page1" in u or "Glen_Huge" in u for u in urls))
 
 
 class ImageGenerationTests(unittest.TestCase):

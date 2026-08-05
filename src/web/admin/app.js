@@ -1305,13 +1305,21 @@
   /** Stable fingerprint so GET + SSE hello don't wipe in-flight thumbnails. */
   function photosSignature(photos) {
     return (photos || [])
-      .map((p) => `${p.token || ''}\0${p.path || ''}\0${p.createdAt || ''}`)
+      .map((p) => `${p.token || ''}\0${p.path || ''}\0${p.thumbPath || ''}\0${p.createdAt || ''}`)
       .join('\n');
   }
 
   /** Root-absolute `/qr-images/…` URL (ignores <base href="/admin/">). */
-  function photoImageUrl(photo, { bust = false } = {}) {
-    const path = appUrl(photo?.path || '');
+  function photoImageUrl(photo, { bust = false, thumb = false } = {}) {
+    let raw = '';
+    if (thumb) {
+      // Only use a dedicated thumb URL when the API provided one. Never invent
+      // `/thumbs/…` paths — that 404s when sharp isn't installed in Docker.
+      raw = photo?.thumbPath || photo?.path || '';
+    } else {
+      raw = photo?.path || '';
+    }
+    const path = appUrl(raw);
     if (!path) {
       return '';
     }
@@ -1398,18 +1406,31 @@
     showLightboxPhoto(lightboxIndex + delta);
   }
 
-  function bindThumbImage(img, photo) {
-    // Eager load: lazy + display:none tab panels leave some thumbs stuck broken.
-    img.loading = 'eager';
+  function bindThumbImage(img, photo, { index = 0 } = {}) {
+    // Prefer the compact thumb when the API advertises one; if that 404s
+    // (encode still running, or sharp missing in the image), fall back to the
+    // full original so the camera roll never stays blank.
+    const eagerCount = 12;
+    const hasThumb = Boolean(photo?.thumbPath) && photo.thumbPath !== photo.path;
+    img.loading = index < eagerCount ? 'eager' : 'lazy';
     img.decoding = 'async';
     img.alt = 'Shared photo';
-    img.src = photoImageUrl(photo);
+    if (index >= eagerCount) {
+      img.setAttribute('fetchpriority', 'low');
+    }
+    img.src = photoImageUrl(photo, { thumb: hasThumb });
     img.addEventListener('error', () => {
-      if (img.dataset.retried === '1') {
+      const stage = img.dataset.stage || 'start';
+      if (stage === 'full') {
         return;
       }
-      img.dataset.retried = '1';
-      img.src = photoImageUrl(photo, { bust: true });
+      if (hasThumb && stage === 'start') {
+        img.dataset.stage = 'thumb-bust';
+        img.src = photoImageUrl(photo, { thumb: true, bust: true });
+        return;
+      }
+      img.dataset.stage = 'full';
+      img.src = photoImageUrl(photo, { thumb: false, bust: true });
     });
   }
 
@@ -1418,7 +1439,7 @@
     const empty = $('photo-grid-empty');
     grid.innerHTML = '';
     empty.hidden = slideshowPhotos.length > 0;
-    slideshowPhotos.forEach((photo) => {
+    slideshowPhotos.forEach((photo, index) => {
       const cell = document.createElement('button');
       cell.type = 'button';
       cell.className = 'photo-thumb';
@@ -1426,7 +1447,7 @@
       cell.classList.toggle('selected', slideshowSelected.has(photo.token));
       cell.dataset.token = photo.token;
       const img = document.createElement('img');
-      bindThumbImage(img, photo);
+      bindThumbImage(img, photo, { index });
       cell.appendChild(img);
       const check = document.createElement('span');
       check.className = 'photo-thumb-check';
@@ -1442,6 +1463,10 @@
     });
   }
 
+  function photosTokenSignature(photos) {
+    return (photos || []).map((p) => p.token || '').join('\n');
+  }
+
   // Shared by the initial load, the manual refresh button, and every SSE
   // push — one place that reconciles the in-flight selection against
   // whatever photo list just arrived (a photo deleted from another session
@@ -1450,10 +1475,23 @@
   function applySlideshowPhotos(photos, { force = false } = {}) {
     const next = photos || [];
     const sig = photosSignature(next);
+    const tokenSig = photosTokenSignature(next);
     // Opening the tab fires GET and SSE `hello` with the same list. Rebuilding
     // the grid aborts half-finished <img> fetches and leaves broken thumbs
     // until a manual refresh — skip identical updates.
     if (!force && sig === slideshowPhotosSig && $('photo-grid')?.children?.length === next.length) {
+      return;
+    }
+    // Same photo set, only thumb metadata flipped — keep in-flight <img>
+    // loads instead of wiping the grid (was the main "still feels slow" feel).
+    if (
+      !force
+      && tokenSig
+      && tokenSig === photosTokenSignature(slideshowPhotos)
+      && $('photo-grid')?.children?.length === next.length
+    ) {
+      slideshowPhotosSig = sig;
+      slideshowPhotos = next;
       return;
     }
     slideshowPhotosSig = sig;
@@ -3482,7 +3520,7 @@
       if (cycle) cycle.textContent = formatCycleLength(result.cycleSeconds);
       await loadWikiCkSettings();
     } catch (error) {
-      toast(error.message || 'Could not save Common Knowledge settings', 'bad');
+      toast(error.message || 'Could not save Wikipedia Common Knowledge settings', 'bad');
     }
   }
 

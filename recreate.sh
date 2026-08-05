@@ -25,7 +25,8 @@ docker rm -f \
 
 # ./src is bind-mounted (docker-compose.yml). JS edits apply on restart — no image
 # rebuild required for normal code changes.
-# Use --build when package.json / Dockerfile dependencies change (e.g. certbot).
+# Use --build when package.json / Dockerfile dependencies change (e.g. certbot,
+# sharp for Slideshow thumbnails).
 restart_listener() {
   docker compose up -d --no-build --force-recreate --remove-orphans
 }

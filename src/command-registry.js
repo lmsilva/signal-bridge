@@ -320,7 +320,7 @@ const COMMANDS = [
   },
   {
     id: 'wiki.show',
-    title: 'Common Knowledge',
+    title: 'Wikipedia Common Knowledge',
     subtitle: 'Wikipedia most-read, then each article',
     group: 'Knowledge',
     route: '/api/push/wiki-common-knowledge',

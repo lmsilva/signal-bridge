@@ -127,6 +127,40 @@ class OverlayCountdownTests(unittest.TestCase):
         overlay.dismiss_footer.hide.assert_called()
         overlay._notify_closed.assert_called_once()
 
+    def test_stop_active_panel_clears_slot_even_when_hide_raises(self):
+        overlay = self._make_overlay()
+        broken = mock.Mock()
+        broken.hide.side_effect = RuntimeError("dead widget")
+        overlay._active_panel = broken
+        overlay._active_panel_key = "wiki-common-knowledge.round"
+        overlay._stop_active_panel()
+        self.assertIsNone(overlay._active_panel)
+        self.assertIsNone(overlay._active_panel_key)
+        broken.hide.assert_called_once()
+
+    def test_apply_payload_cancels_pending_click_dismiss(self):
+        overlay = self._make_overlay()
+        overlay.visible = True
+        overlay._dismiss_pending = True
+        overlay._stop_active_panel = mock.Mock()
+        overlay._scrub_canvas_debris = mock.Mock()
+        overlay._clear_shell_header = mock.Mock()
+        overlay._set_title = mock.Mock()
+        overlay._is_shared_photo_qr = mock.Mock(return_value=False)
+        overlay._suppress_dismiss_footer = mock.Mock(return_value=False)
+        overlay.canvas = mock.MagicMock()
+        overlay.backdrop_frame_id = 1
+        overlay.title_primary_id = 2
+        overlay.title_accent_id = 3
+        panel = mock.Mock()
+        overlay.panels = {"overhead.round": panel}
+
+        with mock.patch("src.overlay.resolve_display_type", return_value="overhead.round"):
+            overlay._apply_payload({"type": "overhead.round"})
+
+        self.assertFalse(overlay._dismiss_pending)
+        panel.show.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

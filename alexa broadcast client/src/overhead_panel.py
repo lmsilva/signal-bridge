@@ -41,14 +41,18 @@ COLOR_EMERGENCY = "#FF7A6B"
 COLOR_OUT_OF_RANGE = INK_3
 
 LABEL_OFFSETS = (
-    (0, -18),
-    (18, 0),
-    (0, 18),
-    (-18, 0),
-    (14, -14),
-    (14, 14),
-    (-14, 14),
-    (-14, -14),
+    (0, -22),
+    (24, 0),
+    (0, 22),
+    (-24, 0),
+    (18, -18),
+    (18, 18),
+    (-18, 18),
+    (-18, -18),
+    (0, -36),
+    (36, 0),
+    (0, 36),
+    (-36, 0),
 )
 
 
@@ -159,6 +163,66 @@ def label_offset_index(hex_code: str) -> int:
 
 def label_offset_for_hex(hex_code: str) -> tuple[int, int]:
     return LABEL_OFFSETS[label_offset_index(hex_code) % len(LABEL_OFFSETS)]
+
+
+def _label_boxes_overlap(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+    pad: float = 6.0,
+) -> bool:
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    return not (
+        ax1 + pad <= bx0
+        or bx1 + pad <= ax0
+        or ay1 + pad <= by0
+        or by1 + pad <= ay0
+    )
+
+
+def resolve_map_label_offsets(
+    anchors: list[tuple[str, float, float, str]],
+    *,
+    char_w: float = 7.5,
+    height: float = 16.0,
+    pad: float = 6.0,
+) -> dict[str, tuple[float, float]]:
+    """Greedy non-overlapping label offsets for on-page aircraft.
+
+    ``anchors`` entries are ``(hex, x, y, label_text)``. Prefers the
+    deterministic slot for each hex, then walks other slots and radial scales.
+    """
+    placed: list[tuple[float, float, float, float]] = []
+    out: dict[str, tuple[float, float]] = {}
+    scales = (1.0, 1.4, 1.85, 2.35, 2.9)
+    for hex_code, x, y, text in anchors:
+        w = max(28.0, len(str(text or "")) * float(char_w))
+        h = max(12.0, float(height))
+        start = label_offset_index(hex_code)
+        chosen: tuple[float, float] | None = None
+        for scale in scales:
+            for i in range(len(LABEL_OFFSETS)):
+                ox, oy = LABEL_OFFSETS[(start + i) % len(LABEL_OFFSETS)]
+                ox *= scale
+                oy *= scale
+                tx = x + ox
+                ty = y + oy
+                box = (tx - w / 2, ty - h / 2, tx + w / 2, ty + h / 2)
+                if any(_label_boxes_overlap(box, other, pad) for other in placed):
+                    continue
+                chosen = (ox, oy)
+                placed.append(box)
+                break
+            if chosen is not None:
+                break
+        if chosen is None:
+            ox, oy = LABEL_OFFSETS[start]
+            chosen = (ox * 3.2, oy * 3.2)
+            tx = x + chosen[0]
+            ty = y + chosen[1]
+            placed.append((tx - w / 2, ty - h / 2, tx + w / 2, ty + h / 2))
+        out[hex_code] = chosen
+    return out
 
 
 def aircraft_is_emergency(ac: dict | None) -> bool:
@@ -539,6 +603,7 @@ class OverheadPanel(BasePanel):
             "meta": tkfont.Font(family=family, size=max(9, int(self.META_U * u))),
             "footer": tkfont.Font(family=family, size=max(9, int(self.FOOTER_U * u))),
             "legend": tkfont.Font(family=family, size=max(8, int(14 * u))),
+            "cardinal": tkfont.Font(family=family, size=max(11, int(18 * u)), weight="bold"),
         }
 
     def _home(self) -> tuple[float, float]:
@@ -560,10 +625,16 @@ class OverheadPanel(BasePanel):
         geo = self._geometry()
         x0, y0, x1, y1 = geo["scope"]
         # Full scope rectangle is the map; the circle is only the focus/range
-        # ring. Legend overlays the bottom of the map in landscape.
+        # ring. In landscape the legend sits on the bottom edge — keep rings and
+        # N/E/S/W clear of that band (map still fills the full rectangle).
+        usable_y1 = y1
+        if not geo["portrait"]:
+            legend = geo["legend"]
+            gap = max(10.0, float(geo.get("u") or 1) * 8)
+            usable_y1 = min(y1, float(legend[1]) - gap)
         cx = (x0 + x1) / 2
-        cy = (y0 + y1) / 2
-        radius_px = min(x1 - x0, y1 - y0) / 2 * 0.92
+        cy = (y0 + usable_y1) / 2
+        radius_px = min(x1 - x0, usable_y1 - y0) / 2 * 0.90
         return cx, cy, radius_px, (x0, y0, x1, y1)
 
     def _project_aircraft(self, lat: float, lon: float) -> tuple[float, float] | None:
@@ -782,28 +853,41 @@ class OverheadPanel(BasePanel):
         )
         # Full rectangular map underlay; the circle is only the focus/range ring.
         self._start_scope_map_fetch(x0, y0, x1, y1, cx, cy, radius_px)
+        # High-contrast rings so they stay readable over the toned OSM basemap.
         for frac in (0.25, 0.5, 0.75, 1.0):
             r = radius_px * frac
-            width = 2 if frac >= 1.0 else 1
+            if frac >= 1.0:
+                outline, width = "#D7E4FF", 3
+            elif frac >= 0.75:
+                outline, width = "#B7C6E4", 2
+            else:
+                outline, width = "#8FA0C0", 2
             self._scope_ids.append(
                 self.canvas.create_oval(
                     cx - r, cy - r, cx + r, cy + r,
-                    outline="#5A6E8F" if frac >= 1.0 else "#3A4A6A",
+                    outline=outline,
                     width=width, tags=("overhead", "scope", "ring"),
                 ),
             )
+        cardinal_font = self._fonts.get("cardinal") or self._fonts["legend"]
+        # Keep cardinals outside the ring but inside the usable scope (above
+        # the landscape legend band).
+        cardinal_r = radius_px + max(12.0, min(20.0, radius_px * 0.04))
+        legend = geo["legend"]
         for label, dx, dy in (("N", 0, -1), ("E", 1, 0), ("S", 0, 1), ("W", -1, 0)):
-            lx = cx + dx * (radius_px + 14)
-            ly = cy + dy * (radius_px + 14)
+            lx = cx + dx * cardinal_r
+            ly = cy + dy * cardinal_r
+            if not geo["portrait"] and ly > float(legend[1]) - 4:
+                ly = float(legend[1]) - max(14.0, float(geo.get("u") or 1) * 12)
             self._scope_ids.append(
                 self.canvas.create_text(
-                    lx, ly, text=label, fill=INK_2, font=self._fonts["legend"],
+                    lx, ly, text=label, fill=INK, font=cardinal_font,
                     tags=("overhead", "scope", "ring"),
                 ),
             )
         self._scope_ids.append(
             self.canvas.create_oval(
-                cx - 4, cy - 4, cx + 4, cy + 4, fill=ACCENT, outline="",
+                cx - 5, cy - 5, cx + 5, cy + 5, fill=ACCENT, outline=INK, width=1,
                 tags=("overhead", "scope", "ring"),
             ),
         )
@@ -954,6 +1038,8 @@ class OverheadPanel(BasePanel):
         age = self._data_age_sec()
         opacity = stale_opacity(age)
 
+        draw_rows: list[tuple] = []
+        label_anchors: list[tuple[str, float, float, str]] = []
         for ac in self._roster:
             hex_code = str(ac.get("hex") or "").strip().upper()
             if not hex_code:
@@ -963,6 +1049,25 @@ class OverheadPanel(BasePanel):
                 continue
             x, y = pos
             on_page = bool(highlight) and hex_code in highlight
+            label = aircraft_display_label(ac)
+            try:
+                alt = int(float(ac.get("altFt") or 0))
+                fl = f" {alt // 100:03d}" if alt > 0 else ""
+            except (TypeError, ValueError):
+                fl = ""
+            label_text = f"{label}{fl}"
+            if on_page:
+                label_anchors.append((hex_code, x, y, label_text))
+            draw_rows.append((ac, hex_code, x, y, on_page, label_text))
+
+        legend_font = self._fonts["legend"]
+        char_w = max(6.0, float(legend_font.measure("0")))
+        label_h = max(12.0, float(legend_font.metrics("linespace")))
+        label_offsets = resolve_map_label_offsets(
+            label_anchors, char_w=char_w * 0.92, height=label_h, pad=8.0,
+        )
+
+        for ac, hex_code, x, y, on_page, label_text in draw_rows:
             emergency = aircraft_is_emergency(ac)
             color = icon_color(ac)
             if emergency and self._pulse_phase < 10:
@@ -996,22 +1101,21 @@ class OverheadPanel(BasePanel):
                 self._scope_ids.append(line)
                 self._item_ids.append(line)
             if on_page:
-                ox, oy = label_offset_for_hex(hex_code)
-                label = aircraft_display_label(ac)
-                try:
-                    alt = int(float(ac.get("altFt") or 0))
-                    fl = f" {alt // 100:03d}" if alt > 0 else ""
-                except (TypeError, ValueError):
-                    fl = ""
+                ox, oy = label_offsets.get(hex_code) or label_offset_for_hex(hex_code)
                 text_id = self.canvas.create_text(
                     x + ox, y + oy,
-                    text=f"{label}{fl}",
+                    text=label_text,
                     fill=INK,
-                    font=self._fonts["legend"],
+                    font=legend_font,
                     tags=("overhead", "ac", "scope"),
                 )
                 self._scope_ids.append(text_id)
                 self._item_ids.append(text_id)
+        try:
+            # Page/motion redraws recreate ac items after the legend was painted.
+            self.canvas.tag_raise("overhead-legend")
+        except Exception:
+            pass
 
     def _draw_aircraft_icon(
         self,
@@ -1068,6 +1172,13 @@ class OverheadPanel(BasePanel):
             ("Emergency", COLOR_EMERGENCY),
         ]
         font = self._fonts["legend"]
+        # Solid band so map/cardinals never show through the legend labels.
+        self._item_ids.append(
+            self.canvas.create_rectangle(
+                x0, y0, x1, y1, fill=BG, outline="",
+                tags=("overhead", "overhead-legend"),
+            ),
+        )
         swatch_w = max(14.0, 18 * u)
         swatch_h = max(8.0, 10 * u)
         gap_swatch = max(10.0, 12 * u)

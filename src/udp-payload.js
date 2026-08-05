@@ -1451,7 +1451,7 @@ function buildWikiCommonKnowledgeRoundPayload({
     wikiCommonKnowledge: {
       sessionId: sessionId || `wiki-${new Date(timestamp).getTime()}`,
       triggeredBy,
-      title: 'Common Knowledge',
+      title: 'Wikipedia Common Knowledge',
       indexTitle: wikiCommonKnowledgeIndexTitle(settings.period || 'daily', count),
       dateline: 'Wikipedia · most-read',
       period: settings.period || 'daily',

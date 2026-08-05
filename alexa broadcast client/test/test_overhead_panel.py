@@ -22,6 +22,7 @@ from src.overhead_panel import (
     label_offset_for_hex,
     motion_frozen,
     page_highlight_hexes,
+    resolve_map_label_offsets,
     roster_page_count,
     roster_page_slice,
     route_label,
@@ -152,6 +153,33 @@ class OverheadRosterTests(unittest.TestCase):
         c = label_offset_for_hex("ZZZZZZ")
         self.assertEqual(a, b)
         self.assertNotEqual(a, c)
+
+    def test_resolve_map_label_offsets_spreads_collisions(self):
+        # Two aircraft nearly on top of each other — offsets must differ.
+        anchors = [
+            ("AAA111", 100.0, 100.0, "N12345 045"),
+            ("BBB222", 104.0, 102.0, "N67890 050"),
+            ("CCC333", 108.0, 98.0, "N11111 055"),
+        ]
+        offsets = resolve_map_label_offsets(anchors, char_w=8.0, height=16.0, pad=6.0)
+        self.assertEqual(len(offsets), 3)
+        positions = {
+            hex_code: (anchors[i][1] + offsets[hex_code][0], anchors[i][2] + offsets[hex_code][1])
+            for i, (hex_code, *_rest) in enumerate(anchors)
+        }
+        vals = list(positions.values())
+        # At least one pair must be meaningfully separated after resolution.
+        spreads = [
+            math.hypot(vals[i][0] - vals[j][0], vals[i][1] - vals[j][1])
+            for i in range(len(vals))
+            for j in range(i + 1, len(vals))
+        ]
+        self.assertTrue(any(s > 20 for s in spreads))
+        # Preferred deterministic offset still used when alone.
+        alone = resolve_map_label_offsets(
+            [("SOLO01", 50.0, 50.0, "SOLO")], char_w=8.0, height=16.0,
+        )
+        self.assertEqual(alone["SOLO01"], label_offset_for_hex("SOLO01"))
 
 
 class OverheadMotionTests(unittest.TestCase):

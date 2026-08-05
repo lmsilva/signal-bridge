@@ -1318,7 +1318,7 @@ def build_payload(args) -> dict:
             "wikiCommonKnowledge": {
                 "sessionId": "test-wiki-ck-round",
                 "triggeredBy": "manual",
-                "title": "Common Knowledge",
+                "title": "Wikipedia Common Knowledge",
                 "indexTitle": f"What the world looked up — {count}",
                 "dateline": "Wikipedia · most-read",
                 "period": "daily",

@@ -10,6 +10,83 @@ function buildUserAgent({ contactEmail = '', version = '1.0' } = {}) {
   return `SignalBridge/${version} (https://github.com/local/signal-bridge; ${email})`;
 }
 
+/** Standard Wikimedia CDN thumbnail steps (non-standard sizes are blocked). */
+const WIKIMEDIA_THUMB_STEPS = [320, 500, 960, 1280, 1920];
+
+function pickWikimediaThumbStep(minWidth = 960) {
+  const want = Math.max(1, Number(minWidth) || 960);
+  for (const step of WIKIMEDIA_THUMB_STEPS) {
+    if (step >= want) return step;
+  }
+  return WIKIMEDIA_THUMB_STEPS[WIKIMEDIA_THUMB_STEPS.length - 1];
+}
+
+/**
+ * Prefer a bounded Wikimedia thumb over a multi-MB original.
+ * Featured feeds often include a ~220–320px thumb; article heroes need ~960px.
+ * Originals (especially TIFF/PNG) regularly time out on the display client.
+ */
+function wikimediaDisplayUrl(url, { minWidth = 960 } = {}) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  const step = pickWikimediaThumbStep(minWidth);
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (!/upload\.wikimedia\.org$/i.test(parsed.hostname)) return raw;
+
+  const path = parsed.pathname;
+  const thumbPx = path.match(/\/(\d+)px-/);
+  if (thumbPx) {
+    const current = Number(thumbPx[1]);
+    if (current >= step) return raw;
+    parsed.pathname = path.replace(/\/\d+px-/, `/${step}px-`);
+    return parsed.toString();
+  }
+
+  // Original file: /wikipedia/{project}/{a}/{ab}/{file}
+  const original = path.match(/^\/wikipedia\/([^/]+)\/([0-9a-f])\/([0-9a-f]{2})\/([^/]+)$/i);
+  if (!original) return raw;
+  const [, project, a, ab, file] = original;
+  const lower = file.toLowerCase();
+  if (/\.(tif|tiff)$/i.test(lower)) {
+    parsed.pathname = `/wikipedia/${project}/thumb/${a}/${ab}/${file}/lossy-page1-${step}px-${file}.jpg`;
+    return parsed.toString();
+  }
+  if (/\.svg$/i.test(lower)) {
+    parsed.pathname = `/wikipedia/${project}/thumb/${a}/${ab}/${file}/${step}px-${file}.png`;
+    return parsed.toString();
+  }
+  if (/\.(pdf|djvu)$/i.test(lower)) return raw;
+  parsed.pathname = `/wikipedia/${project}/thumb/${a}/${ab}/${file}/${step}px-${file}`;
+  return parsed.toString();
+}
+
+/**
+ * Ordered candidate URLs for display: sized thumb → raw thumb → sized original → original.
+ */
+function displayImageCandidates(article = {}, { minWidth = 960 } = {}) {
+  const thumb = String(article.thumbnailUrl || '').trim();
+  const original = String(article.originalImageUrl || article.imageUrl || '').trim();
+  const out = [];
+  const push = (value) => {
+    const text = String(value || '').trim();
+    if (text && !out.includes(text)) out.push(text);
+  };
+  if (thumb) {
+    push(wikimediaDisplayUrl(thumb, { minWidth }));
+    push(thumb);
+  }
+  if (original) {
+    push(wikimediaDisplayUrl(original, { minWidth }));
+    push(original);
+  }
+  return out;
+}
+
 function createLimiter(maxConcurrent = 3) {
   let active = 0;
   const queue = [];
@@ -218,4 +295,8 @@ module.exports = {
   createWikiClient,
   normaliseFeaturedArticle,
   articlesFromFeatured,
+  wikimediaDisplayUrl,
+  displayImageCandidates,
+  pickWikimediaThumbStep,
+  WIKIMEDIA_THUMB_STEPS,
 };
