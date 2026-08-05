@@ -1,0 +1,36 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "name": "Home area placeholder",
+    "description": "Simple ring near the weather defaultLocation — replace with real coastline GeoJSON when available."
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "kind": "search-ring" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-111.95, 40.38],
+          [-111.86, 40.38],
+          [-111.86, 40.32],
+          [-111.95, 40.32],
+          [-111.95, 40.38]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "kind": "coastline-segment", "name": "Sample shoreline" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-111.94, 40.365],
+          [-111.91, 40.355],
+          [-111.88, 40.345],
+          [-111.87, 40.335]
+        ]
+      }
+    }
+  ]
+}

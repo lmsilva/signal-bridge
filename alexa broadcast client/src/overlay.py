@@ -37,6 +37,8 @@ from src.psn_now_playing_panel import PsnNowPlayingPanel
 from src.youtube_now_playing_panel import YoutubeNowPlayingPanel
 from src.trivia_panel import TriviaPanel
 from src.upside_news_panel import UpsideNewsPanel
+from src.wiki_common_knowledge_panel import WikiCommonKnowledgePanel
+from src.overhead_panel import OverheadPanel
 from src.game_library_tour_panel import GameLibraryTourPanel
 from src.weather_fetch import enrich_weather_payload
 
@@ -154,6 +156,8 @@ class OverlayWindow:
             "youtube.now-playing": YoutubeNowPlayingPanel(self.root, self.shell, self.config),
             "trivia.round": TriviaPanel(self.root, self.shell, self.config),
             "upside-news.round": UpsideNewsPanel(self.root, self.shell, self.config),
+            "wiki-common-knowledge.round": WikiCommonKnowledgePanel(self.root, self.shell, self.config),
+            "overhead.round": OverheadPanel(self.root, self.shell, self.config),
             "game.library-tour": GameLibraryTourPanel(self.root, self.shell, self.config),
         }
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
@@ -231,6 +235,24 @@ class OverlayWindow:
             widget.bind("<Button-1>", self._on_dismiss_input)
 
     def _on_dismiss_input(self, _event=None):
+        """Click-to-dismiss. Deferred so panel teardown cannot abort mid-handler.
+
+        Destroying nested marquees/scroll canvases during the Button-1 callback
+        has left the shell empty with the dismiss footer still ticking.
+        """
+        if not self.visible or not self.on_user_dismiss:
+            return
+        if getattr(self, "_dismiss_pending", False):
+            return
+        self._dismiss_pending = True
+        try:
+            self.root.after(0, self._run_user_dismiss)
+        except Exception:
+            self._dismiss_pending = False
+            self._run_user_dismiss()
+
+    def _run_user_dismiss(self):
+        self._dismiss_pending = False
         if self.visible and self.on_user_dismiss:
             self.on_user_dismiss()
 
@@ -449,6 +471,20 @@ class OverlayWindow:
             return self._active_panel.needs_scroll
         return False
 
+    def apply_overhead_update(self, payload: dict) -> bool:
+        """Refresh aircraft on the active overhead panel without a full teardown."""
+        if self._active_panel_key != "overhead.round" or not self._active_panel:
+            return False
+        updater = getattr(self._active_panel, "apply_update", None)
+        if not callable(updater):
+            return False
+        try:
+            updater(payload)
+        except Exception as error:
+            print(f"Overhead update failed: {error}", file=sys.stderr)
+            return False
+        return True
+
     def _apply_payload(self, payload: dict):
         display_type = resolve_display_type(payload)
         if not display_type:
@@ -472,6 +508,8 @@ class OverlayWindow:
             "youtube.now-playing",
             "trivia.round",
             "upside-news.round",
+            "wiki-common-knowledge.round",
+            "overhead.round",
             "game.library-tour",
             "photo.slideshow",
             "weather.query",
@@ -682,14 +720,30 @@ class OverlayWindow:
         if not self.visible:
             return
 
-        self._stop_timers()
-        self._stop_active_panel()
-
-        self._alpha = 0.0
-        self.root.attributes("-alpha", 0.0)
-        self.root.withdraw()
+        # Mark hidden first so a second click / nested destroy cannot re-enter
+        # and leave the shell half-torn-down (empty content + live footer).
         self.visible = False
-        self.dismiss_footer.hide()
+        try:
+            self._stop_timers()
+        except Exception as error:
+            print(f"Overlay dismiss timers failed: {error}", file=sys.stderr)
+        try:
+            self._stop_active_panel()
+        except Exception as error:
+            print(f"Overlay dismiss panel failed: {error}", file=sys.stderr)
+        try:
+            self._alpha = 0.0
+            self.root.attributes("-alpha", 0.0)
+        except Exception:
+            pass
+        try:
+            self.root.withdraw()
+        except Exception:
+            pass
+        try:
+            self.dismiss_footer.hide()
+        except Exception:
+            pass
         self._notify_closed()
 
     def _effective_opacity(self) -> float:

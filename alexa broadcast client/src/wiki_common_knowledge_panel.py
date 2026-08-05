@@ -1,7 +1,7 @@
-"""The Upside News overlay (upside-news.round).
+"""Wiki Common Knowledge overlay (wiki-common-knowledge.round).
 
-One UDP packet carries the whole index → stories cycle; this panel pages
-locally on ``root.after`` like ``TriviaPanel``. Category artwork is composed
+One UDP packet carries the whole index → articles cycle; this panel pages
+locally on ``root.after`` like ``UpsideNewsPanel``. Topic artwork is composed
 for legibility — **do not add a scrim** over the JPEG field.
 """
 
@@ -24,7 +24,7 @@ except ImportError:
     Image = None
     ImageTk = None
 
-from src.design_system import INK, INK_2, INK_3, page_chrome
+from src.design_system import BG, INK, INK_2, INK_3, page_chrome
 from src.display_panels import BasePanel
 from src.message_scroll import MessageScrollController
 from src.paths import app_root, asset_path
@@ -35,61 +35,76 @@ from src.trivia_panel import (
     mix_hex,
 )
 
+# Nested text widgets must sit on the shell navy — never the category purple —
+# or they read as opaque bars across the artwork.
+PANEL_INK_BG = BG
+
+# Wikimedia rejects anonymous scrapers; keep a descriptive contactable UA.
+WIKIMEDIA_USER_AGENT = (
+    "SignalDisplayClient/1.0 (Alexa Broadcast Client; "
+    "https://github.com/local/signal-bridge)"
+)
+
 _unverified_ssl = False
+
+
+def should_apply_fetched_image(*, fetch_gen: int, current_gen: int, visible: bool) -> bool:
+    """True when an async image still belongs to the active paint generation."""
+    return bool(visible) and int(fetch_gen) == int(current_gen)
 
 DEFAULT_INDEX_BACKGROUND = "#7A2396"
 DEFAULT_INDEX_ACCENT = "#E897FF"
 WARN_ACCENT = "#F5C453"
-# Until-dismissed rounds loop locally; cap planned cycles for v1.
 INFINITE_LOOP_CYCLES = 20
-# Overlay ``after`` drift can shave a second or two off the last page. Still
-# show the story when enough time remains; only hold the index when it would
-# flash for a blink.
-MIN_STORY_SHOW_SECONDS = 4
+MIN_ARTICLE_SHOW_SECONDS = 4
 ARTWORK_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+WIKI_COUNT_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
 
 
-def upside_news_artwork_cache_dir() -> Path:
-    return app_root() / "upside-news-artwork-cache"
+def wiki_ck_artwork_cache_dir() -> Path:
+    return app_root() / "wiki-common-knowledge-artwork-cache"
 
 
-def upside_news_artwork_cache_path(url: str) -> Path:
+def wiki_ck_artwork_cache_path(url: str) -> Path:
     text = str(url or "")
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:40]
     ext = Path(urlsplit(text).path).suffix.lower()
     if ext not in {".webp", ".png", ".jpg", ".jpeg"}:
         ext = ".jpg"
-    return upside_news_artwork_cache_dir() / f"{digest}{ext}"
+    return wiki_ck_artwork_cache_dir() / f"{digest}{ext}"
 
 
-def upside_news_artwork_asset_path(section_id: str, portrait: bool) -> Path | None:
-    """Bundled topic pack under assets/upside-news-artwork/."""
-    key = str(section_id or "").strip().lower() or "general"
-    orientation = "portrait" if portrait else "landscape"
+def wiki_ck_artwork_asset_path(category_id: str) -> Path | None:
+    """Bundled topic pack under assets/wiki-common-knowledge-artwork/."""
+    key = str(category_id or "").strip().lower() or "misc"
     for ext in ARTWORK_EXTENSIONS:
-        candidate = asset_path(Path("upside-news-artwork") / f"{key}-{orientation}{ext}")
+        candidate = asset_path(Path("wiki-common-knowledge-artwork") / f"{key}{ext}")
         try:
             if candidate.exists():
                 return candidate
         except Exception:
             continue
+    for orientation in ("landscape", "portrait"):
+        for ext in ARTWORK_EXTENSIONS:
+            candidate = asset_path(
+                Path("wiki-common-knowledge-artwork") / f"{key}-{orientation}{ext}",
+            )
+            try:
+                if candidate.exists():
+                    return candidate
+            except Exception:
+                continue
     return None
 
 
-def build_phase_plan(upside: dict) -> list[dict]:
-    """Flatten a round into ordered index/story cards (pure, no Tk).
-
-    ``loopCount`` 0 means until-dismissed — plan many cycles for v1; the
-    overlay ``displaySeconds`` / dismiss still ends the round.
-
-    The index summary is its own phase — it is never counted as a story page.
-    """
-    upside = upside or {}
-    stories = list(upside.get("stories") or [])
-    index_seconds = max(1, int(upside.get("indexSeconds") or 12))
-    story_seconds = max(1, int(upside.get("storySeconds") or 15))
+def build_phase_plan(wiki: dict) -> list[dict]:
+    """Flatten a round into ordered index/article cards (pure, no Tk)."""
+    wiki = wiki or {}
+    stories = list(wiki.get("stories") or [])
+    index_seconds = max(1, int(wiki.get("indexSeconds") or 12))
+    article_seconds = max(1, int(wiki.get("articleSeconds") or 15))
     try:
-        loop_count = int(upside.get("loopCount"))
+        loop_count = int(wiki.get("loopCount"))
     except (TypeError, ValueError):
         loop_count = 1
 
@@ -107,56 +122,61 @@ def build_phase_plan(upside: dict) -> list[dict]:
         })
         for index in range(len(stories)):
             plan.append({
-                "phase": "story",
-                "seconds": story_seconds,
+                "phase": "article",
+                "seconds": article_seconds,
                 "index": index,
                 "cycle": cycle,
             })
     return plan
 
 
-def resolve_story_phase_seconds(
+def resolve_article_phase_seconds(
     planned_seconds: int,
     remaining: float | None,
     *,
-    min_show: int = MIN_STORY_SHOW_SECONDS,
+    min_show: int = MIN_ARTICLE_SHOW_SECONDS,
 ) -> tuple[str, int]:
-    """Decide how long to air a story when the overlay clock is tight.
-
-    Returns ``('story', seconds)``, ``('hold', seconds)`` (index hold), or
-    ``('stop', 0)`` when the overlay is already expired.
-    """
+    """Decide how long to air an article when the overlay clock is tight."""
     planned = max(1, int(planned_seconds or 1))
     if remaining is None:
-        return ("story", planned)
+        return ("article", planned)
     left = float(remaining)
     if left <= 0.5:
         return ("stop", 0)
-    # Slack so after()-drift across earlier pages does not drop/short-change
-    # the final story when we are only a couple of seconds short.
     if left + 3.0 >= planned:
-        return ("story", planned)
+        return ("article", planned)
     if left >= min_show:
-        return ("story", max(min_show, int(left)))
+        return ("article", max(min_show, int(left)))
     return ("hold", max(1, int(left + 0.5)))
 
 
-def resolve_index_title(upside: dict) -> str:
+def resolve_index_title(wiki: dict) -> str:
     """Prefer bridge ``indexTitle``; fall back to period-based copy."""
-    upside = upside or {}
-    explicit = str(upside.get("indexTitle") or "").strip()
+    wiki = wiki or {}
+    explicit = str(wiki.get("indexTitle") or "").strip()
     if explicit:
         return explicit
-    count = len(upside.get("stories") or [])
-    period = str(upside.get("period") or "daily").lower()
-    word = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}.get(count, str(count))
+    count = len(wiki.get("stories") or [])
+    period = str(wiki.get("period") or "daily").lower()
+    word = WIKI_COUNT_WORDS.get(count, str(count))
     if period == "weekly":
         return f"This week's {word}"
     if period == "monthly":
-        return "This month's picks"
+        return "This month's most-read"
     if period == "yearly":
-        return "This year's highlights"
-    return f"Today's {word}"
+        return "This year's most-read"
+    return f"What the world looked up — {word}"
+
+
+def format_index_dateline(wiki: dict | None = None) -> str:
+    wiki = wiki or {}
+    explicit = str(wiki.get("dateline") or "").strip()
+    if explicit:
+        return explicit
+    from datetime import datetime
+    now = datetime.now()
+    date_part = f"{now.strftime('%A')} {now.day} {now.strftime('%B')}"
+    return f"{date_part} · Wikipedia"
 
 
 def index_list_top(
@@ -166,11 +186,6 @@ def index_list_top(
     portrait: bool,
     title_bottom: float | None = None,
 ) -> float:
-    """Y where index cards may start — always clear of the dateline.
-
-    Tk ``linespace`` can under-report on DPI-unaware Windows sessions, so we
-    add a hard design-unit pad and never start above the reserved title band.
-    """
     pad = (48 * u) if portrait else (44 * u)
     top = float(header_bottom) + pad
     if title_bottom is not None:
@@ -178,64 +193,144 @@ def index_list_top(
     return top
 
 
-def format_index_dateline(upside: dict | None = None) -> str:
-    """Mockup subtitle: ``Tuesday 4 August · The Guardian``."""
-    from datetime import datetime
-    now = datetime.now()
-    date_part = f"{now.strftime('%A')} {now.day} {now.strftime('%B')}"
-    return f"{date_part} · The Guardian"
-
-
-def story_accent(story: dict, fallback: str = DEFAULT_INDEX_ACCENT) -> str:
+def article_accent(story: dict, fallback: str = DEFAULT_INDEX_ACCENT) -> str:
     color = str((story or {}).get("accent") or "").strip()
     return color if color.startswith("#") and len(color) == 7 else fallback
 
 
-def credit_line(card: dict) -> str:
-    byline = str(card.get("byline") or "").strip()
-    source = str(card.get("sourceLabel") or "").strip()
-    if byline and source and byline.lower() == source.lower():
-        return byline
-    return " · ".join(part for part in (byline, source) if part)
+def format_view_count(value) -> str:
+    try:
+        n = int(value or 0)
+    except (TypeError, ValueError):
+        return "0"
+    if n >= 1_000_000:
+        text = f"{n / 1_000_000:.1f}M"
+        return text.replace(".0M", "M")
+    if n >= 10_000:
+        return f"{n // 1_000:,}K".replace(",", "")
+    if n >= 1_000:
+        text = f"{n / 1_000:.1f}K"
+        return text.replace(".0K", "K")
+    return f"{n:,}".replace(",", ",")
 
 
-class UpsideNewsPanel(BasePanel):
+def format_views_line(story: dict) -> str:
+    story = story or {}
+    views = format_view_count(story.get("views"))
+    parts = [f"{views} views"]
+    try:
+        delta_pct = story.get("viewsDeltaPct")
+        if delta_pct is not None:
+            pct = float(delta_pct)
+            sign = "+" if pct >= 0 else ""
+            parts.append(f"{sign}{pct:.0f}%")
+    except (TypeError, ValueError):
+        pass
+    if len(parts) == 1:
+        try:
+            delta = int(story.get("viewsDelta") or 0)
+            if delta:
+                sign = "+" if delta >= 0 else ""
+                parts.append(f"{sign}{format_view_count(abs(delta))}")
+        except (TypeError, ValueError):
+            pass
+    return " · ".join(parts)
+
+
+def hero_box_in_region(region: tuple, *, portrait: bool) -> tuple:
+    """16:9 hero rectangle inside a content region (pure geometry)."""
+    x0, y0, x1, y1 = region
+    width = max(40.0, x1 - x0)
+    height_avail = max(40.0, y1 - y0)
+    if portrait:
+        hero_w = width
+        hero_h = hero_w * 9 / 16
+        # Cap so portrait still leaves room for title + extract below.
+        hero_h = min(hero_h, height_avail * 0.42)
+        hero_w = hero_h * 16 / 9
+        if hero_w > width:
+            hero_w = width
+            hero_h = hero_w * 9 / 16
+        return (x0, y0, x0 + hero_w, y0 + hero_h)
+    hero_h = height_avail
+    hero_w = min(width, hero_h * 16 / 9)
+    return (x0, y0, x0 + hero_w, y0 + hero_h)
+
+
+def estimate_wrapped_lines(text: str, font, width: float, *, max_lines: int = 8) -> int:
+    """Rough word-wrap line count for sizing text bands without a Tk measure pass."""
+    text = str(text or "").strip()
+    if not text:
+        return 0
+    max_lines = max(1, int(max_lines))
+    width = max(40.0, float(width))
+    words = text.replace("\n", " \n ").split()
+    if not words:
+        return 1
+    lines = 1
+    current = 0.0
+    space = float(font.measure(" "))
+    for word in words:
+        if word == "\n":
+            lines += 1
+            current = 0.0
+            if lines >= max_lines:
+                return max_lines
+            continue
+        word_w = float(font.measure(word))
+        needed = word_w if current <= 0 else current + space + word_w
+        if needed <= width:
+            current = needed
+        else:
+            lines += 1
+            current = word_w
+            if lines >= max_lines:
+                return max_lines
+    return lines
+
+
+class WikiCommonKnowledgePanel(BasePanel):
     """Owns chrome: full-bleed artwork, title, per-page countdown ring."""
 
-    # Type ramp — mockup hierarchy (brand eyebrow → hero title → cards).
     BRAND_U = 22
     INDEX_HERO_U = (68, 56)
     INDEX_DATE_U = 22
-    INDEX_HEADER_PAD_U = (48, 44)
-    INDEX_ROW_U = (30, 26)
+    INDEX_ROW_U = (28, 24)
+    INDEX_DESC_U = (18, 16)
     INDEX_META_U = 16
     INDEX_NUM_U = (48, 42)
-    INDEX_MAX_LINES = 2
-    HEADLINE_U_PORTRAIT = (68, 44)
-    HEADLINE_U_LANDSCAPE = (56, 40)
-    STANDFIRST_U = (28, 24)
+    HEADLINE_U_PORTRAIT = (52, 40)
+    HEADLINE_U_LANDSCAPE = (48, 36)
+    STANDFIRST_U = (24, 20)
+    EXTRACT_U = (22, 20)
     CHIP_U = 18
     META_U = 18
     PROGRESS_U = 18
     ATTRIBUTION_U = 13
-    CONTENT_INSET_PORTRAIT_U = 36
-    CONTENT_INSET_LANDSCAPE_U = 20
-    COUNTDOWN_U = 32
-    QR_LANDSCAPE_U = 200
-    QR_PORTRAIT_U = 180
+    CONTENT_INSET_PORTRAIT_U = 28
+    CONTENT_INSET_LANDSCAPE_U = 16
+    COUNTDOWN_U = 28
+    QR_LANDSCAPE_U = 160
+    QR_PORTRAIT_U = 150
     CARD_RADIUS_U = 18
     CARD_PAD_U = 22
     ACCENT_BAR_U = 8
+    THUMB_U = (72, 64)
+    FOOTER_U = 56
+    HERO_ASPECT = 16 / 9
 
     def __init__(self, root: tk.Tk, shell, config: dict):
         super().__init__(root, shell, config)
-        self._upside = {}
+        self._wiki = {}
         self._plan = []
         self._step = 0
         self._phase_job = None
         self._tick_job = None
         self._phase_ends_at = 0.0
         self._phase_seconds = 0
+        # One generation per paint/hide — shared by artwork + every thumbnail so
+        # concurrent fetches do not invalidate each other (old bug: only the
+        # last card's image ever applied).
         self._fetch_token = 0
         self._photo_refs = []
         self._artwork_id = None
@@ -292,11 +387,28 @@ class UpsideNewsPanel(BasePanel):
                     pass
         self._scrollers = []
 
+    def _bind_dismiss(self, widget):
+        """Nested marquees/scrollers eat clicks — forward them to overlay dismiss."""
+        overlay = getattr(self.shell, "overlay", None)
+        handler = getattr(overlay, "_on_dismiss_input", None)
+        if widget is None or handler is None:
+            return
+        try:
+            widget.bind("<Button-1>", handler)
+        except Exception:
+            pass
+
+    def _bump_image_generation(self) -> int:
+        self._fetch_token += 1
+        return self._fetch_token
+
+    def _ink_bg(self) -> str:
+        return PANEL_INK_BG
+
     def _place_marquee(
         self, text: str, x0, y0, x1, y1, font, fill: str, *, bg: str | None = None, center: bool = False,
     ):
-        """Single-line horizontal marquee when text outruns its band."""
-        text = str(text or "")
+        text = str(text or "").strip()
         if not text:
             return
         width = max(40, int(x1 - x0))
@@ -307,7 +419,16 @@ class UpsideNewsPanel(BasePanel):
         band_h = max(1, int(y1 - y0))
         height = max(line_h + 2, min(band_h, line_h + 10))
         y = int(y0 + max(0, (band_h - height) / 2))
-        fill_bg = bg or self._palette.get("background") or "#0B1730"
+        # Prefer a plain canvas text item when the line fits — nested marquees
+        # with category-coloured backgrounds were painting purple bars.
+        if font.measure(text) <= width:
+            anchor = "n" if center else "nw"
+            x = int(x0 + width / 2) if center else int(x0)
+            self._track(self.canvas.create_text(
+                x, y + height // 2, anchor=anchor, text=text, fill=fill, font=font,
+            ))
+            return
+        fill_bg = bg or self._ink_bg()
         marquee = MarqueeLine(self.root)
         self._marquees.append(marquee)
         viewport = marquee.build(
@@ -320,6 +441,7 @@ class UpsideNewsPanel(BasePanel):
             bg=fill_bg,
             center=center,
         )
+        self._bind_dismiss(viewport)
         win_id = self.canvas.create_window(
             int(x0), y, anchor="nw", window=viewport, width=width, height=height,
         )
@@ -329,13 +451,32 @@ class UpsideNewsPanel(BasePanel):
     def _place_vertical_scroll(
         self, text: str, x0, y0, x1, y1, font, fill: str, *, bg: str | None = None,
     ):
-        """Clipped multi-line band; scrolls vertically when taller than the box."""
         text = str(text or "").strip()
         if not text:
             return
         width = max(40, int(x1 - x0))
         height = max(20, int(y1 - y0))
-        fill_bg = bg or self._palette.get("background") or "#0B1730"
+        fill_bg = bg or self._ink_bg()
+        # Fast path: draw wrapped canvas text when it fits the band.
+        probe = self.canvas.create_text(
+            0, 0, anchor="nw", text=text, fill=fill, font=font, width=width, justify=tk.LEFT,
+        )
+        try:
+            bbox = self.canvas.bbox(probe)
+            text_h = (bbox[3] - bbox[1]) if bbox else 0
+        except Exception:
+            text_h = height + 1
+        finally:
+            try:
+                self.canvas.delete(probe)
+            except Exception:
+                pass
+        if text_h <= height:
+            self._track(self.canvas.create_text(
+                int(x0), int(y0), anchor="nw", text=text, fill=fill, font=font,
+                width=width, justify=tk.LEFT,
+            ))
+            return
         viewport = tk.Canvas(
             self.canvas,
             width=width,
@@ -354,6 +495,7 @@ class UpsideNewsPanel(BasePanel):
             viewport, text_id, scroll_config, self.root, on_finish=lambda: None,
         )
         needs_scroll = scroller.configure(text, center_x=0, viewport_height=height)
+        self._bind_dismiss(viewport)
         win_id = self.canvas.create_window(
             int(x0), int(y0), anchor="nw", window=viewport, width=width, height=height,
         )
@@ -374,8 +516,8 @@ class UpsideNewsPanel(BasePanel):
                 setattr(self, attr, None)
 
     def _render(self, payload: dict):
-        self._upside = payload.get("upsideNews") or {}
-        self._plan = build_phase_plan(self._upside)
+        self._wiki = payload.get("wikiCommonKnowledge") or {}
+        self._plan = build_phase_plan(self._wiki)
         self._step = 0
         if not self._plan:
             self._draw_empty_round()
@@ -389,8 +531,8 @@ class UpsideNewsPanel(BasePanel):
 
         entry = self._plan[step]
         seconds = int(entry["seconds"])
-        if entry["phase"] == "story":
-            action, seconds = resolve_story_phase_seconds(
+        if entry["phase"] == "article":
+            action, seconds = resolve_article_phase_seconds(
                 entry["seconds"],
                 self._remaining_overlay_seconds(),
             )
@@ -398,8 +540,6 @@ class UpsideNewsPanel(BasePanel):
                 self._on_display_expired()
                 return
             if action == "hold":
-                # Only when almost no time remains — do NOT treat the index as
-                # a story or skip the last headline because of timer drift.
                 index_entry = {
                     "phase": "index",
                     "seconds": seconds,
@@ -427,11 +567,9 @@ class UpsideNewsPanel(BasePanel):
         self._schedule_countdown_tick()
 
     def _on_display_expired(self):
-        """Index hold finished — stop stepping; overlay dismiss handles exit."""
         self._cancel_jobs()
 
     def _now(self) -> float:
-        # OverlayWindow._expires_at is stamped with time.time(), not monotonic.
         import time
         return time.time()
 
@@ -456,6 +594,9 @@ class UpsideNewsPanel(BasePanel):
     def _paint_step(self, entry: dict):
         self._stop_text_motion()
         self._clear_foreground()
+        # Invalidate in-flight images from the previous step, then share one
+        # generation across artwork + every index thumbnail.
+        self._bump_image_generation()
         geometry = self.compute_geometry()
         card = self._card_for(entry)
         self._set_palette(entry, card)
@@ -465,26 +606,23 @@ class UpsideNewsPanel(BasePanel):
         elif entry["phase"] == "empty":
             self._draw_empty_round(geometry)
         else:
-            self._draw_story(geometry, card, entry["index"])
+            self._draw_article(geometry, card, entry["index"])
         self._draw_attribution(geometry)
         self._lower_background()
 
     def _card_for(self, entry: dict) -> dict:
-        if entry["phase"] != "story":
+        if entry["phase"] != "article":
             return {}
-        stories = self._upside.get("stories") or []
+        stories = self._wiki.get("stories") or []
         if not stories:
             return {}
         index = entry.get("index") or 0
         return stories[max(0, min(len(stories) - 1, index))]
 
     def _set_palette(self, entry: dict, card: dict):
-        if entry["phase"] == "index":
-            background = str(self._upside.get("indexBackground") or DEFAULT_INDEX_BACKGROUND)
-            accent = str(self._upside.get("indexAccent") or DEFAULT_INDEX_ACCENT)
-        elif entry["phase"] == "empty":
-            background = str(self._upside.get("indexBackground") or DEFAULT_INDEX_BACKGROUND)
-            accent = str(self._upside.get("indexAccent") or DEFAULT_INDEX_ACCENT)
+        if entry["phase"] in ("index", "empty"):
+            background = str(self._wiki.get("indexBackground") or DEFAULT_INDEX_BACKGROUND)
+            accent = str(self._wiki.get("indexAccent") or DEFAULT_INDEX_ACCENT)
         else:
             background = str(card.get("background") or DEFAULT_INDEX_BACKGROUND)
             accent = str(card.get("accent") or DEFAULT_INDEX_ACCENT)
@@ -529,36 +667,36 @@ class UpsideNewsPanel(BasePanel):
 
     @classmethod
     def compute_portrait_boxes(cls, chrome) -> dict:
-        """Portrait: generous index header; story text above bottom-right QR."""
         u = chrome.u
         inset = cls.CONTENT_INSET_PORTRAIT_U * u
         x0 = chrome.content_x + inset
         x1 = chrome.content_x + chrome.content_w - inset
         top = chrome.content_top
-        bottom = chrome.content_bottom - 10 * u
-        gap = 22 * u
+        bottom = chrome.content_bottom - 8 * u
+        gap = 16 * u
 
-        attribution_h = 28 * u
-        progress_h = 56 * u
-        # brand + hero + dateline (extra room — cards measure clearance at draw)
-        title_h = 240 * u
-        qr_size = min(cls.QR_PORTRAIT_U * u, (x1 - x0) * 0.36)
+        attribution_h = 22 * u
+        progress_h = 48 * u
+        # Index header only — article pages start at `top` (no empty title band).
+        title_h = 150 * u
+        qr_size = min(cls.QR_PORTRAIT_U * u, (x1 - x0) * 0.30)
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
         progress = (x0, attribution[1] - progress_h, x1, attribution[1])
         title = (x0, top, x1, top + title_h)
         content_bottom = progress[1] - gap
-        # QR bottom-right; credit/pips share the left of that band.
+        # QR defines the bottom of the article stack so it cannot cover copy.
         story_qr = (x1 - qr_size, content_bottom - qr_size, x1, content_bottom)
-        story_main = (x0, title[3] + gap, x1, story_qr[1] - gap)
-        story_credit = (x0, story_qr[1], story_qr[0] - gap, content_bottom)
+        footer_top = story_qr[1]
+        article_footer = (x0, footer_top, story_qr[0] - gap, content_bottom)
+        article_main = (x0, top, x1, footer_top - gap)
         body = (x0, title[3] + gap, x1, content_bottom)
         return {
             "title": title,
             "body": body,
             "body_right": None,
-            "story_text": story_main,
-            "story_credit": story_credit,
+            "article_main": article_main,
+            "article_footer": article_footer,
             "story_qr": story_qr,
             "progress": progress,
             "attribution": attribution,
@@ -567,43 +705,55 @@ class UpsideNewsPanel(BasePanel):
 
     @classmethod
     def compute_landscape_boxes(cls, chrome) -> dict:
-        """Landscape: two index columns; story QR anchored bottom-right."""
         u = chrome.u
         inset = cls.CONTENT_INSET_LANDSCAPE_U * u
         x0 = chrome.content_x + inset
         x1 = chrome.content_x + chrome.content_w - inset
         top = chrome.content_top
-        bottom = chrome.content_bottom - 10 * u
-        gutter = 36 * u
-        gap = 20 * u
+        bottom = chrome.content_bottom - 8 * u
+        gutter = 28 * u
+        gap = 14 * u
 
-        attribution_h = 26 * u
-        progress_h = 56 * u
-        # brand + hero + dateline (cards clear this via measured list_top)
-        title_h = 200 * u
-        qr_size = min(cls.QR_LANDSCAPE_U * u, (x1 - x0) * 0.22)
+        attribution_h = 20 * u
+        progress_h = 48 * u
+        title_h = 130 * u
+        qr_size = min(cls.QR_LANDSCAPE_U * u, (x1 - x0) * 0.18)
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
         progress = (x0, attribution[1] - progress_h, x1, attribution[1])
         title = (x0, top, x1, top + title_h)
-        content_top = title[3] + gap
+        index_top = title[3] + gap
         content_bottom = progress[1] - gap
 
         col_w = (x1 - x0 - gutter) / 2
         left_x1 = x0 + col_w
         right_x0 = left_x1 + gutter
-        body_left = (x0, content_top, left_x1, content_bottom)
-        body_right = (right_x0, content_top, x1, content_bottom)
+        body_left = (x0, index_top, left_x1, content_bottom)
+        body_right = (right_x0, index_top, x1, content_bottom)
 
+        # Article uses the full content height from `top` — no empty title void.
         story_qr = (x1 - qr_size, content_bottom - qr_size, x1, content_bottom)
-        story_main = (x0, content_top, x1, story_qr[1] - gap)
-        story_credit = (x0, story_qr[1], story_qr[0] - gap, content_bottom)
+        footer_top = story_qr[1]
+        article_footer = (x0, footer_top, story_qr[0] - gap, content_bottom)
+        hero_w = (x1 - x0 - gutter) * 0.44
+        article_hero = (x0, top, x0 + hero_w, footer_top - gap)
+        # Keep copy clear of the QR column.
+        article_body = (
+            article_hero[2] + gutter,
+            top,
+            story_qr[0] - gap,
+            footer_top - gap,
+        )
+        article_main = (x0, top, x1, footer_top - gap)
+
         return {
             "title": title,
             "body": body_left,
             "body_right": body_right,
-            "story_text": story_main,
-            "story_credit": story_credit,
+            "article_main": article_main,
+            "article_hero": article_hero,
+            "article_body": article_body,
+            "article_footer": article_footer,
             "story_qr": story_qr,
             "progress": progress,
             "attribution": attribution,
@@ -629,14 +779,13 @@ class UpsideNewsPanel(BasePanel):
         y = y0
         header_ids = []
         header_ids.append(self._track(self.canvas.create_text(
-            x0, y, anchor="nw", text="good news", fill=INK_2, font=brand_font,
+            x0, y, anchor="nw", text="Wikipedia", fill=INK_2, font=brand_font,
         )))
         y += brand_font.metrics("linespace") + 10 * u
-        hero = resolve_index_title(self._upside)
+        hero = resolve_index_title(self._wiki)
         header_ids.append(self._track(self.canvas.create_text(
             x0, y, anchor="nw", text=hero, fill=INK, font=hero_font,
         )))
-        # Prefer ascent+descent — linespace alone can under-clear on some DPI setups.
         hero_h = max(
             hero_font.metrics("linespace"),
             hero_font.metrics("ascent") + hero_font.metrics("descent") + 4,
@@ -644,7 +793,7 @@ class UpsideNewsPanel(BasePanel):
         y += hero_h + 14 * u
         header_ids.append(self._track(self.canvas.create_text(
             x0, y, anchor="nw",
-            text=format_index_dateline(self._upside), fill=INK_2, font=date_font,
+            text=format_index_dateline(self._wiki), fill=INK_2, font=date_font,
         )))
         date_h = max(
             date_font.metrics("linespace"),
@@ -658,8 +807,8 @@ class UpsideNewsPanel(BasePanel):
             title_bottom=geometry["title"][3],
         )
         body_bottom = geometry["body"][3]
+        stories = self._wiki.get("stories") or []
 
-        stories = self._upside.get("stories") or []
         if geometry["columns"] == 1 or not geometry.get("body_right"):
             columns = [((geometry["body"][0], list_top, geometry["body"][2], body_bottom), stories)]
         else:
@@ -675,7 +824,6 @@ class UpsideNewsPanel(BasePanel):
         for box, column_stories in columns:
             self._draw_index_column(box, column_stories, geometry)
 
-        # Keep header copy above any card that still collides.
         for item in header_ids:
             try:
                 self.canvas.tag_raise(item)
@@ -695,6 +843,11 @@ class UpsideNewsPanel(BasePanel):
             size=max(13, int(round((row_hi if portrait else row_lo) * u))),
             weight="bold",
         )
+        desc_hi, desc_lo = self.INDEX_DESC_U
+        desc_font = tkfont.Font(
+            family=family,
+            size=max(10, int(round((desc_hi if portrait else desc_lo) * u))),
+        )
         num_u = self.INDEX_NUM_U[0] if portrait else self.INDEX_NUM_U[1]
         num_font = tkfont.Font(
             family=family, size=max(18, int(round(num_u * u))), weight="bold",
@@ -706,21 +859,22 @@ class UpsideNewsPanel(BasePanel):
         count = max(1, len(column_stories))
         available = max(40.0, by1 - by0)
         gap = 14 * u if portrait else 12 * u
-        # Fit the column — do not force a tall min that overflows into the header.
         card_h = (available - gap * (count - 1)) / count
-        card_h = max(72 * u, min(148 * u, card_h))
+        card_h = max(88 * u, min(168 * u, card_h))
         pad = self.CARD_PAD_U * u
         bar_w = self.ACCENT_BAR_U * u
         radius = self.CARD_RADIUS_U * u
         card_fill = mix_hex(self._palette["background"], "#000000", 0.42)
+        thumb_u = self.THUMB_U[0] if portrait else self.THUMB_U[1]
+        thumb_size = thumb_u * u
 
         y = by0
         for story in column_stories:
-            if y + 64 * u > by1:
+            if y + 72 * u > by1:
                 break
-            draw_h = min(card_h, max(64 * u, by1 - y))
-            accent = story_accent(story, self._palette["accent"])
-            number = int(story.get("index", 0)) + 1
+            draw_h = min(card_h, max(72 * u, by1 - y))
+            accent = article_accent(story, self._palette["accent"])
+            number = int(story.get("rank") or story.get("index", 0) + 1)
             self._round_rect(
                 bx0, y, bx1, y + draw_h,
                 radius=min(radius, draw_h / 3), fill=card_fill,
@@ -733,28 +887,40 @@ class UpsideNewsPanel(BasePanel):
             ))
 
             inner_x = bx0 + bar_w + pad
-            num_w = num_font.measure(str(number)) + 16 * u
-            text_x = inner_x + num_w
-            text_w = max(40.0, bx1 - pad - text_x)
-            headline = str(story.get("headline") or "")
-            meta_h = meta_font.metrics("linespace")
-            headline_top = y + pad * 0.7
-            headline_bottom = y + draw_h - pad - meta_h - 6 * u
-
+            num_w = num_font.measure(str(number)) + 14 * u
+            thumb_x = inner_x + num_w
+            thumb_y = y + pad * 0.65
             self._track(self.canvas.create_text(
-                inner_x, headline_top, anchor="nw",
+                inner_x, thumb_y + thumb_size * 0.22, anchor="nw",
                 text=str(number), fill=accent, font=num_font,
             ))
-            # Full headline scrolls horizontally when it outruns the card.
+            self._draw_thumb_placeholder(
+                thumb_x, thumb_y, thumb_size, story, accent, card_fill,
+            )
+            self._fetch_thumb_async(story, thumb_x, thumb_y, thumb_size)
+
+            text_x = thumb_x + thumb_size + pad * 0.75
+            meta_h = meta_font.metrics("linespace")
+            headline_top = y + pad * 0.65
+            headline_bottom = y + draw_h - pad - meta_h - 6 * u
+
+            title = str(story.get("title") or "")
             self._place_marquee(
-                headline,
-                text_x, headline_top, bx1 - pad, max(headline_top + 8, headline_bottom),
+                title,
+                text_x, headline_top, bx1 - pad, headline_top + row_font.metrics("linespace") + 6,
                 row_font, INK, bg=card_fill, center=False,
             )
 
-            section = str(story.get("sectionName") or story.get("sectionId") or "").upper()
-            published = str(story.get("publishedLabel") or "").strip()
-            meta = "  ".join(part for part in (section, published) if part)
+            desc = str(story.get("description") or "").strip()
+            desc_top = headline_top + row_font.metrics("linespace") + 8 * u
+            if desc:
+                self._place_marquee(
+                    desc,
+                    text_x, desc_top, bx1 - pad, max(desc_top + 8, headline_bottom - meta_h - 4),
+                    desc_font, INK_2, bg=card_fill, center=False,
+                )
+
+            meta = format_views_line(story)
             if meta:
                 meta_y = y + draw_h - pad - meta_h
                 self._place_marquee(
@@ -764,166 +930,255 @@ class UpsideNewsPanel(BasePanel):
                 )
             y += draw_h + gap
 
-    def _draw_story(self, geometry, card: dict, index: int):
+    def _draw_thumb_placeholder(self, x, y, size, story, accent, fill):
+        self._round_rect(
+            x, y, x + size, y + size,
+            radius=8, fill=mix_hex(accent, fill, 0.35),
+            outline=mix_hex(accent, fill, 0.55),
+            width=1,
+        )
+
+    def _fetch_thumb_async(self, story, x, y, size):
+        url = str(story.get("thumbnailUrl") or story.get("imageUrl") or "").strip()
+        if not url or Image is None or ImageTk is None:
+            return
+        # Share the paint-step generation — do not bump per thumbnail.
+        token = self._fetch_token
+
+        def worker():
+            image = self._load_cover_url(url, int(size), int(size))
+            if image is None:
+                return
+            self.root.after(0, lambda: self._apply_inline_image(token, x, y, image))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _draw_article(self, geometry, card: dict, index: int):
         u = geometry["u"]
         portrait = geometry["portrait"]
         accent = self._palette["accent"]
         family = self.config.get("titleFontFamily", "Segoe UI")
-        stories = self._upside.get("stories") or []
+        stories = self._wiki.get("stories") or []
         total = len(stories)
+        ink_bg = self._ink_bg()
 
-        tx0, ty0, tx1, ty1 = geometry["story_text"]
-        cx0, cy0, cx1, cy1 = geometry.get("story_credit") or (tx0, ty1, tx1, ty1)
+        show_qr = bool(self._wiki.get("showQr", True) and card.get("contentUrl"))
         qx0, qy0, qx1, qy1 = geometry["story_qr"]
-        show_qr = bool(self._upside.get("showQr", True) and card.get("url"))
         qr_size = int(max(0, min(qx1 - qx0, qy1 - qy0))) if show_qr else 0
-        if not show_qr:
-            # Reclaim QR band for copy + credit.
-            ty1 = max(ty1, qy1)
-            cx1 = max(cx1, qx1)
 
         brand_font = tkfont.Font(family=family, size=max(11, int(round(self.BRAND_U * u))))
         progress_font = tkfont.Font(
             family=family, size=max(11, int(round(self.PROGRESS_U * u))),
         )
-        self._track(self.canvas.create_text(
-            tx0, ty0, anchor="nw", text="good news", fill=INK_2, font=brand_font,
-        ))
-        self._track(self.canvas.create_text(
-            tx1, ty0, anchor="ne",
-            text=f"{index + 1} of {total}", fill=INK_2, font=progress_font,
-        ))
 
-        y = ty0 + brand_font.metrics("linespace") + 18 * u
-        chip_h = 40 * u
-        chip_w = self._draw_section_chip(tx0, y, chip_h, card, accent, u)
+        if portrait:
+            main = geometry["article_main"]
+            mx0, my0, mx1, my1 = main
+            self._track(self.canvas.create_text(
+                mx0, my0, anchor="nw", text="Wikipedia", fill=INK_2, font=brand_font,
+            ))
+            self._track(self.canvas.create_text(
+                mx1, my0, anchor="ne",
+                text=f"{index + 1} of {total}", fill=INK_2, font=progress_font,
+            ))
+            y = my0 + brand_font.metrics("linespace") + 10 * u
+            hero = hero_box_in_region((mx0, y, mx1, my1), portrait=True)
+            self._draw_hero_image(hero, card)
+            self._draw_rank_pill(hero, card, accent, u)
+            copy_top = hero[3] + 14 * u
+            copy_box = (mx0, copy_top, mx1, my1)
+        else:
+            hero = geometry["article_hero"]
+            cx0, cy0, cx1, cy1 = geometry["article_body"]
+            # Page index lives in the copy column; brand sits above the chip.
+            self._track(self.canvas.create_text(
+                cx0, cy0, anchor="nw", text="Wikipedia", fill=INK_2, font=brand_font,
+            ))
+            self._track(self.canvas.create_text(
+                geometry["story_qr"][0] - 8 * u, cy0, anchor="ne",
+                text=f"{index + 1} of {total}", fill=INK_2, font=progress_font,
+            ))
+            self._draw_hero_image(hero, card)
+            self._draw_rank_pill(hero, card, accent, u)
+            copy_box = (cx0, cy0 + brand_font.metrics("linespace") + 10 * u, cx1, cy1)
 
-        meta_parts = []
-        published = str(card.get("publishedLabel") or "").strip()
-        if published:
-            meta_parts.append(published)
-        if self._upside.get("showReadingTime", True):
-            minutes = card.get("readingMinutes")
-            if minutes is not None:
-                try:
-                    mins = int(minutes)
-                    if mins > 0:
-                        meta_parts.append(f"{mins} min read")
-                except (TypeError, ValueError):
-                    pass
-        meta_font = tkfont.Font(family=family, size=max(11, int(round(self.META_U * u))))
-        if meta_parts:
-            meta_text = " · ".join(meta_parts)
-            meta_x0 = tx0 + chip_w + 18 * u
-            self._place_marquee(
-                meta_text,
-                meta_x0, y, tx1 - 8 * u, y + chip_h,
-                meta_font, INK_2,
-                bg=self._palette.get("background") or "#0B1730",
-                center=False,
-            )
-
-        y += chip_h + 22 * u
+        tx0, ty0, tx1, ty1 = copy_box
+        y = ty0
+        chip_h = 34 * u
+        self._draw_category_chip(tx0, y, chip_h, card, accent, u)
+        y += chip_h + 12 * u
         text_w = max(80.0, tx1 - tx0)
         floor_y = ty1
-        fill_bg = self._palette.get("background") or "#0B1730"
 
-        hi, _lo = self.HEADLINE_U_PORTRAIT if portrait else self.HEADLINE_U_LANDSCAPE
+        hi = self.HEADLINE_U_PORTRAIT[0] if portrait else self.HEADLINE_U_LANDSCAPE[0]
         headline_font = tkfont.Font(
             family=family, size=max(16, int(round(hi * u))), weight="bold",
         )
-        # Prefer a readable size; overflow scrolls instead of ellipsising.
-        try:
-            headline_font.configure(size=max(14, int(round(hi * u))))
-        except Exception:
-            pass
-        headline = str(card.get("headline") or "")
+        headline = str(card.get("title") or "")
         line_h = max(1, int(headline_font.metrics("linespace") or 24))
-        max_headline_lines = 5 if portrait else 4
-        headline_band = min(max_headline_lines * line_h, max(line_h, floor_y - y - 80 * u))
+        max_headline_lines = 3 if portrait else 2
+        lines = estimate_wrapped_lines(headline, headline_font, text_w, max_lines=max_headline_lines)
+        headline_band = max(line_h, lines * line_h + 4)
+        headline_band = min(headline_band, max(line_h, floor_y - y - 100 * u))
         if headline and headline_band >= line_h:
             self._place_vertical_scroll(
-                headline, tx0, y, tx1, y + headline_band, headline_font, INK, bg=fill_bg,
+                headline, tx0, y, tx1, y + headline_band, headline_font, INK, bg=ink_bg,
             )
-            y += headline_band
+            y += headline_band + 8 * u
 
-        # Hairline rule under the headline (mockup).
-        if y + 28 * u < floor_y:
-            y += 18 * u
+        if y + 20 * u < floor_y:
             self._track(self.canvas.create_line(
-                tx0, y, tx0 + min(text_w, 520 * u), y,
-                fill=mix_hex(INK, self._palette["background"], 0.55),
+                tx0, y, tx0 + min(text_w, 420 * u), y,
+                fill=mix_hex(INK, ink_bg, 0.45),
                 width=max(1, int(round(2 * u))),
             ))
-            y += 18 * u
+            y += 12 * u
 
-        standfirst = str(card.get("standfirst") or "").strip()
-        if standfirst and y + 20 * u < floor_y:
+        description = str(card.get("description") or "").strip()
+        if description and y + 18 * u < floor_y:
             sf_hi, sf_lo = self.STANDFIRST_U
-            stand_font = tkfont.Font(
+            desc_font = tkfont.Font(
                 family=family,
                 size=max(12, int(round((sf_hi if portrait else sf_lo) * u))),
             )
-            stand_h = max(20.0, floor_y - y)
+            desc_lines = estimate_wrapped_lines(description, desc_font, text_w, max_lines=3)
+            desc_h = max(
+                desc_font.metrics("linespace"),
+                desc_lines * desc_font.metrics("linespace") + 4,
+            )
+            desc_h = min(desc_h, max(20.0, floor_y - y - 60 * u))
             self._place_vertical_scroll(
-                standfirst, tx0, y, tx1, y + stand_h, stand_font, INK_2, bg=fill_bg,
+                description, tx0, y, tx1, y + desc_h, desc_font, INK_2, bg=ink_bg,
+            )
+            y += desc_h + 10 * u
+
+        extract = str(card.get("extract") or "").strip()
+        if extract and y + 18 * u < floor_y:
+            ex_hi, ex_lo = self.EXTRACT_U
+            extract_font = tkfont.Font(
+                family=family,
+                size=max(11, int(round((ex_hi if portrait else ex_lo) * u))),
+            )
+            extract_h = max(20.0, floor_y - y)
+            self._place_vertical_scroll(
+                extract, tx0, y, tx1, y + extract_h, extract_font, INK_2, bg=ink_bg,
             )
 
-        # Bottom credit + pips (left of QR), QR bottom-right.
-        credit = credit_line(card)
-        byline_font = tkfont.Font(
-            family=family, size=max(12, int(round(22 * u))), weight="bold",
-        )
-        source_font = tkfont.Font(family=family, size=max(11, int(round(18 * u))))
-        credit_y = cy0 + 8 * u
-        if credit:
-            byline = str(card.get("byline") or "").strip()
-            source = str(card.get("sourceLabel") or "").strip()
-            if byline and source and byline.lower() != source.lower():
-                self._place_marquee(
-                    byline, cx0, credit_y, cx1,
-                    credit_y + byline_font.metrics("linespace") + 4,
-                    byline_font, INK, bg=fill_bg, center=False,
-                )
-                credit_y += byline_font.metrics("linespace") + 4 * u
-                self._place_marquee(
-                    source, cx0, credit_y, cx1,
-                    credit_y + source_font.metrics("linespace") + 4,
-                    source_font, INK_2, bg=fill_bg, center=False,
-                )
-                credit_y += source_font.metrics("linespace") + 12 * u
-            else:
-                self._place_marquee(
-                    credit, cx0, credit_y, cx1,
-                    credit_y + byline_font.metrics("linespace") + 4,
-                    byline_font, INK, bg=fill_bg, center=False,
-                )
-                credit_y += byline_font.metrics("linespace") + 12 * u
-
+        self._draw_article_footer(geometry, card, accent, u, show_qr, qr_size)
         if total > 1:
-            self._draw_story_pips_at(cx0, credit_y + 10 * u, index, accent, u, max_x=cx1)
-
-        if qr_size > 0:
-            label_font = tkfont.Font(family=family, size=max(10, int(round(16 * u))))
-            label = "Scan to read"
-            label_w = label_font.measure(label)
-            label_x = qx0 - 14 * u
-            if label_x - label_w >= cx0:
-                self._track(self.canvas.create_text(
-                    label_x, qy0 + qr_size / 2, anchor="e",
-                    text=label, fill=INK_2, font=label_font,
-                ))
-            else:
-                self._track(self.canvas.create_text(
-                    qx0 + qr_size / 2, qy0 - 8 * u, anchor="s",
-                    text=label, fill=INK_2, font=label_font,
-                ))
-            self._draw_story_qr(qx0, qy0, qr_size, str(card.get("url") or ""))
+            fx0, fy0, fx1, _fy1 = geometry["article_footer"]
+            # Pips sit under the hero in landscape; under the stats in portrait.
+            pip_x = geometry["article_hero"][0] if not portrait else fx0
+            self._draw_story_pips_at(pip_x, fy0 + 6 * u, index, accent, u, max_x=fx1 - 20 * u)
 
         self._draw_countdown_ring(geometry, accent)
 
-    def _draw_section_chip(self, x0, y0, chip_h, card, accent, u) -> float:
-        label = str(card.get("sectionName") or card.get("sectionId") or "").upper()
+    def _draw_hero_image(self, box, card: dict):
+        x0, y0, x1, y1 = box
+        w = max(1, int(x1 - x0))
+        h = max(1, int(y1 - y0))
+        fill = mix_hex(self._palette["background"], "#000000", 0.35)
+        self._round_rect(x0, y0, x1, y1, radius=12, fill=fill, outline=self._palette["accent"], width=2)
+        url = str(card.get("imageUrl") or card.get("thumbnailUrl") or "").strip()
+        if not url:
+            cat = str(card.get("categoryId") or "misc")
+            local = self._load_local_topic_image(cat, w, h)
+            if local is not None:
+                self._place_inline_photo(x0, y0, local)
+            return
+        token = self._fetch_token
+
+        def worker():
+            image = self._load_cover_url(url, w, h)
+            if image is None:
+                image = self._load_local_topic_image(
+                    str(card.get("categoryId") or "misc"), w, h,
+                )
+            if image is None:
+                return
+            self.root.after(0, lambda: self._apply_inline_image(token, x0, y0, image))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _draw_rank_pill(self, hero_box, card, accent, u):
+        x0, y0, x1, y1 = hero_box
+        family = self.config.get("titleFontFamily", "Segoe UI")
+        rank = int(card.get("rank") or 1)
+        font = tkfont.Font(family=family, size=max(11, int(round(20 * u))), weight="bold")
+        label = f"#{rank}"
+        pad_x, pad_y = 16 * u, 8 * u
+        w = font.measure(label) + pad_x * 2
+        h = font.metrics("linespace") + pad_y * 2
+        px, py = x0 + 12 * u, y0 + 12 * u
+        fill = mix_hex(accent, self._palette["background"], 0.18)
+        self._round_rect(px, py, px + w, py + h, radius=h / 2, fill=fill, outline=accent, width=2)
+        self._track(self.canvas.create_text(
+            px + w / 2, py + h / 2, anchor="center", text=label, fill=INK, font=font,
+        ))
+
+    def _draw_article_footer(self, geometry, card, accent, u, show_qr, qr_size):
+        family = self.config.get("titleFontFamily", "Segoe UI")
+        ink_bg = self._ink_bg()
+        fx0, fy0, fx1, fy1 = geometry["article_footer"]
+        stats_font = tkfont.Font(family=family, size=max(11, int(round(18 * u))), weight="bold")
+        views_text = format_views_line(card)
+        spark_w = max(40.0, (fx1 - fx0) * 0.55)
+        if self._wiki.get("showSparkline", True) and card.get("history"):
+            spark_w = max(40.0, (fx1 - fx0) * 0.42)
+        if views_text:
+            self._place_marquee(
+                views_text, fx0, fy0 + 4 * u, fx0 + (fx1 - fx0) * 0.38, fy1,
+                stats_font, INK, bg=ink_bg, center=False,
+            )
+        if self._wiki.get("showSparkline", True):
+            history = list(card.get("history") or [])
+            if history:
+                sx = fx0 + (fx1 - fx0) * 0.38 + 12 * u
+                self._draw_views_sparkline(
+                    sx, fy0 + 6 * u, spark_w, max(16.0, fy1 - fy0 - 12 * u),
+                    history, accent, u,
+                )
+
+        if show_qr and qr_size > 0:
+            qx0, qy0, _, _ = geometry["story_qr"]
+            self._draw_story_qr(qx0, qy0, qr_size, str(card.get("contentUrl") or ""))
+
+    def _draw_views_sparkline(self, x, y, w, h, history, accent, u):
+        values = []
+        for point in history:
+            if isinstance(point, dict):
+                try:
+                    values.append(float(point.get("views") or point.get("value") or 0))
+                except (TypeError, ValueError):
+                    continue
+            else:
+                try:
+                    values.append(float(point))
+                except (TypeError, ValueError):
+                    continue
+        if len(values) < 2:
+            return
+        v_min, v_max = min(values), max(values)
+        n = len(values)
+        xs = [x + (w * i / (n - 1)) for i in range(n)]
+        ys = []
+        for val in values:
+            frac = 0.5 if v_max == v_min else (val - v_min) / (v_max - v_min)
+            ys.append(y + h * (1 - frac))
+        for i in range(n - 1):
+            self._track(self.canvas.create_line(
+                xs[i], ys[i], xs[i + 1], ys[i + 1],
+                fill=accent, width=max(2, int(3 * u)),
+            ))
+        for i, val in enumerate(values):
+            r = max(2, int(4 * u))
+            self._track(self.canvas.create_oval(
+                xs[i] - r, ys[i] - r, xs[i] + r, ys[i] + r,
+                fill=accent, outline="",
+            ))
+
+    def _draw_category_chip(self, x0, y0, chip_h, card, accent, u) -> float:
+        label = str(card.get("categoryName") or card.get("categoryId") or "").upper()
         if not label:
             return 0.0
         font = tkfont.Font(
@@ -944,13 +1199,8 @@ class UpsideNewsPanel(BasePanel):
         ))
         return width
 
-    def _draw_story_pips(self, geometry, index: int, accent):
-        u = geometry["u"]
-        x0, y0, x1, _y1 = geometry["progress"]
-        self._draw_story_pips_at(x0, y0 + 18 * u, index, accent, u, max_x=x1 - 110 * u)
-
     def _draw_story_pips_at(self, x0, cy, index: int, accent, u, *, max_x):
-        stories = self._upside.get("stories") or []
+        stories = self._wiki.get("stories") or []
         total = len(stories)
         r = 6 * u
         span = min(total, 8)
@@ -1012,25 +1262,23 @@ class UpsideNewsPanel(BasePanel):
     def _draw_attribution(self, geometry):
         u = geometry["u"]
         x0, y0, x1, y1 = geometry["attribution"]
-        label = str(self._upside.get("attribution") or "").strip()
+        label = str(self._wiki.get("attribution") or "").strip()
         if not label:
             return
         font = tkfont.Font(
             family="Consolas", size=max(8, int(round(self.ATTRIBUTION_U * u))),
         )
-        # Stay clear of the countdown ring on the right.
-        self._place_marquee(
-            label, x0, y0, x1 - 120 * u, y1,
-            font, INK_3,
-            bg=self._palette.get("background") or "#0B1730",
-            center=False,
-        )
+        # Plain text — a full-width marquee here was drawing a purple strip.
+        cy = (y0 + y1) / 2
+        self._track(self.canvas.create_text(
+            x0, cy, anchor="w", text=label, fill=INK_3, font=font,
+        ))
 
     def _draw_empty_round(self, geometry=None):
         if geometry is None:
             geometry = self.compute_geometry()
         u = geometry["u"]
-        box = geometry.get("story_text") or geometry["body"]
+        box = geometry.get("article_main") or geometry["body"]
         x0, y0, x1, y1 = box
         title_font = tkfont.Font(
             family=self.config.get("titleFontFamily", "Segoe UI"),
@@ -1040,25 +1288,12 @@ class UpsideNewsPanel(BasePanel):
         cy = (y0 + y1) / 2
         self._track(self.canvas.create_text(
             (x0 + x1) / 2, cy, anchor="s",
-            text="No stories yet", fill=INK, font=title_font,
+            text="No articles yet", fill=INK, font=title_font,
         ))
         self._track(self.canvas.create_text(
             (x0 + x1) / 2, cy + 16 * u, anchor="n",
-            text="Check back after the next archive poll", fill=INK_2, font=sub_font,
+            text="Check back after the next Wikipedia poll", fill=INK_2, font=sub_font,
         ))
-
-    @staticmethod
-    def _ellipsise(font, text: str, max_width: float) -> str:
-        text = str(text or "")
-        try:
-            if font.measure(text) <= max_width:
-                return text
-        except Exception:
-            return text
-        trimmed = text
-        while trimmed and font.measure(f"{trimmed}…") > max_width:
-            trimmed = trimmed[:-1]
-        return f"{trimmed.rstrip()}…" if trimmed else "…"
 
     @staticmethod
     def _build_qr_image(content: str, target_size: int):
@@ -1077,7 +1312,7 @@ class UpsideNewsPanel(BasePanel):
             qr.box_size = max(1, target_size // modules)
             return qr.make_image(fill_color="black", back_color="white").convert("RGB")
         except Exception as error:
-            print(f"Upside News QR generation failed: {error}", file=sys.stderr)
+            print(f"Wiki Common Knowledge QR generation failed: {error}", file=sys.stderr)
             return None
 
     def _draw_story_qr(self, x, y, size, url: str):
@@ -1091,29 +1326,45 @@ class UpsideNewsPanel(BasePanel):
         self._photo_refs.append(photo)
         self._track(self.canvas.create_image(x, y, anchor="nw", image=photo))
 
-    # -------------------------------------------------------------- artwork
+    def _place_inline_photo(self, x, y, image):
+        if ImageTk is None:
+            return
+        try:
+            photo = ImageTk.PhotoImage(image)
+        except Exception:
+            return
+        self._photo_refs.append(photo)
+        self._track(self.canvas.create_image(x, y, anchor="nw", image=photo))
+
+    def _apply_inline_image(self, token, x, y, image):
+        if ImageTk is None:
+            return
+        if not should_apply_fetched_image(
+            fetch_gen=token, current_gen=self._fetch_token, visible=self.visible,
+        ):
+            return
+        self._place_inline_photo(x, y, image)
 
     def _artwork_context(self, entry: dict, card: dict) -> tuple[str, dict | None, str, str]:
-        if entry["phase"] == "index":
-            section_id = "general"
-            artwork = self._upside.get("indexArtwork") or {}
-            background = str(self._upside.get("indexBackground") or DEFAULT_INDEX_BACKGROUND)
-            accent = str(self._upside.get("indexAccent") or DEFAULT_INDEX_ACCENT)
-        elif entry["phase"] == "empty":
-            section_id = "general"
-            artwork = self._upside.get("indexArtwork") or {}
-            background = str(self._upside.get("indexBackground") or DEFAULT_INDEX_BACKGROUND)
-            accent = str(self._upside.get("indexAccent") or DEFAULT_INDEX_ACCENT)
+        if entry["phase"] in ("index", "empty"):
+            category_id = "misc"
+            artwork = self._wiki.get("indexArtwork") or {}
+            background = str(self._wiki.get("indexBackground") or DEFAULT_INDEX_BACKGROUND)
+            accent = str(self._wiki.get("indexAccent") or DEFAULT_INDEX_ACCENT)
         else:
-            section_id = str(card.get("sectionId") or "general")
+            category_id = str(card.get("categoryId") or "misc")
             artwork = card.get("artwork") or {}
             background = str(card.get("background") or DEFAULT_INDEX_BACKGROUND)
             accent = str(card.get("accent") or DEFAULT_INDEX_ACCENT)
-        return section_id, artwork, background, accent
+        return category_id, artwork, background, accent
+
+    def _artwork_url(self, artwork: dict | None) -> str:
+        artwork = artwork or {}
+        return str(artwork.get("topic") or artwork.get("fallback") or "").strip()
 
     def _paint_artwork(self, geometry, entry: dict, card: dict):
-        section_id, artwork, background, accent = self._artwork_context(entry, card)
-        key = f"{entry['phase']}:{section_id}"
+        category_id, artwork, background, accent = self._artwork_context(entry, card)
+        key = f"{entry['phase']}:{category_id}"
         if key == self._artwork_key and self._background_ids():
             self._lower_background()
             return
@@ -1123,20 +1374,18 @@ class UpsideNewsPanel(BasePanel):
         self._draw_colour_field(geometry, background)
         self._draw_gradient_fallback(geometry, background, accent)
 
-        portrait = bool(geometry["portrait"])
-        url = (artwork or {}).get("portrait" if portrait else "landscape")
-        if Image is None or not (url or upside_news_artwork_asset_path(section_id, portrait)):
+        url = self._artwork_url(artwork)
+        if Image is None or not (url or wiki_ck_artwork_asset_path(category_id)):
             return
-        self._fetch_token += 1
         token = self._fetch_token
-        local = self._load_local_artwork(
-            section_id, portrait, geometry["screen_w"], geometry["screen_h"],
+        local = self._load_local_topic_image(
+            category_id, geometry["screen_w"], geometry["screen_h"],
         )
         if local is not None:
             self._apply_artwork(token, local)
         threading.Thread(
             target=self._fetch_artwork,
-            args=(token, url, geometry["screen_w"], geometry["screen_h"], section_id, portrait),
+            args=(token, url, geometry["screen_w"], geometry["screen_h"], category_id),
             daemon=True,
         ).start()
 
@@ -1208,26 +1457,26 @@ class UpsideNewsPanel(BasePanel):
             self._fallback_ids.append(item)
             below = item
 
-    def _fetch_artwork(self, token, url, width, height, section_id=None, portrait=True):
+    def _fetch_artwork(self, token, url, width, height, category_id=None):
         image = None
         for candidate in artwork_url_candidates(url, self.config):
             image = self._load_one_url(candidate, width, height)
             if image is not None:
                 break
         if image is None:
-            image = self._load_local_artwork(section_id, portrait, width, height)
+            image = self._load_local_topic_image(category_id, width, height)
         if image is None:
             print(
-                "Upside News artwork unavailable over HTTP and from the bundled pack "
-                f"(section={section_id or '?'}, url={url or 'none'})",
+                "Wiki Common Knowledge artwork unavailable over HTTP and from the bundled pack "
+                f"(category={category_id or '?'}, url={url or 'none'})",
                 file=sys.stderr, flush=True,
             )
             return
         self.root.after(0, lambda: self._apply_artwork(token, image))
 
     @classmethod
-    def _load_local_artwork(cls, section_id, portrait, width, height):
-        path = upside_news_artwork_asset_path(section_id, portrait)
+    def _load_local_topic_image(cls, category_id, width, height):
+        path = wiki_ck_artwork_asset_path(category_id)
         if path is None:
             return None
         try:
@@ -1236,16 +1485,26 @@ class UpsideNewsPanel(BasePanel):
             return None
 
     @classmethod
+    def _load_cover_url(cls, url, width, height):
+        for candidate in artwork_url_candidates(url, {}):
+            image = cls._load_one_url(candidate, width, height)
+            if image is not None:
+                return image
+        return None
+
+    @classmethod
     def _load_one_url(cls, url, width, height):
         global _unverified_ssl
-        cache_file = upside_news_artwork_cache_path(url)
+        if not url:
+            return None
+        cache_file = wiki_ck_artwork_cache_path(url)
         if cache_file.exists():
             cached = cls._decode_cached(cache_file, width, height)
             if cached is not None:
                 return cached
         try:
             request = urllib.request.Request(
-                url, headers={"User-Agent": "alexa-broadcast-client/1.0"},
+                url, headers={"User-Agent": WIKIMEDIA_USER_AGENT},
             )
 
             def download(context):
@@ -1322,7 +1581,11 @@ class UpsideNewsPanel(BasePanel):
         return resized.crop((left, top, left + width, top + height))
 
     def _apply_artwork(self, token, image):
-        if token != self._fetch_token or not self.visible or ImageTk is None:
+        if ImageTk is None:
+            return
+        if not should_apply_fetched_image(
+            fetch_gen=token, current_gen=self._fetch_token, visible=self.visible,
+        ):
             return
         try:
             photo = ImageTk.PhotoImage(image)

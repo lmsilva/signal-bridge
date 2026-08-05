@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Upside News overflow scroll)
+**Last updated:** 2026-08-05 (Wiki CK dismiss + thumbnails)
 
 ---
 
@@ -39,6 +39,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/lan_crypto.py` | Shared-secret AES-256-GCM seal/open for UDP (`udpSecret` must match bridge `LAN_UDP_SECRET`); stamps `sentAt` at seal; ±120s freshness on `sentAt` |
 | `src/design_system.py` | Shared tokens (`#0B1730` bg, ink/accent/status, Steam + print-border colours) + `design_u` / `page_chrome()` (header 32–116, content 136→footer) |
 | `src/page_header.py` | Shared 3-column header (left / pill / right); used by overlay shell + Shared Photos |
+| `src/overhead_panel.py` | Overhead flight-radar — `overhead.round` scope + paginated list (portrait scope top / landscape scope left); vector aircraft icons, dead-reckon motion, stale freeze/fade, `overhead.update` in-place refresh, `overhead.close` |
 | `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `enrichPending` reserves desc/shots/footer and spins dual-arc placeholders until library-tour enrich lands; `steam.now-playing` / close; `SOURCE_CHIP` / `PAYLOAD_KEY` overridable |
 | `src/psn_now_playing_panel.py` | Dedicated PSN Now Playing — shares Steam artwork fetch helpers only; owns status-line + Store description when present, concept-media gallery, footer `PLAYTIME`/`TROPHIES`/`PROGRESS` (no concurrent players); collapses empty bands into a larger hero unless `enrichPending` (library tour) reserves them with spinners |
 | `src/dismiss_footer.py` | Shared dismiss footer — compact full-bleed band (64u) + draining rail + fixed-width “Dismisses in …” slot; used by `overlay.py` for every timed page except shared-photos / persistent Steam |
@@ -66,7 +67,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `build_portable.bat` | PyInstaller → `dist/alexa broadcast client/` (uses `%LOCALAPPDATA%` venv on NAS shares) |
 | `alexa-broadcast-client.spec` | PyInstaller spec + hidden imports |
 | `requirements-build.txt` | PyInstaller + runtime deps for portable build |
-| `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor|input-text|photo-slideshow|route-planner|route-planner-flight …`) |
+| `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor|input-text|photo-slideshow|route-planner|route-planner-flight|overhead|overhead-update …`) |
 | `test/run_tests.bat` | Python `unittest` for `test_*.py` |
 | `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing, `QrPanel`, `PhotoSlideshowPanel`, `map_tiles` (incl. `zoom_to_fit`), `place_facts`, `RoutePlannerPanel` layout math + formatting helpers, `TeslaBatteryPanel.battery_bar_height`, `input_control`/display remote, `text_marquee` (`MarqueeLine` fit-vs-overflow, tick/pause/reset cycle, `stop()`) |
 | `README.md` | User-facing setup / portable build guide |
@@ -263,7 +264,14 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-05: **Wiki CK dismiss + index thumbnails** — click-to-dismiss is deferred and tear-down is exception-safe so the panel cannot clear while leaving an empty shell + live dismiss footer; nested marquees/scrollers forward clicks to dismiss; index thumbnails share one image generation (no more “only the last card gets a picture”). Ship: portable client rebuild.
+- 2026-08-05: **Overhead map + route list** — OSM map fills the full left/top scope rectangle (circle is focus/range only); header subtitle uses font metrics and stays above the map; list rows show origin → destination (structured `route` dict, `"A → B"` string, or `overhead.routes[hex]`); legend spelled out as Airliner / General aviation / Helicopter / Emergency with swatch gaps. Ship: portable client rebuild.
 - 2026-08-04: **Upside News overflow scroll** — index card headlines/meta and story credits/attribution use `MarqueeLine` when too wide; story headline + standfirst use clipped vertical `MessageScrollController` so long copy is never ellipsised away. Portable rebuild required.
+
+- 2026-08-05: **Wiki CK article layout fix** — remove unused title void on article pages; size title/description bands to wrapped line count; draw fitting text as canvas items (no purple nested canvases); QR reserved so it cannot cover extract; portrait hero capped for copy room. Ship: portable rebuild.
+- 2026-08-05: **Overhead UI polish** — emergency colour only when `isEmergency` / real squawk (ADS-B `emergency="none"` no longer paints everything red); class colours + dimmed off-page icons; OSM map underlay inside the scope circle (`map_tiles`); list rows use font metrics so callsign/altitude never overlap; reserved footer band so pager text/dots are not clipped; portrait/landscape spacing tightened. Admin: Wiki + Overhead settings cards span full width; Wiki cache actions sit in one compact row. Ship: portable client + `./recreate.sh` (admin cache-bust `signal44`).
+- 2026-08-05: **Overhead flight-radar panel** — new `src/overhead_panel.py` handles `overhead.round`: single-page radar scope (rings, N/E/S/W, home dot, geo polylines, airport markers, vector aircraft icons with track/heading, label collision offsets, page highlight halos) + paginated list (frozen roster, route chips with triangle separator, stale banner, clear skies). Live refresh via `overhead.update` (`overlay.apply_overhead_update` → `OverheadPanel.apply_update`); `overhead.close` dismisses. Registered in `payload_utils`, `main`, `overlay` (+ `owns_chrome`), `config.effective_display_seconds` (never clamped). `send_test.py --type overhead` (+ `overhead-update`). Tests: `test_overhead_panel.py`. Ship: portable rebuild (`build_portable.bat`).
+- 2026-08-05: **Wiki Common Knowledge panel** — new `src/wiki_common_knowledge_panel.py` handles `wiki-common-knowledge.round`: index (portrait single column / landscape odd-even) with rank+thumbnail+title+description+views, then article pages with 16:9 hero, category chip, scrolling title/description/extract, views sparkline, QR bottom-right. Bundled `assets/wiki-common-knowledge-artwork/` (`{categoryId}.jpg`, seeded from upside/trivia via `scripts/seed_wiki_ck_artwork.py`). Registered in `payload_utils`, `main`, `overlay` (+ `owns_chrome`), `config.effective_display_seconds` (never clamped). `send_test.py --type wiki-common-knowledge`. Tests: `test_wiki_common_knowledge_panel.py`. Ship: portable rebuild (`build_portable.bat`).
 
 - 2026-08-04: **Upside News dateline clearance** — index cards use ascent/descent + a hard pad (and never start above the title band); header text is raised above cards. Portable rebuild required.
 

@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "icao": "KSLC",
+        "iata": "SLC",
+        "name": "Salt Lake City Intl"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-111.9781, 40.7884]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "icao": "KPVU",
+        "iata": "PVU",
+        "name": "Provo Municipal"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-111.723, 40.2192]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "icao": "KOGD",
+        "iata": "OGD",
+        "name": "Ogden-Hinckley"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-112.012, 41.1959]
+      }
+    }
+  ]
+}

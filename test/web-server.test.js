@@ -1197,7 +1197,7 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   // supplies the rows the renderer fills.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
-  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,News,Steam,PSN,YouTube"/);
+  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"/);
   assert.doesNotMatch(html, /id="push-row-playing"/);
   assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
 

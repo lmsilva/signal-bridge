@@ -803,6 +803,29 @@ textarea.field-input.text-input-area {
 
 .upside-news-columns { margin-top: 18px; }
 
+/* Wiki Common Knowledge — denser action row, breathing room before buttons */
+.wiki-ck-display-col .wiki-ck-cache-hint,
+.wiki-ck-display-col #wiki-ck-cache-hint {
+  margin-top: 14px;
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+.wiki-ck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.wiki-ck-actions .btn {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.overhead-settings-card .settings-columns {
+  margin-top: 12px;
+}
+
 .upside-news-key-row {
   display: flex;
   flex-direction: column;
@@ -1763,7 +1786,9 @@ textarea.field-input.text-input-area {
   #tab-settings .slideshow-settings-card,
   #tab-settings .youtube-settings-card,
   #tab-settings .trivia-settings-card,
-  #tab-settings .upside-news-settings-card {
+  #tab-settings .upside-news-settings-card,
+  #tab-settings .wiki-ck-settings-card,
+  #tab-settings .overhead-settings-card {
     grid-column: 1 / -1;
   }
 

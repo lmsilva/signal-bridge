@@ -1379,6 +1379,105 @@ function buildUpsideNewsRoundPayload({
   };
 }
 
+const WIKI_COUNT_WORDS = {
+  3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight',
+};
+
+function wikiCommonKnowledgeIndexTitle(period, count) {
+  const word = WIKI_COUNT_WORDS[count] || String(count);
+  if (period === 'weekly') return `This week's ${word}`;
+  if (period === 'monthly') return "This month's most-read";
+  if (period === 'yearly') return "This year's most-read";
+  return `What the world looked up — ${word}`;
+}
+
+/**
+ * Wiki Common Knowledge — index page + one article page per item.
+ * One UDP packet for the whole cycle; the client pages locally like Upside News.
+ */
+function buildWikiCommonKnowledgeRoundPayload({
+  stories = [],
+  settings = {},
+  indexSeconds = 12,
+  articleSeconds = 15,
+  loops = 'once',
+  loopCount = 1,
+  artworkBaseUrl = '',
+  device = 'Signal',
+  timestamp = Date.now(),
+  trigger = 'wiki-common-knowledge',
+  triggeredBy = 'manual',
+  sessionId = null,
+  durationSeconds = null,
+} = {}, config = {}) {
+  if (!Array.isArray(stories) || !stories.length) {
+    return null;
+  }
+  const count = Math.min(8, stories.length);
+  const cards = stories.slice(0, count).map((story, index) => ({
+    index,
+    id: story.id,
+    rank: story.rank || index + 1,
+    title: story.title,
+    description: story.description || '',
+    extract: story.extract || '',
+    categoryId: story.categoryId || 'misc',
+    categoryName: story.categoryName || 'General',
+    accent: story.accent || '#E897FF',
+    background: story.background || '#7A2396',
+    thumbnailUrl: story.thumbnailUrl || '',
+    imageUrl: story.imageUrl || story.thumbnailUrl || '',
+    contentUrl: story.contentUrl || null,
+    views: story.views || 0,
+    viewsDelta: story.viewsDelta || 0,
+    viewsDeltaPct: story.viewsDeltaPct,
+    history: Array.isArray(story.history) ? story.history.slice(-30) : [],
+    artwork: story.artwork || null,
+  }));
+
+  const indexSec = Math.max(6, Number(indexSeconds) || 12);
+  const articleSec = Math.max(8, Number(articleSeconds) || 15);
+  const oneCycle = indexSec + (count * articleSec);
+  const total = Number(durationSeconds) > 0 ? Number(durationSeconds) : oneCycle;
+  const base = String(artworkBaseUrl || '').replace(/\/+$/, '');
+
+  return {
+    version: 2,
+    type: 'wiki-common-knowledge.round',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: total,
+    trigger,
+    wikiCommonKnowledge: {
+      sessionId: sessionId || `wiki-${new Date(timestamp).getTime()}`,
+      triggeredBy,
+      title: 'Common Knowledge',
+      indexTitle: wikiCommonKnowledgeIndexTitle(settings.period || 'daily', count),
+      dateline: 'Wikipedia · most-read',
+      period: settings.period || 'daily',
+      storyCount: count,
+      indexSeconds: indexSec,
+      articleSeconds: articleSec,
+      loops: loops || 'once',
+      loopCount: loopCount == null ? 1 : loopCount,
+      cycleSeconds: oneCycle,
+      totalDurationSeconds: total,
+      showQr: settings.showQr !== false,
+      showSparkline: settings.showSparkline !== false,
+      attribution: 'Wikipedia · Wikimedia pageviews',
+      indexArtwork: base
+        ? {
+          topic: `${base}/wiki-common-knowledge-artwork/misc.jpg`,
+          fallback: `${base}/wiki-common-knowledge-artwork/misc.jpg`,
+        }
+        : null,
+      indexAccent: '#E897FF',
+      indexBackground: '#7A2396',
+      stories: cards,
+    },
+  };
+}
+
 /**
  * Deterministic-per-call answer order. Booleans keep True/False order so the
  * two-tile layout always reads the same way; multiple choice is shuffled so the
@@ -1499,9 +1598,139 @@ function buildYoutubeNowPlayingClosePayload({
   };
 }
 
+/**
+ * Overhead flight radar — initial round with settings + aircraft list.
+ */
+function buildOverheadRoundPayload({
+  settings = {},
+  home = {},
+  aircraft = [],
+  routes = {},
+  sessionId = null,
+  loops = 'once',
+  loopCount = 1,
+  cycleSeconds = null,
+  durationSeconds = null,
+  geoBaseUrl = '',
+  device = 'Signal',
+  timestamp = Date.now(),
+  trigger = 'overhead',
+  triggeredBy = 'manual',
+} = {}, config = {}) {
+  const list = Array.isArray(aircraft) ? aircraft : [];
+  const total = Number(durationSeconds) > 0
+    ? Number(durationSeconds)
+    : displaySeconds(config);
+  const base = String(geoBaseUrl || '').replace(/\/+$/, '');
+
+  return {
+    version: 2,
+    type: 'overhead.round',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: total,
+    trigger,
+    overhead: {
+      sessionId: sessionId || `overhead-${new Date(timestamp).getTime()}`,
+      triggeredBy,
+      title: 'Overhead',
+      clearSkies: list.length === 0,
+      aircraftCount: list.length,
+      home: {
+        lat: home.lat,
+        lon: home.lon,
+        name: home.name || 'Home',
+      },
+      radiusNm: Number(settings.radiusNm) || 40,
+      pageSeconds: Number(settings.pageSeconds) || 8,
+      rowsPerPage: settings.rowsPerPage || 'auto',
+      maxPages: Number(settings.maxPages) || 6,
+      loops: loops || 'once',
+      loopCount: loopCount == null ? 1 : loopCount,
+      cycleSeconds: Number(cycleSeconds) > 0 ? Number(cycleSeconds) : total,
+      totalDurationSeconds: total,
+      sort: settings.sort || 'nearest',
+      showRoutes: settings.showRoutes !== false,
+      mapStyle: settings.mapStyle || 'scope',
+      provider: settings.provider || 'airplanes-live',
+      refreshSeconds: Number(settings.refreshSeconds) || 5,
+      settings: {
+        radiusNm: Number(settings.radiusNm) || 40,
+        refreshSeconds: Number(settings.refreshSeconds) || 5,
+        rowsPerPage: settings.rowsPerPage || 'auto',
+        pageSeconds: Number(settings.pageSeconds) || 8,
+        maxPages: Number(settings.maxPages) || 6,
+        loops: settings.loops || 'once',
+        sort: settings.sort || 'nearest',
+        altitudeFloorFt: Number(settings.altitudeFloorFt) || 0,
+        includeGround: settings.includeGround === true,
+        showRoutes: settings.showRoutes !== false,
+        mapStyle: settings.mapStyle || 'scope',
+      },
+      aircraft: list,
+      routes: routes || {},
+      geo: base
+        ? {
+          homeArea: `${base}/overhead-geo/home-area.json`,
+          airports: `${base}/overhead-geo/airports.json`,
+        }
+        : null,
+    },
+  };
+}
+
+function buildOverheadUpdatePayload({
+  sessionId,
+  aircraft = [],
+  routes = {},
+  device = 'Signal',
+  timestamp = Date.now(),
+  trigger = 'overhead-update',
+} = {}, _config) {
+  if (!sessionId) return null;
+  return {
+    version: 2,
+    type: 'overhead.update',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: 0,
+    persistent: true,
+    trigger,
+    overhead: {
+      sessionId,
+      aircraft: Array.isArray(aircraft) ? aircraft : [],
+      routes: routes || {},
+    },
+  };
+}
+
+function buildOverheadClosePayload({
+  sessionId,
+  device = 'Signal',
+  timestamp = Date.now(),
+  trigger = 'overhead-close',
+} = {}, _config) {
+  if (!sessionId) return null;
+  return {
+    version: 2,
+    type: 'overhead.close',
+    device,
+    timestamp: new Date(timestamp).toISOString(),
+    displaySeconds: 0,
+    trigger,
+    overhead: {
+      sessionId,
+    },
+  };
+}
+
 module.exports = {
   buildTriviaRoundPayload,
   buildUpsideNewsRoundPayload,
+  buildWikiCommonKnowledgeRoundPayload,
+  buildOverheadRoundPayload,
+  buildOverheadUpdatePayload,
+  buildOverheadClosePayload,
   buildYoutubeNowPlayingPayload,
   buildYoutubeNowPlayingClosePayload,
   buildBroadcastPayload,

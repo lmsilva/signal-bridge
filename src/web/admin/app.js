@@ -689,6 +689,8 @@
     alarm: '<path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/><path d="M12 3v1"/>',
     trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.2 2.5c-.5.2-.7.6-.7 1.1v.5"/><path d="M12 16.6v.4"/>',
     news: '<path d="M4 5.5h12.5A2.5 2.5 0 0 1 19 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M8 9h6M8 12h6M8 15h3.5"/><path d="M19 10.5h1.5A1.5 1.5 0 0 1 22 12v5.5A1.5 1.5 0 0 1 20.5 19H19"/>',
+    wiki: '<path d="M5 4.5h8a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2v-13Z"/><path d="M9 4.5V3h6v1.5"/><path d="M8 10h6M8 13.5h4"/>',
+    sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
     steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
     psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
@@ -3380,6 +3382,346 @@
       }
     });
     loadUpsideNewsSettings();
+  }
+
+  // ------------------------------------------- Settings → Wiki Common Knowledge
+
+  const WIKI_PERIOD_HINTS = {
+    daily: 'Most-read Wikipedia articles for today',
+    weekly: 'Most-read articles this ISO week (from daily caches)',
+    monthly: 'Most-read articles this month (from daily caches)',
+    yearly: 'Most-read articles this year (from daily caches)',
+  };
+
+  function renderWikiCkSettings(status) {
+    const settings = status.settings || {};
+    const periodBtn = document.querySelector(`#wiki-ck-period-tabs .segmented-btn[data-period="${settings.period || 'daily'}"]`);
+    document.querySelectorAll('#wiki-ck-period-tabs .segmented-btn')
+      .forEach((btn) => btn.classList.toggle('active', btn === periodBtn));
+    const hint = $('wiki-ck-period-hint');
+    if (hint) hint.textContent = WIKI_PERIOD_HINTS[settings.period] || WIKI_PERIOD_HINTS.daily;
+    const items = $('wiki-ck-items');
+    if (items) {
+      items.value = settings.items || 5;
+      const label = $('wiki-ck-items-value');
+      if (label) label.textContent = String(items.value);
+    }
+    const articleSec = $('wiki-ck-article-seconds');
+    if (articleSec) {
+      articleSec.value = settings.articleSeconds || 15;
+      const label = $('wiki-ck-article-seconds-value');
+      if (label) label.textContent = `${articleSec.value}s`;
+    }
+    const loops = $('wiki-ck-loops');
+    if (loops) loops.value = settings.loops || 'once';
+    const lang = $('wiki-ck-lang');
+    if (lang) lang.value = settings.lang || 'en';
+    const email = $('wiki-ck-contact-email');
+    if (email) email.value = settings.contactEmail || '';
+    const cycle = $('wiki-ck-cycle-length');
+    if (cycle) cycle.textContent = formatCycleLength(status.cycleSeconds);
+    [
+      ['wiki-ck-show-qr', 'showQr'],
+      ['wiki-ck-show-sparkline', 'showSparkline'],
+      ['wiki-ck-skip-no-image', 'skipNoImage'],
+      ['wiki-ck-filter-distressing', 'filterDistressing'],
+    ].forEach(([id, key]) => {
+      const el = $(id);
+      if (!el) return;
+      el.checked = Boolean(settings[key]);
+      el.closest('.trivia-check')?.classList.toggle('is-off', !el.checked);
+    });
+    const cacheHint = $('wiki-ck-cache-hint');
+    if (cacheHint) {
+      const cache = status.cache || {};
+      const last = cache.lastPollAt
+        ? `${Math.max(0, Math.round((Date.now() - Number(cache.lastPollAt)) / 60000))}m ago`
+        : 'never';
+      cacheHint.textContent = `Cache: ${cache.dayLists || 0} day lists · ${cache.articles || 0} articles · last poll ${last}`
+        + (cache.lastPollError ? ` · ${cache.lastPollError}` : '');
+    }
+    const pill = $('wiki-ck-status-pill');
+    const detail = $('wiki-ck-status-detail');
+    if (pill) {
+      pill.textContent = status.hasContent ? 'Ready' : (status.hasContactEmail ? 'Collecting' : 'Needs email');
+      pill.className = `status-pill ${status.hasContent ? 'ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = status.hasContent
+        ? `${status.available || 0} articles ready for ${settings.period || 'daily'}`
+        : (status.hasContactEmail
+          ? 'Cache is still filling — refresh after a poll.'
+          : 'Add a contact email so Wikimedia requests can include a valid User-Agent.');
+    }
+  }
+
+  function readWikiCkForm() {
+    const periodBtn = document.querySelector('#wiki-ck-period-tabs .segmented-btn.active');
+    return {
+      period: periodBtn?.dataset.period || 'daily',
+      items: Number($('wiki-ck-items')?.value || 5),
+      articleSeconds: Number($('wiki-ck-article-seconds')?.value || 15),
+      loops: $('wiki-ck-loops')?.value || 'once',
+      lang: $('wiki-ck-lang')?.value || 'en',
+      contactEmail: $('wiki-ck-contact-email')?.value || '',
+      apiToken: $('wiki-ck-api-token')?.value || undefined,
+      showQr: Boolean($('wiki-ck-show-qr')?.checked),
+      showSparkline: Boolean($('wiki-ck-show-sparkline')?.checked),
+      skipNoImage: Boolean($('wiki-ck-skip-no-image')?.checked),
+      filterDistressing: Boolean($('wiki-ck-filter-distressing')?.checked),
+    };
+  }
+
+  let wikiCkSaveTimer = null;
+  async function saveWikiCkSettings() {
+    try {
+      const body = readWikiCkForm();
+      if (!body.apiToken) delete body.apiToken;
+      const result = await apiPost('/api/wiki-common-knowledge/settings', body);
+      const cycle = $('wiki-ck-cycle-length');
+      if (cycle) cycle.textContent = formatCycleLength(result.cycleSeconds);
+      await loadWikiCkSettings();
+    } catch (error) {
+      toast(error.message || 'Could not save Common Knowledge settings', 'bad');
+    }
+  }
+
+  function queueWikiCkSave() {
+    clearTimeout(wikiCkSaveTimer);
+    wikiCkSaveTimer = setTimeout(saveWikiCkSettings, 400);
+  }
+
+  async function loadWikiCkSettings() {
+    const card = $('wiki-ck-settings-card');
+    if (!card) return;
+    try {
+      const status = await apiGet('/api/wiki-common-knowledge/status');
+      renderWikiCkSettings(status);
+      card.hidden = false;
+    } catch {
+      card.hidden = true;
+      const label = card.previousElementSibling;
+      if (label?.classList.contains('section-label')) label.hidden = true;
+    }
+  }
+
+  const wikiCkCard = $('wiki-ck-settings-card');
+  if (wikiCkCard) {
+    document.querySelectorAll('#wiki-ck-period-tabs .segmented-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#wiki-ck-period-tabs .segmented-btn')
+          .forEach((other) => other.classList.toggle('active', other === btn));
+        const hint = $('wiki-ck-period-hint');
+        if (hint) hint.textContent = WIKI_PERIOD_HINTS[btn.dataset.period] || '';
+        queueWikiCkSave();
+      });
+    });
+    wikiCkCard.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.matches('input[type="checkbox"]')) {
+        target.closest('.trivia-check')?.classList.toggle('is-off', !target.checked);
+        queueWikiCkSave();
+      } else if (target.matches('select') || target.matches('input[type="range"]') || target.matches('input[type="email"]') || target.matches('input[type="text"]') || target.matches('input[type="password"]')) {
+        queueWikiCkSave();
+      }
+    });
+    wikiCkCard.addEventListener('input', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === 'range') {
+        const isItems = target.id === 'wiki-ck-items';
+        const label = $(isItems ? 'wiki-ck-items-value' : `${target.id}-value`);
+        if (label) label.textContent = `${target.value}${isItems ? '' : 's'}`;
+      }
+    });
+    $('btn-wiki-ck-test')?.addEventListener('click', async () => {
+      try {
+        await saveWikiCkSettings();
+        const result = await apiPost('/api/wiki-common-knowledge/test', {});
+        toast(result.ok ? `Wikipedia OK (${result.articles || 0} featured)` : (result.error || 'Test failed'), result.ok ? 'ok' : 'bad');
+      } catch (error) {
+        toast(error.message || 'Test failed', 'bad');
+      }
+    });
+    $('btn-wiki-ck-poll')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await apiPost('/api/wiki-common-knowledge/cache/poll', {});
+        toast('Cache refresh started', 'ok');
+        setTimeout(loadWikiCkSettings, 4000);
+      } catch (error) {
+        toast(error.message || 'Could not refresh cache', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    $('btn-wiki-ck-backfill')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await apiPost('/api/wiki-common-knowledge/cache/backfill', { days: 7 });
+        toast('Backfill started', 'ok');
+        setTimeout(loadWikiCkSettings, 8000);
+      } catch (error) {
+        toast(error.message || 'Could not backfill', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    loadWikiCkSettings();
+  }
+
+  // ------------------------------------------- Settings → Overhead
+
+  function renderOverheadSettings(status) {
+    const settings = status.settings || {};
+    setTriviaSlider('overhead-radius-nm', 'overhead-radius-nm-value', settings.radiusNm, 'nm');
+    setTriviaSlider('overhead-refresh-seconds', 'overhead-refresh-seconds-value', settings.refreshSeconds, 's');
+    setTriviaSlider('overhead-page-seconds', 'overhead-page-seconds-value', settings.pageSeconds, 's');
+    setTriviaSlider('overhead-max-pages', 'overhead-max-pages-value', settings.maxPages, '');
+    const loops = $('overhead-loops');
+    if (loops) loops.value = settings.loops || 'once';
+    const sort = $('overhead-sort');
+    if (sort) sort.value = settings.sort || 'nearest';
+    const rows = $('overhead-rows-per-page');
+    if (rows) rows.value = String(settings.rowsPerPage || 'auto');
+    const provider = $('overhead-provider');
+    if (provider) provider.value = settings.provider || 'airplanes-live';
+    const localUrl = $('overhead-local-url');
+    if (localUrl) localUrl.value = settings.localReceiverUrl || '';
+    const floor = $('overhead-altitude-floor');
+    if (floor) floor.value = String(settings.altitudeFloorFt ?? 0);
+    const mapStyle = $('overhead-map-style');
+    if (mapStyle) mapStyle.value = settings.mapStyle || 'scope';
+    setChecked('overhead-show-routes', settings.showRoutes !== false);
+    setChecked('overhead-include-ground', settings.includeGround === true);
+    const cycle = $('overhead-cycle-length');
+    if (cycle) cycle.textContent = formatCycleLength(status.estimatedDurationSeconds || status.cycleSeconds);
+    const homeLoc = $('overhead-home-location');
+    if (homeLoc) {
+      if (status.home?.latitude != null) {
+        homeLoc.textContent = `Location: ${status.home.name || 'Home'} (${Number(status.home.latitude).toFixed(4)}, ${Number(status.home.longitude).toFixed(4)})`;
+      } else {
+        homeLoc.textContent = 'Location: not set — configure voiceEvents.defaultLocation (same as weather).';
+      }
+    }
+    const aircraftHint = $('overhead-aircraft-hint');
+    if (aircraftHint) {
+      const count = status.aircraftInRange ?? 0;
+      const last = status.lastFetchAt
+        ? `${Math.max(0, Math.round((Date.now() - Date.parse(status.lastFetchAt)) / 1000))}s ago`
+        : 'never';
+      aircraftHint.textContent = `Aircraft in range: ${count} · last fetch ${last}`;
+    }
+    const pill = $('overhead-status-pill');
+    const detail = $('overhead-status-detail');
+    if (pill) {
+      pill.textContent = status.hasHome
+        ? (status.hasContent ? 'Traffic' : 'Clear skies')
+        : 'Needs location';
+      pill.className = `status-pill ${status.hasContent ? 'ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = !status.hasHome
+        ? 'Set voiceEvents.defaultLocation in config — Overhead uses the same coordinates as weather.'
+        : (status.hasContent
+          ? `${status.aircraftInRange || 0} aircraft within ${settings.radiusNm || 40} nm`
+          : 'No aircraft in range right now — manual push still shows clear skies.');
+    }
+  }
+
+  function readOverheadForm() {
+    return {
+      radiusNm: Number($('overhead-radius-nm')?.value || 40),
+      refreshSeconds: Number($('overhead-refresh-seconds')?.value || 5),
+      rowsPerPage: $('overhead-rows-per-page')?.value || 'auto',
+      pageSeconds: Number($('overhead-page-seconds')?.value || 8),
+      maxPages: Number($('overhead-max-pages')?.value || 6),
+      loops: $('overhead-loops')?.value || 'once',
+      sort: $('overhead-sort')?.value || 'nearest',
+      altitudeFloorFt: Number($('overhead-altitude-floor')?.value || 0),
+      includeGround: Boolean($('overhead-include-ground')?.checked),
+      showRoutes: Boolean($('overhead-show-routes')?.checked),
+      provider: $('overhead-provider')?.value || 'airplanes-live',
+      localReceiverUrl: $('overhead-local-url')?.value || '',
+      mapStyle: $('overhead-map-style')?.value || 'scope',
+    };
+  }
+
+  let overheadSaveTimer = null;
+  async function saveOverheadSettings() {
+    try {
+      const result = await apiPost('/api/overhead/settings', readOverheadForm());
+      const cycle = $('overhead-cycle-length');
+      if (cycle) {
+        cycle.textContent = formatCycleLength(result.estimatedDurationSeconds || result.cycleSeconds);
+      }
+    } catch (error) {
+      toast(error.message || 'Could not save Overhead settings', 'bad');
+    }
+  }
+  function queueOverheadSave() {
+    clearTimeout(overheadSaveTimer);
+    overheadSaveTimer = setTimeout(saveOverheadSettings, 400);
+  }
+
+  async function loadOverheadSettings() {
+    const card = $('overhead-settings-card');
+    if (!card) return;
+    try {
+      const status = await apiGet('/api/overhead/status');
+      renderOverheadSettings(status);
+    } catch (error) {
+      toast(error.message || 'Could not load Overhead settings', 'bad');
+    }
+  }
+
+  const overheadCard = $('overhead-settings-card');
+  if (overheadCard) {
+    overheadCard.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+      if (target.type === 'checkbox') {
+        target.closest('.trivia-check')?.classList.toggle('is-off', !target.checked);
+      }
+      queueOverheadSave();
+    });
+    overheadCard.addEventListener('input', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (target.type === 'range') {
+        const suffix = target.id === 'overhead-radius-nm' ? 'nm' : (target.id.includes('seconds') ? 's' : '');
+        const label = $(`${target.id}-value`);
+        if (label) label.textContent = suffix ? `${target.value}${suffix}` : String(target.value);
+      }
+      queueOverheadSave();
+    });
+    $('btn-overhead-provider-test')?.addEventListener('click', async () => {
+      try {
+        await saveOverheadSettings();
+        const result = await apiPost('/api/overhead/provider/test', readOverheadForm());
+        toast(result.ok
+          ? `Provider OK — ${result.aircraftCount ?? 0} aircraft`
+          : (result.error || 'Provider test failed'), result.ok ? 'ok' : 'bad');
+      } catch (error) {
+        toast(error.message || 'Provider test failed', 'bad');
+      }
+    });
+    $('btn-overhead-refresh-count')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const status = await apiGet('/api/overhead/status');
+        renderOverheadSettings(status);
+        toast('Count refreshed', 'ok');
+      } catch (error) {
+        toast(error.message || 'Could not refresh', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    loadOverheadSettings();
   }
 
   // ------------------------------------------- Settings → Trivia
