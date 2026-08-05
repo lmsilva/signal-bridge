@@ -108,11 +108,26 @@ class BasePanel:
     def hide(self):
         self.visible = False
         self._stop_tick()
-        for item_id in self._item_ids:
-            self.canvas.delete(item_id)
+        for item_id in list(self._item_ids):
+            try:
+                self.canvas.delete(item_id)
+            except Exception:
+                pass
         self._item_ids.clear()
-        for widget in self._widgets:
-            widget.place_forget()
+        for widget in list(self._widgets):
+            # Nested marquees/scrollers may already be destroy()'d by a panel
+            # subclass — place_forget on a dead widget raises and used to abort
+            # panel handoff mid-teardown (empty shell + lingering dismiss footer).
+            try:
+                if widget.winfo_exists():
+                    widget.place_forget()
+            except Exception:
+                pass
+            try:
+                if widget.winfo_exists():
+                    widget.destroy()
+            except Exception:
+                pass
         self._widgets.clear()
 
     def _stop_tick(self):

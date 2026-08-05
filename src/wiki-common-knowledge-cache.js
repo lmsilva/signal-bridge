@@ -125,14 +125,38 @@ function createWikiCommonKnowledgeCache({
 
   async function enrichArticle(client, raw) {
     const cached = readArticle(raw.title);
-    if (cached) return { ...cached, ...raw, fromCache: true };
+    let article;
+    if (cached) {
+      // Never let an empty featured-feed field wipe a previously enriched image.
+      article = {
+        ...cached,
+        ...raw,
+        thumbnailUrl: raw.thumbnailUrl || cached.thumbnailUrl || '',
+        originalImageUrl: raw.originalImageUrl || cached.originalImageUrl || '',
+        extract: String(raw.extract || cached.extract || '').trim(),
+        description: String(raw.description || cached.description || '').trim(),
+        contentUrl: raw.contentUrl || cached.contentUrl || '',
+        history: (Array.isArray(raw.history) && raw.history.length)
+          ? raw.history
+          : (cached.history || []),
+        fromCache: true,
+      };
+      if ((cached.extract || '').length > (article.extract || '').length) {
+        article.extract = cached.extract;
+      }
+    } else {
+      article = { ...raw, fromCache: false };
+    }
 
-    let article = { ...raw, fromCache: false };
     try {
-      if (!article.extract || article.extract.length < 40) {
+      const needsExtract = !article.extract || article.extract.length < 40;
+      const needsImage = !article.thumbnailUrl && !article.originalImageUrl;
+      if (needsExtract || needsImage) {
         networkCalls += 1;
         const summary = await client.fetchSummary(raw.title);
-        article.extract = String(summary.extract || article.extract || '').trim();
+        if (needsExtract || !article.extract) {
+          article.extract = String(summary.extract || article.extract || '').trim();
+        }
         article.description = article.description
           || String(summary.description || '').trim();
         article.thumbnailUrl = article.thumbnailUrl

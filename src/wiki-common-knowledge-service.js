@@ -15,7 +15,7 @@ const {
   ensureArtworkPlaceholders,
   getUnmatchedLog,
 } = require('./wiki-common-knowledge-categories');
-const { createWikiClient } = require('./wiki-common-knowledge-wiki');
+const { createWikiClient, displayImageCandidates } = require('./wiki-common-knowledge-wiki');
 const { buildWikiCommonKnowledgeRoundPayload } = require('./udp-payload');
 
 function createWikiCommonKnowledgeService({
@@ -64,6 +64,10 @@ function createWikiCommonKnowledgeService({
     const catId = article.categoryId || 'misc';
     const art = artworkUrls(artworkBaseUrl(), catId);
     const topic = listTopics().find((t) => t.id === art.topicId) || {};
+    // Prefer a bounded thumb for the hero — originals often fail on the display.
+    const images = displayImageCandidates(article, { minWidth: 960 });
+    const displayUrl = images[0] || '';
+    const thumbUrl = String(article.thumbnailUrl || '').trim() || displayUrl;
     return {
       id: article.pageid || article.title,
       rank: article.rank,
@@ -74,8 +78,8 @@ function createWikiCommonKnowledgeService({
       categoryName: topic.label || art.topicId,
       accent: topic.accent || '#E897FF',
       background: topic.background || '#7A2396',
-      thumbnailUrl: article.thumbnailUrl || article.originalImageUrl || '',
-      imageUrl: article.originalImageUrl || article.thumbnailUrl || '',
+      thumbnailUrl: thumbUrl,
+      imageUrl: displayUrl || thumbUrl,
       contentUrl: article.contentUrl || '',
       views: article.views || 0,
       viewsDelta: article.viewsDelta || 0,

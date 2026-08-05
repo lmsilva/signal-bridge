@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import ssl
 import sys
 import threading
@@ -45,12 +46,92 @@ WIKIMEDIA_USER_AGENT = (
     "https://github.com/local/signal-bridge)"
 )
 
+# Wikimedia CDN only serves these thumbnail widths (others are blocked).
+WIKIMEDIA_THUMB_STEPS = (320, 500, 960, 1280, 1920)
+
 _unverified_ssl = False
 
 
 def should_apply_fetched_image(*, fetch_gen: int, current_gen: int, visible: bool) -> bool:
     """True when an async image still belongs to the active paint generation."""
     return bool(visible) and int(fetch_gen) == int(current_gen)
+
+
+def pick_wikimedia_thumb_step(min_width: int = 960) -> int:
+    want = max(1, int(min_width or 960))
+    for step in WIKIMEDIA_THUMB_STEPS:
+        if step >= want:
+            return step
+    return WIKIMEDIA_THUMB_STEPS[-1]
+
+
+def wikimedia_display_url(url: str, *, min_width: int = 960) -> str:
+    """Rewrite upload.wikimedia.org URLs to a bounded standard thumb size."""
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    step = pick_wikimedia_thumb_step(min_width)
+    try:
+        parts = urlsplit(raw)
+    except Exception:
+        return raw
+    host = (parts.hostname or "").lower()
+    if host != "upload.wikimedia.org":
+        return raw
+    path = parts.path or ""
+
+    thumb_px = re.search(r"/(\d+)px-", path)
+    if thumb_px:
+        current = int(thumb_px.group(1))
+        if current >= step:
+            return raw
+        new_path = re.sub(r"/\d+px-", f"/{step}px-", path, count=1)
+        return urlunsplit((parts.scheme, parts.netloc, new_path, parts.query, parts.fragment))
+
+    original = re.match(
+        r"^/wikipedia/([^/]+)/([0-9a-f])/([0-9a-f]{2})/([^/]+)$",
+        path,
+        flags=re.IGNORECASE,
+    )
+    if not original:
+        return raw
+    project, a, ab, file_name = original.groups()
+    lower = file_name.lower()
+    if lower.endswith((".tif", ".tiff")):
+        new_path = (
+            f"/wikipedia/{project}/thumb/{a}/{ab}/{file_name}/"
+            f"lossy-page1-{step}px-{file_name}.jpg"
+        )
+    elif lower.endswith(".svg"):
+        new_path = (
+            f"/wikipedia/{project}/thumb/{a}/{ab}/{file_name}/"
+            f"{step}px-{file_name}.png"
+        )
+    elif lower.endswith((".pdf", ".djvu")):
+        return raw
+    else:
+        new_path = (
+            f"/wikipedia/{project}/thumb/{a}/{ab}/{file_name}/"
+            f"{step}px-{file_name}"
+        )
+    return urlunsplit((parts.scheme, parts.netloc, new_path, parts.query, parts.fragment))
+
+
+def hero_image_urls(card: dict | None, *, min_width: int = 960) -> list[str]:
+    """Prefer thumbnail (sized up) over multi-MB originals for article heroes."""
+    card = card or {}
+    thumb = str(card.get("thumbnailUrl") or "").strip()
+    image = str(card.get("imageUrl") or "").strip()
+    out: list[str] = []
+    for raw in (thumb, image):
+        if not raw:
+            continue
+        sized = wikimedia_display_url(raw, min_width=min_width)
+        for candidate in (sized, raw):
+            if candidate and candidate not in out:
+                out.append(candidate)
+    return out
+
 
 DEFAULT_INDEX_BACKGROUND = "#7A2396"
 DEFAULT_INDEX_ACCENT = "#E897FF"
@@ -292,7 +373,8 @@ def estimate_wrapped_lines(text: str, font, width: float, *, max_lines: int = 8)
 class WikiCommonKnowledgePanel(BasePanel):
     """Owns chrome: full-bleed artwork, title, per-page countdown ring."""
 
-    BRAND_U = 22
+    BRAND_LABEL = "Wikipedia Common Knowledge"
+    BRAND_U = 18
     INDEX_HERO_U = (68, 56)
     INDEX_DATE_U = 22
     INDEX_ROW_U = (28, 24)
@@ -779,7 +861,7 @@ class WikiCommonKnowledgePanel(BasePanel):
         y = y0
         header_ids = []
         header_ids.append(self._track(self.canvas.create_text(
-            x0, y, anchor="nw", text="Wikipedia", fill=INK_2, font=brand_font,
+            x0, y, anchor="nw", text=self.BRAND_LABEL, fill=INK_2, font=brand_font,
         )))
         y += brand_font.metrics("linespace") + 10 * u
         hero = resolve_index_title(self._wiki)
@@ -889,9 +971,11 @@ class WikiCommonKnowledgePanel(BasePanel):
             inner_x = bx0 + bar_w + pad
             num_w = num_font.measure(str(number)) + 14 * u
             thumb_x = inner_x + num_w
+            # Align number + thumbnail on the same vertical mid-line.
             thumb_y = y + pad * 0.65
+            num_cy = thumb_y + thumb_size / 2
             self._track(self.canvas.create_text(
-                inner_x, thumb_y + thumb_size * 0.22, anchor="nw",
+                inner_x, num_cy, anchor="w",
                 text=str(number), fill=accent, font=num_font,
             ))
             self._draw_thumb_placeholder(
@@ -944,9 +1028,18 @@ class WikiCommonKnowledgePanel(BasePanel):
             return
         # Share the paint-step generation — do not bump per thumbnail.
         token = self._fetch_token
+        # Size up tiny feed thumbs so index cards stay sharp on large displays.
+        load_urls = hero_image_urls(
+            {"thumbnailUrl": url, "imageUrl": str(story.get("imageUrl") or "")},
+            min_width=max(500, int(size) * 2),
+        ) or [url]
 
         def worker():
-            image = self._load_cover_url(url, int(size), int(size))
+            image = None
+            for candidate in load_urls:
+                image = self._load_cover_url(candidate, int(size), int(size))
+                if image is not None:
+                    break
             if image is None:
                 return
             self.root.after(0, lambda: self._apply_inline_image(token, x, y, image))
@@ -975,7 +1068,7 @@ class WikiCommonKnowledgePanel(BasePanel):
             main = geometry["article_main"]
             mx0, my0, mx1, my1 = main
             self._track(self.canvas.create_text(
-                mx0, my0, anchor="nw", text="Wikipedia", fill=INK_2, font=brand_font,
+                mx0, my0, anchor="nw", text=self.BRAND_LABEL, fill=INK_2, font=brand_font,
             ))
             self._track(self.canvas.create_text(
                 mx1, my0, anchor="ne",
@@ -992,7 +1085,7 @@ class WikiCommonKnowledgePanel(BasePanel):
             cx0, cy0, cx1, cy1 = geometry["article_body"]
             # Page index lives in the copy column; brand sits above the chip.
             self._track(self.canvas.create_text(
-                cx0, cy0, anchor="nw", text="Wikipedia", fill=INK_2, font=brand_font,
+                cx0, cy0, anchor="nw", text=self.BRAND_LABEL, fill=INK_2, font=brand_font,
             ))
             self._track(self.canvas.create_text(
                 geometry["story_qr"][0] - 8 * u, cy0, anchor="ne",
@@ -1079,8 +1172,9 @@ class WikiCommonKnowledgePanel(BasePanel):
         h = max(1, int(y1 - y0))
         fill = mix_hex(self._palette["background"], "#000000", 0.35)
         self._round_rect(x0, y0, x1, y1, radius=12, fill=fill, outline=self._palette["accent"], width=2)
-        url = str(card.get("imageUrl") or card.get("thumbnailUrl") or "").strip()
-        if not url:
+        # Prefer thumbnail (sized up) — imageUrl used to point at multi-MB originals.
+        urls = hero_image_urls(card, min_width=max(960, w))
+        if not urls:
             cat = str(card.get("categoryId") or "misc")
             local = self._load_local_topic_image(cat, w, h)
             if local is not None:
@@ -1089,7 +1183,11 @@ class WikiCommonKnowledgePanel(BasePanel):
         token = self._fetch_token
 
         def worker():
-            image = self._load_cover_url(url, w, h)
+            image = None
+            for url in urls:
+                image = self._load_cover_url(url, w, h)
+                if image is not None:
+                    break
             if image is None:
                 image = self._load_local_topic_image(
                     str(card.get("categoryId") or "misc"), w, h,

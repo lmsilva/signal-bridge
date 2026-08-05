@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-05 (Wiki CK dismiss + thumbnails)
+**Last updated:** 2026-08-05 (Wiki CK article hero images)
 
 ---
 
@@ -264,6 +264,9 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-05: **Wiki CK article hero images** — article pages preferred multi-MB `originalImageUrl` (often TIFF) and timed out while index thumbs worked; heroes now prefer sized Wikimedia thumbs (standard CDN widths) with original as fallback. Ship: portable client rebuild (+ `./recreate.sh` so UDP `imageUrl` is the bounded thumb).
+- 2026-08-05: **Overhead labels + Wiki CK rename** — landscape radar circle / N/E/S/W sit above the legend band (legend gets a solid backdrop); on-page aircraft labels use greedy collision offsets; Wiki index rank numbers share the thumbnail mid-line; display brand / chrome title is **Wikipedia Common Knowledge**. Ship: portable client rebuild.
+- 2026-08-05: **Overhead handoff + radar contrast** — replacing Wiki CK (or any marquee panel) no longer aborts mid-teardown when destroyed nested widgets raise on `place_forget` (empty shell + live dismiss footer); pending click-dismiss is cancelled on the next payload; radar range rings + N/E/S/W use brighter ink and bolder type over the map. Ship: portable client rebuild.
 - 2026-08-05: **Wiki CK dismiss + index thumbnails** — click-to-dismiss is deferred and tear-down is exception-safe so the panel cannot clear while leaving an empty shell + live dismiss footer; nested marquees/scrollers forward clicks to dismiss; index thumbnails share one image generation (no more “only the last card gets a picture”). Ship: portable client rebuild.
 - 2026-08-05: **Overhead map + route list** — OSM map fills the full left/top scope rectangle (circle is focus/range only); header subtitle uses font metrics and stays above the map; list rows show origin → destination (structured `route` dict, `"A → B"` string, or `overhead.routes[hex]`); legend spelled out as Airliner / General aviation / Helicopter / Emergency with swatch gaps. Ship: portable client rebuild.
 - 2026-08-04: **Upside News overflow scroll** — index card headlines/meta and story credits/attribution use `MarqueeLine` when too wide; story headline + standfirst use clipped vertical `MessageScrollController` so long copy is never ellipsised away. Portable rebuild required.

@@ -65,7 +65,7 @@ const {
   readPsnAuthStatus,
 } = require('./psn-session');
 const { createDisplayControlAuth } = require('./display-control-auth');
-const { createQrImageCache } = require('./qr-image-cache');
+const { createQrImageCache, parseThumbRouteTail } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
 const { createCommandRegistry } = require('./command-registry');
 const { createDisplayScheduler } = require('./display-scheduler');
@@ -341,6 +341,15 @@ function createWebServer({
   const adminAuth = createWebAdminAuth(config, log);
   const guestSnapsAuth = guestSnapsAuthInjected || createGuestSnapsAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
+  // Existing camera-roll photos predate thumbnail support — fill them in the
+  // background so the Slideshow tab does not download multi‑MB originals.
+  if (typeof qrImageCache.backfillThumbnails === 'function') {
+    Promise.resolve()
+      .then(() => qrImageCache.backfillThumbnails())
+      .catch((error) => {
+        log.warn?.('QR image thumbnail backfill failed to start', error?.message || error);
+      });
+  }
   const slideshowSettings = createSlideshowSettings(config, log);
   const libraryTourSettings = libraryTourSettingsInjected || createLibraryTourSettings(config, log);
   const commandRegistry = createCommandRegistry({
@@ -2492,19 +2501,29 @@ function createWebServer({
     sendCommandPayload(payload, targetIdFrom(body), res, { qrType, label });
   }
 
-  function handleQrImageServe(pathname, res) {
+  async function handleQrImageServe(pathname, res) {
     const routeTail = pathname.slice(qrImageCache.routePrefix.length);
-    const entry = qrImageCache.get(routeTail);
+    let entry = qrImageCache.get(routeTail);
+    if (!entry && typeof qrImageCache.ensureThumb === 'function') {
+      const token = parseThumbRouteTail(routeTail.replace(/^\/+/, ''));
+      if (token) {
+        entry = await qrImageCache.ensureThumb(token);
+      }
+    }
     if (!entry) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found or expired');
       return;
     }
+    // Thumbs are immutable per token and safe to cache in the browser so the
+    // Slideshow grid stays snappy on revisit. Full originals stay no-store so
+    // a delete is reflected immediately if a lightbox still has the URL.
+    const cacheControl = entry.isThumb
+      ? 'private, max-age=31536000, immutable'
+      : 'no-store';
     res.writeHead(200, {
       'Content-Type': entry.mimeType,
-      // Never cache client/proxy-side: once the token expires the URL must
-      // 404 immediately for anyone who still has it.
-      'Cache-Control': 'no-store',
+      'Cache-Control': cacheControl,
     });
     fs.createReadStream(entry.filePath).pipe(res);
   }
@@ -3523,7 +3542,7 @@ function createWebServer({
           return;
         }
         if (pathname.startsWith(qrImageCache.routePrefix)) {
-          handleQrImageServe(pathname, res);
+          await handleQrImageServe(pathname, res);
           return;
         }
         if (pathname.startsWith(TRIVIA_ARTWORK_ROUTE_PREFIX)) {

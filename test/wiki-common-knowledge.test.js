@@ -22,6 +22,8 @@ const {
   normaliseFeaturedArticle,
   articlesFromFeatured,
   buildUserAgent,
+  wikimediaDisplayUrl,
+  displayImageCandidates,
 } = require('../src/wiki-common-knowledge-wiki');
 const { createWikiCommonKnowledgeCache } = require('../src/wiki-common-knowledge-cache');
 const { createWikiCommonKnowledgeService } = require('../src/wiki-common-knowledge-service');
@@ -85,6 +87,30 @@ test('featured article normalisation', () => {
   assert.equal(art.viewsDeltaPct, 20);
   assert.equal(art.thumbnailUrl, 'https://example.com/t.jpg');
   assert.equal(articlesFromFeatured({ mostread: { articles: [{ title: 'A', views: 1 }] } }).length, 1);
+});
+
+test('wikimedia display urls prefer bounded thumbs over originals', () => {
+  const thumb = wikimediaDisplayUrl(
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Glen.jpg/220px-Glen.jpg',
+    { minWidth: 960 },
+  );
+  assert.match(thumb, /\/960px-Glen\.jpg$/);
+
+  const fromOriginal = wikimediaDisplayUrl(
+    'https://upload.wikimedia.org/wikipedia/commons/a/ab/Glen.jpg',
+    { minWidth: 960 },
+  );
+  assert.equal(
+    fromOriginal,
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Glen.jpg/960px-Glen.jpg',
+  );
+
+  const candidates = displayImageCandidates({
+    thumbnailUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Glen.jpg/220px-Glen.jpg',
+    originalImageUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Glen_Huge.tif',
+  });
+  assert.equal(candidates[0], thumb);
+  assert.match(candidates.join('\n'), /lossy-page1-960px-Glen_Huge\.tif\.jpg/);
 });
 
 test('day-list cache hit makes zero network calls', async () => {
@@ -151,6 +177,7 @@ test('UDP payload shape', () => {
   });
   assert.equal(payload.type, 'wiki-common-knowledge.round');
   assert.equal(payload.wikiCommonKnowledge.storyCount, 3);
+  assert.equal(payload.wikiCommonKnowledge.title, 'Wikipedia Common Knowledge');
   assert.equal(payload.wikiCommonKnowledge.indexTitle.includes('world'), true);
   assert.equal(payload.displaySeconds, 61);
 });
@@ -167,6 +194,7 @@ test('command registry content check and duration', () => {
   assert.equal(registry.hasContent('wiki.show'), true);
   assert.equal(registry.estimateDuration('wiki.show'), 87);
   const cmd = registry.list().find((c) => c.id === 'wiki.show');
+  assert.equal(cmd.title, 'Wikipedia Common Knowledge');
   assert.equal(cmd.group, 'Knowledge');
   assert.equal(cmd.variableDuration, true);
 });
