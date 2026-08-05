@@ -75,6 +75,9 @@ const {
 const {
   ARTWORK_ROUTE_PREFIX: UPSIDE_NEWS_ARTWORK_ROUTE_PREFIX,
 } = require('./upside-news-categories');
+const {
+  ARTWORK_ROUTE_PREFIX: WIKI_ARTWORK_ROUTE_PREFIX,
+} = require('./wiki-common-knowledge-categories');
 
 /** Cached YouTube thumbnails and channel avatars, served from `data/`. */
 const YOUTUBE_IMAGE_ROUTE_PREFIX = '/youtube-images/';
@@ -307,6 +310,10 @@ function createWebServer({
   getTriviaStatus = null,
   upsideNews = null,
   getUpsideNewsStatus = null,
+  wikiCommonKnowledge = null,
+  getWikiCommonKnowledgeStatus = null,
+  overhead = null,
+  getOverheadStatus = null,
   displayBusy = null,
   libraryTourSettings: libraryTourSettingsInjected = null,
   steamLibraryTour = null,
@@ -356,6 +363,12 @@ function createWebServer({
     getYoutubeStatus: () => getYoutubeStatus?.() || youtubeService()?.statusSnapshot?.() || null,
     getTriviaStatus: () => getTriviaStatus?.() || triviaService()?.statusSnapshot?.() || null,
     getUpsideNewsStatus: () => getUpsideNewsStatus?.() || upsideNewsService()?.statusSnapshot?.() || null,
+    getWikiCommonKnowledgeStatus: () => getWikiCommonKnowledgeStatus?.()
+      || wikiCommonKnowledgeService()?.statusSnapshot?.()
+      || null,
+    getOverheadStatus: () => getOverheadStatus?.()
+      || overheadService()?.statusSnapshot?.()
+      || null,
     getPhotoCount: () => qrImageCache.list().length,
   });
   let server = null;
@@ -700,6 +713,14 @@ function createWebServer({
     return typeof upsideNews === 'function' ? upsideNews() : upsideNews;
   }
 
+  function wikiCommonKnowledgeService() {
+    return typeof wikiCommonKnowledge === 'function' ? wikiCommonKnowledge() : wikiCommonKnowledge;
+  }
+
+  function overheadService() {
+    return typeof overhead === 'function' ? overhead() : overhead;
+  }
+
   function upsideNewsOverridesFrom(body = {}) {
     const overrides = {};
     if (body.period != null) overrides.period = body.period;
@@ -829,6 +850,232 @@ function createWebServer({
       return;
     }
     sendJson(res, 202, { ...result, targetId });
+  }
+
+  /* -------------------------------------------------- Wiki Common Knowledge */
+
+  function wikiOverridesFrom(body = {}) {
+    const overrides = {};
+    if (body.period != null) overrides.period = body.period;
+    if (body.items != null) overrides.items = body.items;
+    if (body.indexSeconds != null) overrides.indexSeconds = body.indexSeconds;
+    if (body.articleSeconds != null) overrides.articleSeconds = body.articleSeconds;
+    if (body.loops != null) overrides.loops = body.loops;
+    return overrides;
+  }
+
+  function handleWikiStatus(res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleWikiSettingsGet(res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, settings: service.settings.get() });
+  }
+
+  function handleWikiSettingsPut(body, res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    try {
+      const settings = service.settings.update(body || {});
+      sendJson(res, 200, {
+        ok: true,
+        settings,
+        cycleSeconds: service.statusSnapshot().cycleSeconds,
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleWikiTest(res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    const result = await service.testConnection();
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  async function handleWikiCachePoll(res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    sendJson(res, 202, { ok: true, started: true });
+    service.cache.poll({ force: true }).catch((error) => {
+      log.warn('Wiki Common Knowledge poll failed', error?.message || error);
+    });
+  }
+
+  async function handleWikiBackfill(body, res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    const days = Math.max(1, Math.min(30, Number(body?.days) || 7));
+    sendJson(res, 202, { ok: true, started: true, days });
+    service.cache.backfill(days).catch((error) => {
+      log.warn('Wiki Common Knowledge backfill failed', error?.message || error);
+    });
+  }
+
+  function handleWikiPush(body, res) {
+    const service = wikiCommonKnowledgeService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Wiki Common Knowledge is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    const result = service.push(wikiOverridesFrom(body), {
+      device: deviceFrom(body),
+      triggeredBy: String(body?.triggeredBy || 'manual'),
+      send: (payload) => {
+        if (typeof deliverTargetedPayload === 'function') {
+          return deliverTargetedPayload(payload, targetId);
+        }
+        return sendUdpPayload(payload);
+      },
+    });
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    sendJson(res, 202, { ...result, targetId });
+  }
+
+  /* -------------------------------------------------- Overhead (flight radar) */
+
+  function overheadOverridesFrom(body = {}) {
+    const overrides = {};
+    if (body.radiusNm != null) overrides.radiusNm = body.radiusNm;
+    if (body.refreshSeconds != null) overrides.refreshSeconds = body.refreshSeconds;
+    if (body.rowsPerPage != null) overrides.rowsPerPage = body.rowsPerPage;
+    if (body.pageSeconds != null) overrides.pageSeconds = body.pageSeconds;
+    if (body.maxPages != null) overrides.maxPages = body.maxPages;
+    if (body.loops != null) overrides.loops = body.loops;
+    if (body.sort != null) overrides.sort = body.sort;
+    if (body.altitudeFloorFt != null) overrides.altitudeFloorFt = body.altitudeFloorFt;
+    if (body.includeGround != null) overrides.includeGround = body.includeGround;
+    if (body.showRoutes != null) overrides.showRoutes = body.showRoutes;
+    if (body.provider != null) overrides.provider = body.provider;
+    if (body.localReceiverUrl != null) overrides.localReceiverUrl = body.localReceiverUrl;
+    if (body.mapStyle != null) overrides.mapStyle = body.mapStyle;
+    return overrides;
+  }
+
+  function handleOverheadStatus(res) {
+    const service = overheadService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Overhead is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleOverheadSettingsGet(res) {
+    const service = overheadService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Overhead is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, settings: service.settings.get() });
+  }
+
+  function handleOverheadSettingsPut(body, res) {
+    const service = overheadService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Overhead is not available' });
+      return;
+    }
+    try {
+      const next = service.settings.update(body || {});
+      sendJson(res, 200, {
+        ok: true,
+        settings: next,
+        cycleSeconds: service.statusSnapshot().cycleSeconds,
+        estimatedDurationSeconds: service.statusSnapshot().estimatedDurationSeconds,
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleOverheadProviderTest(body, res) {
+    const service = overheadService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Overhead is not available' });
+      return;
+    }
+    const result = await service.testProvider(overheadOverridesFrom(body));
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  async function handleOverheadPush(body, res) {
+    const service = overheadService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Overhead is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    try {
+      const result = await service.push(overheadOverridesFrom(body), {
+        device: deviceFrom(body),
+        triggeredBy: String(body?.triggeredBy || 'manual'),
+        send: (payload) => {
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId);
+          }
+          return sendUdpPayload(payload);
+        },
+      });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 202, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleOverheadClose(body, res) {
+    const service = overheadService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Overhead is not available' });
+      return;
+    }
+    const result = service.closeSession(String(body?.reason || 'manual'));
+    sendJson(res, 200, result);
   }
 
   // ------------------------------------------------------------- YouTube
@@ -1286,6 +1533,8 @@ function createWebServer({
         await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
       case 'trivia.show': handleTriviaPush(body, res); break;
       case 'goodnews.show': handleUpsideNewsPush(body, res); break;
+      case 'wiki.show': handleWikiPush(body, res); break;
+      case 'overhead.show': await handleOverheadPush(body, res); break;
       default:
         throw new Error(`Command "${commandId}" has no scheduler dispatch`);
     }
@@ -3188,7 +3437,51 @@ function createWebServer({
     const stat = fs.statSync(filePath);
     res.writeHead(200, {
       'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/jpeg',
-      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=86400',
+      ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+
+  function handleWikiArtworkServe(pathname, res) {
+    const name = path.basename(decodeURIComponent(pathname));
+    if (!/^[a-z0-9_-]+\.(webp|png|jpe?g)$/i.test(name)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const root = config.ROOT || path.resolve(__dirname, '..');
+    const stem = name.replace(/\.(webp|png|jpe?g)$/i, '');
+    const stems = triviaArtworkStemVariants(stem);
+    const extOrder = [path.extname(name).toLowerCase(), '.jpg', '.jpeg', '.png', '.webp']
+      .filter((ext, index, all) => ext && all.indexOf(ext) === index);
+    const directories = [
+      path.resolve(root, 'data/wiki-common-knowledge-artwork'),
+      path.join(__dirname, 'web', 'wiki-common-knowledge-artwork'),
+      path.join(__dirname, 'web', 'upside-news-artwork'),
+    ];
+    let filePath = null;
+    for (const dir of directories) {
+      for (const candidateStem of stems) {
+        for (const ext of extOrder) {
+          const candidate = path.join(dir, `${candidateStem}${ext}`);
+          if (fs.existsSync(candidate)) {
+            filePath = candidate;
+            break;
+          }
+        }
+        if (filePath) break;
+      }
+      if (filePath) break;
+    }
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/jpeg',
       'Cache-Control': 'public, max-age=86400',
       ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
     });
@@ -3239,6 +3532,10 @@ function createWebServer({
         }
         if (pathname.startsWith(UPSIDE_NEWS_ARTWORK_ROUTE_PREFIX)) {
           handleUpsideNewsArtworkServe(pathname, res);
+          return;
+        }
+        if (pathname.startsWith(WIKI_ARTWORK_ROUTE_PREFIX)) {
+          handleWikiArtworkServe(pathname, res);
           return;
         }
         if (pathname.startsWith(YOUTUBE_IMAGE_ROUTE_PREFIX)) {
@@ -3305,6 +3602,26 @@ function createWebServer({
         if (pathname === '/api/upside-news/archive/stats') {
           if (!requireAdminSession(req, res)) return;
           handleUpsideNewsStatus(res);
+          return;
+        }
+        if (pathname === '/api/wiki-common-knowledge/status') {
+          if (!requireAdminSession(req, res)) return;
+          handleWikiStatus(res);
+          return;
+        }
+        if (pathname === '/api/wiki-common-knowledge/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWikiSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/overhead/status') {
+          if (!requireAdminSession(req, res)) return;
+          handleOverheadStatus(res);
+          return;
+        }
+        if (pathname === '/api/overhead/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleOverheadSettingsGet(res);
           return;
         }
         if (pathname.startsWith('/api/youtube/')) {
@@ -3632,6 +3949,33 @@ function createWebServer({
             return;
           case '/api/upside-news/archive/poll':
             await handleUpsideNewsArchivePoll(res);
+            return;
+          case '/api/push/wiki-common-knowledge':
+            handleWikiPush(body, res);
+            return;
+          case '/api/wiki-common-knowledge/settings':
+            handleWikiSettingsPut(body, res);
+            return;
+          case '/api/wiki-common-knowledge/test':
+            await handleWikiTest(res);
+            return;
+          case '/api/wiki-common-knowledge/cache/poll':
+            await handleWikiCachePoll(res);
+            return;
+          case '/api/wiki-common-knowledge/cache/backfill':
+            await handleWikiBackfill(body, res);
+            return;
+          case '/api/push/overhead':
+            handleOverheadPush(body, res);
+            return;
+          case '/api/push/overhead/close':
+            handleOverheadClose(body, res);
+            return;
+          case '/api/overhead/settings':
+            handleOverheadSettingsPut(body, res);
+            return;
+          case '/api/overhead/provider/test':
+            await handleOverheadProviderTest(body, res);
             return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });

@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import socket
 import sys
@@ -1261,6 +1262,197 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "wiki-common-knowledge":
+        base = f"http://{args.host}:8080/wiki-common-knowledge-artwork"
+        specs = [
+            ("science", "Science", "#A5B4FC", "#312E81",
+             "James Webb Space Telescope",
+             "Space observatory launched in 2021 to study the early universe.",
+             "The James Webb Space Telescope is a space telescope which conducts infrared astronomy."),
+            ("history", "History", "#FCD34D", "#78350F",
+             "Roman Empire",
+             "The post-Republican period of ancient Rome.",
+             "The Roman Empire was the post-Republican period of ancient Rome."),
+            ("technology", "Technology", "#67E8F9", "#164E63",
+             "Artificial intelligence",
+             "Intelligence demonstrated by machines.",
+             "Artificial intelligence is the capability of computational systems to perform tasks typically associated with human intelligence."),
+        ]
+        index_seconds, article_seconds = 12, 15
+        stories = []
+        for i, (cat_id, cat_name, accent, background, title, description, extract) in enumerate(specs):
+            rank = i + 1
+            history = [1200 + rank * 100 + j * 40 for j in range(14)]
+            stories.append({
+                "index": i,
+                "rank": rank,
+                "id": f"wiki-test-{i}",
+                "title": title,
+                "description": description,
+                "extract": extract,
+                "categoryId": cat_id,
+                "categoryName": cat_name,
+                "accent": accent,
+                "background": background,
+                "thumbnailUrl": f"https://picsum.photos/seed/wiki{rank}/320/180",
+                "imageUrl": f"https://picsum.photos/seed/wiki{rank}/960/540",
+                "contentUrl": f"https://en.wikipedia.org/wiki/Test_{rank}",
+                "views": 842000 + rank * 12000,
+                "viewsDelta": 12000 + rank * 500,
+                "viewsDeltaPct": 12.4 + rank,
+                "history": history,
+                "artwork": {
+                    "topic": f"{base}/{cat_id}.jpg",
+                    "fallback": f"{base}/misc.jpg",
+                },
+            })
+        count = len(stories)
+        total = index_seconds + count * article_seconds
+        return {
+            "version": 2,
+            "type": "wiki-common-knowledge.round",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": total,
+            "trigger": "test",
+            "wikiCommonKnowledge": {
+                "sessionId": "test-wiki-ck-round",
+                "triggeredBy": "manual",
+                "title": "Common Knowledge",
+                "indexTitle": f"What the world looked up — {count}",
+                "dateline": "Wikipedia · most-read",
+                "period": "daily",
+                "storyCount": count,
+                "indexSeconds": index_seconds,
+                "articleSeconds": article_seconds,
+                "loops": "once",
+                "loopCount": 1,
+                "cycleSeconds": total,
+                "totalDurationSeconds": total,
+                "showQr": True,
+                "showSparkline": True,
+                "attribution": "Wikipedia · Wikimedia pageviews",
+                "indexArtwork": {
+                    "topic": f"{base}/misc.jpg",
+                    "fallback": f"{base}/misc.jpg",
+                },
+                "indexAccent": "#E897FF",
+                "indexBackground": "#7A2396",
+                "stories": stories,
+            },
+        }
+
+    if args.type in ("overhead", "overhead-update"):
+        home_lat, home_lon = 40.0, -111.0
+        aircraft = []
+        specs = [
+            ("A1B2C3", "UAL123", "jet", 0, 8, 35000, 420),
+            ("B2C3D4", "N12345", "light", 45, 12, 8500, 140),
+            ("C3D4E5", "LIFEM1", "heli", 120, 6, 2500, 95),
+            ("D4E5F6", "", "generic", 200, 18, 18000, 310),
+            ("E5F6A7", "SWA456", "jet", 270, 10, 32000, 380),
+            ("F6A7B8", "N9876Z", "light", 315, 14, 6500, 120),
+            ("A7B8C9", "FDX789", "jet", 90, 20, 36000, 480),
+            ("B8C9D0", "MEDEV1", "heli", 160, 5, 1500, 110, True),
+        ]
+        routes = [
+            ("Salt Lake City", "Denver", "SLC", "DEN"),
+            ("Provo", "Phoenix", "PVU", "PHX"),
+            ("Salt Lake City", "Las Vegas", "SLC", "LAS"),
+            ("Boise", "Salt Lake City", "BOI", "SLC"),
+            ("Denver", "Los Angeles", "DEN", "LAX"),
+            ("Salt Lake City", "Seattle", "SLC", "SEA"),
+            ("Memphis", "Oakland", "MEM", "OAK"),
+            ("Salt Lake City", "Ogden", "SLC", "OGD"),
+        ]
+        for idx, spec in enumerate(specs):
+            hex_code, callsign, icon, bearing, dist, alt, gs = spec[:7]
+            emergency = spec[7] if len(spec) > 7 else False
+            br = math.radians(bearing)
+            lat = home_lat + dist * math.cos(br) / 60.0
+            lon = home_lon + dist * math.sin(br) / (60.0 * math.cos(math.radians(home_lat)))
+            origin_city, dest_city, origin_iata, dest_iata = routes[idx % len(routes)]
+            row = {
+                "hex": hex_code,
+                "callsign": callsign,
+                "registration": callsign if callsign.startswith("N") else "",
+                "iconClass": icon,
+                "lat": round(lat, 5),
+                "lon": round(lon, 5),
+                "track": (bearing + 70) % 360,
+                "gsKt": gs,
+                "altFt": alt,
+                "dstNm": dist,
+                "dirDeg": bearing,
+                "route": {
+                    "originCity": origin_city,
+                    "destCity": dest_city,
+                    "originIata": origin_iata,
+                    "destIata": dest_iata,
+                    "label": f"{origin_city} → {dest_city}",
+                },
+            }
+            if emergency:
+                row["emergency"] = True
+            aircraft.append(row)
+
+        overhead = {
+            "sessionId": "test-overhead-round",
+            "title": "Overhead Traffic",
+            "home": {"lat": home_lat, "lon": home_lon},
+            "radiusNm": 25,
+            "pageSeconds": 8,
+            "rowsPerPage": 4,
+            "mapStyle": "radar",
+            "aircraft": aircraft,
+            "airports": [
+                {"iata": "SLC", "lat": 40.788, "lon": -111.978},
+                {"iata": "PVU", "lat": 40.219, "lon": -111.723},
+            ],
+            "geo": {
+                "lines": [
+                    [
+                        {"lat": home_lat + 0.15, "lon": home_lon - 0.2},
+                        {"lat": home_lat + 0.05, "lon": home_lon},
+                        {"lat": home_lat - 0.1, "lon": home_lon + 0.15},
+                    ],
+                ],
+            },
+            "loops": "once",
+            "loopCount": 1,
+        }
+
+        if args.type == "overhead-update":
+            moved = [dict(ac) for ac in aircraft[:4]]
+            for ac in moved:
+                ac["lat"] = round(float(ac["lat"]) + 0.02, 5)
+                ac["lon"] = round(float(ac["lon"]) + 0.01, 5)
+            return {
+                "version": 2,
+                "type": "overhead.update",
+                "device": args.sender,
+                "timestamp": _iso_now(),
+                "trigger": "test",
+                "overhead": {
+                    "sessionId": "test-overhead-round",
+                    "aircraft": moved + aircraft[4:],
+                },
+            }
+
+        page_seconds = overhead["pageSeconds"]
+        rows = overhead["rowsPerPage"]
+        pages = max(1, (len(aircraft) + rows - 1) // rows)
+        total = max(60, pages * page_seconds + 20)
+        return {
+            "version": 2,
+            "type": "overhead.round",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": total,
+            "trigger": "test",
+            "overhead": overhead,
+        }
+
     if args.type == "notifications":
         return {
             "version": 2,
@@ -1342,7 +1534,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
         default="broadcast",
         help="Payload type to send",
     )

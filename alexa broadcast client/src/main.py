@@ -60,6 +60,8 @@ class BroadcastClientApp:
             "youtube.now-playing",
             "trivia.round",
             "upside-news.round",
+            "wiki-common-knowledge.round",
+            "overhead.round",
             "game.library-tour",
         }
     )
@@ -206,6 +208,12 @@ class BroadcastClientApp:
                 self.overlay.dismiss_immediately()
         elif command_type == "youtube.now-playing.close":
             if self.overlay and self.overlay.active_display_type == "youtube.now-playing":
+                self.overlay.dismiss_immediately()
+        elif command_type == "overhead.update":
+            if self.overlay:
+                self.overlay.apply_overhead_update(payload)
+        elif command_type == "overhead.close":
+            if self.overlay and self.overlay.active_display_type == "overhead.round":
                 self.overlay.dismiss_immediately()
         elif command_type == "system.command":
             self._run_system_command((payload.get("system") or {}).get("action"))

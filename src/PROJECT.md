@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Upside News last-story slack)
+**Last updated:** 2026-08-05 (Overhead structured routes)
 
 ---
 
@@ -67,6 +67,10 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
 | `src/display-voice-commands.js` | Matchers for Alexa routines that push display overlays without needing Alexa’s spoken answer: trivia, Steam/PSN library tours, Steam/PSN/YouTube now-or-last-played (`requestedMode: 'auto'`) |
 | `src/upside-news-*.js` | **The Upside News** — Guardian + positive RSS archive, period selection, filters/ranking, settings, credentials (`GUARDIAN_API_KEY` / encrypted `data/guardian-credentials.json`), UDP `upside-news.round`; topic artwork under `/upside-news-artwork/` |
+| `src/wiki-common-knowledge-*.js` | **Wiki Common Knowledge** — Wikimedia featured/pageviews + summary/history, day-list cache under `data/wiki-common-knowledge-cache/`, settings in `data/wiki-common-knowledge-settings.json` (required contact email for User-Agent), denylist + description→topic map, UDP `wiki-common-knowledge.round`; artwork under `/wiki-common-knowledge-artwork/` |
+| `src/overhead-*.js` | **Overhead (flight radar)** — airplanes.live ADS-B fetch, adsbdb route/type enrichment, settings in `data/overhead-settings.json`, live session poller (`overhead.round` / `overhead.update` / `overhead.close`); home lat/lon from `voiceEvents.defaultLocation`; static GeoJSON at `/overhead-geo/` |
+| `src/web/overhead-geo/` | Placeholder `home-area.json` + sample `airports.json` for Overhead scope map |
+| `src/web/wiki-common-knowledge-artwork/` | Topic JPEGs (20 categories) for Wiki Common Knowledge (seeded from Upside/trivia packs when missing) |
 | `src/web/upside-news-artwork/` | Shipped topic JPEGs (13 × portrait/landscape) for The Upside News |
 | `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
 | `tools/steam-presence-reporter/` | **Optional** fallback only — normally presence is piggybacked on the theater PC’s `display.announce` (`hostname` + `steamAppId`) |
@@ -505,6 +509,13 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-05: **Overhead structured routes** — adsbdb enrichment emits `{ originCity, destCity, originIata, destIata, label }` on each aircraft (and `overhead.routes`) so the display can show origin → destination. Deploy: `./recreate.sh` + portable client rebuild.
+- 2026-08-05: **Overhead + Wiki admin layout** — Wiki Common Knowledge and Overhead settings cards stretch full width (same as Upside/Trivia); Wiki refresh/backfill sit in one compact row with clearer spacing. Cache-bust `?v=signal44`. Deploy: `./recreate.sh`.
+
+- 2026-08-05: **Overhead (flight radar)** — live ADS-B scope panel: `overhead-*.js` modules, airplanes.live provider + adsbdb enrichment, admin Settings card + Push/scheduler command `overhead.show` (Sky group), UDP `overhead.round` / `overhead.update` / `overhead.close`, home coordinates from `voiceEvents.defaultLocation`, static GeoJSON at `/overhead-geo/`. Tests: `test/overhead.test.js`. Deploy: `./recreate.sh` + portable client rebuild for the display panel.
+
+- 2026-08-05: **Wiki Common Knowledge** — Wikipedia most-read index → article pages: `wiki-common-knowledge-*.js` modules (Wikimedia UA + contact email required, day/article cache, denylist, topic map), admin Settings card, Push/scheduler command `wiki.show` (Knowledge group), UDP `wiki-common-knowledge.round`, artwork at `/wiki-common-knowledge-artwork/`. Tests: `test/wiki-common-knowledge.test.js`. Deploy: `./recreate.sh` + portable client rebuild.
 
 - 2026-08-04: **Upside News last-story slack** — push `displaySeconds` includes a few seconds so client timer drift does not clip the final story page. Deploy: `./recreate.sh` (+ portable client for the matching panel timing fix).
 

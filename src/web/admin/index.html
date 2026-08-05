@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal41">
+  <link rel="stylesheet" href="styles.css?v=signal44">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -77,7 +77,7 @@
              behaviour as the Settings test buttons. -->
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad" id="push-row-quick"
-             data-push-row="Signal,Alexa,Trivia,News,Steam,PSN,YouTube"></div>
+             data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"></div>
 
         <div class="push-columns">
           <div class="push-column">
@@ -640,6 +640,180 @@
           </div>
         </div>
 
+        <div class="section-label">Common Knowledge</div>
+        <div class="card wiki-ck-settings-card" id="wiki-ck-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Wikipedia most-read on the wall</div>
+            <span class="status-pill" id="wiki-ck-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="wiki-ck-status-detail">Loading…</p>
+
+          <div class="upside-news-period-band">
+            <label class="field-label">Period</label>
+            <div class="segmented wiki-ck-period-tabs" id="wiki-ck-period-tabs">
+              <button type="button" class="segmented-btn active" data-period="daily">Daily</button>
+              <button type="button" class="segmented-btn" data-period="weekly">Weekly</button>
+              <button type="button" class="segmented-btn" data-period="monthly">Monthly</button>
+              <button type="button" class="segmented-btn" data-period="yearly">Yearly</button>
+            </div>
+            <p class="hint" id="wiki-ck-period-hint">Most-read Wikipedia articles for today</p>
+          </div>
+
+          <div class="settings-columns settings-columns-3 upside-news-columns">
+            <div class="settings-col">
+              <label class="field-label" for="wiki-ck-items">How many articles</label>
+              <div class="slider-row">
+                <input type="range" id="wiki-ck-items" min="3" max="8" step="1" value="5" aria-label="Articles per cycle">
+                <span class="slider-value" id="wiki-ck-items-value">5</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="wiki-ck-article-seconds">Each article shows for</label>
+              <div class="slider-row">
+                <input type="range" id="wiki-ck-article-seconds" min="8" max="30" step="1" value="15" aria-label="Seconds per article">
+                <span class="slider-value" id="wiki-ck-article-seconds-value">15s</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="wiki-ck-loops">Loop</label>
+              <select id="wiki-ck-loops" class="field-input">
+                <option value="once">Once</option>
+                <option value="2">Twice</option>
+                <option value="3">Three times</option>
+                <option value="until-dismissed">Until dismissed</option>
+              </select>
+              <p class="hint">Full cycle: <strong id="wiki-ck-cycle-length">—</strong></p>
+
+              <label class="field-label field-label-spaced" for="wiki-ck-lang">Language</label>
+              <input type="text" id="wiki-ck-lang" class="field-input" value="en" maxlength="12" spellcheck="false">
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label" for="wiki-ck-contact-email">Contact email (required)</label>
+              <input type="email" id="wiki-ck-contact-email" class="field-input" placeholder="you@example.com" autocomplete="email">
+              <p class="hint">Used in the Wikimedia User-Agent. Required before any Wikipedia fetch.</p>
+
+              <label class="field-label field-label-spaced" for="wiki-ck-api-token">API token (optional)</label>
+              <input type="password" id="wiki-ck-api-token" class="field-input" placeholder="Optional Wikimedia token" autocomplete="new-password" spellcheck="false">
+              <div class="upside-news-key-actions" style="margin-top:8px">
+                <button type="button" class="btn btn-outline" id="btn-wiki-ck-test">Test connection</button>
+              </div>
+              <p class="hint" id="wiki-ck-key-hint">Higher rate limits if you have a Wikimedia developer token.</p>
+            </div>
+
+            <div class="settings-col upside-news-display-col wiki-ck-display-col">
+              <label class="field-label">Display</label>
+              <div class="upside-news-display-list">
+                <label class="trivia-check"><input type="checkbox" id="wiki-ck-show-qr" checked><span>Show QR code to the article</span></label>
+                <label class="trivia-check"><input type="checkbox" id="wiki-ck-show-sparkline" checked><span>Show pageview sparkline</span></label>
+                <label class="trivia-check"><input type="checkbox" id="wiki-ck-skip-no-image"><span>Skip articles without an image</span></label>
+                <label class="trivia-check"><input type="checkbox" id="wiki-ck-filter-distressing" checked><span>Filter distressing titles</span></label>
+              </div>
+              <p class="hint upside-news-archive-hint wiki-ck-cache-hint" id="wiki-ck-cache-hint">Cache: —</p>
+              <div class="wiki-ck-actions">
+                <button class="btn btn-outline" id="btn-wiki-ck-poll">Refresh cache</button>
+                <button class="btn btn-outline" id="btn-wiki-ck-backfill">Backfill 7 days</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label">Overhead</div>
+        <div class="card overhead-settings-card" id="overhead-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Flight radar</div>
+            <span class="status-pill" id="overhead-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="overhead-status-detail">Loading…</p>
+
+          <p class="hint" id="overhead-home-hint">Home location comes from weather settings (<code>voiceEvents.defaultLocation</code> in config).</p>
+          <p class="hint" id="overhead-home-location">Location: —</p>
+
+          <div class="settings-columns settings-columns-3 upside-news-columns">
+            <div class="settings-col">
+              <label class="field-label" for="overhead-radius-nm">Search radius (nm)</label>
+              <div class="slider-row">
+                <input type="range" id="overhead-radius-nm" min="10" max="150" step="5" value="40" aria-label="Search radius in nautical miles">
+                <span class="slider-value" id="overhead-radius-nm-value">40nm</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="overhead-refresh-seconds">Refresh data every</label>
+              <div class="slider-row">
+                <input type="range" id="overhead-refresh-seconds" min="3" max="30" step="1" value="5" aria-label="Refresh interval seconds">
+                <span class="slider-value" id="overhead-refresh-seconds-value">5s</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="overhead-page-seconds">Each page shows for</label>
+              <div class="slider-row">
+                <input type="range" id="overhead-page-seconds" min="3" max="60" step="1" value="8" aria-label="Seconds per page">
+                <span class="slider-value" id="overhead-page-seconds-value">8s</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="overhead-max-pages">Max pages</label>
+              <div class="slider-row">
+                <input type="range" id="overhead-max-pages" min="1" max="12" step="1" value="6" aria-label="Maximum pages">
+                <span class="slider-value" id="overhead-max-pages-value">6</span>
+              </div>
+
+              <label class="field-label field-label-spaced" for="overhead-loops">Loop</label>
+              <select id="overhead-loops" class="field-input">
+                <option value="once">Once</option>
+                <option value="2">Twice</option>
+                <option value="3">Three times</option>
+                <option value="until-dismissed">Until dismissed</option>
+              </select>
+              <p class="hint">Full cycle: <strong id="overhead-cycle-length">—</strong></p>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label" for="overhead-sort">Sort</label>
+              <select id="overhead-sort" class="field-input">
+                <option value="nearest">Nearest first</option>
+                <option value="altitude">Highest altitude</option>
+                <option value="callsign">Callsign</option>
+              </select>
+
+              <label class="field-label field-label-spaced" for="overhead-rows-per-page">Rows per page</label>
+              <select id="overhead-rows-per-page" class="field-input">
+                <option value="auto">Auto</option>
+                <option value="4">4</option>
+                <option value="6">6</option>
+              </select>
+
+              <label class="field-label field-label-spaced" for="overhead-provider">Provider</label>
+              <select id="overhead-provider" class="field-input">
+                <option value="airplanes-live">airplanes.live</option>
+                <option value="local-readsb">Local readsb</option>
+                <option value="opensky">OpenSky (stub)</option>
+              </select>
+
+              <label class="field-label field-label-spaced" for="overhead-local-url">Local receiver URL</label>
+              <input type="url" id="overhead-local-url" class="field-input" placeholder="http://readsb.local:8080" spellcheck="false">
+
+              <label class="field-label field-label-spaced" for="overhead-altitude-floor">Altitude floor (ft)</label>
+              <input type="number" id="overhead-altitude-floor" class="field-input" min="0" max="60000" step="500" value="0">
+
+              <button type="button" class="btn btn-outline btn-block" id="btn-overhead-provider-test" style="margin-top:10px">Test provider</button>
+              <p class="hint" id="overhead-provider-hint">Uses the weather home coordinates.</p>
+            </div>
+
+            <div class="settings-col upside-news-display-col">
+              <label class="field-label">Display</label>
+              <div class="upside-news-display-list">
+                <label class="trivia-check"><input type="checkbox" id="overhead-show-routes" checked><span>Show route labels when known</span></label>
+                <label class="trivia-check"><input type="checkbox" id="overhead-include-ground"><span>Include ground traffic</span></label>
+              </div>
+
+              <label class="field-label field-label-spaced" for="overhead-map-style">Map style</label>
+              <select id="overhead-map-style" class="field-input">
+                <option value="scope">Radar scope + map underlay</option>
+                <option value="tiles">Full map tiles (later)</option>
+              </select>
+
+              <p class="hint upside-news-archive-hint" id="overhead-aircraft-hint">Aircraft in range: —</p>
+              <button class="btn btn-outline btn-block" id="btn-overhead-refresh-count">Refresh aircraft count</button>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label">Trivia</div>
         <div class="card trivia-settings-card" id="trivia-settings-card">
           <div class="auth-head">
@@ -854,6 +1028,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal41"></script>
+  <script src="app.js?v=signal44"></script>
 </body>
 </html>

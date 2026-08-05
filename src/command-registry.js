@@ -14,6 +14,8 @@
  * and looked up by command id.
  */
 
+const { estimateDuration: estimateOverheadDuration } = require('./overhead-settings');
+
 /**
  * @typedef {Object} CommandDescriptor
  * @property {string} id            Dotted namespace, e.g. `steam.now-playing`.
@@ -317,6 +319,53 @@ const COMMANDS = [
     defaultDurationSeconds: null,
   },
   {
+    id: 'wiki.show',
+    title: 'Common Knowledge',
+    subtitle: 'Wikipedia most-read, then each article',
+    group: 'Knowledge',
+    route: '/api/push/wiki-common-knowledge',
+    icon: 'wiki',
+    pushable: true,
+    schedulable: true,
+    params: [
+      {
+        key: 'period',
+        label: 'Period',
+        type: 'enum',
+        values: ['daily', 'weekly', 'monthly', 'yearly'],
+      },
+      { key: 'items', label: 'Articles', type: 'number', min: 3, max: 8 },
+      { key: 'articleSeconds', label: 'Seconds per article', type: 'number', min: 8, max: 30 },
+    ],
+    supportsContentCheck: true,
+    variableDuration: true,
+    defaultDurationSeconds: null,
+  },
+  {
+    id: 'overhead.show',
+    title: 'Overhead',
+    subtitle: 'Nearby aircraft on the scope',
+    group: 'Sky',
+    route: '/api/push/overhead',
+    icon: 'sky',
+    pushable: true,
+    schedulable: true,
+    params: [
+      { key: 'radiusNm', label: 'Radius (nm)', type: 'number', min: 10, max: 150 },
+      { key: 'pageSeconds', label: 'Seconds per page', type: 'number', min: 3, max: 60 },
+      { key: 'maxPages', label: 'Max pages', type: 'number', min: 1, max: 12 },
+      {
+        key: 'sort',
+        label: 'Sort',
+        type: 'enum',
+        values: ['nearest', 'altitude', 'callsign'],
+      },
+    ],
+    supportsContentCheck: true,
+    variableDuration: true,
+    defaultDurationSeconds: null,
+  },
+  {
     id: 'youtube.now-playing',
     title: 'YouTube',
     subtitle: 'Now playing, or last played',
@@ -392,6 +441,8 @@ function createCommandRegistry(deps = {}) {
     getYoutubeStatus = null,
     getTriviaStatus = null,
     getUpsideNewsStatus = null,
+    getWikiCommonKnowledgeStatus = null,
+    getOverheadStatus = null,
     getPhotoCount = null,
     log = null,
   } = deps;
@@ -447,6 +498,24 @@ function createCommandRegistry(deps = {}) {
       const need = Math.min(8, Math.max(3, Number(params?.items) || Number(status.settings?.items) || 5));
       return Number(status.available ?? 0) >= Math.min(3, need);
     },
+    'wiki.show': (params) => {
+      const status = call(getWikiCommonKnowledgeStatus);
+      if (!status) {
+        return false;
+      }
+      if (status.hasContent === false) {
+        return false;
+      }
+      const need = Math.min(8, Math.max(3, Number(params?.items) || Number(status.settings?.items) || 5));
+      return Number(status.available ?? 0) >= Math.min(3, need);
+    },
+    'overhead.show': () => {
+      const status = call(getOverheadStatus);
+      if (!status) {
+        return false;
+      }
+      return Boolean(status.hasContent);
+    },
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
   };
 
@@ -490,6 +559,40 @@ function createCommandRegistry(deps = {}) {
         return Math.round(Number(status.cycleSeconds));
       }
       return Math.round(Number(indexSeconds) + items * storySeconds);
+    },
+    'wiki.show': (params) => {
+      const status = call(getWikiCommonKnowledgeStatus) || {};
+      const settings = status.settings || {};
+      const items = Math.min(8, Math.max(3, Math.round(
+        Number(params?.items ?? settings.items) || 5,
+      )));
+      const articleSeconds = Math.min(30, Math.max(8, Math.round(
+        Number(params?.articleSeconds ?? settings.articleSeconds) || 15,
+      )));
+      let indexSeconds = settings.indexSeconds;
+      if (params?.indexSeconds != null) {
+        indexSeconds = Number(params.indexSeconds);
+      }
+      if (!Number.isFinite(Number(indexSeconds))) {
+        indexSeconds = Math.round(4 + 1.6 * items);
+      }
+      if (Number.isFinite(Number(status.cycleSeconds)) && !params?.items && !params?.articleSeconds) {
+        return Math.round(Number(status.cycleSeconds));
+      }
+      return Math.round(Number(indexSeconds) + items * articleSeconds);
+    },
+    'overhead.show': (params) => {
+      const status = call(getOverheadStatus) || {};
+      const settings = { ...(status.settings || {}), ...(params || {}) };
+      const count = Number(status.aircraftInRange ?? status.hasContent ? 1 : 0) || 0;
+      if (Number.isFinite(Number(status.estimatedDurationSeconds))
+        && !params?.radiusNm
+        && !params?.pageSeconds
+        && !params?.maxPages) {
+        return Math.round(Number(status.estimatedDurationSeconds));
+      }
+      const aircraftCount = Math.max(1, count);
+      return Math.round(estimateOverheadDuration(settings, aircraftCount));
     },
     'steam.library-tour': (params) => {
       const count = Number(call(getSteamLibraryCount) || 0);

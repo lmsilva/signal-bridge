@@ -30,6 +30,8 @@ DISPLAY_TYPES = (
     "youtube.now-playing",
     "trivia.round",
     "upside-news.round",
+    "wiki-common-knowledge.round",
+    "overhead.round",
     "game.library-tour",
 )
 
@@ -46,6 +48,8 @@ COMMAND_TYPES = (
     "steam.now-playing.close",
     "psn.now-playing.close",
     "youtube.now-playing.close",
+    "overhead.update",
+    "overhead.close",
 )
 
 # Bridge discovery / heartbeats — never shown as overlays.
@@ -131,6 +135,8 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "youtube.now-playing": ("YouTube", "Now Playing"),
         "trivia.round": ("Signal", "Trivia"),
         "upside-news.round": ("Signal", "The Upside News"),
+        "wiki-common-knowledge.round": ("Signal", "Common Knowledge"),
+        "overhead.round": ("Signal", "Overhead"),
         "game.library-tour": ("Signal", "Library Tour"),
     }
     return titles.get(display_type, ("Alexa", "Display"))

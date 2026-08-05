@@ -267,11 +267,12 @@ class UpsideNewsPanel(BasePanel):
 
     def _stop_text_motion(self):
         for marquee in self._marquees:
+            # Capture before stop() — MarqueeLine.stop() nulls ``viewport``.
+            viewport = getattr(marquee, "viewport", None)
             try:
                 marquee.stop()
             except Exception:
                 pass
-            viewport = getattr(marquee, "viewport", None)
             if viewport is not None:
                 try:
                     viewport.destroy()
@@ -279,11 +280,11 @@ class UpsideNewsPanel(BasePanel):
                     pass
         self._marquees = []
         for scroller in self._scrollers:
+            viewport = getattr(scroller, "viewport", None)
             try:
                 scroller.stop()
             except Exception:
                 pass
-            viewport = getattr(scroller, "viewport", None)
             if viewport is not None:
                 try:
                     viewport.destroy()

@@ -101,6 +101,8 @@ const { createPsnLibraryTour } = require('./psn-library-tour');
 const { createYoutubeNowPlaying } = require('./youtube-now-playing');
 const { createTriviaService } = require('./trivia-service');
 const { createUpsideNewsService } = require('./upside-news-service');
+const { createWikiCommonKnowledgeService } = require('./wiki-common-knowledge-service');
+const { createOverheadService } = require('./overhead-service');
 const { createDisplayBusy } = require('./display-busy');
 
 const VOLUME_POLL_DELAY_MS = 2000;
@@ -170,6 +172,8 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   let youtubeNowPlaying = null;
   let trivia = null;
   let upsideNews = null;
+  let wikiCommonKnowledge = null;
+  let overhead = null;
   const displayBusy = createDisplayBusy({ log });
   const udpBroadcaster = createUdpBroadcaster(config, log, {
     onMessage: (payload, rinfo) => {
@@ -1950,6 +1954,12 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         upsideNews = createUpsideNewsService({ config, log, sendUdpPayload });
         upsideNews.start();
 
+        wikiCommonKnowledge = createWikiCommonKnowledgeService({ config, log, sendUdpPayload });
+        wikiCommonKnowledge.start();
+
+        overhead = createOverheadService({ config, log, sendUdpPayload, fetchImpl: fetch });
+        overhead.prefetchCount?.().catch(() => {});
+
         resolve(alexa);
       });
     });
@@ -1990,6 +2000,10 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     getTriviaStatus: () => trivia?.statusSnapshot?.() || null,
     upsideNews: () => upsideNews,
     getUpsideNewsStatus: () => upsideNews?.statusSnapshot?.() || null,
+    wikiCommonKnowledge: () => wikiCommonKnowledge,
+    getWikiCommonKnowledgeStatus: () => wikiCommonKnowledge?.statusSnapshot?.() || null,
+    overhead: () => overhead,
+    getOverheadStatus: () => overhead?.statusSnapshot?.() || null,
     // The Display Scheduler's §6 precedence check. Fed by every sendUdpPayload,
     // so it covers manual pushes, live events and scheduled airings alike.
     displayBusy,

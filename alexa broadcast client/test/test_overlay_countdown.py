@@ -89,6 +89,44 @@ class OverlayCountdownTests(unittest.TestCase):
         overlay._stop_timers()
         overlay.root.after_cancel.assert_called()
 
+    def test_click_dismiss_is_deferred(self):
+        overlay = self._make_overlay()
+        overlay.visible = True
+        overlay.on_user_dismiss = mock.Mock()
+        overlay._dismiss_pending = False
+        scheduled = []
+
+        def capture_after(ms, fn):
+            scheduled.append((ms, fn))
+            return 1
+
+        overlay.root.after = mock.MagicMock(side_effect=capture_after)
+        overlay._on_dismiss_input()
+        self.assertTrue(overlay._dismiss_pending)
+        overlay.on_user_dismiss.assert_not_called()
+        self.assertEqual(len(scheduled), 1)
+        scheduled[0][1]()
+        overlay.on_user_dismiss.assert_called_once()
+        self.assertFalse(overlay._dismiss_pending)
+
+    def test_dismiss_immediately_hides_footer_even_if_panel_teardown_fails(self):
+        overlay = self._make_overlay()
+        overlay.visible = True
+        overlay._alpha = 1.0
+        overlay.on_user_dismiss = None
+        overlay._notify_closed = mock.Mock()
+        overlay._stop_timers = mock.Mock()
+        overlay._stop_active_panel = mock.Mock(side_effect=RuntimeError("boom"))
+        overlay.root.attributes = mock.Mock()
+        overlay.root.withdraw = mock.Mock()
+
+        overlay.dismiss_immediately()
+
+        self.assertFalse(overlay.visible)
+        overlay.root.withdraw.assert_called_once()
+        overlay.dismiss_footer.hide.assert_called()
+        overlay._notify_closed.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
