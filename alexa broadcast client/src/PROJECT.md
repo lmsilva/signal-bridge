@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-04 (Upside News last-story timing)
+**Last updated:** 2026-08-04 (Upside News index dateline clearance)
 
 ---
 
@@ -262,6 +262,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-04: **Upside News index dateline** — cards start below the measured dateline under “Today's five” so Tk linespace cannot clip that line. Portable rebuild required.
 
 - 2026-08-04: **Upside News last story** — timer drift no longer skips the final story page (index was never counted as a story; the client was holding the index when remaining < storySeconds). Shortened last page still airs; bridge adds a few seconds of overlay slack. Portable rebuild + `./recreate.sh`.
 

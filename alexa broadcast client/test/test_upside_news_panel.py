@@ -207,7 +207,9 @@ class GeometryTests(unittest.TestCase):
         left = boxes["body"]
         right = boxes["body_right"]
         self.assertGreater(right[0], left[2])
-        self.assertGreater(boxes["title"][3] - boxes["title"][1], 140 * chrome.u)
+        self.assertGreater(boxes["title"][3] - boxes["title"][1], 180 * chrome.u)
+        # Index list must start below the title band (dateline lives in title).
+        self.assertGreaterEqual(boxes["body"][1], boxes["title"][3])
 
     def test_portrait_qr_is_bottom_right_under_story_text(self):
         chrome = page_chrome(1080, 1920, timed=True)
@@ -223,7 +225,8 @@ class GeometryTests(unittest.TestCase):
         self.assertGreater(qr[0], (text[0] + text[2]) / 2)
         self.assertLessEqual(credit[2], qr[0])
         self.assertEqual(boxes["columns"], 1)
-        self.assertGreater(boxes["title"][3] - boxes["title"][1], 180 * chrome.u)
+        self.assertGreater(boxes["title"][3] - boxes["title"][1], 200 * chrome.u)
+        self.assertGreaterEqual(boxes["body"][1], boxes["title"][3])
 
 
 if __name__ == "__main__":

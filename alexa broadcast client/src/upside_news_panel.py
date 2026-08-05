@@ -419,7 +419,7 @@ class UpsideNewsPanel(BasePanel):
         attribution_h = 28 * u
         progress_h = 56 * u
         # brand + hero + dateline + breathing room before cards
-        title_h = 220 * u
+        title_h = 250 * u
         qr_size = min(cls.QR_PORTRAIT_U * u, (x1 - x0) * 0.36)
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
@@ -457,7 +457,8 @@ class UpsideNewsPanel(BasePanel):
 
         attribution_h = 26 * u
         progress_h = 56 * u
-        title_h = 168 * u
+        # brand + hero + dateline (Tk linespace can exceed design units)
+        title_h = 210 * u
         qr_size = min(cls.QR_LANDSCAPE_U * u, (x1 - x0) * 0.22)
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
@@ -517,14 +518,23 @@ class UpsideNewsPanel(BasePanel):
             x0, y, anchor="nw",
             text=format_index_dateline(self._upside), fill=INK_2, font=date_font,
         ))
+        # Cards must start below the measured dateline — fixed title_h alone can
+        # undershoot real Tk linespace and clip this line under the first cards.
+        list_top = y + date_font.metrics("linespace") + (28 * u if portrait else 24 * u)
+        body_bottom = geometry["body"][3]
 
         stories = self._upside.get("stories") or []
         if geometry["columns"] == 1 or not geometry.get("body_right"):
-            columns = [(geometry["body"], stories)]
+            columns = [((geometry["body"][0], list_top, geometry["body"][2], body_bottom), stories)]
         else:
             left = [s for i, s in enumerate(stories) if i % 2 == 0]
             right = [s for i, s in enumerate(stories) if i % 2 == 1]
-            columns = [(geometry["body"], left), (geometry["body_right"], right)]
+            lb = geometry["body"]
+            rb = geometry["body_right"]
+            columns = [
+                ((lb[0], list_top, lb[2], body_bottom), left),
+                ((rb[0], list_top, rb[2], body_bottom), right),
+            ]
 
         for box, column_stories in columns:
             self._draw_index_column(box, column_stories, geometry)
