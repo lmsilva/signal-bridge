@@ -30,6 +30,7 @@ STALE_FREEZE_SEC = 60
 STALE_FADE_SEC = 90
 EASE_MS = 350
 MOTION_MS = 33  # ~30 fps
+PAGE_COUNTDOWN_MS = 250  # keep "next page in Ns" ticking smoothly
 METERS_PER_NM = 1852.0
 EMERGENCY_SQUAWKS = {"7500", "7600", "7700"}
 
@@ -396,6 +397,20 @@ def format_list_footer(page_index: int, rows: int, total: int, next_in_sec: int)
     return f"{start}–{end} of {total} · next page in {max(0, int(next_in_sec))}s"
 
 
+def page_seconds_remaining(
+    page_seconds: float,
+    started_at: float,
+    *,
+    now: float | None = None,
+) -> int:
+    """Whole seconds left until the next list page (ceil so 8→7→…→1→0)."""
+    now_ts = time.time() if now is None else float(now)
+    remaining = float(page_seconds) - (now_ts - float(started_at))
+    if remaining <= 0:
+        return 0
+    return max(0, int(math.ceil(remaining - 1e-9)))
+
+
 def _split_route_arrow(text: str) -> tuple[str, str]:
     raw = str(text or "").strip()
     if not raw:
@@ -457,6 +472,8 @@ class OverheadPanel(BasePanel):
         self._page_started_at = 0.0
         self._page_seconds = 8
         self._page_job = None
+        self._page_countdown_job = None
+        self._footer_text_id = None
         self._motion_job = None
         self._ease_job = None
         self._last_update_at = 0.0
@@ -479,6 +496,7 @@ class OverheadPanel(BasePanel):
         super().hide()
         self._scope_ids.clear()
         self._list_ids.clear()
+        self._footer_text_id = None
         self._display_positions.clear()
         self._target_positions.clear()
         self._easing = False
@@ -510,9 +528,10 @@ class OverheadPanel(BasePanel):
         self._easing = True
         self._schedule_ease()
         self._paint_all()
+        self._schedule_page_countdown()
 
     def _cancel_jobs(self):
-        for attr in ("_page_job", "_motion_job", "_ease_job"):
+        for attr in ("_page_job", "_page_countdown_job", "_motion_job", "_ease_job"):
             job = getattr(self, attr, None)
             if job is not None:
                 try:
@@ -535,6 +554,7 @@ class OverheadPanel(BasePanel):
         self._ensure_fonts()
         self._paint_all()
         self._schedule_page_turn()
+        self._schedule_page_countdown()
         self._schedule_motion()
 
     def _parse_update_time(self, payload: dict) -> float:
@@ -689,10 +709,32 @@ class OverheadPanel(BasePanel):
                 self.root.after_cancel(self._page_job)
             except Exception:
                 pass
+            self._page_job = None
         pages = roster_page_count(len(self._roster), self._geometry()["rows"])
         if pages <= 1:
             return
         self._page_job = self.root.after(self._page_seconds * 1000, self._advance_page)
+
+    def _schedule_page_countdown(self):
+        if self._page_countdown_job is not None:
+            try:
+                self.root.after_cancel(self._page_countdown_job)
+            except Exception:
+                pass
+            self._page_countdown_job = None
+        pages = roster_page_count(len(self._roster), self._geometry()["rows"])
+        if pages <= 1:
+            return
+        self._page_countdown_job = self.root.after(
+            PAGE_COUNTDOWN_MS, self._on_page_countdown_tick,
+        )
+
+    def _on_page_countdown_tick(self):
+        self._page_countdown_job = None
+        if not self.visible:
+            return
+        self._refresh_list_footer()
+        self._schedule_page_countdown()
 
     def _advance_page(self):
         if not self.visible:
@@ -703,6 +745,7 @@ class OverheadPanel(BasePanel):
         self._paint_list()
         self._paint_scope_aircraft()
         self._schedule_page_turn()
+        self._schedule_page_countdown()
 
     def _schedule_motion(self):
         if self._motion_job is not None:
@@ -1208,6 +1251,20 @@ class OverheadPanel(BasePanel):
             )
             x += item_w + gap_item
 
+    def _refresh_list_footer(self):
+        """Update only the 'next page in Ns' text so it counts down every second."""
+        if self._footer_text_id is None:
+            return
+        geo = self._geometry()
+        rows = geo["rows"]
+        total = len(self._roster)
+        next_in = page_seconds_remaining(self._page_seconds, self._page_started_at)
+        footer = format_list_footer(self._page_index, rows, total, next_in)
+        try:
+            self.canvas.itemconfigure(self._footer_text_id, text=footer)
+        except Exception:
+            self._footer_text_id = None
+
     def _paint_list(self):
         for item_id in list(self._list_ids):
             try:
@@ -1217,6 +1274,7 @@ class OverheadPanel(BasePanel):
             if item_id in self._item_ids:
                 self._item_ids.remove(item_id)
         self._list_ids.clear()
+        self._footer_text_id = None
 
         geo = self._geometry()
         x0, y0, x1, y1 = geo["list"]
@@ -1311,14 +1369,14 @@ class OverheadPanel(BasePanel):
 
         total = len(self._roster)
         pages = roster_page_count(total, rows)
-        next_in = max(0, int(self._page_seconds - (time.time() - self._page_started_at)))
+        next_in = page_seconds_remaining(self._page_seconds, self._page_started_at)
         footer = format_list_footer(self._page_index, rows, total, next_in)
         footer_top = usable_bottom + 6
-        self._list_ids.append(
-            self.canvas.create_text(
-                x0, footer_top, anchor="nw", text=footer, fill=INK_2, font=self._fonts["footer"],
-            ),
+        self._footer_text_id = self.canvas.create_text(
+            x0, footer_top, anchor="nw", text=footer, fill=INK_2, font=self._fonts["footer"],
+            tags=("overhead", "list", "overhead-footer"),
         )
+        self._list_ids.append(self._footer_text_id)
         if pages > 1:
             # Dots sit under the footer copy, still inside the reserved band.
             dot_y = min(y1 - 10, footer_top + self._fonts["footer"].metrics("linespace") + 8)
