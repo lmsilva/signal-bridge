@@ -274,6 +274,78 @@ def index_list_top(
     return top
 
 
+def index_card_row_layout(
+    card_y: float,
+    card_h: float,
+    *,
+    pad: float,
+    thumb_size: float,
+    num_h: float,
+    title_h: float,
+    desc_h: float = 0.0,
+    meta_h: float = 0.0,
+    gap_title_desc: float = 6.0,
+    gap_desc_meta: float = 6.0,
+) -> dict:
+    """Vertically center number, thumbnail, and text stack as one content band.
+
+    Returns y positions so rank / thumb / copy share a common mid-line inside
+    the card (equal breathing room above and below).
+    """
+    card_y = float(card_y)
+    card_h = max(1.0, float(card_h))
+    pad = max(0.0, float(pad))
+    thumb_size = max(1.0, float(thumb_size))
+    title_h = max(0.0, float(title_h))
+    desc_h = max(0.0, float(desc_h))
+    meta_h = max(0.0, float(meta_h))
+    gap_td = max(0.0, float(gap_title_desc))
+    gap_dm = max(0.0, float(gap_desc_meta))
+
+    text_stack = title_h
+    if desc_h > 0:
+        text_stack += gap_td + desc_h
+    if meta_h > 0:
+        text_stack += gap_dm + meta_h
+
+    band_h = max(thumb_size, float(num_h), text_stack)
+    inner_top = card_y + pad
+    inner_bottom = card_y + card_h - pad
+    inner_h = max(band_h, inner_bottom - inner_top)
+    band_top = inner_top + max(0.0, (inner_h - band_h) / 2)
+    if band_top + band_h > inner_bottom:
+        band_top = max(inner_top, inner_bottom - band_h)
+
+    mid = band_top + band_h / 2
+    thumb_y = mid - thumb_size / 2
+    text_top = mid - text_stack / 2
+    title_y = text_top
+    cursor = title_y + title_h
+    if desc_h > 0:
+        cursor += gap_td
+        desc_y = cursor
+        cursor += desc_h
+    else:
+        desc_y = title_y
+    if meta_h > 0:
+        cursor += gap_dm
+        meta_y = cursor
+    else:
+        meta_y = title_y
+
+    return {
+        "band_top": band_top,
+        "band_h": band_h,
+        "mid_y": mid,
+        "thumb_y": thumb_y,
+        "num_cy": mid,
+        "title_y": title_y,
+        "desc_y": desc_y,
+        "meta_y": meta_y,
+        "text_stack_h": text_stack,
+    }
+
+
 def article_accent(story: dict, fallback: str = DEFAULT_INDEX_ACCENT) -> str:
     color = str((story or {}).get("accent") or "").strip()
     return color if color.startswith("#") and len(color) == 7 else fallback
@@ -504,11 +576,17 @@ class WikiCommonKnowledgePanel(BasePanel):
         # Prefer a plain canvas text item when the line fits — nested marquees
         # with category-coloured backgrounds were painting purple bars.
         if font.measure(text) <= width:
-            anchor = "n" if center else "nw"
-            x = int(x0 + width / 2) if center else int(x0)
-            self._track(self.canvas.create_text(
-                x, y + height // 2, anchor=anchor, text=text, fill=fill, font=font,
-            ))
+            cy = y + height // 2
+            if center:
+                self._track(self.canvas.create_text(
+                    int(x0 + width / 2), cy, anchor="center", text=text, fill=fill, font=font,
+                ))
+            else:
+                # West anchor centers the glyph box on ``cy`` — nw + mid-y was
+                # shifting fitting lines down by half a line (index cards looked top-heavy).
+                self._track(self.canvas.create_text(
+                    int(x0), cy, anchor="w", text=text, fill=fill, font=font,
+                ))
             return
         fill_bg = bg or self._ink_bg()
         marquee = MarqueeLine(self.root)
@@ -931,8 +1009,12 @@ class WikiCommonKnowledgePanel(BasePanel):
             size=max(10, int(round((desc_hi if portrait else desc_lo) * u))),
         )
         num_u = self.INDEX_NUM_U[0] if portrait else self.INDEX_NUM_U[1]
+        # Cap rank size to the thumb so the pair reads as one aligned unit.
+        thumb_u = self.THUMB_U[0] if portrait else self.THUMB_U[1]
+        thumb_size = thumb_u * u
+        num_px = max(18, min(int(round(num_u * u)), int(round(thumb_size * 0.78))))
         num_font = tkfont.Font(
-            family=family, size=max(18, int(round(num_u * u))), weight="bold",
+            family=family, size=num_px, weight="bold",
         )
         meta_font = tkfont.Font(
             family=family, size=max(10, int(round(self.INDEX_META_U * u))),
@@ -947,8 +1029,13 @@ class WikiCommonKnowledgePanel(BasePanel):
         bar_w = self.ACCENT_BAR_U * u
         radius = self.CARD_RADIUS_U * u
         card_fill = mix_hex(self._palette["background"], "#000000", 0.42)
-        thumb_u = self.THUMB_U[0] if portrait else self.THUMB_U[1]
-        thumb_size = thumb_u * u
+
+        title_h = float(row_font.metrics("linespace"))
+        desc_line_h = float(desc_font.metrics("linespace"))
+        meta_h = float(meta_font.metrics("linespace"))
+        num_h = float(num_font.metrics("ascent") + num_font.metrics("descent"))
+        gap_td = max(4.0, 6 * u)
+        gap_dm = max(4.0, 6 * u)
 
         y = by0
         for story in column_stories:
@@ -968,14 +1055,26 @@ class WikiCommonKnowledgePanel(BasePanel):
                 fill=accent, outline=accent,
             ))
 
+            desc = str(story.get("description") or "").strip()
+            meta = format_views_line(story)
+            layout = index_card_row_layout(
+                y, draw_h,
+                pad=pad,
+                thumb_size=thumb_size,
+                num_h=num_h,
+                title_h=title_h,
+                desc_h=desc_line_h if desc else 0.0,
+                meta_h=meta_h if meta else 0.0,
+                gap_title_desc=gap_td,
+                gap_desc_meta=gap_dm,
+            )
+
             inner_x = bx0 + bar_w + pad
             num_w = num_font.measure(str(number)) + 14 * u
             thumb_x = inner_x + num_w
-            # Align number + thumbnail on the same vertical mid-line.
-            thumb_y = y + pad * 0.65
-            num_cy = thumb_y + thumb_size / 2
+            thumb_y = layout["thumb_y"]
             self._track(self.canvas.create_text(
-                inner_x, num_cy, anchor="w",
+                inner_x, layout["num_cy"], anchor="w",
                 text=str(number), fill=accent, font=num_font,
             ))
             self._draw_thumb_placeholder(
@@ -984,32 +1083,23 @@ class WikiCommonKnowledgePanel(BasePanel):
             self._fetch_thumb_async(story, thumb_x, thumb_y, thumb_size)
 
             text_x = thumb_x + thumb_size + pad * 0.75
-            meta_h = meta_font.metrics("linespace")
-            headline_top = y + pad * 0.65
-            headline_bottom = y + draw_h - pad - meta_h - 6 * u
-
+            text_right = bx1 - pad
             title = str(story.get("title") or "")
             self._place_marquee(
                 title,
-                text_x, headline_top, bx1 - pad, headline_top + row_font.metrics("linespace") + 6,
+                text_x, layout["title_y"], text_right, layout["title_y"] + title_h,
                 row_font, INK, bg=card_fill, center=False,
             )
-
-            desc = str(story.get("description") or "").strip()
-            desc_top = headline_top + row_font.metrics("linespace") + 8 * u
             if desc:
                 self._place_marquee(
                     desc,
-                    text_x, desc_top, bx1 - pad, max(desc_top + 8, headline_bottom - meta_h - 4),
+                    text_x, layout["desc_y"], text_right, layout["desc_y"] + desc_line_h,
                     desc_font, INK_2, bg=card_fill, center=False,
                 )
-
-            meta = format_views_line(story)
             if meta:
-                meta_y = y + draw_h - pad - meta_h
                 self._place_marquee(
                     meta,
-                    text_x, meta_y, bx1 - pad, y + draw_h - pad * 0.4,
+                    text_x, layout["meta_y"], text_right, layout["meta_y"] + meta_h,
                     meta_font, accent, bg=card_fill, center=False,
                 )
             y += draw_h + gap

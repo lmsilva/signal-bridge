@@ -17,6 +17,7 @@ from src.wiki_common_knowledge_panel import (
     format_views_line,
     hero_box_in_region,
     hero_image_urls,
+    index_card_row_layout,
     index_list_top,
     resolve_article_phase_seconds,
     resolve_index_title,
@@ -304,6 +305,46 @@ class IndexListTopTests(unittest.TestCase):
         top = index_list_top(200, u=u, portrait=False, title_bottom=240)
         self.assertGreaterEqual(top, 240 + 20)
         self.assertGreaterEqual(top, 200 + 44)
+
+
+class IndexCardRowLayoutTests(unittest.TestCase):
+    def test_number_thumb_and_text_share_a_midline(self):
+        layout = index_card_row_layout(
+            100, 120,
+            pad=16,
+            thumb_size=64,
+            num_h=50,
+            title_h=24,
+            desc_h=18,
+            meta_h=16,
+            gap_title_desc=6,
+            gap_desc_meta=6,
+        )
+        self.assertAlmostEqual(layout["num_cy"], layout["thumb_y"] + 32, places=3)
+        self.assertAlmostEqual(
+            layout["title_y"] + layout["text_stack_h"] / 2,
+            layout["mid_y"],
+            places=3,
+        )
+        above = layout["band_top"] - 100
+        below = (100 + 120) - (layout["band_top"] + layout["band_h"])
+        self.assertAlmostEqual(above, below, delta=1.0)
+        self.assertLess(layout["title_y"], layout["desc_y"])
+        self.assertLess(layout["desc_y"], layout["meta_y"])
+
+    def test_meta_follows_title_when_description_missing(self):
+        layout = index_card_row_layout(
+            0, 100,
+            pad=10,
+            thumb_size=48,
+            num_h=40,
+            title_h=20,
+            desc_h=0,
+            meta_h=14,
+            gap_title_desc=6,
+            gap_desc_meta=6,
+        )
+        self.assertAlmostEqual(layout["meta_y"], layout["title_y"] + 20 + 6, places=3)
 
 
 class WikiCkMotionHelpersTests(unittest.TestCase):
