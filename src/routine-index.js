@@ -17,6 +17,14 @@ const {
   matchesGuestPhotoboothQuery,
   matchesGuestSnapsSlideshowQuery,
 } = require('./guest-photobooth');
+const {
+  matchesTriviaQuery,
+  matchesSteamLibraryTourQuery,
+  matchesPsnLibraryTourQuery,
+  matchesSteamNowPlayingQuery,
+  matchesPsnNowPlayingQuery,
+  matchesYoutubeNowPlayingQuery,
+} = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
 const {
@@ -92,6 +100,25 @@ function classifyPhrase(phrase) {
   }
   if (matchesTeslaBatteryQuery(text, text)) {
     return 'tesla-battery';
+  }
+  if (matchesTriviaQuery(text, '')) {
+    return 'trivia';
+  }
+  // Library tours before platform now-playing (phrase contains "steam"/"psn").
+  if (matchesSteamLibraryTourQuery(text, '')) {
+    return 'steam-library-tour';
+  }
+  if (matchesPsnLibraryTourQuery(text, '')) {
+    return 'psn-library-tour';
+  }
+  if (matchesSteamNowPlayingQuery(text, '')) {
+    return 'steam-now-playing';
+  }
+  if (matchesPsnNowPlayingQuery(text, '')) {
+    return 'psn-now-playing';
+  }
+  if (matchesYoutubeNowPlayingQuery(text, '')) {
+    return 'youtube-now-playing';
   }
   if (matchesShoppingListQuery(text, '')) {
     return 'shopping-list';
