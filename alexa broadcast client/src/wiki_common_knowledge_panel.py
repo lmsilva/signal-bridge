@@ -926,11 +926,13 @@ class WikiCommonKnowledgePanel(BasePanel):
         accent = self._palette["accent"]
         family = self.config.get("titleFontFamily", "Segoe UI")
         x0, y0, x1, y1 = geometry["title"]
+        title_w = max(80.0, float(x1 - x0))
 
         brand_font = tkfont.Font(family=family, size=max(11, int(round(self.BRAND_U * u))))
         hero_u = self.INDEX_HERO_U[0] if portrait else self.INDEX_HERO_U[1]
+        hero_px = max(22, int(round(hero_u * u)))
         hero_font = tkfont.Font(
-            family=family, size=max(22, int(round(hero_u * u))), weight="bold",
+            family=family, size=hero_px, weight="bold",
         )
         date_font = tkfont.Font(
             family=family, size=max(11, int(round(self.INDEX_DATE_U * u))),
@@ -943,13 +945,24 @@ class WikiCommonKnowledgePanel(BasePanel):
         )))
         y += brand_font.metrics("linespace") + 10 * u
         hero = resolve_index_title(self._wiki)
-        header_ids.append(self._track(self.canvas.create_text(
+        # Shrink until the hero fits in two wrapped lines, then draw with Tk wrap.
+        while (
+            estimate_wrapped_lines(hero, hero_font, title_w, max_lines=3) > 2
+            and int(hero_font.cget("size")) > 18
+        ):
+            hero_font.configure(size=int(hero_font.cget("size")) - 2)
+        hero_id = self._track(self.canvas.create_text(
             x0, y, anchor="nw", text=hero, fill=INK, font=hero_font,
-        )))
-        hero_h = max(
-            hero_font.metrics("linespace"),
-            hero_font.metrics("ascent") + hero_font.metrics("descent") + 4,
-        )
+            width=int(title_w), justify=tk.LEFT,
+        ))
+        header_ids.append(hero_id)
+        try:
+            bbox = self.canvas.bbox(hero_id)
+            hero_h = max(1.0, float(bbox[3] - bbox[1])) if bbox else float(hero_font.metrics("linespace"))
+        except Exception:
+            hero_h = float(hero_font.metrics("linespace")) * max(
+                1, estimate_wrapped_lines(hero, hero_font, title_w, max_lines=2),
+            )
         y += hero_h + 14 * u
         header_ids.append(self._track(self.canvas.create_text(
             x0, y, anchor="nw",
