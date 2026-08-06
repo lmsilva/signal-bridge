@@ -543,6 +543,7 @@ class UpsideNewsPanel(BasePanel):
         # brand + hero + dateline (extra room — cards measure clearance at draw)
         title_h = 240 * u
         qr_size = min(cls.QR_PORTRAIT_U * u, (x1 - x0) * 0.36)
+        scan_label_h = 28 * u
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
         progress = (x0, attribution[1] - progress_h, x1, attribution[1])
@@ -550,7 +551,9 @@ class UpsideNewsPanel(BasePanel):
         content_bottom = progress[1] - gap
         # QR bottom-right; credit/pips share the left of that band.
         story_qr = (x1 - qr_size, content_bottom - qr_size, x1, content_bottom)
-        story_main = (x0, title[3] + gap, x1, story_qr[1] - gap)
+        # Article copy uses the full content height (index title band is unused
+        # on story pages) so headline/standfirst sit up and clear the QR.
+        story_main = (x0, top, x1, story_qr[1] - gap - scan_label_h)
         story_credit = (x0, story_qr[1], story_qr[0] - gap, content_bottom)
         body = (x0, title[3] + gap, x1, content_bottom)
         return {
@@ -582,6 +585,7 @@ class UpsideNewsPanel(BasePanel):
         # brand + hero + dateline (cards clear this via measured list_top)
         title_h = 200 * u
         qr_size = min(cls.QR_LANDSCAPE_U * u, (x1 - x0) * 0.22)
+        scan_label_h = 26 * u
 
         attribution = (x0, bottom - attribution_h, x1, bottom)
         progress = (x0, attribution[1] - progress_h, x1, attribution[1])
@@ -596,7 +600,9 @@ class UpsideNewsPanel(BasePanel):
         body_right = (right_x0, content_top, x1, content_bottom)
 
         story_qr = (x1 - qr_size, content_bottom - qr_size, x1, content_bottom)
-        story_main = (x0, content_top, x1, story_qr[1] - gap)
+        # Story pages start at the top of the content chrome, not under the
+        # index title reservation — that unused void was crushing the QR band.
+        story_main = (x0, top, x1, story_qr[1] - gap - scan_label_h)
         story_credit = (x0, story_qr[1], story_qr[0] - gap, content_bottom)
         return {
             "title": title,
@@ -906,18 +912,12 @@ class UpsideNewsPanel(BasePanel):
         if qr_size > 0:
             label_font = tkfont.Font(family=family, size=max(10, int(round(16 * u))))
             label = "Scan to read"
-            label_w = label_font.measure(label)
-            label_x = qx0 - 14 * u
-            if label_x - label_w >= cx0:
-                self._track(self.canvas.create_text(
-                    label_x, qy0 + qr_size / 2, anchor="e",
-                    text=label, fill=INK_2, font=label_font,
-                ))
-            else:
-                self._track(self.canvas.create_text(
-                    qx0 + qr_size / 2, qy0 - 8 * u, anchor="s",
-                    text=label, fill=INK_2, font=label_font,
-                ))
+            # Always above the QR — never beside credit/pips (that collision was
+            # burying the label under the byline on tall portrait stories).
+            self._track(self.canvas.create_text(
+                qx0 + qr_size / 2, qy0 - 8 * u, anchor="s",
+                text=label, fill=INK_2, font=label_font,
+            ))
             self._draw_story_qr(qx0, qy0, qr_size, str(card.get("url") or ""))
 
         self._draw_countdown_ring(geometry, accent)

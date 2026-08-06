@@ -151,6 +151,112 @@ test('day-list cache hit makes zero network calls', async () => {
   assert.equal(cache.hasContent(), true);
 });
 
+test('empty today stub falls back to yesterday cache and walk-back featured', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wiki-ck-empty-'));
+  const settings = createWikiCommonKnowledgeSettings({
+    wikiCommonKnowledgeSettingsPath: path.join(tmp, 'settings.json'),
+    ROOT: tmp,
+  });
+  settings.update({ contactEmail: 'ops@example.com', items: 3 });
+  const fixedNow = Date.UTC(2026, 7, 6, 18, 0, 0); // 2026-08-06
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('/featured/2026/08/06')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ tfa: { title: 'Duck' } }), // no mostread
+        text: async () => '',
+      };
+    }
+    if (String(url).includes('/featured/2026/08/05')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({
+          mostread: {
+            articles: [
+              {
+                normalizedtitle: 'Ada_Lovelace',
+                title: 'Ada_Lovelace',
+                description: 'mathematician',
+                extract: 'Ada Lovelace was a pioneer of computing and mathematics.',
+                views: 100,
+                views_delta: 10,
+                rank: 1,
+                thumbnail: { source: 'https://example.com/a.jpg' },
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Ada_Lovelace' } },
+              },
+              {
+                normalizedtitle: 'Mars',
+                title: 'Mars',
+                description: 'planet',
+                extract: 'Mars is the fourth planet from the Sun in our solar system.',
+                views: 90,
+                rank: 2,
+                thumbnail: { source: 'https://example.com/b.jpg' },
+              },
+              {
+                normalizedtitle: 'Tokyo',
+                title: 'Tokyo',
+                description: 'city',
+                extract: 'Tokyo is the capital of Japan and a major world city.',
+                views: 80,
+                rank: 3,
+                thumbnail: { source: 'https://example.com/c.jpg' },
+              },
+            ],
+          },
+        }),
+        text: async () => '',
+      };
+    }
+    // Summary / pageviews history — return minimal ok bodies
+    if (String(url).includes('/page/summary/') || String(url).includes('/per-article/')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ extract: 'ok', thumbnail: { source: 'https://example.com/t.jpg' }, items: [] }),
+        text: async () => '',
+      };
+    }
+    return {
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+      json: async () => ({}),
+      text: async () => 'missing',
+    };
+  };
+  const cache = createWikiCommonKnowledgeCache({
+    config: { ROOT: tmp, wikiCommonKnowledgeCacheDir: path.join(tmp, 'cache') },
+    settings,
+    fetchImpl,
+    now: () => fixedNow,
+  });
+  // Poisoned empty stub for "today"
+  const todayKey = '2026-08-06';
+  const daysDir = path.join(tmp, 'cache', 'days');
+  fs.mkdirSync(daysDir, { recursive: true });
+  fs.writeFileSync(path.join(daysDir, `daily-${todayKey}.json`), JSON.stringify({
+    period: 'daily', key: todayKey, fetchedAt: fixedNow, articles: [],
+  }));
+  // Push should still see yesterday if we had it — and force poll should walk back.
+  assert.equal(cache.hasContent(), false);
+  const result = await cache.fetchDay('daily', { force: true });
+  assert.equal(result.ok, true);
+  assert.ok(result.articles.length >= 3);
+  assert.ok(urls.some((u) => u.includes('/featured/2026/08/06')));
+  assert.ok(urls.some((u) => u.includes('/featured/2026/08/05')));
+  assert.equal(cache.hasContent(), true);
+  const written = JSON.parse(fs.readFileSync(path.join(daysDir, `daily-${todayKey}.json`), 'utf8'));
+  assert.ok(written.articles.length >= 3);
+});
+
 test('UDP payload shape', () => {
   const payload = buildWikiCommonKnowledgeRoundPayload({
     stories: [

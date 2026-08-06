@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-05 (Wiki CK index card alignment)
+**Last updated:** 2026-08-05 (Upside QR + Overhead grid)
 
 ---
 
@@ -264,6 +264,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-05: **Upside QR + Overhead grid** — Upside story pages use the full content height (no unused index-title void) and put “Scan to read” above the QR; Overhead adds header→map clearance and a multi-column portrait list so ~7–8 aircraft fit without paging. Ship: portable client rebuild.
 - 2026-08-05: **Wiki CK index card alignment** — rank, thumbnail, and title/desc/views share one vertically centered content band; marquee fitting text uses a true mid-line west anchor (was shifted down half a line). Ship: portable client rebuild.
 - 2026-08-05: **Overhead page countdown tick** — `next page in Ns` updates on a 250ms timer (was only refreshed on irregular ADS-B list repaints, so it jumped). Ship: portable client rebuild.
 - 2026-08-05: **Wiki CK article hero images** — article pages preferred multi-MB `originalImageUrl` (often TIFF) and timed out while index thumbs worked; heroes now prefer sized Wikimedia thumbs (standard CDN widths) with original as fallback. Ship: portable client rebuild (+ `./recreate.sh` so UDP `imageUrl` is the bounded thumb).
