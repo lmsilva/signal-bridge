@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-05 (Wiki CK hero image URLs)
+**Last updated:** 2026-08-05 (Wiki CK empty-day cache)
 
 ---
 
@@ -510,6 +510,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-05: **Wiki CK empty-day cache** — today’s Wikimedia featured feed often omits `mostread` (and pageviews/top for “today” 404s); we were writing `articles: []` and then Push refused. Polls now walk back up to 3 days, never persist empty day lists, and selectArticles falls back to the newest non-empty cache. Deploy: `./recreate.sh`, then Refresh cache (or wait for the next poll).
 - 2026-08-05: **Wiki CK hero image URLs** — UDP `imageUrl` is a bounded Wikimedia thumb (not the multi-MB original); enrich still fills missing images when the extract is already long; cache merge no longer wipes thumbs with empty feed fields. Deploy: `./recreate.sh`.
 - 2026-08-05: **Wikipedia Common Knowledge rename** — Push/scheduler command title, UDP payload `title`, and admin Settings section label are consistently **Wikipedia Common Knowledge** (was “Common Knowledge”). Cache-bust `?v=signal48`. Deploy: `./recreate.sh`.
 - 2026-08-05: **Slideshow thumbs unbroken without sharp** — admin grid falls back to the full original if a thumb 404s; when `sharp` isn't in the runtime, `list()` omits `thumbPath` (no invented `/thumbs/…` URLs). Real speed still needs `sharp` in the image: `./recreate.sh --build`. Cache-bust `?v=signal47`.

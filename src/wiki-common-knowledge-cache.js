@@ -123,6 +123,81 @@ function createWikiCommonKnowledgeCache({
     }, null, 2)}\n`, 'utf8');
   }
 
+  function articlesFromDayList(cached) {
+    return Array.isArray(cached?.articles) ? cached.articles : [];
+  }
+
+  /** Prefer a non-empty day list, walking back up to ``maxLag`` days. */
+  function latestNonEmptyDayArticles(period, fromDate = new Date(now()), maxLag = 7) {
+    if (period === 'daily') {
+      for (let lag = 0; lag <= maxLag; lag += 1) {
+        const d = new Date(fromDate);
+        d.setUTCDate(d.getUTCDate() - lag);
+        const articles = articlesFromDayList(readDayList('daily', dayKey(d, 'daily')));
+        if (articles.length) return articles;
+      }
+      return [];
+    }
+    const primary = articlesFromDayList(readDayList(period, dayKey(fromDate, period)));
+    if (primary.length) return primary;
+    for (let lag = 0; lag <= maxLag; lag += 1) {
+      const d = new Date(fromDate);
+      d.setUTCDate(d.getUTCDate() - lag);
+      const articles = articlesFromDayList(readDayList('daily', dayKey(d, 'daily')));
+      if (articles.length) return articles;
+    }
+    return [];
+  }
+
+  /**
+   * Today's featured feed often omits ``mostread`` until later UTC, and
+   * pageviews/top for "today" is usually 404. Walk back a few days.
+   */
+  async function fetchMostReadCandidates(client, date = new Date(now())) {
+    const base = new Date(date);
+    for (let lag = 0; lag <= 3; lag += 1) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() - lag);
+      try {
+        networkCalls += 1;
+        const featured = await client.fetchFeatured(d);
+        const articles = articlesFromFeatured(featured);
+        if (articles.length) {
+          return { articles, source: 'featured', date: d };
+        }
+      } catch (error) {
+        log?.warn?.('Wiki featured fetch failed', dayKey(d, 'daily'), error?.message || error);
+      }
+    }
+    for (let lag = 1; lag <= 3; lag += 1) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() - lag);
+      try {
+        networkCalls += 1;
+        const top = await client.fetchPageviewsTop(d);
+        const items = top?.items?.[0]?.articles || [];
+        if (!items.length) continue;
+        const articles = items.slice(0, 50).map((item, i) => ({
+          title: String(item.article || '').replace(/_/g, ' '),
+          views: Number(item.views) || 0,
+          viewsDelta: 0,
+          viewsDeltaPct: null,
+          rank: i + 1,
+          description: '',
+          extract: '',
+          thumbnailUrl: '',
+          originalImageUrl: '',
+          contentUrl: '',
+          history: [],
+        }));
+        return { articles, source: 'pageviews', date: d };
+      } catch (error) {
+        log?.warn?.('Wiki pageviews fetch failed', dayKey(d, 'daily'), error?.message || error);
+      }
+    }
+    return { articles: [], source: null, date: base };
+  }
+
   async function enrichArticle(client, raw) {
     const cached = readArticle(raw.title);
     let article;
@@ -190,36 +265,16 @@ function createWikiCommonKnowledgeCache({
     const key = dayKey(new Date(now()), period);
     if (!force) {
       const cached = readDayList(period, key);
-      if (cached?.articles?.length) {
+      // Empty stubs are a miss — today's feed often ships without mostread.
+      if (articlesFromDayList(cached).length) {
         return { ok: true, articles: cached.articles, fromCache: true, key };
       }
     }
 
     const client = clientFromSettings(snap);
     try {
-      networkCalls += 1;
-      const featured = await client.fetchFeatured(new Date(now()));
-      let articles = articlesFromFeatured(featured);
-      if (!articles.length) {
-        // Fallback: pageviews top → summaries
-        networkCalls += 1;
-        const top = await client.fetchPageviewsTop(new Date(now()));
-        const items = top?.items?.[0]?.articles || [];
-        articles = items.slice(0, 50).map((item, i) => ({
-          title: String(item.article || '').replace(/_/g, ' '),
-          views: Number(item.views) || 0,
-          viewsDelta: 0,
-          viewsDeltaPct: null,
-          rank: i + 1,
-          description: '',
-          extract: '',
-          thumbnailUrl: '',
-          originalImageUrl: '',
-          contentUrl: '',
-          history: [],
-        }));
-      }
-
+      const resolved = await fetchMostReadCandidates(client, new Date(now()));
+      let articles = resolved.articles || [];
       articles = filterArticles(articles, {
         denylist: snap.denylist,
         filterDistressing: snap.filterDistressing,
@@ -232,17 +287,42 @@ function createWikiCommonKnowledgeCache({
         if (snap.skipNoImage && !art.thumbnailUrl && !art.originalImageUrl) continue;
         enriched.push(art);
       }
+
+      if (!enriched.length) {
+        lastPollError = 'No most-read articles available yet — will retry later';
+        const fallback = latestNonEmptyDayArticles(period, new Date(now()));
+        if (fallback.length) {
+          lastPollCount = fallback.length;
+          return {
+            ok: true,
+            articles: fallback,
+            fromCache: true,
+            key,
+            stale: true,
+            error: lastPollError,
+          };
+        }
+        return { ok: false, error: lastPollError, articles: [] };
+      }
+
+      // Never persist an empty day list — that poisoned Push after UTC midnight.
       writeDayList(period, key, enriched);
       lastPollAt = now();
       lastPollError = null;
       lastPollCount = enriched.length;
-      return { ok: true, articles: enriched, fromCache: false, key };
+      return {
+        ok: true,
+        articles: enriched,
+        fromCache: false,
+        key,
+        source: resolved.source || null,
+      };
     } catch (error) {
       lastPollError = error?.message || String(error);
       log?.warn?.('Wiki day fetch failed', lastPollError);
-      const cached = readDayList(period, key);
-      if (cached?.articles?.length) {
-        return { ok: true, articles: cached.articles, fromCache: true, key, stale: true };
+      const fallback = latestNonEmptyDayArticles(period, new Date(now()));
+      if (fallback.length) {
+        return { ok: true, articles: fallback, fromCache: true, key, stale: true };
       }
       return { ok: false, error: lastPollError, articles: [] };
     }
@@ -250,14 +330,7 @@ function createWikiCommonKnowledgeCache({
 
   function selectArticles(overrides = {}) {
     const snap = { ...settings.get(), ...overrides };
-    const key = dayKey(new Date(now()), snap.period);
-    const cached = readDayList(snap.period, key);
-    let articles = cached?.articles || [];
-    if (!articles.length) {
-      // Try daily fallback for weekly/monthly when those lists empty
-      const daily = readDayList('daily', dayKey(new Date(now()), 'daily'));
-      articles = daily?.articles || [];
-    }
+    let articles = latestNonEmptyDayArticles(snap.period, new Date(now()));
     articles = filterArticles(articles, {
       denylist: snap.denylist,
       filterDistressing: snap.filterDistressing,

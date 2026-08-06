@@ -58,7 +58,40 @@ LABEL_OFFSETS = (
 
 
 def rows_per_page(portrait: bool) -> int:
+    """Legacy default page size — prefer ``list_grid_for_box`` at draw time."""
     return 4 if portrait else 6
+
+
+def list_grid_for_box(
+    list_w: float,
+    list_h: float,
+    *,
+    portrait: bool,
+    u: float = 1.0,
+) -> dict:
+    """How many columns × rows fit in the aircraft list band."""
+    u = max(0.5, float(u or 1.0))
+    list_w = max(80.0, float(list_w))
+    list_h = max(80.0, float(list_h))
+    footer_h = max(48.0, 40 * u)
+    usable_h = max(80.0, list_h - footer_h)
+    min_row = max(56.0, (76 if portrait else 52) * u)
+    cols = 1
+    if portrait:
+        if list_w >= 900 * u:
+            cols = 3
+        elif list_w >= 560 * u:
+            cols = 2
+    rows = max(3, int(usable_h // min_row))
+    if cols >= 2:
+        rows = max(3, min(rows, 5))
+    else:
+        rows = max(3, min(rows, 8 if portrait else 10))
+    return {
+        "columns": cols,
+        "rows": rows,
+        "page_size": cols * rows,
+    }
 
 
 def compute_layout_regions(
@@ -68,33 +101,45 @@ def compute_layout_regions(
     content_h: float,
     *,
     portrait: bool,
+    u: float = 1.0,
 ) -> dict:
-    """Scope ~55% primary axis, legend band, list fills remainder."""
+    """Scope ~primary axis; legend band; list fills remainder (multi-col in portrait)."""
     gap = max(10.0, content_h * 0.014)
     # Tall enough for swatch + spelled-out legend labels with breathing room.
     legend_h = max(40.0, content_h * 0.055)
+    u = max(0.5, float(u or 1.0))
 
     if portrait:
-        # Leave room for header clearance inside the scope box; list gets the
-        # lower band with a reserved footer for pager text.
-        scope_h = content_h * 0.50
-        list_top = content_y + scope_h + gap + legend_h + gap
+        # Leave a clear gap under the SIGNAL/Overhead header before the map.
+        scope_pad_top = max(16.0, 18 * u)
+        scope_h = content_h * 0.42
+        scope_y0 = content_y + scope_pad_top
+        scope_y1 = scope_y0 + scope_h
+        list_top = scope_y1 + gap + legend_h + gap
+        list_box = (content_x, list_top, content_x + content_w, content_y + content_h)
+        grid = list_grid_for_box(
+            content_w, (content_y + content_h) - list_top, portrait=True, u=u,
+        )
         return {
             "portrait": True,
-            "scope": (content_x, content_y, content_x + content_w, content_y + scope_h),
+            "scope": (content_x, scope_y0, content_x + content_w, scope_y1),
             "legend": (
                 content_x,
-                content_y + scope_h + gap,
+                scope_y1 + gap,
                 content_x + content_w,
-                content_y + scope_h + gap + legend_h,
+                scope_y1 + gap + legend_h,
             ),
-            "list": (content_x, list_top, content_x + content_w, content_y + content_h),
-            "rows": rows_per_page(True),
+            "list": list_box,
+            "rows": grid["page_size"],
+            "list_columns": grid["columns"],
+            "list_rows": grid["rows"],
         }
 
     scope_w = content_w * 0.55
     list_left = content_x + scope_w + gap
     list_w = max(40.0, content_x + content_w - list_left)
+    list_box = (list_left, content_y, list_left + list_w, content_y + content_h)
+    grid = list_grid_for_box(list_w, content_h, portrait=False, u=u)
     return {
         "portrait": False,
         "scope": (content_x, content_y, content_x + scope_w, content_y + content_h),
@@ -104,8 +149,10 @@ def compute_layout_regions(
             content_x + scope_w,
             content_y + content_h,
         ),
-        "list": (list_left, content_y, list_left + list_w, content_y + content_h),
-        "rows": rows_per_page(False),
+        "list": list_box,
+        "rows": grid["page_size"],
+        "list_columns": grid["columns"],
+        "list_rows": grid["rows"],
     }
 
 
@@ -595,6 +642,7 @@ class OverheadPanel(BasePanel):
             chrome.content_w,
             chrome.content_bottom - chrome.content_top,
             portrait=chrome.portrait,
+            u=chrome.u,
         )
         regions["u"] = chrome.u
         regions["screen_w"] = screen_w
@@ -842,8 +890,9 @@ class OverheadPanel(BasePanel):
         brand_h = brand_font.metrics("ascent") + brand_font.metrics("descent")
         title_h = title_font.metrics("ascent") + title_font.metrics("descent")
         meta_h = meta_font.metrics("ascent") + meta_font.metrics("descent")
-        # Fit SIGNAL + title + subtitle inside the chrome header band.
-        band_bottom = chrome.content_top - 4 * u
+        # Fit SIGNAL + title + subtitle inside the chrome header band with
+        # clear air above the map (content_top).
+        band_bottom = chrome.content_top - max(10.0, 12 * u)
         avail = max(40.0, band_bottom - y)
         gap = max(2.0, 3 * u)
         stack = brand_h + gap + title_h + gap + meta_h
@@ -1278,13 +1327,18 @@ class OverheadPanel(BasePanel):
 
         geo = self._geometry()
         x0, y0, x1, y1 = geo["list"]
-        rows = geo["rows"]
-        page_rows = roster_page_slice(self._roster, self._page_index, rows)
+        page_size = geo["rows"]
+        cols = max(1, int(geo.get("list_columns") or 1))
+        row_count = max(1, int(geo.get("list_rows") or page_size))
+        page_rows = roster_page_slice(self._roster, self._page_index, page_size)
         # Reserve a clear footer band so pager text is never clipped by the
         # dismiss chrome / panel edge.
         footer_h = max(48.0, geo["u"] * 40)
         usable_bottom = y1 - footer_h
-        row_h = max(44.0, (usable_bottom - y0) / rows)
+        row_h = max(44.0, (usable_bottom - y0) / row_count)
+        col_w = (x1 - x0) / cols
+        col_gap = max(10.0, geo["u"] * 12) if cols > 1 else 0.0
+        usable_col_w = col_w - (col_gap if cols > 1 else 0.0)
         home_lat, home_lon = self._home()
         radius_nm = self._radius_nm()
         row_font = self._fonts["row"]
@@ -1298,7 +1352,11 @@ class OverheadPanel(BasePanel):
         show_routes = self._overhead.get("showRoutes") is not False
 
         for i, ac in enumerate(page_rows):
-            ry = y0 + i * row_h
+            col = i % cols
+            row = i // cols
+            cell_x0 = x0 + col * col_w
+            cell_x1 = cell_x0 + usable_col_w
+            ry = y0 + row * row_h
             label = aircraft_display_label(ac)
             type_code = str(ac.get("typeCode") or "").strip().upper()
             if type_code:
@@ -1337,11 +1395,11 @@ class OverheadPanel(BasePanel):
             # Class accent rule on the left of each row.
             self._list_ids.append(
                 self.canvas.create_rectangle(
-                    x0, ry + 2, x0 + 4, ry + row_h - 6,
+                    cell_x0, ry + 2, cell_x0 + 4, ry + row_h - 6,
                     fill=class_color, outline="", tags=("overhead", "list"),
                 ),
             )
-            text_x = x0 + 12
+            text_x = cell_x0 + 12
             if has_route:
                 stack_h = label_block + line_gap + meta_block + line_gap + meta_block
             else:
@@ -1357,7 +1415,7 @@ class OverheadPanel(BasePanel):
             if has_route:
                 self._draw_route_chip(
                     text_x, cursor_y + meta_block / 2, origin, dest,
-                    dim=out_of_range, max_right=x1 - 8,
+                    dim=out_of_range, max_right=cell_x1 - 8,
                 )
                 cursor_y += meta_block + line_gap
             self._list_ids.append(
@@ -1368,9 +1426,9 @@ class OverheadPanel(BasePanel):
             )
 
         total = len(self._roster)
-        pages = roster_page_count(total, rows)
+        pages = roster_page_count(total, page_size)
         next_in = page_seconds_remaining(self._page_seconds, self._page_started_at)
-        footer = format_list_footer(self._page_index, rows, total, next_in)
+        footer = format_list_footer(self._page_index, page_size, total, next_in)
         footer_top = usable_bottom + 6
         self._footer_text_id = self.canvas.create_text(
             x0, footer_top, anchor="nw", text=footer, fill=INK_2, font=self._fonts["footer"],

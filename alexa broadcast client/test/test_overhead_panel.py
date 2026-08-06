@@ -20,6 +20,7 @@ from src.overhead_panel import (
     freeze_roster,
     icon_color,
     label_offset_for_hex,
+    list_grid_for_box,
     motion_frozen,
     page_highlight_hexes,
     page_seconds_remaining,
@@ -69,22 +70,30 @@ class OverheadGeometryTests(unittest.TestCase):
         self.assertEqual(rows_per_page(True), 4)
         self.assertEqual(rows_per_page(False), 6)
 
-    def test_portrait_scope_is_top_half(self):
-        layout = compute_layout_regions(40, 136, 1000, 1600, portrait=True)
+    def test_portrait_list_uses_multiple_columns_when_wide(self):
+        grid = list_grid_for_box(1000, 700, portrait=True, u=1.0)
+        self.assertGreaterEqual(grid["columns"], 2)
+        self.assertGreaterEqual(grid["page_size"], 7)
+        layout = compute_layout_regions(40, 136, 1000, 1600, portrait=True, u=1.0)
+        self.assertGreaterEqual(layout["list_columns"], 2)
+        self.assertGreaterEqual(layout["rows"], 7)
+        self.assertGreater(layout["scope"][1], 136)
+
+    def test_portrait_scope_is_top_band(self):
+        layout = compute_layout_regions(40, 136, 1000, 1600, portrait=True, u=1.0)
         scope = layout["scope"]
         scope_h = scope[3] - scope[1]
-        self.assertAlmostEqual(scope_h / 1600, 0.50, places=2)
+        self.assertAlmostEqual(scope_h / 1600, 0.42, places=2)
         self.assertLess(scope[3], layout["list"][1])
-        self.assertEqual(layout["rows"], 4)
         self.assertIn("legend", layout)
 
     def test_landscape_scope_is_left_55_percent(self):
-        layout = compute_layout_regions(60, 132, 1800, 900, portrait=False)
+        layout = compute_layout_regions(60, 132, 1800, 900, portrait=False, u=1.0)
         scope = layout["scope"]
         scope_w = scope[2] - scope[0]
         self.assertAlmostEqual(scope_w / 1800, 0.55, places=2)
         self.assertLess(scope[2], layout["list"][0])
-        self.assertEqual(layout["rows"], 6)
+        self.assertGreaterEqual(layout["rows"], 6)
 
     def test_scope_projection_inside_radius(self):
         pos, dist = scope_xy_from_latlon(40.1, -111.0, 40.0, -111.0, 25, 200, 200, 100)

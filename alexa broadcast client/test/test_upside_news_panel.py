@@ -202,6 +202,8 @@ class GeometryTests(unittest.TestCase):
         credit = boxes["story_credit"]
         self.assertGreater(text[2] - text[0], chrome.content_w * 0.7)
         self.assertLessEqual(text[3], qr[1])  # copy above QR
+        self.assertGreaterEqual(qr[1] - text[3], 20 * chrome.u)  # room for Scan to read
+        self.assertAlmostEqual(text[1], chrome.content_top, delta=2)
         self.assertGreater(qr[0], chrome.content_x + chrome.content_w * 0.55)
         self.assertLessEqual(credit[2], qr[0])
         self.assertEqual(boxes["columns"], 2)
@@ -221,6 +223,8 @@ class GeometryTests(unittest.TestCase):
         progress = boxes["progress"]
         attribution = boxes["attribution"]
         self.assertLessEqual(text[3], qr[1])
+        self.assertGreaterEqual(qr[1] - text[3], 20 * chrome.u)
+        self.assertAlmostEqual(text[1], chrome.content_top, delta=2)
         self.assertLessEqual(qr[3], progress[1])
         self.assertLessEqual(progress[3], attribution[1])
         self.assertGreater(qr[0], (text[0] + text[2]) / 2)
