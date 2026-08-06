@@ -172,6 +172,14 @@ class IndexTitleTests(unittest.TestCase):
         wiki["dateline"] = "Tuesday 5 August · Wikipedia"
         self.assertEqual(format_index_dateline(wiki), "Tuesday 5 August · Wikipedia")
 
+    def test_default_daily_title_is_not_a_single_huge_unbroken_line(self):
+        # Portrait posters were clipping "What the world looked up — five".
+        wiki = make_round(5)
+        wiki["indexTitle"] = ""
+        title = resolve_index_title(wiki)
+        self.assertIn("looked up", title)
+        self.assertIn("five", title)
+
 
 class ViewsLineTests(unittest.TestCase):
     def test_formats_views_and_percent_delta(self):

@@ -110,10 +110,12 @@ def compute_layout_regions(
     u = max(0.5, float(u or 1.0))
 
     if portrait:
-        # Leave a clear gap under the SIGNAL/Overhead header before the map.
-        scope_pad_top = max(16.0, 18 * u)
-        scope_h = content_h * 0.42
-        scope_y0 = content_y + scope_pad_top
+        # Dedicated strip for "15 NM · N aircraft" so it never sits on the map
+        # (map tiles load async and were covering / intersecting the subtitle).
+        meta_strip_h = max(28.0, 26 * u)
+        scope_pad_top = max(10.0, 12 * u)
+        scope_h = content_h * 0.40
+        scope_y0 = content_y + meta_strip_h + scope_pad_top
         scope_y1 = scope_y0 + scope_h
         list_top = scope_y1 + gap + legend_h + gap
         list_box = (content_x, list_top, content_x + content_w, content_y + content_h)
@@ -122,6 +124,12 @@ def compute_layout_regions(
         )
         return {
             "portrait": True,
+            "meta_strip": (
+                content_x,
+                content_y,
+                content_x + content_w,
+                content_y + meta_strip_h,
+            ),
             "scope": (content_x, scope_y0, content_x + content_w, scope_y1),
             "legend": (
                 content_x,
@@ -138,11 +146,20 @@ def compute_layout_regions(
     scope_w = content_w * 0.55
     list_left = content_x + scope_w + gap
     list_w = max(40.0, content_x + content_w - list_left)
+    # Landscape: meta strip sits above the scope on the left column.
+    meta_strip_h = max(26.0, 24 * u)
+    scope_y0 = content_y + meta_strip_h + max(8.0, 10 * u)
     list_box = (list_left, content_y, list_left + list_w, content_y + content_h)
     grid = list_grid_for_box(list_w, content_h, portrait=False, u=u)
     return {
         "portrait": False,
-        "scope": (content_x, content_y, content_x + scope_w, content_y + content_h),
+        "meta_strip": (
+            content_x,
+            content_y,
+            content_x + scope_w,
+            content_y + meta_strip_h,
+        ),
+        "scope": (content_x, scope_y0, content_x + scope_w, content_y + content_h),
         "legend": (
             content_x,
             content_y + content_h - legend_h,
@@ -852,13 +869,18 @@ class OverheadPanel(BasePanel):
     def _paint_all(self):
         self._clear_layer()
         self._paint_header()
+        self._paint_meta_strip()
         self._paint_scope_static()
         self._paint_scope_aircraft()
         self._paint_legend()
         self._paint_list()
         # Map underlay is painted after the header; keep chrome readable.
+        self._raise_chrome()
+
+    def _raise_chrome(self):
         try:
             self.canvas.tag_raise("overhead-header")
+            self.canvas.tag_raise("overhead-meta")
             self.canvas.tag_raise("overhead-legend")
         except Exception:
             pass
@@ -878,27 +900,20 @@ class OverheadPanel(BasePanel):
         chrome = geo["chrome"]
         u = geo["u"]
         title = str(self._overhead.get("title") or "Overhead")
-        radius = self._radius_nm()
-        subtitle = f"{radius:.0f} NM · {len(self._roster)} aircraft"
         x = chrome.content_x
         y = chrome.header_top + 4 * u
         brand_font = self._fonts["brand"]
         title_font = self._fonts["title"]
-        meta_font = self._fonts["meta"]
-        # Measure real glyph boxes — fixed u offsets were burying the subtitle
-        # under the large "Overhead" display face.
         brand_h = brand_font.metrics("ascent") + brand_font.metrics("descent")
         title_h = title_font.metrics("ascent") + title_font.metrics("descent")
-        meta_h = meta_font.metrics("ascent") + meta_font.metrics("descent")
-        # Fit SIGNAL + title + subtitle inside the chrome header band with
-        # clear air above the map (content_top).
-        band_bottom = chrome.content_top - max(10.0, 12 * u)
+        # SIGNAL + Overhead only — the NM/aircraft line lives in meta_strip
+        # above the map so async tiles cannot cover it.
+        band_bottom = chrome.content_top - max(8.0, 10 * u)
         avail = max(40.0, band_bottom - y)
         gap = max(2.0, 3 * u)
-        stack = brand_h + gap + title_h + gap + meta_h
+        stack = brand_h + gap + title_h
         if stack > avail:
-            # Prefer keeping the subtitle readable over generous title leading.
-            gap = max(1.0, (avail - brand_h - title_h - meta_h) / 2)
+            gap = max(1.0, avail - brand_h - title_h)
         self._item_ids.append(
             self.canvas.create_text(
                 x, y, anchor="nw", text="SIGNAL", fill=INK_3,
@@ -912,13 +927,6 @@ class OverheadPanel(BasePanel):
                 font=title_font, tags=("overhead", "overhead-header"),
             ),
         )
-        sub_y = title_y + title_h + gap
-        self._item_ids.append(
-            self.canvas.create_text(
-                x, sub_y, anchor="nw", text=subtitle, fill=INK_2,
-                font=meta_font, tags=("overhead", "overhead-header"),
-            ),
-        )
         age = self._data_age_sec()
         if age >= STALE_FREEZE_SEC:
             banner = "Provider data stale — positions frozen"
@@ -929,10 +937,33 @@ class OverheadPanel(BasePanel):
                     anchor="ne",
                     text=banner,
                     fill=WARN,
-                    font=meta_font,
+                    font=self._fonts["meta"],
                     tags=("overhead", "overhead-header"),
                 ),
             )
+
+    def _paint_meta_strip(self):
+        geo = self._geometry()
+        strip = geo.get("meta_strip")
+        if not strip:
+            return
+        x0, y0, x1, y1 = strip
+        radius = self._radius_nm()
+        subtitle = f"{radius:.0f} NM · {len(self._roster)} aircraft"
+        # Solid band so the map never shows through while tiles load.
+        self._item_ids.append(
+            self.canvas.create_rectangle(
+                x0, y0, x1, y1, fill=BG, outline="",
+                tags=("overhead", "overhead-meta"),
+            ),
+        )
+        cy = (y0 + y1) / 2
+        self._item_ids.append(
+            self.canvas.create_text(
+                x0, cy, anchor="w", text=subtitle, fill=INK_2,
+                font=self._fonts["meta"], tags=("overhead", "overhead-meta"),
+            ),
+        )
 
     def _paint_scope_static(self):
         geo = self._geometry()
@@ -1065,6 +1096,8 @@ class OverheadPanel(BasePanel):
         try:
             self.canvas.tag_raise("ring")
             self.canvas.tag_raise("ac")
+            self.canvas.tag_raise("overhead-meta")
+            self.canvas.tag_raise("overhead-header")
         except Exception:
             pass
 
