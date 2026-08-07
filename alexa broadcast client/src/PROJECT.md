@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-06 (PSN footer plays)
+**Last updated:** 2026-08-06 (Deploy bat UNC fix)
 
 ---
 
@@ -264,6 +264,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-06: **Deploy bat works from the NAS UNC share** — double-clicking `dist\Deploy Alexa Broadcast Client.bat` on `\\nas\...` made `cmd` drop to `C:\Windows` (“UNC paths are not supported”) and a silenced `Expand-Archive` could leave `C:\MoviePoster` without `alexa-broadcast-client.exe`. Deploy now `pushd`s the bat folder (drive-letter map), copies the zip beside the bat, extracts with `tar` (same as the build), checks zip size, and prints directory listings on failure. No portable rebuild required — only the deploy bat changed.
 - 2026-08-06: **PSN footer shows PLAYS, not trophy %** — third column was labelled PROGRESS and showed Sony’s trophy completion (e.g. Split Fiction stuck at 6% while playtime grew), which read as story progress. It now shows PSN `playCount` (times the game was launched) as **PLAYS**. Ship: portable client rebuild.
 - 2026-08-05: **Wiki title wrap + Overhead meta strip** — index hero title wraps/shrinks to two lines instead of clipping mid-phrase; Overhead moves “N NM · M aircraft” into a solid strip above the map so async tiles cannot cover it. Ship: portable client rebuild.
 - 2026-08-05: **Upside QR + Overhead grid** — Upside story pages use the full content height (no unused index-title void) and put “Scan to read” above the QR; Overhead adds header→map clearance and a multi-column portrait list so ~7–8 aircraft fit without paging. Ship: portable client rebuild.
