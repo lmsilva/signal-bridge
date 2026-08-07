@@ -614,7 +614,10 @@ function createYoutubeLounge({
     device.provisional = null;
     device.provisionalSince = null;
     finishSession(device, 'disconnected');
-    emitter.emit('device-disconnected', { deviceId: device.deviceId });
+    emitter.emit('device-disconnected', {
+      deviceId: device.deviceId,
+      reason: message.reason || null,
+    });
   }
 
   function progressFor(device) {

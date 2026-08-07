@@ -22,6 +22,10 @@ const {
 const SHORT_MAX_SECONDS = 60;
 const TOKEN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** Ask Lounge for a fresh now-playing — Apple TV is often silent until polled. */
+const KEEP_ALIVE_POLL_MS = 45 * 1000;
+/** Backoff when a device task dies and Node has to re-connect it. */
+const RECONNECT_BACKOFF_MS = [2000, 5000, 15000, 30000, 60000];
 
 function createYoutubeNowPlaying({
   config,
@@ -49,11 +53,14 @@ function createYoutubeNowPlaying({
 
   let refreshTimer = null;
   let pruneTimer = null;
+  let keepAliveTimer = null;
   let lastError = null;
   let started = false;
   // videoId → resolved metadata for the currently airing card, so a progress
   // tick or a manual push does not re-resolve what we just fetched.
   let airing = null;
+  /** @type {Map<string, { timer: NodeJS.Timeout|null, attempt: number }>} */
+  const reconnectState = new Map();
 
   function imageBaseUrl() {
     if (youtubeConfig.imageBaseUrl) {
@@ -238,6 +245,106 @@ function createYoutubeNowPlaying({
         await connectDevice(device);
       } catch (error) {
         log?.warn?.(`YouTube device ${device.label} failed to connect`, error?.message || error);
+      }
+    }
+  }
+
+  function clearReconnect(deviceId) {
+    const entry = reconnectState.get(deviceId);
+    if (entry?.timer) {
+      clearTimeout(entry.timer);
+    }
+    reconnectState.delete(deviceId);
+  }
+
+  function clearAllReconnects() {
+    for (const deviceId of [...reconnectState.keys()]) {
+      clearReconnect(deviceId);
+    }
+  }
+
+  /**
+   * Lounge subscribe tasks can still die hard (agent crash, needs-relink).
+   * The Python sidecar reconnects across normal long-poll ends; this is the
+   * safety net when the whole device task exits and Node hears `disconnected`.
+   */
+  function scheduleReconnect(deviceId, reason = null) {
+    const device = store.getDevice(deviceId);
+    if (!device?.enabled || !started) {
+      return;
+    }
+    if (reason === 'needs-relink' || device.status === 'needs-relink') {
+      store.markDeviceStatus(deviceId, 'needs-relink', reason || device.statusDetail);
+      clearReconnect(deviceId);
+      return;
+    }
+    const existing = reconnectState.get(deviceId) || { timer: null, attempt: 0 };
+    if (existing.timer) {
+      return;
+    }
+    const delay = RECONNECT_BACKOFF_MS[
+      Math.min(existing.attempt, RECONNECT_BACKOFF_MS.length - 1)
+    ];
+    existing.attempt += 1;
+    existing.timer = setTimeout(() => {
+      existing.timer = null;
+      const current = store.getDevice(deviceId);
+      if (!started || !current?.enabled) {
+        clearReconnect(deviceId);
+        return;
+      }
+      connectDevice(current)
+        .then((result) => {
+          if (result?.ok) {
+            clearReconnect(deviceId);
+            return;
+          }
+          if (result?.error === 'needs-relink') {
+            clearReconnect(deviceId);
+            return;
+          }
+          scheduleReconnect(deviceId, result?.error);
+        })
+        .catch((error) => {
+          log?.warn?.(`YouTube reconnect failed for ${current.label}`, error?.message || error);
+          scheduleReconnect(deviceId);
+        });
+    }, delay);
+    existing.timer?.unref?.();
+    reconnectState.set(deviceId, existing);
+    log?.info?.(
+      `YouTube device ${device.label} disconnected`
+      + (reason ? ` (${reason})` : '')
+      + ` — reconnecting in ${Math.round(delay / 1000)}s`,
+    );
+  }
+
+  async function keepAlivePoll() {
+    if (!started || typeof lounge.pollNowPlaying !== 'function') {
+      return;
+    }
+    let result;
+    try {
+      result = await lounge.pollNowPlaying();
+    } catch (error) {
+      log?.warn?.('YouTube keep-alive poll failed', error?.message || error);
+      return;
+    }
+    // A dead agent session reports not-connected per device — re-bind those.
+    const rows = Array.isArray(result?.devices) ? result.devices : null;
+    if (rows) {
+      for (const row of rows) {
+        if (row?.ok === false && (row.error === 'not-connected' || !row.error)) {
+          scheduleReconnect(row.deviceId, row.error || 'not-connected');
+        }
+      }
+      return;
+    }
+    if (result?.ok === false && result.error === 'not-connected') {
+      for (const device of store.listDevices()) {
+        if (device.enabled) {
+          scheduleReconnect(device.id, 'not-connected');
+        }
       }
     }
   }
@@ -499,7 +606,11 @@ function createYoutubeNowPlaying({
     lounge.on('stopped', onStopped);
     lounge.on('prefetch', onPrefetch);
     lounge.on('ready', () => {
+      clearAllReconnects();
       connectAll().catch((error) => log?.warn?.('YouTube connect failed', error?.message || error));
+    });
+    lounge.on('device-disconnected', (event) => {
+      scheduleReconnect(event?.deviceId, event?.reason || null);
     });
     lounge.on('auth', (event) => {
       const device = store.getDevice(event.deviceId);
@@ -520,6 +631,11 @@ function createYoutubeNowPlaying({
     }, TOKEN_REFRESH_INTERVAL_MS);
     refreshTimer.unref?.();
 
+    keepAliveTimer = setInterval(() => {
+      keepAlivePoll().catch((error) => log?.warn?.('YouTube keep-alive failed', error?.message || error));
+    }, KEEP_ALIVE_POLL_MS);
+    keepAliveTimer.unref?.();
+
     pruneTimer = setInterval(() => {
       const removed = api.pruneThumbnails();
       if (removed) {
@@ -531,10 +647,13 @@ function createYoutubeNowPlaying({
 
   function stop() {
     started = false;
+    clearAllReconnects();
     clearInterval(refreshTimer);
     clearInterval(pruneTimer);
+    clearInterval(keepAliveTimer);
     refreshTimer = null;
     pruneTimer = null;
+    keepAliveTimer = null;
     lounge.stop();
     api.flush();
   }
@@ -559,10 +678,15 @@ function createYoutubeNowPlaying({
     _onStarted: onStarted,
     _onStopped: onStopped,
     _recoverHistoryFromCache: recoverHistoryFromCache,
+    _scheduleReconnect: scheduleReconnect,
+    _keepAlivePoll: keepAlivePoll,
+    _reconnectState: reconnectState,
   };
 }
 
 module.exports = {
   SHORT_MAX_SECONDS,
+  KEEP_ALIVE_POLL_MS,
+  RECONNECT_BACKOFF_MS,
   createYoutubeNowPlaying,
 };

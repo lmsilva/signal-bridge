@@ -66,6 +66,11 @@ except Exception as error:  # pragma: no cover - the bridge degrades instead of 
 
 DEVICE_NAME = "Signal Bridge"
 SSDP_TARGET = "urn:dial-multiscreen-org:service:dial:1"
+# Lounge long-polls end routinely (TV sleep, network blip, server close).
+# Without a loop the bridge looks "linked" forever while hearing nothing.
+SUBSCRIBE_RETRY_SECONDS = 1.0
+CONNECT_RETRY_SECONDS = 10.0
+CONNECT_RETRY_MAX_SECONDS = 60.0
 
 
 def emit(payload: Dict[str, Any]) -> None:
@@ -349,9 +354,68 @@ class Agent:
             await self.disconnect(device_id)
         return result
 
+    async def _reestablish(self, device_id: str, api: Any) -> Optional[str]:
+        """Refresh lounge tokens and open a new bind session.
+
+        Returns None on success, or an error code (`needs-relink` / `unreachable`).
+        """
+        try:
+            if not await api.refresh_auth():
+                return "needs-relink"
+        except Exception as error:
+            log("warn", f"Lounge auth refresh for {device_id} failed: {error}")
+            return "needs-relink"
+        self._emit_auth(device_id, api)
+        try:
+            if not await api.connect():
+                return "unreachable"
+        except Exception as error:
+            log("warn", f"Lounge reconnect for {device_id} failed: {error}")
+            return "unreachable"
+        return None
+
+    async def _subscribe_forever(self, device_id: str, api: Any) -> Optional[str]:
+        """Keep the Lounge long-poll alive across normal subscribe endings.
+
+        `subscribe()` returns when YouTube closes the bind stream — that is
+        expected, not fatal. Exiting here used to leave the TV marked linked
+        with no events, so auto-push and Now Playing both went silent.
+        """
+        delay = CONNECT_RETRY_SECONDS
+        while not self.stopping:
+            try:
+                await api.get_now_playing()
+            except Exception as error:
+                log("warn", f"Now-playing poll for {device_id} failed: {error}")
+            try:
+                await api.subscribe()
+                # Normal completion — Lounge closed the long-poll.
+                log("info", f"Lounge subscribe ended for {device_id}; reconnecting")
+                delay = CONNECT_RETRY_SECONDS
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                log("warn", f"Lounge subscribe for {device_id} failed: {error}")
+
+            if self.stopping:
+                return None
+
+            failure = await self._reestablish(device_id, api)
+            if failure == "needs-relink":
+                return failure
+            if failure == "unreachable":
+                # TV asleep / off — keep trying; do not tear the device down.
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, CONNECT_RETRY_MAX_SECONDS)
+                continue
+
+            await asyncio.sleep(SUBSCRIBE_RETRY_SECONDS)
+        return None
+
     async def _run_device(
         self, device_id: str, device: Dict[str, Any], handshake: "asyncio.Future",
     ) -> None:
+        fatal_error: Optional[str] = None
         try:
             async with new_api(BridgeListener(device_id)) as api:
                 session = self.sessions.get(device_id)
@@ -368,21 +432,25 @@ class Agent:
                 })
                 # Apple TV often stays silent until asked — seed current video
                 # before the long-lived subscribe loop blocks this task.
-                try:
-                    await api.get_now_playing()
-                except Exception as error:
-                    log("warn", f"Initial now-playing poll for {device_id} failed: {error}")
-                await api.subscribe()
+                fatal_error = await self._subscribe_forever(device_id, api)
         except asyncio.CancelledError:
             raise
         except Exception as error:
             _settle(handshake, {"ok": False, "error": str(error)})
             log("warn", f"Lounge subscription for {device_id} ended: {error}")
+            fatal_error = str(error)
         finally:
-            _settle(handshake, {"ok": False, "error": "unreachable"})
+            _settle(handshake, {"ok": False, "error": fatal_error or "unreachable"})
+            # Drop a dead session so poll/connect do not talk to a closed API.
+            current = self.sessions.get(device_id)
+            if current and current.get("task") is asyncio.current_task():
+                self.sessions.pop(device_id, None)
             # One dead device link must not affect the others (§12.13), so the
             # failure is reported and contained here.
-            emit({"event": "disconnected", "deviceId": device_id})
+            payload: Dict[str, Any] = {"event": "disconnected", "deviceId": device_id}
+            if fatal_error:
+                payload["reason"] = fatal_error
+            emit(payload)
 
     async def _authorise(
         self, device_id: str, device: Dict[str, Any], api: Any,
