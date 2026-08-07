@@ -270,7 +270,12 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
             self._shot_ids.append((img_id, sx1 - sx0 - 4, y1 - y0 - 4))
 
     def _draw_footer(self, boxes, psn):
-        """PLAYTIME · TROPHIES · PROGRESS — no concurrent-players column."""
+        """PLAYTIME · TROPHIES · SESSIONS — no concurrent-players column.
+
+        Trophy completion % used to fill the third column as "PROGRESS", which
+        read as story completion. Sony only exposes trophy progress (and it can
+        sit still for hours of play), so show session count instead.
+        """
         text = self.config.get("textColor", "#f8fafc")
         muted = self.config.get("mutedTextColor", "#94a3b8")
         fx0, fy0, fx1, fy1 = boxes["footer"]
@@ -286,27 +291,26 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         else:
             trophy_text = "—"
 
-        progress = str(psn.get("progressLabel") or "").strip()
-        if not progress and trophies.get("available"):
-            prog = trophies.get("progress")
-            if prog is not None:
-                try:
-                    progress = f"{int(round(float(prog)))}%"
-                except (TypeError, ValueError):
-                    progress = "—"
-            else:
-                progress = "—"
-        if not progress:
+        sessions_text = None
+        raw_count = psn.get("playCount")
+        if raw_count is not None:
+            try:
+                count = int(raw_count)
+                if count > 0:
+                    sessions_text = str(count)
+            except (TypeError, ValueError):
+                sessions_text = None
+        if sessions_text is None:
             if enrich_pending:
-                progress = None
+                sessions_text = None
             else:
-                # Fall back to platform when trophy % is unavailable.
-                progress = str(psn.get("platform") or "—")
+                # Fall back to platform when session count is unavailable.
+                sessions_text = str(psn.get("platform") or "—")
 
         cols = (
             ("PLAYTIME", playtime),
             ("TROPHIES", trophy_text),
-            ("PROGRESS", progress),
+            ("SESSIONS", sessions_text),
         )
         col_w = (fx1 - fx0) / 3
         label_y = fy0 + max(6, int((fy1 - fy0) * 0.18))

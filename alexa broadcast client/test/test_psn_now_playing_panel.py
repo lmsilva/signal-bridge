@@ -116,7 +116,7 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         self.assertEqual(len(panel._shot_ids), 2)
         self.assertEqual(panel._round_rect.call_count, 2)
 
-    def test_footer_uses_progress_not_playing_now(self):
+    def test_footer_uses_sessions_not_progress_percent(self):
         root = MagicMock()
         shell = MagicMock()
         shell.chip_label_font = MagicMock()
@@ -130,8 +130,9 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
             {"footer": (0, 0, 900, 100)},
             {
                 "playtimeLabel": "12.5 h",
-                "trophies": {"earned": 0, "total": 21, "available": True, "progress": 0},
-                "progressLabel": "0%",
+                "trophies": {"earned": 2, "total": 21, "available": True, "progress": 6},
+                "progressLabel": "6%",
+                "playCount": 7,
                 "platform": "PS5",
             },
         )
@@ -140,9 +141,16 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
             for call in panel.canvas.create_text.call_args_list
             if "text" in call.kwargs
         ]
+        values = [
+            call.kwargs["text"]
+            for call in panel.canvas.create_text.call_args_list
+            if "text" in call.kwargs
+        ]
         self.assertIn("PLAYTIME", labels)
         self.assertIn("TROPHIES", labels)
-        self.assertIn("PROGRESS", labels)
+        self.assertIn("SESSIONS", labels)
+        self.assertIn("7", values)
+        self.assertNotIn("PROGRESS", labels)
         self.assertNotIn("PLAYING NOW", labels)
         self.assertNotIn("ACHIEVEMENTS", labels)
 
