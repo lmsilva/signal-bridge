@@ -26,10 +26,12 @@ ENDING_SEC = 10
 EXTEND_MS = 300
 
 # Approximate rgba() with solid hex (Tk canvas has no alpha fills).
+# Fill stays clearly brighter than the track so the drain is obvious on
+# the navy overlay (the old mid-grey looked “stuck” against the band).
 BAND_FILL = "#000000"  # rgba(0,0,0,0.22) intent — solid system chrome plate
-RAIL_TRACK = "#242428"  # ≈ white @ 0.14 over dark
-RAIL_FILL = "#8c8c8c"  # ≈ white @ 0.55
-RAIL_FILL_ENDING = "#d9d9d9"  # ≈ white @ 0.85
+RAIL_TRACK = "#2a3140"  # empty portion of the rail
+RAIL_FILL = "#f2f7ff"  # remaining time — high contrast ink
+RAIL_FILL_ENDING = "#ffffff"  # last 10s
 LABEL_COLOR = "#9e9e9e"  # ≈ white @ 0.62
 LABEL_COLOR_ENDING = "#d9d9d9"  # ≈ white @ 0.85
 
@@ -65,6 +67,24 @@ def format_dismiss_parts(
     if remaining_seconds <= 0:
         return (PREFIX, format_dismiss_value(1))
     return (PREFIX, format_dismiss_value(remaining_seconds))
+
+
+def remaining_rail_fraction(
+    expires_at: float,
+    timeout_ms: int,
+    *,
+    now: float | None = None,
+) -> float:
+    """1.0 = just started (full rail), 0.0 = drained.
+
+    Uses the deadline + original duration so the bar and “Dismisses in Xs”
+    always agree, even if ``show()`` is called again mid-flight.
+    """
+    if timeout_ms <= 0:
+        return 0.0
+    now = time.time() if now is None else now
+    remaining_ms = max(0.0, (float(expires_at) - now) * 1000.0)
+    return max(0.0, min(1.0, remaining_ms / float(timeout_ms)))
 
 
 class DismissFooter:
@@ -186,7 +206,9 @@ class DismissFooter:
 
         self._timeout_ms = timeout_ms
         self._expires_at = new_expires
-        self._started_at = now
+        # Anchor the start to the deadline so remounts mid-flight keep the
+        # same drain curve (now→expires would otherwise jump the bar).
+        self._started_at = new_expires - (timeout_ms / 1000.0)
         self._finishing = False
         self._ending = False
         self._cancel_jobs()
@@ -201,17 +223,36 @@ class DismissFooter:
         if self._visible:
             self._refresh(time.time())
 
+    def pulse(self):
+        """Overlay-driven refresh — keeps the rail alive if an ``after`` job stalls."""
+        if self._visible:
+            self._refresh(time.time())
+            if self._rail_job is None:
+                self._schedule_rail()
+            if self._tick_job is None and not self._finishing:
+                self._schedule_tick()
+
     def raise_(self):
         try:
             self.canvas.tag_raise("dismiss_footer")
         except Exception:
             pass
 
+    def _rail_width(self) -> int:
+        """Prefer the live canvas width — frozen screen_w can disagree after DPI changes."""
+        try:
+            width = int(self.canvas.winfo_width())
+            if width > 1:
+                return width
+        except Exception:
+            pass
+        return max(1, int(self.screen_w))
+
     def _paint_shell(self):
         self._clear_items()
         top = self.band_top
         rail_h = self.rail_h
-        sw = self.screen_w
+        sw = self._rail_width()
         sh = self.screen_h
 
         self._band_id = self._track(self.canvas.create_rectangle(
@@ -248,10 +289,7 @@ class DismissFooter:
 
     def _rail_fraction(self, now: float) -> float:
         """1.0 = full rail (just started), 0.0 = drained."""
-        if self._timeout_ms <= 0:
-            return 0.0
-        remaining_ms = max(0.0, (self._expires_at - now) * 1000.0)
-        return max(0.0, min(1.0, remaining_ms / self._timeout_ms))
+        return remaining_rail_fraction(self._expires_at, self._timeout_ms, now=now)
 
     def _ease_out_cubic(self, t: float) -> float:
         t = max(0.0, min(1.0, t))
@@ -262,7 +300,8 @@ class DismissFooter:
         if self._extend_until and now < self._extend_until:
             t = 1.0 - (self._extend_until - now) / (EXTEND_MS / 1000.0)
             grown = self._extend_from_frac + (1.0 - self._extend_from_frac) * self._ease_out_cubic(t)
-            return max(grown, target) if grown > target else grown
+            # Ease the bar back up toward full, then continue draining.
+            return max(target, grown)
         return target
 
     def _refresh(self, now: float | None = None):
@@ -279,13 +318,23 @@ class DismissFooter:
         frac = self._current_fill_fraction(now)
         top = self.band_top
         rail_h = self.rail_h
-        fill_w = self.screen_w * frac
+        sw = self._rail_width()
+        fill_w = sw * frac
+        if self._track_id is not None:
+            try:
+                self.canvas.coords(self._track_id, 0, top, sw, top + rail_h)
+            except Exception:
+                pass
         if self._rail_fill_id is not None:
             try:
+                # Drain right→left: left edge stays put, right edge moves in.
                 self.canvas.coords(self._rail_fill_id, 0, top, fill_w, top + rail_h)
                 self.canvas.itemconfigure(self._rail_fill_id, fill=fill_color)
             except Exception:
-                pass
+                # Item was scrubbed — remount so the next pulse can continue.
+                self._rail_fill_id = None
+                self._paint_shell()
+                return
 
         prefix, value = format_dismiss_parts(remaining, finishing=self._finishing)
         if self._finishing:
@@ -293,7 +342,7 @@ class DismissFooter:
                 try:
                     self.canvas.coords(
                         self._prefix_id,
-                        self.screen_w / 2,
+                        sw / 2,
                         top + rail_h + (self.screen_h - top - rail_h) / 2,
                     )
                     self.canvas.itemconfigure(
@@ -309,7 +358,7 @@ class DismissFooter:
         else:
             cy = top + rail_h + (self.screen_h - top - rail_h) / 2
             total_w = self._prefix_w + self._slot_w
-            left = self.screen_w / 2 - total_w / 2
+            left = sw / 2 - total_w / 2
             if self._prefix_id is not None:
                 try:
                     self.canvas.coords(self._prefix_id, left, cy)
@@ -331,24 +380,25 @@ class DismissFooter:
 
     def _schedule_rail(self):
         def tick():
+            self._rail_job = None
             if not self._visible:
                 return
             self._refresh()
-            self._rail_job = self.root.after(33, tick)
+            if self._visible:
+                self._rail_job = self.root.after(33, tick)
 
         self._rail_job = self.root.after(33, tick)
 
     def _schedule_tick(self):
         """Second-boundary text refresh (rail already ticks at 33ms)."""
         def tick():
+            self._tick_job = None
             if not self._visible:
                 return
             self._refresh()
             remaining = self._expires_at - time.time()
-            if remaining > 0:
+            if remaining > 0 and self._visible:
                 delay = max(50, int((remaining - math.floor(remaining)) * 1000) or 1000)
                 self._tick_job = self.root.after(min(1000, delay), tick)
-            else:
-                self._tick_job = None
 
         self._tick_job = self.root.after(200, tick)

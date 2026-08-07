@@ -622,9 +622,11 @@ class OverlayWindow:
             self.dismiss_footer.hide()
         elif finishing:
             self.dismiss_footer.set_finishing(True)
-            self.dismiss_footer.raise_()
+            self.dismiss_footer.pulse()
         else:
-            self.dismiss_footer.raise_()
+            # Drive the rail from the overlay clock too — if the footer's
+            # 33ms after-job stalls, the bar used to freeze mid-drain.
+            self.dismiss_footer.pulse()
 
         self._raise_overlay_chrome()
 
