@@ -116,7 +116,7 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         self.assertEqual(len(panel._shot_ids), 2)
         self.assertEqual(panel._round_rect.call_count, 2)
 
-    def test_footer_uses_sessions_not_progress_percent(self):
+    def test_footer_uses_plays_not_progress_percent(self):
         root = MagicMock()
         shell = MagicMock()
         shell.chip_label_font = MagicMock()
@@ -148,8 +148,9 @@ class PsnNowPlayingPanelTests(unittest.TestCase):
         ]
         self.assertIn("PLAYTIME", labels)
         self.assertIn("TROPHIES", labels)
-        self.assertIn("SESSIONS", labels)
+        self.assertIn("PLAYS", labels)
         self.assertIn("7", values)
+        self.assertNotIn("SESSIONS", labels)
         self.assertNotIn("PROGRESS", labels)
         self.assertNotIn("PLAYING NOW", labels)
         self.assertNotIn("ACHIEVEMENTS", labels)

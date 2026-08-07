@@ -270,11 +270,12 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
             self._shot_ids.append((img_id, sx1 - sx0 - 4, y1 - y0 - 4))
 
     def _draw_footer(self, boxes, psn):
-        """PLAYTIME · TROPHIES · SESSIONS — no concurrent-players column.
+        """PLAYTIME · TROPHIES · PLAYS — no concurrent-players column.
 
         Trophy completion % used to fill the third column as "PROGRESS", which
         read as story completion. Sony only exposes trophy progress (and it can
-        sit still for hours of play), so show session count instead.
+        sit still for hours of play), so show PSN's launch count (`playCount`)
+        instead — labelled PLAYS (how many times the game was started).
         """
         text = self.config.get("textColor", "#f8fafc")
         muted = self.config.get("mutedTextColor", "#94a3b8")
@@ -291,26 +292,26 @@ class PsnNowPlayingPanel(SteamNowPlayingPanel):
         else:
             trophy_text = "—"
 
-        sessions_text = None
+        plays_text = None
         raw_count = psn.get("playCount")
         if raw_count is not None:
             try:
                 count = int(raw_count)
                 if count > 0:
-                    sessions_text = str(count)
+                    plays_text = str(count)
             except (TypeError, ValueError):
-                sessions_text = None
-        if sessions_text is None:
+                plays_text = None
+        if plays_text is None:
             if enrich_pending:
-                sessions_text = None
+                plays_text = None
             else:
-                # Fall back to platform when session count is unavailable.
-                sessions_text = str(psn.get("platform") or "—")
+                # Fall back to platform when play count is unavailable.
+                plays_text = str(psn.get("platform") or "—")
 
         cols = (
             ("PLAYTIME", playtime),
             ("TROPHIES", trophy_text),
-            ("SESSIONS", sessions_text),
+            ("PLAYS", plays_text),
         )
         col_w = (fx1 - fx0) / 3
         label_y = fy0 + max(6, int((fy1 - fy0) * 0.18))

@@ -351,7 +351,8 @@ function buildPsnStatusLine({
   }
   const count = Number(playCount);
   if (Number.isFinite(count) && count > 0) {
-    bits.push(count === 1 ? '1 session' : `${count} sessions`);
+    // PSN playCount = how many times the title was launched (not story chapters).
+    bits.push(count === 1 ? 'played once' : `played ${count} times`);
   }
   if (starRating != null && Number.isFinite(Number(starRating))) {
     bits.push(`★ ${Number(starRating).toFixed(1)}`);

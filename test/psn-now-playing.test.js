@@ -209,7 +209,7 @@ test('buildPsnStatusLine and trophy progress labels', () => {
       mode: 'playing',
       starRating: 4.04,
     }),
-    'Playing now · on PS5 · as Tester · 3 sessions · ★ 4.0',
+    'Playing now · on PS5 · as Tester · played 3 times · ★ 4.0',
   );
   assert.equal(formatTrophyProgress({ progress: 61 }), '61%');
   assert.equal(formatTrophyProgress({ earned: 5, total: 20 }), '25%');

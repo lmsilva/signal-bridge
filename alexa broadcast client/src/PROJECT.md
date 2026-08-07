@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-06 (PSN footer sessions)
+**Last updated:** 2026-08-06 (PSN footer plays)
 
 ---
 
@@ -264,7 +264,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
-- 2026-08-06: **PSN footer shows SESSIONS, not trophy %** — third column was labelled PROGRESS and showed Sony’s trophy completion (e.g. Split Fiction stuck at 6% while playtime grew), which read as story progress. It now shows `playCount`. Ship: portable client rebuild.
+- 2026-08-06: **PSN footer shows PLAYS, not trophy %** — third column was labelled PROGRESS and showed Sony’s trophy completion (e.g. Split Fiction stuck at 6% while playtime grew), which read as story progress. It now shows PSN `playCount` (times the game was launched) as **PLAYS**. Ship: portable client rebuild.
 - 2026-08-05: **Wiki title wrap + Overhead meta strip** — index hero title wraps/shrinks to two lines instead of clipping mid-phrase; Overhead moves “N NM · M aircraft” into a solid strip above the map so async tiles cannot cover it. Ship: portable client rebuild.
 - 2026-08-05: **Upside QR + Overhead grid** — Upside story pages use the full content height (no unused index-title void) and put “Scan to read” above the QR; Overhead adds header→map clearance and a multi-column portrait list so ~7–8 aircraft fit without paging. Ship: portable client rebuild.
 - 2026-08-05: **Wiki CK index card alignment** — rank, thumbnail, and title/desc/views share one vertically centered content band; marquee fitting text uses a true mid-line west anchor (was shifted down half a line). Ship: portable client rebuild.

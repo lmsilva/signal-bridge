@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-06 (PSN trophy lookup + sessions footer)
+**Last updated:** 2026-08-06 (PSN plays footer label)
 
 ---
 
@@ -527,7 +527,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 - 2026-08-04: **Upside News randomised rounds** — each push draws from a scored candidate pool and shuffles; recently aired story ids are remembered in the archive so the next push prefers different headlines. Deploy: `./recreate.sh`.
 
-- 2026-08-06: **PSN card no longer shows trophy % as “PROGRESS”** — Sony only exposes trophy completion (Split Fiction correctly sat at 6% / 2 of 21 for hours of play), which read as stuck story progress. Footer third column is now **SESSIONS** (`playCount`). Trophy fetch prefers `getUserTrophiesForSpecificTitle(npTitleId)` over a single `getUserTitles` page + fuzzy name match. Deploy: `./recreate.sh` + portable client rebuild for the footer label. Tests: `test/psn-now-playing.test.js`, client `test_psn_now_playing_panel.py`.
+- 2026-08-06: **PSN card no longer shows trophy % as “PROGRESS”** — Sony only exposes trophy completion (Split Fiction correctly sat at 6% / 2 of 21 for hours of play), which read as stuck story progress. Footer third column is **PLAYS** (PSN `playCount` = times launched); status line says “played N times”. Trophy fetch prefers `getUserTrophiesForSpecificTitle(npTitleId)` over a single `getUserTitles` page + fuzzy name match. Deploy: `./recreate.sh` + portable client rebuild for the footer label. Tests: `test/psn-now-playing.test.js`, client `test_psn_now_playing_panel.py`.
 
 - 2026-08-06: **YouTube detection reconnects after Lounge subscribe ends** — `pyytlounge` `subscribe()` returns when YouTube closes the long-poll; the agent used to exit the device task and never re-bind, so the TV stayed `linked` while auto-push and Now Playing/Last Played went silent (stale history only). Agent now loops refresh+connect+subscribe across normal endings; Node reconnects on hard `disconnected` with backoff, polls now-playing every 45s, and resurrects `not-connected` sessions. Deploy: `./recreate.sh` (src bind-mounted; rebuild only if the image lacks a current agent). Tests: `test/youtube-now-playing.test.js`.
 
