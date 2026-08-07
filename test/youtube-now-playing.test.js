@@ -515,6 +515,75 @@ test('a manual push is always dismissible even while a video is playing', async 
   assert.ok(sent[0].displaySeconds > 0);
 });
 
+// -------------------------------------------------- reconnect / keep-alive
+
+test('a hard device disconnect schedules a reconnect', async () => {
+  const lounge = fakeLounge();
+  let connects = 0;
+  lounge.connectDevice = async () => {
+    connects += 1;
+    return { ok: true, screenName: 'Theater' };
+  };
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  lounge.emit('ready');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const afterReady = connects;
+
+  lounge.emit('device-disconnected', { deviceId: 'tv-1', reason: 'unreachable' });
+  assert.equal(service._reconnectState.has('tv-1'), true);
+
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  assert.ok(connects > afterReady, 'reconnect should call connectDevice again');
+  service.stop();
+});
+
+test('needs-relink does not keep retrying reconnect', async () => {
+  const lounge = fakeLounge();
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  lounge.emit('device-disconnected', { deviceId: 'tv-1', reason: 'needs-relink' });
+
+  assert.equal(store.getDevice('tv-1').status, 'needs-relink');
+  assert.equal(service._reconnectState.has('tv-1'), false);
+  service.stop();
+});
+
+test('keep-alive not-connected schedules a reconnect', async () => {
+  const lounge = fakeLounge();
+  lounge.pollNowPlaying = async () => ({
+    ok: true,
+    devices: [{ deviceId: 'tv-1', ok: false, error: 'not-connected' }],
+  });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  await service._keepAlivePoll();
+
+  assert.equal(service._reconnectState.has('tv-1'), true);
+  service.stop();
+});
+
 // ---------------------------------------------------------- device linking
 
 test('linking stores the device with its token encrypted at rest', async () => {
