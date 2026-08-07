@@ -1020,7 +1020,7 @@ def build_payload(args) -> dict:
                 "mode": "playing",
                 "platform": "PS5",
                 "shortDescription": "",
-                "statusLine": "Playing now · on PS5 · as Tester · 4 sessions",
+                "statusLine": "Playing now · on PS5 · as Tester · played 4 times",
                 "developers": [],
                 "publishers": [],
                 "releaseYear": None,
