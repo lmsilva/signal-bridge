@@ -254,12 +254,15 @@ class BroadcastPanel(BasePanel):
     # Vertical gap between the bottom of the FROM/TO/TIME chip row and the
     # scrolling message text below it.
     CHIP_MESSAGE_GAP = 24
+    CHIP_VALUE_MIN_SIZE = 10
 
     def __init__(self, root, shell, config):
         super().__init__(root, shell, config)
         self.needs_scroll = False
         self.scroller = None
         self.chip_value_ids = []
+        self._chip_marquees: list = []
+        self._chip_value_fonts: list = []
         self._message_top = 0
         self._message_viewport_height = 0
         self._build_viewport()
@@ -299,8 +302,9 @@ class BroadcastPanel(BasePanel):
 
     def _build_chips(self):
         layout = self.shell.layout
-        chip_fill = self.config.get("chipBackground", "#141a24")
         self.chip_value_ids = []
+        self._chip_value_fonts = []
+        self._stop_chip_marquees()
 
         for index, label in enumerate(("FROM", "TO", "TIME")):
             chip_x = layout.content_x + index * (layout.chip_width + layout.chip_gap)
@@ -316,33 +320,107 @@ class BroadcastPanel(BasePanel):
             self._track(
                 self.canvas.create_text(
                     chip_x + layout.chip_width // 2,
-                    layout.chip_y + 22,
+                    layout.chip_y + 18,
                     anchor="center",
                     text=label,
                     fill=self.config["mutedTextColor"],
                     font=self.shell.chip_label_font,
                 )
             )
+            # Single-line value slot (no wrap) — long names shrink or marquee.
             value_id = self._track(
                 self.canvas.create_text(
                     chip_x + layout.chip_width // 2,
-                    layout.chip_y + layout.chip_height // 2 + 10,
+                    layout.chip_y + layout.chip_height - 22,
                     anchor="center",
                     text="—",
                     fill=self.config["textColor"],
                     font=self.shell.chip_value_font,
-                    width=layout.chip_width - 20,
-                    justify="center",
                 )
             )
             self.chip_value_ids.append(value_id)
+            self._chip_value_fonts.append(None)
+
+    def _stop_chip_marquees(self):
+        for marquee in getattr(self, "_chip_marquees", []) or []:
+            try:
+                if marquee.viewport is not None:
+                    marquee.viewport.place_forget()
+            except Exception:
+                pass
+            try:
+                marquee.stop()
+            except Exception:
+                pass
+        self._chip_marquees = []
+
+    def _chip_value_font_for(self, text: str, max_width: int):
+        """Largest bold size that fits on one line, down to CHIP_VALUE_MIN_SIZE."""
+        base = self.shell.chip_value_font
+        family = base.cget("family")
+        try:
+            size = int(base.cget("size"))
+        except (TypeError, ValueError):
+            size = 15
+        size = abs(size) or 15
+        font = tkfont.Font(family=family, size=size, weight="bold")
+        while size > self.CHIP_VALUE_MIN_SIZE and font.measure(text) > max_width:
+            size -= 1
+            font.configure(size=size)
+        return font, font.measure(text) <= max_width
+
+    def _set_chip_value(self, index: int, text: str):
+        """Fit a chip value on one line: shrink font, else horizontal marquee."""
+        layout = self.shell.layout
+        if index < 0 or index >= len(self.chip_value_ids):
+            return
+        value_id = self.chip_value_ids[index]
+        chip_x = layout.content_x + index * (layout.chip_width + layout.chip_gap)
+        max_w = max(40, layout.chip_width - 24)
+        value_h = max(22, int(self.shell.chip_value_font.metrics("linespace") + 4))
+        value_y = layout.chip_y + layout.chip_height - 22
+        font, fits = self._chip_value_font_for(str(text or "—"), max_w)
+        self._chip_value_fonts[index] = font
+
+        if fits:
+            try:
+                self.canvas.itemconfigure(value_id, text=text, font=font, state="normal")
+                self.canvas.coords(value_id, chip_x + layout.chip_width // 2, value_y)
+            except Exception:
+                pass
+            return
+
+        # Still too long at the minimum size — scroll inside the chip.
+        try:
+            self.canvas.itemconfigure(value_id, text="", state="hidden")
+        except Exception:
+            pass
+        marquee = MarqueeLine(self.root)
+        viewport = marquee.build(
+            parent=self.root,
+            text=str(text or "—"),
+            font=font,
+            fill=self.config["textColor"],
+            width=max_w,
+            height=value_h,
+            bg=self.CARD,
+            center=True,
+        )
+        self._chip_marquees.append(marquee)
+        self._place_widget(
+            viewport,
+            x=chip_x + (layout.chip_width - max_w) // 2,
+            y=int(value_y - value_h / 2),
+        )
 
     def hide(self):
         self.visible = False
+        self._stop_chip_marquees()
         for item_id in self._item_ids:
             self.canvas.delete(item_id)
         self._item_ids.clear()
         self.chip_value_ids = []
+        self._chip_value_fonts = []
         if self.message_viewport:
             self.message_viewport.place_forget()
         if self.scroller:
@@ -357,8 +435,8 @@ class BroadcastPanel(BasePanel):
         timestamp = format_chip_timestamp(payload.get("timestamp", ""))
         message = payload.get("message", "")
 
-        for item_id, value in zip(self.chip_value_ids, (sender, destination, timestamp)):
-            self.canvas.itemconfigure(item_id, text=value)
+        for index, value in enumerate((sender, destination, timestamp)):
+            self._set_chip_value(index, value)
 
         self.needs_scroll = self.scroller.configure(
             message,
