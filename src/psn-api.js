@@ -381,45 +381,119 @@ function sumTrophyCounts(counts) {
   return Number.isFinite(total) ? total : null;
 }
 
+function trophySummaryFromTitle(match) {
+  if (!match) {
+    return { earned: null, total: null, available: false, progress: null };
+  }
+  const earned = sumTrophyCounts(match.earnedTrophies);
+  const defined = sumTrophyCounts(match.definedTrophies);
+  return {
+    earned,
+    total: defined,
+    available: true,
+    progress: match.progress ?? null,
+    npCommunicationId: match.npCommunicationId || null,
+  };
+}
+
+function pickTrophyTitleByName(titles, titleName = '') {
+  const nameNeedle = String(titleName || '').trim().toLowerCase();
+  if (!nameNeedle) {
+    return null;
+  }
+  const rows = Array.isArray(titles) ? titles : [];
+  const exact = rows.find((row) => (
+    String(row.trophyTitleName || '').trim().toLowerCase() === nameNeedle
+  ));
+  if (exact) {
+    return exact;
+  }
+  // Prefer the longest name that contains the needle (or vice versa) so a
+  // short title like "Split" cannot steal "Split Fiction"'s progress.
+  const fuzzy = rows
+    .map((row) => {
+      const name = String(row.trophyTitleName || '').trim().toLowerCase();
+      if (!name) {
+        return null;
+      }
+      if (name.includes(nameNeedle) || nameNeedle.includes(name)) {
+        return { row, score: Math.min(name.length, nameNeedle.length) };
+      }
+      return null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+  return fuzzy[0]?.row || null;
+}
+
+/**
+ * Trophy progress for a title.
+ *
+ * Prefer `getUserTrophiesForSpecificTitle(npTitleId)` — presence/library give us
+ * PPSA/CUSA ids, while `getUserTitles` is ordered by last trophy sync and only
+ * returns one page. A long session without a new unlock used to drop the game
+ * off the first page (or fuzzy-match the wrong title), freezing PROGRESS.
+ */
 async function fetchTrophyProgress(authorization, accountId, titleId, {
   api = getPsnApi(),
   titleName = '',
 } = {}) {
-  if (typeof api.getUserTitles !== 'function') {
-    return { earned: null, total: null, available: false, progress: null };
-  }
+  const empty = { earned: null, total: null, available: false, progress: null };
   if (!titleId && !titleName) {
-    return { earned: null, total: null, available: false, progress: null };
+    return empty;
+  }
+
+  const npTitleId = String(titleId || '').trim();
+  if (npTitleId && typeof api.getUserTrophiesForSpecificTitle === 'function') {
+    try {
+      const response = await api.getUserTrophiesForSpecificTitle(
+        authorization,
+        accountId || 'me',
+        { npTitleIds: npTitleId },
+      );
+      const block = (response?.titles || []).find((row) => (
+        String(row.npTitleId || '').toLowerCase() === npTitleId.toLowerCase()
+      )) || response?.titles?.[0];
+      const match = Array.isArray(block?.trophyTitles) ? block.trophyTitles[0] : null;
+      if (match) {
+        return trophySummaryFromTitle(match);
+      }
+    } catch {
+      // Fall through to the scanned title list.
+    }
+  }
+
+  if (typeof api.getUserTitles !== 'function') {
+    return empty;
   }
   try {
-    const response = await api.getUserTitles(authorization, accountId || 'me', {
-      limit: 100,
-    });
-    const titles = Array.isArray(response?.trophyTitles) ? response.trophyTitles : [];
-    const nameNeedle = String(titleName || '').trim().toLowerCase();
-    // Trophy APIs key on npCommunicationId (not npTitleId) — match by title name.
-    const match = titles.find((row) => {
-      const name = String(row.trophyTitleName || '').trim().toLowerCase();
-      if (!name || !nameNeedle) {
-        return false;
+    // Scan recent pages — results are last-trophy-sync order, not library order.
+    const pageSize = 100;
+    const maxPages = 5;
+    let offset = 0;
+    let total = Infinity;
+    for (let page = 0; page < maxPages && offset < total; page += 1) {
+      const response = await api.getUserTitles(authorization, accountId || 'me', {
+        limit: pageSize,
+        offset,
+      });
+      const titles = Array.isArray(response?.trophyTitles) ? response.trophyTitles : [];
+      total = Number(response?.totalItemCount);
+      if (!Number.isFinite(total) || total < 0) {
+        total = offset + titles.length;
       }
-      return name === nameNeedle
-        || name.includes(nameNeedle)
-        || nameNeedle.includes(name);
-    });
-    if (!match) {
-      return { earned: null, total: null, available: false, progress: null };
+      const match = pickTrophyTitleByName(titles, titleName);
+      if (match) {
+        return trophySummaryFromTitle(match);
+      }
+      if (!titles.length) {
+        break;
+      }
+      offset += titles.length;
     }
-    const earned = sumTrophyCounts(match.earnedTrophies);
-    const defined = sumTrophyCounts(match.definedTrophies);
-    return {
-      earned,
-      total: defined,
-      available: true,
-      progress: match.progress ?? null,
-    };
+    return empty;
   } catch {
-    return { earned: null, total: null, available: false, progress: null };
+    return empty;
   }
 }
 

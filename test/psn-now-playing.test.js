@@ -14,6 +14,7 @@ const {
   collectConceptGenres,
   psnReadingIsThin,
   enrichPsnTitle,
+  fetchTrophyProgress,
   buildPsnStatusLine,
   formatTrophyProgress,
 } = require('../src/psn-api');
@@ -212,6 +213,73 @@ test('buildPsnStatusLine and trophy progress labels', () => {
   );
   assert.equal(formatTrophyProgress({ progress: 61 }), '61%');
   assert.equal(formatTrophyProgress({ earned: 5, total: 20 }), '25%');
+});
+
+test('fetchTrophyProgress prefers title-id lookup over the scanned title list', async () => {
+  const calls = [];
+  const api = {
+    getUserTrophiesForSpecificTitle: async (_auth, _account, options) => {
+      calls.push(['byId', options.npTitleIds]);
+      return {
+        titles: [{
+          npTitleId: 'PPSA08560_00',
+          trophyTitles: [{
+            trophyTitleName: 'Split Fiction',
+            npCommunicationId: 'NPWR31606_00',
+            progress: 6,
+            earnedTrophies: { bronze: 0, silver: 2, gold: 0, platinum: 0 },
+            definedTrophies: { bronze: 7, silver: 5, gold: 8, platinum: 1 },
+          }],
+        }],
+      };
+    },
+    getUserTitles: async () => {
+      calls.push(['scan']);
+      return { trophyTitles: [], totalItemCount: 0 };
+    },
+  };
+  const result = await fetchTrophyProgress({ accessToken: 't' }, 'me', 'PPSA08560_00', {
+    api,
+    titleName: 'Split Fiction',
+  });
+  assert.deepEqual(calls, [['byId', 'PPSA08560_00']]);
+  assert.equal(result.available, true);
+  assert.equal(result.progress, 6);
+  assert.equal(result.earned, 2);
+  assert.equal(result.total, 21);
+});
+
+test('fetchTrophyProgress name fallback prefers the best fuzzy match', async () => {
+  const api = {
+    getUserTitles: async (_auth, _account, options = {}) => {
+      if ((options.offset || 0) > 0) {
+        return { trophyTitles: [], totalItemCount: 2 };
+      }
+      return {
+        totalItemCount: 2,
+        trophyTitles: [
+          {
+            trophyTitleName: 'Split',
+            progress: 99,
+            earnedTrophies: { bronze: 1, silver: 0, gold: 0, platinum: 0 },
+            definedTrophies: { bronze: 1, silver: 0, gold: 0, platinum: 0 },
+          },
+          {
+            trophyTitleName: 'Split Fiction',
+            progress: 6,
+            earnedTrophies: { bronze: 0, silver: 2, gold: 0, platinum: 0 },
+            definedTrophies: { bronze: 7, silver: 5, gold: 8, platinum: 1 },
+          },
+        ],
+      };
+    },
+  };
+  const result = await fetchTrophyProgress({ accessToken: 't' }, 'me', null, {
+    api,
+    titleName: 'Split Fiction',
+  });
+  assert.equal(result.progress, 6);
+  assert.equal(result.earned, 2);
 });
 
 test('normalizeTokens sets expiry skew', () => {
