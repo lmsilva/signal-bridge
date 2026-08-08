@@ -466,6 +466,26 @@ function createSteamNowPlaying({
     return result;
   }
 
+  /** Announce without steamAppId — drop that host so a stuck registry value cannot linger. */
+  function clearPresence(hostname) {
+    if (!hostname) {
+      return;
+    }
+    presence.clearHost(hostname);
+  }
+
+  function clearPresenceMatchingApp(appId) {
+    const id = Number(appId);
+    if (!Number.isFinite(id) || id <= 0) {
+      return;
+    }
+    for (const entry of presence.listFresh()) {
+      if (Number(entry.appId) === id) {
+        presence.clearHost(entry.hostname);
+      }
+    }
+  }
+
   async function loadOwnedGames(apiKey, steamId) {
     try {
       return await fetchMostRecentlyPlayedOwnedGames(apiKey, steamId, { limit: 12 });
@@ -525,62 +545,74 @@ function createSteamNowPlaying({
 
     const accountAppId = summary.gameId;
     const presenceHint = presence.matchForApp(accountAppId) || presence.matchForApp(null);
+    const personaOnline = isSteamPersonaOnline(summary.personaState);
 
     let ownedGames = null;
     let recentGame = null;
     let recentAppId = null;
 
-    // OwnedGames path only when Steam/presence do not already name a game.
-    if (!accountAppId && !presenceHint && isSteamPersonaOnline(summary.personaState)) {
+    // Quit detection when Steam omits gameid: OwnedGames stagnant window
+    // (STEAM_RECENT_PLAY_STAGNANT_SEC). Presence must NOT skip this — local
+    // RunningAppID can stick after exit and would otherwise refresh forever,
+    // never closing the overlay.
+    if (!accountAppId && personaOnline && session) {
       ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
-
-      if (session) {
-        // Keep an open session alive via OwnedGames (covers recent-led titles
-        // and brief gameid dropouts) until playtime/rtime go stagnant.
-        const active = ownedGames.find((game) => Number(game.appId) === Number(session.appId));
-        if (active && isRecentSessionStillActive({
-          game: active,
-          sessionAppId: session.appId,
-          sessionLastPlaytime: session.lastPlaytime,
-          sessionLastRtime: session.lastRtime,
-          sessionLastActivityAt: session.lastActivityAt,
-          nowMs: now(),
-          stagnantSeconds: recentPlayStagnantSeconds(),
-        })) {
-          if (session.lastPlaytime == null
-            && Number.isFinite(Number(active.playtimeForeverMin))) {
-            session.lastPlaytime = Number(active.playtimeForeverMin);
-          }
-          if (session.lastRtime == null
-            && Number.isFinite(Number(active.lastPlayedAt))) {
-            session.lastRtime = Number(active.lastPlayedAt);
-          }
-          recentGame = active;
-          recentAppId = active.appId;
-          noteRecentActivity(active);
-        } else if (session.recentLed) {
-          // Quit / stagnant recent-led session — absorb before idle.
+      const active = ownedGames.find((game) => Number(game.appId) === Number(session.appId));
+      if (active && isRecentSessionStillActive({
+        game: active,
+        sessionAppId: session.appId,
+        sessionLastPlaytime: session.lastPlaytime,
+        sessionLastRtime: session.lastRtime,
+        sessionLastActivityAt: session.lastActivityAt,
+        nowMs: now(),
+        stagnantSeconds: recentPlayStagnantSeconds(),
+      })) {
+        if (session.lastPlaytime == null
+          && Number.isFinite(Number(active.playtimeForeverMin))) {
+          session.lastPlaytime = Number(active.playtimeForeverMin);
+        }
+        if (session.lastRtime == null
+          && Number.isFinite(Number(active.lastPlayedAt))) {
+          session.lastRtime = Number(active.lastPlayedAt);
+        }
+        recentGame = active;
+        recentAppId = active.appId;
+        noteRecentActivity(active);
+      } else {
+        // Stagnant / missing OwnedGames activity — close even if presence still
+        // claims this app (stuck RunningAppID after quit).
+        const stagnantFor = Math.max(
+          0,
+          (now() - (Number(session.lastActivityAt) || Number(session.startedAt) || now())) / 1000,
+        );
+        const presenceOnlyGrace = Boolean(presenceHint)
+          && !active
+          && stagnantFor <= recentPlayStagnantSeconds();
+        if (!presenceOnlyGrace) {
+          clearPresenceMatchingApp(session.appId);
           endSession('game-ended', ownedGames);
           lastAccountAppId = null;
           lastStatus = 'idle';
           lastError = null;
           return;
         }
-        // Non-recent session with no OwnedGames keep-alive: fall through;
-        // effectiveAppId stays null → endSession below.
-      } else {
-        recentGame = pickRecentPlayLaunch({
-          games: ownedGames,
-          baseline: idleBaseline,
-          nowMs: now(),
-          inferSeconds: inferFromRecentSeconds(),
-          personaOnline: true,
-        });
-        recentAppId = recentGame?.appId || null;
+        // Presence-only + no OwnedGames row yet — keep within stagnant grace
+        // without refreshing lastActivityAt from presence.
       }
-    } else if (session && (accountAppId || presenceHint)) {
-      // Confirmed in-game via Steam/presence — reset activity clock so a later
-      // brief gameid gap still has a fresh stagnant window.
+    } else if (!accountAppId && !presenceHint && personaOnline) {
+      // Idle: look for a baseline-advanced OwnedGames launch.
+      ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
+      recentGame = pickRecentPlayLaunch({
+        games: ownedGames,
+        baseline: idleBaseline,
+        nowMs: now(),
+        inferSeconds: inferFromRecentSeconds(),
+        personaOnline: true,
+      });
+      recentAppId = recentGame?.appId || null;
+    } else if (session && accountAppId) {
+      // Confirmed in-game by Steam profile gameid — reset stagnant clock.
+      // Presence alone must not reset it (that froze the 2‑minute idle close).
       session.lastActivityAt = now();
     }
 
@@ -839,6 +871,7 @@ function createSteamNowPlaying({
     stop,
     tick,
     recordPresence,
+    clearPresence,
     suppressActiveSession,
     statusSnapshot,
     pushManualPreview,

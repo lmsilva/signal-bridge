@@ -155,6 +155,58 @@ test('tick keeps session through brief gameid dropout via OwnedGames activity', 
   });
 });
 
+test('tick ends stagnant session even when local presence still claims the app', async () => {
+  // Regression: stuck RunningAppID / presence used to skip OwnedGames quit
+  // detection and refresh lastActivityAt every poll, so STEAM_RECENT_PLAY_STAGNANT_SEC
+  // never fired.
+  const sent = [];
+  let now = 1_700_000_000_000;
+  const quitStamp = now - 10_000;
+  const game = {
+    appId: 965680,
+    lastPlayedAt: quitStamp,
+    playtimeForeverMin: 100,
+  };
+  await withSteamApiMocks({
+    fetchPlayerSummary: async () => ({
+      gameId: null,
+      personaState: 1,
+      personaName: 'Tester',
+    }),
+    fetchMostRecentlyPlayedOwnedGames: async () => [game],
+    ...enrichStubs(965680),
+  }, async (createSteamNowPlaying) => {
+    const controller = createSteamNowPlaying({
+      config: makeConfig(),
+      log: { info() {}, warn() {} },
+      sendUdpPayload: (payload) => sent.push(payload),
+      now: () => now,
+    });
+    controller._setBaselineReady(true);
+    controller.recordPresence({ hostname: 'MOVIETHEATERPC', appId: 965680 });
+    controller._setSession({
+      appId: 965680,
+      host: 'MOVIETHEATERPC',
+      startedAt: now - 300_000,
+      suppressed: false,
+      suppressedAt: null,
+      suppressReason: null,
+      pushed: true,
+      lastPushAt: now - 200_000,
+      details: { appId: 965680, name: 'App 965680' },
+      lastPlaytime: 100,
+      lastRtime: quitStamp,
+      lastActivityAt: now - 200_000, // beyond stagnantSeconds (150s)
+      recentLed: false,
+    });
+    await controller.tick();
+    assert.equal(controller._getSession(), null);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing.close'), true);
+    assert.equal(controller.presence.listFresh().length, 0);
+    controller.stop();
+  });
+});
+
 test('tick ends stagnant recent-led session and absorbs quit stamp into baseline', async () => {
   const sent = [];
   let now = 1_700_000_000_000;
