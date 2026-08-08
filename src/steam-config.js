@@ -65,8 +65,8 @@ function resolveSteamConfig(config, fileConfig = {}) {
         || 180,
       ) || 180,
     ),
-    // Recent-led sessions end if playtime/rtime stop moving this long (default
-    // 150s — playtime often ticks once per minute).
+    // Sessions without gameid/presence end if playtime/rtime stop moving this
+    // long (default 150s — playtime often ticks once per minute).
     recentPlayStagnantSeconds: Math.max(
       60,
       Number(
@@ -74,6 +74,17 @@ function resolveSteamConfig(config, fileConfig = {}) {
         || steam.recentPlayStagnantSeconds
         || 150,
       ) || 150,
+    ),
+    // When Steam still reports gameid or local RunningAppID for the session,
+    // allow a longer idle before force-close (default 10 min). Covers titles
+    // whose OwnedGames playtime barely ticks while playing.
+    recentPlayHardIdleSeconds: Math.max(
+      180,
+      Number(
+        process.env.STEAM_RECENT_PLAY_HARD_IDLE_SEC
+        || steam.recentPlayHardIdleSeconds
+        || 600,
+      ) || 600,
     ),
     // Shared secret for optional presence POST (falls back to API key).
     presenceSecret: String(

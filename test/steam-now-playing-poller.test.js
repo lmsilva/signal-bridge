@@ -255,9 +255,9 @@ test('tick hands off from stagnant session to a different OwnedGames launch', as
   });
 });
 
-test('tick ends stagnant session even when Steam gameid is still set', async () => {
-  // Regression: bare gameid used to refresh lastActivityAt every poll, so the
-  // idle timeout never fired after quit when Steam left gameid stuck.
+test('tick soft-keeps session under hard idle when gameid still matches', async () => {
+  // Playtime may not tick for several minutes; matching gameid extends the
+  // idle cap so we do not close+reopen mid-session (elapsed reset).
   const sent = [];
   let now = 1_700_000_000_000;
   await withSteamApiMocks({
@@ -268,7 +268,118 @@ test('tick ends stagnant session even when Steam gameid is still set', async () 
     }),
     fetchMostRecentlyPlayedOwnedGames: async () => [{
       appId: 965680,
-      lastPlayedAt: now - 180_000,
+      lastPlayedAt: now - 400_000,
+      playtimeForeverMin: 100,
+    }],
+    ...enrichStubs(965680),
+  }, async (createSteamNowPlaying) => {
+    const controller = createSteamNowPlaying({
+      config: makeConfig(),
+      log: { info() {}, warn() {} },
+      sendUdpPayload: (payload) => sent.push(payload),
+      now: () => now,
+    });
+    controller._setBaselineReady(true);
+    const startedAt = now - 300_000;
+    controller._setSession({
+      appId: 965680,
+      host: 'any',
+      startedAt,
+      suppressed: false,
+      suppressedAt: null,
+      suppressReason: null,
+      pushed: true,
+      lastPushAt: now - 10_000,
+      details: { appId: 965680, name: 'App 965680' },
+      lastPlaytime: 100,
+      lastRtime: now - 400_000,
+      lastActivityAt: now - 200_000, // beyond 150s stagnant, under 600s hard idle
+      recentLed: false,
+    });
+    await controller.tick();
+    assert.equal(controller._getSession()?.appId, 965680);
+    assert.equal(controller._getSession()?.startedAt, startedAt);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing.close'), false);
+    controller.stop();
+  });
+});
+
+test('tick resumes startedAt when same app reopens after idle timeout', async () => {
+  const sent = [];
+  let now = 1_700_000_000_000;
+  let playtime = 100;
+  let lastPlayedAt = now - 60_000;
+  await withSteamApiMocks({
+    fetchPlayerSummary: async () => ({
+      gameId: null,
+      personaState: 1,
+      personaName: 'Tester',
+    }),
+    fetchMostRecentlyPlayedOwnedGames: async () => [{
+      appId: 965680,
+      lastPlayedAt,
+      playtimeForeverMin: playtime,
+    }],
+    ...enrichStubs(965680),
+  }, async (createSteamNowPlaying) => {
+    const controller = createSteamNowPlaying({
+      config: makeConfig(),
+      log: { info() {}, warn() {} },
+      sendUdpPayload: (payload) => sent.push(payload),
+      now: () => now,
+    });
+    const startedAt = now - 300_000;
+    controller._getBaseline().set(965680, {
+      lastPlayedAt: now - 60_000,
+      playtimeForeverMin: 100,
+    });
+    controller._setBaselineReady(true);
+    controller._setSession({
+      appId: 965680,
+      host: 'any',
+      startedAt,
+      suppressed: false,
+      suppressedAt: null,
+      suppressReason: null,
+      pushed: true,
+      lastPushAt: now - 200_000,
+      details: { appId: 965680, name: 'App 965680' },
+      lastPlaytime: 100,
+      lastRtime: now - 60_000,
+      lastActivityAt: now - 200_000,
+      recentLed: true,
+    });
+    // Idle timeout closes (no growth for 200s, no gameid/presence).
+    await controller.tick();
+    assert.equal(controller._getSession(), null);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing.close'), true);
+
+    // Next poll sees playtime advance — must resume original startedAt.
+    now += 15_000;
+    playtime = 101;
+    lastPlayedAt = now - 5_000;
+    sent.length = 0;
+    await controller.tick();
+    assert.equal(controller._getSession()?.appId, 965680);
+    assert.equal(controller._getSession()?.startedAt, startedAt);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing'), true);
+    controller.stop();
+  });
+});
+
+test('tick ends session when gameid stuck past hard idle without growth', async () => {
+  // Matching gameid soft-keeps through the 150s window, but not forever.
+  const sent = [];
+  let now = 1_700_000_000_000;
+  await withSteamApiMocks({
+    fetchPlayerSummary: async () => ({
+      gameId: 965680,
+      personaState: 1,
+      personaName: 'Tester',
+    }),
+    fetchMostRecentlyPlayedOwnedGames: async () => [{
+      appId: 965680,
+      lastPlayedAt: now - 900_000,
       playtimeForeverMin: 100,
     }],
     ...enrichStubs(965680),
@@ -283,7 +394,7 @@ test('tick ends stagnant session even when Steam gameid is still set', async () 
     controller._setSession({
       appId: 965680,
       host: 'any',
-      startedAt: now - 300_000,
+      startedAt: now - 900_000,
       suppressed: false,
       suppressedAt: null,
       suppressReason: null,
@@ -291,8 +402,8 @@ test('tick ends stagnant session even when Steam gameid is still set', async () 
       lastPushAt: now - 200_000,
       details: { appId: 965680, name: 'App 965680' },
       lastPlaytime: 100,
-      lastRtime: now - 180_000,
-      lastActivityAt: now - 200_000,
+      lastRtime: now - 900_000,
+      lastActivityAt: now - 700_000, // beyond hard idle (600s)
       recentLed: false,
     });
     await controller.tick();
@@ -302,13 +413,11 @@ test('tick ends stagnant session even when Steam gameid is still set', async () 
   });
 });
 
-test('tick ends stagnant session even when local presence still claims the app', async () => {
-  // Regression: stuck RunningAppID / presence used to skip OwnedGames quit
-  // detection and refresh lastActivityAt every poll, so STEAM_RECENT_PLAY_STAGNANT_SEC
-  // never fired.
+test('tick ends session when presence stuck past hard idle without growth', async () => {
+  // Matching presence soft-keeps through the 150s window; past hard idle it closes.
   const sent = [];
   let now = 1_700_000_000_000;
-  const quitStamp = now - 10_000;
+  const quitStamp = now - 900_000;
   const game = {
     appId: 965680,
     lastPlayedAt: quitStamp,
@@ -334,7 +443,7 @@ test('tick ends stagnant session even when local presence still claims the app',
     controller._setSession({
       appId: 965680,
       host: 'MOVIETHEATERPC',
-      startedAt: now - 300_000,
+      startedAt: now - 900_000,
       suppressed: false,
       suppressedAt: null,
       suppressReason: null,
@@ -343,7 +452,7 @@ test('tick ends stagnant session even when local presence still claims the app',
       details: { appId: 965680, name: 'App 965680' },
       lastPlaytime: 100,
       lastRtime: quitStamp,
-      lastActivityAt: now - 200_000, // beyond stagnantSeconds (150s)
+      lastActivityAt: now - 700_000, // beyond hard idle (600s)
       recentLed: false,
     });
     await controller.tick();

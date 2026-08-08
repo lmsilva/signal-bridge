@@ -202,6 +202,16 @@ function createSteamNowPlaying({
   /** @type {Map<number, { lastPlayedAt: number, playtimeForeverMin: number|null }>} */
   const idleBaseline = new Map();
   let baselineReady = false;
+  /** @type {null | {
+   *   appId: number,
+   *   startedAt: number,
+   *   endedAt: number,
+   *   lastPlaytime: number | null,
+   *   lastRtime: number | null,
+   *   details: object | null,
+   *   host: string,
+   * }} */
+  let resumable = null;
 
   function getCredentials() {
     return resolveSteamCredentials(steamConfig);
@@ -217,6 +227,17 @@ function createSteamNowPlaying({
 
   function recentPlayStagnantSeconds() {
     return Math.max(60, Number(steamConfig.recentPlayStagnantSeconds) || 150);
+  }
+
+  function recentPlayHardIdleSeconds() {
+    return Math.max(
+      recentPlayStagnantSeconds(),
+      Number(steamConfig.recentPlayHardIdleSeconds) || 600,
+    );
+  }
+
+  function sessionResumeWindowMs() {
+    return Math.max(recentPlayStagnantSeconds(), inferFromRecentSeconds()) * 1000;
   }
 
   function statusSnapshot() {
@@ -320,18 +341,35 @@ function createSteamNowPlaying({
     const rtime = recentGame && Number.isFinite(Number(recentGame.lastPlayedAt))
       ? Number(recentGame.lastPlayedAt)
       : null;
+
+    // Mid-play idle timeouts can reopen the same title on the next playtime
+    // tick — resume the original startedAt so elapsed does not reset to 0.
+    const resume = resumable
+      && Number(resumable.appId) === Number(appId)
+      && (now() - Number(resumable.endedAt)) <= sessionResumeWindowMs()
+      ? resumable
+      : null;
+    if (resume) {
+      log?.info?.('Steam Now Playing resuming session', {
+        appId: Number(appId),
+        elapsedSec: Math.max(0, Math.round((now() - resume.startedAt) / 1000)),
+        gapSec: Math.max(0, Math.round((now() - resume.endedAt) / 1000)),
+      });
+    }
+    resumable = null;
+
     session = {
       appId: Number(appId),
-      host: String(host),
-      startedAt: now(),
+      host: String(host || resume?.host || 'any'),
+      startedAt: resume ? Number(resume.startedAt) : now(),
       suppressed: false,
       suppressedAt: null,
       suppressReason: null,
       pushed: false,
       lastPushAt: 0,
-      details: null,
-      lastPlaytime: playtime,
-      lastRtime: rtime,
+      details: resume?.details || null,
+      lastPlaytime: playtime ?? resume?.lastPlaytime ?? null,
+      lastRtime: rtime ?? resume?.lastRtime ?? null,
       lastActivityAt: now(),
       recentLed: Boolean(recentLed),
     };
@@ -369,6 +407,17 @@ function createSteamNowPlaying({
   function endSession(reason, ownedGames = null) {
     clearRestoreTimer();
     const wasPushed = Boolean(session?.pushed && !session?.suppressed);
+    if (session) {
+      resumable = {
+        appId: Number(session.appId),
+        startedAt: Number(session.startedAt),
+        endedAt: now(),
+        lastPlaytime: session.lastPlaytime,
+        lastRtime: session.lastRtime,
+        details: session.details,
+        host: session.host,
+      };
+    }
     session = null;
     // Absorb current OwnedGames stamps (including quit-time rtime) so the same
     // quit cannot look like a new launch on the next poll.
@@ -560,8 +609,10 @@ function createSteamNowPlaying({
     let recentAppId = null;
 
     // Open-session idle clock: ONLY OwnedGames playtime/rtime growth refreshes
-    // lastActivityAt. Bare profile gameid and local RunningAppID must NOT — both
-    // can stick after quit and previously froze STEAM_RECENT_PLAY_STAGNANT_SEC.
+    // lastActivityAt. Bare gameid / RunningAppID do not reset the clock each
+    // poll (they can stick after quit), but they DO extend the hard idle cap
+    // so titles that barely tick playtime mid-session are not force-closed.
+    let sessionKeepAlive = false;
     if (session && personaOnline) {
       ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
       const active = ownedGames.find((game) => Number(game.appId) === Number(session.appId));
@@ -579,15 +630,20 @@ function createSteamNowPlaying({
 
       const lastActivity = Number(session.lastActivityAt) || Number(session.startedAt) || now();
       const stagnantFor = Math.max(0, (now() - lastActivity) / 1000);
-      const stillActive = stagnantFor <= stagnantSeconds;
+      const matchingGameId = accountAppId != null
+        && Number(accountAppId) === Number(session.appId);
+      const matchingPresence = Boolean(presenceHint)
+        && Number(presenceHint.appId) === Number(session.appId);
+      const hardIdleSeconds = recentPlayHardIdleSeconds();
+      const stillActive = stagnantFor <= stagnantSeconds
+        || ((matchingGameId || matchingPresence) && stagnantFor <= hardIdleSeconds);
 
       if (stillActive) {
+        sessionKeepAlive = true;
         if (active) {
           recentGame = active;
           recentAppId = active.appId;
         }
-        // else: keep session via gameid/presence effectiveAppId below, but the
-        // idle clock is still ticking toward stagnantSeconds.
       } else {
         const endedAppId = session.appId;
         const handoff = pickRecentPlayLaunch({
@@ -605,7 +661,9 @@ function createSteamNowPlaying({
           appId: endedAppId,
           stagnantForSec: Math.round(stagnantFor),
           stagnantSeconds,
-          hadGameId: Boolean(accountAppId),
+          hardIdleSeconds,
+          hadGameId: Boolean(matchingGameId),
+          hadPresence: Boolean(matchingPresence),
           hadOwnedRow: Boolean(active),
         });
         if (handoff) {
@@ -639,7 +697,8 @@ function createSteamNowPlaying({
       recentAppId = recentGame?.appId || null;
     }
 
-    const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint, recentAppId);
+    const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint, recentAppId)
+      || (sessionKeepAlive && session ? Number(session.appId) : null);
     const matchedPresence = effectiveAppId
       ? presence.matchForApp(effectiveAppId)
       : null;
