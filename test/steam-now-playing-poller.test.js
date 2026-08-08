@@ -255,6 +255,53 @@ test('tick hands off from stagnant session to a different OwnedGames launch', as
   });
 });
 
+test('tick ends stagnant session even when Steam gameid is still set', async () => {
+  // Regression: bare gameid used to refresh lastActivityAt every poll, so the
+  // idle timeout never fired after quit when Steam left gameid stuck.
+  const sent = [];
+  let now = 1_700_000_000_000;
+  await withSteamApiMocks({
+    fetchPlayerSummary: async () => ({
+      gameId: 965680,
+      personaState: 1,
+      personaName: 'Tester',
+    }),
+    fetchMostRecentlyPlayedOwnedGames: async () => [{
+      appId: 965680,
+      lastPlayedAt: now - 180_000,
+      playtimeForeverMin: 100,
+    }],
+    ...enrichStubs(965680),
+  }, async (createSteamNowPlaying) => {
+    const controller = createSteamNowPlaying({
+      config: makeConfig(),
+      log: { info() {}, warn() {} },
+      sendUdpPayload: (payload) => sent.push(payload),
+      now: () => now,
+    });
+    controller._setBaselineReady(true);
+    controller._setSession({
+      appId: 965680,
+      host: 'any',
+      startedAt: now - 300_000,
+      suppressed: false,
+      suppressedAt: null,
+      suppressReason: null,
+      pushed: true,
+      lastPushAt: now - 200_000,
+      details: { appId: 965680, name: 'App 965680' },
+      lastPlaytime: 100,
+      lastRtime: now - 180_000,
+      lastActivityAt: now - 200_000,
+      recentLed: false,
+    });
+    await controller.tick();
+    assert.equal(controller._getSession(), null);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing.close'), true);
+    controller.stop();
+  });
+});
+
 test('tick ends stagnant session even when local presence still claims the app', async () => {
   // Regression: stuck RunningAppID / presence used to skip OwnedGames quit
   // detection and refresh lastActivityAt every poll, so STEAM_RECENT_PLAY_STAGNANT_SEC

@@ -553,27 +553,19 @@ function createSteamNowPlaying({
     const accountAppId = summary.gameId;
     const presenceHint = presence.matchForApp(accountAppId) || presence.matchForApp(null);
     const personaOnline = isSteamPersonaOnline(summary.personaState);
+    const stagnantSeconds = recentPlayStagnantSeconds();
 
     let ownedGames = null;
     let recentGame = null;
     let recentAppId = null;
 
-    // Quit detection when Steam omits gameid: OwnedGames stagnant window
-    // (STEAM_RECENT_PLAY_STAGNANT_SEC). Presence must NOT skip this — local
-    // RunningAppID can stick after exit and would otherwise refresh forever,
-    // never closing the overlay.
-    if (!accountAppId && personaOnline && session) {
+    // Open-session idle clock: ONLY OwnedGames playtime/rtime growth refreshes
+    // lastActivityAt. Bare profile gameid and local RunningAppID must NOT — both
+    // can stick after quit and previously froze STEAM_RECENT_PLAY_STAGNANT_SEC.
+    if (session && personaOnline) {
       ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
       const active = ownedGames.find((game) => Number(game.appId) === Number(session.appId));
-      if (active && isRecentSessionStillActive({
-        game: active,
-        sessionAppId: session.appId,
-        sessionLastPlaytime: session.lastPlaytime,
-        sessionLastRtime: session.lastRtime,
-        sessionLastActivityAt: session.lastActivityAt,
-        nowMs: now(),
-        stagnantSeconds: recentPlayStagnantSeconds(),
-      })) {
+      if (active) {
         if (session.lastPlaytime == null
           && Number.isFinite(Number(active.playtimeForeverMin))) {
           session.lastPlaytime = Number(active.playtimeForeverMin);
@@ -582,52 +574,60 @@ function createSteamNowPlaying({
           && Number.isFinite(Number(active.lastPlayedAt))) {
           session.lastRtime = Number(active.lastPlayedAt);
         }
-        recentGame = active;
-        recentAppId = active.appId;
         noteRecentActivity(active);
-      } else {
-        // Stagnant / missing OwnedGames activity — close even if presence still
-        // claims this app (stuck RunningAppID after quit). Capture a *different*
-        // baseline-advanced launch BEFORE absorb, or endSession would stamp the
-        // new title into the idle baseline and it would never open.
-        const stagnantFor = Math.max(
-          0,
-          (now() - (Number(session.lastActivityAt) || Number(session.startedAt) || now())) / 1000,
-        );
-        const presenceOnlyGrace = Boolean(presenceHint)
-          && Number(presenceHint.appId) === Number(session.appId)
-          && !active
-          && stagnantFor <= recentPlayStagnantSeconds();
-        if (!presenceOnlyGrace) {
-          const endedAppId = session.appId;
-          const handoff = pickRecentPlayLaunch({
-            games: (ownedGames || []).filter(
-              (game) => Number(game.appId) !== Number(endedAppId),
-            ),
-            baseline: idleBaseline,
-            nowMs: now(),
-            inferSeconds: inferFromRecentSeconds(),
-            personaOnline: true,
-          });
-          clearPresenceMatchingApp(endedAppId);
-          endSession('game-ended', ownedGames);
-          if (handoff) {
-            recentGame = handoff;
-            recentAppId = handoff.appId;
-            // Fall through — beginSession below opens the new title this tick.
-          } else {
-            lastAccountAppId = null;
-            lastStatus = 'idle';
-            lastError = null;
-            return;
-          }
-        }
-        // Presence-only + no OwnedGames row yet — keep within stagnant grace
-        // without refreshing lastActivityAt from presence.
       }
+
+      const lastActivity = Number(session.lastActivityAt) || Number(session.startedAt) || now();
+      const stagnantFor = Math.max(0, (now() - lastActivity) / 1000);
+      const stillActive = stagnantFor <= stagnantSeconds;
+
+      if (stillActive) {
+        if (active) {
+          recentGame = active;
+          recentAppId = active.appId;
+        }
+        // else: keep session via gameid/presence effectiveAppId below, but the
+        // idle clock is still ticking toward stagnantSeconds.
+      } else {
+        const endedAppId = session.appId;
+        const handoff = pickRecentPlayLaunch({
+          games: (ownedGames || []).filter(
+            (game) => Number(game.appId) !== Number(endedAppId),
+          ),
+          baseline: idleBaseline,
+          nowMs: now(),
+          inferSeconds: inferFromRecentSeconds(),
+          personaOnline: true,
+        });
+        clearPresenceMatchingApp(endedAppId);
+        endSession('game-ended', ownedGames);
+        log?.info?.('Steam Now Playing idle timeout', {
+          appId: endedAppId,
+          stagnantForSec: Math.round(stagnantFor),
+          stagnantSeconds,
+          hadGameId: Boolean(accountAppId),
+          hadOwnedRow: Boolean(active),
+        });
+        if (handoff) {
+          recentGame = handoff;
+          recentAppId = handoff.appId;
+        } else {
+          lastAccountAppId = null;
+          lastStatus = 'idle';
+          lastError = null;
+          return;
+        }
+      }
+    } else if (session && !personaOnline && !accountAppId) {
+      ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
+      clearPresenceMatchingApp(session.appId);
+      endSession('game-ended', ownedGames);
+      lastAccountAppId = null;
+      lastStatus = 'idle';
+      lastError = null;
+      return;
     } else if (!accountAppId && personaOnline && !session) {
       // Idle: always scan OwnedGames for a launch — even when presence is set.
-      // Stuck RunningAppID used to skip this path so new games were never seen.
       ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
       recentGame = pickRecentPlayLaunch({
         games: ownedGames,
@@ -637,10 +637,6 @@ function createSteamNowPlaying({
         personaOnline: true,
       });
       recentAppId = recentGame?.appId || null;
-    } else if (session && accountAppId) {
-      // Confirmed in-game by Steam profile gameid — reset stagnant clock.
-      // Presence alone must not reset it (that froze the 2‑minute idle close).
-      session.lastActivityAt = now();
     }
 
     const effectiveAppId = resolveEffectiveSteamAppId(accountAppId, presenceHint, recentAppId);

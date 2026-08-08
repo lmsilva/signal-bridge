@@ -225,12 +225,17 @@ class DismissFooter:
 
     def pulse(self):
         """Overlay-driven refresh — keeps the rail alive if an ``after`` job stalls."""
-        if self._visible:
-            self._refresh(time.time())
-            if self._rail_job is None:
-                self._schedule_rail()
-            if self._tick_job is None and not self._finishing:
-                self._schedule_tick()
+        if not self._visible:
+            return
+        self._refresh(time.time())
+        if self._rail_job is None:
+            self._schedule_rail()
+        if self._tick_job is None and not self._finishing:
+            self._schedule_tick()
+        try:
+            self.canvas.update_idletasks()
+        except Exception:
+            pass
 
     def raise_(self):
         try:
@@ -239,13 +244,12 @@ class DismissFooter:
             pass
 
     def _rail_width(self) -> int:
-        """Prefer the live canvas width — frozen screen_w can disagree after DPI changes."""
-        try:
-            width = int(self.canvas.winfo_width())
-            if width > 1:
-                return width
-        except Exception:
-            pass
+        """Use the overlay's design width.
+
+        ``winfo_width()`` can report a transient/layout value that does not match
+        the fullscreen geometry the footer was built for, which made the fill
+        look like a stuck sliver while the “Dismisses in …” text still ticked.
+        """
         return max(1, int(self.screen_w))
 
     def _paint_shell(self):
@@ -331,10 +335,14 @@ class DismissFooter:
                 self.canvas.coords(self._rail_fill_id, 0, top, fill_w, top + rail_h)
                 self.canvas.itemconfigure(self._rail_fill_id, fill=fill_color)
             except Exception:
-                # Item was scrubbed — remount so the next pulse can continue.
+                # Item was scrubbed — remount and re-apply the current fraction.
                 self._rail_fill_id = None
                 self._paint_shell()
-                return
+                try:
+                    self.canvas.coords(self._rail_fill_id, 0, top, sw * frac, top + rail_h)
+                    self.canvas.itemconfigure(self._rail_fill_id, fill=fill_color)
+                except Exception:
+                    return
 
         prefix, value = format_dismiss_parts(remaining, finishing=self._finishing)
         if self._finishing:
