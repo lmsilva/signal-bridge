@@ -190,8 +190,12 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
           + (steamAppId > 0 ? ` steamAppId=${steamAppId}` : ''),
         );
         // Presence via the already-running display client (no separate reporter).
+        // Clear when the announce omits steamAppId so a quit is not held open by
+        // a stale presence entry until presenceStaleSeconds elapses.
         if (hostname && steamAppId > 0) {
           steamNowPlaying?.recordPresence({ hostname, appId: steamAppId });
+        } else if (hostname) {
+          steamNowPlaying?.clearPresence?.(hostname);
         }
       }
     },
