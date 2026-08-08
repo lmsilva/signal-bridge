@@ -30,8 +30,8 @@ const {
 } = require('./udp-payload');
 
 /**
- * Prefer Steam profile gameid, then local presence, then a baseline-advanced
- * OwnedGames title (never a raw "most recent" stamp).
+ * Prefer Steam profile gameid, then a baseline-advanced OwnedGames title when it
+ * disagrees with local presence (stuck RunningAppID), then presence, then recent.
  */
 function resolveEffectiveSteamAppId(accountAppId, presenceEntry, recentAppId = null) {
   const fromAccount = Number(accountAppId);
@@ -39,11 +39,18 @@ function resolveEffectiveSteamAppId(accountAppId, presenceEntry, recentAppId = n
     return fromAccount;
   }
   const fromPresence = Number(presenceEntry?.appId);
-  if (Number.isFinite(fromPresence) && fromPresence > 0) {
+  const fromRecent = Number(recentAppId);
+  const presenceOk = Number.isFinite(fromPresence) && fromPresence > 0;
+  const recentOk = Number.isFinite(fromRecent) && fromRecent > 0;
+  // OwnedGames launch wins over a mismatched presence hint — otherwise a stuck
+  // RunningAppID keeps reopening the old title and the real launch is missed.
+  if (recentOk && presenceOk && fromRecent !== fromPresence) {
+    return fromRecent;
+  }
+  if (presenceOk) {
     return fromPresence;
   }
-  const fromRecent = Number(recentAppId);
-  if (Number.isFinite(fromRecent) && fromRecent > 0) {
+  if (recentOk) {
     return fromRecent;
   }
   return null;
@@ -580,27 +587,47 @@ function createSteamNowPlaying({
         noteRecentActivity(active);
       } else {
         // Stagnant / missing OwnedGames activity — close even if presence still
-        // claims this app (stuck RunningAppID after quit).
+        // claims this app (stuck RunningAppID after quit). Capture a *different*
+        // baseline-advanced launch BEFORE absorb, or endSession would stamp the
+        // new title into the idle baseline and it would never open.
         const stagnantFor = Math.max(
           0,
           (now() - (Number(session.lastActivityAt) || Number(session.startedAt) || now())) / 1000,
         );
         const presenceOnlyGrace = Boolean(presenceHint)
+          && Number(presenceHint.appId) === Number(session.appId)
           && !active
           && stagnantFor <= recentPlayStagnantSeconds();
         if (!presenceOnlyGrace) {
-          clearPresenceMatchingApp(session.appId);
+          const endedAppId = session.appId;
+          const handoff = pickRecentPlayLaunch({
+            games: (ownedGames || []).filter(
+              (game) => Number(game.appId) !== Number(endedAppId),
+            ),
+            baseline: idleBaseline,
+            nowMs: now(),
+            inferSeconds: inferFromRecentSeconds(),
+            personaOnline: true,
+          });
+          clearPresenceMatchingApp(endedAppId);
           endSession('game-ended', ownedGames);
-          lastAccountAppId = null;
-          lastStatus = 'idle';
-          lastError = null;
-          return;
+          if (handoff) {
+            recentGame = handoff;
+            recentAppId = handoff.appId;
+            // Fall through — beginSession below opens the new title this tick.
+          } else {
+            lastAccountAppId = null;
+            lastStatus = 'idle';
+            lastError = null;
+            return;
+          }
         }
         // Presence-only + no OwnedGames row yet — keep within stagnant grace
         // without refreshing lastActivityAt from presence.
       }
-    } else if (!accountAppId && !presenceHint && personaOnline) {
-      // Idle: look for a baseline-advanced OwnedGames launch.
+    } else if (!accountAppId && personaOnline && !session) {
+      // Idle: always scan OwnedGames for a launch — even when presence is set.
+      // Stuck RunningAppID used to skip this path so new games were never seen.
       ownedGames = await loadOwnedGames(creds.apiKey, creds.steamId);
       recentGame = pickRecentPlayLaunch({
         games: ownedGames,

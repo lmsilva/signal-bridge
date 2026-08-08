@@ -155,6 +155,106 @@ test('tick keeps session through brief gameid dropout via OwnedGames activity', 
   });
 });
 
+test('tick opens OwnedGames launch even when stale presence claims another app', async () => {
+  const sent = [];
+  let now = 1_700_000_000_000;
+  await withSteamApiMocks({
+    fetchPlayerSummary: async () => ({
+      gameId: null,
+      personaState: 1,
+      personaName: 'Tester',
+    }),
+    fetchMostRecentlyPlayedOwnedGames: async () => [{
+      appId: 2524850,
+      lastPlayedAt: now - 20_000,
+      playtimeForeverMin: 12,
+    }],
+    ...enrichStubs(2524850),
+  }, async (createSteamNowPlaying) => {
+    const controller = createSteamNowPlaying({
+      config: makeConfig(),
+      log: { info() {}, warn() {} },
+      sendUdpPayload: (payload) => sent.push(payload),
+      now: () => now,
+    });
+    controller._getBaseline().set(2524850, {
+      lastPlayedAt: now - 600_000,
+      playtimeForeverMin: 11,
+    });
+    // Leftover presence for a different title (stuck RunningAppID).
+    controller.recordPresence({ hostname: 'MOVIETHEATERPC', appId: 965680 });
+    controller._setBaselineReady(true);
+    await controller.tick();
+    assert.equal(controller._getSession()?.appId, 2524850);
+    assert.equal(controller._getSession()?.recentLed, true);
+    assert.equal(sent[0]?.type, 'steam.now-playing');
+    assert.equal(sent[0]?.steam?.appId, 2524850);
+    controller.stop();
+  });
+});
+
+test('tick hands off from stagnant session to a different OwnedGames launch', async () => {
+  const sent = [];
+  let now = 1_700_000_000_000;
+  const quitStamp = now - 10_000;
+  await withSteamApiMocks({
+    fetchPlayerSummary: async () => ({
+      gameId: null,
+      personaState: 1,
+      personaName: 'Tester',
+    }),
+    fetchMostRecentlyPlayedOwnedGames: async () => [
+      {
+        appId: 2524850,
+        lastPlayedAt: now - 15_000,
+        playtimeForeverMin: 5,
+      },
+      {
+        appId: 965680,
+        lastPlayedAt: quitStamp,
+        playtimeForeverMin: 100,
+      },
+    ],
+    ...enrichStubs(2524850),
+  }, async (createSteamNowPlaying) => {
+    const controller = createSteamNowPlaying({
+      config: makeConfig(),
+      log: { info() {}, warn() {} },
+      sendUdpPayload: (payload) => sent.push(payload),
+      now: () => now,
+    });
+    controller._getBaseline().set(965680, {
+      lastPlayedAt: quitStamp,
+      playtimeForeverMin: 100,
+    });
+    controller._getBaseline().set(2524850, {
+      lastPlayedAt: now - 600_000,
+      playtimeForeverMin: 4,
+    });
+    controller._setBaselineReady(true);
+    controller._setSession({
+      appId: 965680,
+      host: 'any',
+      startedAt: now - 300_000,
+      suppressed: false,
+      suppressedAt: null,
+      suppressReason: null,
+      pushed: true,
+      lastPushAt: now - 200_000,
+      details: { appId: 965680, name: 'App 965680' },
+      lastPlaytime: 100,
+      lastRtime: quitStamp,
+      lastActivityAt: now - 200_000,
+      recentLed: true,
+    });
+    await controller.tick();
+    assert.equal(controller._getSession()?.appId, 2524850);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing.close'), true);
+    assert.equal(sent.some((p) => p.type === 'steam.now-playing' && p.steam?.appId === 2524850), true);
+    controller.stop();
+  });
+});
+
 test('tick ends stagnant session even when local presence still claims the app', async () => {
   // Regression: stuck RunningAppID / presence used to skip OwnedGames quit
   // detection and refresh lastActivityAt every poll, so STEAM_RECENT_PLAY_STAGNANT_SEC

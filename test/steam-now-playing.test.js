@@ -17,9 +17,13 @@ const {
   isRecentSessionStillActive,
 } = require('../src/steam-now-playing');
 
-test('resolveEffectiveSteamAppId prefers gameid, then presence, then recent', () => {
+test('resolveEffectiveSteamAppId prefers gameid, then recent over mismatched presence', () => {
   assert.equal(resolveEffectiveSteamAppId(570, { appId: 440 }, 2524850), 570);
-  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, 2524850), 440);
+  // Agreeing presence + recent still prefer presence (fast local hint).
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, 440), 440);
+  // Stuck RunningAppID must not beat a different OwnedGames launch.
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, 2524850), 2524850);
+  assert.equal(resolveEffectiveSteamAppId(null, { appId: 440 }, null), 440);
   assert.equal(resolveEffectiveSteamAppId(null, null, 2524850), 2524850);
   assert.equal(resolveEffectiveSteamAppId(null, null, null), null);
 });

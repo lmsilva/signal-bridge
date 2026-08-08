@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-07 (Steam stagnant close vs stuck presence)
+**Last updated:** 2026-08-07 (Steam stagnant close + launch handoff)
 
 ---
 
@@ -510,7 +510,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
-- 2026-08-07: **Steam idle close works with stuck presence** — when Steam omits `gameid`, local presence used to skip the OwnedGames stagnant check and refresh `lastActivityAt` every poll, so `STEAM_RECENT_PLAY_STAGNANT_SEC` (default 150s) never closed quit games (especially with a stuck `RunningAppID`). Poller always applies the stagnant window without `gameid`; only profile `gameid` resets the clock; announce without `steamAppId` clears that host’s presence. Deploy: `./recreate.sh`. Tests: `test/steam-now-playing-poller.test.js`.
+- 2026-08-07: **Steam idle close + launch handoff** — stagnant close no longer skipped by stuck presence (`STEAM_RECENT_PLAY_STAGNANT_SEC`); announce without `steamAppId` clears presence. Follow-up: closing a stagnant session no longer absorbs a *different* fresh OwnedGames launch into the idle baseline (that made the next game never open), idle polls always scan OwnedGames even with presence, and a mismatched presence hint loses to OwnedGames. Deploy: `./recreate.sh`. Tests: `test/steam-now-playing-poller.test.js`.
 - 2026-08-05: **Wiki CK empty-day cache** — today’s Wikimedia featured feed often omits `mostread` (and pageviews/top for “today” 404s); we were writing `articles: []` and then Push refused. Polls now walk back up to 3 days, never persist empty day lists, and selectArticles falls back to the newest non-empty cache. Deploy: `./recreate.sh`, then Refresh cache (or wait for the next poll).
 - 2026-08-05: **Wiki CK hero image URLs** — UDP `imageUrl` is a bounded Wikimedia thumb (not the multi-MB original); enrich still fills missing images when the extract is already long; cache merge no longer wipes thumbs with empty feed fields. Deploy: `./recreate.sh`.
 - 2026-08-05: **Wikipedia Common Knowledge rename** — Push/scheduler command title, UDP payload `title`, and admin Settings section label are consistently **Wikipedia Common Knowledge** (was “Common Knowledge”). Cache-bust `?v=signal48`. Deploy: `./recreate.sh`.
