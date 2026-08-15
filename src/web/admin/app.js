@@ -1226,10 +1226,10 @@
       img.alt = 'Queued photo';
       const remove = document.createElement('button');
       remove.type = 'button';
-      remove.className = 'btn btn-outline btn-icon';
+      remove.className = 'qr-photo-queue-remove';
       remove.title = 'Remove photo';
       remove.setAttribute('aria-label', 'Remove photo');
-      remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      remove.textContent = '×';
       remove.addEventListener('click', () => {
         qrPhotoQueue = qrPhotoQueue.filter((entry) => entry.id !== item.id);
         renderQrPhotoQueue();

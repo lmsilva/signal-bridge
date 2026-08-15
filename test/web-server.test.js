@@ -1926,6 +1926,7 @@ test('admin QR photo picker queues multiple files', () => {
   assert.match(html, /id="qr-image-file"[^>]*accept="image\/\*"/);
   assert.match(html, /id="qr-image-file"[^>]*\bmultiple\b/);
   assert.match(js, /qrPhotoQueue/);
+  assert.match(js, /qr-photo-queue-remove/);
   assert.match(js, /mode:\s*'photo'/);
   assert.match(js, /photos,/);
 });
