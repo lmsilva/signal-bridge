@@ -189,6 +189,18 @@ test('voice query parser detects short add milk command', () => {
   assert.equal(event?.trigger, 'shopping-list-add');
 });
 
+test('voice query parser classifies short remove as shopping-list-remove', () => {
+  const { extractRemovedItem } = require('../src/shopping-list');
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    'alexa remove onion almonds, remove onion almonds',
+    "Okay, I've removed onion almonds from your shopping list",
+  ));
+  assert.equal(event?.kind, 'shopping-list');
+  assert.equal(event?.trigger, 'shopping-list-remove');
+  assert.equal(extractRemovedItem(event.query, event.spokenResponse), 'onion almonds');
+});
+
 test('voice query parser classifies logged chocolate-almonds ASR echo as add', () => {
   const { extractAddedItem } = require('../src/shopping-list');
   const parser = createVoiceQueryParser();

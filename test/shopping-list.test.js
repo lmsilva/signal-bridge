@@ -4,6 +4,8 @@ const {
   matchesShoppingListQuery,
   shoppingListTrigger,
   extractAddedItem,
+  extractRemovedItem,
+  extractShoppingListItem,
   normalizeItems,
   parseShoppingListFromSpeech,
   resolveShoppingList,
@@ -35,9 +37,55 @@ test('shoppingListTrigger classifies add vs show', () => {
   assert.equal(shoppingListTrigger('show my shopping list'), 'shopping-list-show');
 });
 
+test('matchesShoppingListQuery detects short remove', () => {
+  assert.equal(matchesShoppingListQuery('alexa remove onion almonds'), true);
+  assert.equal(
+    matchesShoppingListQuery(
+      'alexa remove onion almonds, remove onion almonds',
+      "Okay, I've removed onion almonds from your shopping list",
+    ),
+    true,
+  );
+  assert.equal(
+    matchesShoppingListQuery(
+      'remove the transformer from the wall plug and wait ten seconds and then put it back again',
+    ),
+    false,
+  );
+  assert.equal(matchesShoppingListQuery('how long would it take to drive to moab'), false);
+});
+
+test('shoppingListTrigger classifies short remove', () => {
+  assert.equal(shoppingListTrigger('remove coke from shopping list'), 'shopping-list-remove');
+  assert.equal(shoppingListTrigger('alexa remove onion almonds'), 'shopping-list-remove');
+  assert.equal(
+    shoppingListTrigger(
+      'alexa remove onion almonds, remove onion almonds',
+      "Okay, I've removed onion almonds from your shopping list",
+    ),
+    'shopping-list-remove',
+  );
+});
+
 test('extractAddedItem reads explicit and short add commands', () => {
   assert.equal(extractAddedItem('add bananas to shopping list'), 'bananas');
   assert.equal(extractAddedItem('add milk', "Added milk to your shopping list"), 'milk');
+});
+
+test('extractRemovedItem reads explicit and short remove commands', () => {
+  assert.equal(extractRemovedItem('remove coke from shopping list'), 'coke');
+  assert.equal(extractRemovedItem('alexa remove onion almonds'), 'onion almonds');
+  assert.equal(
+    extractRemovedItem(
+      'alexa remove onion almonds, remove onion almonds',
+      "Okay, I've removed onion almonds from your shopping list",
+    ),
+    'onion almonds',
+  );
+  assert.equal(
+    extractShoppingListItem('alexa remove onion almonds', null, 'shopping-list-remove'),
+    'onion almonds',
+  );
 });
 
 test('extractAddedItem strips Alexa wake+repeat ASR echo', () => {
@@ -315,4 +363,41 @@ test('resolveShoppingList merges added item onto API list', () => {
     'add milk',
   );
   assert.deepEqual(list.items.map((item) => item.value), ['milk', 'eggs']);
+});
+
+test('short remove drops the item and still builds a display payload', () => {
+  const query = 'alexa remove onion almonds, remove onion almonds';
+  const spoken = "Okay, I've removed onion almonds from your shopping list";
+  const removed = extractRemovedItem(query, spoken);
+  assert.equal(removed, 'onion almonds');
+  const list = resolveShoppingList(
+    {
+      name: 'Shopping List',
+      items: [
+        { id: '1', value: 'onion almonds', createdAt: '2026-08-15T04:56:39.000Z' },
+        { id: '2', value: 'Eggs', createdAt: '2026-08-14T22:34:27.160Z' },
+      ],
+    },
+    spoken,
+    [],
+    removed,
+    'shopping-list-remove',
+    query,
+  );
+  assert.deepEqual(list.items.map((item) => item.value), ['Eggs']);
+  const payload = buildShoppingListPayload(
+    {
+      device: 'Mudroom Echo',
+      query,
+      spokenResponse: spoken,
+      trigger: 'shopping-list-remove',
+      addedItem: removed,
+    },
+    { udpBroadcast: { defaultDisplaySeconds: 30 } },
+    { list },
+  );
+  assert.equal(payload.type, 'shopping-list.snapshot');
+  assert.equal(payload.trigger, 'shopping-list-remove');
+  assert.equal(payload.addedItem, 'onion almonds');
+  assert.deepEqual(payload.items.map((item) => item.value), ['Eggs']);
 });

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-14 (Shopping list ASR add-echo)
+**Last updated:** 2026-08-14 (Shopping list short remove)
 
 ---
 
@@ -510,6 +510,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-14: **Shopping list short remove updates the display** — “alexa remove onion almonds” never matched (only “remove X from my shopping list” did), so no overlay was sent. Short remove/delete/take now classifies as `shopping-list-remove`, strips wake+repeat ASR, drops the item if the API still has it, and pushes the current list. Long non-list “remove …” phrases stay unmatched. Deploy: `./recreate.sh`. Tests: `test/shopping-list.test.js`, `test/voice-query-parser.test.js`.
 - 2026-08-14: **Shopping list no longer adds the ASR echo as a second item** — Amazon stores wake+repeat (“alexa add chocolate almonds, add chocolate almonds”); `extractAddedItem` used the whole tail, then `resolveShoppingList` merged it beside the real API item. Strip the repeated add, prefer Alexa’s “added X to your shopping list”, and sanitize leftover “X, add X” names. Regression covers the logged Snack Room query through parse → extract → resolve → UDP payload. Deploy: `./recreate.sh`. Tests: `test/shopping-list.test.js`, `test/voice-query-parser.test.js`.
 - 2026-08-07: **Steam no longer resets elapsed mid-session** — false idle-close (OwnedGames playtime often does not tick for minutes) was followed by a “new launch” push with a fresh `startedAt`. Matching `gameid`/presence now soft-keeps until `STEAM_RECENT_PLAY_HARD_IDLE_SEC` (default 600); reopening the same app within the resume window restores the original `startedAt`. Deploy: `./recreate.sh`. Tests: `test/steam-now-playing-poller.test.js`.
 - 2026-08-07: **Steam idle clock only trusts OwnedGames growth** — `lastActivityAt` no longer resets from bare profile `gameid` or local presence each poll. Launch handoff + presence clear kept. Deploy: `./recreate.sh`.

@@ -54,7 +54,7 @@ const {
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createSlideshowSettings } = require('./slideshow-settings');
-const { fetchShoppingList, extractAddedItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
+const { fetchShoppingList, extractShoppingListItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
 const { buildTeslaBatteryReading } = require('./tesla-battery');
 const { fetchTeslaBattery, fetchTeslaDashboard, isFleetConfigured, buildErrorReading } = require('./tesla-fleet-client');
 const { createTeslaSessionKeepAlive } = require('./tesla-session-keepalive');
@@ -637,7 +637,11 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     if (event.kind === 'time') {
       payload = buildTimeQueryPayload(event, config);
     } else if (event.kind === 'shopping-list') {
-      const addedItem = extractAddedItem(event.query, event.spokenResponse);
+      const addedItem = extractShoppingListItem(
+        event.query,
+        event.spokenResponse,
+        event.trigger,
+      );
       const cachedItems = loadShoppingListCache(config.shoppingListCachePath);
       let fetched = null;
       try {
