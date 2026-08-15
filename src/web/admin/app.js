@@ -735,6 +735,7 @@
           + '</button>';
       }).join('');
       row.hidden = mine.length === 0;
+      row.removeAttribute('aria-busy');
     });
   }
 
@@ -2833,28 +2834,93 @@
       }
     });
 
+    const SCHED_SIMULATE_STATUS = [
+      {
+        title: 'Building a 24-hour forecast…',
+        detail: 'Walking every scheduler tick. Nothing is sent to the display.',
+      },
+      {
+        title: 'Rolling 200 simulated days…',
+        detail: 'Each run is a different roll of the dice, so we can average the spread.',
+      },
+      {
+        title: 'Scoring which rule would win…',
+        detail: 'Quiet hours, gaps, and importance all apply — same as a real day.',
+      },
+      {
+        title: 'Averaging airings per rule…',
+        detail: 'Turning the runs into a forecast you can compare to expected counts.',
+      },
+    ];
+
+    function setSchedSimulationStatus(index) {
+      const step = SCHED_SIMULATE_STATUS[index % SCHED_SIMULATE_STATUS.length];
+      const title = $('sched-simulation-status');
+      const detail = $('sched-simulation-detail');
+      if (title) title.textContent = step.title;
+      if (detail) detail.textContent = step.detail;
+    }
+
+    function showSchedSimulationWorking() {
+      const host = $('sched-simulation');
+      const working = $('sched-simulation-working');
+      const results = $('sched-simulation-results');
+      if (!host) return;
+      host.hidden = false;
+      if (working) working.hidden = false;
+      if (results) results.innerHTML = '';
+      setSchedSimulationStatus(0);
+    }
+
+    function renderSchedSimulation(result) {
+      const host = $('sched-simulation');
+      const working = $('sched-simulation-working');
+      const results = $('sched-simulation-results');
+      if (!host) return;
+      host.hidden = false;
+      if (working) working.hidden = true;
+      if (!results) return;
+      results.innerHTML = '<p class="hint" style="margin-top:12px">Forecast for the next 24 hours — '
+        + `average of ${result.runs} runs. Scheduling is stochastic, so a real day will differ.</p>`
+        + (result.perRule || []).map((entry) => (
+          `<div class="sched-readout"><i class="sched-dot" style="background:${escapeHtml(entry.color)};`
+          + `display:inline-block;margin-right:6px"></i>${escapeHtml(entry.label)}: `
+          + `<strong>≈${entry.simulated}</strong> airings (expected ${entry.expected})</div>`
+        )).join('');
+    }
+
     $('btn-sched-simulate')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
       const host = $('sched-simulation');
+      const label = button.textContent;
       button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = 'Simulating…';
+      showSchedSimulationWorking();
+      let statusIndex = 0;
+      const statusTimer = setInterval(() => {
+        statusIndex += 1;
+        setSchedSimulationStatus(statusIndex);
+      }, 2200);
       try {
         const result = await apiFetch(`${SCHED_ROUTE}/simulate`, {
           method: 'POST', body: { hours: 24, runs: 200 },
         });
-        if (host) {
-          host.hidden = false;
-          host.innerHTML = '<p class="hint" style="margin-top:12px">Forecast for the next 24 hours — '
-            + `average of ${result.runs} runs. Scheduling is stochastic, so a real day will differ.</p>`
-            + result.perRule.map((entry) => (
-              `<div class="sched-readout"><i class="sched-dot" style="background:${escapeHtml(entry.color)};`
-              + `display:inline-block;margin-right:6px"></i>${escapeHtml(entry.label)}: `
-              + `<strong>≈${entry.simulated}</strong> airings (expected ${entry.expected})</div>`
-            )).join('');
-        }
+        renderSchedSimulation(result);
       } catch (error) {
+        if (host) {
+          host.hidden = true;
+          const working = $('sched-simulation-working');
+          const results = $('sched-simulation-results');
+          if (working) working.hidden = true;
+          if (results) results.innerHTML = '';
+        }
         toast(error.message || 'Could not run the simulation', 'bad');
       } finally {
+        clearInterval(statusTimer);
         button.disabled = false;
+        button.removeAttribute('aria-busy');
+        button.textContent = label;
       }
     });
 

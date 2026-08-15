@@ -1183,6 +1183,7 @@ test('admin has a Scheduler tab with a rules view and an activity view', () => {
   for (const id of [
     'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'btn-sched-add',
     'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
+    'sched-simulation', 'sched-simulation-working', 'sched-simulation-status', 'sched-simulation-results',
     'sched-stats', 'sched-timeline', 'sched-show-skips', 'sched-inspector',
     'sched-rule-stats', 'sched-heatmap',
   ]) {
@@ -1211,6 +1212,15 @@ test('admin has a Scheduler tab with a rules view and an activity view', () => {
   assert.match(js, /quietBands/);
   assert.match(css, /\.sched-timeline\b/);
   assert.match(css, /\.sched-heat-0/);
+  // Simulate must show a spinner + status, not only disable the button.
+  assert.match(js, /function showSchedSimulationWorking/);
+  assert.match(js, /function renderSchedSimulation/);
+  assert.match(js, /function setSchedSimulationStatus/);
+  assert.match(js, /Building a 24-hour forecast/);
+  assert.match(js, /Rolling 200 simulated days/);
+  assert.match(js, /Simulating…/);
+  assert.match(css, /\.sched-sim-working\b/);
+  assert.match(css, /\.sched-sim-spinner\b/);
 });
 
 test('admin on-screen keyboard sends Space and flashes pressed keys', () => {
@@ -1253,6 +1263,13 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
   assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"/);
+  assert.match(html, /data-skeleton-count/);
+  assert.match(html, /push-card-skeleton/);
+  const teslaCount = COMMANDS.filter((c) => c.pushable && c.group === 'Tesla').length;
+  const quickGroups = ['Signal', 'Alexa', 'Trivia', 'News', 'Knowledge', 'Sky', 'Steam', 'PSN', 'YouTube'];
+  const quickCount = COMMANDS.filter((c) => c.pushable && quickGroups.includes(c.group)).length;
+  assert.match(html, new RegExp(`id="push-row-tesla"[\\s\\S]*?data-skeleton-count="${teslaCount}"`));
+  assert.match(html, new RegExp(`id="push-row-quick"[\\s\\S]*?data-skeleton-count="${quickCount}"`));
   assert.doesNotMatch(html, /id="push-row-playing"/);
   assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
 

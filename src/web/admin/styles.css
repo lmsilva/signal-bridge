@@ -334,7 +334,27 @@ button.app-title:focus-visible {
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  /* Icon + title + subtitle so empty skeleton tiles match live cards and
+     the Web Browser / QR Code block does not jump when /api/commands lands. */
+  min-height: 124px;
   transition: transform 90ms ease, background 90ms ease, border-color 90ms ease;
+}
+
+.push-card-skeleton {
+  pointer-events: none;
+  cursor: default;
+  animation: pulse-skeleton 1.4s ease-in-out infinite;
+}
+
+.push-card-skeleton:active {
+  transform: none;
+  background: var(--bg-elev);
+  border-color: var(--line);
+}
+
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 0.88; }
 }
 
 .push-card:active { transform: scale(0.97); background: var(--bg-elev-2); border-color: var(--accent); }
@@ -1123,6 +1143,33 @@ textarea.field-input.text-input-area {
   font-variant-numeric: tabular-nums;
 }
 .sched-readout strong { color: var(--text); }
+
+.sched-sim-working {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.sched-sim-working[hidden] { display: none; }
+.sched-sim-spinner {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin-top: 2px;
+  border: 2px solid rgba(56, 189, 248, 0.22);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: slideshow-spin 700ms linear infinite;
+}
+.sched-sim-working-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.sched-sim-working .hint { margin: 4px 0 0; }
 .sched-warning { color: var(--warn, #f5c453); font-size: 0.85rem; }
 
 .sched-field-row {
