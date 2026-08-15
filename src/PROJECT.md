@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-15 (Guest Snaps photo queue)
+**Last updated:** 2026-08-15 (Admin Photo QR upload bar)
 
 ---
 
@@ -510,6 +510,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-15: **Admin Photo QR upload uses one progress bar** — sending a queue no longer stacks “Uploading 1 of N…” toasts. A single in-card bar tracks upload then send; only the final success/error toast remains. Cache-bust `?v=signal52`. Deploy: `./recreate.sh`.
 - 2026-08-15: **Admin Photo QR queue shows a small circular ×** — the remove control reused `.btn-icon` (48px + padding), which clipped the glyph into an empty square. It is now a 22px circle like the camera-roll select dots. Cache-bust `?v=signal51`. Deploy: `./recreate.sh`.
 - 2026-08-15: **Guest Snaps + admin Photo QR can queue several pictures** — booth and Push-tab Photo picker accept multi-select (camera roll) and “Add more” after a camera shot (max 20). One photo still pushes `qr.display`; two or more push `photo.slideshow` of just that queue (`order:"queued"`). Cache-bust booth `?v=3`, admin `?v=signal51`. Deploy: `./recreate.sh`. Tests: `test/web-server.test.js` (single-item stays QR, 21 rejected, guest PIN can push a queued slideshow), `test/web-command-payloads.test.js`.
 - 2026-08-15: **Overhead no longer dies on airplanes.live 403** — their public API now rejects unregistered projects (`Please contact us at contact@airplanes.live…`). The default provider tries adsb.lol, then adsb.fi, then airplanes.live, sticks to the last host that worked, and sends a SignalBridge User-Agent. Admin Test provider reports the source. Deploy: `./recreate.sh`. Tests: `test/overhead.test.js`.

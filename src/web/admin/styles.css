@@ -676,6 +676,36 @@ textarea.field-input.text-input-area {
   object-fit: cover;
 }
 
+.qr-photo-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.qr-photo-progress-label {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.qr-photo-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.qr-photo-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease-out;
+}
+
 .qr-photo-queue-remove {
   position: absolute;
   top: 6px;
