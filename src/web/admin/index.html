@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal52">
+  <link rel="stylesheet" href="styles.css?v=signal54">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -68,16 +68,32 @@
 
         <!-- Tiles are rendered from GET /api/commands (src/command-registry.js)
              so the Push grid, the scheduler rule editor and the push routes
-             can never drift apart. See app.js → renderPushGrid(). -->
+             can never drift apart. See app.js → renderPushGrid().
+             data-skeleton-count reserves the same grid height on first paint
+             so Web Browser / QR Code do not jump down when the API returns. -->
         <div class="section-label">Tesla</div>
-        <div class="card-row" id="push-row-tesla" data-push-row="Tesla"></div>
+        <div class="card-row" id="push-row-tesla" data-push-row="Tesla"
+             data-skeleton-count="2" aria-busy="true"></div>
 
         <!-- Steam / PSN / YouTube sit next to Trivia as one auto-mode tile each
              (live session if there is one, otherwise last played) — the same
              behaviour as the Settings test buttons. -->
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad" id="push-row-quick"
-             data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"></div>
+             data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"
+             data-skeleton-count="17" aria-busy="true"></div>
+        <script>
+          (function () {
+            document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
+              var n = parseInt(row.getAttribute('data-skeleton-count'), 10) || 0;
+              var html = '';
+              for (var i = 0; i < n; i++) {
+                html += '<div class="push-card push-card-skeleton" aria-hidden="true"></div>';
+              }
+              row.innerHTML = html;
+            });
+          })();
+        </script>
 
         <div class="push-columns">
           <div class="push-column">
@@ -320,7 +336,16 @@
               </div>
             </div>
             <button class="btn btn-outline btn-block" id="btn-sched-simulate" style="margin-top:12px">Simulate next 24 hours</button>
-            <div id="sched-simulation" hidden></div>
+            <div id="sched-simulation" hidden>
+              <div id="sched-simulation-working" class="sched-sim-working" hidden aria-live="polite">
+                <span class="sched-sim-spinner" aria-hidden="true"></span>
+                <div>
+                  <div class="sched-sim-working-title" id="sched-simulation-status">Building a 24-hour forecast…</div>
+                  <p class="hint" id="sched-simulation-detail">Walking every scheduler tick. Nothing is sent to the display.</p>
+                </div>
+              </div>
+              <div id="sched-simulation-results"></div>
+            </div>
           </div>
         </div>
 
@@ -1035,6 +1060,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal52"></script>
+  <script src="app.js?v=signal54"></script>
 </body>
 </html>
