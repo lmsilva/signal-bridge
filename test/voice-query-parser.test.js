@@ -189,6 +189,18 @@ test('voice query parser detects short add milk command', () => {
   assert.equal(event?.trigger, 'shopping-list-add');
 });
 
+test('voice query parser classifies logged chocolate-almonds ASR echo as add', () => {
+  const { extractAddedItem } = require('../src/shopping-list');
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    'alexa add chocolate almonds, add chocolate almonds',
+    "Okay, I've added chocolate almonds to your shopping list",
+  ));
+  assert.equal(event?.kind, 'shopping-list');
+  assert.equal(event?.trigger, 'shopping-list-add');
+  assert.equal(extractAddedItem(event.query, event.spokenResponse), 'chocolate almonds');
+});
+
 test('voice query parser detects "what is the distance between X and Y"', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity(
