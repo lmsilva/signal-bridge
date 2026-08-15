@@ -39,6 +39,39 @@ test('extractAddedItem reads explicit and short add commands', () => {
   assert.equal(extractAddedItem('add milk', "Added milk to your shopping list"), 'milk');
 });
 
+test('extractAddedItem strips Alexa wake+repeat ASR echo', () => {
+  assert.equal(
+    extractAddedItem('alexa add chocolate almonds, add chocolate almonds'),
+    'chocolate almonds',
+  );
+  assert.equal(
+    extractAddedItem(
+      'alexa add dark chocolate, add dark chocolate',
+      "Okay, I've added dark chocolate to your shopping list",
+    ),
+    'dark chocolate',
+  );
+});
+
+test('sanitizeItemName collapses duplicated add-echo leftovers', () => {
+  assert.equal(
+    sanitizeItemName('chocolate almonds, add chocolate almonds'),
+    'chocolate almonds',
+  );
+});
+
+test('resolveShoppingList does not merge ASR echo as a second item', () => {
+  const list = resolveShoppingList(
+    { name: 'Shopping List', items: [{ id: '1', value: 'chocolate almonds', createdAt: null }] },
+    "Okay, I've added chocolate almonds to your shopping list",
+    [],
+    extractAddedItem('alexa add chocolate almonds, add chocolate almonds'),
+    'shopping-list-add',
+    'alexa add chocolate almonds, add chocolate almonds',
+  );
+  assert.deepEqual(list.items.map((item) => item.value), ['chocolate almonds']);
+});
+
 test('normalizeItems reads alexa v2 list item fields', () => {
   const items = normalizeItems([
     { itemId: '1', itemName: 'milk', itemStatus: 'ACTIVE', updateAt: 2000 },

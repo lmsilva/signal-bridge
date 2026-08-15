@@ -21,6 +21,44 @@ const SHOPPING_SPOKEN_PAGINATION_RE = /\b(?:first|next|last|all of them|would yo
 const SHOPPING_SPOKEN_EMPTY_RE = /\b(?:your|my|the)\s+(?:shopping|grocery)\s+list\s+is\s+empty\b|\b(?:don't|do not)\s+have\s+anything\s+(?:on|in)\s+(?:your|my|the)\s+(?:shopping|grocery)\s+list\b/i;
 const COUNT_ONLY_RE = /^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+items?$/i;
 
+function stripWakeWord(text) {
+  return normalizeText(text).replace(/^(?:alexa[,.\s]+)+/i, '');
+}
+
+/**
+ * Amazon often joins wake + repeat ASR: "alexa add milk, add milk".
+ * Keep the first add fragment when the tail is the same command again.
+ */
+function stripRepeatedAddEcho(text) {
+  const cleaned = stripWakeWord(text);
+  const match = cleaned.match(
+    /^(.*?\b(?:add|put)\s+.+?)\s*,\s*(?:alexa[,.\s]+)?((?:add|put)\s+.+)$/i,
+  );
+  if (!match) {
+    return cleaned;
+  }
+  const first = match[1].trim();
+  const second = match[2].trim();
+  const firstItem = first
+    .replace(/^(?:add|put)\s+/i, '')
+    .replace(/\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:shopping|grocery)\s+list$/i, '')
+    .trim()
+    .toLowerCase();
+  const secondItem = second
+    .replace(/^(?:add|put)\s+/i, '')
+    .replace(/\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:shopping|grocery)\s+list$/i, '')
+    .trim()
+    .toLowerCase();
+  if (firstItem && secondItem && (
+    firstItem === secondItem
+    || firstItem.includes(secondItem)
+    || secondItem.includes(firstItem)
+  )) {
+    return first;
+  }
+  return cleaned;
+}
+
 function sanitizeItemName(raw) {
   let name = String(raw || '').trim();
   name = name.replace(META_PREFIX_RE, '');
@@ -28,6 +66,19 @@ function sanitizeItemName(raw) {
   name = name.replace(/^(?:on\s+it\s*:\s*)/i, '');
   name = name.replace(NARRATION_SUFFIX_RE, '');
   name = name.replace(/[.!?]+$/g, '').trim();
+  // "chocolate almonds, add chocolate almonds" leftover from ASR echo.
+  const echo = name.match(/^(.+?)\s*,\s*(?:alexa[,.\s]+)?(?:add|put)\s+(.+)$/i);
+  if (echo) {
+    const left = echo[1].trim();
+    const right = echo[2]
+      .replace(/\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:shopping|grocery)\s+list$/i, '')
+      .trim();
+    const a = left.toLowerCase();
+    const b = right.toLowerCase();
+    if (a && b && (a === b || a.includes(b) || b.includes(a))) {
+      name = left;
+    }
+  }
   return name;
 }
 
@@ -71,7 +122,7 @@ function spokenMentionsShoppingList(response) {
 }
 
 function matchesShoppingListQuery(summary, response) {
-  const text = normalizeText(summary);
+  const text = stripRepeatedAddEcho(summary);
   const spoken = normalizeText(response);
 
   if (SHOPPING_ADD_RE.test(text) || SHOPPING_REMOVE_RE.test(text) || SHOPPING_SHOW_RE.test(text)) {
@@ -91,7 +142,7 @@ function matchesShoppingListQuery(summary, response) {
 }
 
 function shoppingListTrigger(summary, response) {
-  const text = normalizeText(summary);
+  const text = stripRepeatedAddEcho(summary);
   if (SHOPPING_ADD_RE.test(text)) {
     return 'shopping-list-add';
   }
@@ -105,22 +156,22 @@ function shoppingListTrigger(summary, response) {
 }
 
 function extractAddedItem(summary, response) {
-  const text = normalizeText(summary);
+  const text = stripRepeatedAddEcho(summary);
   const spoken = normalizeText(response);
 
   const explicit = text.match(SHOPPING_ADD_RE);
   if (explicit) {
-    return explicit[1].trim();
-  }
-
-  const short = text.match(SHOPPING_ADD_SHORT_RE);
-  if (short && (spokenMentionsShoppingList(spoken) || SHOPPING_SPOKEN_ADD_RE.test(spoken))) {
-    return short[1].replace(/\b(?:please|alexa|now)\b/gi, '').trim();
+    return sanitizeItemName(explicit[1]);
   }
 
   const spokenAdd = spoken.match(SHOPPING_SPOKEN_ADD_RE);
   if (spokenAdd) {
-    return spokenAdd[1].trim();
+    return sanitizeItemName(spokenAdd[1]);
+  }
+
+  const short = text.match(SHOPPING_ADD_SHORT_RE);
+  if (short && (spokenMentionsShoppingList(spoken) || SHOPPING_SPOKEN_ADD_RE.test(spoken) || !spoken)) {
+    return sanitizeItemName(short[1].replace(/\b(?:please|alexa|now)\b/gi, ''));
   }
 
   return null;
