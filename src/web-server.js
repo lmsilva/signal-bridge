@@ -2421,6 +2421,36 @@ function createWebServer({
     sendJson(res, 200, { ok: true, path: result.path, token: result.token, createdAt: result.createdAt });
   }
 
+  function collectQrPhotoEntries(body) {
+    const raw = [];
+    if (Array.isArray(body?.photos) && body.photos.length) {
+      raw.push(...body.photos);
+    } else if (Array.isArray(body?.urls) && body.urls.length) {
+      raw.push(...body.urls);
+    } else if (body?.url) {
+      raw.push(body.url);
+    }
+    const entries = [];
+    for (const item of raw) {
+      const url = item && typeof item === 'object' ? item.url : item;
+      const validation = validatePushUrl(url);
+      if (!validation.ok) {
+        return { ok: false, error: validation.error };
+      }
+      const uploadedAt = item && typeof item === 'object'
+        ? (item.uploadedAt || item.createdAt || null)
+        : null;
+      entries.push({ url: validation.url, uploadedAt });
+    }
+    if (!entries.length) {
+      return { ok: false, error: 'URL is required' };
+    }
+    if (entries.length > 20) {
+      return { ok: false, error: 'Send up to 20 photos at a time' };
+    }
+    return { ok: true, entries };
+  }
+
   function handleQrPush(req, body, res) {
     const mode = String(body?.mode || '').trim().toLowerCase();
     // Photo pushes need a Guest Snaps PIN session (or admin); URL/Wi-Fi admin-only.
@@ -2440,7 +2470,39 @@ function createWebServer({
     let content;
     let label;
 
-    if (mode === 'url' || mode === 'photo') {
+    if (mode === 'photo') {
+      const collected = collectQrPhotoEntries(body);
+      if (!collected.ok) {
+        sendJson(res, 400, { ok: false, error: collected.error });
+        return;
+      }
+      if (collected.entries.length > 1) {
+        const payload = buildPhotoSlideshowPayload({
+          photos: collected.entries,
+          secondsPerPhoto: slideshowSettings.getSecondsPerPhoto(),
+          device: deviceFrom(body),
+          trigger: 'qr-photo-queue',
+          order: 'queued',
+        });
+        if (!payload) {
+          sendJson(res, 400, { ok: false, error: 'Could not build the photo slideshow' });
+          return;
+        }
+        log.info('Queued photo slideshow pushed to display', {
+          count: payload.slideshow.photos.length,
+          secondsPerPhoto: payload.slideshow.secondsPerPhoto,
+          targetId: targetIdFrom(body),
+        });
+        sendCommandPayload(payload, targetIdFrom(body), res, {
+          slideshow: true,
+          count: payload.slideshow.photos.length,
+        });
+        return;
+      }
+      qrType = 'photo';
+      content = collected.entries[0].url;
+      label = String(body?.label || '').trim() || 'Scan to save this photo';
+    } else if (mode === 'url') {
       const validation = validatePushUrl(body?.url);
       if (!validation.ok) {
         sendJson(res, 400, { ok: false, error: validation.error });
@@ -2449,10 +2511,9 @@ function createWebServer({
       // 'photo' tells the display to hero the image itself and tuck the QR
       // into the corner (slideshow-style); plain 'url' keeps the classic
       // full-size QR layout for arbitrary links.
-      qrType = mode === 'photo' ? 'photo' : 'url';
+      qrType = 'url';
       content = validation.url;
-      label = String(body?.label || '').trim()
-        || (mode === 'photo' ? 'Scan to save this photo' : validation.url);
+      label = String(body?.label || '').trim() || validation.url;
     } else if (mode === 'wifi') {
       const ssid = String(body?.ssid || '').trim();
       if (!ssid) {
@@ -2853,12 +2914,15 @@ function createWebServer({
     const secondsPerPhoto = body?.secondsPerPhoto != null
       ? clampSecondsPerPhoto(body.secondsPerPhoto)
       : slideshowSettings.getSecondsPerPhoto();
+    const order = body?.order === 'queued' || body?.order === 'as-is'
+      ? 'queued'
+      : slideshowSettings.getOrder();
     const payload = buildPhotoSlideshowPayload({
       photos,
       secondsPerPhoto,
       device: deviceFrom(body),
       trigger: 'photo-slideshow-api',
-      order: slideshowSettings.getOrder(),
+      order,
     });
     if (!payload) {
       // Photos in the cache but no payload means the URLs could not be built,

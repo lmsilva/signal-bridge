@@ -6,8 +6,10 @@
   const ALL_DISPLAYS = '*';
   const STORAGE_TARGET_KEY = 'signalBooth.targetId';
   const PIN_DIGITS = 6;
+  const MAX_QUEUE = 20;
 
-  let selectedPhotoDataUrl = null;
+  let photoQueue = [];
+  let nextPhotoId = 1;
   let displayEvents = null;
   let authenticated = false;
   let pinDigits = PIN_DIGITS;
@@ -84,7 +86,7 @@
     authenticated = true;
     $('booth-login').hidden = true;
     $('booth-app').hidden = false;
-    $('booth-subtitle').textContent = 'Share a photo with us';
+    $('booth-subtitle').textContent = 'Share photos with us';
     setBoothStatus('');
     refreshDisplays();
     startDisplayEvents();
@@ -139,7 +141,7 @@
       opt.value = ALL_DISPLAYS;
       opt.textContent = 'All displays (none online yet)';
       select.appendChild(opt);
-      $('display-hint').textContent = 'No displays announced yet — your photo will broadcast to the LAN.';
+      $('display-hint').textContent = 'No displays announced yet — your photos will broadcast to the LAN.';
       return;
     }
 
@@ -200,43 +202,123 @@
     }
   }
 
-  function resetPhotoPicker() {
-    selectedPhotoDataUrl = null;
-    $('photo-file').value = '';
-    $('photo-preview').hidden = true;
-    $('photo-preview-img').removeAttribute('src');
-    $('btn-pick-photo').hidden = false;
-    $('btn-send').disabled = true;
+  function encodePhotoFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error('No file'));
+        return;
+      }
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const maxSide = 1600;
+        const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const width = Math.max(1, Math.round(img.naturalWidth * ratio));
+        const height = Math.max(1, Math.round(img.naturalHeight * ratio));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Could not read that photo'));
+      };
+      img.src = objectUrl;
+    });
   }
 
-  function loadPhotoFile(file) {
-    if (!file) {
+  function renderPhotoQueue() {
+    const queueEl = $('photo-queue');
+    const grid = $('photo-queue-grid');
+    const countEl = $('photo-queue-count');
+    const pick = $('btn-pick-photo');
+    const pickLabel = $('btn-pick-photo-label');
+    const send = $('btn-send');
+    if (!queueEl || !grid || !send) return;
+
+    const count = photoQueue.length;
+    queueEl.hidden = count === 0;
+    send.disabled = count === 0;
+    pick?.classList.toggle('is-compact', count > 0);
+    if (pickLabel) {
+      pickLabel.textContent = count > 0 ? 'Add more photos' : 'Take or choose photos';
+    }
+    if (countEl) {
+      countEl.textContent = count === 1 ? '1 photo' : `${count} photos`;
+    }
+    if (count === 0) {
+      send.textContent = 'Send to display';
+    } else if (count === 1) {
+      send.textContent = 'Send photo';
+    } else {
+      send.textContent = `Send ${count} photos`;
+    }
+
+    grid.replaceChildren();
+    photoQueue.forEach((item) => {
+      const cell = document.createElement('div');
+      cell.className = 'booth-queue-item';
+      const img = document.createElement('img');
+      img.src = item.dataUrl;
+      img.alt = 'Queued photo';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'booth-queue-remove';
+      remove.setAttribute('aria-label', 'Remove photo');
+      remove.textContent = '×';
+      remove.addEventListener('click', () => {
+        photoQueue = photoQueue.filter((entry) => entry.id !== item.id);
+        renderPhotoQueue();
+      });
+      cell.append(img, remove);
+      grid.appendChild(cell);
+    });
+  }
+
+  function resetPhotoPicker() {
+    photoQueue = [];
+    $('photo-file').value = '';
+    renderPhotoQueue();
+  }
+
+  async function addPhotoFiles(fileList) {
+    const files = [...(fileList || [])].filter((file) => file && /^image\//.test(file.type || ''));
+    if (!files.length) {
       return;
     }
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      const maxSide = 1600;
-      const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-      const width = Math.max(1, Math.round(img.naturalWidth * ratio));
-      const height = Math.max(1, Math.round(img.naturalHeight * ratio));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      selectedPhotoDataUrl = canvas.toDataURL('image/jpeg', 0.82);
-      $('photo-preview-img').src = selectedPhotoDataUrl;
-      $('photo-preview').hidden = false;
-      $('btn-pick-photo').hidden = true;
-      $('btn-send').disabled = false;
-      setBoothStatus('');
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      setBoothStatus('Could not read that photo', 'bad');
-    };
-    img.src = objectUrl;
+    const room = MAX_QUEUE - photoQueue.length;
+    if (room <= 0) {
+      setBoothStatus(`You can queue up to ${MAX_QUEUE} photos`, 'bad');
+      return;
+    }
+    const slice = files.slice(0, room);
+    setBoothStatus(slice.length > 1 ? `Adding ${slice.length} photos…` : 'Adding photo…');
+    let added = 0;
+    for (const file of slice) {
+      try {
+        const dataUrl = await encodePhotoFile(file);
+        photoQueue.push({ id: nextPhotoId, dataUrl });
+        nextPhotoId += 1;
+        added += 1;
+        renderPhotoQueue();
+      } catch {
+        // skip unreadable files
+      }
+    }
+    if (!added) {
+      setBoothStatus('Could not read those photos', 'bad');
+      return;
+    }
+    if (files.length > room) {
+      setBoothStatus(`Added ${added}. Queue is full at ${MAX_QUEUE} photos.`, 'bad');
+      return;
+    }
+    setBoothStatus(added === 1
+      ? 'Photo added — take or choose more, or send.'
+      : `${added} photos queued. Send them as a slideshow, or add more.`);
   }
 
   async function unlockWithPin() {
@@ -291,8 +373,7 @@
   });
 
   $('photo-file')?.addEventListener('change', () => {
-    const file = $('photo-file').files && $('photo-file').files[0];
-    loadPhotoFile(file);
+    addPhotoFiles($('photo-file').files);
   });
 
   $('btn-photo-clear')?.addEventListener('click', () => {
@@ -301,25 +382,37 @@
   });
 
   $('btn-send')?.addEventListener('click', async () => {
-    if (!selectedPhotoDataUrl) {
+    if (!photoQueue.length) {
       setBoothStatus('Choose a photo first', 'bad');
       return;
     }
     const button = $('btn-send');
     button.disabled = true;
-    setBoothStatus('Sending…');
+    const queued = photoQueue.slice();
+    setBoothStatus(queued.length > 1 ? `Sending ${queued.length} photos…` : 'Sending…');
     try {
-      const upload = await apiPost('/api/qr/image-upload', {
-        imageDataUrl: selectedPhotoDataUrl,
-      });
-      const absoluteUrl = new URL(upload.path, location.origin).href;
+      const photos = [];
+      for (let i = 0; i < queued.length; i += 1) {
+        setBoothStatus(queued.length > 1
+          ? `Uploading ${i + 1} of ${queued.length}…`
+          : 'Sending…');
+        const upload = await apiPost('/api/qr/image-upload', {
+          imageDataUrl: queued[i].dataUrl,
+        });
+        photos.push({
+          url: new URL(upload.path, location.origin).href,
+          uploadedAt: upload.createdAt || null,
+        });
+      }
       await apiPost('/api/qr/push', {
         mode: 'photo',
-        url: absoluteUrl,
+        photos,
         label: 'Scan to save this photo',
         targetId: selectedTargetId(),
       });
-      setBoothStatus('Photo sent — thanks!', 'good');
+      setBoothStatus(photos.length > 1
+        ? `${photos.length} photos sent as a slideshow — thanks!`
+        : 'Photo sent — thanks!', 'good');
       resetPhotoPicker();
     } catch (error) {
       if (error.status === 401) {
@@ -327,8 +420,8 @@
         showLogin();
         return;
       }
-      setBoothStatus(error.message || 'Could not send the photo', 'bad');
-      button.disabled = !selectedPhotoDataUrl;
+      setBoothStatus(error.message || 'Could not send the photos', 'bad');
+      button.disabled = !photoQueue.length;
     }
   });
 

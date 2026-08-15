@@ -186,6 +186,11 @@ test('buildPhotoSlideshowPayload accepts {url, uploadedAt} objects and orders by
   const noOrder = buildPhotoSlideshowPayload({ photos });
   assert.deepEqual(noOrder.slideshow.photos.map((p) => p.url), ['https://nas/b.jpg', 'https://nas/c.jpg', 'https://nas/a.jpg']);
 
+  const queued = buildPhotoSlideshowPayload({ photos, order: 'queued' });
+  assert.deepEqual(queued.slideshow.photos.map((p) => p.url), [
+    'https://nas/a.jpg', 'https://nas/b.jpg', 'https://nas/c.jpg',
+  ]);
+
   const random = buildPhotoSlideshowPayload({ photos, order: 'random' });
   assert.deepEqual(
     [...random.slideshow.photos.map((p) => p.url)].sort(),

@@ -1134,7 +1134,9 @@
 
   const QR_MODES = ['image', 'url', 'wifi'];
   let qrGenerateMode = 'image';
-  let qrSelectedPhotoDataUrl = null;
+  let qrPhotoQueue = [];
+  let qrNextPhotoId = 1;
+  const QR_PHOTO_QUEUE_MAX = 20;
 
   function setQrGenerateMode(mode) {
     if (!QR_MODES.includes(mode)) {
@@ -1171,11 +1173,108 @@
     }
   });
 
+  function encodeQrPhotoFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error('No file'));
+        return;
+      }
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        // Downscale + re-encode as JPEG client-side so the upload stays small
+        // and fast over LAN regardless of the phone's original photo size.
+        const maxSide = 1600;
+        const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const width = Math.max(1, Math.round(img.naturalWidth * ratio));
+        const height = Math.max(1, Math.round(img.naturalHeight * ratio));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Could not read that photo'));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  function renderQrPhotoQueue() {
+    const queueEl = $('qr-photo-queue');
+    const grid = $('qr-photo-queue-grid');
+    const countEl = $('qr-photo-queue-count');
+    const pick = $('btn-qr-pick-photo');
+    if (!queueEl || !grid) return;
+    const count = qrPhotoQueue.length;
+    queueEl.hidden = count === 0;
+    if (countEl) {
+      countEl.textContent = count === 1 ? '1 photo' : `${count} photos`;
+    }
+    if (pick) {
+      pick.textContent = count > 0 ? 'Add more photos' : 'Choose photos';
+    }
+    grid.replaceChildren();
+    qrPhotoQueue.forEach((item) => {
+      const cell = document.createElement('div');
+      cell.className = 'qr-photo-queue-item';
+      const img = document.createElement('img');
+      img.src = item.dataUrl;
+      img.alt = 'Queued photo';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn btn-outline btn-icon';
+      remove.title = 'Remove photo';
+      remove.setAttribute('aria-label', 'Remove photo');
+      remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      remove.addEventListener('click', () => {
+        qrPhotoQueue = qrPhotoQueue.filter((entry) => entry.id !== item.id);
+        renderQrPhotoQueue();
+      });
+      cell.append(img, remove);
+      grid.appendChild(cell);
+    });
+  }
+
   function resetPhotoPicker() {
-    qrSelectedPhotoDataUrl = null;
-    $('qr-photo-preview').hidden = true;
-    $('btn-qr-pick-photo').hidden = false;
+    qrPhotoQueue = [];
     $('qr-image-file').value = '';
+    renderQrPhotoQueue();
+  }
+
+  async function addQrPhotoFiles(fileList) {
+    const files = [...(fileList || [])].filter((file) => file && /^image\//.test(file.type || ''));
+    if (!files.length) {
+      return;
+    }
+    const room = QR_PHOTO_QUEUE_MAX - qrPhotoQueue.length;
+    if (room <= 0) {
+      toast(`You can queue up to ${QR_PHOTO_QUEUE_MAX} photos`, 'bad');
+      return;
+    }
+    const slice = files.slice(0, room);
+    let added = 0;
+    for (const file of slice) {
+      try {
+        const dataUrl = await encodeQrPhotoFile(file);
+        qrPhotoQueue.push({ id: qrNextPhotoId, dataUrl });
+        qrNextPhotoId += 1;
+        added += 1;
+        renderQrPhotoQueue();
+      } catch {
+        // skip unreadable files
+      }
+    }
+    if (!added) {
+      toast('Could not read those photos', 'bad');
+      return;
+    }
+    if (files.length > room) {
+      toast(`Added ${added}. Queue is full at ${QR_PHOTO_QUEUE_MAX} photos.`, 'bad');
+    }
   }
 
   $('btn-qr-pick-photo').addEventListener('click', () => {
@@ -1184,34 +1283,7 @@
   });
 
   $('qr-image-file').addEventListener('change', () => {
-    const file = $('qr-image-file').files && $('qr-image-file').files[0];
-    if (!file) {
-      return;
-    }
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      // Downscale + re-encode as JPEG client-side so the upload stays small
-      // and fast over LAN regardless of the phone's original photo size.
-      const maxSide = 1600;
-      const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-      const width = Math.max(1, Math.round(img.naturalWidth * ratio));
-      const height = Math.max(1, Math.round(img.naturalHeight * ratio));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      qrSelectedPhotoDataUrl = canvas.toDataURL('image/jpeg', 0.82);
-      $('qr-photo-preview-img').src = qrSelectedPhotoDataUrl;
-      $('qr-photo-preview').hidden = false;
-      $('btn-qr-pick-photo').hidden = true;
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      toast('Could not read that photo', 'bad');
-    };
-    img.src = objectUrl;
+    addQrPhotoFiles($('qr-image-file').files);
   });
 
   $('btn-qr-photo-clear').addEventListener('click', resetPhotoPicker);
@@ -1258,19 +1330,34 @@
         return;
       }
 
-      // Photo mode: upload first (bridge hosts it + returns a relative path),
-      // then push that resolved URL through the same 'url' QR path — a photo
-      // QR is just a URL QR once the upload step has happened.
-      if (!qrSelectedPhotoDataUrl) {
+      // Photo mode: upload each queued JPEG, then push. One photo is a
+      // qr.display hero; two or more become a photo.slideshow of just
+      // this queue (not the whole camera roll).
+      if (!qrPhotoQueue.length) {
         toast('Choose a photo first', 'bad');
         return;
       }
-      const upload = await apiPost('/api/qr/image-upload', { imageDataUrl: qrSelectedPhotoDataUrl });
-      const absoluteUrl = new URL(upload.path, document.baseURI).href;
+      const photos = [];
+      for (let i = 0; i < qrPhotoQueue.length; i += 1) {
+        if (qrPhotoQueue.length > 1) {
+          toast(`Uploading ${i + 1} of ${qrPhotoQueue.length}…`, 'ok');
+        }
+        const upload = await apiPost('/api/qr/image-upload', {
+          imageDataUrl: qrPhotoQueue[i].dataUrl,
+        });
+        photos.push({
+          url: new URL(upload.path, document.baseURI).href,
+          uploadedAt: upload.createdAt || null,
+        });
+      }
       await apiPost('/api/qr/push', withTarget({
-        mode: 'photo', url: absoluteUrl, label: 'Scan to save this photo',
+        mode: 'photo',
+        photos,
+        label: 'Scan to save this photo',
       }));
-      toast('Photo sent to display', 'good');
+      toast(photos.length > 1
+        ? `Slideshow sent (${photos.length} photos)`
+        : 'Photo sent to display', 'good');
       resetPhotoPicker();
     } catch (error) {
       toast(error.message || 'Could not generate the QR code', 'bad');
@@ -3739,8 +3826,9 @@
       try {
         await saveOverheadSettings();
         const result = await apiPost('/api/overhead/provider/test', readOverheadForm());
+        const sourceLabel = result.source ? ` via ${result.source}` : '';
         toast(result.ok
-          ? `Provider OK — ${result.aircraftCount ?? 0} aircraft`
+          ? `Provider OK — ${result.aircraftCount ?? 0} aircraft${sourceLabel}`
           : (result.error || 'Provider test failed'), result.ok ? 'ok' : 'bad');
       } catch (error) {
         toast(error.message || 'Provider test failed', 'bad');

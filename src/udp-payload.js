@@ -750,12 +750,16 @@ function buildAlarmSnapshotPayload({
 }
 
 // Sorts normalized {url, uploadedAt} photos per the Slideshow Manager's
-// persisted order setting. Ties (equal/missing uploadedAt) keep their
+// persisted order setting. `queued` / `as-is` keeps send order (Guest Snaps
+// and admin Photo QR queues). Ties (equal/missing uploadedAt) keep their
 // incoming relative order — Array#sort is a stable sort in Node, so callers
 // that don't have real timestamps yet (e.g. tests) still see a predictable
 // order rather than one that looks shuffled.
 function applySlideshowOrder(photos, order) {
   const key = (photo) => Date.parse(photo.uploadedAt) || 0;
+  if (order === 'queued' || order === 'as-is') {
+    return [...photos];
+  }
   if (order === 'oldest') {
     return [...photos].sort((a, b) => key(a) - key(b));
   }

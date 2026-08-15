@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal48">
+  <link rel="stylesheet" href="styles.css?v=signal50">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -123,15 +123,16 @@
               </div>
 
               <div class="qr-mode-panel" id="qr-panel-image">
-                <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose Photo</button>
-                <input type="file" id="qr-image-file" accept="image/*" hidden>
-                <div class="qr-photo-preview" id="qr-photo-preview" hidden>
-                  <img id="qr-photo-preview-img" alt="Selected photo preview">
-                  <button type="button" class="btn btn-outline btn-icon" id="btn-qr-photo-clear" title="Remove photo">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                  </button>
+                <div class="qr-photo-queue" id="qr-photo-queue" hidden>
+                  <div class="qr-photo-queue-head">
+                    <p class="qr-photo-queue-count" id="qr-photo-queue-count">0 photos</p>
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-qr-photo-clear">Clear all</button>
+                  </div>
+                  <div class="qr-photo-queue-grid" id="qr-photo-queue-grid"></div>
                 </div>
-                <p class="hint">Uploaded to the bridge and shared via a link in the QR code. Manage or delete saved photos anytime from the Slideshow tab.</p>
+                <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose photos</button>
+                <input type="file" id="qr-image-file" accept="image/*" multiple hidden>
+                <p class="hint">Queue one or more photos from the camera roll or camera. One photo shows as a QR; two or more play as a short slideshow of just those pictures. Saved photos stay in the Slideshow tab.</p>
               </div>
 
               <div class="qr-mode-panel" id="qr-panel-url" hidden>
@@ -780,7 +781,7 @@
 
               <label class="field-label field-label-spaced" for="overhead-provider">Provider</label>
               <select id="overhead-provider" class="field-input">
-                <option value="airplanes-live">airplanes.live</option>
+                <option value="airplanes-live">Public ADS-B (adsb.lol)</option>
                 <option value="local-readsb">Local readsb</option>
                 <option value="opensky">OpenSky (stub)</option>
               </select>
@@ -792,7 +793,7 @@
               <input type="number" id="overhead-altitude-floor" class="field-input" min="0" max="60000" step="500" value="0">
 
               <button type="button" class="btn btn-outline btn-block" id="btn-overhead-provider-test" style="margin-top:10px">Test provider</button>
-              <p class="hint" id="overhead-provider-hint">Uses the weather home coordinates.</p>
+              <p class="hint" id="overhead-provider-hint">Uses the weather home coordinates. Public ADS-B tries adsb.lol, then adsb.fi; airplanes.live is last because it now 403s unregistered projects.</p>
             </div>
 
             <div class="settings-col upside-news-display-col">
@@ -1028,6 +1029,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal48"></script>
+  <script src="app.js?v=signal50"></script>
 </body>
 </html>

@@ -104,11 +104,13 @@ test('cardinal bearing helper', () => {
   assert.equal(cardinalBearing(90), 'E');
 });
 
-test('airplanes.live provider uses mock fetch', async () => {
+test('public ADS-B provider uses mock fetch and sends User-Agent', async () => {
   let url = '';
+  let headers = null;
   const provider = createProvider('airplanes-live', {
-    fetchImpl: async (u) => {
+    fetchImpl: async (u, opts) => {
       url = u;
+      headers = opts?.headers || {};
       return {
         ok: true,
         json: async () => ({ ac: [{ hex: 'abc', flight: 'UAL1', alt_baro: 1000, category: 'A3' }] }),
@@ -116,8 +118,51 @@ test('airplanes.live provider uses mock fetch', async () => {
     },
   });
   const rows = await provider.fetchPoint(40.35, -111.9, 40);
-  assert.match(url, /api\.airplanes\.live\/v2\/point\/40\.35\/-111\.9\/40/);
+  assert.match(url, /api\.adsb\.lol\/v2\/lat\/40\.35\/lon\/-111\.9\/dist\/40/);
+  assert.match(String(headers['User-Agent'] || ''), /SignalBridge/);
   assert.equal(rows.length, 1);
+});
+
+test('public ADS-B provider falls back after 403', async () => {
+  const urls = [];
+  let clock = 10_000;
+  const provider = createProvider('airplanes-live', {
+    now: () => { clock += 2000; return clock; },
+    fetchImpl: async (u) => {
+      urls.push(u);
+      if (String(u).includes('adsb.lol')) {
+        return {
+          ok: false,
+          status: 403,
+          text: async () => JSON.stringify({ error: 'Please contact us at contact@airplanes.live' }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ aircraft: [{ hex: 'def', flight: 'UAL2' }] }),
+      };
+    },
+  });
+  const rows = await provider.fetchPoint(40.35, -111.9, 40);
+  assert.equal(rows.length, 1);
+  assert.match(urls[0], /adsb\.lol/);
+  assert.match(urls[1], /adsb\.fi/);
+  const again = await provider.fetchPoint(40.35, -111.9, 40);
+  assert.equal(again.length, 1);
+  assert.match(urls[2], /adsb\.fi/);
+});
+
+test('public ADS-B testConnection reports fallback source', async () => {
+  const provider = createProvider('airplanes-live', {
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({ ac: [{ hex: 'abc' }, { hex: 'def' }] }),
+    }),
+  });
+  const result = await provider.testConnection(40.35, -111.9, 40);
+  assert.equal(result.ok, true);
+  assert.equal(result.aircraftCount, 2);
+  assert.equal(result.source, 'adsb-lol');
 });
 
 test('enrichment cache hits disk for hex metadata', async () => {

@@ -633,24 +633,55 @@ textarea.field-input.text-input-area {
   flex-shrink: 0;
 }
 
-.qr-photo-preview {
+.qr-photo-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.qr-photo-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qr-photo-queue-count {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.qr-photo-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.qr-photo-queue-item {
   position: relative;
+  aspect-ratio: 1;
   border-radius: 12px;
   overflow: hidden;
+  background: #000;
   border: 1px solid var(--line);
 }
 
-.qr-photo-preview img {
+.qr-photo-queue-item img {
   display: block;
   width: 100%;
-  max-height: 220px;
+  height: 100%;
   object-fit: cover;
 }
 
-.qr-photo-preview .btn-icon {
+.qr-photo-queue-item .btn-icon {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
   background: rgba(4, 8, 18, 0.65);
   border-color: rgba(255, 255, 255, 0.25);
   color: #fff;
