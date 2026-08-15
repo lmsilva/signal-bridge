@@ -1243,6 +1243,37 @@
     qrPhotoQueue = [];
     $('qr-image-file').value = '';
     renderQrPhotoQueue();
+    setQrPhotoProgress(null);
+  }
+
+  function setQrPhotoProgress(done, total, phase) {
+    const wrap = $('qr-photo-progress');
+    const label = $('qr-photo-progress-label');
+    const fill = $('qr-photo-progress-fill');
+    const bar = $('qr-photo-progress-bar');
+    if (!wrap) {
+      return;
+    }
+    if (done == null || !total) {
+      wrap.hidden = true;
+      if (fill) fill.style.width = '0%';
+      if (bar) bar.setAttribute('aria-valuenow', '0');
+      return;
+    }
+    wrap.hidden = false;
+    const pct = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+    if (fill) fill.style.width = `${pct}%`;
+    if (bar) {
+      bar.setAttribute('aria-valuenow', String(pct));
+      bar.setAttribute('aria-valuemax', '100');
+    }
+    if (label) {
+      if (phase === 'send') {
+        label.textContent = 'Sending to display…';
+      } else {
+        label.textContent = `Uploading ${done} of ${total}`;
+      }
+    }
   }
 
   async function addQrPhotoFiles(fileList) {
@@ -1337,11 +1368,15 @@
         toast('Choose a photo first', 'bad');
         return;
       }
+      const total = qrPhotoQueue.length;
+      const pick = $('btn-qr-pick-photo');
+      const clear = $('btn-qr-photo-clear');
+      if (pick) pick.disabled = true;
+      if (clear) clear.disabled = true;
+      setQrPhotoProgress(0, total);
       const photos = [];
-      for (let i = 0; i < qrPhotoQueue.length; i += 1) {
-        if (qrPhotoQueue.length > 1) {
-          toast(`Uploading ${i + 1} of ${qrPhotoQueue.length}…`, 'ok');
-        }
+      for (let i = 0; i < total; i += 1) {
+        setQrPhotoProgress(i, total);
         const upload = await apiPost('/api/qr/image-upload', {
           imageDataUrl: qrPhotoQueue[i].dataUrl,
         });
@@ -1349,7 +1384,9 @@
           url: new URL(upload.path, document.baseURI).href,
           uploadedAt: upload.createdAt || null,
         });
+        setQrPhotoProgress(i + 1, total);
       }
+      setQrPhotoProgress(total, total, 'send');
       await apiPost('/api/qr/push', withTarget({
         mode: 'photo',
         photos,
@@ -1360,9 +1397,14 @@
         : 'Photo sent to display', 'good');
       resetPhotoPicker();
     } catch (error) {
+      setQrPhotoProgress(null);
       toast(error.message || 'Could not generate the QR code', 'bad');
     } finally {
       button.disabled = false;
+      const pick = $('btn-qr-pick-photo');
+      const clear = $('btn-qr-photo-clear');
+      if (pick) pick.disabled = false;
+      if (clear) clear.disabled = false;
     }
   });
 

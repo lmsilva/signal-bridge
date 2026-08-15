@@ -1925,8 +1925,11 @@ test('admin QR photo picker queues multiple files', () => {
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   assert.match(html, /id="qr-image-file"[^>]*accept="image\/\*"/);
   assert.match(html, /id="qr-image-file"[^>]*\bmultiple\b/);
+  assert.match(html, /id="qr-photo-progress"/);
   assert.match(js, /qrPhotoQueue/);
   assert.match(js, /qr-photo-queue-remove/);
+  assert.match(js, /setQrPhotoProgress/);
+  assert.doesNotMatch(js, /toast\(`Uploading/);
   assert.match(js, /mode:\s*'photo'/);
   assert.match(js, /photos,/);
 });

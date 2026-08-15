@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal51">
+  <link rel="stylesheet" href="styles.css?v=signal52">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -133,6 +133,12 @@
                 <button type="button" class="btn btn-outline btn-block" id="btn-qr-pick-photo">Choose photos</button>
                 <input type="file" id="qr-image-file" accept="image/*" multiple hidden>
                 <p class="hint">Queue one or more photos from the camera roll or camera. One photo shows as a QR; two or more play as a short slideshow of just those pictures. Saved photos stay in the Slideshow tab.</p>
+                <div class="qr-photo-progress" id="qr-photo-progress" hidden>
+                  <p class="qr-photo-progress-label" id="qr-photo-progress-label">Uploading…</p>
+                  <div class="qr-photo-progress-track" id="qr-photo-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div class="qr-photo-progress-fill" id="qr-photo-progress-fill"></div>
+                  </div>
+                </div>
               </div>
 
               <div class="qr-mode-panel" id="qr-panel-url" hidden>
@@ -1029,6 +1035,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal51"></script>
+  <script src="app.js?v=signal52"></script>
 </body>
 </html>
