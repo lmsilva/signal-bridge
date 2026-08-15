@@ -836,6 +836,61 @@ test('qr push rejects invalid url mode without sending', async () => {
   }
 });
 
+test('qr push photo mode with a one-item photos list stays a single qr.display', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const push = await postJson(base, '/api/qr/push', {
+      mode: 'photo',
+      photos: [{ url: 'https://example.com/qr-images/only.jpg' }],
+    });
+    assert.equal(push.status, 200);
+    assert.equal(push.body.slideshow, undefined);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'qr.display');
+    assert.equal(sent[0].qr.qrType, 'photo');
+    assert.equal(sent[0].qr.content, 'https://example.com/qr-images/only.jpg');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr push photo mode rejects more than 20 queued URLs', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const photos = Array.from({ length: 21 }, (_, i) => (
+      `https://example.com/qr-images/${i}.jpg`
+    ));
+    const push = await postJson(base, '/api/qr/push', { mode: 'photo', photos });
+    assert.equal(push.status, 400);
+    assert.match(String(push.body.error || ''), /20/);
+    assert.equal(sent.length, 0);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('qr push photo mode with several URLs sends photo.slideshow in queue order', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const photos = [
+      { url: 'https://example.com/qr-images/a.jpg', uploadedAt: '2026-01-03T00:00:00.000Z' },
+      { url: 'https://example.com/qr-images/b.jpg', uploadedAt: '2026-01-01T00:00:00.000Z' },
+      { url: 'https://example.com/qr-images/c.jpg', uploadedAt: '2026-01-02T00:00:00.000Z' },
+    ];
+    const push = await postJson(base, '/api/qr/push', { mode: 'photo', photos });
+    assert.equal(push.status, 200);
+    assert.equal(push.body.ok, true);
+    assert.equal(push.body.slideshow, true);
+    assert.equal(push.body.count, 3);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'photo.slideshow');
+    assert.equal(sent[0].trigger, 'qr-photo-queue');
+    assert.deepEqual(sent[0].slideshow.photos.map((p) => p.url), photos.map((p) => p.url));
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('qr push sends a qr.display photo payload for photo mode', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1672,6 +1727,7 @@ test('guest booth is served at / and admin shell redirects without a session', a
     const booth = await request(`${base}/`);
     assert.equal(booth.status, 200);
     assert.match(booth.text, /Share a photo/i);
+    assert.match(booth.text, /id="photo-queue"/);
     assert.match(booth.text, /booth\.js/);
 
     const admin = await request(`${base}/admin/`);
@@ -1791,6 +1847,22 @@ test('guest snaps PIN login unlocks photo upload; request-pin pushes overlay', a
     }, guestCookie);
     assert.equal(upload.status, 200);
 
+    const queued = await postJson(base, '/api/qr/push', {
+      mode: 'photo',
+      photos: [
+        { url: 'https://example.com/qr-images/one.jpg' },
+        { url: 'https://example.com/qr-images/two.jpg' },
+      ],
+    }, guestCookie);
+    assert.equal(queued.status, 200);
+    const slideshow = sent.find((s) => s.payload?.type === 'photo.slideshow');
+    assert.ok(slideshow);
+    assert.equal(slideshow.payload.trigger, 'qr-photo-queue');
+    assert.deepEqual(
+      slideshow.payload.slideshow.photos.map((p) => p.url),
+      ['https://example.com/qr-images/one.jpg', 'https://example.com/qr-images/two.jpg'],
+    );
+
     const reqPin = await postJson(base, '/api/guest/request-pin', {}, null);
     assert.equal(reqPin.status, 200);
     assert.equal(reqPin.body.pin, undefined);
@@ -1823,18 +1895,39 @@ test('guest booth HTML/JS exist at the web root', () => {
   assert.match(js, /\/api\/guest\/request-pin/);
   assert.match(js, /\/api\/qr\/image-upload/);
   assert.match(js, /mode:\s*'photo'/);
+  assert.match(js, /photos,/);
   // Same friendly label fields as the admin picker (not displayName / raw id).
   assert.match(js, /display\.label\s*\|\|\s*display\.name/);
 });
 
 test('guest booth photo picker does not force camera capture', () => {
   // capture=environment opens the camera only on iOS/Android and skips the
-  // camera-roll / Files chooser — contradicts "Take or choose a photo".
+  // camera-roll / Files chooser — contradicts "Take or choose photos".
   const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
   assert.match(html, /id="photo-file"[^>]*type="file"/);
   assert.match(html, /id="photo-file"[^>]*accept="image\/\*"/);
+  assert.match(html, /id="photo-file"[^>]*\bmultiple\b/);
   assert.doesNotMatch(html, /id="photo-file"[^>]*\bcapture\b/);
-  assert.match(html, /Take or choose a photo/);
+  assert.match(html, /Take or choose photos/);
+});
+
+test('guest booth queues photos and pushes a slideshow when more than one is sent', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/booth.js'), 'utf8');
+  assert.match(js, /MAX_QUEUE\s*=\s*20/);
+  assert.match(js, /photoQueue/);
+  assert.match(js, /mode:\s*'photo'/);
+  assert.match(js, /photos,/);
+  assert.match(js, /Add more photos/);
+});
+
+test('admin QR photo picker queues multiple files', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  assert.match(html, /id="qr-image-file"[^>]*accept="image\/\*"/);
+  assert.match(html, /id="qr-image-file"[^>]*\bmultiple\b/);
+  assert.match(js, /qrPhotoQueue/);
+  assert.match(js, /mode:\s*'photo'/);
+  assert.match(js, /photos,/);
 });
 
 test('admin login page and logout control exist', () => {
