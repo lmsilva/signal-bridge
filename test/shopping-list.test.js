@@ -14,6 +14,7 @@ const {
   isValidShoppingItemName,
   isItemCompleted,
 } = require('../src/shopping-list');
+const { buildShoppingListPayload } = require('../src/udp-payload');
 
 test('matchesShoppingListQuery detects show and add phrases', () => {
   assert.equal(matchesShoppingListQuery('show my shopping list'), true);
@@ -70,6 +71,67 @@ test('resolveShoppingList does not merge ASR echo as a second item', () => {
     'alexa add chocolate almonds, add chocolate almonds',
   );
   assert.deepEqual(list.items.map((item) => item.value), ['chocolate almonds']);
+});
+
+test('resolveShoppingList sanitizes a raw ASR-echo addedItem', () => {
+  // Defense in depth: even if extractAddedItem is skipped, merge must not
+  // keep "chocolate almonds, add chocolate almonds" as its own row.
+  const list = resolveShoppingList(
+    { name: 'Shopping List', items: [{ id: '1', value: 'chocolate almonds', createdAt: null }] },
+    "Okay, I've added chocolate almonds to your shopping list",
+    [],
+    'chocolate almonds, add chocolate almonds',
+    'shopping-list-add',
+    'alexa add chocolate almonds, add chocolate almonds',
+  );
+  assert.deepEqual(list.items.map((item) => item.value), ['chocolate almonds']);
+  assert.equal(list.items.some((item) => /,\s*add\s+/i.test(item.value)), false);
+});
+
+test('logged Snack Room add does not produce a duplicated echo row', () => {
+  // From data/voice-events.jsonl 2026-08-15T04:39:54Z
+  const query = 'alexa add chocolate almonds, add chocolate almonds';
+  const spoken = "Okay, I've added chocolate almonds to your shopping list";
+  assert.equal(matchesShoppingListQuery(query, spoken), true);
+  assert.equal(shoppingListTrigger(query, spoken), 'shopping-list-add');
+  const added = extractAddedItem(query, spoken);
+  assert.equal(added, 'chocolate almonds');
+  const list = resolveShoppingList(
+    {
+      name: 'Shopping List',
+      items: [
+        { id: '1', value: 'chocolate almonds', createdAt: '2026-08-15T04:39:56.016Z' },
+        { id: '2', value: 'Eggs', createdAt: '2026-08-14T22:34:27.160Z' },
+      ],
+    },
+    spoken,
+    [],
+    added,
+    'shopping-list-add',
+    query,
+  );
+  assert.deepEqual(
+    list.items.map((item) => item.value),
+    ['chocolate almonds', 'Eggs'],
+  );
+  const payload = buildShoppingListPayload(
+    {
+      device: 'Snack Room Echo',
+      query,
+      spokenResponse: spoken,
+      trigger: 'shopping-list-add',
+      addedItem: added,
+    },
+    { udpBroadcast: { defaultDisplaySeconds: 30 } },
+    { list },
+  );
+  assert.equal(payload.type, 'shopping-list.snapshot');
+  assert.equal(payload.addedItem, 'chocolate almonds');
+  assert.deepEqual(payload.items.map((item) => item.value), ['chocolate almonds', 'Eggs']);
+  assert.equal(
+    payload.items.some((item) => /,\s*add\s+/i.test(item.value)),
+    false,
+  );
 });
 
 test('normalizeItems reads alexa v2 list item fields', () => {
