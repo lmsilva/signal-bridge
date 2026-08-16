@@ -27,6 +27,7 @@ const { fetchDrivingRoute, greatCircleEstimate } = require('./route-fetch');
 const { createEventsLog } = require('./events-log');
 const { createTimerSync } = require('./timer-sync');
 const { createAlarmSync } = require('./alarm-sync');
+const { createReminderSync } = require('./reminder-sync');
 const {
   buildBroadcastPayload,
   buildTimeQueryPayload,
@@ -44,6 +45,7 @@ const {
   buildRoutePlannerPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
+  buildReminderFiredPayload,
   buildGuestPhotoboothPayload,
   buildPhotoSlideshowPayload,
 } = require('./udp-payload');
@@ -250,6 +252,8 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   let authJournal = null;
   let timerSync = null;
   let alarmSync = null;
+  let reminderSync = null;
+  const recentReminderFires = new Map();
   let teslaKeepAlive = null;
   let backgroundCacheRefresh = null;
   let activeSession = null;
@@ -417,6 +421,21 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
       });
       alarmSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
       return;
+    }
+
+    if (voiceEvent?.kind === 'reminder-hint') {
+      voiceQueryParser.markProcessed(activityId);
+      log.info('Reminder voice command detected', {
+        trigger: voiceEvent.trigger,
+        query: voiceEvent.query,
+        device: voiceEvent.device,
+      });
+      reminderSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
+      return;
+    }
+
+    if (voiceEvent?.kind === 'reminder-fired') {
+      reminderSync?.requestImmediatePoll(voiceEvent.trigger, voiceEvent.device);
     }
 
     if (!voiceSettings.enabled) {
@@ -843,6 +862,21 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         pendingVoiceResponses.forget(event.device, 'alexa-notifications');
       }
       payload = buildNotificationsPayload(event, config, { notifications });
+    } else if (event.kind === 'reminder-fired') {
+      payload = buildReminderFiredPayload({
+        reminder: {
+          label: event.reminderLabel || event.query || 'Reminder',
+          device: event.device,
+        },
+        device: event.device,
+        timestamp: event.timestamp,
+        trigger: event.trigger,
+        spokenResponse: event.spokenResponse,
+        event: { kind: 'fired', reminder: { label: event.reminderLabel || event.query, device: event.device } },
+      }, config);
+      if (!noteReminderFire(payload)) {
+        return;
+      }
     } else if (event.kind === 'indoor-temperature') {
       const indoorConfig = config.indoorTemperature || {};
       const location = resolveIndoorQueryLocation(event.query, event.spokenResponse, indoorConfig);
@@ -1415,6 +1449,9 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     if (event.kind === 'alexa-notifications') {
       logMeta.count = payload?.notifications?.items?.length ?? 0;
     }
+    if (event.kind === 'reminder-fired') {
+      logMeta.label = payload?.reminder?.label ?? null;
+    }
     if (event.kind === 'route') {
       logMeta.mode = payload?.mode ?? null;
       logMeta.distanceMiles = payload?.distanceMiles ?? null;
@@ -1454,6 +1491,46 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     log.info(`Timer snapshot sent (${payload.trigger})`, {
       activeTimers: payload.timers.length,
       event: payload.event?.kind,
+    });
+  }
+
+  function noteReminderFire(payload) {
+    const key = [
+      String(payload?.device || '').trim().toLowerCase(),
+      String(payload?.reminder?.label || '').trim().toLowerCase(),
+    ].join('|');
+    const now = Date.now();
+    const previous = recentReminderFires.get(key);
+    if (previous && now - previous < 120000) {
+      return false;
+    }
+    recentReminderFires.set(key, now);
+    if (recentReminderFires.size > 40) {
+      for (const [entryKey, at] of recentReminderFires) {
+        if (now - at > 120000) {
+          recentReminderFires.delete(entryKey);
+        }
+      }
+    }
+    return true;
+  }
+
+  function handleReminderFired(snapshot) {
+    const payload = buildReminderFiredPayload(snapshot, config);
+    if (!noteReminderFire(payload)) {
+      return;
+    }
+    voiceEventsLog.append({
+      type: payload.type,
+      trigger: payload.trigger,
+      label: payload.reminder?.label || null,
+      event: payload.event,
+    });
+    sendUdpPayload(payload);
+    lastCaptureAt = Date.now();
+    log.info(`Reminder fired (${payload.trigger})`, {
+      label: payload.reminder?.label || null,
+      device: payload.device,
     });
   }
 
@@ -1602,6 +1679,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
       voiceEventsEnabled: voiceSettings.enabled,
       activeTimers: timerSync?.listActiveTimers?.().length ?? 0,
       activeAlarms: alarmSync?.listActiveAlarms?.().length ?? 0,
+      activeReminders: reminderSync?.listActiveReminders?.().length ?? 0,
       backgroundCache: backgroundCacheRefresh?.getStatus?.() || null,
     });
 
@@ -1765,6 +1843,9 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     alexa.on('ws-notification-change', (payload) => {
       log.debug('Notification change detected', payload);
       scheduleHistoryPoll('notification-change');
+      timerSync?.requestImmediatePoll('notification-change');
+      alarmSync?.requestImmediatePoll('notification-change');
+      reminderSync?.requestImmediatePoll('notification-change');
     });
 
     alexa.on('command', (command, payload) => {
@@ -1899,6 +1980,15 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
           getDeviceNameMap,
         });
         alarmSync.start();
+
+        reminderSync = createReminderSync({
+          alexa,
+          config,
+          log,
+          onFired: handleReminderFired,
+          getDeviceNameMap,
+        });
+        reminderSync.start();
 
         teslaKeepAlive = createTeslaSessionKeepAlive({
           fleet: config.teslaFleet,

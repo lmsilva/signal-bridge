@@ -3415,6 +3415,84 @@ class AlarmPanel(BasePanel):
         return device
 
 
+class ReminderPanel(BasePanel):
+    """One-shot reminder fire — big label, not a broadcast and not an alarm list."""
+
+    def _screen(self) -> tuple[int, int]:
+        overlay = getattr(self.shell, "overlay", None)
+        w = int(getattr(overlay, "screen_w", 0) or getattr(self.shell, "screen_w", 0) or 1080)
+        h = int(getattr(overlay, "screen_h", 0) or getattr(self.shell, "screen_h", 0) or 1920)
+        return w, h
+
+    def _paint_header(self):
+        from src.page_header import paint_page_header
+        from src.design_system import page_chrome
+
+        sw, sh = self._screen()
+        chrome = page_chrome(sw, sh, timed=True)
+        paint_page_header(
+            self.canvas,
+            screen_w=sw,
+            screen_h=sh,
+            pill="REMINDER",
+            left_label="SOURCE",
+            left_value="Alexa",
+            right_label="NOW",
+            right_value="1",
+            track=self._track,
+            sans_family=self.config.get("titleFontFamily", "Segoe UI"),
+            mono_family="Consolas",
+        )
+        return chrome
+
+    def _render(self, payload: dict):
+        from src.design_system import ALERT, INK, INK_2
+
+        reminder = payload.get("reminder") or {}
+        chrome = self._paint_header()
+        cx = chrome.content_x + chrome.content_w / 2
+        cy = chrome.content_top + (chrome.content_bottom - chrome.content_top) / 2
+        headline = self.reminder_headline(reminder)
+        place = self.reminder_place(reminder)
+        self._track(self.canvas.create_text(
+            cx, cy - 40, anchor="center", text=headline,
+            fill=ALERT, font=self.shell.timer_alert_font,
+            width=int(chrome.content_w),
+        ))
+        if place:
+            self._track(self.canvas.create_text(
+                cx, cy + 48, anchor="center", text=place,
+                fill=INK, font=self.shell.body_font,
+            ))
+        spoken = str(payload.get("spokenResponse") or "").strip()
+        if spoken and spoken.lower() != headline.lower():
+            self._track(self.canvas.create_text(
+                cx, cy + 88, anchor="center", text=spoken,
+                fill=INK_2, font=self.shell.timer_meta_font,
+                width=int(chrome.content_w),
+            ))
+
+    @classmethod
+    def reminder_headline(cls, reminder: dict | None) -> str:
+        label = str((reminder or {}).get("label") or "").strip()
+        return label or "Reminder"
+
+    @classmethod
+    def reminder_place(cls, reminder: dict | None) -> str:
+        device = cls._format_device_name((reminder or {}).get("device"))
+        if device == "Unknown device":
+            return ""
+        return device
+
+    @staticmethod
+    def _format_device_name(device: str | None) -> str:
+        if not device:
+            return "Unknown device"
+        if len(device) >= 12 and device.isalnum() and device.upper() == device:
+            return "Echo device"
+        return device
+
+
 class ShoppingListPanel(BasePanel):
     """Shopping list — large type for short lists; denser grid for 20–30+.
 

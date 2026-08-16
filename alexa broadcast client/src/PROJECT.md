@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-07 (Dismiss rail uses screen width)
+**Last updated:** 2026-08-16 (Reminder fired overlay)
 
 ---
 
@@ -102,6 +102,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `indoor-temperature.query` | Indoor thermostat reading — location label, temp/humidity, cold/comfort/hot icon |
 | `air-quality.query` | Owns chrome — SOURCE/Alexa + AIR QUALITY pill; large score ring + rating; GOOD/FAIR/POOR/SEVERE scale; five metrics (landscape: 1×5 or 3+2 — no empty sixth cell; rooms packed from the top); BY ROOM score bars |
 | `timer.snapshot` | Owns chrome — SOURCE/Alexa + TIMERS pill; count ladder: 1–4 rings; **Mode B (5–9)** hero ring + THEN rows compressed 106–160 tall; **Mode C (10+)** numeric strip + dense 3-col grid (2-col portrait), collapsing timers >1h (and space overflow) into `+N MORE · NEXT AT …`; soonest-first; accent only on next-to-fire (warn/alert under 60s/10s); each timer shows Echo device; unlabelled → `15 MIN` / `1 HR` |
+| `reminder.fired` | Owns chrome — SOURCE/Alexa + REMINDER pill; large label (e.g. “check on the corn”) + Echo name — not a broadcast FROM/TO card |
 | `alarm.snapshot` | Owns chrome — SOURCE/Alexa + ALARMS pill; next alarm as hero (`6:30` / `AM` / device / `IN 8H 49M`) + ALSO SET rows with Echo device + recurrence chips |
 | `shopping-list.snapshot` | Owns chrome — SOURCE/Alexa + SHOPPING LIST pill; top pad under header; density ladder keeps large type for ≤10 items, then pages at `shoppingList.itemsPerPage` (default 10) every `shoppingList.pageSeconds` (default 10); smoke `shopping-list` / `shopping-list-many` |
 | `music.playing` | Large album art + track info — sized from available space (not a fixed cap) so it fills portrait; two-column art-left/text-right layout in landscape; when progress fields are present, shows `Length 3m49s - 1m37s left` with a draining rail that ticks every second and auto-dismisses when remaining hits 0 |
@@ -144,6 +145,7 @@ python test/send_test.py --type air-quality --seconds 45
 python test/send_test.py --type air-quality-poor --seconds 45
 python test/send_test.py --type timers --seconds 45
 python test/send_test.py --type timer-fired --seconds 120
+python test/send_test.py --type reminder-fired --seconds 30
 python test/send_test.py --type alarms --seconds 45
 python test/send_test.py --type alarm-set --seconds 45
 python test/send_test.py --type web-open --url https://example.com
@@ -264,6 +266,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-16: **Reminder fired overlay** — new `ReminderPanel` for UDP `reminder.fired` (owns chrome, REMINDER pill, large label + Echo). Not the broadcast FROM/TO layout. Smoke: `send_test.py --type reminder-fired`. Tests: `test_reminder_panel.py`. Ship: portable client rebuild.
 - 2026-08-07: **Dismiss rail width fix** — footer fill used `canvas.winfo_width()`, which could disagree with the fullscreen geometry and leave the bar looking like a stuck sliver while the countdown text still ticked; rail width now follows `screen_w`, remounts re-apply the current fraction, and `pulse()` flushes idle draws. Ship: portable client rebuild.
 - 2026-08-07: **Broadcast dismiss rail + long FROM names** — dismiss bar contrast raised and fraction driven from deadline/duration (overlay also `pulse()`s each second so a stalled `after` job cannot freeze the rail); FROM/TO/TIME chip values stay on one line (shrink font, else marquee) so names like “Master Bathroom Echo” no longer wrap into the label. Ship: portable client rebuild.
 - 2026-08-06: **Deploy bat works from the NAS UNC share** — double-clicking `dist\Deploy Alexa Broadcast Client.bat` on `\\nas\...` made `cmd` drop to `C:\Windows` (“UNC paths are not supported”) and a silenced `Expand-Archive` could leave `C:\MoviePoster` without `alexa-broadcast-client.exe`. Deploy now `pushd`s the bat folder (drive-letter map), copies the zip beside the bat, extracts with `tar` (same as the build), checks zip size, and prints directory listings on failure. No portable rebuild required — only the deploy bat changed.

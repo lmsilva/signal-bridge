@@ -148,6 +148,48 @@ test('voice query parser detects set alarm for time command', () => {
   assert.equal(event.trigger, 'alarm-set-voice');
 });
 
+test('voice query parser detects reminder set from Alexa TTS-only confirmation', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    '',
+    "I'll remind you to check on the corn in one hour, at 11:46 AM.",
+  ));
+  assert.equal(event?.kind, 'reminder-hint');
+  assert.equal(event?.trigger, 'reminder-set-voice');
+  assert.equal(event?.reminderLabel, 'check on the corn');
+});
+
+test('voice query parser detects remind me in an hour', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('remind me in one hour', 'Okay'));
+  assert.equal(event?.kind, 'reminder-hint');
+  assert.equal(event?.trigger, 'reminder-set-voice');
+});
+
+test('voice query parser does not treat a reminder offer as a set', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    'sure',
+    'Great! What time would you like me to remind you to check on the corn?',
+  ));
+  assert.equal(event, null);
+});
+
+test('voice query parser detects a fired reminder from Alexa TTS', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('', "Here's your reminder to check on the corn."));
+  assert.equal(event?.kind, 'reminder-fired');
+  assert.equal(event?.trigger, 'reminder-fire-voice');
+  assert.equal(event?.reminderLabel, 'check on the corn');
+});
+
+test('voice query parser detects reminder cancel', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity('cancel my reminder', 'Okay'));
+  assert.equal(event?.kind, 'reminder-hint');
+  assert.equal(event?.trigger, 'reminder-cancel-voice');
+});
+
 test('voice query parser routes duration alarm requests to timers', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('set a 5 minute alarm', 'Five minutes starting now'));

@@ -191,6 +191,31 @@ class MainDisplayRoutingTests(unittest.TestCase):
         )
         self.assertTrue(called["advance"])
 
+    def test_slideshow_yields_to_reminder_fired(self):
+        app = BroadcastClientApp.__new__(BroadcastClientApp)
+        app.display_active = True
+        called = {"advance": False}
+        app.overlay = type(
+            "Overlay",
+            (),
+            {
+                "visible": True,
+                "active_display_type": "photo.slideshow",
+                "advance": lambda *a, **k: called.__setitem__("advance", True),
+                "show": lambda *a, **k: None,
+            },
+        )()
+        app._show_payload(
+            {
+                "type": "reminder.fired",
+                "trigger": "fire-verify",
+                "event": {"kind": "fired"},
+                "reminder": {"label": "check on the corn", "device": "Kitchen Echo"},
+            },
+            30,
+        )
+        self.assertTrue(called["advance"])
+
 
 class ConsoleUnicodeTests(unittest.TestCase):
     def test_make_console_streams_unicode_safe_reconfigures_streams(self):

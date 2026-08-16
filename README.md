@@ -16,7 +16,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 
 | Area | What you get |
 |------|----------------|
-| **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
+| **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, reminders, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
 | **Signal (web UI)** | Guest photo booth at `https://<NAS_IP>:47810/` — PIN-gated (6-digit code rotates every 24h; shown on the Guest Snaps display overlay; Request PIN pushes that overlay). Full admin UI at `https://<NAS_IP>:47810/admin/` (password from `ADMIN_PASSWORD` in `.env`) — push Tesla/URL, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth, Slideshow Manager |
 | **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); Signal lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
@@ -34,6 +34,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | **Indoor temperature** | "Alexa, what's the temperature on the top floor?" | `indoor-temperature.query` |
 | **Air quality** | "Alexa, what is the air quality?" | `air-quality.query` |
 | **Timers** | Set, cancel, "show my timers", timer fired | `timer.snapshot` |
+| **Reminders** | "Remind me in an hour" / reminder coming due | `reminder.fired` |
 | **Alarms** | "Alexa, show my alarms" / set / cancel | `alarm.snapshot` |
 | **Shopping list** | "Alexa, show my shopping list" / "add milk to my shopping list" | `shopping-list.snapshot` |
 | **Music** | "Alexa, play …", "what's playing", or "next"/"skip" (music only — not news/briefing) | `music.playing` |

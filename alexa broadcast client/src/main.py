@@ -42,6 +42,7 @@ class BroadcastClientApp:
             "air-quality.query",
             "timer.snapshot",
             "alarm.snapshot",
+            "reminder.fired",
             "shopping-list.snapshot",
             "music.playing",
             "smart-home.command",

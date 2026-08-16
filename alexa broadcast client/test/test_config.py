@@ -19,7 +19,15 @@ class ConfigTests(unittest.TestCase):
         }
         self.assertEqual(effective_display_seconds(payload, config), 120)
 
-    def test_active_timer_list_uses_full_display_seconds(self):
+    def test_fired_reminder_uses_at_least_25_seconds(self):
+        config = {"defaultDisplaySeconds": 20, "maxDisplaySeconds": 120}
+        payload = {
+            "type": "reminder.fired",
+            "displaySeconds": 20,
+            "event": {"kind": "fired"},
+            "reminder": {"label": "check on the corn"},
+        }
+        self.assertEqual(effective_display_seconds(payload, config), 25)
         config = {"defaultDisplaySeconds": 120, "maxDisplaySeconds": 120}
         payload = {
             "type": "timer.snapshot",

@@ -57,6 +57,7 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(resolve_display_type({"type": "air-quality.query"}), "air-quality.query")
         self.assertEqual(resolve_display_type({"type": "timer.snapshot", "timers": []}), "timer.snapshot")
         self.assertEqual(resolve_display_type({"type": "alarm.snapshot", "alarms": []}), "alarm.snapshot")
+        self.assertEqual(resolve_display_type({"type": "reminder.fired"}), "reminder.fired")
         self.assertEqual(resolve_display_type({"type": "tesla-battery.query"}), "tesla-battery.query")
         self.assertEqual(resolve_display_type({"type": "tesla-dashboard.query"}), "tesla-dashboard.query")
         self.assertEqual(resolve_display_type({"type": "vivint-alarm.query"}), "vivint-alarm.query")
@@ -80,6 +81,7 @@ class PayloadUtilsTests(unittest.TestCase):
         self.assertEqual(title_for_display_type("vivint-alarm.query"), ("Alexa", "Security"))
         self.assertEqual(title_for_display_type("alexa-notifications.query"), ("Alexa", "Notifications"))
         self.assertEqual(title_for_display_type("alarm.snapshot"), ("Alexa", "Alarms"))
+        self.assertEqual(title_for_display_type("reminder.fired"), ("Alexa", "Reminder"))
         self.assertRegex(
             format_limit_reset_time("2026-07-08T20:30:00+00:00"),
             r"Try again at",

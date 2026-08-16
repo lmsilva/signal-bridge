@@ -749,6 +749,37 @@ function buildAlarmSnapshotPayload({
   };
 }
 
+function reminderDisplaySeconds(config) {
+  return Math.max(25, displaySeconds(config));
+}
+
+function buildReminderFiredPayload({
+  reminder,
+  device,
+  timestamp,
+  trigger,
+  event,
+  spokenResponse,
+}, config) {
+  const resolved = reminder || event?.reminder || {};
+  return {
+    version: 2,
+    type: 'reminder.fired',
+    device: device || resolved.device || null,
+    timestamp: new Date(timestamp || Date.now()).toISOString(),
+    displaySeconds: reminderDisplaySeconds(config),
+    trigger: trigger || 'reminder-sync',
+    reminder: {
+      amazonId: resolved.amazonId || null,
+      label: resolved.label || 'Reminder',
+      device: resolved.device || device || null,
+      triggerTime: resolved.triggerTime || resolved.fireAt || null,
+    },
+    spokenResponse: spokenResponse || null,
+    event: event || { kind: 'fired', reminder: resolved },
+  };
+}
+
 // Sorts normalized {url, uploadedAt} photos per the Slideshow Manager's
 // persisted order setting. `queued` / `as-is` keeps send order (Guest Snaps
 // and admin Photo QR queues). Ties (equal/missing uploadedAt) keep their
@@ -1765,6 +1796,7 @@ module.exports = {
   buildRoutePlannerPayload,
   buildTimerSnapshotPayload,
   buildAlarmSnapshotPayload,
+  buildReminderFiredPayload,
   buildQrDisplayPayload,
   buildGuestPhotoboothPayload,
   buildSteamNowPlayingPayload,

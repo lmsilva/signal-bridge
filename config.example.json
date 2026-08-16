@@ -84,6 +84,14 @@
     "mirrorFile": "data/alarm-mirror.json",
     "localTimeZone": "America/Denver"
   },
+  "reminderSync": {
+    "enabled": true,
+    "pollIntervalMs": 30000,
+    "nearFirePollIntervalMs": 10000,
+    "nearFireWindowMs": 120000,
+    "fireVerifySlackMs": 30000,
+    "mirrorFile": "data/reminder-mirror.json"
+  },
   "sessionKeepAlive": {
     "enabled": true,
     "pingIntervalMs": 900000,
