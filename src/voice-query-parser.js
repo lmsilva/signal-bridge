@@ -30,6 +30,12 @@ const {
   matchesAlarmSetQuery,
   matchesAlarmCancelQuery,
 } = require('./alexa-alarms');
+const {
+  matchesReminderSetQuery,
+  matchesReminderCancelQuery,
+  matchesReminderFiredSpeech,
+  extractReminderLabel,
+} = require('./alexa-reminders');
 const { parseSmartHomeCommand } = require('./smart-home-command');
 
 const TIME_QUERY_RE = /\b(?:what(?:'s|\s+is|\s+was)?\s+(?:the\s+)?time(?:\s+is\s+it)?|tell\s+me\s+(?:the\s+)?time|do\s+you\s+have\s+(?:the\s+)?time|time\s+please)\b/i;
@@ -444,6 +450,19 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
       };
     }
 
+    if (matchesReminderCancelQuery(matchSummary, response)) {
+      return {
+        kind: 'reminder-hint',
+        activityId,
+        device,
+        timestamp,
+        query: summary || matchSummary || 'cancel reminder',
+        spokenResponse: response || null,
+        reminderLabel: extractReminderLabel(summary || response),
+        trigger: 'reminder-cancel-voice',
+      };
+    }
+
     if (TIMER_CANCEL_RE.test(matchSummary) || TIMER_CANCEL_RESPONSE_RE.test(response)) {
       return {
         kind: 'timer-hint',
@@ -480,6 +499,33 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
         query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'timer-set-voice',
+      };
+    }
+
+    if (matchesReminderSetQuery(matchSummary, response)) {
+      return {
+        kind: 'reminder-hint',
+        activityId,
+        device,
+        timestamp,
+        query: summary || matchSummary || 'set reminder',
+        spokenResponse: response || null,
+        reminderLabel: extractReminderLabel(summary || response),
+        trigger: 'reminder-set-voice',
+      };
+    }
+
+    if (matchesReminderFiredSpeech(matchSummary, response)) {
+      const label = extractReminderLabel(response || matchSummary);
+      return {
+        kind: 'reminder-fired',
+        activityId,
+        device,
+        timestamp,
+        query: label || summary || matchSummary || 'reminder',
+        spokenResponse: response || null,
+        reminderLabel: label,
+        trigger: 'reminder-fire-voice',
       };
     }
 

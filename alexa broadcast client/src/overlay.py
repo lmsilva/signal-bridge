@@ -15,6 +15,7 @@ from src.display_panels import (
     ProcessingPanel,
     GuestPhotoboothPanel,
     QrPanel,
+    ReminderPanel,
     ShoppingListPanel,
     NotificationsPanel,
     PhotoSlideshowPanel,
@@ -138,6 +139,7 @@ class OverlayWindow:
             "air-quality.query": AirQualityPanel(self.root, self.shell, self.config),
             "timer.snapshot": TimerPanel(self.root, self.shell, self.config),
             "alarm.snapshot": AlarmPanel(self.root, self.shell, self.config),
+            "reminder.fired": ReminderPanel(self.root, self.shell, self.config),
             "shopping-list.snapshot": ShoppingListPanel(self.root, self.shell, self.config),
             "music.playing": MusicPanel(self.root, self.shell, self.config),
             "smart-home.command": SmartHomePanel(self.root, self.shell, self.config),
@@ -527,6 +529,7 @@ class OverlayWindow:
             "weather.query",
             "timer.snapshot",
             "alarm.snapshot",
+            "reminder.fired",
             "shopping-list.snapshot",
             "air-quality.query",
         ) or self._is_shared_photo_qr(display_type, payload)

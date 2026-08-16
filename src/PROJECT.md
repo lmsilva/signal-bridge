@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-15 (Scheduler simulate progress)
+**Last updated:** 2026-08-16 (Alexa reminder fired overlay)
 
 ---
 
@@ -77,8 +77,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/command-registry.js` | **Single source of truth for pushable pages.** `COMMANDS[]` descriptors (`id`, `title`, `group`, `route`, `icon`, `body`, `pushable`, `schedulable`, `supportsContentCheck`, `variableDuration`, `defaultDurationSeconds`, `params`); `createCommandRegistry(deps)` binds live state for `hasContent(id)` / `estimateDuration(id, params)`. Served at `GET /api/commands`; the admin Push grid renders from it and the Display Scheduler enumerates rules from it. `assertValid()` rejects duplicate ids and duration contradictions |
 | `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
-| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
-| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/music/route/guest-photobooth/trivia/library-tour/platform-now-playing voice queries from history |
+| `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, reminder, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
+| `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/reminder/music/route/guest-photobooth/trivia/library-tour/platform-now-playing voice queries from history |
 | `src/guest-photobooth.js` | Match "open guest snaps" (dual-QR welcome) + "open guest snaps slideshow" (Shared Photo Slideshow; ASR "slide show" / legacy "slideshow guest snaps") + legacy "guest photobooth"; `photosToSlideshowEntries` builds absolute `/qr-images/…` URLs; resolve Wi‑Fi SSID/password + booth URL from `.env` (`GUEST_WIFI_*`, `GUEST_PHOTOBOOTH_URL`) |
 | `src/guest-snaps-auth.js` | Rotating 24h 6-digit Guest Snaps booth PIN (`data/guest-snaps-pin.json`); `signal_guest` session until PIN expiry; progressive IP lockout; PIN only for UDP overlay / never in phone JSON |
 | `src/route-query.js` | Detect distance/directions voice queries (`matchesRouteQuery` + incomplete-ASR `looksLikeRouteQuery`); extract `{origin, destination}` place names from the query or Alexa's spoken answer (`extractRouteLocations`, incl. incomplete "distance from PLACE" → wait for TTS; `spokenHasRouteAnswer` for orphan miles TTS; dedupe comma-joined ASR + strip query tails from place names) |
@@ -96,7 +96,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/weather-fetch.js` | Open-Meteo geocode + forecast fetch (no API key) |
 | `src/timer-sync.js` | Poll Amazon notifications API; mirror active timers; fire verify |
 | `src/alarm-sync.js` | Poll Amazon notifications API; mirror active wake alarms (`Alarm`/`MusicAlarm`) |
+| `src/reminder-sync.js` | Poll Amazon notifications API; mirror active `Reminder` rows; wake at fire time; UDP `reminder.fired` |
 | `src/alexa-alarms.js` | Detect show/set/cancel wake-alarm voice commands (distinct from Vivint security) |
+| `src/alexa-reminders.js` | Detect reminder set/cancel/fire from ASR + TTS (`I'll remind you to…` / `Here's your reminder`) |
 | `src/tesla-battery.js` | Voice match for "show tesla battery"; speech-parse fallback |
 | `src/tesla-dashboard.js` | Voice match for "show tesla dashboard" |
 | `src/tesla-dashboard-data.js` | Map Fleet `vehicle_data` → dashboard UDP object |
@@ -267,6 +269,7 @@ cd /share/Container/signal-bridge
 5. **On broadcast match:** log → `data/voice-events.jsonl` → UDP `type: broadcast`
 6. **On voice match:** time/weather/indoor/air quality/tesla-battery/shopping/… → UDP + `data/voice-events.jsonl`; timer/alarm voice → immediate sync poll
 7. **Timer sync:** periodic `getNotifications()` diff → UDP `type: timer.snapshot` with full active timer list
+8. **Reminder sync:** same notifications poll for `type: Reminder` → UDP `type: reminder.fired` when one comes due (also matches Alexa TTS “Here's your reminder…”)
 8. **Dedup:** `BroadcastParser` + voice query processed-id set + `bridge-state.json`
 
 ---
@@ -304,6 +307,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `voiceEvents.eventsLogFile` | Default `data/voice-events.jsonl` — all captured events (broadcasts + voice + timers) |
 | `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
 | `alarmSync.*` | Alarm poll/mirror; `localTimeZone` for `originalDate`/`originalTime` (default `America/Denver`) |
+| `reminderSync.*` | Reminder poll/mirror/wake; same `localTimeZone` fallback as alarms |
 | `teslaFleet.*` | Fleet API region, domain, VIN, keep-alive, `minRequestIntervalSec` |
 | `webServer.enabled/port` | Control web page HTTPS port (default enabled, `47810`) |
 | `webServer.https` | `true` (default) — TLS; required for live camera QR on iOS |
@@ -340,6 +344,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `indoor-temperature.query` | Indoor thermostat — "temperature on/at/in \<location\>" or "humidity of \<location\>" |
 | `air-quality.query` | Air quality monitor — IAQ score + sensor metrics (temp, humidity, PM2.5, CO, VOC) |
 | `timer.snapshot` | Timer set/list/change/fire — includes `timers[]` (all active), `event.kind` (`started`, `list`, `fired`) |
+| `reminder.fired` | Alexa reminder coming due — `reminder.{label,device,triggerTime}`; voice TTS *or* `Reminder` notification disappearing near `fireAt`. Not a broadcast (no FROM/TO) and not the notifications inbox |
 | `tesla-battery.query` | "Show tesla battery" — `battery` object from Fleet API or speech fallback |
 | `tesla-dashboard.query` | "Show Tesla dashboard" — `dashboard` object from Fleet API (`vehicle_data` + `location_data`) |
 | `request.processing` | Instant ack for slow external-API commands (Tesla) when **no cache exists** — `request.{title,source,timeoutSeconds,stages[]}`; when a cached snapshot exists the bridge sends it instead, flagged `stale+refreshing`. Either is replaced by the real payload when the fetch completes |
@@ -397,8 +402,8 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (1054 tests)
-run_all_tests.bat           # repo root — bridge + Windows client (1054 + 546)
+npm test                    # bridge only (1069 tests)
+run_all_tests.bat           # repo root — bridge + Windows client (1069 + 552)
 ```
 
 Bridge tests in `test/*.test.js` — includes **YouTube** (`youtube-api` — call counting: a first play is exactly 3 calls and a replay 0, same-channel reuse, stats-only refresh past the 6h TTL, large-channel 30d TTL, 50-id batching, 24h negative cache, degraded-not-thrown failures, image cache + 90-day prune keeping avatars, restart reuse, quota/hit-rate readout; `youtube-lounge` — NDJSON framing across chunks, restart backoff, confirm debounce, ad suppression including the explicit-`ad`-event rule and the wedge guard, `watchedSeconds` from position deltas vs pause/seek, session boundaries, multi-TV ordering, prefetch gating; `youtube-now-playing` — payload shape for playing/last-played/live/missing, display toggles, Shorts suppression, multi-device selection, manual-preview fallbacks, device linking with encrypted tokens, history cap, command registration; `secret-box` — round trip, nonce reuse, tamper detection, env-key override, legacy plaintext), **Display Scheduler** (`display-scheduler`, `display-busy`, `scheduler-api`), **Trivia** (`trivia-providers`, `trivia-pool`, `trivia-payload`), **Steam poller integration** (`steam-now-playing-poller` — mocked `steam-api` tick: gameid open, OwnedGames keep-alive / quit absorb / inference, presence gate, interrupt restore re-push, immediate presence tick, manual last-played preview), **Steam API OwnedGames** (`steam-api-owned` — `rtime_last_played` → ms), **music empty/retry** (`music-empty-and-retry` — `emptyNowPlaying`, `musicQueryRetryOutcome`, companion-weather suppress), **UDP LAN round-trip** (`broadcast-udp` — seal/send/open + encrypted announce + plaintext reject), **voice orchestration** (`voice-orchestration` — Steam suppress rules, smart-home payload, guest-snaps slideshow trigger, `sentAt`≠activity timestamp, multi-ASR activity fields), plus existing: `tesla-fleet`, `tesla-udp-payload`, `tesla-auth-status`, `tesla-battery`/`tesla-battery-cache`, `tesla-dashboard`/`tesla-dashboard-data`/`tesla-dashboard-cache`, voice-event gate/dedup, `pending-voice-responses` (route TTL + cross-device reject), `parser` (legacy fingerprint migration + broadcast ASR dedupe), `web-command-payloads` (progressive route loading/failed), `qr-image-cache`, `route-query`/`route-fetch` (OSRM AbortSignal + 12s timeout), `guest-photobooth`, `guest-snaps-auth` (24h 6-digit booth PIN + lockout), `slideshow-settings`, `lan-crypto`, `web-server`/`web-tls`/`web-admin-auth` (guest booth PIN gate; admin PIN sheet 6 digits; Guest Snaps/admin Photo QR queue — single stays `qr.display`, 2+ is `photo.slideshow` in queued order, max 20), `display-control-auth` (default 6-digit PIN), `display-registry`, `music-info` (Signal preferred skip), `activity-fields` (`customerParts`/`responseParts`).
@@ -510,6 +515,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-16: **Alexa reminders display when they fire** — “remind me in an hour” / TTS “I'll remind you to check on the corn…” was unmatched; the due reminder never reached a display. New `alexa-reminders.js` + `reminder-sync.js` poll Amazon `Reminder` notifications (wake + `ws-notification-change`), and `reminder.fired` shows a dedicated overlay (label + Echo), not the broadcast FROM/TO chips. Deploy: `./recreate.sh` + portable client rebuild. Tests: `test/alexa-reminders.test.js`, `test/reminder-sync.test.js`, `test/voice-query-parser.test.js`.
 - 2026-08-15: **Scheduler “Simulate next 24 hours” shows progress** — the button no longer just greys out during the 200-run forecast. A spinner and rotating status sit under it (forecast / dice rolls / scoring / averaging). Cache-bust `?v=signal54`. Deploy: `./recreate.sh`.
 - 2026-08-15: **Admin Push tab no longer jumps on load** — Tesla / Quick Push tiles come from `GET /api/commands`, so Web Browser + QR Code used to paint first and get shoved down. Rows now paint matching skeleton tiles before that fetch. Cache-bust `?v=signal53`. Deploy: `./recreate.sh`.
 - 2026-08-15: **Admin Photo QR upload uses one progress bar** — sending a queue no longer stacks “Uploading 1 of N…” toasts. A single in-card bar tracks upload then send; only the final success/error toast remains. Cache-bust `?v=signal52`. Deploy: `./recreate.sh`.

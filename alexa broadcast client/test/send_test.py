@@ -372,6 +372,31 @@ def build_payload(args) -> dict:
             },
         }
 
+    if args.type == "reminder-fired":
+        return {
+            "version": 2,
+            "type": "reminder.fired",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": max(display_seconds, 25),
+            "trigger": "test",
+            "reminder": {
+                "amazonId": "rem-1",
+                "label": "check on the corn",
+                "device": args.sender,
+                "triggerTime": _iso_now(),
+            },
+            "spokenResponse": "Here's your reminder to check on the corn.",
+            "event": {
+                "kind": "fired",
+                "reminder": {
+                    "amazonId": "rem-1",
+                    "label": "check on the corn",
+                    "device": args.sender,
+                },
+            },
+        }
+
     if args.type == "alarms":
         now = datetime.now(timezone.utc)
         return {
@@ -1534,7 +1559,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
         default="broadcast",
         help="Payload type to send",
     )

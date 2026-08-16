@@ -22,7 +22,7 @@ function normalizePart(value) {
 // Kinds that flow through the pending-response upgrade path can surface the
 // same command under several activity ids (push event, history record, and the
 // separate response record), so fingerprint them by content instead.
-const CONTENT_FINGERPRINT_KINDS = new Set(['vivint-alarm', 'alexa-notifications']);
+const CONTENT_FINGERPRINT_KINDS = new Set(['vivint-alarm', 'alexa-notifications', 'reminder-fired']);
 
 function voiceEventFingerprint(event) {
   if (!CONTENT_FINGERPRINT_KINDS.has(event?.kind)) {
