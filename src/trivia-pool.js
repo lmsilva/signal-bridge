@@ -234,7 +234,22 @@ function createTriviaPool({
   function categoryTarget(current) {
     const enabled = fetchableCategories(current).length;
     const share = Math.ceil(current.poolTargetSize / Math.max(1, enabled));
-    return Math.max(current.questionsPerSession, share);
+    // A share of 12 (300 ÷ 26 categories) looks "full" after one thin pass,
+    // then 30-day no-repeat burns the pool and the card sits on "Stocking"
+    // with nothing left to fetch. Floor at one OpenTDB page so a category
+    // can actually carry the avoid-repeat window.
+    return Math.max(current.questionsPerSession, FETCH_BATCH_SIZE, share);
+  }
+
+  function eligibleQuestions(current) {
+    return notServedRecently(
+      matching(store.questions, {
+        categoryIds: current.enabledCategoryIds,
+        difficulties: current.enabledDifficulties,
+        types: current.enabledTypes,
+      }),
+      store.servedIds, current.avoidRepeatDays, now(),
+    );
   }
 
   /**
@@ -250,13 +265,22 @@ function createTriviaPool({
     return rotated.sort((a, b) => (counts[a] || 0) - (counts[b] || 0));
   }
 
-  /** True while any enabled category is still short of its share. */
+  /** True while any enabled category is still short of its share, or the
+   *  unplayed remainder has dropped below the low watermark. */
   function needsRefill(current) {
+    if (store.questions.length >= HARD_POOL_CAP) {
+      return false;
+    }
+    const fetchable = fetchableCategories(current, { includeExhausted: false });
+    if (!fetchable.length) {
+      return false;
+    }
     const counts = perCategoryCounts();
     const target = categoryTarget(current);
-    return store.questions.length < HARD_POOL_CAP
-      && fetchableCategories(current, { includeExhausted: false })
-        .some((id) => (counts[id] || 0) < target);
+    if (fetchable.some((id) => (counts[id] || 0) < target)) {
+      return true;
+    }
+    return eligibleQuestions(current).length < current.poolLowWatermark;
   }
 
   function addQuestions(incoming) {
@@ -305,6 +329,10 @@ function createTriviaPool({
       const order = replenishOrder(current);
       const target = categoryTarget(current);
       const counts = perCategoryCounts();
+      // Manual "Fetch more" and a burnt-through no-repeat window both need to
+      // grow past the per-category share, otherwise the pass walks every
+      // category, adds nothing, stamps lastRefillAt, and the card looks done.
+      const grow = force || eligibleQuestions(current).length < current.poolLowWatermark;
       categoryCursor += 1;
       for (const categoryId of order) {
         if (store.questions.length >= HARD_POOL_CAP) {
@@ -314,7 +342,10 @@ function createTriviaPool({
         // succeed: most OpenTDB categories hold fewer than 50 questions at a
         // given difficulty, and over-asking is what it reports as "token empty".
         const deficit = target - (counts[categoryId] || 0);
-        if (deficit <= 0) {
+        const amount = deficit > 0
+          ? Math.min(FETCH_BATCH_SIZE, deficit)
+          : (grow ? FETCH_BATCH_SIZE : 0);
+        if (amount <= 0) {
           continue;
         }
         const difficulty = current.enabledDifficulties[
@@ -324,7 +355,7 @@ function createTriviaPool({
         for (const provider of active) {
           try {
             const questions = await provider.fetchQuestions({
-              amount: Math.min(FETCH_BATCH_SIZE, deficit),
+              amount,
               categoryId,
               difficulty,
             });
@@ -491,14 +522,7 @@ function createTriviaPool({
   function status() {
     const current = settings.get();
     const counts = perCategoryCounts();
-    const eligible = notServedRecently(
-      matching(store.questions, {
-        categoryIds: current.enabledCategoryIds,
-        difficulties: current.enabledDifficulties,
-        types: current.enabledTypes,
-      }),
-      store.servedIds, current.avoidRepeatDays, now(),
-    );
+    const eligible = eligibleQuestions(current);
     // Categories the user enabled that cannot fill a round on their own.
     const starved = current.enabledCategoryIds.filter(
       (id) => (counts[id] || 0) < current.questionsPerSession,

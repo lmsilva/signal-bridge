@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-16 (Alexa reminder fired overlay)
+**Last updated:** 2026-08-19 (Trivia stocking status)
 
 ---
 
@@ -515,6 +515,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-19: **Trivia “Stocking” was a stuck label, not a fetch** — the pill said Stocking whenever fewer than a round’s worth of *unplayed* questions remained (here: 4 of 464, after the 30-day no-repeat window). Per-category aim was `ceil(300/26)=12`, so **Fetch more** walked every topic, added nothing, stamped `lastRefillAt`, and looked finished. Aim is now at least 50 per category (one OpenTDB page); refill also grows when unplayed questions drop below the low watermark; Fetch more actually asks again. Admin copy distinguishes Restocking… / N ready / Stocking / N left. Cache-bust `?v=signal55`. Deploy: `./recreate.sh`. Tests: `test/trivia-pool.test.js`.
+- 2026-08-19: **YouTube last-played no longer ignores the TV** — `youtube.last-played` skipped the Lounge poll and only read `youtube-history.json`, which had not gained a row since 15 Aug, so Signal aired a four-day-old video. Last-played now polls like auto and prefers whatever the Apple TV still reports (even Stopped/paused); Stopped watches past `confirmSeconds` are recorded into history without a live overlay; admin “seen” uses Lounge last video sighting, not last connect. Deploy: `./recreate.sh`. Tests: `test/youtube-lounge.test.js`, `test/youtube-now-playing.test.js`.
 - 2026-08-16: **Alexa reminders display when they fire** — “remind me in an hour” / TTS “I'll remind you to check on the corn…” was unmatched; the due reminder never reached a display. New `alexa-reminders.js` + `reminder-sync.js` poll Amazon `Reminder` notifications (wake + `ws-notification-change`), and `reminder.fired` shows a dedicated overlay (label + Echo), not the broadcast FROM/TO chips. Deploy: `./recreate.sh` + portable client rebuild. Tests: `test/alexa-reminders.test.js`, `test/reminder-sync.test.js`, `test/voice-query-parser.test.js`.
 - 2026-08-15: **Scheduler “Simulate next 24 hours” shows progress** — the button no longer just greys out during the 200-run forecast. A spinner and rotating status sit under it (forecast / dice rolls / scoring / averaging). Cache-bust `?v=signal54`. Deploy: `./recreate.sh`.
 - 2026-08-15: **Admin Push tab no longer jumps on load** — Tesla / Quick Push tiles come from `GET /api/commands`, so Web Browser + QR Code used to paint first and get shoved down. Rows now paint matching skeleton tiles before that fetch. Cache-bust `?v=signal53`. Deploy: `./recreate.sh`.

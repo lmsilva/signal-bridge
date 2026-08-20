@@ -519,6 +519,14 @@ function createYoutubeApi({
       .slice(0, Math.max(1, Number(limit) || 20));
   }
 
+  function cachedVideo(videoId) {
+    const id = String(videoId || '').trim();
+    if (!id) {
+      return null;
+    }
+    return cache.videos?.[id] || null;
+  }
+
   function clear(scope = 'all') {
     if (scope === 'stats') {
       cache.stats = {};
@@ -540,6 +548,7 @@ function createYoutubeApi({
     pruneThumbnails,
     stats: stats0,
     recentVideos,
+    cachedVideo,
     clear,
     flush,
     thumbnailFileFor,

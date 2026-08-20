@@ -167,6 +167,41 @@ function createYoutubeNowPlaying({
     }
   }
 
+  function onObserved(event) {
+    if (!event?.videoId) {
+      return;
+    }
+    const settings = store.getSettings();
+    const durationSeconds = Number(event.durationSeconds) || 0;
+    if (
+      durationSeconds > 0
+      && durationSeconds < SHORT_MAX_SECONDS
+      && settings.showShorts !== true
+    ) {
+      return;
+    }
+    store.recordSession(event);
+    if (event.deviceId && event.endedAt && typeof store.touchLastSeen === 'function') {
+      store.touchLastSeen(event.deviceId, event.endedAt);
+    }
+  }
+
+  function seedHistoryFromPlayback(live) {
+    if (!live?.videoId) {
+      return;
+    }
+    store.recordSession({
+      videoId: live.videoId,
+      deviceId: live.deviceId,
+      startedAt: live.startedAt || new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      watchedSeconds: live.watchedSeconds || 0,
+      positionSeconds: live.positionSeconds || 0,
+      durationSeconds: live.durationSeconds || 0,
+      completed: false,
+    });
+  }
+
   /**
    * Rebuild last-played from the metadata cache when history is empty.
    *
@@ -338,13 +373,24 @@ function createYoutubeNowPlaying({
           scheduleReconnect(row.deviceId, row.error || 'not-connected');
         }
       }
-      return;
-    }
-    if (result?.ok === false && result.error === 'not-connected') {
+    } else if (result?.ok === false && result.error === 'not-connected') {
       for (const device of store.listDevices()) {
         if (device.enabled) {
           scheduleReconnect(device.id, 'not-connected');
         }
+      }
+    }
+    syncDeviceLastSeen();
+  }
+
+  function syncDeviceLastSeen() {
+    if (typeof store.touchLastSeen !== 'function' || typeof lounge.snapshot !== 'function') {
+      return;
+    }
+    const snap = lounge.snapshot();
+    for (const row of snap?.devices || []) {
+      if (row?.deviceId && row.lastSeenAt) {
+        store.touchLastSeen(row.deviceId, row.lastSeenAt);
       }
     }
   }
@@ -490,21 +536,24 @@ function createYoutubeNowPlaying({
     let targetVideoId = videoId;
     let targetDeviceId = deviceId;
 
-    if (!targetVideoId && requestedMode !== 'last-played') {
-      // Apple TV often goes quiet between ticks — ask Lounge for a fresh
-      // now-playing before deciding the TV is idle and falling back to history.
-      if (typeof lounge.pollNowPlaying === 'function') {
-        try {
-          await lounge.pollNowPlaying(deviceId);
-          const settleMs = Number(youtubeConfig.pollSettleMs);
-          await new Promise((resolve) => setTimeout(
-            resolve,
-            Number.isFinite(settleMs) ? Math.max(0, settleMs) : 500,
-          ));
-        } catch (error) {
-          log?.warn?.('YouTube now-playing poll failed', error?.message || error);
-        }
+    // Apple TV often goes quiet between ticks — ask Lounge for a fresh
+    // now-playing before deciding the TV is idle and falling back to history.
+    // Last-played used to skip this poll, so a video still on the TV (Stopped
+    // or paused) was ignored in favour of a days-old history row.
+    if (!targetVideoId && typeof lounge.pollNowPlaying === 'function') {
+      try {
+        await lounge.pollNowPlaying(deviceId);
+        const settleMs = Number(youtubeConfig.pollSettleMs);
+        await new Promise((resolve) => setTimeout(
+          resolve,
+          Number.isFinite(settleMs) ? Math.max(0, settleMs) : 500,
+        ));
+      } catch (error) {
+        log?.warn?.('YouTube now-playing poll failed', error?.message || error);
       }
+    }
+
+    if (!targetVideoId && requestedMode !== 'last-played') {
       // Prefer confirmed Playing, then any current/provisional Lounge video —
       // otherwise the admin button silently airs stale history while the TV
       // is already on something else.
@@ -520,6 +569,20 @@ function createYoutubeNowPlaying({
       }
     }
 
+    if (!targetVideoId && requestedMode === 'last-played') {
+      const live = typeof lounge.currentPlayback === 'function'
+        ? lounge.currentPlayback()
+        : lounge.activeSessions();
+      session = pickSession(live, deviceId)
+        || pickSession(lounge.activeSessions(), deviceId);
+      if (session?.videoId) {
+        seedHistoryFromPlayback(session);
+        targetVideoId = session.videoId;
+        targetDeviceId = session.deviceId || deviceId;
+        mode = 'last-played';
+      }
+    }
+
     if (!targetVideoId) {
       const previous = store.lastPlayed(deviceId);
       if (!previous) {
@@ -529,7 +592,7 @@ function createYoutubeNowPlaying({
       targetVideoId = previous.videoId;
       targetDeviceId = previous.deviceId;
       session = previous;
-    } else if (session?.provisional) {
+    } else if (session?.provisional && requestedMode !== 'last-played') {
       mode = 'playing';
     }
 
@@ -570,6 +633,14 @@ function createYoutubeNowPlaying({
     const sessions = lounge.activeSessions();
     const devices = store.publicDevices();
     const chosen = pickSession(sessions);
+    const loungeSnap = typeof lounge.snapshot === 'function' ? lounge.snapshot() : null;
+    const seenById = new Map(
+      (loungeSnap?.devices || []).map((row) => [row.deviceId, row.lastSeenAt]),
+    );
+    const last = store.lastPlayed();
+    const lastTitle = last && typeof api.cachedVideo === 'function'
+      ? api.cachedVideo(last.videoId)?.title
+      : null;
     return {
       enabled: youtubeConfig.enabled !== false,
       configured: devices.length > 0,
@@ -577,17 +648,20 @@ function createYoutubeNowPlaying({
       apiKeySource: config?.youtube?.apiKeySource || null,
       // The command registry's content check keys off this one boolean.
       playing: Boolean(chosen),
-      hasHistory: Boolean(store.lastPlayed()),
+      hasHistory: Boolean(last),
       videoId: chosen?.videoId || null,
       deviceId: chosen?.deviceId || null,
       deviceLabel: chosen ? deviceLabelFor(chosen.deviceId) : null,
       sessions,
-      devices,
+      devices: devices.map((device) => ({
+        ...device,
+        lastSeenAt: seenById.get(device.id) || device.lastSeenAt,
+      })),
       needsRelink: devices.filter((entry) => entry.status === 'needs-relink').map((e) => e.label),
-      lounge: lounge.snapshot(),
+      lounge: loungeSnap || lounge.snapshot(),
       cache: api.stats(),
       settings: store.getSettings(),
-      lastPlayed: store.lastPlayed(),
+      lastPlayed: last ? { ...last, title: lastTitle || null } : null,
       message: lastError,
     };
   }
@@ -604,6 +678,7 @@ function createYoutubeNowPlaying({
       onStarted(event).catch((error) => log?.warn?.('YouTube start failed', error?.message || error));
     });
     lounge.on('stopped', onStopped);
+    lounge.on('observed', onObserved);
     lounge.on('prefetch', onPrefetch);
     lounge.on('ready', () => {
       clearAllReconnects();
@@ -677,6 +752,7 @@ function createYoutubeNowPlaying({
     // Test seams
     _onStarted: onStarted,
     _onStopped: onStopped,
+    _onObserved: onObserved,
     _recoverHistoryFromCache: recoverHistoryFromCache,
     _scheduleReconnect: scheduleReconnect,
     _keepAlivePoll: keepAlivePoll,
