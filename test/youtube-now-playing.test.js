@@ -103,6 +103,7 @@ function fakeApi(overrides = {}) {
       return true;
     },
     stats: () => ({ videos: 1, channels: 1, quotaUsedToday: 3, quotaLimit: 10000, hasApiKey: true }),
+    cachedVideo: (videoId) => ({ ...VIDEO, videoId }),
     recentVideos: (opts) => (overrides.recentVideos
       ? overrides.recentVideos(opts)
       : []),
@@ -486,6 +487,69 @@ test('a manual push prefers a provisional Lounge video over stale history', asyn
   assert.equal(result.mode, 'playing');
   assert.equal(result.videoId, 'abc');
   assert.equal(sent[0].youtube.mode, 'playing');
+});
+
+test('last-played prefers the TV current video over a days-old history row', async () => {
+  const { service, store, lounge } = makeService();
+  store.recordSession({
+    deviceId: 'tv-1', videoId: 'four-days-ago', watchedSeconds: 300,
+    startedAt: '2026-08-15T04:47:10.599Z', endedAt: '2026-08-15T04:55:31.477Z',
+  });
+  lounge._current.push({
+    deviceId: 'tv-1',
+    videoId: 'watched-today',
+    startedAt: '2026-08-20T01:00:00.000Z',
+    provisional: true,
+    state: 'Stopped',
+    positionSeconds: 120,
+    durationSeconds: 600,
+  });
+
+  const sent = [];
+  const result = await service.pushManualPreview({
+    requestedMode: 'last-played',
+    send: (payload) => sent.push(payload),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'last-played');
+  assert.equal(result.videoId, 'watched-today');
+  assert.equal(store.lastPlayed().videoId, 'watched-today');
+});
+
+test('last-played still uses history when the TV is idle', async () => {
+  const { service, store } = makeService();
+  store.recordSession({
+    deviceId: 'tv-1', videoId: 'yesterday', watchedSeconds: 600,
+    startedAt: '2026-08-01T20:00:00Z', endedAt: '2026-08-01T20:10:00Z',
+  });
+
+  const result = await service.pushManualPreview({
+    requestedMode: 'last-played',
+    send: () => {},
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'last-played');
+  assert.equal(result.videoId, 'yesterday');
+});
+
+test('an observed Stopped watch is recorded without airing a card', () => {
+  const { service, store, lounge, sent } = makeService();
+  service.start();
+
+  lounge.emit('observed', {
+    deviceId: 'tv-1',
+    videoId: 'watched-today',
+    startedAt: '2026-08-20T01:00:00.000Z',
+    endedAt: '2026-08-20T01:10:00.000Z',
+    watchedSeconds: 90,
+    positionSeconds: 120,
+    durationSeconds: 600,
+  });
+
+  assert.deepEqual(sent, []);
+  assert.equal(store.lastPlayed().videoId, 'watched-today');
 });
 
 test('asking for now-playing when nothing is on is an error, not a stale card', async () => {

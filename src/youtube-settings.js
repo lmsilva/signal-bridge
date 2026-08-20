@@ -154,7 +154,7 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
     return listDevices().find((device) => device.id === String(id)) || null;
   }
 
-  function saveDevice(patch) {
+  function saveDevice(patch, { quiet = false } = {}) {
     const devices = rawDevices();
     const index = devices.findIndex((device) => device.id === String(patch.id));
     const existing = index >= 0 ? devices[index] : null;
@@ -170,7 +170,9 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
       devices.push(next);
     }
     devicesFile.write({ devices });
-    log?.info?.(`YouTube device ${index >= 0 ? 'updated' : 'linked'}: ${next.label}`);
+    if (!quiet) {
+      log?.info?.(`YouTube device ${index >= 0 ? 'updated' : 'linked'}: ${next.label}`);
+    }
     return { ...next, authState: undefined };
   }
 
@@ -195,6 +197,27 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
       statusDetail: detail,
       lastSeenAt: status === 'linked' ? new Date().toISOString() : device.lastSeenAt,
     });
+  }
+
+  const LAST_SEEN_TOUCH_MIN_MS = 30 * 1000;
+
+  function touchLastSeen(id, at = null) {
+    const device = rawDevices().find((entry) => entry.id === String(id));
+    if (!device) {
+      return null;
+    }
+    const nextMs = at != null ? Date.parse(at) : Date.now();
+    if (!Number.isFinite(nextMs)) {
+      return device;
+    }
+    const prevMs = Date.parse(device.lastSeenAt || 0);
+    if (Number.isFinite(prevMs) && (nextMs <= prevMs || nextMs - prevMs < LAST_SEEN_TOUCH_MIN_MS)) {
+      return device;
+    }
+    return saveDevice({
+      ...device,
+      lastSeenAt: new Date(nextMs).toISOString(),
+    }, { quiet: true });
   }
 
   // ------------------------------------------------------------- history
@@ -275,6 +298,7 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
     saveDevice,
     removeDevice,
     markDeviceStatus,
+    touchLastSeen,
     history,
     recordSession,
     lastPlayed,

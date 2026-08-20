@@ -39,7 +39,7 @@ function harness({ confirmSeconds = DEFAULT_CONFIRM_SECONDS } = {}) {
   const clock = { t: Date.parse('2026-08-02T20:00:00Z') };
   const children = [];
   const timers = [];
-  const events = { started: [], stopped: [], prefetch: [], progress: [], ready: [], auth: [] };
+  const events = { started: [], stopped: [], observed: [], prefetch: [], progress: [], ready: [], auth: [] };
 
   const lounge = createYoutubeLounge({
     config: {
@@ -537,6 +537,24 @@ test('Apple TV sparse Stopped ticks do not clear provisional before confirm', ()
   h.advance(CONFIRM_RETRY_MS / 1000);
   assert.equal(h.events.started.length, 1);
   assert.equal(h.events.started[0].videoId, 'live-id');
+});
+
+test('Apple TV Stopped watches are observed into history without a live card', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'today-id',
+    position: 40, durationSeconds: 600, state: 'Stopped',
+  });
+  assert.deepEqual(h.events.started, []);
+  assert.deepEqual(h.events.observed, []);
+
+  h.advance(5);
+  assert.deepEqual(h.events.started, [], 'Stopped must not air a now-playing card');
+  assert.equal(h.events.observed.length, 1);
+  assert.equal(h.events.observed[0].videoId, 'today-id');
+  assert.equal(h.events.observed[0].positionSeconds, 40);
 });
 
 test('currentPlayback keeps a Stopped provisional during the stop grace', () => {

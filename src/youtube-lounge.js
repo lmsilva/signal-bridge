@@ -104,6 +104,7 @@ function createYoutubeLounge({
         upNextVideoId: null,
         connected: false,
         lastSeenAt: null,
+        lastObserved: null,
       });
     }
     return devices.get(deviceId);
@@ -150,6 +151,7 @@ function createYoutubeLounge({
     device.confirmTimer = setTimer(() => {
       device.confirmTimer = null;
       confirmIfDue(device);
+      observeIfDue(device);
     }, delay);
     device.confirmTimer?.unref?.();
   }
@@ -488,10 +490,52 @@ function createYoutubeLounge({
     });
   }
 
+  /**
+   * Apple TV often parks in Stopped after a real watch, so confirm never
+   * fires and last-played stays on a days-old history row. After the same
+   * debounce as a live card, record the video into history without airing
+   * a now-playing overlay.
+   */
+  function observeIfDue(device) {
+    if (device.adPlaying || device.active) {
+      return;
+    }
+    const videoId = device.provisional;
+    if (!videoId) {
+      return;
+    }
+    const elapsed = (now() - (device.provisionalSince || now())) / 1000;
+    if (elapsed < confirmSeconds()) {
+      return;
+    }
+    const positionSeconds = Math.max(device.position || 0, device.maxPosition || 0);
+    const durationSeconds = Number(device.durationSeconds) || 0;
+    if (positionSeconds < 1 && durationSeconds < 1) {
+      return;
+    }
+    const last = device.lastObserved;
+    if (last && last.videoId === videoId && (now() - last.at) < 15000) {
+      return;
+    }
+    device.lastObserved = { videoId, at: now() };
+    emitter.emit('observed', {
+      deviceId: device.deviceId,
+      videoId,
+      startedAt: new Date(device.provisionalSince || now()).toISOString(),
+      endedAt: new Date(now()).toISOString(),
+      watchedSeconds: Math.max(0, Math.round(device.watchedSeconds || 0)),
+      positionSeconds: Math.round(positionSeconds),
+      durationSeconds: Math.round(durationSeconds),
+      completed: false,
+    });
+  }
+
   function onNowPlaying(message) {
     const device = deviceState(message.deviceId);
     device.connected = true;
-    device.lastSeenAt = now();
+    if (message.videoId) {
+      device.lastSeenAt = now();
+    }
     clearStopTimer(device);
     if (Number.isFinite(Number(message.durationSeconds)) && Number(message.durationSeconds) > 0) {
       device.durationSeconds = Number(message.durationSeconds);
@@ -533,12 +577,15 @@ function createYoutubeLounge({
     }
     maybeClearStuckAd(device);
     confirmIfDue(device);
+    observeIfDue(device);
   }
 
   function onState(message) {
     const device = deviceState(message.deviceId);
     device.connected = true;
-    device.lastSeenAt = now();
+    if (device.active || device.provisional) {
+      device.lastSeenAt = now();
+    }
     const previousState = device.state;
     device.state = message.state || device.state;
     if (Number.isFinite(Number(message.durationSeconds)) && Number(message.durationSeconds) > 0) {
@@ -550,6 +597,7 @@ function createYoutubeLounge({
     if (device.state === 'Stopped') {
       // Debounce — Apple TV often flickers Stopped between sparse Playing ticks.
       scheduleStop(device, 'stopped');
+      observeIfDue(device);
       return;
     }
     clearStopTimer(device);
@@ -565,6 +613,7 @@ function createYoutubeLounge({
     }
     maybeClearStuckAd(device);
     confirmIfDue(device);
+    observeIfDue(device);
     if (device.provisional && !device.active && PLAYING_STATES.has(device.state)) {
       scheduleConfirm(device);
     }
@@ -576,7 +625,9 @@ function createYoutubeLounge({
   function onAd(message) {
     const device = deviceState(message.deviceId);
     device.connected = true;
-    device.lastSeenAt = now();
+    if (message.playing === true || message.contentVideoId) {
+      device.lastSeenAt = now();
+    }
     device.adPlaying = message.playing === true;
     device.adFromEvent = device.adPlaying;
     const contentVideoId = String(message.contentVideoId || '').trim();
@@ -594,6 +645,7 @@ function createYoutubeLounge({
     }
     if (!device.adPlaying) {
       confirmIfDue(device);
+      observeIfDue(device);
     }
   }
 

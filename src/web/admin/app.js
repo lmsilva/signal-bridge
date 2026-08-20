@@ -4075,20 +4075,39 @@
     const detail = $('trivia-status-detail');
     const size = Number(status?.size || 0);
     const available = Number(status?.available || 0);
-    const target = Number(status?.settings?.poolTargetSize || 0);
+    const perCategory = Number(status?.categoryTarget || 0);
     if (pill) {
       const ready = status?.hasContent;
-      pill.textContent = status?.refilling ? 'Restocking…' : (ready ? `${available} ready` : 'Stocking');
-      pill.className = `status-pill ${ready ? 'ok' : 'warn'}`;
+      const fetching = Boolean(status?.refilling);
+      const restocking = Boolean(status?.restocking);
+      let label;
+      let tone;
+      if (fetching) {
+        label = 'Restocking…';
+        tone = 'warn';
+      } else if (ready) {
+        label = `${available} ready`;
+        tone = 'ok';
+      } else if (restocking) {
+        label = 'Stocking';
+        tone = 'warn';
+      } else {
+        label = available ? `${available} left` : 'Repeats soon';
+        tone = 'warn';
+      }
+      pill.textContent = label;
+      pill.className = `status-pill ${tone === 'ok' ? 'ok' : 'warn'}`;
     }
     if (detail) {
       // `available` excludes recently-served questions, so it is usually lower
       // than the raw cache size — showing both avoids a confusing "3 ready of 300".
-      const bits = [`${available} eligible of ${size} cached (target ${target})`];
-      if (status?.categoryTarget) {
-        bits.push(`${status.categoryTarget} per category`);
+      const bits = [`${available} unplayed of ${size} cached`];
+      if (perCategory) {
+        bits.push(`aim ${perCategory} per category`);
       }
-      if (status?.lastRefillAt) {
+      if (status?.refilling) {
+        bits.push('fetching now');
+      } else if (status?.lastRefillAt) {
         bits.push(`last topped up ${new Date(status.lastRefillAt).toLocaleTimeString()}`);
       }
       if (status?.lastError) {
@@ -4236,11 +4255,15 @@
       try {
         const result = await apiPost('/api/trivia/pool/refill', {});
         renderTriviaStatus(result.status);
-        // The sources allow one call every six seconds, so a pass over every
-        // category runs for minutes. Watch it from here rather than holding the
-        // request open for the whole thing.
-        toast('Restocking — this takes a few minutes', 'ok');
-        watchTriviaRefill();
+        await refreshTriviaCategories();
+        if (result.status?.refilling) {
+          toast('Restocking — this takes a few minutes', 'ok');
+          watchTriviaRefill();
+        } else if (result.status?.restocking) {
+          toast('Fetch queued — the pool will pick it up on the next pass', 'ok');
+        } else {
+          toast('Nothing new to fetch right now (per-category aim already met, or sources are empty)', 'ok');
+        }
       } catch (error) {
         toast(error.message || 'Could not fetch questions', 'bad');
       } finally {

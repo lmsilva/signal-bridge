@@ -9,6 +9,7 @@ const {
   DAY_MS,
   HARD_POOL_CAP,
   EXHAUSTED_TTL_MS,
+  FETCH_BATCH_SIZE,
 } = require('../src/trivia-pool');
 const {
   createTriviaSettings,
@@ -270,6 +271,58 @@ test('refill is a no-op once every category has its share', async () => {
   assert.equal(calls, 0);
 });
 
+test('each category aims for at least one full fetch page', () => {
+  const { pool } = makePool({ settings: { poolTargetSize: 30 } });
+  assert.ok(pool.categoryTarget() >= FETCH_BATCH_SIZE);
+});
+
+test('a full pool still restocks when unplayed questions drop below the watermark', async () => {
+  const asked = [];
+  const provider = {
+    id: 'opentdb',
+    async fetchQuestions({ categoryId, amount }) {
+      asked.push({ categoryId, amount });
+      return Array.from({ length: amount }, () => makeQuestion({ categoryId }));
+    },
+  };
+  const { pool } = makePool({ providers: [provider] });
+  const target = pool.categoryTarget();
+  const servedAt = new Date(0).toISOString();
+  for (const categoryId of ['geography', 'history', 'music']) {
+    pool.addQuestions(Array.from(
+      { length: target },
+      () => makeQuestion({ categoryId, servedAt }),
+    ));
+  }
+
+  assert.equal(pool.status().available, 0);
+  assert.equal(pool.needsRefill(), true);
+  await pool.refill();
+  assert.ok(asked.length > 0, 'watermark miss must fetch even when counts look full');
+});
+
+test('a forced refill still asks when every category is already at its share', async () => {
+  const asked = [];
+  const provider = {
+    id: 'opentdb',
+    async fetchQuestions({ categoryId, amount }) {
+      asked.push({ categoryId, amount });
+      return Array.from({ length: amount }, () => makeQuestion({ categoryId }));
+    },
+  };
+  const { pool } = makePool({ providers: [provider] });
+  const target = pool.categoryTarget();
+  for (const categoryId of ['geography', 'history', 'music']) {
+    pool.addQuestions(Array.from({ length: target }, () => makeQuestion({ categoryId })));
+  }
+
+  assert.equal((await pool.refill()).skipped, 'pool-full');
+  asked.length = 0;
+  const forced = await pool.refill({ force: true });
+  assert.equal(forced.ok, true);
+  assert.ok(asked.length > 0, 'Fetch more must not no-op just because counts hit the share');
+});
+
 test('a pool at its global size but missing categories keeps restocking', async () => {
   /*
    * Regression: "full" used to mean nothing but total question count. Batches
@@ -287,9 +340,10 @@ test('a pool at its global size but missing categories keeps restocking', async 
     },
   };
   const { pool } = makePool({ providers: [provider], settings: { poolTargetSize: 30 } });
-  // Everything the pool holds is one category, and there are already more
-  // questions than the global target.
-  pool.addQuestions(Array.from({ length: 40 }, () => makeQuestion({ categoryId: 'geography' })));
+  const target = pool.categoryTarget();
+  // Everything the pool holds is one category, already at its share, so the
+  // pass should spend its budget on the empty ones.
+  pool.addQuestions(Array.from({ length: target }, () => makeQuestion({ categoryId: 'geography' })));
 
   assert.equal(pool.needsRefill(), true);
   await pool.refill();
