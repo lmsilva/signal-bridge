@@ -1,6 +1,6 @@
 const Alexa = require('alexa-remote2');
 const path = require('path');
-const { BroadcastParser } = require('./parser');
+const { BroadcastParser, historyPollStartMs } = require('./parser');
 const { buildAlexaInitOptions, persistFromAlexa, loadSession } = require('./session');
 const { loadBridgeState, saveBridgeState, fingerprint } = require('./bridge-state');
 const { getActivityId, getDeviceName } = require('./parser');
@@ -1615,9 +1615,10 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     historyPollInFlight = true;
     log.debug(`Polling voice history (${reason})`);
 
-    const historyStart = Math.max(
-      Date.now() - lookbackMs,
-      parser.lastRecordedTimestamp + 1,
+    const historyStart = historyPollStartMs(
+      Date.now(),
+      lookbackMs,
+      parser.lastRecordedTimestamp,
     );
 
     alexa.getCustomerHistoryRecords(

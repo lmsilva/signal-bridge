@@ -160,7 +160,18 @@ function cleanBroadcastMessage(value) {
   if (/^(?:announce(?:ment)?|broadcast(?:ing)?|make an announcement|send an announcement)$/i.test(text)) {
     return null;
   }
+  // Alexa completion TTS sometimes lands in the customer/summary field.
+  // Never display it as the household message.
+  if (isAnnounceCompleteResponse(text)) {
+    return null;
+  }
   return text;
+}
+
+const ANNOUNCE_COMPLETE_RE = /^(?:announc(?:ing|ed) on all devices|sending (?:your )?(?:the )?announcement|i(?:'| a)ll announce that)\.?$/i;
+
+function isAnnounceCompleteResponse(text) {
+  return ANNOUNCE_COMPLETE_RE.test(normalizeText(text));
 }
 
 /**
@@ -243,4 +254,6 @@ module.exports = {
   destinationLooksLikeDevice,
   messageLooksLikeContent,
   splitDestinationAndMessage,
+  isAnnounceCompleteResponse,
+  ANNOUNCE_COMPLETE_RE,
 };
