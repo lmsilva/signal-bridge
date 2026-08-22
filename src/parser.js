@@ -19,6 +19,7 @@ const {
   extractInlineBroadcastMessage,
   isBroadcastCommandOnly,
   cleanBroadcastMessage,
+  isAnnounceCompleteResponse,
 } = require('./broadcast-parse');
 const { extractActivityFields } = require('./activity-fields');
 
@@ -185,8 +186,29 @@ class BroadcastParser {
   parseActivity(activity) {
     const activityId = getActivityId(activity);
     const timestamp = activity?.creationTimestamp || Date.now();
+    const fields = extractActivityFields(activity);
+    // Customer ASR only — never fall back to allText. That string includes
+    // Alexa TTS, so a two-step completion ("Announcing on all devices") was
+    // recorded as the household message and then hid the real follow-up.
+    const summary = fields.summary;
+    const response = fields.response;
+    const customerParts = fields.customerParts || [];
+    const device = getDeviceName(activity);
+    const utteranceType = fields.utteranceType || activity?.data?.utteranceType;
+    const announceComplete = isAnnounceCompleteResponse(response);
 
-    if (timestamp <= this.lastRecordedTimestamp) {
+    const looksLikeBroadcast = Boolean(
+      BROADCAST_VERB_RE.test(summary)
+      || customerParts.some((part) => BROADCAST_VERB_RE.test(part))
+      || isBroadcastPrompt(response)
+      || announceComplete
+      || (this.pendingAnnounceDevice && messageLooksLikeFollowUp(summary, customerParts))
+    );
+
+    // lastRecordedTimestamp is a history-window hint, not a hard gate for
+    // in-flight two-step follow-ups. A later one-shot (or Date.now() stamp)
+    // used to drop earlier announce completions.
+    if (timestamp <= this.lastRecordedTimestamp && !looksLikeBroadcast) {
       this.rememberActivity(activityId);
       return null;
     }
@@ -194,13 +216,6 @@ class BroadcastParser {
     if (!this.rememberActivity(activityId)) {
       return null;
     }
-
-    const fields = extractActivityFields(activity);
-    const summary = fields.summary || fields.allText;
-    const response = fields.response;
-    const customerParts = fields.customerParts || [];
-    const device = getDeviceName(activity);
-    const utteranceType = fields.utteranceType || activity?.data?.utteranceType;
 
     if (!summary && !response && customerParts.length === 0) {
       return null;
@@ -210,21 +225,26 @@ class BroadcastParser {
       return null;
     }
 
-    const pendingFollowUp = Boolean(
+    const pendingFresh = Boolean(
       this.pendingAnnounceDevice
-      && device === this.pendingAnnounceDevice
-      && messageLooksLikeFollowUp(summary, customerParts)
       && timestamp >= this.pendingAnnounceStartedAt - 5000
       && Date.now() - this.pendingAnnounceStartedAt < 120000
+    );
+    // Household arbitration often attributes the spoken message to a
+    // different Echo than the one that asked "what would you like to announce?"
+    const pendingDeviceOk = pendingFresh && (
+      device === this.pendingAnnounceDevice
+      || announceComplete
+    );
+    const pendingFollowUp = Boolean(
+      pendingDeviceOk
+      && messageLooksLikeFollowUp(summary, customerParts)
     );
 
     // Prefer completing a pending two-step announce before treating a
     // comma-joined ", broadcast …" echo as a new broadcast verb utterance.
     if (pendingFollowUp) {
-      const followUp = resolveBroadcastUtterance(summary, customerParts);
-      const message = followUp?.kind === 'follow-up'
-        ? followUp.message
-        : cleanBroadcastMessage(summary);
+      const message = extractFollowUpMessage(summary, customerParts);
       if (!message) {
         return null;
       }
@@ -271,12 +291,40 @@ class BroadcastParser {
       return null;
     }
 
+    // Completed announce whose customer text has no broadcast verb — the
+    // follow-up arrived before the prompt, pending was cleared by a later
+    // one-shot, or arbitration used a different device.
+    if (announceComplete) {
+      const message = extractFollowUpMessage(summary, customerParts);
+      if (message) {
+        return this.recordIfNew({
+          message,
+          destination: this.pendingAnnounceDestination,
+          device,
+          source: 'voice',
+          trigger: this.pendingAnnounceDevice ? 'broadcast-followup' : 'broadcast-complete',
+          timestamp,
+          rawSummary: summary,
+          rawResponse: response,
+          activityId,
+        });
+      }
+    }
+
     if (this.pendingAnnounceDevice && Date.now() - this.pendingAnnounceStartedAt > 120000) {
       this.clearPendingAnnounce();
     }
 
     return null;
   }
+}
+
+function extractFollowUpMessage(summary, customerParts = []) {
+  const followUp = resolveBroadcastUtterance(summary, customerParts);
+  if (followUp?.message && (followUp.kind === 'follow-up' || followUp.kind === 'inline')) {
+    return followUp.message;
+  }
+  return cleanBroadcastMessage(summary);
 }
 
 function messageLooksLikeFollowUp(summary, customerParts = []) {
@@ -298,6 +346,24 @@ function messageLooksLikeFollowUp(summary, customerParts = []) {
   return false;
 }
 
+/**
+ * History fetch start: keep the requested lookback, but never jump forward
+ * to lastRecorded+1. After a newer one-shot, that collapse dropped earlier
+ * two-step follow-ups still inside the lookback window.
+ */
+function historyPollStartMs(
+  now,
+  lookbackMs,
+  lastRecordedTimestamp = 0,
+  overlapMs = DUPLICATE_CONTENT_WINDOW_MS,
+) {
+  const lookbackStart = now - lookbackMs;
+  if (!lastRecordedTimestamp) {
+    return lookbackStart;
+  }
+  return Math.max(lookbackStart, lastRecordedTimestamp - overlapMs);
+}
+
 module.exports = {
   BroadcastParser,
   getActivityId,
@@ -308,4 +374,6 @@ module.exports = {
   parseBroadcastUtterance,
   resolveBroadcastUtterance,
   cleanBroadcastMessage,
+  historyPollStartMs,
+  isAnnounceCompleteResponse,
 };
