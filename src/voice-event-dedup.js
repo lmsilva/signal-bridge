@@ -1,5 +1,7 @@
-const { parseAlarmStatusFromSpeech } = require('./vivint-alarm');const { parseNotificationsFromSpeech } = require('./alexa-notifications');
+const { parseAlarmStatusFromSpeech } = require('./vivint-alarm');
+const { parseNotificationsFromSpeech } = require('./alexa-notifications');
 const { parseShoppingListFromSpeech } = require('./shopping-list');
+const { parseSmartHomeCommand } = require('./smart-home-command');
 
 const DEFAULT_DEDUP_MS = 120000;
 const MAX_ENTRIES = 400;
@@ -24,7 +26,33 @@ function normalizePart(value) {
 // separate response record), so fingerprint them by content instead.
 const CONTENT_FINGERPRINT_KINDS = new Set(['vivint-alarm', 'alexa-notifications', 'reminder-fired']);
 
+function smartHomeContentKey(event) {
+  const command = event?.command || parseSmartHomeCommand(event?.query);
+  if (!command?.action || !command?.target) {
+    return null;
+  }
+  return [
+    'smart-home',
+    normalizePart(event?.device),
+    normalizePart(command.action),
+    normalizePart(command.target),
+  ].join('|');
+}
+
 function voiceEventFingerprint(event) {
+  // Amazon often writes one utterance as two history rows ~30–90s apart:
+  // "alexa lights on, lights on" then a later "lights on" with a new
+  // activity id. Fingerprint by the parsed command so the delayed fragment
+  // cannot replace whatever is already on the display (trivia, photo QR, …).
+  if (event?.kind === 'smart-home') {
+    return smartHomeContentKey(event)
+      || [
+        normalizePart(event?.kind),
+        normalizePart(event?.device),
+        normalizePart(event?.query),
+      ].join('|');
+  }
+
   if (!CONTENT_FINGERPRINT_KINDS.has(event?.kind)) {
     const activityId = normalizePart(event?.activityId);
     if (activityId) {
@@ -202,5 +230,6 @@ module.exports = {
   createVoiceEventDedup,
   voiceEventFingerprint,
   contentSignature,
+  smartHomeContentKey,
   DEFAULT_DEDUP_MS,
 };
