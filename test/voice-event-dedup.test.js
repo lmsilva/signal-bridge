@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createVoiceEventDedup, voiceEventFingerprint } = require('../src/voice-event-dedup');
+const { createVoiceEventDedup, voiceEventFingerprint, smartHomeContentKey } = require('../src/voice-event-dedup');
+const { createVoiceQueryParser } = require('../src/voice-query-parser');
 
 test('voiceEventFingerprint prefers activity id', () => {
   const fp = voiceEventFingerprint({
@@ -226,5 +227,98 @@ test('createVoiceEventDedup suppresses repeat tesla query for same activity id',
   assert.equal(
     dedup.shouldEmit({ ...base, spokenResponse: 'Your battery is 80 percent' }, 2000),
     false,
+  );
+});
+
+test('smart-home wake+repeat and later fragment share a content fingerprint', () => {
+  assert.equal(
+    smartHomeContentKey({
+      kind: 'smart-home',
+      device: 'Snack Room Echo',
+      query: 'alexa lights on, lights on',
+    }),
+    smartHomeContentKey({
+      kind: 'smart-home',
+      device: 'Snack Room Echo',
+      query: 'lights on',
+    }),
+  );
+  assert.equal(
+    voiceEventFingerprint({
+      activityId: 'first-wake-repeat',
+      kind: 'smart-home',
+      device: 'Snack Room Echo',
+      query: 'alexa lights on, lights on',
+    }),
+    voiceEventFingerprint({
+      activityId: 'later-fragment',
+      kind: 'smart-home',
+      device: 'Snack Room Echo',
+      query: 'lights on',
+    }),
+  );
+});
+
+test('delayed smart-home ASR fragment does not re-display after trivia or a photo push', () => {
+  // Logged 2026-08-22: Snack Room "alexa lights on" at 23:48:03, then
+  // "alexa show trivia", then an admin photo push. At 23:49:24 history
+  // produced a second row whose query was only "lights on" (new activity
+  // id) and that overlay replaced the photo. Nobody said lights on again.
+  const dedup = createVoiceEventDedup({ dedupMs: 120000 });
+  const parser = createVoiceQueryParser();
+  const first = parser.parse({
+    creationTimestamp: 1_787_442_483_689,
+    name: 'Snack Room Echo',
+    description: { summary: 'alexa lights on, lights on' },
+    alexaResponse: 'Okay',
+    data: { recordKey: 'snack-lights-on-wake' },
+  });
+  const fragment = parser.parse({
+    creationTimestamp: 1_787_442_564_650,
+    name: 'Snack Room Echo',
+    description: { summary: 'lights on' },
+    alexaResponse: 'Okay',
+    data: { recordKey: 'snack-lights-on-fragment' },
+  });
+  assert.equal(first?.kind, 'smart-home');
+  assert.equal(fragment?.kind, 'smart-home');
+  assert.equal(first.command.action, 'on');
+  assert.equal(first.command.target, 'lights');
+  assert.deepEqual(fragment.command, first.command);
+
+  assert.equal(dedup.shouldEmit(first, 1_787_442_483_689), true);
+  // Trivia / photo push happen in between — they are not smart-home, so
+  // they must not clear this fingerprint.
+  assert.equal(
+    dedup.shouldEmit({
+      activityId: 'trivia-1',
+      kind: 'trivia',
+      device: 'Snack Room Echo',
+      query: 'alexa show trivia',
+      timestamp: 1_787_442_493_054,
+    }, 1_787_442_493_054),
+    true,
+  );
+  assert.equal(dedup.shouldEmit(fragment, 1_787_442_564_650), false);
+
+  // History re-read of the fragment minutes later still suppressed.
+  assert.equal(dedup.shouldEmit(fragment, 1_787_442_564_650 + 5 * 60 * 1000), false);
+
+  // A real later command (lights off, or lights on after the window) shows.
+  const lightsOff = parser.parse({
+    creationTimestamp: 1_787_442_600_000,
+    name: 'Snack Room Echo',
+    description: { summary: 'alexa lights off, lights off' },
+    alexaResponse: 'Okay',
+    data: { recordKey: 'snack-lights-off' },
+  });
+  assert.equal(dedup.shouldEmit(lightsOff, 1_787_442_600_000), true);
+  assert.equal(
+    dedup.shouldEmit({
+      ...first,
+      activityId: 'snack-lights-on-again',
+      timestamp: 1_787_442_483_689 + 3 * 60 * 1000,
+    }, 1_787_442_483_689 + 3 * 60 * 1000),
+    true,
   );
 });
