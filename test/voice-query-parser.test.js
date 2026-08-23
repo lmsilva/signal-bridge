@@ -335,6 +335,32 @@ test('voice query parser detects "what song is playing" as a music query', () =>
   assert.equal(event?.trigger, 'music-query');
 });
 
+test('voice query parser treats TTS-only Amazon Music now-playing as a music query', () => {
+  // Logged 2026-08-23 17:44: "alexa what's playing" had no customer ASR
+  // (NO_TEXT_OR_AUDIO_STORED). Only the spoken answer arrived, so the
+  // overlay never opened.
+  const parser = createVoiceQueryParser();
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Basement Bathroom Echo Flex',
+    description: { summary: '' },
+    alexaResponse: 'Highlife by Cypress Hill is playing on Amazon Music.',
+    data: {
+      recordKey: 'whats-playing-tts-only',
+      utteranceType: 'NO_TEXT_OR_AUDIO_STORED',
+      voiceHistoryRecordItems: [
+        {
+          recordItemType: 'TTS_REPLACEMENT_TEXT',
+          transcriptText: 'Highlife by Cypress Hill is playing on Amazon Music.',
+        },
+      ],
+    },
+  });
+  assert.equal(event?.kind, 'music');
+  assert.equal(event?.trigger, 'music-query');
+  assert.equal(event?.spokenResponse, 'Highlife by Cypress Hill is playing on Amazon Music.');
+});
+
 test('voice query parser detects "which song is playing" and "what is this song"', () => {
   const parser = createVoiceQueryParser();
   const first = parser.parse(activity('which song is playing', 'Bohemian Rhapsody by Queen'));

@@ -13,9 +13,11 @@ const SPOKEN_PLAYING_RE = /\bplaying\b/i;
 const NOW_PLAYING_QUERY_RE = /\b(?:what(?:'s|\s+is)?\s+(?:this\s+)?song(?:\s+is\s+(?:this|playing|on))?|which\s+song\s+is\s+playing|what(?:'s|\s+is)?\s+(?:currently\s+)?playing|who\s+sings?\s+this(?:\s+song)?|name\s+(?:this|that)\s+song|identify\s+(?:this|that)\s+song|tell\s+me\s+what\s+song\s+this\s+is)\b/i;
 
 // When the activity transcript is empty but Alexa already answered with a
-// now-playing line ("Currently playing …", "This is X by Y"), still treat
-// it as a now-playing query so we don't silently drop the display.
-const NOW_PLAYING_ANSWER_RE = /\b(?:currently\s+playing|now\s+playing|you'?re\s+listening\s+to|this\s+is\s+.+\s+by\s+)\b/i;
+// now-playing line. Amazon's "what's playing" TTS is often
+// "Highlife by Cypress Hill is playing on Amazon Music" or
+// "Here's Hits from the Bong by Cypress Hill, on Amazon Music" — not
+// "Currently playing …" / "This is X by Y".
+const NOW_PLAYING_ANSWER_RE = /\b(?:currently\s+playing|now\s+playing|you'?re\s+listening\s+to|this\s+is\s+.+\s+by\s+|here'?s\s+.+\s+by\s+|.+\s+by\s+.+\s+is\s+playing)\b/i;
 
 // Whole-utterance skip/next. Bare "next"/"skip" is shared with news/briefings;
 // explicit "... song/track" phrases are music-intent regardless of provider.
@@ -56,8 +58,10 @@ function matchesNowPlayingQuery(summary, response) {
   // Empty transcript + Alexa already answering with a now-playing line
   // (history sometimes omits description.summary on the first poll).
   const spoken = normalizeQueryText(response);
-  if (!text && spoken && !MUSIC_BLOCKLIST_RE.test(spoken) && NOW_PLAYING_ANSWER_RE.test(spoken)) {
-    return true;
+  if (!text && spoken && !MUSIC_BLOCKLIST_RE.test(spoken)) {
+    if (NOW_PLAYING_ANSWER_RE.test(spoken) || parseSpokenNowPlaying(spoken)) {
+      return true;
+    }
   }
   return false;
 }
@@ -166,6 +170,7 @@ function parseSpokenNowPlaying(spoken, device = null) {
     /\bthis\s+is\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+(.+))?[.!]?$/i,
     /\bplaying\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+(.+))?[.!]?$/i,
     /^(.+?)\s+by\s+(.+?)\s+is\s+playing(?:\s+on\s+(.+))?[.!]?$/i,
+    /\bhere'?s\s+(.+?)\s+by\s+(.+?)(?:\s*,)?(?:\s+on\s+(.+))?[.!]?$/i,
   ];
 
   for (const pattern of patterns) {
