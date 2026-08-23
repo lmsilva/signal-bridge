@@ -270,6 +270,64 @@ const COMMANDS = [
     ],
   },
   {
+    id: 'credits.show',
+    title: 'Roll Credits',
+    subtitle: 'Dashboard + every game beaten',
+    group: 'Games',
+    route: '/api/push/roll-credits',
+    icon: 'credits',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: true,
+    defaultDurationSeconds: null,
+    params: [
+      { key: 'secondsPerGame', label: 'Seconds per game', type: 'number', min: 5, max: 300 },
+      { key: 'gameLimit', label: 'Games to show (0 = all)', type: 'number', min: 0, max: 500 },
+    ],
+  },
+  {
+    id: 'autodarts.now',
+    title: 'Autodarts',
+    subtitle: 'Live match, or the last one',
+    group: 'Autodarts',
+    route: '/api/push/autodarts-now',
+    icon: 'autodarts',
+    body: {},
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 90,
+  },
+  {
+    id: 'autodarts.last-match',
+    title: 'Autodarts — last match',
+    subtitle: 'The most recent finished game',
+    group: 'Autodarts',
+    route: '/api/push/autodarts-last-match',
+    icon: 'autodarts',
+    body: { mode: 'last-match' },
+    pushable: false,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 90,
+  },
+  {
+    id: 'autodarts.dashboard',
+    title: 'Autodarts Dashboard',
+    subtitle: 'Leaderboard, records & charts',
+    group: 'Autodarts',
+    route: '/api/push/autodarts-dashboard',
+    icon: 'autodarts',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 120,
+  },
+  {
     id: 'trivia.show',
     title: 'Trivia',
     subtitle: 'A short round of questions',
@@ -438,7 +496,9 @@ function createCommandRegistry(deps = {}) {
     getSteamLibraryCount = null,
     getPsnLibraryCount = null,
     getLibraryTourSettings = null,
+    getRollCreditsStatus = null,
     getYoutubeStatus = null,
+    getAutodartsStatus = null,
     getTriviaStatus = null,
     getUpsideNewsStatus = null,
     getWikiCommonKnowledgeStatus = null,
@@ -471,6 +531,7 @@ function createCommandRegistry(deps = {}) {
       return Boolean(status?.session && !status.session.suppressed);
     },
     'psn.library-tour': () => Number(call(getPsnLibraryCount) || 0) > 0,
+    'credits.show': () => Number(call(getRollCreditsStatus)?.gameCount || 0) > 0,
     'youtube.now-playing': () => {
       const status = call(getYoutubeStatus);
       return Boolean(status?.playing);
@@ -479,6 +540,12 @@ function createCommandRegistry(deps = {}) {
       const status = call(getYoutubeStatus);
       return Boolean(status?.hasHistory || status?.lastPlayed);
     },
+    'autodarts.now': () => {
+      const status = call(getAutodartsStatus);
+      return Boolean(status?.hasLiveMatch || status?.hasArchive);
+    },
+    'autodarts.last-match': () => Boolean(call(getAutodartsStatus)?.hasArchive),
+    'autodarts.dashboard': () => Boolean(call(getAutodartsStatus)?.hasArchive),
     'trivia.show': (params) => {
       const status = call(getTriviaStatus);
       if (!status) {
@@ -615,6 +682,32 @@ function createCommandRegistry(deps = {}) {
         return null;
       }
       return Math.round(count * seconds);
+    },
+    'credits.show': (params) => {
+      const status = call(getRollCreditsStatus) || {};
+      const display = status.settings?.display || status.display || {};
+      const total = Math.max(0, Number(status.gameCount) || 0);
+      const explicitLimit = Math.max(0, Math.round(Number(params?.gameLimit) || 0));
+      const scheduledLimit = Math.max(0, Math.round(Number(display.scheduledGameLimit) || 0));
+      const walkedCount = Math.min(total, explicitLimit > 0 ? explicitLimit : (scheduledLimit || total));
+      const secondsPerGame = Math.min(300, Math.max(
+        5,
+        Math.round(Number(params?.secondsPerGame ?? display.secondsPerGame) || 12),
+      ));
+      const dashboardSeconds = Math.min(120, Math.max(
+        10,
+        Math.round(Number(display.dashboardSeconds) || 25),
+      ));
+      if (!walkedCount) return null;
+      return dashboardSeconds + walkedCount * secondsPerGame + 4;
+    },
+    'autodarts.last-match': () => {
+      const status = call(getAutodartsStatus) || {};
+      return Number(status.settings?.lastMatch?.displaySeconds) || 90;
+    },
+    'autodarts.dashboard': () => {
+      const status = call(getAutodartsStatus) || {};
+      return Number(status.settings?.dashboard?.displaySeconds) || 120;
     },
   };
 

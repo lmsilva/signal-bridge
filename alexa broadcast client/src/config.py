@@ -134,6 +134,13 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
             return 0
         return max(requested, 1)
 
+    if payload.get("type") == "roll-credits.tour":
+        # Manual tours loop locally; scheduled tours carry the full dashboard
+        # + walked-games duration and must not be clipped by maxDisplaySeconds.
+        if payload.get("persistent") is True:
+            return 0
+        return max(requested, 1)
+
     if payload.get("persistent") is True:
         # Stay until an explicit close or another overlay replaces it.
         return 0

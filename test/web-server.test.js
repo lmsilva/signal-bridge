@@ -150,6 +150,7 @@ async function startTestServer(options = {}) {
     guestSnapsAuth: options.guestSnapsAuth || null,
     trivia: options.trivia || null,
     youtubeNowPlaying: options.youtubeNowPlaying || null,
+    rollCredits: options.rollCredits || null,
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
@@ -1262,11 +1263,11 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   // supplies the rows the renderer fills.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
-  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"/);
+  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts"/);
   assert.match(html, /data-skeleton-count/);
   assert.match(html, /push-card-skeleton/);
   const teslaCount = COMMANDS.filter((c) => c.pushable && c.group === 'Tesla').length;
-  const quickGroups = ['Signal', 'Alexa', 'Trivia', 'News', 'Knowledge', 'Sky', 'Steam', 'PSN', 'YouTube'];
+  const quickGroups = ['Signal', 'Alexa', 'Games', 'Trivia', 'News', 'Knowledge', 'Sky', 'Steam', 'PSN', 'YouTube'];
   const quickCount = COMMANDS.filter((c) => c.pushable && quickGroups.includes(c.group)).length;
   assert.match(html, new RegExp(`id="push-row-tesla"[\\s\\S]*?data-skeleton-count="${teslaCount}"`));
   assert.match(html, new RegExp(`id="push-row-quick"[\\s\\S]*?data-skeleton-count="${quickCount}"`));
@@ -1337,6 +1338,73 @@ test('GET /api/commands returns the registry', async () => {
   } finally {
     await webServer.stop();
   }
+});
+
+test('Roll Credits push creates a public playlist and card', async (t) => {
+  const games = [{
+    id: 'rc_route',
+    title: 'Route Test',
+    system: 'pc',
+    beatenAt: '2026-08-23',
+    induction: 1,
+    media: [{
+      id: 'cover',
+      kind: 'cover',
+      path: 'rc_route/cover.jpg',
+      status: 'ready',
+      hidden: false,
+      order: 0,
+    }],
+  }];
+  const settings = {
+    mediaPriority: ['video', 'screenshot', 'cover'],
+    display: { secondsPerGame: 12, dashboardSeconds: 25, order: 'recent', scheduledGameLimit: 15 },
+    limits: { maxImageBytes: 1024 },
+  };
+  const rollCredits = {
+    store: {
+      getAllGames: () => JSON.parse(JSON.stringify(games)),
+      getSystemById: () => ({ id: 'pc', label: 'PC' }),
+    },
+    media: {
+      routePrefix: '/roll-credits-media/',
+      publicUrl: (value) => `/roll-credits-media/${value}`,
+      absolutePath: () => path.join(os.tmpdir(), 'missing-roll-credits-test-media'),
+    },
+    statusSnapshot: () => ({ gameCount: games.length }),
+    getSettings: () => JSON.parse(JSON.stringify(settings)),
+    getStats: () => ({
+      total: 1, thisYear: 1, systemsCount: 1, latest: JSON.parse(JSON.stringify(games[0])),
+      months: [], bySystem: [{ id: 'pc', label: 'PC', count: 1 }], undatedCount: 0,
+    }),
+    getGame: (id) => JSON.parse(JSON.stringify(games.find((game) => game.id === id) || null)),
+    start: () => {},
+    close: () => {},
+  };
+  const { webServer, base, sent } = await startTestServer({ rollCredits });
+  t.after(() => webServer.stop());
+
+  const pushed = await postJson(base, '/api/push/roll-credits', { secondsPerGame: 15 });
+  assert.equal(pushed.status, 200);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'roll-credits.tour');
+  assert.equal(sent[0].persistent, true);
+
+  const playlist = await getJson(base, sent[0].playlistPath, null);
+  assert.equal(playlist.status, 200);
+  assert.equal(playlist.body.games[0].id, 'rc_route');
+
+  const card = await getJson(base, '/api/roll-credits/card?id=rc_route', null);
+  assert.equal(card.status, 200);
+  assert.equal(card.body.card.title, 'Route Test');
+  assert.equal(card.body.card.media.hero.kind, 'cover');
+  assert.match(card.body.card.media.hero.url, /^https?:\/\//);
+
+  const scheduled = await webServer.airCommand('credits.show', { gameLimit: 1, secondsPerGame: 20 });
+  assert.equal(scheduled.loop, false);
+  assert.equal(scheduled.persistent, false);
+  assert.equal(sent[1].loop, false);
+  assert.equal(sent[1].displaySeconds, 25 + 20 + 4);
 });
 
 test('air-quality and now-playing quick-push tiles feed synthetic events', async () => {
@@ -1956,4 +2024,42 @@ test('admin login page and logout control exist', () => {
   const admin = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(login, /\/api\/admin\/login/);
   assert.match(admin, /id="btn-admin-logout"/);
+});
+
+test('admin app.js parses and tab bar keeps remote/control between push and scheduler', () => {
+  const { Script } = require('node:vm');
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+
+  assert.doesNotThrow(() => new Script(js), 'admin/app.js must parse — a SyntaxError blanks the whole UI');
+
+  const push = html.indexOf('data-tab="push"');
+  const remote = html.indexOf('id="tab-btn-remote"');
+  const control = html.indexOf('id="tab-btn-control"');
+  const scheduler = html.indexOf('data-tab="scheduler"');
+  assert.ok(push >= 0 && remote > push && control > remote && scheduler > control,
+    'tab order must be Push → Remote → Control → Scheduler');
+  assert.match(html, /id="tab-btn-remote"[^>]*\bhidden\b/);
+  assert.match(html, /id="tab-btn-control"[^>]*\bhidden\b/);
+  assert.match(js, /function updateControlTabVisibility/);
+  assert.match(js, /remoteBtn\.hidden\s*=\s*!single/);
+  assert.match(js, /controlBtn\.hidden\s*=\s*!single/);
+});
+
+test('Roll Credits edit media can reorder video across kinds and supports drag-and-drop', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  // Regression: arrows used to no-op when the neighbor was a different kind
+  // (video sitting under screenshots could never move up).
+  assert.doesNotMatch(js, /media\[next\]\.kind\s*!==\s*row\.kind/);
+  assert.match(js, /function moveCreditsMediaRow\(/);
+  assert.match(js, /function syncCreditsPriorityFromMediaList\(/);
+  assert.match(js, /draggable="true"/);
+  assert.match(js, /credits-media-handle/);
+  assert.match(js, /addEventListener\('dragstart'/);
+  assert.match(js, /addEventListener\('drop'/);
+  assert.match(css, /select\.field-input\s*\{/);
+  assert.match(css, /-webkit-appearance:\s*none/);
+  assert.match(css, /\.credits-media-row\.is-drop-target/);
 });

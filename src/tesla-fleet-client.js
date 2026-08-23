@@ -4,7 +4,7 @@ const { fetchJson, parseRateLimitHeaders } = require('./tesla-http');
 const { getValidAccessToken } = require('./tesla-token-refresh');
 const { clampPercent } = require('./tesla-battery');
 const { buildDashboardFromVehicleData, buildDashboardErrorReading } = require('./tesla-dashboard-data');
-const { markTeslaReauthRequired } = require('./tesla-auth-status');
+const { markTeslaReauthRequired, clearTeslaAuthStatus } = require('./tesla-auth-status');
 
 const MODEL_LABELS = {
   modely: 'Model Y',
@@ -313,7 +313,7 @@ async function fetchTeslaBattery(config, log) {
   try {
     ({ accessToken } = await getValidAccessToken(fleet, { log }));
   } catch (error) {
-    if (error?.status === 401) {
+    if (error?.status === 401 || /login_required|refresh_token is invalid|invalid_grant/i.test(error?.message || '')) {
       markTeslaReauthRequired(fleet, { message: error.message, reason: 'token_invalid' });
     }
     return buildErrorReading(error);
@@ -327,35 +327,43 @@ async function fetchTeslaBattery(config, log) {
     vehicleData = await fetchVehicleData(fleet, accessToken, vin);
   } catch (error) {
     if (error.status === 401) {
-      markTeslaReauthRequired(fleet, { message: error.message, reason: 'api_unauthorized' });
-      return buildErrorReading(error);
-    }
-    if (error.status === 429) {
-      return buildErrorReading(error, { limitResetAt: error.limitResetAt });
-    }
-
-    const asleep = error.status === 408 || /asleep|offline/i.test(error.message || '');
-    if (!asleep) {
       try {
-        vehicleData = await fetchVehicleSnapshot(fleet, accessToken, vin);
-        const reading = readingFromVehiclePayload(vehicleData);
-        if (reading.percent != null) {
-          return reading;
-        }
-      } catch {
-        // fall through to wake attempt
+        ({ accessToken } = await getValidAccessToken(fleet, { log, forceRefresh: true }));
+        vehicleData = await fetchVehicleData(fleet, accessToken, vin);
+      } catch (retryError) {
+        markTeslaReauthRequired(fleet, {
+          message: retryError.message || error.message,
+          reason: 'api_unauthorized',
+        });
+        return buildErrorReading(retryError);
       }
-    }
+    } else if (error.status === 429) {
+      return buildErrorReading(error, { limitResetAt: error.limitResetAt });
+    } else {
+      const asleep = error.status === 408 || /asleep|offline/i.test(error.message || '');
+      if (!asleep) {
+        try {
+          vehicleData = await fetchVehicleSnapshot(fleet, accessToken, vin);
+          const reading = readingFromVehiclePayload(vehicleData);
+          if (reading.percent != null) {
+            return reading;
+          }
+        } catch {
+          // fall through to wake attempt
+        }
+      }
 
-    try {
-      await wakeVehicle(fleet, accessToken, vin, log);
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      vehicleData = await fetchVehicleData(fleet, accessToken, vin);
-    } catch (wakeError) {
-      return buildErrorReading(wakeError, { limitResetAt: wakeError.limitResetAt });
+      try {
+        await wakeVehicle(fleet, accessToken, vin, log);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        vehicleData = await fetchVehicleData(fleet, accessToken, vin);
+      } catch (wakeError) {
+        return buildErrorReading(wakeError, { limitResetAt: wakeError.limitResetAt });
+      }
     }
   }
 
+  clearTeslaAuthStatus(fleet);
   return readingFromVehiclePayload(vehicleData);
 }
 
@@ -430,7 +438,7 @@ async function fetchTeslaVehicleData(config, log) {
   try {
     ({ accessToken } = await getValidAccessToken(fleet, { log }));
   } catch (error) {
-    if (error?.status === 401) {
+    if (error?.status === 401 || /login_required|refresh_token is invalid|invalid_grant/i.test(error?.message || '')) {
       markTeslaReauthRequired(fleet, { message: error.message, reason: 'token_invalid' });
     }
     throw error;
@@ -440,11 +448,23 @@ async function fetchTeslaVehicleData(config, log) {
   lastFetchAt = Date.now();
 
   try {
-    return await fetchDashboardVehicleData(fleet, accessToken, vin);
+    const result = await fetchDashboardVehicleData(fleet, accessToken, vin);
+    clearTeslaAuthStatus(fleet);
+    return result;
   } catch (error) {
     if (error.status === 401) {
-      markTeslaReauthRequired(fleet, { message: error.message, reason: 'api_unauthorized' });
-      throw error;
+      try {
+        ({ accessToken } = await getValidAccessToken(fleet, { log, forceRefresh: true }));
+        const result = await fetchDashboardVehicleData(fleet, accessToken, vin);
+        clearTeslaAuthStatus(fleet);
+        return result;
+      } catch (retryError) {
+        markTeslaReauthRequired(fleet, {
+          message: retryError.message || error.message,
+          reason: 'api_unauthorized',
+        });
+        throw retryError;
+      }
     }
     if (error.status === 429) {
       throw error;

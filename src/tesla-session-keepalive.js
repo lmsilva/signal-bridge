@@ -1,5 +1,5 @@
-const { loadTeslaSession, saveTeslaSession, accessTokenExpiresWithin } = require('./tesla-session');
-const { refreshAccessToken } = require('./tesla-token-refresh');
+const { loadTeslaSession, accessTokenExpiresWithin } = require('./tesla-session');
+const { refreshSession, isRefreshTokenRejected } = require('./tesla-token-refresh');
 const {
   clearTeslaAuthStatus,
   markTeslaReauthRequired,
@@ -17,7 +17,6 @@ function createTeslaSessionKeepAlive({ fleet, log, settings: userSettings = {} }
   const settings = { ...DEFAULTS, ...userSettings };
   let pingTimer = null;
   let lastRefreshAt = 0;
-  let refreshInFlight = null;
 
   async function refreshIfNeeded(reason) {
     if (!fleet?.clientId || !fleet?.clientSecret) {
@@ -37,37 +36,25 @@ function createTeslaSessionKeepAlive({ fleet, log, settings: userSettings = {} }
     );
 
     if (!needsExpiryRefresh && !needsProactive) {
+      // Healthy session — don't leave a stale reauth banner up.
+      clearTeslaAuthStatus(fleet);
       return;
     }
 
-    if (refreshInFlight) {
-      return refreshInFlight;
+    try {
+      await refreshSession(fleet, { log, reason });
+      lastRefreshAt = Date.now();
+    } catch (error) {
+      const status = error?.status;
+      const message = error?.message || String(error);
+      log?.warn?.('Tesla token refresh failed', { reason, status, message });
+      if (isRefreshTokenRejected(error)) {
+        markTeslaReauthRequired(fleet, { reason: 'refresh_failed', message });
+      } else {
+        markTeslaReauthRecommended(fleet, { reason: 'refresh_failed', message });
+      }
+      throw error;
     }
-
-    refreshInFlight = refreshAccessToken(fleet, session)
-      .then((updated) => {
-        saveTeslaSession(fleet.sessionPath, updated);
-        clearTeslaAuthStatus(fleet);
-        lastRefreshAt = Date.now();
-        log?.info?.('Tesla token refreshed', { reason });
-        return updated;
-      })
-      .catch((error) => {
-        const status = error?.status;
-        const message = error?.message || String(error);
-        log?.warn?.('Tesla token refresh failed', { reason, status, message });
-        if (status === 401 || /login_required|invalid_grant/i.test(message)) {
-          markTeslaReauthRequired(fleet, { reason: 'refresh_failed', message });
-        } else {
-          markTeslaReauthRecommended(fleet, { reason: 'refresh_failed', message });
-        }
-        throw error;
-      })
-      .finally(() => {
-        refreshInFlight = null;
-      });
-
-    return refreshInFlight;
   }
 
   async function ping(reason = 'scheduled') {
@@ -97,6 +84,10 @@ function createTeslaSessionKeepAlive({ fleet, log, settings: userSettings = {} }
     log?.info?.('Tesla session keep-alive enabled', {
       pingEveryMinutes: Math.round(settings.pingIntervalMs / 60000),
     });
+    // Drop a stale banner if the on-disk session looks usable.
+    if (!accessTokenExpiresWithin(session, settings.refreshWithinMs)) {
+      clearTeslaAuthStatus(fleet);
+    }
     pingTimer = setInterval(() => ping('scheduled'), settings.pingIntervalMs);
     setTimeout(() => ping('startup'), 5000);
   }

@@ -64,6 +64,9 @@ class BroadcastClientApp:
             "wiki-common-knowledge.round",
             "overhead.round",
             "game.library-tour",
+            "roll-credits.tour",
+            "autodarts.dashboard",
+            "autodarts.match",
         }
     )
 
@@ -215,6 +218,9 @@ class BroadcastClientApp:
                 self.overlay.apply_overhead_update(payload)
         elif command_type == "overhead.close":
             if self.overlay and self.overlay.active_display_type == "overhead.round":
+                self.overlay.dismiss_immediately()
+        elif command_type == "autodarts.match.close":
+            if self.overlay and self.overlay.active_display_type == "autodarts.match":
                 self.overlay.dismiss_immediately()
         elif command_type == "system.command":
             self._run_system_command((payload.get("system") or {}).get("action"))

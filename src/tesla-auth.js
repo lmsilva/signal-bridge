@@ -256,6 +256,12 @@ async function saveTokensFromCode(fleet, code, log) {
   const existing = loadTeslaSession(fleet.sessionPath) || {};
   const session = sessionFromTokenResponse(tokenData, existing);
   saveTeslaSession(fleet.sessionPath, session);
+  try {
+    const { clearTeslaAuthStatus } = require('./tesla-auth-status');
+    clearTeslaAuthStatus(fleet);
+  } catch {
+    // optional
+  }
 
   log.info(`Tesla session saved to ${fleet.sessionPath}`);
   if (!session.refreshToken) {

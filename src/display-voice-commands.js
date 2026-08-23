@@ -32,6 +32,10 @@ const PSN_NOW_PLAYING_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(
 
 const YOUTUBE_NOW_PLAYING_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(?:the\s+)?)?youtube\s+(?:now\s+playing|last\s+played)\b/i;
 
+// "show darts", "show autodarts", "darts dashboard"
+const AUTODARTS_DASHBOARD_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(?:the\s+)?)?(?:auto\s*)?darts\s+dashboard\b/i;
+const AUTODARTS_NOW_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(?:the\s+)?)?(?:auto\s*)?darts(?:\s+(?:now|match|live))?\b/i;
+
 function textMatches(re, summary, response) {
   const text = normalizeText(summary);
   const spoken = normalizeText(response);
@@ -68,6 +72,17 @@ function matchesYoutubeNowPlayingQuery(summary, response) {
   return textMatches(YOUTUBE_NOW_PLAYING_RE, summary, response);
 }
 
+function matchesAutodartsDashboardQuery(summary, response) {
+  return textMatches(AUTODARTS_DASHBOARD_RE, summary, response);
+}
+
+function matchesAutodartsNowQuery(summary, response) {
+  if (matchesAutodartsDashboardQuery(summary, response)) {
+    return false;
+  }
+  return textMatches(AUTODARTS_NOW_RE, summary, response);
+}
+
 /** Classify a routine name / utterance into a voice kind, or null. */
 function classifyDisplayVoicePhrase(phrase) {
   const text = normalizeText(phrase);
@@ -92,6 +107,12 @@ function classifyDisplayVoicePhrase(phrase) {
   if (matchesYoutubeNowPlayingQuery(text, '')) {
     return 'youtube-now-playing';
   }
+  if (matchesAutodartsDashboardQuery(text, '')) {
+    return 'autodarts-dashboard';
+  }
+  if (matchesAutodartsNowQuery(text, '')) {
+    return 'autodarts-now';
+  }
   return null;
 }
 
@@ -103,5 +124,7 @@ module.exports = {
   matchesSteamNowPlayingQuery,
   matchesPsnNowPlayingQuery,
   matchesYoutubeNowPlayingQuery,
+  matchesAutodartsDashboardQuery,
+  matchesAutodartsNowQuery,
   classifyDisplayVoicePhrase,
 };

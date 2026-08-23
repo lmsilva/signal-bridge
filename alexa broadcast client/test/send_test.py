@@ -977,6 +977,201 @@ def build_payload(args) -> dict:
             "slideshow": {"photos": photos, "secondsPerPhoto": seconds_per_photo},
         }
 
+    if args.type == "roll-credits":
+        now = datetime.now(timezone.utc)
+        months = []
+        for offset, count in enumerate([1, 2, 0, 3, 2, 4, 1, 5, 2, 3, 4, 6]):
+            date = now - timedelta(days=(11 - offset) * 30)
+            months.append({"key": date.strftime("%Y-%m"), "label": date.strftime("%b"), "count": count})
+        return {
+            "version": 2,
+            "type": "roll-credits.tour",
+            "timestamp": _iso_now(),
+            "displaySeconds": 40,
+            "persistent": False,
+            "tourId": "smoke-dashboard",
+            "count": 132,
+            "walkedCount": 0,
+            "loop": False,
+            "secondsPerGame": 12,
+            "dashboardSeconds": 35,
+            "order": "recent",
+            "playlistPath": "",
+            "cardBaseUrl": "",
+            "stats": {
+                "total": 132,
+                "thisYear": 41,
+                "systemsCount": 14,
+                "undatedCount": 3,
+                "latest": {
+                    "id": "rc_smoke",
+                    "title": "It Takes Two",
+                    "system": "ps5",
+                    "systemLabel": "PlayStation 5",
+                    "beatenAt": now.strftime("%Y-%m-%d"),
+                    "beatenWith": "Dan",
+                    "induction": 132,
+                    "media": {
+                        "hero": {
+                            "kind": "cover",
+                            "url": "https://picsum.photos/seed/roll-credits/800/1100",
+                        },
+                        "screenshots": [],
+                    },
+                },
+                "months": months,
+                "bySystem": [
+                    {"label": "PS5", "count": 34},
+                    {"label": "SNES", "count": 22},
+                    {"label": "PC", "count": 17},
+                    {"label": "PS2", "count": 13},
+                ],
+            },
+        }
+
+    if args.type == "autodarts-dashboard":
+        now = datetime.now(timezone.utc)
+        months = []
+        for offset, count in enumerate([2, 4, 1, 6, 3, 5, 2, 8, 4, 3, 7, 9]):
+            date = now - timedelta(days=(11 - offset) * 30)
+            months.append({"key": date.strftime("%Y-%m"), "label": date.strftime("%b"), "count": count})
+        return {
+            "version": 2,
+            "type": "autodarts.dashboard",
+            "timestamp": _iso_now(),
+            "displaySeconds": args.seconds or 120,
+            "persistent": False,
+            "totals": {
+                "matches": 412,
+                "legs": 1204,
+                "thisMonth": 18,
+                "lastPlayedAt": (now - timedelta(days=2)).isoformat().replace("+00:00", "Z"),
+                "lastPlayedLabel": "2d",
+            },
+            "leaderboard": [
+                {
+                    "rank": 1, "crown": True, "name": "TRASHPANDA",
+                    "wins": 23, "losses": 14, "winPct": 62.2,
+                    "x01Average": 25.0, "bestCheckout": 48, "oneEighties": 0, "matches": 37,
+                },
+                {
+                    "rank": 2, "crown": False, "name": "WAR D",
+                    "wins": 14, "losses": 23, "winPct": 37.8,
+                    "x01Average": 20.9, "bestCheckout": 40, "oneEighties": 0, "matches": 37,
+                },
+                {
+                    "rank": 3, "crown": False, "name": "KYLIE",
+                    "wins": 3, "losses": 2, "winPct": 60.0,
+                    "x01Average": 18.4, "bestCheckout": 32, "oneEighties": 0, "matches": 5,
+                },
+                {
+                    "rank": 4, "crown": False, "name": "TOMMY",
+                    "wins": 1, "losses": 4, "winPct": 20.0,
+                    "x01Average": 15.1, "bestCheckout": 20, "oneEighties": 0, "matches": 5,
+                },
+            ],
+            "moreCount": 3,
+            "byMonth": months,
+            "rivalry": {
+                "a": "TRASHPANDA", "b": "WAR D", "aWins": 23, "bWins": 14,
+                "lastWinner": "TRASHPANDA",
+                "lastPlayedAt": (now - timedelta(days=5)).isoformat().replace("+00:00", "Z"),
+            },
+            "records": {
+                "bestMatchAverage": {"value": 36.3, "player": "TRASHPANDA"},
+                "highestCheckout": {"value": 48, "player": "TRASHPANDA"},
+                "total180s": 0,
+            },
+            "recent": [],
+        }
+
+    if args.type in ("autodarts-match", "autodarts-final"):
+        finished = args.type == "autodarts-final"
+        # Calibrated T20 in treble-20: mid-treble radius ≈ 0.6055 at top (x≈0, y≈-0.6055)
+        t20_x, t20_y = 0.0, -((0.582 + 0.629) / 2)
+        payload = {
+            "version": 2,
+            "type": "autodarts.match",
+            "timestamp": _iso_now(),
+            "displaySeconds": 0 if not finished else (args.seconds or 60),
+            "persistent": not finished,
+            "match": {
+                "matchId": "smoke-match-1",
+                "revision": 41,
+                "status": "finished" if finished else "live",
+                "variant": "X01",
+                "settingsLine": "501 · SI-DO · First to 2 legs",
+                "startedAt": _iso_now(),
+                "durationSec": 412 if not finished else 638,
+                "currentPlayerIndex": 0,
+                "turn": {
+                    "points": 65,
+                    "busted": False,
+                    "darts": [
+                        {"seg": "T20", "x": t20_x, "y": t20_y, "type": "normal"},
+                        {"seg": "5", "x": -0.55, "y": 0.42, "type": "normal"},
+                        None,
+                    ],
+                },
+                "prevTurn": {
+                    "playerIndex": 1,
+                    "points": 41,
+                    "darts": [
+                        {"seg": "20", "x": 0.03, "y": -0.71, "type": "normal"},
+                        {"seg": "1", "x": 0.28, "y": -0.66, "type": "normal"},
+                        {"seg": "M", "x": 1.24, "y": 0.31, "type": "normal"},
+                    ],
+                },
+                "players": [
+                    {
+                        "name": "TRASHPANDA", "score": 261 if not finished else 2,
+                        "legs": 1 if not finished else 2, "sets": 0,
+                        "average": 25.03, "lastTurnPoints": 85,
+                        "isWinner": finished,
+                    },
+                    {
+                        "name": "WAR D", "score": 356 if not finished else 0,
+                        "legs": 0, "sets": 0,
+                        "average": 20.89, "lastTurnPoints": 41,
+                        "isWinner": False,
+                    },
+                ],
+                "gameShot": "D8" if finished else None,
+                "hitMap": {
+                    "players": [
+                        {
+                            "name": "TRASHPANDA",
+                            "darts": [
+                                {"seg": "T20", "x": t20_x, "y": t20_y, "type": "normal"},
+                                {"seg": "20", "x": 0.05, "y": -0.75, "type": "normal"},
+                                {"seg": "D16", "x": 0.55, "y": 0.78, "type": "normal"},
+                            ],
+                        },
+                        {
+                            "name": "WAR D",
+                            "darts": [
+                                {"seg": "19", "x": -0.2, "y": 0.7, "type": "normal"},
+                                {"seg": "5", "x": -0.6, "y": 0.4, "type": "normal"},
+                            ],
+                        },
+                    ],
+                } if finished else None,
+            },
+        }
+        if finished:
+            payload["match"]["turn"] = {"points": 0, "busted": False, "darts": [None, None, None]}
+            payload["match"]["prevTurn"] = None
+        return payload
+
+    if args.type == "autodarts-match-close":
+        return {
+            "version": 2,
+            "type": "autodarts.match.close",
+            "timestamp": _iso_now(),
+            "matchId": "smoke-match-1",
+            "reason": "test",
+        }
+
     if args.type == "steam-now-playing":
         started = datetime.now(timezone.utc) - timedelta(minutes=74)
         return {
@@ -1559,7 +1754,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "roll-credits", "autodarts-dashboard", "autodarts-match", "autodarts-final", "autodarts-match-close", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
         default="broadcast",
         help="Payload type to send",
     )

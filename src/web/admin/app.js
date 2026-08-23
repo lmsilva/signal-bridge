@@ -424,6 +424,14 @@
     window.scrollTo(0, 0);
     document.scrollingElement?.scrollTo?.(0, 0);
     updateControlLockUi();
+    if (tabId === 'credits') {
+      initCreditsUi();
+      startCreditsEvents();
+      loadCredits();
+    } else if (tabId === 'settings') {
+      initCreditsUi();
+      loadCreditsSettings();
+    }
   }
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -694,6 +702,8 @@
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
     steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
     psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
+    credits: '<path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4M12 13v4M8 20h8M9 17h6"/>',
+    autodarts: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>',
   };
 
   function pushIconSvg(icon) {
@@ -3958,6 +3968,459 @@
     loadOverheadSettings();
   }
 
+  // ---------------------------------------- Settings → Autodarts
+
+  let autodartsSaveTimer = null;
+  let autodartsPollTimer = null;
+  let autodartsLinkMode = 'device';
+  let autodartsBusy = false;
+
+  function setAutodartsSlider(sliderId, labelId, value, suffix) {
+    const slider = $(sliderId);
+    const label = $(labelId);
+    if (!slider) return;
+    slider.value = String(value);
+    if (label) label.textContent = `${value}${suffix || ''}`;
+  }
+
+  function readAutodartsForm() {
+    const inactivityBtn = document.querySelector('#autodarts-inactivity-tabs .segmented-btn.active');
+    return {
+      live: {
+        autoPush: Boolean($('autodarts-auto-push')?.checked),
+        inactivityMinutes: Number(inactivityBtn?.dataset.minutes || 15),
+        finalHoldSeconds: Number($('autodarts-final-hold')?.value || 60),
+      },
+      dashboard: {
+        leaderboardSize: Number($('autodarts-leaderboard-size')?.value || 8),
+        displaySeconds: Number($('autodarts-dashboard-seconds')?.value || 120),
+      },
+      lastMatch: {
+        displaySeconds: Number($('autodarts-last-match-seconds')?.value || 90),
+      },
+    };
+  }
+
+  async function saveAutodartsSettings() {
+    try {
+      const result = await apiPost('/api/autodarts/settings', readAutodartsForm());
+      if (result.settings) renderAutodartsSettings(result.settings);
+    } catch (error) {
+      toast(error.message || 'Could not save Autodarts settings', 'bad');
+    }
+  }
+
+  function queueAutodartsSave() {
+    clearTimeout(autodartsSaveTimer);
+    autodartsSaveTimer = setTimeout(saveAutodartsSettings, 400);
+  }
+
+  function renderAutodartsSettings(settings) {
+    if (!settings) return;
+    const live = settings.live || {};
+    const dashboard = settings.dashboard || {};
+    const lastMatch = settings.lastMatch || {};
+    if ($('autodarts-auto-push')) $('autodarts-auto-push').checked = live.autoPush !== false;
+    document.querySelectorAll('#autodarts-inactivity-tabs .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', Number(btn.dataset.minutes) === Number(live.inactivityMinutes || 15));
+    });
+    setAutodartsSlider('autodarts-final-hold', 'autodarts-final-hold-value', live.finalHoldSeconds || 60, 's');
+    setAutodartsSlider('autodarts-leaderboard-size', 'autodarts-leaderboard-size-value', dashboard.leaderboardSize || 8, '');
+    setAutodartsSlider('autodarts-dashboard-seconds', 'autodarts-dashboard-seconds-value', dashboard.displaySeconds || 120, 's');
+    setAutodartsSlider('autodarts-last-match-seconds', 'autodarts-last-match-seconds-value', lastMatch.displaySeconds || 90, 's');
+  }
+
+  function renderAutodartsBoards(boards, selectedId) {
+    const select = $('autodarts-board');
+    if (!select) return;
+    const rows = Array.isArray(boards) ? boards : [];
+    if (!rows.length) {
+      select.innerHTML = '<option value="">No boards found</option>';
+      return;
+    }
+    const selected = String(selectedId || '');
+    const placeholder = selected
+      ? ''
+      : '<option value="" selected disabled>Select a board…</option>';
+    select.innerHTML = placeholder + rows.map((board) => (
+      `<option value="${escapeHtml(board.id)}"${board.id === selected ? ' selected' : ''}>`
+      + `${escapeHtml(board.name || board.id)}`
+      + `${board.online === true ? ' · online' : (board.online === false ? ' · offline' : '')}`
+      + `</option>`
+    )).join('');
+  }
+
+  async function ensureAutodartsBoardSelection(boards, status) {
+    const rows = Array.isArray(boards) ? boards : [];
+    if (!rows.length || status?.boardId) return status;
+    // One board: persist it. Multiple: leave the placeholder so the UI does not
+    // look selected when nothing is saved (Test was saying "no board selected").
+    if (rows.length !== 1) return status;
+    const only = rows[0];
+    try {
+      const saved = await apiPost('/api/autodarts/board', {
+        boardId: only.id,
+        boardName: only.name || only.id,
+      });
+      if (saved?.ok) {
+        return { ...status, boardId: only.id, boardName: only.name || only.id, ...saved };
+      }
+    } catch {
+      // leave placeholder
+    }
+    return status;
+  }
+
+  function renderAutodartsOauth(oauth) {
+    if (!oauth) return;
+    const idInput = $('autodarts-client-id');
+    const secretInput = $('autodarts-client-secret');
+    const hint = $('autodarts-oauth-hint');
+    if (idInput && !idInput.dataset.dirty) {
+      const rawId = oauth.clientId || oauth.defaultClientId || 'darts-caller';
+      idInput.value = rawId === 'developer-darts-caller' ? 'darts-caller' : rawId;
+      idInput.readOnly = Boolean(oauth.envBlocksOverwrite);
+    }
+    if (secretInput) {
+      secretInput.readOnly = Boolean(oauth.envBlocksOverwrite);
+      if (!secretInput.dataset.dirty) {
+        secretInput.value = '';
+        secretInput.placeholder = oauth.hasClientSecret ? '•••••••• (saved)' : 'Optional';
+      }
+    }
+    if (hint) {
+      const id = oauth.clientId || 'darts-caller';
+      if (oauth.envBlocksOverwrite) {
+        hint.textContent = 'Client id/secret come from .env and cannot be changed here.';
+      } else if (oauth.hasClientSecret) {
+        hint.textContent = `Override active (${id}, secret saved via ${oauth.source}). Leave secret blank to keep it.`;
+      } else if (id === 'darts-caller') {
+        hint.textContent = 'Using built-in darts-caller — no override needed to link.';
+      } else {
+        hint.textContent = `Using client ${id}.`;
+      }
+    }
+  }
+
+  function applyAutodartsLinkMode(mode) {
+    autodartsLinkMode = mode === 'password' ? 'password' : 'device';
+    document.querySelectorAll('#autodarts-mode-tabs .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.mode === autodartsLinkMode);
+    });
+    const deviceMode = $('autodarts-device-mode');
+    const passwordMode = $('autodarts-password-block');
+    if (deviceMode) deviceMode.hidden = autodartsLinkMode !== 'device';
+    if (passwordMode) passwordMode.hidden = autodartsLinkMode !== 'password';
+  }
+
+  function renderAutodartsStatus(status) {
+    const pill = $('autodarts-status-pill');
+    const detail = $('autodarts-status-detail');
+    const linked = Boolean(status.linked);
+    const needsRelink = Boolean(status.needsRelink);
+    if (pill) {
+      pill.textContent = needsRelink ? 'Re-link needed' : (linked ? 'Linked' : 'Not linked');
+      pill.className = `status-pill${needsRelink ? ' bad' : (linked ? ' good' : '')}`;
+    }
+    if (detail) {
+      if (needsRelink) {
+        detail.textContent = status.unavailableReason || 'Re-link Autodarts in Settings';
+      } else if (linked) {
+        detail.textContent = `Linked as ${status.userName || status.userId || 'account'}`
+          + (status.boardName ? ` · board ${status.boardName}` : '');
+      } else {
+        detail.textContent = 'Pick device link or email & password below to connect your account.';
+      }
+    }
+
+    renderAutodartsOauth(status.oauth);
+
+    const modeTabs = $('autodarts-mode-tabs');
+    const linkedActions = $('autodarts-linked-actions');
+    const deviceBlock = $('autodarts-device-block');
+    const linkBtn = $('btn-autodarts-link');
+
+    if (linked) {
+      if (modeTabs) modeTabs.hidden = true;
+      if ($('autodarts-device-mode')) $('autodarts-device-mode').hidden = true;
+      if ($('autodarts-password-block')) $('autodarts-password-block').hidden = true;
+      if (linkedActions) linkedActions.hidden = false;
+    } else {
+      if (modeTabs) modeTabs.hidden = false;
+      if (linkedActions) linkedActions.hidden = true;
+      if (status.deviceLinkPending) {
+        autodartsLinkMode = 'device';
+        applyAutodartsLinkMode('device');
+        if (deviceBlock) deviceBlock.hidden = false;
+        if (linkBtn) linkBtn.hidden = true;
+      } else {
+        applyAutodartsLinkMode(autodartsLinkMode);
+        if (deviceBlock) deviceBlock.hidden = true;
+        if (linkBtn) linkBtn.hidden = false;
+      }
+    }
+
+    if (status.deviceUserCode && $('autodarts-device-code')) {
+      $('autodarts-device-code').textContent = String(status.deviceUserCode).replace(/(.{3})/g, '$1 ').trim();
+    }
+    if (status.deviceVerificationUri && $('autodarts-device-open')) {
+      $('autodarts-device-open').href = status.deviceVerificationUri;
+    }
+
+    const archive = status.archive || {};
+    const archiveHint = $('autodarts-archive-hint');
+    if (archiveHint) {
+      const note = archive.note || (archive.enabled === false
+        ? 'Archive builds from live matches until the history list endpoint is confirmed'
+        : '');
+      archiveHint.textContent = `${archive.count || 0} matches archived`
+        + (archive.lastSyncAt ? ` · last sync ${archive.lastSyncAt}` : '')
+        + (note ? ` — ${note}` : '');
+    }
+    const syncBtn = $('btn-autodarts-sync');
+    if (syncBtn) {
+      const syncReady = archive.enabled === true;
+      syncBtn.disabled = !syncReady;
+      syncBtn.title = syncReady
+        ? 'Pull past matches from Autodarts'
+        : 'Backfill stays off until Autodarts publishes a confirmed history-list API — live matches still archive automatically';
+    }
+    const boardStatus = $('autodarts-board-status');
+    if (boardStatus) {
+      const online = status.live?.boardOnline;
+      boardStatus.textContent = status.boardId
+        ? `Board status: ${status.boardName || status.boardId} · ${online === true ? 'online' : (online === false ? 'offline' : 'status unknown')}`
+        : 'Board status: not saved — pick a board in the list';
+    }
+    renderAutodartsSettings(status.settings);
+  }
+
+  async function loadAutodartsSettings() {
+    const card = $('autodarts-settings-card');
+    if (!card) return;
+    try {
+      let status = await apiGet('/api/autodarts/status');
+      renderAutodartsStatus(status);
+      try {
+        const boards = await apiGet('/api/autodarts/boards');
+        if (boards.ok) {
+          status = await ensureAutodartsBoardSelection(boards.boards, status);
+          renderAutodartsBoards(boards.boards, status.boardId);
+          renderAutodartsStatus(status);
+        }
+      } catch {
+        // boards need a linked account
+      }
+      if (status.deviceLinkPending) {
+        clearTimeout(autodartsPollTimer);
+        autodartsPollTimer = setTimeout(loadAutodartsSettings, 3000);
+      }
+    } catch (error) {
+      card.hidden = true;
+    }
+  }
+
+  function setAutodartsBusy(button, busy, busyLabel) {
+    autodartsBusy = busy;
+    if (!button) return;
+    if (busy) {
+      button.dataset.label = button.textContent;
+      button.disabled = true;
+      button.textContent = busyLabel || 'Working…';
+    } else {
+      button.disabled = false;
+      if (button.dataset.label) button.textContent = button.dataset.label;
+    }
+  }
+
+  const autodartsCard = $('autodarts-settings-card');
+  if (autodartsCard) {
+    autodartsCard.addEventListener('change', (event) => {
+      if (event.target.matches('#autodarts-client-id, #autodarts-client-secret, #autodarts-email, #autodarts-password')) {
+        return;
+      }
+      if (event.target.matches('input, select')) queueAutodartsSave();
+    });
+    autodartsCard.addEventListener('input', (event) => {
+      if (event.target.id === 'autodarts-client-id' || event.target.id === 'autodarts-client-secret') {
+        event.target.dataset.dirty = '1';
+        return;
+      }
+      if (event.target.matches('input[type="range"]')) {
+        const id = event.target.id;
+        const map = {
+          'autodarts-final-hold': ['autodarts-final-hold-value', 's'],
+          'autodarts-leaderboard-size': ['autodarts-leaderboard-size-value', ''],
+          'autodarts-dashboard-seconds': ['autodarts-dashboard-seconds-value', 's'],
+          'autodarts-last-match-seconds': ['autodarts-last-match-seconds-value', 's'],
+        };
+        const entry = map[id];
+        if (entry) setAutodartsSlider(id, entry[0], event.target.value, entry[1]);
+        queueAutodartsSave();
+      }
+    });
+    $('autodarts-inactivity-tabs')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('.segmented-btn');
+      if (!btn) return;
+      document.querySelectorAll('#autodarts-inactivity-tabs .segmented-btn')
+        .forEach((node) => node.classList.toggle('active', node === btn));
+      queueAutodartsSave();
+    });
+    $('autodarts-mode-tabs')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('.segmented-btn');
+      if (!btn || autodartsBusy) return;
+      applyAutodartsLinkMode(btn.dataset.mode);
+    });
+    $('btn-autodarts-oauth-save')?.addEventListener('click', async () => {
+      const button = $('btn-autodarts-oauth-save');
+      setAutodartsBusy(button, true, 'Saving…');
+      toast('Saving OAuth client…', '');
+      try {
+        const body = {
+          clientId: $('autodarts-client-id')?.value,
+          clientSecret: $('autodarts-client-secret')?.value,
+        };
+        const result = await apiPost('/api/autodarts/oauth', body);
+        if (!result.ok) {
+          toast(result.error || 'Could not save client', 'bad');
+          return;
+        }
+        if ($('autodarts-client-secret')) {
+          $('autodarts-client-secret').value = '';
+          delete $('autodarts-client-secret').dataset.dirty;
+        }
+        if ($('autodarts-client-id')) delete $('autodarts-client-id').dataset.dirty;
+        toast('OAuth client saved', 'good');
+        await loadAutodartsSettings();
+      } catch (error) {
+        toast(error.message || 'Could not save client', 'bad');
+      } finally {
+        setAutodartsBusy(button, false);
+      }
+    });
+    $('btn-autodarts-link')?.addEventListener('click', async () => {
+      const button = $('btn-autodarts-link');
+      setAutodartsBusy(button, true, 'Starting…');
+      toast('Starting device link…', '');
+      try {
+        const result = await apiPost('/api/autodarts/link/device', {});
+        if (!result.ok) {
+          toast(result.error || 'Device link unavailable', 'bad');
+          return;
+        }
+        if (result.linked) {
+          toast('Autodarts linked', 'good');
+        } else {
+          toast('Approve the code on auth.autodarts.com', 'good');
+        }
+        await loadAutodartsSettings();
+      } catch (error) {
+        toast(error.message || 'Could not start Autodarts link', 'bad');
+      } finally {
+        setAutodartsBusy(button, false);
+      }
+    });
+    $('btn-autodarts-device-cancel')?.addEventListener('click', async () => {
+      try {
+        await apiPost('/api/autodarts/link/cancel', {});
+      } catch {
+        // ignore
+      }
+      await loadAutodartsSettings();
+      toast('Device link cancelled', 'warn');
+    });
+    $('btn-autodarts-password')?.addEventListener('click', async () => {
+      const button = $('btn-autodarts-password');
+      setAutodartsBusy(button, true, 'Signing in…');
+      toast('Signing in to Autodarts…', '');
+      try {
+        const result = await apiPost('/api/autodarts/link/password', {
+          email: $('autodarts-email')?.value,
+          password: $('autodarts-password')?.value,
+        });
+        if (!result.ok) {
+          toast(result.error || 'Login failed', 'bad');
+          return;
+        }
+        if ($('autodarts-password')) $('autodarts-password').value = '';
+        toast('Autodarts linked', 'good');
+        await loadAutodartsSettings();
+      } catch (error) {
+        toast(error.message || 'Login failed', 'bad');
+      } finally {
+        setAutodartsBusy(button, false);
+      }
+    });
+    $('btn-autodarts-relink')?.addEventListener('click', async () => {
+      applyAutodartsLinkMode('device');
+      if ($('autodarts-mode-tabs')) $('autodarts-mode-tabs').hidden = false;
+      if ($('autodarts-linked-actions')) $('autodarts-linked-actions').hidden = true;
+      if ($('autodarts-device-mode')) $('autodarts-device-mode').hidden = false;
+      $('btn-autodarts-link')?.click();
+    });
+    $('btn-autodarts-unlink')?.addEventListener('click', async () => {
+      try {
+        const result = await apiPost('/api/autodarts/unlink', {});
+        if (!result.ok) {
+          toast(result.error || 'Could not unlink', 'bad');
+          return;
+        }
+        toast('Autodarts unlinked', 'good');
+        await loadAutodartsSettings();
+      } catch (error) {
+        toast(error.message || 'Could not unlink', 'bad');
+      }
+    });
+    $('autodarts-board')?.addEventListener('change', async () => {
+      const select = $('autodarts-board');
+      const option = select?.selectedOptions?.[0];
+      try {
+        await apiPost('/api/autodarts/board', {
+          boardId: select.value,
+          boardName: option?.textContent?.split(' · ')[0] || select.value,
+        });
+        toast('Board saved', 'good');
+        await loadAutodartsSettings();
+      } catch (error) {
+        toast(error.message || 'Could not save board', 'bad');
+      }
+    });
+    $('btn-autodarts-test')?.addEventListener('click', async () => {
+      const button = $('btn-autodarts-test');
+      setAutodartsBusy(button, true, 'Testing…');
+      toast('Testing Autodarts…', '');
+      try {
+        const result = await apiPost('/api/autodarts/test', {});
+        $('autodarts-test-result').textContent = result.message || (result.ok ? 'ok' : 'failed');
+        toast(result.message || (result.ok ? 'Autodarts ok' : 'Test failed'), result.ok ? 'good' : 'bad');
+      } catch (error) {
+        toast(error.message || 'Test failed', 'bad');
+      } finally {
+        setAutodartsBusy(button, false);
+      }
+    });
+    $('btn-autodarts-sync')?.addEventListener('click', async () => {
+      const button = $('btn-autodarts-sync');
+      if (button?.disabled) {
+        toast('History backfill is not available yet — live matches still archive on their own', 'warn');
+        return;
+      }
+      try {
+        const result = await apiPost('/api/autodarts/sync', {});
+        if (result.skipped) {
+          toast(result.error || 'History sync is not available yet', 'warn');
+        } else {
+          toast(result.error || result.note || (result.ok ? 'Sync started' : 'Sync unavailable'), result.ok ? 'good' : 'warn');
+        }
+        await loadAutodartsSettings();
+      } catch (error) {
+        toast(error.message || 'Sync failed', 'bad');
+      }
+    });
+    applyAutodartsLinkMode('device');
+    loadAutodartsSettings();
+  }
+
   // ------------------------------------------- Settings → Trivia
 
   const TRIVIA_PROVIDER_LABELS = {
@@ -5167,6 +5630,1342 @@
 
     refreshKeyboard();
   })();
+
+  // ------------------------------------------------------------- Roll Credits
+
+  const CREDITS_ROUTE = '/api/roll-credits';
+  const CREDITS_VIEW_KEY = 'rollCredits.view';
+  const CREDITS_DENSITY_KEY = 'rollCredits.density';
+  const CREDITS_PRIORITY_LABELS = {
+    video: 'Video',
+    screenshot: 'Screenshots',
+    cover: 'Cover',
+  };
+  let creditsReady = false;
+  let creditsLoading = false;
+  let creditsView = localStorage.getItem(CREDITS_VIEW_KEY) === 'list' ? 'list' : 'grid';
+  let creditsDensity = (() => {
+    const saved = Number(localStorage.getItem(CREDITS_DENSITY_KEY));
+    if (Number.isFinite(saved) && saved >= 2 && saved <= 6) return Math.round(saved);
+    return creditsDefaultDensity();
+  })();
+  let creditsSystems = [];
+  let creditsUsedSystems = [];
+  let creditsSystemLabels = new Map();
+  let creditsGames = [];
+  let creditsTotal = 0;
+  let creditsPages = 0;
+  let creditsPage = 1;
+  let creditsSort = 'induction';
+  let creditsDir = 'desc';
+  let creditsSelecting = false;
+  let creditsSelected = new Set();
+  let creditsSelectedSystems = new Set();
+  let creditsEvents = null;
+  let creditsSearchTimer = null;
+  let creditsEditGame = null;
+  let creditsEditDirty = false;
+  let creditsDifficulty = null;
+  let creditsGlobalPriority = ['video', 'screenshot', 'cover'];
+  let creditsGamePriority = ['video', 'screenshot', 'cover'];
+  let creditsCandidate = null;
+  let creditsAddBeatenAt = '';
+  let creditsPendingDelete = null;
+  let creditsRescrapeIds = [];
+  let creditsSettingsLoaded = false;
+  let creditsResizeTimer = null;
+  let creditsMediaDragIndex = null;
+  let creditsFiltersOpen = false;
+  let creditsKnownYears = [];
+
+  function creditsViewportWidth() {
+    return Math.max(320, Number(window.innerWidth) || 390);
+  }
+
+  function creditsMaxColumns() {
+    const width = creditsViewportWidth();
+    if (width < 480) return 2;
+    if (width < 640) return 3;
+    if (width < 900) return 4;
+    return 6;
+  }
+
+  function creditsDefaultDensity() {
+    return creditsViewportWidth() < 640 ? 2 : 3;
+  }
+
+  function creditsGridColumns() {
+    return Math.max(2, Math.min(creditsDensity, creditsMaxColumns()));
+  }
+
+  function syncCreditsZoomControls() {
+    const slider = $('credits-zoom');
+    if (!slider) return;
+    const max = creditsMaxColumns();
+    slider.max = String(max);
+    slider.min = '2';
+    slider.value = String(creditsGridColumns());
+  }
+
+  function creditsToday() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
+  function creditsIsDateOnly(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+  }
+
+  function creditsReadBeatenFields(dateInputId, naInputId) {
+    if ($(naInputId)?.checked) {
+      return { beatenAt: null, beatenDateUnknown: true };
+    }
+    const raw = String($(dateInputId)?.value || '').trim();
+    if (!creditsIsDateOnly(raw)) {
+      return { error: 'Pick a beaten-on date, or choose NA — don\'t remember.' };
+    }
+    return { beatenAt: raw, beatenDateUnknown: false };
+  }
+
+  function revealCreditsAddFields() {
+    $('credits-add-fields').hidden = false;
+    // Hidden `<input type="date">` values are unreliable on iOS — re-apply after show.
+    if (!$('credits-add-date-na').checked) {
+      const preferred = creditsIsDateOnly(creditsAddBeatenAt)
+        ? creditsAddBeatenAt
+        : (creditsIsDateOnly($('credits-add-date').value) ? $('credits-add-date').value : creditsToday());
+      creditsAddBeatenAt = preferred;
+      $('credits-add-date').value = preferred;
+      $('credits-add-date').disabled = false;
+    }
+  }
+
+  function creditsSystemLabel(id) {
+    const key = String(id || '').toLowerCase();
+    return creditsSystemLabels.get(key)
+      || creditsUsedSystems.find((system) => system.id === key)?.label
+      || String(id || 'Other');
+  }
+
+  function creditsPanelFilterCount() {
+    let count = creditsSelectedSystems.size;
+    if ($('credits-year')?.value) count += 1;
+    if ($('credits-no-date')?.checked) count += 1;
+    return count;
+  }
+
+  function creditsHasActiveFilters() {
+    return creditsPanelFilterCount() > 0 || Boolean($('credits-q')?.value.trim());
+  }
+
+  function syncCreditsFiltersChrome() {
+    const count = creditsPanelFilterCount();
+    const badge = $('credits-filters-badge');
+    const clear = $('btn-credits-clear-filters');
+    const toggle = $('btn-credits-filters-toggle');
+    const panel = $('credits-filters-panel');
+    const shell = $('credits-filters-shell');
+    if (badge) {
+      badge.hidden = count === 0;
+      badge.textContent = count ? String(count) : '';
+      badge.title = count
+        ? `${count} active filter${count === 1 ? '' : 's'}`
+        : '';
+    }
+    if (clear) clear.hidden = count === 0;
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', creditsFiltersOpen ? 'true' : 'false');
+      toggle.classList.toggle('is-open', creditsFiltersOpen);
+      toggle.classList.toggle('has-active', count > 0);
+    }
+    if (panel) panel.hidden = !creditsFiltersOpen;
+    if (shell) shell.classList.toggle('has-active', count > 0);
+  }
+
+  function clearCreditsPanelFilters() {
+    creditsSelectedSystems.clear();
+    if ($('credits-year')) $('credits-year').value = '';
+    if ($('credits-no-date')) $('credits-no-date').checked = false;
+    syncCreditsFiltersChrome();
+    renderCreditsSystemFilters();
+    creditsPage = 1;
+    loadCredits();
+  }
+
+  function creditsDate(value, long = false) {
+    if (!value) return 'date unknown';
+    const [year, month, day] = String(value).split('-').map(Number);
+    if (!year || !month || !day) return 'date unknown';
+    return new Intl.DateTimeFormat('en-US', long
+      ? { month: 'short', day: 'numeric', year: 'numeric' }
+      : { month: 'short', day: 'numeric' }).format(new Date(year, month - 1, day));
+  }
+
+  function creditsMediaUrl(path) {
+    if (!path) return '';
+    const value = String(path);
+    if (/^https?:\/\//i.test(value) || value.startsWith('/roll-credits-media/')) return value;
+    return `/roll-credits-media/${value.replace(/^\/+/, '')}`;
+  }
+
+  function creditsYoutubeId(url) {
+    const text = String(url || '').trim();
+    if (!text) return '';
+    const match = text.match(
+      /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/i,
+    );
+    return match ? match[1] : '';
+  }
+
+  function creditsYoutubeThumbUrl(url) {
+    const id = creditsYoutubeId(url);
+    return id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : '';
+  }
+
+  function creditsMediaThumbHtml(row) {
+    const stored = creditsMediaUrl(row.thumbPath || (row.kind !== 'video' ? row.path : ''));
+    if (stored) {
+      return `<img class="credits-media-thumb" src="${escapeHtml(stored)}" alt="">`;
+    }
+    if (row.kind === 'video') {
+      const youtubeThumb = creditsYoutubeThumbUrl(row.youtubeUrl);
+      if (youtubeThumb) {
+        return `<span class="credits-media-thumb credits-media-thumb-video has-preview"><img src="${escapeHtml(youtubeThumb)}" alt="" loading="lazy"><span class="credits-media-play" aria-hidden="true"></span></span>`;
+      }
+      return `<span class="credits-media-thumb credits-media-thumb-video" title="Video" role="img" aria-label="Video"><span class="credits-media-play" aria-hidden="true"></span></span>`;
+    }
+    return '<span class="credits-media-thumb" aria-hidden="true"></span>';
+  }
+
+  function creditsInitials(title) {
+    return String(title || '?').split(/\s+/).filter(Boolean).slice(0, 2)
+      .map((word) => word[0]).join('').toUpperCase();
+  }
+
+  function creditsThumb(game) {
+    const ready = (game.media || []).filter((row) => row.status === 'ready' && !row.hidden);
+    const row = ready.find((item) => item.kind === 'cover')
+      || ready.find((item) => item.kind === 'screenshot');
+    return creditsMediaUrl(row?.thumbPath || row?.path);
+  }
+
+  function creditsMediaState(game) {
+    const media = game.media || [];
+    if (media.some((row) => row.status === 'failed')) return 'failed';
+    if (media.some((row) => row.status === 'pending')) return 'pending';
+    return '';
+  }
+
+  function creditsListQuery(pageSize, page = creditsPage) {
+    const params = new URLSearchParams({
+      sort: creditsSort,
+      dir: creditsDir,
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    const query = $('credits-q')?.value.trim();
+    const year = $('credits-year')?.value;
+    if (query) params.set('q', query);
+    if (year) params.set('yearBeaten', year);
+    if ($('credits-no-date')?.checked) params.set('noDate', 'true');
+    if (creditsSelectedSystems.size === 1) {
+      params.set('system', [...creditsSelectedSystems][0]);
+    }
+    return params;
+  }
+
+  function creditsSetError(error) {
+    $('credits-error-copy').textContent = error?.message || 'Try refreshing.';
+    $('credits-error').hidden = false;
+    $('credits-empty').hidden = true;
+  }
+
+  async function loadCredits({ quiet = false } = {}) {
+    if (!creditsReady || creditsLoading) return;
+    creditsLoading = true;
+    $('credits-error').hidden = true;
+    $('btn-credits-refresh')?.classList.add('is-loading');
+    try {
+      if (creditsSelectedSystems.size > 1) {
+        const selected = [...creditsSelectedSystems];
+        const pageSize = creditsView === 'grid' ? 500 : 50;
+        const responses = await Promise.all(selected.map((system) => {
+          const params = creditsListQuery(500, 1);
+          params.set('system', system);
+          return apiGet(`${CREDITS_ROUTE}/games?${params}`);
+        }));
+        const merged = responses.flatMap((result) => result.games || []);
+        const seen = new Set();
+        const unique = merged.filter((game) => !seen.has(game.id) && seen.add(game.id));
+        const direction = creditsDir === 'asc' ? 1 : -1;
+        unique.sort((a, b) => direction * String(a[creditsSort] ?? '').localeCompare(
+          String(b[creditsSort] ?? ''), undefined, { numeric: true, sensitivity: 'base' },
+        ));
+        creditsTotal = unique.length;
+        creditsPages = Math.ceil(unique.length / pageSize) || (unique.length ? 1 : 0);
+        creditsPage = Math.min(Math.max(1, creditsPage), Math.max(1, creditsPages));
+        creditsGames = unique.slice((creditsPage - 1) * pageSize, creditsPage * pageSize);
+      } else {
+        const size = creditsView === 'grid' ? 500 : 50;
+        const result = await apiGet(`${CREDITS_ROUTE}/games?${creditsListQuery(size)}`);
+        creditsGames = result.games || [];
+        creditsTotal = Number(result.total) || 0;
+        creditsPages = Number(result.pages) || (creditsTotal ? Math.ceil(creditsTotal / size) : 0);
+        creditsPage = Number(result.page) || 1;
+      }
+      const ids = new Set(creditsGames.map((game) => game.id));
+      [...creditsSelected].forEach((id) => { if (!ids.has(id)) creditsSelected.delete(id); });
+      renderCreditsYears();
+      renderCredits();
+      await loadCreditsJobs();
+      loadCreditsSystems().catch(() => {});
+    } catch (error) {
+      creditsSetError(error);
+      if (!quiet) toast(error.message || 'Could not load Roll Credits', 'bad');
+    } finally {
+      creditsLoading = false;
+      $('btn-credits-refresh')?.classList.remove('is-loading');
+    }
+  }
+
+  async function loadCreditsJobs() {
+    try {
+      const { jobs = [] } = await apiGet(`${CREDITS_ROUTE}/jobs`);
+      const pending = jobs.filter((job) => job.state === 'queued' || job.state === 'running').length;
+      const failed = jobs.filter((job) => job.state === 'failed').length;
+      const status = $('credits-job-status');
+      status.classList.toggle('has-failures', failed > 0);
+      if (!pending && !failed) status.textContent = 'Media jobs are up to date.';
+      else status.textContent = `${pending} pending · ${failed} failed media job${failed === 1 ? '' : 's'}`;
+    } catch {
+      $('credits-job-status').textContent = 'Media job status unavailable.';
+    }
+  }
+
+  function setCreditsZoom(columns) {
+    const max = creditsMaxColumns();
+    const next = Math.max(2, Math.min(max, Math.round(Number(columns) || creditsDefaultDensity())));
+    creditsDensity = next;
+    localStorage.setItem(CREDITS_DENSITY_KEY, String(next));
+    syncCreditsZoomControls();
+    if (creditsView === 'grid') renderCreditsGrid();
+  }
+
+  function renderCredits() {
+    const empty = creditsTotal === 0;
+    const filtered = creditsHasActiveFilters();
+    const emptyCard = $('credits-empty');
+    emptyCard.querySelector('strong').textContent = filtered ? 'No games match these filters.' : 'No games yet.';
+    emptyCard.querySelector('span').textContent = filtered
+      ? 'Filters stay applied above — clear them or expand Filters to adjust.'
+      : "Add the first one you've beaten.";
+    $('btn-credits-empty-add').hidden = filtered;
+    $('credits-empty').hidden = !empty;
+    $('credits-grid-view').hidden = creditsView !== 'grid' || empty;
+    $('credits-list-view').hidden = creditsView !== 'list' || empty;
+    $('credits-density-wrap').hidden = creditsView !== 'grid';
+    document.querySelectorAll('[data-credits-view]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.creditsView === creditsView);
+    });
+    syncCreditsZoomControls();
+    syncCreditsFiltersChrome();
+    renderCreditsSelection();
+    if (creditsView === 'grid') renderCreditsGrid();
+    else renderCreditsList();
+  }
+
+  function renderCreditsGrid() {
+    const host = $('credits-grid');
+    syncCreditsZoomControls();
+    host.style.setProperty('--credits-columns', String(creditsGridColumns()));
+    host.innerHTML = creditsGames.map((game, index) => {
+      const thumb = creditsThumb(game);
+      const state = creditsMediaState(game);
+      const lazy = index >= 12 ? ' loading="lazy"' : '';
+      const art = thumb
+        ? `<img src="${escapeHtml(thumb)}" alt=""${lazy}>`
+        : `<span class="credits-placeholder">${escapeHtml(creditsInitials(game.title))}</span>`;
+      const badge = state === 'pending'
+        ? '<span class="credits-media-badge" title="Media pending">↻</span>'
+        : state === 'failed' ? '<span class="credits-media-badge failed" title="Media failed">!</span>' : '';
+      return `<button type="button" class="credits-tile${creditsSelected.has(game.id) ? ' selected' : ''}"
+        data-credits-id="${escapeHtml(game.id)}">
+        ${creditsSelecting ? '<span class="credits-tile-check"></span>' : ''}
+        <span class="credits-cover">${art}${badge}
+          <span class="credits-induction">#${String(game.induction || 0).padStart(3, '0')}</span>
+        </span>
+        <span class="credits-tile-copy">
+          <strong class="credits-tile-title">${escapeHtml(game.title || 'Untitled game')}</strong>
+          <span class="credits-tile-meta"><span class="credits-system-chip">${escapeHtml(creditsSystemLabel(game.system))}</span>
+          <span class="credits-date">${escapeHtml(creditsDate(game.beatenAt, true))}</span></span>
+        </span>
+      </button>`;
+    }).join('');
+  }
+
+  function creditsSortMark(column) {
+    return creditsSort === column ? (creditsDir === 'asc' ? ' ↑' : ' ↓') : '';
+  }
+
+  function renderCreditsList() {
+    document.querySelectorAll('[data-credits-sort]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.creditsSort === creditsSort);
+      button.textContent = `${button.dataset.creditsSort === 'beatenAt' ? 'Beaten'
+        : button.dataset.creditsSort === 'createdAt' ? 'Added'
+          : button.dataset.creditsSort[0].toUpperCase() + button.dataset.creditsSort.slice(1)
+      }${creditsSortMark(button.dataset.creditsSort)}`;
+    });
+    $('credits-table-body').innerHTML = creditsGames.map((game) => `<tr data-credits-id="${escapeHtml(game.id)}"
+      class="${creditsSelected.has(game.id) ? 'selected' : ''}">
+      <td>${creditsSelecting ? `<input type="checkbox" aria-label="Select ${escapeHtml(game.title)}"${creditsSelected.has(game.id) ? ' checked' : ''}>` : ''}</td>
+      <td class="credits-induction-col"><span class="credits-induction">#${String(game.induction || 0).padStart(3, '0')}</span></td>
+      <td><strong>${escapeHtml(game.title)}</strong></td>
+      <td><span class="credits-system-chip">${escapeHtml(creditsSystemLabel(game.system))}</span></td>
+      <td>${escapeHtml(creditsDate(game.beatenAt))}</td>
+      <td>${escapeHtml(creditsDate(String(game.createdAt || '').slice(0, 10)))}</td>
+      <td class="credits-wide-col">${escapeHtml(game.meta?.maxPlayers || '—')}</td>
+      <td class="credits-wide-col">${escapeHtml(game.meta?.publisher || '—')}</td>
+    </tr>`).join('');
+    $('credits-page-label').textContent = creditsPages
+      ? `Page ${creditsPage} of ${creditsPages}` : 'Page 1 of 1';
+    $('btn-credits-prev').disabled = creditsPage <= 1;
+    $('btn-credits-next').disabled = creditsPage >= Math.max(1, creditsPages);
+  }
+
+  function renderCreditsSelection() {
+    $('btn-credits-select').hidden = creditsSelecting;
+    $('credits-selection-tools').hidden = !creditsSelecting;
+    $('credits-selected-count').textContent = creditsSelected.size;
+    $('btn-credits-delete-selected').disabled = creditsSelected.size === 0;
+    $('btn-credits-rescrape-selected').disabled = creditsSelected.size === 0;
+    $('btn-credits-select-all').textContent = creditsGames.length
+      && creditsGames.every((game) => creditsSelected.has(game.id)) ? 'Unselect all' : 'Select all';
+  }
+
+  function setCreditsSelecting(on) {
+    creditsSelecting = on;
+    if (!on) creditsSelected.clear();
+    renderCredits();
+  }
+
+  function toggleCreditSelected(id) {
+    if (creditsSelected.has(id)) creditsSelected.delete(id);
+    else creditsSelected.add(id);
+    renderCredits();
+  }
+
+  async function loadCreditsSystems() {
+    const result = await apiGet(`${CREDITS_ROUTE}/systems`);
+    creditsSystems = result.systems || [];
+    creditsUsedSystems = Array.isArray(result.usedSystems) ? result.usedSystems : [];
+    creditsSystemLabels = new Map(creditsSystems.map((system) => [system.id, system.label]));
+    const options = creditsSystems.map((system) => (
+      `<option value="${escapeHtml(system.id)}">${escapeHtml(system.label)}</option>`
+    )).join('');
+    $('credits-add-system').innerHTML = options;
+    $('credits-edit-system').innerHTML = options;
+    renderCreditsSystemFilters();
+  }
+
+  function renderCreditsSystemFilters() {
+    const host = $('credits-system-filters');
+    if (!host) return;
+    const used = creditsUsedSystems.length ? [...creditsUsedSystems] : [];
+    const usedIds = new Set(used.map((system) => system.id));
+    // Keep selected systems visible even after the last matching game is edited away,
+    // otherwise the list goes empty with no clue which filter is still on.
+    for (const id of creditsSelectedSystems) {
+      if (usedIds.has(id)) continue;
+      used.push({
+        id,
+        label: creditsSystemLabel(id),
+        count: 0,
+        orphan: true,
+      });
+    }
+    used.sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id), undefined, {
+      sensitivity: 'base',
+    }));
+    if (!used.length) {
+      host.innerHTML = '<span class="credits-system-filters-empty">Filters appear after you add games.</span>';
+      syncCreditsFiltersChrome();
+      return;
+    }
+    host.innerHTML = used.map((system) => {
+      const active = creditsSelectedSystems.has(system.id);
+      const countLabel = Number.isFinite(Number(system.count)) ? ` · ${system.count}` : '';
+      const orphanClass = system.orphan ? ' is-orphan' : '';
+      return `<button type="button" class="credits-filter-chip${active ? ' active' : ''}${orphanClass}" data-credits-system="${escapeHtml(system.id)}">${escapeHtml(system.label)}${countLabel}</button>`;
+    }).join('');
+    syncCreditsFiltersChrome();
+  }
+
+  function renderCreditsYears() {
+    const fromPage = creditsGames.map((game) => String(game.beatenAt || '').slice(0, 4))
+      .filter((year) => /^\d{4}$/.test(year));
+    creditsKnownYears = [...new Set([...creditsKnownYears, ...fromPage])]
+      .filter((year) => /^\d{4}$/.test(year))
+      .sort()
+      .reverse();
+    const select = $('credits-year');
+    if (!select) return;
+    const current = select.value;
+    if (current && /^\d{4}$/.test(current) && !creditsKnownYears.includes(current)) {
+      creditsKnownYears = [...creditsKnownYears, current].sort().reverse();
+    }
+    select.innerHTML = '<option value="">All years</option>'
+      + creditsKnownYears.map((year) => `<option value="${year}">${year}</option>`).join('');
+    if (current) select.value = current;
+    syncCreditsFiltersChrome();
+  }
+
+  function startCreditsEvents() {
+    if (creditsEvents) return;
+    try {
+      creditsEvents = new EventSource(appUrl(`${CREDITS_ROUTE}/events`));
+    } catch {
+      return;
+    }
+    let refreshTimer = null;
+    creditsEvents.addEventListener('roll-credits', () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => loadCredits({ quiet: true }), 180);
+    });
+  }
+
+  function openCreditsAdd() {
+    creditsCandidate = null;
+    creditsAddBeatenAt = creditsToday();
+    $('credits-add-search').value = '';
+    $('credits-add-title').value = '';
+    $('credits-add-date').value = creditsAddBeatenAt;
+    $('credits-add-date').disabled = false;
+    $('credits-add-date-na').checked = false;
+    $('credits-add-with').value = '';
+    $('credits-candidates').innerHTML = '';
+    $('credits-add-fields').hidden = true;
+    $('credits-add-status').textContent = 'Search IGDB and Steam, or add a game manually.';
+    $('credits-add-sheet').hidden = false;
+    setTimeout(() => $('credits-add-search').focus(), 40);
+  }
+
+  async function searchCreditsCandidates() {
+    const q = $('credits-add-search').value.trim();
+    if (!q) {
+      $('credits-add-status').textContent = 'Type a game title first.';
+      return;
+    }
+    $('btn-credits-add-search').disabled = true;
+    $('credits-add-status').textContent = 'Searching…';
+    try {
+      const { candidates = [] } = await apiPost(`${CREDITS_ROUTE}/search`, { q });
+      $('credits-add-status').textContent = candidates.length
+        ? 'Pick a game, then pick one system.' : 'No matches. Try another title or add it manually.';
+      $('credits-candidates').innerHTML = candidates.map((candidate, index) => {
+        const thumb = candidate.thumbUrl
+          ? `<img src="${escapeHtml(candidate.thumbUrl)}" alt="">`
+          : '<span class="credits-candidate-art"></span>';
+        const systems = (candidate.platforms || []).map((system) => {
+          const id = typeof system === 'object' ? system.id : system;
+          const label = typeof system === 'object' ? (system.label || creditsSystemLabel(id)) : creditsSystemLabel(id);
+          return `<button type="button" data-candidate-index="${index}" data-candidate-system="${escapeHtml(id)}">${escapeHtml(label)}</button>`;
+        }).join('');
+        return `<div class="credits-candidate" data-candidate-card="${index}">${thumb}<div class="credits-candidate-main">
+          <div class="credits-candidate-title">${escapeHtml(candidate.name || candidate.title)}</div>
+          <div class="credits-candidate-year">${escapeHtml(candidate.year || 'Year unknown')}</div>
+          <div class="credits-chip-row">${systems || '<span class="hint">No supported systems listed.</span>'}</div>
+        </div></div>`;
+      }).join('');
+      $('credits-candidates')._creditsCandidates = candidates;
+    } catch (error) {
+      $('credits-add-status').textContent = error.message || 'Search failed. Add the game manually instead.';
+    } finally {
+      $('btn-credits-add-search').disabled = false;
+    }
+  }
+
+  function chooseCreditsCandidate(index, system, button) {
+    const candidate = $('credits-candidates')._creditsCandidates?.[index];
+    if (!candidate) return;
+    creditsCandidate = candidate;
+    document.querySelectorAll('[data-candidate-card]').forEach((card) => {
+      card.classList.toggle('selected', card.dataset.candidateCard === String(index));
+    });
+    document.querySelectorAll('[data-candidate-system]').forEach((chip) => chip.classList.remove('active'));
+    button.classList.add('active');
+    $('credits-add-title').value = candidate.name || candidate.title || '';
+    $('credits-add-system').value = system;
+    revealCreditsAddFields();
+  }
+
+  async function createCreditGame() {
+    const title = $('credits-add-title').value.trim();
+    const system = $('credits-add-system').value;
+    if (!title || !system) {
+      toast('Choose a title and one system', 'bad');
+      return;
+    }
+    revealCreditsAddFields();
+    const beaten = creditsReadBeatenFields('credits-add-date', 'credits-add-date-na');
+    if (beaten.error) {
+      toast(beaten.error, 'bad');
+      return;
+    }
+    const payload = {
+      title,
+      system,
+      beatenAt: beaten.beatenAt,
+      beatenDateUnknown: beaten.beatenDateUnknown,
+      beatenWith: $('credits-add-with').value.trim(),
+    };
+    if (creditsCandidate) payload.candidate = creditsCandidate;
+    $('btn-credits-create').disabled = true;
+    try {
+      const result = await apiPost(`${CREDITS_ROUTE}/games`, payload);
+      $('credits-add-sheet').hidden = true;
+      toast(result.game?.duplicateWarning ? 'Game added — a matching game already exists' : 'Game added', 'good');
+      creditsPage = 1;
+      await loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not add game', 'bad');
+    } finally {
+      $('btn-credits-create').disabled = false;
+    }
+  }
+
+  function creditsPriorityHtml(order, scope) {
+    return order.map((kind, index) => `<div class="credits-priority-item" data-priority-kind="${kind}">
+      <span>${CREDITS_PRIORITY_LABELS[kind]}</span>
+      <button type="button" class="credits-mini-btn" data-priority-scope="${scope}" data-priority-move="-1" data-priority-index="${index}" aria-label="Move up">↑</button>
+      <button type="button" class="credits-mini-btn" data-priority-scope="${scope}" data-priority-move="1" data-priority-index="${index}" aria-label="Move down">↓</button>
+    </div>`).join('');
+  }
+
+  function markCreditsEditDirty() {
+    creditsEditDirty = true;
+    if ($('btn-credits-edit-save')) $('btn-credits-edit-save').disabled = false;
+  }
+
+  function renderCreditsPriorities() {
+    $('credits-global-priority').innerHTML = creditsPriorityHtml(creditsGlobalPriority, 'global');
+    $('credits-game-priority').innerHTML = creditsPriorityHtml(creditsGamePriority, 'game');
+  }
+
+  function moveCreditsPriority(scope, index, amount) {
+    const list = scope === 'global' ? creditsGlobalPriority : creditsGamePriority;
+    const next = index + amount;
+    if (next < 0 || next >= list.length) return;
+    [list[index], list[next]] = [list[next], list[index]];
+    if (scope === 'game') markCreditsEditDirty();
+    renderCreditsPriorities();
+  }
+
+  async function openCreditsEdit(id) {
+    try {
+      const { game } = await apiGet(`${CREDITS_ROUTE}/games/${encodeURIComponent(id)}`);
+      creditsEditGame = game;
+      creditsEditDirty = false;
+      $('btn-credits-edit-save').disabled = true;
+      creditsDifficulty = game.meta?.difficulty || null;
+      creditsGamePriority = [...(game.mediaPriorityOverride || creditsGlobalPriority)];
+      $('credits-edit-heading').textContent = game.title || 'Edit game';
+      $('credits-edit-induction').textContent = `#${String(game.induction || 0).padStart(3, '0')}`;
+      $('credits-edit-title').value = game.title || '';
+      $('credits-edit-system').value = game.system || 'other';
+      $('credits-edit-date').value = game.beatenAt || '';
+      $('credits-edit-date').disabled = game.beatenDateUnknown === true;
+      $('credits-edit-date-na').checked = game.beatenDateUnknown === true;
+      $('credits-edit-with').value = game.beatenWith || '';
+      $('credits-edit-description').value = game.meta?.description || '';
+      $('credits-edit-publisher').value = game.meta?.publisher || '';
+      $('credits-edit-developer').value = game.meta?.developer || '';
+      $('credits-edit-release').value = game.meta?.releaseDate || '';
+      $('credits-edit-players').value = game.meta?.maxPlayers || '';
+      $('credits-edit-coop').checked = game.meta?.coopSupported === true;
+      $('credits-edit-genres').value = (game.meta?.genres || []).join(', ');
+      $('credits-edit-notes').value = game.notes || '';
+      $('credits-priority-override').checked = Array.isArray(game.mediaPriorityOverride);
+      $('credits-game-priority').hidden = !Array.isArray(game.mediaPriorityOverride);
+      $('credits-priority-help').textContent = Array.isArray(game.mediaPriorityOverride)
+        ? 'This game uses the order below.' : `Using global order: ${creditsGlobalPriority.map((kind) => CREDITS_PRIORITY_LABELS[kind].toLowerCase()).join(' → ')}.`;
+      $('credits-youtube-add-resolution').value = $('credits-youtube-resolution').value || '720';
+      renderCreditsDifficulty();
+      renderCreditsPriorities();
+      renderCreditsMedia();
+      $('credits-edit-sheet').hidden = false;
+    } catch (error) {
+      toast(error.message || 'Could not open game', 'bad');
+    }
+  }
+
+  function renderCreditsDifficulty() {
+    document.querySelectorAll('[data-difficulty]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.difficulty === (creditsDifficulty || ''));
+    });
+  }
+
+  function renderCreditsMedia() {
+    const media = creditsEditGame?.media || [];
+    $('credits-media-list').innerHTML = media.length ? media.map((row, index) => {
+      return `<div class="credits-media-row" draggable="true" data-media-id="${escapeHtml(row.id)}" data-media-index="${index}">
+        <span class="credits-media-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+        ${creditsMediaThumbHtml(row)}
+        <div class="credits-media-copy"><strong>${escapeHtml(CREDITS_PRIORITY_LABELS[row.kind] || row.kind)}</strong>
+          ${escapeHtml(row.source || 'unknown')} · ${escapeHtml(row.status || 'ready')}${row.resolution ? ` · ${row.resolution}p` : ''}
+          ${row.statusDetail ? `<br>${escapeHtml(row.statusDetail)}` : ''}</div>
+        <div class="credits-media-actions">
+          <button type="button" class="credits-mini-btn" data-media-action="up" data-media-index="${index}" aria-label="Move up"${index === 0 ? ' disabled' : ''}>↑</button>
+          <button type="button" class="credits-mini-btn" data-media-action="down" data-media-index="${index}" aria-label="Move down"${index >= media.length - 1 ? ' disabled' : ''}>↓</button>
+          <button type="button" class="credits-mini-btn" data-media-action="hide" data-media-index="${index}">${row.hidden ? 'Show' : 'Hide'}</button>
+          ${row.status === 'failed' ? `<button type="button" class="credits-mini-btn" data-media-action="retry" data-media-index="${index}">Retry</button>` : ''}
+          <button type="button" class="credits-mini-btn" data-media-action="delete" data-media-index="${index}">Delete</button>
+        </div>
+      </div>`;
+    }).join('') : '<p class="hint">No media yet. Upload an image or add a YouTube link.</p>';
+  }
+
+  function creditsKindsFromMediaOrder(media) {
+    const seen = new Set();
+    const kinds = [];
+    for (const row of media || []) {
+      const kind = String(row?.kind || '');
+      if (!['video', 'screenshot', 'cover'].includes(kind) || seen.has(kind)) continue;
+      seen.add(kind);
+      kinds.push(kind);
+    }
+    for (const kind of ['video', 'screenshot', 'cover']) {
+      if (!seen.has(kind)) kinds.push(kind);
+    }
+    return kinds;
+  }
+
+  function syncCreditsPriorityFromMediaList() {
+    creditsGamePriority = creditsKindsFromMediaOrder(creditsEditGame?.media);
+    const override = $('credits-priority-override');
+    if (override) {
+      override.checked = true;
+      $('credits-game-priority').hidden = false;
+      $('credits-priority-help').textContent = `Using this game's order: ${creditsGamePriority.join(' → ')}.`;
+    }
+    renderCreditsPriorities();
+  }
+
+  function moveCreditsMediaRow(fromIndex, toIndex) {
+    const media = creditsEditGame?.media || [];
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return false;
+    if (from === to || from < 0 || to < 0 || from >= media.length || to >= media.length) return false;
+    const [row] = media.splice(from, 1);
+    media.splice(to, 0, row);
+    media.forEach((item, itemIndex) => { item.order = itemIndex; });
+    // List order drives this game's kind priority so moving video to the top
+    // actually prioritizes video (arrows used to no-op across different kinds).
+    syncCreditsPriorityFromMediaList();
+    markCreditsEditDirty();
+    renderCreditsMedia();
+    return true;
+  }
+
+  function updateCreditsMedia(action, index) {
+    const media = creditsEditGame?.media || [];
+    const row = media[index];
+    if (!row) return;
+    if (action === 'hide') {
+      row.hidden = !row.hidden;
+      markCreditsEditDirty();
+      renderCreditsMedia();
+      return;
+    }
+    if (action === 'up' || action === 'down') {
+      moveCreditsMediaRow(index, index + (action === 'up' ? -1 : 1));
+      return;
+    }
+    if (action === 'retry') {
+      apiPost(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsEditGame.id)}/media/${encodeURIComponent(row.id)}/retry`, {})
+        .then(() => { toast('Media retry queued', 'good'); loadCredits(); })
+        .catch((error) => toast(error.message || 'Could not retry media', 'bad'));
+      return;
+    }
+    if (action === 'delete') {
+      creditsPendingDelete = { type: 'media', gameId: creditsEditGame.id, mediaId: row.id };
+      $('credits-delete-title').textContent = `Delete this ${row.kind}?`;
+      $('credits-delete-copy').textContent = 'The stored file is removed too.';
+      $('btn-credits-delete-confirm').textContent = 'Delete media';
+      $('credits-delete-sheet').hidden = false;
+    }
+  }
+
+  async function saveCreditsEdit() {
+    if (!creditsEditGame) return;
+    const originalMeta = creditsEditGame.meta || {};
+    const meta = {
+      ...originalMeta,
+      description: $('credits-edit-description').value.trim(),
+      publisher: $('credits-edit-publisher').value.trim(),
+      developer: $('credits-edit-developer').value.trim(),
+      releaseDate: $('credits-edit-release').value.trim(),
+      genres: $('credits-edit-genres').value.split(',').map((item) => item.trim()).filter(Boolean),
+      maxPlayers: Number($('credits-edit-players').value) || null,
+      coopSupported: $('credits-edit-coop').checked,
+      difficulty: creditsDifficulty || null,
+    };
+    const changedMeta = ['description', 'publisher', 'developer', 'releaseDate', 'genres', 'maxPlayers', 'coopSupported', 'difficulty']
+      .filter((key) => JSON.stringify(meta[key]) !== JSON.stringify(originalMeta[key]));
+    const patch = {
+      title: $('credits-edit-title').value.trim(),
+      system: $('credits-edit-system').value,
+      beatenAt: $('credits-edit-date-na').checked ? null : $('credits-edit-date').value,
+      beatenDateUnknown: $('credits-edit-date-na').checked,
+      beatenWith: $('credits-edit-with').value.trim(),
+      notes: $('credits-edit-notes').value.trim(),
+      meta,
+      metaEdited: [...new Set([...(creditsEditGame.metaEdited || []), ...changedMeta])],
+      media: (creditsEditGame.media || []).map((row, index) => ({ ...row, order: index })),
+      mediaPriorityOverride: $('credits-priority-override').checked ? creditsGamePriority : null,
+    };
+    $('btn-credits-edit-save').disabled = true;
+    try {
+      const { game } = await apiFetch(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsEditGame.id)}`, { method: 'PUT', body: patch });
+      creditsEditGame = game;
+      creditsEditDirty = false;
+      $('credits-edit-sheet').hidden = true;
+      toast('Game saved', 'good');
+      await loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not save game', 'bad');
+    } finally {
+      $('btn-credits-edit-save').disabled = false;
+    }
+  }
+
+  function openCreditsDelete(ids, game = null) {
+    creditsPendingDelete = { type: ids.length === 1 ? 'game' : 'bulk', ids };
+    $('credits-delete-title').textContent = ids.length === 1
+      ? `Delete ${game?.title || 'this game'}?` : `Delete ${ids.length} games?`;
+    $('credits-delete-copy').textContent = ids.length === 1
+      ? 'Its photos and video are removed too.' : 'Their photos and videos are removed too.';
+    $('btn-credits-delete-confirm').textContent = ids.length === 1 ? 'Delete game' : `Delete ${ids.length} games`;
+    $('credits-delete-sheet').hidden = false;
+  }
+
+  async function confirmCreditsDelete() {
+    const pending = creditsPendingDelete;
+    if (!pending) return;
+    $('btn-credits-delete-confirm').disabled = true;
+    try {
+      if (pending.type === 'media') {
+        await apiFetch(`${CREDITS_ROUTE}/games/${encodeURIComponent(pending.gameId)}/media/${encodeURIComponent(pending.mediaId)}`, { method: 'DELETE' });
+        creditsEditGame.media = (creditsEditGame.media || []).filter((row) => row.id !== pending.mediaId);
+        renderCreditsMedia();
+        toast('Media deleted', 'good');
+      } else if (pending.type === 'game') {
+        await apiFetch(`${CREDITS_ROUTE}/games/${encodeURIComponent(pending.ids[0])}`, { method: 'DELETE' });
+        $('credits-edit-sheet').hidden = true;
+        toast('Game deleted', 'good');
+      } else {
+        const result = await apiPost(`${CREDITS_ROUTE}/games/bulk-delete`, { ids: pending.ids });
+        toast(`${result.deleted?.length || 0} games deleted`, 'good');
+        setCreditsSelecting(false);
+      }
+      $('credits-delete-sheet').hidden = true;
+      creditsPendingDelete = null;
+      await loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not delete', 'bad');
+    } finally {
+      $('btn-credits-delete-confirm').disabled = false;
+    }
+  }
+
+  function openCreditsRescrape(ids) {
+    if (!ids.length) return;
+    creditsRescrapeIds = ids;
+    $('credits-rescrape-title').textContent = ids.length === 1 ? 'Re-scrape game' : `Re-scrape ${ids.length} games`;
+    $('btn-credits-rescrape-confirm').textContent = ids.length === 1 ? 'Re-scrape game' : `Re-scrape ${ids.length} games`;
+    updateCreditsRescrapeCopy();
+    $('credits-rescrape-sheet').hidden = false;
+  }
+
+  function updateCreditsRescrapeCopy() {
+    const mode = document.querySelector('input[name="credits-rescrape-mode"]:checked')?.value;
+    const count = creditsRescrapeIds.length;
+    const scopes = [...document.querySelectorAll('input[name="credits-scope"]:checked')]
+      .map((input) => input.nextElementSibling?.textContent.toLowerCase()).filter(Boolean);
+    const subject = scopes.length ? scopes.join(', ') : 'nothing';
+    const ending = mode === 'replace-everything'
+      ? 'Edited text may be replaced. Uploads are kept.'
+      : mode === 'replace-scraped'
+        ? 'Uploads and hand-edited text stay untouched.'
+        : 'Only missing data is added.';
+    $('credits-rescrape-copy').textContent = `Refresh ${subject} for ${count} game${count === 1 ? '' : 's'}. ${ending}`;
+  }
+
+  async function confirmCreditsRescrape() {
+    const scopes = [...document.querySelectorAll('input[name="credits-scope"]:checked')].map((input) => input.value);
+    if (!scopes.length) {
+      toast('Choose at least one thing to refresh', 'bad');
+      return;
+    }
+    const mode = document.querySelector('input[name="credits-rescrape-mode"]:checked')?.value || 'fill-gaps';
+    $('btn-credits-rescrape-confirm').disabled = true;
+    try {
+      if (creditsRescrapeIds.length === 1) {
+        await apiPost(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsRescrapeIds[0])}/rescrape`, { scopes, mode });
+      } else {
+        await apiPost(`${CREDITS_ROUTE}/rescrape-bulk`, { ids: creditsRescrapeIds, scopes, mode });
+      }
+      $('credits-rescrape-sheet').hidden = true;
+      toast(`Re-scrape started for ${creditsRescrapeIds.length} game${creditsRescrapeIds.length === 1 ? '' : 's'}`, 'good');
+      await loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not re-scrape games', 'bad');
+    } finally {
+      $('btn-credits-rescrape-confirm').disabled = false;
+    }
+  }
+
+  function readFileDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read the selected file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadCreditsImages(files) {
+    if (!creditsEditGame || !files.length) return;
+    const kind = $('credits-image-kind').value === 'cover' ? 'cover' : 'screenshot';
+    try {
+      for (const file of files) {
+        const dataUrl = await readFileDataUrl(file);
+        const result = await apiPost(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsEditGame.id)}/media`, {
+          dataUrl,
+          kind,
+        });
+        creditsEditGame.media = [...(creditsEditGame.media || []), result.media];
+      }
+      renderCreditsMedia();
+      toast(`${files.length} image${files.length === 1 ? '' : 's'} uploaded`, 'good');
+      loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not upload image', 'bad');
+    }
+  }
+
+  async function uploadCreditsVideo(file) {
+    if (!creditsEditGame || !file) return;
+    try {
+      const response = await fetch(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsEditGame.id)}/media/video-upload`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': file.type || 'video/mp4' },
+        body: file,
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error || `Upload failed (${response.status})`);
+      creditsEditGame.media = [...(creditsEditGame.media || []), result.media];
+      renderCreditsMedia();
+      toast('Video uploaded', 'good');
+      loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not upload video', 'bad');
+    }
+  }
+
+  async function addCreditsYoutube() {
+    if (!creditsEditGame) return;
+    const youtubeUrl = $('credits-youtube-url').value.trim();
+    if (!youtubeUrl) {
+      toast('Paste a YouTube URL first', 'bad');
+      return;
+    }
+    try {
+      const result = await apiPost(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsEditGame.id)}/media`, {
+        youtubeUrl,
+        resolution: Number($('credits-youtube-add-resolution').value),
+      });
+      creditsEditGame.media = [...(creditsEditGame.media || []), result.media];
+      $('credits-youtube-url').value = '';
+      renderCreditsMedia();
+      toast('YouTube download queued', 'good');
+      loadCredits();
+    } catch (error) {
+      toast(error.message || 'Could not add YouTube video', 'bad');
+    }
+  }
+
+  function formatCreditsBytes(bytes) {
+    let value = Number(bytes) || 0;
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+      value /= 1024;
+      index += 1;
+    }
+    return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+  }
+
+  async function loadCreditsSettings() {
+    if (!$('credits-settings-card')) return;
+    try {
+      const result = await apiGet(`${CREDITS_ROUTE}/settings`);
+      const settings = result.settings || {};
+      creditsGlobalPriority = [...(settings.mediaPriority || ['video', 'screenshot', 'cover'])];
+      renderCreditsPriorities();
+      $('credits-max-screenshots').value = settings.scrape?.maxScreenshots ?? 6;
+      $('credits-download-video').checked = settings.scrape?.downloadVideo !== false;
+      $('credits-youtube-enabled').checked = settings.youtube?.downloadEnabled !== false;
+      $('credits-youtube-resolution').value = String(settings.youtube?.defaultResolution || 720);
+      $('credits-seconds-game').value = settings.display?.secondsPerGame ?? 12;
+      $('credits-dashboard-seconds').value = settings.display?.dashboardSeconds ?? 25;
+      $('credits-display-order').value = settings.display?.order || 'recent';
+      $('credits-scheduled-limit').value = settings.display?.scheduledGameLimit ?? 15;
+      const credentials = result.credentials || {};
+      const source = credentials.source || 'not set';
+      pillState($('credits-credentials-pill'), credentials.hasCredentials ? 'ok' : 'warn',
+        credentials.hasCredentials ? source : 'not set');
+      const envOwned = source === 'env';
+      $('credits-client-id').disabled = envOwned;
+      $('credits-client-secret').disabled = envOwned;
+      $('btn-credits-credentials-save').disabled = envOwned;
+      $('credits-settings-status').textContent = envOwned
+        ? 'IGDB credentials are set by environment variables. Change them in the bridge environment.'
+        : credentials.hasCredentials ? 'IGDB credentials are ready.' : 'Add IGDB credentials to search the full game catalog.';
+      const disk = result.diskUsage || {};
+      $('credits-disk-usage').textContent = `${formatCreditsBytes(disk.totalBytes)} · ${disk.imageCount || 0} images · ${disk.videoCount || 0} videos`;
+      creditsSettingsLoaded = true;
+    } catch (error) {
+      $('credits-settings-status').textContent = error.message || 'Could not load Roll Credits settings.';
+    }
+  }
+
+  async function saveCreditsSettings() {
+    const body = {
+      mediaPriority: creditsGlobalPriority,
+      scrape: {
+        maxScreenshots: Number($('credits-max-screenshots').value),
+        downloadVideo: $('credits-download-video').checked,
+      },
+      youtube: {
+        downloadEnabled: $('credits-youtube-enabled').checked,
+        defaultResolution: Number($('credits-youtube-resolution').value),
+      },
+      display: {
+        secondsPerGame: Number($('credits-seconds-game').value),
+        dashboardSeconds: Number($('credits-dashboard-seconds').value),
+        order: $('credits-display-order').value,
+        scheduledGameLimit: Number($('credits-scheduled-limit').value),
+      },
+    };
+    try {
+      await apiPost(`${CREDITS_ROUTE}/settings`, body);
+      startCreditsEvents();
+      toast('Roll Credits settings saved', 'good');
+      await loadCreditsSettings();
+    } catch (error) {
+      toast(error.message || 'Could not save Roll Credits settings', 'bad');
+    }
+  }
+
+  async function saveCreditsCredentials() {
+    const response = await fetch(`${CREDITS_ROUTE}/credentials`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: $('credits-client-id').value.trim(),
+        clientSecret: $('credits-client-secret').value,
+      }),
+    });
+    const result = await response.json().catch(() => null);
+    if (response.status === 409) {
+      $('credits-client-id').disabled = true;
+      $('credits-client-secret').disabled = true;
+      $('btn-credits-credentials-save').disabled = true;
+      $('credits-settings-status').textContent = result?.error
+        || 'IGDB credentials are set by environment variables and cannot be changed here.';
+      pillState($('credits-credentials-pill'), 'ok', 'env');
+      return;
+    }
+    if (!response.ok) {
+      toast(result?.error || 'Could not save IGDB credentials', 'bad');
+      return;
+    }
+    $('credits-client-secret').value = '';
+    toast('IGDB credentials saved', 'good');
+    startCreditsEvents();
+    await loadCreditsSettings();
+  }
+
+  async function testCreditsCredentials() {
+    $('btn-credits-credentials-test').disabled = true;
+    try {
+      const result = await apiPost(`${CREDITS_ROUTE}/credentials/test`, {});
+      $('credits-settings-status').textContent = result.message || 'IGDB connection works.';
+      pillState($('credits-credentials-pill'), 'ok', 'working');
+      toast(result.message || 'IGDB connection works', 'good');
+    } catch (error) {
+      $('credits-settings-status').textContent = error.message || 'IGDB test failed.';
+      pillState($('credits-credentials-pill'), 'bad', 'failed');
+      toast(error.message || 'IGDB test failed', 'bad');
+    } finally {
+      $('btn-credits-credentials-test').disabled = false;
+    }
+  }
+
+  function initCreditsUi() {
+    if (creditsReady) return;
+    creditsReady = true;
+    document.querySelectorAll('[data-credits-view]').forEach((button) => {
+      button.addEventListener('click', () => {
+        creditsView = button.dataset.creditsView;
+        localStorage.setItem(CREDITS_VIEW_KEY, creditsView);
+        creditsPage = 1;
+        loadCredits();
+      });
+    });
+    const zoomSlider = $('credits-zoom');
+    if (zoomSlider) {
+      syncCreditsZoomControls();
+      zoomSlider.addEventListener('input', () => setCreditsZoom(zoomSlider.value));
+    }
+    $('btn-credits-zoom-out')?.addEventListener('click', () => setCreditsZoom(creditsGridColumns() + 1));
+    $('btn-credits-zoom-in')?.addEventListener('click', () => setCreditsZoom(creditsGridColumns() - 1));
+    window.addEventListener('resize', () => {
+      clearTimeout(creditsResizeTimer);
+      creditsResizeTimer = setTimeout(() => {
+        if (!creditsReady || creditsView !== 'grid') {
+          syncCreditsZoomControls();
+          return;
+        }
+        renderCreditsGrid();
+      }, 120);
+    });
+    $('btn-credits-add')?.addEventListener('click', openCreditsAdd);
+    $('btn-credits-empty-add')?.addEventListener('click', openCreditsAdd);
+    $('btn-credits-refresh')?.addEventListener('click', () => loadCredits());
+    $('btn-credits-select')?.addEventListener('click', () => setCreditsSelecting(true));
+    $('btn-credits-cancel-select')?.addEventListener('click', () => setCreditsSelecting(false));
+    $('btn-credits-select-all')?.addEventListener('click', () => {
+      const allSelected = creditsGames.length && creditsGames.every((game) => creditsSelected.has(game.id));
+      creditsGames.forEach((game) => { if (allSelected) creditsSelected.delete(game.id); else creditsSelected.add(game.id); });
+      renderCredits();
+    });
+    $('btn-credits-delete-selected')?.addEventListener('click', () => openCreditsDelete([...creditsSelected]));
+    $('btn-credits-rescrape-selected')?.addEventListener('click', () => openCreditsRescrape([...creditsSelected]));
+    $('credits-grid')?.addEventListener('click', (event) => {
+      const tile = event.target.closest('[data-credits-id]');
+      if (!tile) return;
+      if (creditsSelecting) toggleCreditSelected(tile.dataset.creditsId);
+      else openCreditsEdit(tile.dataset.creditsId);
+    });
+    $('credits-table-body')?.addEventListener('click', (event) => {
+      const row = event.target.closest('[data-credits-id]');
+      if (!row) return;
+      if (creditsSelecting) toggleCreditSelected(row.dataset.creditsId);
+      else openCreditsEdit(row.dataset.creditsId);
+    });
+    $('credits-q')?.addEventListener('input', () => {
+      clearTimeout(creditsSearchTimer);
+      creditsSearchTimer = setTimeout(() => { creditsPage = 1; loadCredits(); }, 250);
+    });
+    $('btn-credits-filters-toggle')?.addEventListener('click', () => {
+      creditsFiltersOpen = !creditsFiltersOpen;
+      syncCreditsFiltersChrome();
+    });
+    $('btn-credits-clear-filters')?.addEventListener('click', () => {
+      clearCreditsPanelFilters();
+    });
+    $('credits-year')?.addEventListener('change', () => {
+      syncCreditsFiltersChrome();
+      creditsPage = 1;
+      loadCredits();
+    });
+    $('credits-no-date')?.addEventListener('change', () => {
+      syncCreditsFiltersChrome();
+      creditsPage = 1;
+      loadCredits();
+    });
+    $('credits-system-filters')?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-credits-system]');
+      if (!button) return;
+      const id = button.dataset.creditsSystem;
+      if (creditsSelectedSystems.has(id)) creditsSelectedSystems.delete(id);
+      else creditsSelectedSystems.add(id);
+      renderCreditsSystemFilters();
+      creditsPage = 1;
+      loadCredits();
+    });
+    document.querySelectorAll('[data-credits-sort]').forEach((button) => button.addEventListener('click', () => {
+      if (creditsSort === button.dataset.creditsSort) creditsDir = creditsDir === 'asc' ? 'desc' : 'asc';
+      else {
+        creditsSort = button.dataset.creditsSort;
+        creditsDir = 'asc';
+      }
+      creditsPage = 1;
+      loadCredits();
+    }));
+    $('btn-credits-prev')?.addEventListener('click', () => { creditsPage -= 1; loadCredits(); });
+    $('btn-credits-next')?.addEventListener('click', () => { creditsPage += 1; loadCredits(); });
+    document.querySelectorAll('[data-close-credits-sheet]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.dataset.closeCreditsSheet === 'credits-edit-sheet' && creditsEditDirty) {
+          toast('Save the game before closing, or reload it to discard changes', 'bad');
+          return;
+        }
+        $(button.dataset.closeCreditsSheet).hidden = true;
+      });
+    });
+    $('btn-credits-add-search')?.addEventListener('click', searchCreditsCandidates);
+    $('credits-add-search')?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') searchCreditsCandidates();
+    });
+    $('credits-candidates')?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-candidate-system]');
+      if (button) chooseCreditsCandidate(Number(button.dataset.candidateIndex), button.dataset.candidateSystem, button);
+    });
+    $('btn-credits-manual')?.addEventListener('click', () => {
+      creditsCandidate = null;
+      $('credits-add-title').value = $('credits-add-search').value.trim();
+      revealCreditsAddFields();
+      $('credits-candidates').innerHTML = '';
+    });
+    $('credits-add-date')?.addEventListener('change', () => {
+      if (creditsIsDateOnly($('credits-add-date').value)) {
+        creditsAddBeatenAt = $('credits-add-date').value;
+      }
+    });
+    $('credits-add-date')?.addEventListener('input', () => {
+      if (creditsIsDateOnly($('credits-add-date').value)) {
+        creditsAddBeatenAt = $('credits-add-date').value;
+      }
+    });
+    $('credits-add-date-na')?.addEventListener('change', () => {
+      $('credits-add-date').disabled = $('credits-add-date-na').checked;
+    });
+    $('btn-credits-create')?.addEventListener('click', createCreditGame);
+    $('credits-edit-date-na')?.addEventListener('change', () => {
+      $('credits-edit-date').disabled = $('credits-edit-date-na').checked;
+      markCreditsEditDirty();
+    });
+    $('credits-edit-sheet')?.addEventListener('input', markCreditsEditDirty);
+    $('credits-difficulty')?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-difficulty]');
+      if (!button) return;
+      creditsDifficulty = button.dataset.difficulty || null;
+      markCreditsEditDirty();
+      renderCreditsDifficulty();
+    });
+    $('credits-priority-override')?.addEventListener('change', () => {
+      $('credits-game-priority').hidden = !$('credits-priority-override').checked;
+      markCreditsEditDirty();
+    });
+    document.addEventListener('click', (event) => {
+      const priority = event.target.closest('[data-priority-move]');
+      if (priority) moveCreditsPriority(priority.dataset.priorityScope, Number(priority.dataset.priorityIndex), Number(priority.dataset.priorityMove));
+    });
+    $('credits-media-list')?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-media-action]');
+      if (button) updateCreditsMedia(button.dataset.mediaAction, Number(button.dataset.mediaIndex));
+    });
+    const creditsMediaList = $('credits-media-list');
+    creditsMediaList?.addEventListener('dragstart', (event) => {
+      const row = event.target.closest('.credits-media-row');
+      if (!row || !creditsMediaList.contains(row)) return;
+      if (event.target.closest('button, a, input, select, label')) {
+        event.preventDefault();
+        return;
+      }
+      creditsMediaDragIndex = Number(row.dataset.mediaIndex);
+      row.classList.add('is-dragging');
+      try {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', row.dataset.mediaId || String(creditsMediaDragIndex));
+      } catch {
+        // Older WebViews sometimes reject setData; drag can still proceed.
+      }
+    });
+    creditsMediaList?.addEventListener('dragend', () => {
+      creditsMediaList.querySelectorAll('.credits-media-row').forEach((row) => {
+        row.classList.remove('is-dragging', 'is-drop-target');
+      });
+      creditsMediaDragIndex = null;
+    });
+    creditsMediaList?.addEventListener('dragover', (event) => {
+      const row = event.target.closest('.credits-media-row');
+      if (!row || creditsMediaDragIndex == null) return;
+      event.preventDefault();
+      try { event.dataTransfer.dropEffect = 'move'; } catch { /* ignore */ }
+      creditsMediaList.querySelectorAll('.credits-media-row.is-drop-target').forEach((el) => {
+        if (el !== row) el.classList.remove('is-drop-target');
+      });
+      row.classList.add('is-drop-target');
+    });
+    creditsMediaList?.addEventListener('dragleave', (event) => {
+      const row = event.target.closest('.credits-media-row');
+      if (row && !row.contains(event.relatedTarget)) row.classList.remove('is-drop-target');
+    });
+    creditsMediaList?.addEventListener('drop', (event) => {
+      const row = event.target.closest('.credits-media-row');
+      if (!row || creditsMediaDragIndex == null) return;
+      event.preventDefault();
+      const toIndex = Number(row.dataset.mediaIndex);
+      const fromIndex = creditsMediaDragIndex;
+      creditsMediaDragIndex = null;
+      row.classList.remove('is-drop-target');
+      moveCreditsMediaRow(fromIndex, toIndex);
+    });
+    $('credits-image-upload')?.addEventListener('change', (event) => {
+      uploadCreditsImages([...event.target.files]);
+      event.target.value = '';
+    });
+    $('credits-video-upload')?.addEventListener('change', (event) => {
+      uploadCreditsVideo(event.target.files[0]);
+      event.target.value = '';
+    });
+    $('btn-credits-youtube-add')?.addEventListener('click', addCreditsYoutube);
+    $('btn-credits-edit-save')?.addEventListener('click', saveCreditsEdit);
+    $('btn-credits-edit-delete')?.addEventListener('click', () => {
+      if (creditsEditGame) openCreditsDelete([creditsEditGame.id], creditsEditGame);
+    });
+    $('btn-credits-edit-rescrape')?.addEventListener('click', () => {
+      if (creditsEditGame) openCreditsRescrape([creditsEditGame.id]);
+    });
+    $('btn-credits-delete-cancel')?.addEventListener('click', () => {
+      $('credits-delete-sheet').hidden = true;
+      creditsPendingDelete = null;
+    });
+    $('btn-credits-delete-confirm')?.addEventListener('click', confirmCreditsDelete);
+    $('btn-credits-rescrape-cancel')?.addEventListener('click', () => { $('credits-rescrape-sheet').hidden = true; });
+    $('btn-credits-rescrape-confirm')?.addEventListener('click', confirmCreditsRescrape);
+    document.querySelectorAll('input[name="credits-scope"], input[name="credits-rescrape-mode"]')
+      .forEach((input) => input.addEventListener('change', updateCreditsRescrapeCopy));
+    $('btn-credits-settings-save')?.addEventListener('click', saveCreditsSettings);
+    $('btn-credits-credentials-save')?.addEventListener('click', saveCreditsCredentials);
+    $('btn-credits-credentials-test')?.addEventListener('click', testCreditsCredentials);
+    $('btn-credits-prune')?.addEventListener('click', async () => {
+      const btn = $('btn-credits-prune');
+      if (btn) btn.disabled = true;
+      try {
+        const result = await apiPost(`${CREDITS_ROUTE}/prune-orphans`, {});
+        const removed = Number(result.removed || result.pruned || result.count || 0);
+        toast(removed ? `Removed ${removed} orphaned media folder${removed === 1 ? '' : 's'}` : 'No orphaned media found', 'good');
+        await loadCreditsSettings();
+      } catch (error) {
+        toast(error.message || 'Could not prune orphaned files', 'bad');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+    loadCreditsSystems().then(() => {
+      renderCreditsYears();
+      loadCredits();
+    }).catch((error) => creditsSetError(error));
+    renderCredits();
+    if (!creditsSettingsLoaded) loadCreditsSettings();
+  }
 
   // -------------------------------------------------------------- Admin session
 

@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal55">
+  <link rel="stylesheet" href="styles.css?v=signal71">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -80,8 +80,8 @@
              behaviour as the Settings test buttons. -->
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad" id="push-row-quick"
-             data-push-row="Signal,Alexa,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube"
-             data-skeleton-count="17" aria-busy="true"></div>
+             data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts"
+             data-skeleton-count="18" aria-busy="true"></div>
         <script>
           (function () {
             document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
@@ -416,6 +416,103 @@
 
         <div class="photo-grid" id="photo-grid"></div>
         <p class="hint photo-grid-empty" id="photo-grid-empty" hidden>No saved photos yet — share one via QR Code → Photo first.</p>
+      </div>
+    </section>
+
+    <!-- ======================== ROLL CREDITS TAB ======================== -->
+    <section class="tab-panel" id="tab-credits">
+      <div class="credits-shell">
+        <div class="card credits-toolbar-card">
+          <div class="credits-toolbar-primary">
+            <button type="button" class="btn btn-accent" id="btn-credits-add">Add game</button>
+            <input type="search" class="field-input credits-search" id="credits-q"
+                   placeholder="Search title, publisher, system…" autocomplete="off">
+            <button type="button" class="btn btn-outline btn-icon credits-refresh" id="btn-credits-refresh" title="Refresh Roll Credits">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </button>
+          </div>
+          <div class="credits-toolbar-secondary">
+            <div class="segmented credits-view-toggle" id="credits-view-toggle">
+              <button type="button" class="segmented-btn active" data-credits-view="grid">Grid</button>
+              <button type="button" class="segmented-btn" data-credits-view="list">List</button>
+            </div>
+            <div class="credits-zoom-wrap" id="credits-density-wrap">
+              <span class="credits-control-label">Zoom</span>
+              <button type="button" class="credits-zoom-btn" id="btn-credits-zoom-out" aria-label="Zoom out — more tiles per row">−</button>
+              <input type="range" class="credits-zoom-slider" id="credits-zoom" min="2" max="6" step="1" value="3" aria-label="Grid zoom">
+              <button type="button" class="credits-zoom-btn" id="btn-credits-zoom-in" aria-label="Zoom in — fewer tiles per row">+</button>
+            </div>
+            <button type="button" class="btn btn-outline" id="btn-credits-select">Select</button>
+          </div>
+          <div class="credits-selection-tools" id="credits-selection-tools" hidden>
+            <strong><span id="credits-selected-count">0</span> selected</strong>
+            <button type="button" class="btn btn-outline" id="btn-credits-select-all">Select all</button>
+            <button type="button" class="btn btn-outline" id="btn-credits-rescrape-selected" disabled>Re-scrape selected</button>
+            <button type="button" class="btn btn-danger" id="btn-credits-delete-selected" disabled>Delete selected</button>
+            <button type="button" class="btn btn-outline" id="btn-credits-cancel-select">Cancel</button>
+          </div>
+          <p class="credits-job-status" id="credits-job-status">Checking media jobs…</p>
+        </div>
+
+        <div class="card credits-filters-shell" id="credits-filters-shell">
+          <div class="credits-filters-toggle-row">
+            <button type="button" class="credits-filters-toggle" id="btn-credits-filters-toggle"
+                    aria-expanded="false" aria-controls="credits-filters-panel">
+              <span class="credits-filters-chevron" aria-hidden="true"></span>
+              <span class="credits-filters-toggle-label">Filters</span>
+              <span class="credits-filters-badge" id="credits-filters-badge" hidden></span>
+            </button>
+            <button type="button" class="btn btn-outline credits-filters-clear" id="btn-credits-clear-filters" hidden>Clear</button>
+          </div>
+          <div class="credits-filters" id="credits-filters-panel" hidden>
+            <div>
+              <span class="credits-control-label">Systems</span>
+              <div class="credits-system-filters" id="credits-system-filters"></div>
+            </div>
+            <div class="credits-filters-meta">
+              <label class="credits-inline-field">Year beaten
+                <select class="field-input" id="credits-year"><option value="">All years</option></select>
+              </label>
+              <label class="trivia-check"><input type="checkbox" id="credits-no-date"><span>No date only</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div id="credits-grid-view">
+          <div class="credits-grid" id="credits-grid" aria-live="polite"></div>
+        </div>
+
+        <div id="credits-list-view" hidden>
+          <div class="credits-table-wrap">
+            <table class="credits-table">
+              <thead><tr>
+                <th class="credits-select-col" aria-label="Selected"></th>
+                <th class="credits-induction-col">#</th>
+                <th><button type="button" data-credits-sort="title">Title</button></th>
+                <th><button type="button" data-credits-sort="system">System</button></th>
+                <th><button type="button" data-credits-sort="beatenAt">Beaten</button></th>
+                <th><button type="button" data-credits-sort="createdAt">Added</button></th>
+                <th class="credits-wide-col">Players</th>
+                <th class="credits-wide-col">Publisher</th>
+              </tr></thead>
+              <tbody id="credits-table-body"></tbody>
+            </table>
+          </div>
+          <div class="credits-pagination">
+            <button type="button" class="btn btn-outline" id="btn-credits-prev">Prev</button>
+            <span id="credits-page-label">Page 1 of 1</span>
+            <button type="button" class="btn btn-outline" id="btn-credits-next">Next</button>
+          </div>
+        </div>
+        <div class="card credits-empty" id="credits-empty" hidden>
+          <strong>No games yet.</strong>
+          <span>Add the first one you've beaten.</span>
+          <button type="button" class="btn btn-accent" id="btn-credits-empty-add">Add game</button>
+        </div>
+        <div class="card credits-error" id="credits-error" hidden>
+          <strong>Roll Credits could not load.</strong>
+          <span id="credits-error-copy">Try refreshing.</span>
+        </div>
       </div>
     </section>
 
@@ -846,6 +943,132 @@
           </div>
         </div>
 
+        <div class="section-label">Autodarts</div>
+        <div class="card autodarts-settings-card" id="autodarts-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Autodarts</div>
+            <span class="status-pill" id="autodarts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="autodarts-status-detail">Loading…</p>
+          <p class="hint autodarts-observe-hint">Unofficial read-out only — never starts or corrects matches.</p>
+
+          <div class="autodarts-layout">
+            <section class="autodarts-panel" aria-label="Account and board">
+              <div class="autodarts-panel-head">
+                <span class="field-label">Connection</span>
+                <div id="autodarts-linked-actions" class="autodarts-inline-actions" hidden>
+                  <button type="button" class="btn btn-outline" id="btn-autodarts-relink">Re-link</button>
+                  <button type="button" class="btn btn-outline" id="btn-autodarts-unlink">Unlink</button>
+                </div>
+              </div>
+
+              <div id="autodarts-account-block" class="autodarts-account-stack">
+                <div id="autodarts-mode-tabs" class="segmented">
+                  <button type="button" class="segmented-btn active" data-mode="device">Device link</button>
+                  <button type="button" class="segmented-btn" data-mode="password">Email &amp; password</button>
+                </div>
+
+                <div id="autodarts-device-mode">
+                  <button type="button" class="btn btn-accent btn-block" id="btn-autodarts-link">Link Autodarts</button>
+                  <div id="autodarts-device-block" hidden>
+                    <p class="hint">Enter this code at Autodarts:</p>
+                    <p class="autodarts-device-code" id="autodarts-device-code">—</p>
+                    <a class="btn btn-outline btn-block" id="autodarts-device-open" href="https://auth.autodarts.com/link" target="_blank" rel="noopener">Open auth.autodarts.com to approve</a>
+                    <button type="button" class="btn btn-outline btn-block" id="btn-autodarts-device-cancel">Cancel device link</button>
+                  </div>
+                </div>
+
+                <div id="autodarts-password-block" class="autodarts-password-block" hidden>
+                  <div class="autodarts-field-grid">
+                    <label class="field-label" for="autodarts-email">Email
+                      <input class="field-input" id="autodarts-email" type="email" autocomplete="username">
+                    </label>
+                    <label class="field-label" for="autodarts-password">Password
+                      <input class="field-input" id="autodarts-password" type="password" autocomplete="current-password">
+                    </label>
+                  </div>
+                  <button type="button" class="btn btn-accent btn-block" id="btn-autodarts-password">Sign in with email</button>
+                </div>
+              </div>
+
+              <div class="autodarts-board-row">
+                <label class="field-label" for="autodarts-board">Board
+                  <select id="autodarts-board" class="field-input"></select>
+                </label>
+                <p class="hint" id="autodarts-board-status">Board status: —</p>
+              </div>
+            </section>
+
+            <section class="autodarts-panel autodarts-behavior" aria-label="Live and display">
+              <div class="autodarts-behavior-grid">
+                <div>
+                  <span class="field-label">Live match</span>
+                  <label class="trivia-check"><input type="checkbox" id="autodarts-auto-push" checked><span>Auto-push on match start</span></label>
+                  <label class="field-label field-label-spaced">Inactivity close</label>
+                  <div class="segmented" id="autodarts-inactivity-tabs">
+                    <button type="button" class="segmented-btn" data-minutes="5">5m</button>
+                    <button type="button" class="segmented-btn" data-minutes="10">10m</button>
+                    <button type="button" class="segmented-btn active" data-minutes="15">15m</button>
+                    <button type="button" class="segmented-btn" data-minutes="30">30m</button>
+                    <button type="button" class="segmented-btn" data-minutes="60">60m</button>
+                  </div>
+                  <label class="field-label field-label-spaced" for="autodarts-final-hold">Final card hold</label>
+                  <div class="slider-row">
+                    <input type="range" id="autodarts-final-hold" min="30" max="180" step="5" value="60" aria-label="Final card hold seconds">
+                    <span class="slider-value" id="autodarts-final-hold-value">60s</span>
+                  </div>
+                </div>
+                <div>
+                  <span class="field-label">On screen</span>
+                  <label class="field-label" for="autodarts-leaderboard-size">Leaderboard size</label>
+                  <div class="slider-row">
+                    <input type="range" id="autodarts-leaderboard-size" min="3" max="16" step="1" value="8" aria-label="Leaderboard size">
+                    <span class="slider-value" id="autodarts-leaderboard-size-value">8</span>
+                  </div>
+                  <label class="field-label field-label-spaced" for="autodarts-dashboard-seconds">Dashboard</label>
+                  <div class="slider-row">
+                    <input type="range" id="autodarts-dashboard-seconds" min="30" max="300" step="5" value="120" aria-label="Dashboard display seconds">
+                    <span class="slider-value" id="autodarts-dashboard-seconds-value">120s</span>
+                  </div>
+                  <label class="field-label field-label-spaced" for="autodarts-last-match-seconds">Last match</label>
+                  <div class="slider-row">
+                    <input type="range" id="autodarts-last-match-seconds" min="30" max="300" step="5" value="90" aria-label="Last match display seconds">
+                    <span class="slider-value" id="autodarts-last-match-seconds-value">90s</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="autodarts-panel autodarts-footer" aria-label="Archive and test">
+              <p class="hint" id="autodarts-archive-hint">Archive: —</p>
+              <div class="autodarts-footer-actions">
+                <button type="button" class="btn btn-outline" id="btn-autodarts-sync">Sync history</button>
+                <button type="button" class="btn btn-accent" id="btn-autodarts-test">Test</button>
+              </div>
+              <p class="hint" id="autodarts-test-result"></p>
+            </section>
+
+            <details class="autodarts-advanced">
+              <summary>Advanced — OAuth override</summary>
+              <p class="hint">Linking uses Autodarts’ public client <code>darts-caller</code> (no secret). Override only if you were given a different client id.</p>
+              <div class="autodarts-field-grid">
+                <label class="field-label" for="autodarts-client-id">
+                  <span class="autodarts-oauth-label">Client ID</span>
+                  <input class="field-input" id="autodarts-client-id" spellcheck="false" autocomplete="off" placeholder="darts-caller">
+                </label>
+                <label class="field-label" for="autodarts-client-secret">
+                  <span class="autodarts-oauth-label">Client secret</span>
+                  <input class="field-input" id="autodarts-client-secret" type="password" spellcheck="false" autocomplete="new-password" placeholder="Optional">
+                </label>
+              </div>
+              <p class="hint" id="autodarts-oauth-hint">Using built-in darts-caller</p>
+              <div class="autodarts-oauth-actions">
+                <button type="button" class="btn btn-accent" id="btn-autodarts-oauth-save">Save override</button>
+              </div>
+            </details>
+          </div>
+        </div>
+
         <div class="section-label">Trivia</div>
         <div class="card trivia-settings-card" id="trivia-settings-card">
           <div class="auth-head">
@@ -939,6 +1162,70 @@
           </div>
         </div>
 
+        <div class="section-label">Roll Credits</div>
+        <div class="card credits-settings-card" id="credits-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Roll Credits</div>
+            <span class="status-pill" id="credits-credentials-pill">…</span>
+          </div>
+          <p class="auth-detail" id="credits-settings-status">Loading settings…</p>
+          <div class="settings-columns settings-columns-3">
+            <div class="settings-col">
+              <label class="field-label" for="credits-client-id">IGDB client ID</label>
+              <input class="field-input" id="credits-client-id" autocomplete="off" spellcheck="false">
+              <label class="field-label field-label-spaced" for="credits-client-secret">IGDB client secret</label>
+              <input class="field-input" id="credits-client-secret" type="password" autocomplete="new-password" spellcheck="false">
+              <div class="credits-settings-actions">
+                <button type="button" class="btn btn-accent" id="btn-credits-credentials-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-credits-credentials-test">Test</button>
+              </div>
+              <p class="hint" id="credits-credentials-hint">
+                <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">Open Twitch developer console</a>.
+                Twitch issues the free credentials used to reach IGDB.
+              </p>
+              <label class="field-label field-label-spaced" for="credits-max-screenshots">Screenshots per game</label>
+              <input class="field-input" id="credits-max-screenshots" type="number" min="1" max="12" value="6">
+              <label class="trivia-check"><input type="checkbox" id="credits-download-screenshots" checked disabled><span>Download screenshots</span></label>
+              <p class="hint credits-compact-hint">The server currently downloads 1–12 screenshots; zero is not supported.</p>
+              <label class="trivia-check"><input type="checkbox" id="credits-download-video"><span>Download provider video</span></label>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label">Media priority</label>
+              <p class="hint credits-compact-hint">When a game is shown, the first kind that exists is featured.</p>
+              <div class="credits-priority-list" id="credits-global-priority"></div>
+              <label class="trivia-check field-label-spaced"><input type="checkbox" id="credits-youtube-enabled"><span>Download YouTube videos</span></label>
+              <label class="field-label" for="credits-youtube-resolution">Default YouTube resolution</label>
+              <select class="field-input" id="credits-youtube-resolution">
+                <option value="360">360p</option><option value="480">480p</option>
+                <option value="720">720p</option><option value="1080">1080p</option>
+              </select>
+            </div>
+
+            <div class="settings-col">
+              <label class="field-label" for="credits-seconds-game">Seconds per game</label>
+              <input class="field-input" id="credits-seconds-game" type="number" min="5" max="300">
+              <label class="field-label field-label-spaced" for="credits-dashboard-seconds">Dashboard seconds</label>
+              <input class="field-input" id="credits-dashboard-seconds" type="number" min="10" max="120">
+              <label class="field-label field-label-spaced" for="credits-display-order">Order</label>
+              <select class="field-input" id="credits-display-order">
+                <option value="recent">Newest first</option><option value="oldest">Oldest first</option>
+                <option value="random">Shuffle</option><option value="alpha">A–Z</option>
+              </select>
+              <label class="field-label field-label-spaced" for="credits-scheduled-limit">Scheduled game limit</label>
+              <input class="field-input" id="credits-scheduled-limit" type="number" min="0" value="15">
+              <p class="hint credits-compact-hint">0 shows all games. This limit applies to scheduled airings.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-credits-settings-save">Save Roll Credits settings</button>
+              <div class="credits-storage">
+                <span class="field-label">Storage</span>
+                <strong id="credits-disk-usage">—</strong>
+                <button type="button" class="btn btn-outline btn-block" id="btn-credits-prune">Prune orphaned files</button>
+                <p class="hint credits-compact-hint">Removes media folders that no longer belong to any game.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <p class="hint" id="bridge-meta"></p>
       </div>
     </section>
@@ -959,19 +1246,21 @@
     </button>
     <button class="tab-btn" data-tab="scheduler">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-      <span>Scheduler</span>
+      <span class="tab-label"><span class="tab-label-full">Scheduler</span><span class="tab-label-short">Sched</span></span>
     </button>
     <button class="tab-btn" data-tab="slideshow">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
-      <span>Slideshow</span>
+      <span class="tab-label"><span class="tab-label-full">Slideshow</span><span class="tab-label-short">Slides</span></span>
+    </button>
+    <button class="tab-btn" data-tab="credits">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a4 4 0 0 0 4 4M16 6h3v1a4 4 0 0 1-4 4M12 12v4M8 20h8M9 16h6v4H9z"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Roll Credits</span><span class="tab-label-short">Credits</span></span>
     </button>
     <button class="tab-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
       <span>Settings</span>
     </button>
   </nav>
-
-  <div class="toast-wrap" id="toast-wrap"></div>
 
   <!-- Live QR camera scanner -->
   <div class="sheet-backdrop" id="qr-scanner-sheet" hidden>
@@ -1038,6 +1327,124 @@
     </div>
   </div>
 
+  <!-- Roll Credits add sheet -->
+  <div class="sheet-backdrop" id="credits-add-sheet" hidden>
+    <div class="sheet credits-sheet">
+      <div class="credits-sheet-head"><div class="sheet-title">Add game</div><button type="button" class="credits-sheet-close" data-close-credits-sheet="credits-add-sheet" aria-label="Close">×</button></div>
+      <div class="url-row">
+        <input type="search" id="credits-add-search" placeholder="Game title" autocomplete="off">
+        <button type="button" class="btn btn-accent" id="btn-credits-add-search">Search</button>
+      </div>
+      <p class="hint" id="credits-add-status">Search IGDB and Steam, or add a game manually.</p>
+      <div class="credits-candidates" id="credits-candidates"></div>
+      <button type="button" class="credits-text-button" id="btn-credits-manual">Add manually instead</button>
+      <div class="credits-add-fields" id="credits-add-fields" hidden>
+        <label class="field-label" for="credits-add-title">Title</label>
+        <input class="field-input" id="credits-add-title">
+        <label class="field-label field-label-spaced" for="credits-add-system">System</label>
+        <select class="field-input" id="credits-add-system"></select>
+        <div class="credits-date-row">
+          <label>Beaten on<input class="field-input" id="credits-add-date" type="date"></label>
+          <label class="trivia-check"><input type="checkbox" id="credits-add-date-na"><span>NA — don't remember</span></label>
+        </div>
+        <label class="field-label" for="credits-add-with">Beaten with (optional)</label>
+        <input class="field-input" id="credits-add-with">
+        <button type="button" class="btn btn-accent btn-block" id="btn-credits-create">Add to Roll Credits</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roll Credits edit sheet -->
+  <div class="sheet-backdrop" id="credits-edit-sheet" hidden>
+    <div class="sheet credits-sheet credits-edit-sheet">
+      <div class="credits-sheet-head">
+        <div class="credits-sheet-heading">
+          <span class="credits-induction" id="credits-edit-induction"></span>
+          <div class="sheet-title" id="credits-edit-heading">Edit game</div>
+        </div>
+        <button type="button" class="credits-sheet-close" data-close-credits-sheet="credits-edit-sheet" aria-label="Close">×</button>
+      </div>
+      <div class="credits-edit-scroll">
+        <div class="credits-form-grid">
+          <label>Title<input class="field-input" id="credits-edit-title"></label>
+          <label>System<select class="field-input" id="credits-edit-system"></select></label>
+          <label>Beaten on<input class="field-input" id="credits-edit-date" type="date"></label>
+          <label class="trivia-check credits-na-check"><input type="checkbox" id="credits-edit-date-na"><span>NA — don't remember</span></label>
+          <label class="credits-form-wide">Beaten with<input class="field-input" id="credits-edit-with"></label>
+        </div>
+        <label class="field-label field-label-spaced">Difficulty (manual)</label>
+        <div class="credits-chip-row" id="credits-difficulty">
+          <button type="button" data-difficulty="">N/A</button>
+          <button type="button" data-difficulty="Easy">Easy</button>
+          <button type="button" data-difficulty="Normal">Normal</button>
+          <button type="button" data-difficulty="Hard">Hard</button>
+          <button type="button" data-difficulty="Brutal">Brutal</button>
+        </div>
+        <label class="field-label field-label-spaced" for="credits-edit-description">Description</label>
+        <textarea class="field-input credits-description" id="credits-edit-description"></textarea>
+        <div class="credits-form-grid credits-meta-grid">
+          <label>Publisher<input class="field-input" id="credits-edit-publisher"></label>
+          <label>Developer<input class="field-input" id="credits-edit-developer"></label>
+          <label>Release date<input class="field-input" id="credits-edit-release"></label>
+          <label>Max players<input class="field-input" id="credits-edit-players" type="number" min="1"></label>
+          <label class="trivia-check credits-form-wide"><input type="checkbox" id="credits-edit-coop"><span>Co-op supported</span></label>
+          <label class="credits-form-wide">Genres (comma separated)<input class="field-input" id="credits-edit-genres"></label>
+          <label class="credits-form-wide">Notes<textarea class="field-input" id="credits-edit-notes"></textarea></label>
+        </div>
+        <div class="credits-edit-section">
+          <div class="credits-section-head"><strong>Media</strong><div class="credits-upload-kind"><select class="field-input" id="credits-image-kind"><option value="screenshot">Screenshots</option><option value="cover">Cover</option></select><label class="btn btn-outline credits-file-btn">Upload image<input type="file" id="credits-image-upload" accept="image/jpeg,image/png,image/webp" multiple hidden></label></div></div>
+          <div class="credits-media-list" id="credits-media-list"></div>
+          <div class="credits-media-add">
+            <input class="field-input" id="credits-youtube-url" type="url" placeholder="YouTube URL">
+            <select class="field-input" id="credits-youtube-add-resolution"><option value="360">360p</option><option value="480">480p</option><option value="720">720p</option><option value="1080">1080p</option></select>
+            <button type="button" class="btn btn-outline" id="btn-credits-youtube-add">Add YouTube</button>
+          </div>
+          <label class="btn btn-outline btn-block credits-file-btn">Upload video<input type="file" id="credits-video-upload" accept="video/mp4,video/webm" hidden></label>
+          <p class="hint">Video uploads stream directly to the bridge. Large files may take a while.</p>
+        </div>
+        <div class="credits-edit-section">
+          <label class="trivia-check"><input type="checkbox" id="credits-priority-override"><span>Use a media priority for this game</span></label>
+          <p class="hint" id="credits-priority-help">Using the global order.</p>
+          <div class="credits-priority-list" id="credits-game-priority" hidden></div>
+        </div>
+      </div>
+      <div class="credits-edit-actions">
+        <button type="button" class="btn btn-outline" id="btn-credits-edit-rescrape">Re-scrape</button>
+        <button type="button" class="btn btn-danger" id="btn-credits-edit-delete">Delete game</button>
+        <button type="button" class="btn btn-accent" id="btn-credits-edit-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roll Credits delete confirmation -->
+  <div class="sheet-backdrop" id="credits-delete-sheet" hidden>
+    <div class="sheet sheet-confirm">
+      <div class="sheet-title" id="credits-delete-title">Delete game?</div>
+      <p class="sheet-subtext" id="credits-delete-copy">Its photos and video are removed too.</p>
+      <div class="sheet-actions sheet-actions-confirm"><button type="button" class="btn btn-outline" id="btn-credits-delete-cancel">Cancel</button><button type="button" class="btn btn-danger" id="btn-credits-delete-confirm">Delete</button></div>
+    </div>
+  </div>
+
+  <!-- Roll Credits re-scrape scope -->
+  <div class="sheet-backdrop" id="credits-rescrape-sheet" hidden>
+    <div class="sheet credits-sheet">
+      <div class="sheet-title" id="credits-rescrape-title">Re-scrape game</div>
+      <label class="field-label">Refresh</label>
+      <div class="credits-scope-grid">
+        <label class="trivia-check"><input type="checkbox" name="credits-scope" value="metadata" checked><span>Metadata</span></label>
+        <label class="trivia-check"><input type="checkbox" name="credits-scope" value="cover" checked><span>Cover</span></label>
+        <label class="trivia-check"><input type="checkbox" name="credits-scope" value="screenshots" checked><span>Screenshots</span></label>
+        <label class="trivia-check"><input type="checkbox" name="credits-scope" value="video" checked><span>Video</span></label>
+      </div>
+      <label class="field-label field-label-spaced">Existing data</label>
+      <label class="credits-radio"><input type="radio" name="credits-rescrape-mode" value="fill-gaps" checked><span><strong>Fill gaps only</strong><small>Only add missing text and media.</small></span></label>
+      <label class="credits-radio"><input type="radio" name="credits-rescrape-mode" value="replace-scraped"><span><strong>Replace scraped data</strong><small>Keep uploads and hand-edited text.</small></span></label>
+      <label class="credits-radio"><input type="radio" name="credits-rescrape-mode" value="replace-everything"><span><strong>Replace everything</strong><small>Overwrite edited text too. Uploads are still kept.</small></span></label>
+      <p class="sheet-subtext credits-rescrape-copy" id="credits-rescrape-copy">Your uploads and edited text stay untouched.</p>
+      <div class="sheet-actions"><button type="button" class="btn btn-outline" id="btn-credits-rescrape-cancel">Cancel</button><button type="button" class="btn btn-accent" id="btn-credits-rescrape-confirm">Re-scrape</button></div>
+    </div>
+  </div>
+
   <!-- Control PIN unlock sheet -->
   <div class="sheet-backdrop" id="pin-sheet" hidden>
     <div class="sheet">
@@ -1052,6 +1459,8 @@
     </div>
   </div>
 
+  <div class="toast-wrap" id="toast-wrap"></div>
+
   <script src="jsqr.min.js"></script>
   <script>
     // Fallback: if the vendored copy is missing on the bridge, load from CDN
@@ -1060,6 +1469,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal55"></script>
+  <script src="app.js?v=signal71"></script>
 </body>
 </html>

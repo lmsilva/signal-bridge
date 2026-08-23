@@ -21,6 +21,7 @@ from src.overhead_panel import (
     icon_color,
     label_offset_for_hex,
     list_grid_for_box,
+    list_row_min_height,
     motion_frozen,
     page_highlight_hexes,
     page_seconds_remaining,
@@ -96,8 +97,18 @@ class OverheadGeometryTests(unittest.TestCase):
         scope_w = scope[2] - scope[0]
         self.assertAlmostEqual(scope_w / 1800, 0.55, places=2)
         self.assertLess(scope[2], layout["list"][0])
-        self.assertGreaterEqual(layout["rows"], 6)
+        self.assertGreaterEqual(layout["rows"], 5)
+        self.assertLessEqual(layout["list_rows"], 6)
+        self.assertGreaterEqual(layout["min_row"], list_row_min_height(False, 1.0))
         self.assertGreaterEqual(scope[1], layout["meta_strip"][3])
+
+    def test_landscape_list_rows_leave_room_for_three_line_cards(self):
+        grid = list_grid_for_box(700, 900, portrait=False, u=1.0)
+        self.assertLessEqual(grid["rows"], 6)
+        self.assertGreaterEqual(grid["min_row"], 90)
+        usable = 900 - max(48.0, 40.0)
+        row_h = usable / grid["rows"]
+        self.assertGreaterEqual(row_h, grid["min_row"] - 0.5)
 
     def test_scope_projection_inside_radius(self):
         pos, dist = scope_xy_from_latlon(40.1, -111.0, 40.0, -111.0, 25, 200, 200, 100)

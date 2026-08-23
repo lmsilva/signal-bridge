@@ -41,6 +41,8 @@ from src.upside_news_panel import UpsideNewsPanel
 from src.wiki_common_knowledge_panel import WikiCommonKnowledgePanel
 from src.overhead_panel import OverheadPanel
 from src.game_library_tour_panel import GameLibraryTourPanel
+from src.roll_credits_panel import RollCreditsPanel
+from src.autodarts_panel import AutodartsPanel
 from src.weather_fetch import enrich_weather_payload
 
 
@@ -161,7 +163,12 @@ class OverlayWindow:
             "wiki-common-knowledge.round": WikiCommonKnowledgePanel(self.root, self.shell, self.config),
             "overhead.round": OverheadPanel(self.root, self.shell, self.config),
             "game.library-tour": GameLibraryTourPanel(self.root, self.shell, self.config),
+            "roll-credits.tour": RollCreditsPanel(self.root, self.shell, self.config),
+            "autodarts.dashboard": AutodartsPanel(self.root, self.shell, self.config),
+            "autodarts.match": AutodartsPanel(self.root, self.shell, self.config),
         }
+        # Dashboard + match share one panel class; keep two instances so a
+        # dashboard→match handoff always tears down cleanly.
         self.panels["timer.snapshot"].set_on_local_fire(self._on_timer_panel_local_fire)
 
     @property
@@ -495,6 +502,20 @@ class OverlayWindow:
             return False
         return True
 
+    def _try_autodarts_match_inplace(self, payload: dict) -> bool:
+        """Apply live match revision without tearing down the board (stale/identical safe)."""
+        if self._active_panel_key != "autodarts.match" or not self._active_panel:
+            return False
+        apply = getattr(self._active_panel, "apply_match_payload", None)
+        if not callable(apply):
+            return False
+        try:
+            result = apply(payload)
+        except Exception as error:
+            print(f"Autodarts match update failed: {error}", file=sys.stderr)
+            return False
+        return result in ("ignored", "updated")
+
     def _apply_payload(self, payload: dict):
         display_type = resolve_display_type(payload)
         if not display_type:
@@ -509,6 +530,13 @@ class OverlayWindow:
                 payload = enrich_weather_payload(payload, self.config)
             except Exception as error:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
+
+        if display_type == "autodarts.match" and self._try_autodarts_match_inplace(payload):
+            if self._suppress_dismiss_footer():
+                self.dismiss_footer.hide()
+            else:
+                self.dismiss_footer.raise_()
+            return
 
         self._stop_active_panel()
         self._scrub_canvas_debris()
@@ -525,6 +553,9 @@ class OverlayWindow:
             "wiki-common-knowledge.round",
             "overhead.round",
             "game.library-tour",
+            "roll-credits.tour",
+            "autodarts.dashboard",
+            "autodarts.match",
             "photo.slideshow",
             "weather.query",
             "timer.snapshot",
@@ -599,6 +630,8 @@ class OverlayWindow:
             return True
         if self._active_panel_key == "game.library-tour":
             return True
+        if self._active_panel_key == "roll-credits.tour" and self._display_seconds <= 0:
+            return True
         if self._is_shared_photo_qr_active():
             return True
         if self._active_panel_key == "steam.now-playing" and self._display_seconds <= 0:
@@ -606,6 +639,8 @@ class OverlayWindow:
         if self._active_panel_key == "psn.now-playing" and self._display_seconds <= 0:
             return True
         if self._active_panel_key == "youtube.now-playing" and self._display_seconds <= 0:
+            return True
+        if self._active_panel_key == "autodarts.match" and self._display_seconds <= 0:
             return True
         return False
 

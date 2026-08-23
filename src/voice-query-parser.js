@@ -22,6 +22,8 @@ const {
   matchesSteamNowPlayingQuery,
   matchesPsnNowPlayingQuery,
   matchesYoutubeNowPlayingQuery,
+  matchesAutodartsDashboardQuery,
+  matchesAutodartsNowQuery,
 } = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
@@ -276,6 +278,32 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
         query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'youtube-now-playing-query',
+      };
+    }
+
+    if (matchesAutodartsDashboardQuery(matchSummary, response)) {
+      return {
+        kind: 'autodarts-dashboard',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'autodarts-dashboard-query',
+      };
+    }
+
+    if (matchesAutodartsNowQuery(matchSummary, response)) {
+      return {
+        kind: 'autodarts-now',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'autodarts-now-query',
       };
     }
 

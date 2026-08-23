@@ -12,10 +12,12 @@ RUN npm ci --omit=dev
 
 # A venv keeps pyytlounge off the system Python that certbot uses; Alpine's
 # python3 is PEP 668 "externally managed" and refuses a bare pip install.
-COPY requirements-youtube.txt ./
+COPY requirements-youtube.txt requirements-roll-credits.txt ./
 RUN python3 -m venv /opt/youtube-venv \
-    && /opt/youtube-venv/bin/pip install --no-cache-dir -r requirements-youtube.txt
+    && /opt/youtube-venv/bin/pip install --no-cache-dir -r requirements-youtube.txt \
+    && /opt/youtube-venv/bin/pip install --no-cache-dir -r requirements-roll-credits.txt
 ENV YOUTUBE_PYTHON_BIN=/opt/youtube-venv/bin/python3
+ENV YT_DLP_BIN=/opt/youtube-venv/bin/yt-dlp
 
 COPY src ./src
 COPY scripts ./scripts

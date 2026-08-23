@@ -24,6 +24,8 @@ const {
   matchesSteamNowPlayingQuery,
   matchesPsnNowPlayingQuery,
   matchesYoutubeNowPlayingQuery,
+  matchesAutodartsDashboardQuery,
+  matchesAutodartsNowQuery,
 } = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
@@ -119,6 +121,12 @@ function classifyPhrase(phrase) {
   }
   if (matchesYoutubeNowPlayingQuery(text, '')) {
     return 'youtube-now-playing';
+  }
+  if (matchesAutodartsDashboardQuery(text, '')) {
+    return 'autodarts-dashboard';
+  }
+  if (matchesAutodartsNowQuery(text, '')) {
+    return 'autodarts-now';
   }
   if (matchesShoppingListQuery(text, '')) {
     return 'shopping-list';

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-16 (Reminder fired overlay)
+**Last updated:** 2026-08-23 (Autodarts panel)
 
 ---
 
@@ -42,6 +42,8 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/overhead_panel.py` | Overhead flight-radar — `overhead.round` scope + paginated list (portrait scope top / landscape scope left); vector aircraft icons, dead-reckon motion, stale freeze/fade, `overhead.update` in-place refresh, `overhead.close` |
 | `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `enrichPending` reserves desc/shots/footer and spins dual-arc placeholders until library-tour enrich lands; `steam.now-playing` / close; `SOURCE_CHIP` / `PAYLOAD_KEY` overridable |
 | `src/psn_now_playing_panel.py` | Dedicated PSN Now Playing — shares Steam artwork fetch helpers only; owns status-line + Store description when present, concept-media gallery, footer `PLAYTIME`/`TROPHIES`/`PROGRESS` (no concurrent players); collapses empty bands into a larger hero unless `enrichPending` (library tour) reserves them with spinners |
+| `src/roll_credits_panel.py` | Roll Credits dashboard + image-only game showcase tour (`roll-credits.tour`) |
+| `src/autodarts_panel.py` | Autodarts dashboard (`autodarts.dashboard`) + live/final match (`autodarts.match`); drawn dartboard §12; crown glyph; month chart JAN–DEC; close via `autodarts.match.close` |
 | `src/dismiss_footer.py` | Shared dismiss footer — compact full-bleed band (64u) + draining rail + fixed-width “Dismisses in …” slot; used by `overlay.py` for every timed page except shared-photos / persistent Steam |
 | `src/shared_photos_page.py` | Shared Photos (spec v2) — portrait stack or landscape stage + vertical rail + sidebar (§11); photo-sampled mat + print border + QR plate; used by `PhotoSlideshowPanel` and photo-mode `QrPanel` |
 | `src/overlay.py` | Fullscreen shell: flat `#0B1730` surface, shared `page_header` + `DismissFooter`, `page_chrome` content zone; hides shared chrome for panels that own it (Tesla mission, route planner, guest photobooth, Steam, shared photos) |
@@ -67,7 +69,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `build_portable.bat` | PyInstaller → `dist/alexa broadcast client/` (uses `%LOCALAPPDATA%` venv on NAS shares) |
 | `alexa-broadcast-client.spec` | PyInstaller spec + hidden imports |
 | `requirements-build.txt` | PyInstaller + runtime deps for portable build |
-| `test/send_test.py` | Manual UDP smoke tests (`--type … air-quality|air-quality-poor|input-text|photo-slideshow|route-planner|route-planner-flight|overhead|overhead-update …`) |
+| `test/send_test.py` | Manual UDP smoke tests (`--type … autodarts-dashboard|autodarts-match|autodarts-final|autodarts-match-close|roll-credits|overhead|…`) |
 | `test/run_tests.bat` | Python `unittest` for `test_*.py` |
 | `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing, `QrPanel`, `PhotoSlideshowPanel`, `map_tiles` (incl. `zoom_to_fit`), `place_facts`, `RoutePlannerPanel` layout math + formatting helpers, `TeslaBatteryPanel.battery_bar_height`, `input_control`/display remote, `text_marquee` (`MarqueeLine` fit-vs-overflow, tick/pause/reset cycle, `stop()`) |
 | `README.md` | User-facing setup / portable build guide |
@@ -266,6 +268,10 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-23: **Autodarts panel** — new `autodarts_panel.py` for `autodarts.dashboard` (totals, crowned leaderboard, JAN–DEC month chart, rivalry, records) and `autodarts.match` (live persistent + FINAL timed; faithful dartboard §12, dart/ghost/miss/bouncer markers, turn strip, portrait board fills height). Close: `autodarts.match.close`. Smoke: `send_test.py --type autodarts-dashboard|autodarts-match|autodarts-final|autodarts-match-close`. Tests: `test_autodarts_panel.py`. Ship: portable client rebuild required (not run).
+- 2026-08-23: **Roll Credits month axis + push dashboard** — month chart uses three-letter labels (JAN…DEC) sized to the slot; playlist prefetch waits until showcase so a fast manual Push cannot paint game #1 over the stats page; dashboard also waits on an absolute deadline. Ship: portable client rebuild required.
+- 2026-08-23: **Roll Credits dashboard phase guard** — prefetch of game #1 no longer calls `_draw_showcase` while the stats dashboard is still up (`_phase`); dashboard also shows best month / milestone / beaten-with bars. Ship: portable client rebuild required.
+- 2026-08-23: **Roll Credits Phase 1d panel** — new `roll_credits_panel.py` handles `roll-credits.tour`: portrait/landscape latest-inducted dashboard, counters, 12-month and system charts, then image-only game showcases with public playlist/card fetch, one-ahead prefetch, long-title marquee and progress rail. Registered in payload routing, main, overlay and duration handling; smoke with `send_test.py --type roll-credits`. Phase 2 video is not included. Ship: portable client rebuild required (not run).
 - 2026-08-16: **Reminder fired overlay** — new `ReminderPanel` for UDP `reminder.fired` (owns chrome, REMINDER pill, large label + Echo). Not the broadcast FROM/TO layout. Smoke: `send_test.py --type reminder-fired`. Tests: `test_reminder_panel.py`. Ship: portable client rebuild.
 - 2026-08-07: **Dismiss rail width fix** — footer fill used `canvas.winfo_width()`, which could disagree with the fullscreen geometry and leave the bar looking like a stuck sliver while the countdown text still ticked; rail width now follows `screen_w`, remounts re-apply the current fraction, and `pulse()` flushes idle draws. Ship: portable client rebuild.
 - 2026-08-07: **Broadcast dismiss rail + long FROM names** — dismiss bar contrast raised and fraction driven from deadline/duration (overlay also `pulse()`s each second so a stalled `after` job cannot freeze the rail); FROM/TO/TIME chip values stay on one line (shrink font, else marquee) so names like “Master Bathroom Echo” no longer wrap into the label. Ship: portable client rebuild.

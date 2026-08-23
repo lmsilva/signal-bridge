@@ -249,3 +249,30 @@ test('library tour duration is count × secondsPerGame', () => {
   assert.equal(registry.hasContent('steam.library-tour'), true);
   assert.equal(registry.hasContent('psn.library-tour'), true);
 });
+
+test('Roll Credits command exposes scheduler params and content check', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'credits.show');
+  assert.ok(command);
+  assert.equal(command.group, 'Games');
+  assert.equal(command.route, '/api/push/roll-credits');
+  assert.equal(command.variableDuration, true);
+  assert.deepEqual(command.params.map((param) => param.key), ['secondsPerGame', 'gameLimit']);
+
+  let gameCount = 0;
+  const registry = createCommandRegistry({
+    getRollCreditsStatus: () => ({
+      gameCount,
+      settings: {
+        display: { secondsPerGame: 12, dashboardSeconds: 25, scheduledGameLimit: 15 },
+      },
+    }),
+  });
+  assert.equal(registry.hasContent('credits.show'), false);
+  gameCount = 40;
+  assert.equal(registry.hasContent('credits.show'), true);
+  assert.equal(registry.estimateDuration('credits.show'), 25 + 15 * 12 + 4);
+  assert.equal(
+    registry.estimateDuration('credits.show', { secondsPerGame: 20, gameLimit: 3 }),
+    25 + 3 * 20 + 4,
+  );
+});

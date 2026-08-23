@@ -76,6 +76,8 @@ async function main() {
       psnNowPlaying: listener.psnNowPlaying,
       getYoutubeStatus: listener.getYoutubeStatus,
       youtubeNowPlaying: listener.youtubeNowPlaying,
+      autodarts: listener.autodarts,
+      getAutodartsStatus: listener.getAutodartsStatus,
       trivia: listener.trivia,
       getTriviaStatus: listener.getTriviaStatus,
       upsideNews: listener.upsideNews,
