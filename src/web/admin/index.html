@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal71">
+  <link rel="stylesheet" href="styles.css?v=signal74">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -465,15 +465,17 @@
             <button type="button" class="btn btn-outline credits-filters-clear" id="btn-credits-clear-filters" hidden>Clear</button>
           </div>
           <div class="credits-filters" id="credits-filters-panel" hidden>
-            <div>
-              <span class="credits-control-label">Systems</span>
-              <div class="credits-system-filters" id="credits-system-filters"></div>
-            </div>
-            <div class="credits-filters-meta">
-              <label class="credits-inline-field">Year beaten
-                <select class="field-input" id="credits-year"><option value="">All years</option></select>
-              </label>
-              <label class="trivia-check"><input type="checkbox" id="credits-no-date"><span>No date only</span></label>
+            <div class="credits-filters-row">
+              <div class="credits-filters-systems">
+                <span class="credits-control-label">Systems</span>
+                <div class="credits-system-filters" id="credits-system-filters"></div>
+              </div>
+              <div class="credits-filters-meta">
+                <label class="credits-inline-field">Year beaten
+                  <select class="field-input" id="credits-year"><option value="">All years</option></select>
+                </label>
+                <label class="trivia-check credits-no-date-check"><input type="checkbox" id="credits-no-date"><span>No date only</span></label>
+              </div>
             </div>
           </div>
         </div>
@@ -1022,8 +1024,8 @@
                   <span class="field-label">On screen</span>
                   <label class="field-label" for="autodarts-leaderboard-size">Leaderboard size</label>
                   <div class="slider-row">
-                    <input type="range" id="autodarts-leaderboard-size" min="3" max="16" step="1" value="8" aria-label="Leaderboard size">
-                    <span class="slider-value" id="autodarts-leaderboard-size-value">8</span>
+                    <input type="range" id="autodarts-leaderboard-size" min="3" max="16" step="1" value="12" aria-label="Leaderboard size">
+                    <span class="slider-value" id="autodarts-leaderboard-size-value">12</span>
                   </div>
                   <label class="field-label field-label-spaced" for="autodarts-dashboard-seconds">Dashboard</label>
                   <div class="slider-row">
@@ -1469,6 +1471,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal71"></script>
+  <script src="app.js?v=signal74"></script>
 </body>
 </html>

@@ -96,12 +96,22 @@ test('history sync disabled until endpoint confirmed', async () => {
   const archive = createAutodartsArchive({ ROOT: root, autodartsArchivePath: path.join(root, 'm') });
   const aggregates = createAutodartsAggregates({ ROOT: root, autodartsPlayersPath: path.join(root, 'p.json') });
   const settings = createAutodartsSettings({ autodartsSettingsPath: path.join(root, 's.json') });
+  settings.update({ sync: { historyEndpointConfirmed: false } });
   const history = createAutodartsHistory({ archive, aggregates, api: {}, settings });
   const status = history.status();
   assert.equal(status.enabled, false);
   assert.match(status.note, /live matches/i);
   const result = await history.sync();
   assert.equal(result.skipped, true);
+});
+
+test('history sync enabled when endpoint confirmed', async () => {
+  const root = tempRoot();
+  const archive = createAutodartsArchive({ ROOT: root, autodartsArchivePath: path.join(root, 'm') });
+  const aggregates = createAutodartsAggregates({ ROOT: root, autodartsPlayersPath: path.join(root, 'p.json') });
+  const settings = createAutodartsSettings({ autodartsSettingsPath: path.join(root, 's.json') });
+  const history = createAutodartsHistory({ archive, aggregates, api: {}, settings });
+  assert.equal(history.status().enabled, true);
 });
 
 test('archive matchId dedupe', () => {

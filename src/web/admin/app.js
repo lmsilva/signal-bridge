@@ -3992,7 +3992,7 @@
         finalHoldSeconds: Number($('autodarts-final-hold')?.value || 60),
       },
       dashboard: {
-        leaderboardSize: Number($('autodarts-leaderboard-size')?.value || 8),
+        leaderboardSize: Number($('autodarts-leaderboard-size')?.value || 12),
         displaySeconds: Number($('autodarts-dashboard-seconds')?.value || 120),
       },
       lastMatch: {
@@ -4025,7 +4025,7 @@
       btn.classList.toggle('active', Number(btn.dataset.minutes) === Number(live.inactivityMinutes || 15));
     });
     setAutodartsSlider('autodarts-final-hold', 'autodarts-final-hold-value', live.finalHoldSeconds || 60, 's');
-    setAutodartsSlider('autodarts-leaderboard-size', 'autodarts-leaderboard-size-value', dashboard.leaderboardSize || 8, '');
+    setAutodartsSlider('autodarts-leaderboard-size', 'autodarts-leaderboard-size-value', dashboard.leaderboardSize || 12, '');
     setAutodartsSlider('autodarts-dashboard-seconds', 'autodarts-dashboard-seconds-value', dashboard.displaySeconds || 120, 's');
     setAutodartsSlider('autodarts-last-match-seconds', 'autodarts-last-match-seconds-value', lastMatch.displaySeconds || 90, 's');
   }
@@ -4170,20 +4170,22 @@
     const archive = status.archive || {};
     const archiveHint = $('autodarts-archive-hint');
     if (archiveHint) {
-      const note = archive.note || (archive.enabled === false
-        ? 'Archive builds from live matches until the history list endpoint is confirmed'
-        : '');
-      archiveHint.textContent = `${archive.count || 0} matches archived`
-        + (archive.lastSyncAt ? ` · last sync ${archive.lastSyncAt}` : '')
-        + (note ? ` — ${note}` : '');
+      const count = archive.count || 0;
+      const syncBit = archive.lastSyncAt
+        ? ` · last sync ${archive.lastSyncAt}`
+        : (archive.running ? ' · syncing…' : '');
+      const note = archive.note || '';
+      archiveHint.textContent = count
+        ? `${count} matches archived${syncBit}${note ? ` — ${note}` : ''}`
+        : `No matches archived yet${syncBit}${note ? ` — ${note}` : ' — Sync history pulls from Autodarts cloud'}`;
     }
     const syncBtn = $('btn-autodarts-sync');
     if (syncBtn) {
-      const syncReady = archive.enabled === true;
-      syncBtn.disabled = !syncReady;
+      const syncReady = archive.enabled !== false;
+      syncBtn.disabled = !syncReady || archive.running === true;
       syncBtn.title = syncReady
-        ? 'Pull past matches from Autodarts'
-        : 'Backfill stays off until Autodarts publishes a confirmed history-list API — live matches still archive automatically';
+        ? 'Pull Match History from Autodarts (local archive is the offline cache)'
+        : 'History sync is disabled in settings';
     }
     const boardStatus = $('autodarts-board-status');
     if (boardStatus) {
@@ -4402,19 +4404,29 @@
     $('btn-autodarts-sync')?.addEventListener('click', async () => {
       const button = $('btn-autodarts-sync');
       if (button?.disabled) {
-        toast('History backfill is not available yet — live matches still archive on their own', 'warn');
+        toast('History sync is already running or disabled', 'warn');
         return;
       }
+      setAutodartsBusy(button, true, 'Syncing…');
+      toast('Pulling Match History from Autodarts…', '');
       try {
         const result = await apiPost('/api/autodarts/sync', {});
         if (result.skipped) {
-          toast(result.error || 'History sync is not available yet', 'warn');
+          toast(result.error || 'History sync skipped', 'warn');
+        } else if (result.ok) {
+          toast(
+            `Imported ${result.imported || 0} match${result.imported === 1 ? '' : 'es'}`
+              + (result.skipped ? ` · ${result.skipped} already known` : ''),
+            'good',
+          );
         } else {
-          toast(result.error || result.note || (result.ok ? 'Sync started' : 'Sync unavailable'), result.ok ? 'good' : 'warn');
+          toast(result.error || result.note || 'Sync failed — local archive unchanged', 'warn');
         }
         await loadAutodartsSettings();
       } catch (error) {
         toast(error.message || 'Sync failed', 'bad');
+      } finally {
+        setAutodartsBusy(button, false);
       }
     });
     applyAutodartsLinkMode('device');

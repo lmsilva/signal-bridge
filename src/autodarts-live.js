@@ -29,16 +29,33 @@ function stableJson(value) {
   return JSON.stringify(value);
 }
 
+function segmentLabel(segment) {
+  if (!segment || typeof segment !== 'object') return '';
+  const named = String(segment.name || segment.shortName || segment.seg || '').trim();
+  if (named) return named;
+  const number = Number(segment.number);
+  const mult = Number(segment.multiplier);
+  if (!Number.isFinite(number)) return '';
+  if (number === 25) return mult === 2 ? 'DB' : 'B';
+  if (mult === 3) return `T${number}`;
+  if (mult === 2) return `D${number}`;
+  if (mult === 0 || String(segment.bed || '').toLowerCase() === 'outside') return 'M';
+  return `S${number}`;
+}
+
 function normalizeDart(raw) {
   if (raw == null) return null;
   if (typeof raw !== 'object') {
     const seg = String(raw || '').trim();
     return seg ? { seg, x: null, y: null, type: 'normal' } : null;
   }
+  const segment = raw.segment && typeof raw.segment === 'object' ? raw.segment : null;
   const seg = String(
-    raw.seg || raw.name || raw.segment || raw.shortName || '',
+    raw.seg || raw.name || raw.shortName || segmentLabel(segment) || raw.segment || '',
   ).trim() || 'M';
+  const bed = String(segment?.bed || raw.bed || '').toLowerCase();
   const type = String(raw.type || '').toLowerCase() === 'bouncer'
+    || bed.includes('bounc')
     ? 'bouncer'
     : 'normal';
   const x = Number.isFinite(Number(raw.x)) ? Number(raw.x)
@@ -52,30 +69,52 @@ function settingsLineFrom(meta = {}) {
   if (meta.settingsLine) return String(meta.settingsLine);
   const settings = meta.settings || {};
   const parts = [];
-  if (settings.baseScore) parts.push(String(settings.baseScore));
+  const base = settings.baseScore ?? settings.target;
+  if (base != null && base !== '') parts.push(String(base));
   const inMode = settings.inMode || settings.in;
   const outMode = settings.outMode || settings.out;
   if (inMode || outMode) {
     parts.push([inMode, outMode].filter(Boolean).join('-'));
   }
   const legs = settings.legs || settings.bestOf || meta.legs;
-  if (legs) parts.push(`First to ${legs} legs`);
+  if (legs != null && typeof legs !== 'object') parts.push(`First to ${legs} legs`);
   return parts.join(' · ') || String(meta.variant || 'Match');
+}
+
+function winnerNameFrom(state = {}, players = []) {
+  const raw = state.winner;
+  if (raw == null || raw === '' || Number(raw) === -1) return null;
+  if (typeof raw === 'number' || /^\d+$/.test(String(raw))) {
+    const index = Number(raw);
+    return players[index]?.name || null;
+  }
+  return String(raw);
 }
 
 function mapPlayers(state = {}, meta = {}) {
   const roster = state.players || meta.players || [];
+  const gameScores = state.gameScores || meta.gameScores || [];
+  const scoreRows = state.scores || meta.scores || [];
+  const winnerIndex = Number.isInteger(Number(state.winner)) && Number(state.winner) >= 0
+    ? Number(state.winner)
+    : null;
   return roster.map((row, index) => {
     const name = row.name || row.playerName || row.player?.name || `Player ${index + 1}`;
-    const score = row.score ?? row.remaining ?? row.points ?? row.lives ?? 0;
+    const scoreRow = scoreRows[index] || {};
+    const score = row.score ?? row.remaining ?? row.points ?? row.lives
+      ?? gameScores[index]
+      ?? scoreRow.score
+      ?? 0;
     return {
       name,
       score: Number(score) || 0,
-      legs: Number(row.legs ?? row.legsWon ?? 0) || 0,
-      sets: Number(row.sets ?? row.setsWon ?? 0) || 0,
-      average: row.average != null ? Number(row.average) : null,
+      legs: Number(row.legs ?? row.legsWon ?? scoreRow.legs ?? 0) || 0,
+      sets: Number(row.sets ?? row.setsWon ?? scoreRow.sets ?? 0) || 0,
+      average: row.average != null ? Number(row.average) : (
+        scoreRow.average != null ? Number(scoreRow.average) : null
+      ),
       lastTurnPoints: row.lastTurnPoints != null ? Number(row.lastTurnPoints) : null,
-      isWinner: Boolean(row.isWinner || row.winner),
+      isWinner: Boolean(row.isWinner || row.winner || winnerIndex === index),
       userId: row.userId || row.playerId || row.player?.id || null,
       checkoutPct: row.checkoutPct ?? null,
     };
@@ -83,7 +122,9 @@ function mapPlayers(state = {}, meta = {}) {
 }
 
 function mapTurn(raw = {}) {
-  const darts = Array.isArray(raw.darts) ? raw.darts.map(normalizeDart) : [null, null, null];
+  const throws = Array.isArray(raw.throws) ? raw.throws
+    : (Array.isArray(raw.darts) ? raw.darts : []);
+  const darts = throws.length ? throws.map(normalizeDart) : [null, null, null];
   while (darts.length < 3) darts.push(null);
   return {
     points: Number(raw.points ?? raw.score ?? 0) || 0,
@@ -92,32 +133,90 @@ function mapTurn(raw = {}) {
   };
 }
 
+function turnFromState(state = {}) {
+  if (Array.isArray(state.turns) && state.turns.length) return mapTurn(state.turns[0] || {});
+  if (state.turn && typeof state.turn === 'object') return mapTurn(state.turn);
+  if (Array.isArray(state.throws)) return mapTurn({ throws: state.throws, points: state.points });
+  return mapTurn({});
+}
+
+function matchIsFinished(state = {}) {
+  if (state.finished === true || state.status === 'finished') return true;
+  const winner = state.winner;
+  if (winner == null || winner === '' || Number(winner) === -1) return false;
+  return true;
+}
+
+function eventToken(message = {}, data = {}) {
+  return String(
+    data.event || message.event || data.name || message.name || message.type || '',
+  ).toLowerCase().trim();
+}
+
+function isAbortEvent(event = '') {
+  const e = String(event || '').toLowerCase();
+  return e === 'delete'
+    || e === 'abort'
+    || e === 'aborted'
+    || e === 'surrender'
+    || e === 'cancel'
+    || e === 'cancelled'
+    || e === 'canceled'
+    || e.includes('surrender')
+    || e.includes('abort')
+    || (e.includes('cancel') && !e.includes('calibration'));
+}
+
+function isMatchFinishEvent(event = '', state = {}) {
+  if (isAbortEvent(event)) return false;
+  const e = String(event || '').toLowerCase();
+  if (e === 'finish' || e === 'match.finished' || e.includes('gameshot')) return true;
+  return matchIsFinished(state);
+}
+
 function matchFromState(matchId, state = {}, meta = {}, revision = 0) {
+  const mergedSettings = {
+    ...(meta.settings || {}),
+    ...(state.settings || {}),
+  };
   const players = mapPlayers(state, meta);
-  const currentPlayerIndex = Number.isInteger(state.currentPlayerIndex)
-    ? state.currentPlayerIndex
-    : Number(state.player || state.throwingPlayer || 0) || 0;
+  const playerRaw = state.player ?? state.currentPlayerIndex ?? state.throwingPlayer ?? 0;
+  const currentPlayerIndex = Number.isFinite(Number(playerRaw)) ? Number(playerRaw) : 0;
+  const startedAt = meta.startedAt || meta.createdAt || state.startedAt || state.createdAt || null;
+  let durationSec = Number(state.durationSec ?? state.duration ?? meta.durationSec ?? 0) || 0;
+  if (!durationSec && startedAt) {
+    const startedMs = Date.parse(startedAt);
+    if (Number.isFinite(startedMs)) {
+      durationSec = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+    }
+  }
+  const winner = winnerNameFrom(state, players) || meta.winner || null;
   return {
     matchId: String(matchId),
     revision,
-    status: state.finished || state.status === 'finished' ? 'finished' : 'live',
+    status: matchIsFinished(state) ? 'finished' : 'live',
     variant: meta.variant || state.variant || 'X01',
-    settingsLine: settingsLineFrom({ ...meta, ...(state.settings ? { settings: state.settings } : {}) }),
-    settings: meta.settings || state.settings || null,
-    startedAt: meta.startedAt || state.startedAt || null,
-    durationSec: Number(state.durationSec ?? state.duration ?? 0) || 0,
+    settingsLine: settingsLineFrom({
+      ...meta,
+      ...state,
+      settings: mergedSettings,
+      settingsLine: meta.settingsLine || state.settingsLine,
+    }),
+    settings: Object.keys(mergedSettings).length ? mergedSettings : null,
+    startedAt,
+    durationSec,
     currentPlayerIndex,
-    turn: mapTurn(state.turn || state.throws || {}),
+    turn: turnFromState(state),
     prevTurn: state.prevTurn ? {
       playerIndex: Number(state.prevTurn.playerIndex) || 0,
       points: Number(state.prevTurn.points) || 0,
-      darts: (state.prevTurn.darts || []).map(normalizeDart),
+      darts: (state.prevTurn.darts || state.prevTurn.throws || []).map(normalizeDart),
     } : null,
     players,
     gameShot: state.gameShot || meta.gameShot || null,
     hitMap: state.hitMap || meta.hitMap || null,
     local: meta.local !== false,
-    winner: state.winner || meta.winner || null,
+    winner,
   };
 }
 
@@ -194,12 +293,20 @@ function createAutodartsLive({
     };
   }
 
+  function refreshDuration() {
+    if (!match?.startedAt) return;
+    const startedMs = Date.parse(match.startedAt);
+    if (!Number.isFinite(startedMs)) return;
+    match.durationSec = Math.max(0, Math.floor((now() - startedMs) / 1000));
+  }
+
   function pushMatch(force = false) {
     if (!match || !sendUdpPayload) return false;
     if (!settings.get().live.autoPush && match.status === 'live' && !force) {
       return false;
     }
     if (suppressed && match.status === 'live') return false;
+    refreshDuration();
     const body = payload?.buildMatch
       ? payload.buildMatch(match, {
         persistent: match.status === 'live',
@@ -360,6 +467,7 @@ function createAutodartsLive({
     if (match) {
       match.status = 'finished';
       match.revision = (Number(match.revision) || 0) + 1;
+      refreshDuration();
     }
     pushMatch(true);
     clearTimer(finalTimer);
@@ -372,6 +480,51 @@ function createAutodartsLive({
     }, finalHoldMs());
     if (typeof finalTimer.unref === 'function') finalTimer.unref();
     scheduleArchive(match?.matchId);
+  }
+
+  /** Abort / delete / surrender — close the wall immediately; keep a light archive row. */
+  function beginAbort(reason = 'aborted') {
+    if (!match || phase === 'idle') return;
+    clearTimer(inactivityTimer);
+    clearTimer(restoreTimer);
+    clearTimer(finalTimer);
+    finalTimer = null;
+    suppressed = false;
+    const matchId = match.matchId;
+    refreshDuration();
+    log?.info?.('Autodarts match aborted — closing display', { matchId, reason });
+    archiveAbort(matchId, reason);
+    pushClose(reason);
+    phase = 'idle';
+    match = null;
+    dormantMatchId = null;
+    lastPushedJson = null;
+  }
+
+  function archiveAbort(matchId, reason) {
+    if (!matchId || archive.has(matchId)) return;
+    archive.append({
+      matchId,
+      aborted: true,
+      abortReason: reason,
+      variant: match?.variant || 'X01',
+      settings: match?.settings || null,
+      local: match?.local !== false,
+      startedAt: match?.startedAt || null,
+      finishedAt: new Date(now()).toISOString(),
+      durationSec: match?.durationSec || 0,
+      players: (match?.players || []).map((row) => ({
+        name: row.name,
+        userId: row.userId || null,
+        legsWon: row.legs,
+        setsWon: row.sets,
+        average: row.average,
+      })),
+      winner: null,
+      source: 'live-abort',
+      revision: match?.revision || 0,
+    });
+    // Do not recompute aggregates — aborted matches are excluded from W–L / averages.
   }
 
   function scheduleArchive(matchId) {
@@ -534,33 +687,68 @@ function createAutodartsLive({
     }
     if (!message || typeof message !== 'object') return;
 
-    const channel = String(message.channel || message.topic || message.type || '');
-    const event = String(message.event || message.name || message.type || '').toLowerCase();
-    const data = message.data || message.payload || message;
+    const channel = String(message.channel || message.topic || '');
+    const data = (message.data && typeof message.data === 'object')
+      ? message.data
+      : (message.payload && typeof message.payload === 'object' ? message.payload : message);
+    const event = eventToken(message, data);
+    const topic = String(message.topic || '');
 
-    if (/board/i.test(channel) || event.includes('board')) {
+    // Board channel: match start / board online; abort when board reports delete.
+    if (/boards/i.test(channel) || /boards/i.test(topic)) {
       const online = data.online ?? data.connected ?? data.status === 'online';
       if (online != null) boardOnline = Boolean(online);
+
+      if (isAbortEvent(event)) {
+        const abortId = extractMatchId(data) || extractMatchId(message) || match?.matchId;
+        if (abortId && match && String(match.matchId) === String(abortId)) {
+          beginAbort(event || 'board-delete');
+        }
+        return;
+      }
+
+      if (event === 'start' || event === 'match' || event.includes('match')) {
+        const matchId = extractMatchId(data) || extractMatchId(message);
+        if (matchId && (!match || match.matchId !== String(matchId) || match.status !== 'live')) {
+          seedMatch(String(matchId)).catch((error) => {
+            log?.warn?.('Autodarts seed failed', error?.message || error);
+          });
+        }
+        return;
+      }
+
       const matchId = extractMatchId(data) || extractMatchId(message);
       if (matchId && (!match || match.matchId !== String(matchId))) {
-        if (phase === 'dormant' && dormantMatchId === String(matchId)) {
-          // Will re-open on first throw/state below.
-        }
         seedMatch(String(matchId)).catch((error) => {
           log?.warn?.('Autodarts seed failed', error?.message || error);
         });
       }
+      return;
     }
 
-    const matchId = extractMatchId(message) || match?.matchId;
+    const matchId = extractMatchId(data) || extractMatchId(message) || match?.matchId;
     if (!matchId) return;
+    if (match && match.matchId && String(match.matchId) !== String(matchId)) {
+      // Stale event for a previous match.
+      if (!isAbortEvent(event) && !isMatchFinishEvent(event, data)) return;
+    }
 
-    if (event.includes('finish') || event.includes('gameshot') || event === 'match.finished'
-      || data.finished === true || data.status === 'finished') {
+    if (isAbortEvent(event)) {
+      if (!match || String(match.matchId) === String(matchId)) {
+        if (!match) {
+          // Seed enough identity to close any lingering card.
+          match = { matchId: String(matchId), status: 'live', players: [], revision: 0 };
+        }
+        beginAbort(event || 'aborted');
+      }
+      return;
+    }
+
+    if (isMatchFinishEvent(event, data)) {
       const next = matchFromState(
         matchId,
-        { ...(data.state || data), finished: true, gameShot: data.gameShot || data.segment },
-        { ...(match || {}), winner: data.winner || match?.winner },
+        { ...data, finished: true, gameShot: data.gameShot || data.segment },
+        { ...(match || {}), variant: data.variant || match?.variant, settings: data.settings || match?.settings },
         (Number(match?.revision) || 0) + 1,
       );
       if (data.gameShot || data.segment) {
@@ -570,19 +758,27 @@ function createAutodartsLive({
       return;
     }
 
-    if (data.state || data.players || data.turn || data.throws || event.includes('throw')
-      || event.includes('state') || event.includes('turn')) {
-      const state = data.state || data;
-      const revision = Number(data.revision ?? state.revision ?? (Number(match?.revision) || 0) + 1);
-      const next = matchFromState(matchId, state, match || {}, revision);
-      if (Array.isArray(data.darts) || Array.isArray(state.darts)) {
-        next.turn = mapTurn({
-          ...(state.turn || {}),
-          darts: data.darts || state.darts,
-          points: data.points ?? state.points ?? state.turn?.points,
-          busted: data.busted ?? state.busted,
-        });
-      }
+    // Live state / throws — Autodarts sends the full match object on *.state.
+    if (data.players || data.gameScores || data.turns || data.turn || data.throws
+      || data.scores || event.includes('throw') || event.includes('state')
+      || event.includes('turn') || event === '' || topic.endsWith('.state')) {
+      const revision = Number(
+        data.revision
+        ?? data.version
+        ?? ((Number(match?.revision) || 0) + 1),
+      );
+      const next = matchFromState(
+        matchId,
+        data,
+        {
+          ...(match || {}),
+          variant: data.variant || match?.variant,
+          settings: data.settings || match?.settings,
+          players: data.players || match?.players,
+          startedAt: data.createdAt || data.startedAt || match?.startedAt,
+        },
+        revision,
+      );
       applyMatch(next);
     }
   }
@@ -751,8 +947,11 @@ module.exports = {
   createAutodartsLive,
   normalizeDart,
   matchFromState,
-  settingsLineFrom,
+  mapPlayers,
   mapTurn,
+  settingsLineFrom,
+  isAbortEvent,
+  isMatchFinishEvent,
   resolveWebSocketImpl,
   STATS_RETRY_MS,
   WS_URL,

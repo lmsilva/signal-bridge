@@ -57,6 +57,7 @@ function recomputeFromMatches(matches = []) {
   let total180s = 0;
 
   for (const match of matches) {
+    if (match?.aborted) continue;
     const finishedAt = match.finishedAt || match.startedAt || null;
     if (finishedAt) {
       const key = String(finishedAt).slice(0, 7);

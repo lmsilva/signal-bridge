@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Autodarts OAuth UI)
+**Last updated:** 2026-08-23 (Autodarts UI + history)
 
 ---
 
@@ -137,7 +137,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/autodarts-auth.js` | Device-link preferred + email/password fallback; refresh + re-link flag |
 | `src/autodarts-archive.js` | Month-partitioned `data/autodarts-matches/*.jsonl` with matchId dedupe |
 | `src/autodarts-aggregates.js` | `data/autodarts-players.json` — weighted X01 avg, ranking, rivalry, records |
-| `src/autodarts-history.js` | History backfill scaffold (disabled until list endpoint confirmed) |
+| `src/autodarts-history.js` | Cloud Match History sync (`GET /as/v0/matches/filter` + per-match stats); local archive is offline cache |
 | `src/autodarts-payload.js` | UDP `autodarts.match` / `.close` / `.dashboard` builders |
 | `src/autodarts-live.js` | WS supervisor via `play.ws.autodarts.com` + `ws` package: board match → auto-push, interrupt-resume, inactivity, FINAL hold, archive; board-state poll backup |
 | `src/autodarts-service.js` | Facade for Settings card, Test/board picker, push helpers |
@@ -535,6 +535,9 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-23: **Autodarts display polish + defaults** — dashboard labels clarified (Last played, readable leaderboard lines, Head-to-head / House records); default leaderboard size 12; admin cache-bust `?v=signal74`. Cloud history Sync remains on confirmed `/as/v0/matches/filter`. Deploy: `./recreate.sh`. Portable client rebuild for panel layout.
+- 2026-08-23: **Autodarts cloud history** — confirmed `GET /as/v0/matches/filter` (play Match History); Sync history + startup/6h schedule import finished matches into the local archive (stats per match; list-only fallback on 404). Local archive is the offline cache when cloud sync fails. Cache-bust `?v=signal73`. Deploy: `./recreate.sh`. Tests: `test/autodarts-history.test.js`.
+- 2026-08-23: **Roll Credits Filters compact** — open Filters is a single content-sized row (system chips wrap as needed; year + “No date” sit beside chips). Removed the wide two-column stretch that left a tall empty band. Cache-bust `?v=signal72`. Deploy: `./recreate.sh`.
 - 2026-08-23: **Autodarts OAuth UI** — Advanced override keeps aligned Client ID / Client secret fields (optional only in placeholder); dropped redundant “Use darts-caller” button. Built-in client stays `darts-caller` (required by Autodarts auth). Cache-bust `?v=signal71`. Deploy: `./recreate.sh`.
 - 2026-08-23: **Autodarts live + denser Settings** — live WS uses `wss://play.ws.autodarts.com/ms/v0/subscribe` (ticket + `boardId.matches` topics), `ws` package for Node 20, board-state poll backup; Settings is a compact 2-col Connection | Live/On-screen grid with footer actions and OAuth under Advanced. Cache-bust `?v=signal70`. Deploy: `./recreate.sh --build` (new npm dep).
 - 2026-08-23: **Tesla sticky re-auth** — Fleet refresh tokens rotate; keep-alive and API refreshes now share one single-flight lock, recover from race failures, clear `tesla-auth-status.json` on healthy session/OAuth/API success, and retry once on vehicle 401 before demanding re-auth. Deploy: `./recreate.sh`. Tests: `test/tesla-token-refresh.test.js`.
