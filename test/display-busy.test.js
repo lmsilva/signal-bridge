@@ -122,3 +122,29 @@ test('a payload with no type is ignored', () => {
   busy.noteSent(null);
   assert.equal(busy.isBusy(), false);
 });
+
+test('a late air-quality refresh does not overwrite a newer Steam or PSN page', () => {
+  // Admin sequence 2026-08-22: Indoor Air Quality (cached preview + slow
+  // enrich) → Steam last-played → PSN last-played. The AQ sensor fetch
+  // used to finish after Steam was already up and yank it off the display.
+  const { busy } = build();
+  const airQuality = busy.beginSendRequest();
+  assert.equal(airQuality.maySend(), true);
+  busy.noteSent({ type: 'air-quality.query', displaySeconds: 120 });
+  airQuality.rememberSent();
+  assert.equal(airQuality.maySend(), true, 'the same command may refresh its own preview');
+
+  busy.noteSent({ type: 'steam.now-playing', displaySeconds: 90 });
+  assert.equal(airQuality.maySend(), false, 'Steam took the display — drop the stale AQ enrich');
+
+  busy.noteSent({ type: 'psn.now-playing', displaySeconds: 90 });
+  assert.equal(airQuality.maySend(), false);
+  assert.equal(busy.snapshot().type, 'psn.now-playing');
+});
+
+test('an unsent slow command is dropped if another page landed first', () => {
+  const { busy } = build();
+  const airQuality = busy.beginSendRequest();
+  busy.noteSent({ type: 'steam.now-playing', displaySeconds: 90 });
+  assert.equal(airQuality.maySend(), false);
+});
