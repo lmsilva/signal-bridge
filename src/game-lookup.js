@@ -108,6 +108,53 @@ async function lookupGameByName(name, {
   return value;
 }
 
+/**
+ * Rich Steam record for Roll Credits. This deliberately uses the same strict
+ * name matching and cache policy as lookupGameByName, but retains media fields
+ * that the small Now Playing fallback does not need.
+ */
+async function lookupSteamGameForCredits(name, {
+  steamApi = require('./steam-api'),
+  now = Date.now,
+  maxScreenshots = 6,
+} = {}) {
+  const key = `credits:${normaliseName(name)}`;
+  if (key === 'credits:') return null;
+  const nowMs = typeof now === 'function' ? now() : now;
+  const cached = cache.get(key);
+  if (cached) {
+    const ttl = cached.value ? CACHE_TTL_MS : MISS_TTL_MS;
+    if ((nowMs - cached.at) < ttl) return cached.value;
+  }
+  let value = null;
+  try {
+    const results = await steamApi.searchStoreApps(name);
+    const best = pickBestApp(results, name);
+    if (best) {
+      const details = await steamApi.fetchAppDetails(best.appId);
+      if (details && pickBestApp([{ appId: best.appId, name: details.name }], name)) {
+        value = {
+          name: details.name,
+          shortDescription: String(details.shortDescription || '').trim(),
+          coverUrl: details.headerImage || null,
+          screenshots: (details.screenshots || []).slice(0, maxScreenshots),
+          movieMp4Urls: details.movieMp4Urls || details.movies || [],
+          developers: details.developers || [],
+          publishers: details.publishers || [],
+          releaseYear: details.releaseYear || null,
+          genres: details.genres || [],
+          appId: Number(details.appId || best.appId),
+          source: 'steam',
+        };
+      }
+    }
+  } catch {
+    value = null;
+  }
+  cache.set(key, { at: nowMs, value });
+  return value;
+}
+
 function clearGameLookupCache() {
   cache.clear();
 }
@@ -116,6 +163,7 @@ module.exports = {
   normaliseName,
   pickBestApp,
   lookupGameByName,
+  lookupSteamGameForCredits,
   clearGameLookupCache,
   CACHE_TTL_MS,
   MISS_TTL_MS,

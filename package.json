@@ -22,6 +22,7 @@
   "dependencies": {
     "alexa-remote2": "^8.0.4",
     "psn-api": "^2.18.0",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "ws": "^8.21.3"
   }
 }

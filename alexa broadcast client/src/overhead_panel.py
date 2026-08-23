@@ -62,6 +62,17 @@ def rows_per_page(portrait: bool) -> int:
     return 4 if portrait else 6
 
 
+def list_row_min_height(portrait: bool, u: float = 1.0) -> float:
+    """Minimum vertical slot for one aircraft list card.
+
+    Landscape cards always reserve callsign + route + altitude (three lines).
+    Portrait multi-column cells use a slightly shorter floor because columns
+    share width and the list band is taller.
+    """
+    u = max(0.5, float(u or 1.0))
+    return max(56.0, (72 if portrait else 96) * u)
+
+
 def list_grid_for_box(
     list_w: float,
     list_h: float,
@@ -75,7 +86,7 @@ def list_grid_for_box(
     list_h = max(80.0, float(list_h))
     footer_h = max(48.0, 40 * u)
     usable_h = max(80.0, list_h - footer_h)
-    min_row = max(56.0, (76 if portrait else 52) * u)
+    min_row = list_row_min_height(portrait, u)
     cols = 1
     if portrait:
         if list_w >= 900 * u:
@@ -85,12 +96,17 @@ def list_grid_for_box(
     rows = max(3, int(usable_h // min_row))
     if cols >= 2:
         rows = max(3, min(rows, 5))
+    elif portrait:
+        rows = max(3, min(rows, 8))
     else:
-        rows = max(3, min(rows, 8 if portrait else 10))
+        # Single-column landscape: keep three-line cards readable — never pack
+        # 8–10 skinny rows that collide callsign into the previous altitude line.
+        rows = max(3, min(rows, 6))
     return {
         "columns": cols,
         "rows": rows,
         "page_size": cols * rows,
+        "min_row": min_row,
     }
 
 
@@ -141,6 +157,7 @@ def compute_layout_regions(
             "rows": grid["page_size"],
             "list_columns": grid["columns"],
             "list_rows": grid["rows"],
+            "min_row": grid["min_row"],
         }
 
     scope_w = content_w * 0.55
@@ -170,6 +187,7 @@ def compute_layout_regions(
         "rows": grid["page_size"],
         "list_columns": grid["columns"],
         "list_rows": grid["rows"],
+        "min_row": grid["min_row"],
     }
 
 
@@ -1363,24 +1381,41 @@ class OverheadPanel(BasePanel):
         page_size = geo["rows"]
         cols = max(1, int(geo.get("list_columns") or 1))
         row_count = max(1, int(geo.get("list_rows") or page_size))
-        page_rows = roster_page_slice(self._roster, self._page_index, page_size)
         # Reserve a clear footer band so pager text is never clipped by the
         # dismiss chrome / panel edge.
         footer_h = max(48.0, geo["u"] * 40)
         usable_bottom = y1 - footer_h
-        row_h = max(44.0, (usable_bottom - y0) / row_count)
+        row_font = self._fonts["row"]
+        meta_font = self._fonts["meta"]
+        row_metrics = row_font.metrics()
+        meta_metrics = meta_font.metrics()
+        # Prefer linespace so Tk leading is included — ascent+descent alone was
+        # packing landscape three-line cards tight enough to overlap.
+        label_block = float(row_metrics.get("linespace") or (
+            row_metrics["ascent"] + row_metrics["descent"]
+        ))
+        meta_block = float(meta_metrics.get("linespace") or (
+            meta_metrics["ascent"] + meta_metrics["descent"]
+        ))
+        line_gap = max(4.0, geo["u"] * 4)
+        pad_y = max(6.0, geo["u"] * 6)
+        # Always size for callsign + route + altitude so route enrichment cannot
+        # suddenly overflow a two-line slot.
+        needed = label_block + line_gap + meta_block + line_gap + meta_block + (2 * pad_y)
+        min_row = max(float(geo.get("min_row") or 0), list_row_min_height(False, geo["u"]), needed)
+        fit_rows = max(1, int((usable_bottom - y0) // min_row))
+        if cols == 1:
+            row_count = max(1, min(row_count, fit_rows, 6))
+        else:
+            row_count = max(1, min(row_count, fit_rows))
+        page_size = cols * row_count
+        page_rows = roster_page_slice(self._roster, self._page_index, page_size)
+        row_h = max(min_row, (usable_bottom - y0) / row_count)
         col_w = (x1 - x0) / cols
         col_gap = max(10.0, geo["u"] * 12) if cols > 1 else 0.0
         usable_col_w = col_w - (col_gap if cols > 1 else 0.0)
         home_lat, home_lon = self._home()
         radius_nm = self._radius_nm()
-        row_font = self._fonts["row"]
-        meta_font = self._fonts["meta"]
-        row_metrics = row_font.metrics()
-        meta_metrics = meta_font.metrics()
-        label_block = row_metrics["ascent"] + row_metrics["descent"]
-        meta_block = meta_metrics["ascent"] + meta_metrics["descent"]
-        line_gap = max(3.0, geo["u"] * 3)
         routes_by_hex = self._overhead.get("routes") or {}
         show_routes = self._overhead.get("showRoutes") is not False
 
@@ -1426,9 +1461,10 @@ class OverheadPanel(BasePanel):
             meta_fill = INK_3 if out_of_range else INK_2
             class_color = icon_color(ac)
             # Class accent rule on the left of each row.
+            bar_bottom = min(ry + row_h - pad_y, ry + needed - pad_y)
             self._list_ids.append(
                 self.canvas.create_rectangle(
-                    cell_x0, ry + 2, cell_x0 + 4, ry + row_h - 6,
+                    cell_x0, ry + pad_y / 2, cell_x0 + 4, bar_bottom,
                     fill=class_color, outline="", tags=("overhead", "list"),
                 ),
             )
@@ -1437,7 +1473,10 @@ class OverheadPanel(BasePanel):
                 stack_h = label_block + line_gap + meta_block + line_gap + meta_block
             else:
                 stack_h = label_block + line_gap + meta_block
-            label_y = ry + max(2.0, (row_h - stack_h) / 2)
+            if stack_h + (2 * pad_y) <= row_h:
+                label_y = ry + (row_h - stack_h) / 2
+            else:
+                label_y = ry + pad_y
             self._list_ids.append(
                 self.canvas.create_text(
                     text_x, label_y, anchor="nw", text=label, fill=fill, font=row_font,

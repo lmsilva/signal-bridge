@@ -1,0 +1,1160 @@
+"""Autodarts dashboard + live/final match overlay.
+
+UDP: ``autodarts.dashboard``, ``autodarts.match`` (live or finished), close via
+``autodarts.match.close`` (handled in main). Board geometry §12; layout §11 / §13.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from datetime import datetime
+
+from src.design_system import (
+    ACCENT,
+    ALERT,
+    BG,
+    FILL,
+    INK,
+    INK_2,
+    INK_3,
+    LINE,
+    WARN,
+    page_chrome,
+)
+from src.display_panels import BasePanel
+from src.page_header import paint_page_header
+from src.roll_credits_panel import format_month_axis_label, month_axis_font_size
+
+# Classic board order, clockwise from top (20).
+SEGMENT_ORDER = (
+    20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
+    3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
+)
+
+# Palette §12 — real board tones on the navy wall.
+SURROUND = "#111111"
+BED_BLACK = "#161616"
+BED_CREAM = "#F2ECD8"
+BAND_RED = "#D64541"
+BAND_GREEN = "#3E9B5F"
+NUMBERS = "#F2F7FF"
+WIRES = "#0A0A0A"
+
+# Ratios with double-outer = 1.0
+R_DOUBLE_OUTER = 1.0
+R_DOUBLE_INNER = 0.953
+R_TREBLE_OUTER = 0.629
+R_TREBLE_INNER = 0.582
+R_OUTER_BULL = 0.094
+R_INNER_BULL = 0.037
+R_NUMBER_RING = 1.12
+R_SURROUND = 1.28
+R_MISS_FALLBACK = 1.08
+
+
+def board_radii(outer_px: float) -> dict:
+    """Absolute ring radii in pixels for a board whose double-outer is ``outer_px``."""
+    r = max(1.0, float(outer_px))
+    return {
+        "double_outer": r * R_DOUBLE_OUTER,
+        "double_inner": r * R_DOUBLE_INNER,
+        "treble_outer": r * R_TREBLE_OUTER,
+        "treble_inner": r * R_TREBLE_INNER,
+        "outer_bull": r * R_OUTER_BULL,
+        "inner_bull": r * R_INNER_BULL,
+        "number_ring": r * R_NUMBER_RING,
+        "surround": r * R_SURROUND,
+    }
+
+
+def segment_index(number: int) -> int | None:
+    try:
+        return SEGMENT_ORDER.index(int(number))
+    except (ValueError, TypeError):
+        return None
+
+
+def segment_angle_rad(number: int) -> float | None:
+    """Clockwise-from-top angle (radians) for the centre of a numbered wedge."""
+    idx = segment_index(number)
+    if idx is None:
+        return None
+    return idx * (2 * math.pi / 20)
+
+
+def board_xy_to_offset(x: float, y: float, outer_px: float) -> tuple[float, float]:
+    """Autodarts normalised coords → pixel offset from centre.
+
+    Autodarts: 0,0 centre; distance 1.0 = double outer; negative y toward 20 (top).
+    Screen: +x right, +y down → ``(x * R, y * R)``.
+    """
+    r = max(1.0, float(outer_px))
+    return float(x) * r, float(y) * r
+
+
+def map_coords_to_px(
+    x: float,
+    y: float,
+    cx: float,
+    cy: float,
+    outer_px: float,
+) -> tuple[float, float]:
+    dx, dy = board_xy_to_offset(x, y, outer_px)
+    return cx + dx, cy + dy
+
+
+def parse_segment(seg) -> tuple[str, int | None]:
+    """Return (kind, number) where kind is single|double|treble|bull|outer_bull|miss|unknown."""
+    text = str(seg or "").strip().upper()
+    if not text or text in ("M", "MISS", "OUT"):
+        return "miss", None
+    if text in ("DB", "BULL", "IB", "INNER"):
+        return "bull", None
+    if text in ("B", "SB", "OUTER", "25"):
+        return "outer_bull", None
+    if text.startswith("T") and text[1:].isdigit():
+        return "treble", int(text[1:])
+    if text.startswith("D") and text[1:].isdigit():
+        return "double", int(text[1:])
+    if text.startswith("S") and text[1:].isdigit():
+        return "single", int(text[1:])
+    if text.isdigit():
+        return "single", int(text)
+    return "unknown", None
+
+
+def segment_centroid(seg, *, miss_radius: float = R_MISS_FALLBACK) -> tuple[float, float]:
+    """Normalised board (x, y) at the visual centre of a segment bed."""
+    kind, number = parse_segment(seg)
+    if kind == "miss":
+        # Pin just outside the rim at a neutral angle (3-o'clock) — never invent a hit.
+        return miss_radius, 0.0
+    if kind == "bull":
+        return 0.0, 0.0
+    if kind == "outer_bull":
+        return 0.0, -(R_OUTER_BULL * 0.55)
+    if number is None:
+        return 0.0, 0.0
+    angle = segment_angle_rad(number)
+    if angle is None:
+        return 0.0, 0.0
+    if kind == "treble":
+        radius = (R_TREBLE_INNER + R_TREBLE_OUTER) / 2
+    elif kind == "double":
+        radius = (R_DOUBLE_INNER + R_DOUBLE_OUTER) / 2
+    else:
+        # Outer single bed (between treble and double) — most readable centroid.
+        radius = (R_TREBLE_OUTER + R_DOUBLE_INNER) / 2
+    # x = r sin θ, y = −r cos θ (θ clockwise from top; y negative = top).
+    return radius * math.sin(angle), -radius * math.cos(angle)
+
+
+def dart_board_xy(dart: dict | None) -> tuple[float, float] | None:
+    """Resolve a dart object to normalised board coords (passthrough or centroid)."""
+    if not isinstance(dart, dict):
+        return None
+    kind, _number = parse_segment(dart.get("seg") or dart.get("segment"))
+    x = dart.get("x")
+    y = dart.get("y")
+    has_coords = x is not None and y is not None
+    try:
+        if has_coords:
+            return float(x), float(y)
+    except (TypeError, ValueError):
+        has_coords = False
+    if kind == "miss" and not has_coords:
+        return segment_centroid("M")
+    seg = dart.get("seg") or dart.get("segment")
+    if seg:
+        return segment_centroid(seg)
+    return None
+
+
+def is_miss_dart(dart: dict | None) -> bool:
+    if not isinstance(dart, dict):
+        return False
+    if str(dart.get("type") or "").lower() in ("miss", "outside"):
+        return True
+    kind, _ = parse_segment(dart.get("seg") or dart.get("segment"))
+    return kind == "miss"
+
+
+def is_bouncer_dart(dart: dict | None) -> bool:
+    if not isinstance(dart, dict):
+        return False
+    return str(dart.get("type") or "").lower() in ("bouncer", "bounce", "bounce-out", "bounceout")
+
+
+def wedge_contains_angle(number: int, angle_from_top_cw: float) -> bool:
+    """True when ``angle_from_top_cw`` (radians) sits in the numbered 18° wedge."""
+    centre = segment_angle_rad(number)
+    if centre is None:
+        return False
+    half = math.pi / 20
+    delta = (angle_from_top_cw - centre + math.pi) % (2 * math.pi) - math.pi
+    return abs(delta) <= half + 1e-9
+
+
+def point_board_radius_angle(x: float, y: float) -> tuple[float, float]:
+    """Normalised (x,y) → (radius, angle clockwise from top)."""
+    radius = math.hypot(x, y)
+    # atan2(x, -y): 0 at top, clockwise positive when y-up-negative.
+    angle = math.atan2(x, -y) if radius > 1e-12 else 0.0
+    return radius, angle
+
+
+def is_t20_in_treble_wedge(x: float, y: float) -> bool:
+    """Calibration helper: normalised point lands in the treble-20 bed."""
+    radius, angle = point_board_radius_angle(x, y)
+    if radius < R_TREBLE_INNER - 1e-6 or radius > R_TREBLE_OUTER + 1e-6:
+        return False
+    return wedge_contains_angle(20, angle)
+
+
+def is_t20_in_treble_wedge_px(
+    px: float,
+    py: float,
+    cx: float,
+    cy: float,
+    outer_px: float,
+) -> bool:
+    """Same check after mapping to screen pixels."""
+    r = max(1.0, float(outer_px))
+    x = (px - cx) / r
+    y = (py - cy) / r
+    return is_t20_in_treble_wedge(x, y)
+
+
+def current_month_bar_color(index: int, count: int) -> str:
+    """Gold on the current month (last bar in the rolling 12)."""
+    return WARN if count > 0 and index == count - 1 else ACCENT
+
+
+def should_show_ghosts(turn: dict | None) -> bool:
+    """Ghosts clear the moment the next turn's first dart lands."""
+    darts = (turn or {}).get("darts") or []
+    for dart in darts:
+        if dart is not None:
+            return False
+    return True
+
+
+def format_duration_sec(seconds) -> str:
+    try:
+        total = max(0, int(seconds))
+    except (TypeError, ValueError):
+        return ""
+    minutes, sec = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m"
+    return f"{minutes}m{sec:02d}s"
+
+
+def format_game_shot(value) -> str:
+    if not value:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    upper = text.upper()
+    if upper.startswith("GAME SHOT"):
+        return upper
+    return f"GAME SHOT — {upper}"
+
+
+def match_fingerprint(match: dict | None) -> str:
+    try:
+        return json.dumps(match or {}, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return str(match)
+
+
+def dashboard_fingerprint(payload: dict | None) -> str:
+    try:
+        body = {
+            k: (payload or {}).get(k)
+            for k in (
+                "totals", "leaderboard", "moreCount", "byMonth", "byVariant",
+                "rivalry", "records", "recent", "displaySeconds",
+            )
+        }
+        return json.dumps(body, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return str(payload)
+
+
+def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dict:
+    chrome = page_chrome(screen_w, screen_h, timed=timed)
+    u = chrome.u
+    x0, x1 = chrome.content_x, chrome.content_x + chrome.content_w
+    y0, y1 = chrome.content_top + 10 * u, chrome.content_bottom - 14 * u
+    gap = 16 * u
+    if chrome.portrait:
+        totals_h = 130 * u
+        board_h = min(620 * u, (y1 - y0) * 0.42)
+        months_h = 240 * u
+        rivalry_h = 150 * u
+        y = y0
+        boxes = {
+            "totals": (x0, y, x1, y + totals_h),
+        }
+        y += totals_h + gap
+        boxes["leaderboard"] = (x0, y, x1, y + board_h)
+        y += board_h + gap
+        boxes["months"] = (x0, y, x1, y + months_h)
+        y += months_h + gap
+        boxes["rivalry"] = (x0, y, x1, min(y + rivalry_h, y1 - 90 * u))
+        boxes["records"] = (x0, boxes["rivalry"][3] + gap, x1, y1)
+        return boxes
+    left_w = chrome.content_w * 0.55
+    boxes = {
+        "leaderboard": (x0, y0, x0 + left_w, y1),
+    }
+    rx0 = x0 + left_w + gap
+    totals_h = 140 * u
+    months_h = 250 * u
+    rivalry_h = 160 * u
+    boxes["totals"] = (rx0, y0, x1, y0 + totals_h)
+    boxes["months"] = (rx0, y0 + totals_h + gap, x1, y0 + totals_h + gap + months_h)
+    boxes["rivalry"] = (
+        rx0,
+        y0 + totals_h + months_h + gap * 2,
+        x1,
+        y0 + totals_h + months_h + gap * 2 + rivalry_h,
+    )
+    boxes["records"] = (rx0, boxes["rivalry"][3] + gap, x1, y1)
+    return boxes
+
+
+def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int = 2) -> dict:
+    """Portrait: scores / board / strip fill height (board absorbs slack).
+    Landscape: player | board | player with strip under the board.
+    """
+    chrome = page_chrome(screen_w, screen_h, timed=timed)
+    u = chrome.u
+    x0, x1 = chrome.content_x, chrome.content_x + chrome.content_w
+    y0 = chrome.content_top + 8 * u
+    y1 = chrome.content_bottom - 10 * u
+    settings_h = 48 * u
+    strip_h = 110 * u
+    players = max(2, min(4, int(player_count or 2)))
+    if chrome.portrait:
+        scores_h = (150 if players <= 2 else 200) * u
+        settings = (x0, y0, x1, y0 + settings_h)
+        scores = (x0, y0 + settings_h + 8 * u, x1, y0 + settings_h + 8 * u + scores_h)
+        strip = (x0, y1 - strip_h, x1, y1)
+        board = (x0, scores[3] + 10 * u, x1, strip[1] - 10 * u)
+        return {
+            "settings": settings,
+            "scores": scores,
+            "board": board,
+            "strip": strip,
+            "portrait": True,
+            "chrome": chrome,
+        }
+    settings = (x0, y0, x1, y0 + settings_h)
+    body_top = y0 + settings_h + 10 * u
+    col_w = chrome.content_w * 0.22
+    board_box = (x0 + col_w + 12 * u, body_top, x1 - col_w - 12 * u, y1 - strip_h - 8 * u)
+    return {
+        "settings": settings,
+        "scores_left": (x0, body_top, x0 + col_w, y1),
+        "scores_right": (x1 - col_w, body_top, x1, y1),
+        "board": board_box,
+        "strip": (board_box[0], y1 - strip_h, board_box[2], y1),
+        "portrait": False,
+        "chrome": chrome,
+    }
+
+
+def draw_crown(canvas, cx: float, cy: float, size: float, *, fill=WARN, track=None):
+    """Drawn crown glyph (not emoji) — leaderboard / leg leader / final winner."""
+    s = max(6.0, float(size))
+    points = [
+        cx - s * 0.55, cy + s * 0.35,
+        cx - s * 0.55, cy - s * 0.05,
+        cx - s * 0.28, cy + s * 0.12,
+        cx, cy - s * 0.42,
+        cx + s * 0.28, cy + s * 0.12,
+        cx + s * 0.55, cy - s * 0.05,
+        cx + s * 0.55, cy + s * 0.35,
+    ]
+    item = canvas.create_polygon(*points, fill=fill, outline=fill, width=1, smooth=False)
+    if track:
+        track(item)
+    band = canvas.create_rectangle(
+        cx - s * 0.55, cy + s * 0.35, cx + s * 0.55, cy + s * 0.48,
+        fill=fill, outline="",
+    )
+    if track:
+        track(band)
+    return item
+
+
+def _wedge_path(cx, cy, r0, r1, a0, a1, steps=10):
+    points = []
+    for i in range(steps + 1):
+        t = a0 + (a1 - a0) * (i / steps)
+        points.extend([cx + r1 * math.sin(t), cy - r1 * math.cos(t)])
+    for i in range(steps + 1):
+        t = a1 - (a1 - a0) * (i / steps)
+        points.extend([cx + r0 * math.sin(t), cy - r0 * math.cos(t)])
+    return points
+
+
+def draw_dartboard(canvas, cx, cy, outer_px, *, track=None, show_numbers=True):
+    """Faithful classic board (§12). Returns radii dict."""
+    radii = board_radii(outer_px)
+    ids = []
+
+    def add(item):
+        ids.append(item)
+        if track:
+            track(item)
+        return item
+
+    add(canvas.create_oval(
+        cx - radii["surround"], cy - radii["surround"],
+        cx + radii["surround"], cy + radii["surround"],
+        fill=SURROUND, outline=WIRES, width=1,
+    ))
+
+    wedge = 2 * math.pi / 20
+    for index, number in enumerate(SEGMENT_ORDER):
+        a0 = index * wedge - wedge / 2
+        a1 = a0 + wedge
+        black_bed = index % 2 == 0  # 20 is black
+        single_fill = BED_BLACK if black_bed else BED_CREAM
+        band_fill = BAND_RED if black_bed else BAND_GREEN
+        # Inner single (bull → treble)
+        add(canvas.create_polygon(
+            *_wedge_path(cx, cy, radii["outer_bull"], radii["treble_inner"], a0, a1),
+            fill=single_fill, outline=WIRES, width=1,
+        ))
+        # Treble
+        add(canvas.create_polygon(
+            *_wedge_path(cx, cy, radii["treble_inner"], radii["treble_outer"], a0, a1),
+            fill=band_fill, outline=WIRES, width=1,
+        ))
+        # Outer single
+        add(canvas.create_polygon(
+            *_wedge_path(cx, cy, radii["treble_outer"], radii["double_inner"], a0, a1),
+            fill=single_fill, outline=WIRES, width=1,
+        ))
+        # Double
+        add(canvas.create_polygon(
+            *_wedge_path(cx, cy, radii["double_inner"], radii["double_outer"], a0, a1),
+            fill=band_fill, outline=WIRES, width=1,
+        ))
+        if show_numbers:
+            nr = radii["number_ring"]
+            angle = index * wedge
+            nx = cx + nr * math.sin(angle)
+            ny = cy - nr * math.cos(angle)
+            size = max(9, int(outer_px * 0.07))
+            add(canvas.create_text(
+                nx, ny, text=str(number), fill=NUMBERS,
+                font=("Segoe UI", size, "bold"), angle=0,
+            ))
+
+    add(canvas.create_oval(
+        cx - radii["outer_bull"], cy - radii["outer_bull"],
+        cx + radii["outer_bull"], cy + radii["outer_bull"],
+        fill=BAND_GREEN, outline=WIRES, width=1,
+    ))
+    add(canvas.create_oval(
+        cx - radii["inner_bull"], cy - radii["inner_bull"],
+        cx + radii["inner_bull"], cy + radii["inner_bull"],
+        fill=BAND_RED, outline=WIRES, width=1,
+    ))
+    return radii
+
+
+def draw_dart_marker(canvas, px, py, *, kind="normal", index=None, scale=1.0, track=None):
+    """Accent dart / ghost / miss ✕ / bouncer ring on the board face."""
+    s = max(0.5, float(scale))
+
+    def add(item):
+        if track:
+            track(item)
+        return item
+
+    if kind == "miss":
+        size = 10 * s
+        add(canvas.create_line(px - size, py - size, px + size, py + size, fill=INK_2, width=max(2, int(2 * s))))
+        add(canvas.create_line(px - size, py + size, px + size, py - size, fill=INK_2, width=max(2, int(2 * s))))
+        return
+    if kind == "bouncer":
+        r = 9 * s
+        add(canvas.create_oval(px - r, py - r, px + r, py + r, outline=ACCENT, width=max(2, int(2 * s)), fill=""))
+        return
+    if kind == "ghost":
+        r = 5 * s
+        add(canvas.create_oval(px - r - 1, py - r - 1, px + r + 1, py + r + 1, outline="#0A0A0A", width=1, fill=""))
+        add(canvas.create_oval(px - r, py - r, px + r, py + r, fill=INK_2, outline=""))
+        return
+    # Live dart: shadow + accent ring + white core + index
+    r = 11 * s
+    add(canvas.create_oval(px - r + 1, py - r + 2, px + r + 1, py + r + 2, fill="#000000", outline=""))
+    add(canvas.create_oval(px - r, py - r, px + r, py + r, fill=ACCENT, outline=""))
+    core = 4.5 * s
+    add(canvas.create_oval(px - core, py - core, px + core, py + core, fill=INK, outline=""))
+    if index is not None:
+        add(canvas.create_text(
+            px, py - r - 8 * s, text=str(index), fill=ACCENT,
+            font=("Segoe UI", max(9, int(11 * s)), "bold"),
+        ))
+
+
+def normalize_hit_map(hit_map, players: list) -> list[dict]:
+    """Return ``[{name, darts}, ...]`` or [] when there are no plottable coords."""
+    if not hit_map:
+        return []
+    rows = []
+    if isinstance(hit_map, dict) and isinstance(hit_map.get("players"), list):
+        source = hit_map["players"]
+    elif isinstance(hit_map, list):
+        source = hit_map
+    elif isinstance(hit_map, dict):
+        source = [{"name": key, "darts": value} for key, value in hit_map.items()]
+    else:
+        return []
+    for index, row in enumerate(source):
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name") or (
+            (players[index].get("name") if index < len(players) else None) or f"P{index + 1}"
+        )
+        darts = row.get("darts") or row.get("throws") or []
+        plottable = []
+        for dart in darts:
+            xy = dart_board_xy(dart if isinstance(dart, dict) else None)
+            if xy is None:
+                continue
+            plottable.append({"x": xy[0], "y": xy[1], "raw": dart})
+        rows.append({"name": name, "darts": plottable})
+    if not any(row["darts"] for row in rows):
+        return []
+    return rows
+
+
+class AutodartsPanel(BasePanel):
+    """Owns chrome for dashboard + match (live / final)."""
+
+    def __init__(self, root, shell, config: dict):
+        super().__init__(root, shell, config)
+        self._mode = None  # dashboard | match
+        self._match_id = None
+        self._revision = -1
+        self._match_fp = None
+        self._dashboard_fp = None
+        self._payload = None
+        self._draw_count = 0
+
+    def show(self, payload: dict):
+        payload_type = str((payload or {}).get("type") or "")
+        if payload_type == "autodarts.dashboard":
+            fp = dashboard_fingerprint(payload)
+            if self.visible and self._mode == "dashboard" and fp == self._dashboard_fp:
+                return
+            self.hide()
+            self.visible = True
+            self._mode = "dashboard"
+            self._dashboard_fp = fp
+            self._match_id = None
+            self._revision = -1
+            self._match_fp = None
+            self._payload = payload
+            self._render_dashboard(payload)
+            self._draw_count += 1
+            return
+        if payload_type == "autodarts.match":
+            self._show_match(payload, force=True)
+            return
+        self.hide()
+
+    def apply_match_payload(self, payload: dict) -> str:
+        """In-place live update. Returns ignored | updated | replace."""
+        if str((payload or {}).get("type") or "") != "autodarts.match":
+            return "replace"
+        if not self.visible or self._mode != "match":
+            return "replace"
+        match = (payload or {}).get("match") or {}
+        match_id = str(match.get("matchId") or "")
+        if match_id and self._match_id and match_id != self._match_id:
+            return "replace"
+        try:
+            revision = int(match.get("revision") or 0)
+        except (TypeError, ValueError):
+            revision = 0
+        if revision < self._revision:
+            return "ignored"
+        fp = match_fingerprint(match)
+        if revision == self._revision and fp == self._match_fp:
+            return "ignored"
+        self._show_match(payload, force=False)
+        return "updated"
+
+    def _show_match(self, payload: dict, *, force: bool):
+        match = (payload or {}).get("match") or {}
+        try:
+            revision = int(match.get("revision") or 0)
+        except (TypeError, ValueError):
+            revision = 0
+        fp = match_fingerprint(match)
+        match_id = str(match.get("matchId") or "")
+        if (
+            not force
+            and self.visible
+            and self._mode == "match"
+            and revision < self._revision
+        ):
+            return
+        if (
+            self.visible
+            and self._mode == "match"
+            and revision == self._revision
+            and fp == self._match_fp
+        ):
+            return
+        self.hide()
+        self.visible = True
+        self._mode = "match"
+        self._match_id = match_id
+        self._revision = revision
+        self._match_fp = fp
+        self._dashboard_fp = None
+        self._payload = payload
+        self._render_match(payload)
+        self._draw_count += 1
+
+    def hide(self):
+        super().hide()
+        # Keep revision memory only while visible; cleared on hide so a reopen works.
+        if not self.visible:
+            pass
+
+    def _screen(self):
+        return int(self.shell.screen_w), int(self.shell.screen_h)
+
+    def _font(self, size, bold=False):
+        return ("Segoe UI", max(10, int(size)), "bold" if bold else "normal")
+
+    def _paint_header(self, *, status_chip=None):
+        screen_w, screen_h = self._screen()
+        right_label, right_value = "", ""
+        if status_chip == "LIVE":
+            right_label, right_value = "STATUS", "LIVE"
+        elif status_chip == "FINAL":
+            right_label, right_value = "STATUS", "FINAL"
+        ids = paint_page_header(
+            self.canvas,
+            screen_w=screen_w,
+            screen_h=screen_h,
+            pill="autodarts",
+            left_label="",
+            left_value="",
+            right_label=right_label,
+            right_value=right_value,
+            track=self._track,
+        )
+        if status_chip == "LIVE":
+            # Recolour the status value to alert coral (only LIVE uses ALERT).
+            for item_id in ids[-2:]:
+                try:
+                    if self.canvas.type(item_id) == "text":
+                        text = self.canvas.itemcget(item_id, "text")
+                        if text == "LIVE":
+                            self.canvas.itemconfigure(item_id, fill=ALERT)
+                        elif text == "STATUS":
+                            self.canvas.itemconfigure(item_id, fill=ALERT)
+                except Exception:
+                    pass
+        return ids
+
+    def _card(self, box):
+        return self._track(self.canvas.create_rectangle(*box, fill=FILL, outline=LINE, width=2))
+
+    # --- Dashboard ------------------------------------------------------------
+
+    def _render_dashboard(self, payload: dict):
+        self._paint_header()
+        screen_w, screen_h = self._screen()
+        boxes = layout_dashboard(screen_w, screen_h, timed=True)
+        for box in boxes.values():
+            self._card(box)
+        self._draw_totals(boxes["totals"], payload.get("totals") or {})
+        self._draw_leaderboard(
+            boxes["leaderboard"],
+            payload.get("leaderboard") or [],
+            int(payload.get("moreCount") or 0),
+        )
+        self._draw_months(boxes["months"], payload.get("byMonth") or [])
+        self._draw_rivalry(boxes["rivalry"], payload.get("rivalry"))
+        self._draw_records(boxes["records"], payload.get("records"))
+
+    def _draw_totals(self, box, totals: dict):
+        x0, y0, x1, y1 = box
+        last = totals.get("lastPlayedLabel") or ""
+        if not last and totals.get("lastPlayedAt"):
+            last = str(totals.get("lastPlayedAt"))[:10]
+        cells = [
+            (totals.get("matches") or 0, "MATCHES"),
+            (totals.get("legs") or 0, "LEGS"),
+            (totals.get("thisMonth") or 0, "THIS MO"),
+            (last or "—", "LAST"),
+        ]
+        width = (x1 - x0) / len(cells)
+        for index, (value, label) in enumerate(cells):
+            x = x0 + width * (index + 0.5)
+            self._track(self.canvas.create_text(
+                x, y0 + (y1 - y0) * 0.42, text=str(value),
+                fill=INK, font=self._font(36, True),
+            ))
+            self._track(self.canvas.create_text(
+                x, y0 + (y1 - y0) * 0.72, text=label,
+                fill=INK_3, font=self._font(13, True),
+            ))
+
+    def _draw_leaderboard(self, box, rows: list, more_count: int):
+        x0, y0, x1, y1 = box
+        pad = 22
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad, anchor="nw", text="BOARD LEADERBOARD",
+            fill=INK_2, font=self._font(16, True),
+        ))
+        if not rows:
+            self._track(self.canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2, text="No matches yet",
+                fill=INK_3, font=self._font(18),
+            ))
+            return
+        top = y0 + 58
+        bottom = y1 - (36 if more_count else 16)
+        row_h = max(36, min(72, (bottom - top) / max(1, len(rows))))
+        for index, row in enumerate(rows):
+            cy = top + row_h * (index + 0.5)
+            if cy > bottom:
+                break
+            rank = row.get("rank") or (index + 1)
+            name = str(row.get("name") or "—")
+            wins = row.get("wins") or 0
+            losses = row.get("losses") or 0
+            win_pct = row.get("winPct")
+            avg = row.get("x01Average")
+            hi = row.get("bestCheckout")
+            one80 = row.get("oneEighties") or 0
+            matches = row.get("matches") or 0
+            crowned = bool(row.get("crown")) or index == 0
+            if crowned:
+                self._track(self.canvas.create_rectangle(
+                    x0 + 10, cy - row_h * 0.42, x1 - 10, cy + row_h * 0.42,
+                    fill="#1C2A1A", outline="",
+                ))
+                draw_crown(self.canvas, x0 + pad + 14, cy, min(16, row_h * 0.35), track=self._track)
+                name_x = x0 + pad + 36
+                name_fill = WARN
+            else:
+                name_x = x0 + pad + 8
+                name_fill = INK
+            self._track(self.canvas.create_text(
+                name_x, cy - 10, anchor="w",
+                text=f"{rank}  {name}",
+                fill=name_fill, font=self._font(18 if crowned else 16, True),
+            ))
+            pct = f"{win_pct:.0f}%" if isinstance(win_pct, (int, float)) else "—"
+            avg_s = f"{avg:.1f}" if isinstance(avg, (int, float)) else "—"
+            detail = f"{wins}-{losses}  {pct}  avg {avg_s} · hi {hi or '—'} · 180:{one80} · {matches}"
+            self._track(self.canvas.create_text(
+                name_x, cy + 14, anchor="w", text=detail,
+                fill=INK_2, font=self._font(12),
+            ))
+        if more_count > 0:
+            self._track(self.canvas.create_text(
+                x0 + pad, y1 - 18, anchor="sw",
+                text=f"+ {more_count} more players",
+                fill=INK_3, font=self._font(14, True),
+            ))
+
+    def _draw_months(self, box, months: list):
+        x0, y0, x1, y1 = box
+        pad = 22
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad, anchor="nw", text="MATCHES PER MONTH",
+            fill=INK_2, font=self._font(16, True),
+        ))
+        rows = list(months)[-12:]
+        if not rows:
+            return
+        max_count = max([int(row.get("count") or 0) for row in rows] or [1]) or 1
+        axis_room = 54
+        chart_top, chart_bottom = y0 + 65, y1 - axis_room
+        slot = (x1 - x0 - pad * 2) / max(1, len(rows))
+        label_size = month_axis_font_size(slot)
+        for index, row in enumerate(rows):
+            count = int(row.get("count") or 0)
+            height = max(2, (chart_bottom - chart_top) * count / max_count)
+            cx = x0 + pad + slot * (index + 0.5)
+            color = current_month_bar_color(index, len(rows))
+            bar_half = min(slot * 0.28, 18)
+            self._track(self.canvas.create_rectangle(
+                cx - bar_half, chart_bottom - height, cx + bar_half, chart_bottom,
+                fill=color, outline="",
+            ))
+            self._track(self.canvas.create_text(
+                cx, chart_bottom - height - 6, anchor="s", text=str(count),
+                fill=INK_2, font=self._font(11, True),
+            ))
+            self._track(self.canvas.create_text(
+                cx, chart_bottom + 10, anchor="n",
+                text=format_month_axis_label(row.get("label"), row.get("key")),
+                fill=INK_3 if index < len(rows) - 1 else WARN,
+                font=self._font(label_size, True),
+            ))
+
+    def _draw_rivalry(self, box, rivalry):
+        x0, y0, x1, y1 = box
+        pad = 22
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad, anchor="nw", text="RIVALRY",
+            fill=INK_2, font=self._font(16, True),
+        ))
+        if not isinstance(rivalry, dict) or not rivalry.get("a"):
+            self._track(self.canvas.create_text(
+                x0 + pad, y0 + 70, anchor="nw", text="Play a few head-to-heads",
+                fill=INK_3, font=self._font(14),
+            ))
+            return
+        a = str(rivalry.get("a") or "")
+        b = str(rivalry.get("b") or "")
+        a_wins = rivalry.get("aWins") or 0
+        b_wins = rivalry.get("bWins") or 0
+        self._track(self.canvas.create_text(
+            (x0 + x1) / 2, y0 + (y1 - y0) * 0.48, anchor="center",
+            text=f"{a}   {a_wins}  —  {b_wins}   {b}",
+            fill=INK, font=self._font(22, True),
+        ))
+        last = rivalry.get("lastWinner") or ""
+        when = rivalry.get("lastPlayedAt") or ""
+        when_label = ""
+        if when:
+            try:
+                when_label = datetime.fromisoformat(str(when).replace("Z", "+00:00")).strftime("%b %d")
+            except ValueError:
+                when_label = str(when)[:10]
+        line = f"last: {last} won" if last else "last: —"
+        if when_label:
+            line = f"{line} · {when_label}"
+        self._track(self.canvas.create_text(
+            (x0 + x1) / 2, y0 + (y1 - y0) * 0.72, anchor="center",
+            text=line, fill=INK_2, font=self._font(14),
+        ))
+
+    def _draw_records(self, box, records):
+        x0, y0, x1, y1 = box
+        pad = 22
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad, anchor="nw", text="RECORDS",
+            fill=INK_2, font=self._font(16, True),
+        ))
+        records = records or {}
+        best = records.get("bestMatchAverage") or {}
+        hi = records.get("highestCheckout") or {}
+        total180 = records.get("total180s")
+        if total180 is None:
+            total180 = 0
+        avg_v = best.get("value")
+        hi_v = hi.get("value")
+        line = (
+            f"avg {avg_v if avg_v is not None else '—'} · "
+            f"hi ✓ {hi_v if hi_v is not None else '—'}"
+        )
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + 58, anchor="nw", text=line,
+            fill=INK, font=self._font(16),
+        ))
+        # 180 counter big + gold even at zero — household event when it ticks.
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + 100, anchor="nw",
+            text=f"180s: {total180}" + (" (someday)" if int(total180) == 0 else ""),
+            fill=WARN, font=self._font(28, True),
+        ))
+
+    # --- Match ----------------------------------------------------------------
+
+    def _render_match(self, payload: dict):
+        match = (payload or {}).get("match") or {}
+        status = str(match.get("status") or "live").lower()
+        finished = status in ("finished", "final", "complete", "completed")
+        timed = finished or payload.get("persistent") is False
+        chip = "FINAL" if finished else "LIVE"
+        self._paint_header(status_chip=chip)
+
+        players = list(match.get("players") or [])
+        screen_w, screen_h = self._screen()
+        boxes = layout_match(screen_w, screen_h, timed=timed, player_count=len(players) or 2)
+        u = boxes["chrome"].u
+
+        settings = str(match.get("settingsLine") or match.get("variant") or "")
+        duration = format_duration_sec(match.get("durationSec"))
+        settings_text = settings
+        if duration:
+            settings_text = f"{settings}   ·   {duration}" if settings else duration
+        sx0, sy0, sx1, sy1 = boxes["settings"]
+        self._track(self.canvas.create_text(
+            (sx0 + sx1) / 2, (sy0 + sy1) / 2, text=settings_text,
+            fill=INK_2, font=self._font(18, True),
+        ))
+
+        if finished:
+            self._draw_final_banner(boxes, match, players)
+        elif boxes.get("portrait"):
+            self._draw_scores_row(boxes["scores"], match, players)
+        else:
+            mid = (len(players) + 1) // 2
+            self._draw_scores_column(boxes["scores_left"], match, players[:mid], 0)
+            self._draw_scores_column(boxes["scores_right"], match, players[mid:], mid)
+
+        bx0, by0, bx1, by1 = boxes["board"]
+        # Final card may overlay hit-maps instead of the live board when present.
+        hit_rows = normalize_hit_map(match.get("hitMap"), players) if finished else []
+        if finished and hit_rows:
+            self._draw_hit_maps(boxes["board"], hit_rows)
+        else:
+            side = min(bx1 - bx0, by1 - by0) * 0.92
+            cx = (bx0 + bx1) / 2
+            cy = (by0 + by1) / 2
+            outer = side / (2 * R_SURROUND)
+            draw_dartboard(self.canvas, cx, cy, outer, track=self._track, show_numbers=True)
+            self._draw_turn_markers(match, cx, cy, outer)
+
+        self._draw_turn_strip(boxes["strip"], match.get("turn") or {}, u=u)
+
+        if finished:
+            game_shot = format_game_shot(match.get("gameShot"))
+            if game_shot:
+                self._track(self.canvas.create_text(
+                    (sx0 + sx1) / 2, sy1 + 6 * u, anchor="n", text=game_shot,
+                    fill=WARN, font=self._font(20, True),
+                ))
+
+    def _draw_final_banner(self, boxes, match, players):
+        """Winner line above the board / hit-map area."""
+        if boxes.get("portrait"):
+            box = boxes["scores"]
+        else:
+            # Span full width between player columns for the winner strip.
+            x0 = boxes["scores_left"][0]
+            x1 = boxes["scores_right"][2]
+            y0 = boxes["scores_left"][1]
+            box = (x0, y0, x1, y0 + 90)
+        x0, y0, x1, y1 = box
+        winner = next((p for p in players if p.get("isWinner")), None)
+        if not winner and players:
+            # Highest legs wins as fallback label.
+            winner = max(players, key=lambda p: p.get("legs") or 0)
+        names = "  —  ".join(
+            f"{p.get('legs') or 0}" for p in players
+        )
+        label_names = "   ".join(str(p.get("name") or "") for p in players[:2])
+        if len(players) >= 2:
+            label_names = f"{players[0].get('name')}   {players[0].get('legs') or 0} — {players[1].get('legs') or 0}   {players[1].get('name')}"
+        cx = (x0 + x1) / 2
+        if winner:
+            draw_crown(self.canvas, cx - 180, (y0 + y1) / 2, 18, track=self._track)
+        self._track(self.canvas.create_text(
+            cx, (y0 + y1) / 2, text=label_names or names,
+            fill=WARN if winner else INK, font=self._font(26, True),
+        ))
+        # Compact avgs under the result
+        avg_bits = []
+        for p in players[:4]:
+            avg = p.get("average")
+            if isinstance(avg, (int, float)):
+                avg_bits.append(f"{p.get('name')}: {avg:.2f}")
+        if avg_bits:
+            self._track(self.canvas.create_text(
+                cx, y1 - 12, anchor="s", text="   ".join(avg_bits),
+                fill=INK_2, font=self._font(13),
+            ))
+
+    def _leg_leader_indices(self, players: list) -> set[int]:
+        if not players:
+            return set()
+        best = max(int(p.get("legs") or 0) for p in players)
+        if best <= 0:
+            return set()
+        return {i for i, p in enumerate(players) if int(p.get("legs") or 0) == best}
+
+    def _draw_scores_row(self, box, match, players):
+        x0, y0, x1, y1 = box
+        n = max(1, len(players))
+        width = (x1 - x0) / n
+        thrower = match.get("currentPlayerIndex")
+        leaders = self._leg_leader_indices(players)
+        for index, player in enumerate(players):
+            px0 = x0 + width * index
+            px1 = px0 + width
+            active = thrower == index
+            if active:
+                self._track(self.canvas.create_rectangle(
+                    px0 + 4, y0 + 4, px1 - 4, y1 - 4,
+                    fill="#12263A", outline=ACCENT, width=3,
+                ))
+            self._draw_player_block(
+                px0, y0, px1, y1, player,
+                thrower=active, crown=index in leaders, compact=n > 2,
+            )
+
+    def _draw_scores_column(self, box, match, players, index_offset: int):
+        x0, y0, x1, y1 = box
+        if not players:
+            return
+        height = (y1 - y0) / len(players)
+        thrower = match.get("currentPlayerIndex")
+        # Full player list needed for leg-leader crowns.
+        all_players = (self._payload or {}).get("match", {}).get("players") or players
+        leaders = self._leg_leader_indices(all_players)
+        for local_i, player in enumerate(players):
+            index = index_offset + local_i
+            py0 = y0 + height * local_i
+            py1 = py0 + height
+            active = thrower == index
+            if active:
+                self._track(self.canvas.create_rectangle(
+                    x0 + 4, py0 + 4, x1 - 4, py1 - 4,
+                    fill="#12263A", outline=ACCENT, width=3,
+                ))
+            self._draw_player_block(
+                x0, py0, x1, py1, player,
+                thrower=active, crown=index in leaders, compact=False,
+            )
+
+    def _draw_player_block(self, x0, y0, x1, y1, player, *, thrower, crown, compact):
+        cx = (x0 + x1) / 2
+        name = str(player.get("name") or "—")
+        prefix = "▶ " if thrower else ""
+        name_y = y0 + (y1 - y0) * (0.18 if not compact else 0.2)
+        self._track(self.canvas.create_text(
+            cx, name_y, text=f"{prefix}{name}",
+            fill=ACCENT if thrower else INK, font=self._font(16 if compact else 18, True),
+        ))
+        score = player.get("score")
+        score_y = y0 + (y1 - y0) * (0.48 if not compact else 0.5)
+        self._track(self.canvas.create_text(
+            cx, score_y, text=str(score if score is not None else "—"),
+            fill=INK, font=self._font(44 if not compact else 32, True),
+        ))
+        legs = player.get("legs")
+        legs_y = y0 + (y1 - y0) * 0.72
+        if crown:
+            draw_crown(self.canvas, cx - 36, legs_y, 12, track=self._track)
+        self._track(self.canvas.create_text(
+            cx + (10 if crown else 0), legs_y,
+            text=f"legs {legs if legs is not None else 0}",
+            fill=WARN if crown else INK_2, font=self._font(14, True),
+        ))
+        if not compact:
+            avg = player.get("average")
+            last = player.get("lastTurnPoints")
+            bits = []
+            if isinstance(avg, (int, float)):
+                bits.append(f"avg {avg:.2f}")
+            if last is not None:
+                bits.append(f"last {last}")
+            if bits:
+                self._track(self.canvas.create_text(
+                    cx, y0 + (y1 - y0) * 0.88, text=" · ".join(bits),
+                    fill=INK_3, font=self._font(12),
+                ))
+
+    def _draw_turn_markers(self, match: dict, cx: float, cy: float, outer_px: float):
+        turn = match.get("turn") or {}
+        prev = match.get("prevTurn") or {}
+        if should_show_ghosts(turn):
+            for dart in prev.get("darts") or []:
+                if not isinstance(dart, dict):
+                    continue
+                xy = dart_board_xy(dart)
+                if xy is None:
+                    continue
+                px, py = map_coords_to_px(xy[0], xy[1], cx, cy, outer_px)
+                if is_miss_dart(dart):
+                    draw_dart_marker(self.canvas, px, py, kind="miss", scale=0.85, track=self._track)
+                elif is_bouncer_dart(dart):
+                    draw_dart_marker(self.canvas, px, py, kind="bouncer", scale=0.85, track=self._track)
+                else:
+                    draw_dart_marker(self.canvas, px, py, kind="ghost", scale=0.9, track=self._track)
+        for index, dart in enumerate(turn.get("darts") or []):
+            if not isinstance(dart, dict):
+                continue
+            xy = dart_board_xy(dart)
+            if xy is None:
+                continue
+            px, py = map_coords_to_px(xy[0], xy[1], cx, cy, outer_px)
+            if is_miss_dart(dart):
+                draw_dart_marker(self.canvas, px, py, kind="miss", index=index + 1, track=self._track)
+            elif is_bouncer_dart(dart):
+                draw_dart_marker(self.canvas, px, py, kind="bouncer", index=index + 1, track=self._track)
+            else:
+                draw_dart_marker(self.canvas, px, py, kind="normal", index=index + 1, track=self._track)
+
+    def _draw_turn_strip(self, box, turn: dict, *, u: float):
+        x0, y0, x1, y1 = box
+        busted = bool(turn.get("busted"))
+        fill = "#3f1220" if busted else FILL
+        outline = ALERT if busted else LINE
+        self._track(self.canvas.create_rectangle(x0, y0, x1, y1, fill=fill, outline=outline, width=2))
+        darts = list(turn.get("darts") or [None, None, None])
+        while len(darts) < 3:
+            darts.append(None)
+        darts = darts[:3]
+        slot_w = min(160 * u, (x1 - x0 - 200 * u) / 3)
+        start_x = x0 + 24 * u
+        cy = (y0 + y1) / 2
+        for index, dart in enumerate(darts):
+            sx = start_x + index * (slot_w + 12 * u)
+            label = "—"
+            if isinstance(dart, dict):
+                label = str(dart.get("seg") or dart.get("segment") or "—")
+            self._track(self.canvas.create_rectangle(
+                sx, cy - 28 * u, sx + slot_w, cy + 28 * u,
+                fill=BG, outline=ALERT if busted else ACCENT, width=2,
+            ))
+            self._track(self.canvas.create_text(
+                sx + slot_w / 2, cy, text=label,
+                fill=INK, font=self._font(20, True),
+            ))
+        points = turn.get("points")
+        right = f"BUST" if busted else f"= {points if points is not None else 0}"
+        self._track(self.canvas.create_text(
+            x1 - 28 * u, cy, anchor="e", text=right,
+            fill=ALERT if busted else INK, font=self._font(28, True),
+        ))
+
+    def _draw_hit_maps(self, box, rows: list):
+        x0, y0, x1, y1 = box
+        self._track(self.canvas.create_text(
+            (x0 + x1) / 2, y0 + 8, anchor="n", text="MATCH HIT-MAP",
+            fill=INK_2, font=self._font(14, True),
+        ))
+        n = max(1, len(rows))
+        width = (x1 - x0) / n
+        for index, row in enumerate(rows):
+            cx = x0 + width * (index + 0.5)
+            cy = (y0 + y1) / 2 + 10
+            side = min(width * 0.85, (y1 - y0) * 0.7)
+            outer = side / (2 * R_SURROUND)
+            draw_dartboard(
+                self.canvas, cx, cy - 12, outer,
+                track=self._track, show_numbers=False,
+            )
+            for dart in row.get("darts") or []:
+                px, py = map_coords_to_px(dart["x"], dart["y"], cx, cy - 12, outer)
+                draw_dart_marker(self.canvas, px, py, kind="ghost", scale=0.7, track=self._track)
+            self._track(self.canvas.create_text(
+                cx, y1 - 18, anchor="s", text=str(row.get("name") or ""),
+                fill=INK_2, font=self._font(13, True),
+            ))

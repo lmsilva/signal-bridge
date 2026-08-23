@@ -15,6 +15,7 @@ The client does **not** talk to Amazon. The NAS bridge does that; this app only 
 - **Advertises to the bridge** (`display.announce` → NAS `:47833`) so the Signal UI can list and target this PC
 - Fullscreen tinted overlays with fade in/out (portrait or landscape)
 - Voice-driven panels: broadcasts, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications
+- **Roll Credits:** image-only completed-games dashboard and showcase tour (`roll-credits.tour`), with portrait/landscape charts and playlist/card prefetch. Video heroes are reserved for Phase 2.
 - **Web browser mode:** `web.open` → frameless Edge WebView2 fullscreen until `web.close`
 - **Remote control:** `input.pointer` / `input.key` from the bridge Control tab (touchpad + keyboard)
 - Caps overlay duration with `maxDisplaySeconds` (timers use full payload duration)

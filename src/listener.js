@@ -101,6 +101,7 @@ const { createLibraryTourSessions } = require('./library-tour-sessions');
 const { createSteamLibraryTour } = require('./steam-library-tour');
 const { createPsnLibraryTour } = require('./psn-library-tour');
 const { createYoutubeNowPlaying } = require('./youtube-now-playing');
+const { createAutodartsService } = require('./autodarts-service');
 const { createTriviaService } = require('./trivia-service');
 const { createUpsideNewsService } = require('./upside-news-service');
 const { createWikiCommonKnowledgeService } = require('./wiki-common-knowledge-service');
@@ -123,6 +124,8 @@ function shouldSuppressSteamForPayload(payload) {
     // (youtube.md §9.3), so it neither suppresses nor is suppressed by one.
     || type === 'youtube.now-playing'
     || type === 'youtube.now-playing.close'
+    || type === 'autodarts.match'
+    || type === 'autodarts.match.close'
   ) {
     return false;
   }
@@ -172,6 +175,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
   let steamLibraryTour = null;
   let psnLibraryTour = null;
   let youtubeNowPlaying = null;
+  let autodarts = null;
   let trivia = null;
   let upsideNews = null;
   let wikiCommonKnowledge = null;
@@ -233,6 +237,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     steamNowPlayingQueries: config.voiceEvents?.steamNowPlayingQueries !== false,
     psnNowPlayingQueries: config.voiceEvents?.psnNowPlayingQueries !== false,
     youtubeNowPlayingQueries: config.voiceEvents?.youtubeNowPlayingQueries !== false,
+    autodartsQueries: config.voiceEvents?.autodartsQueries !== false,
   };
   // Photo list reloads from disk on each list(); slideshow prefs reload on
   // each getOrder()/getSecondsPerPhoto() so admin UI changes apply to voice
@@ -278,6 +283,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     if (shouldSuppressNowPlayingForPayload(payload)) {
       steamNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
       psnNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
+      autodarts?.suppressActiveSession(payload?.type || 'other-display');
     }
     // Every page the bridge sends marks the display busy, whatever put it
     // there. The scheduler is the lowest-priority source in the system and must
@@ -616,6 +622,11 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     }
 
     if (event.kind === 'youtube-now-playing' && !voiceSettings.youtubeNowPlayingQueries) {
+      return;
+    }
+
+    if ((event.kind === 'autodarts-now' || event.kind === 'autodarts-dashboard')
+      && !voiceSettings.autodartsQueries) {
       return;
     }
 
@@ -1367,6 +1378,36 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         });
       }
       return;
+    } else if (event.kind === 'autodarts-now' || event.kind === 'autodarts-dashboard') {
+      if (!autodarts) {
+        log.warn('Autodarts voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        const result = event.kind === 'autodarts-dashboard'
+          ? autodarts.pushDashboard({ send: emitVoicePayload })
+          : autodarts.pushNow({ send: emitVoicePayload, mode: 'auto' });
+        if (!result?.ok) {
+          log.warn('Autodarts voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: event.kind === 'autodarts-dashboard' ? 'autodarts.dashboard' : 'autodarts.now',
+          device: event.device,
+          query: event.query,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (${event.kind}) for ${event.device}`, {
+          query: event.query,
+          type: result.type,
+        });
+      } catch (error) {
+        log.warn('Autodarts voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
+      return;
     } else if (event.kind === 'guest-photobooth') {
       const settings = resolveGuestPhotoboothSettings(config);
       if (!settings.configured) {
@@ -2058,6 +2099,14 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         });
         youtubeNowPlaying.start();
 
+        autodarts = createAutodartsService({
+          config,
+          log,
+          sendUdpPayload,
+          displayBusy,
+        });
+        autodarts.start();
+
         // The pool has to be stocking before the first push, so start it with
         // the pollers rather than lazily on first use.
         trivia = createTriviaService({ config, log, sendUdpPayload });
@@ -2108,6 +2157,8 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     getPsnLibraryCount: () => psnLibraryTour?.libraryCount?.() || 0,
     youtubeNowPlaying: () => youtubeNowPlaying,
     getYoutubeStatus: () => youtubeNowPlaying?.statusSnapshot?.() || null,
+    autodarts: () => autodarts,
+    getAutodartsStatus: () => autodarts?.statusSnapshot?.() || null,
     trivia: () => trivia,
     getTriviaStatus: () => trivia?.statusSnapshot?.() || null,
     upsideNews: () => upsideNews,

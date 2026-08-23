@@ -143,6 +143,15 @@ async function fetchAppDetails(appId) {
     .map((shot) => shot.path_full || shot.path_thumbnail)
     .filter(Boolean)
     .slice(0, 8);
+  const movieMp4Urls = (Array.isArray(data.movies) ? data.movies : [])
+    .flatMap((movie) => [
+      movie?.mp4?.max,
+      movie?.mp4?.['480'],
+      movie?.webm?.max,
+      movie?.webm?.['480'],
+    ])
+    .filter(Boolean)
+    .filter((url, index, all) => all.indexOf(url) === index);
 
   const rawCategories = Array.isArray(data.categories) ? data.categories : [];
   const tags = [];
@@ -177,6 +186,8 @@ async function fetchAppDetails(appId) {
     capsuleImage: data.capsule_image || data.capsule_imagev5 || null,
     background: data.background_raw || data.background || null,
     screenshots,
+    movieMp4Urls,
+    movies: movieMp4Urls,
     tags: tags.slice(0, 6),
     posterCandidates: [
       ...libraryCapsuleUrls(appId),

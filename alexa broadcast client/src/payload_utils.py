@@ -34,6 +34,9 @@ DISPLAY_TYPES = (
     "wiki-common-knowledge.round",
     "overhead.round",
     "game.library-tour",
+    "roll-credits.tour",
+    "autodarts.dashboard",
+    "autodarts.match",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -51,6 +54,7 @@ COMMAND_TYPES = (
     "youtube.now-playing.close",
     "overhead.update",
     "overhead.close",
+    "autodarts.match.close",
 )
 
 # Bridge discovery / heartbeats — never shown as overlays.
@@ -140,6 +144,9 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "wiki-common-knowledge.round": ("Signal", "Wikipedia Common Knowledge"),
         "overhead.round": ("Signal", "Overhead"),
         "game.library-tour": ("Signal", "Library Tour"),
+        "roll-credits.tour": ("Signal", "Roll Credits"),
+        "autodarts.dashboard": ("Signal", "autodarts"),
+        "autodarts.match": ("Signal", "autodarts"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 

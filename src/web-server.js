@@ -95,6 +95,9 @@ const {
   MAX_SECONDS_PER_GAME,
   clampSecondsPerGame,
 } = require('./library-tour-settings');
+const { createRollCreditsService } = require('./roll-credits-service');
+const { createRollCreditsPayload } = require('./roll-credits-payload');
+const { createAutodartsService } = require('./autodarts-service');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -120,6 +123,8 @@ const MIME_TYPES = {
   '.webp': 'image/webp',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
@@ -306,6 +311,8 @@ function createWebServer({
   psnNowPlaying = null,
   getYoutubeStatus = null,
   youtubeNowPlaying = null,
+  autodarts = null,
+  getAutodartsStatus = null,
   trivia = null,
   getTriviaStatus = null,
   upsideNews = null,
@@ -314,6 +321,7 @@ function createWebServer({
   getWikiCommonKnowledgeStatus = null,
   overhead = null,
   getOverheadStatus = null,
+  rollCredits = null,
   displayBusy = null,
   libraryTourSettings: libraryTourSettingsInjected = null,
   steamLibraryTour = null,
@@ -352,6 +360,21 @@ function createWebServer({
   }
   const slideshowSettings = createSlideshowSettings(config, log);
   const libraryTourSettings = libraryTourSettingsInjected || createLibraryTourSettings(config, log);
+  const rollCreditsInstance = typeof rollCredits === 'function'
+    ? rollCredits()
+    : (rollCredits || createRollCreditsService({ config, log }));
+  const rollCreditsPayload = createRollCreditsPayload({
+    rollCredits: rollCreditsInstance,
+    config,
+  });
+  const autodartsInstance = typeof autodarts === 'function'
+    ? autodarts()
+    : (autodarts || createAutodartsService({
+      config,
+      log,
+      sendUdpPayload,
+      displayBusy,
+    }));
   const commandRegistry = createCommandRegistry({
     log,
     getSteamStatus,
@@ -369,7 +392,12 @@ function createWebServer({
       return psnLibraryTourService()?.libraryCount?.() || 0;
     },
     getLibraryTourSettings: () => libraryTourSettings.get(),
+    getRollCreditsStatus: () => ({
+      ...rollCreditsInstance.statusSnapshot(),
+      settings: rollCreditsInstance.getSettings(),
+    }),
     getYoutubeStatus: () => getYoutubeStatus?.() || youtubeService()?.statusSnapshot?.() || null,
+    getAutodartsStatus: () => getAutodartsStatus?.() || autodartsInstance.statusSnapshot?.() || null,
     getTriviaStatus: () => getTriviaStatus?.() || triviaService()?.statusSnapshot?.() || null,
     getUpsideNewsStatus: () => getUpsideNewsStatus?.() || upsideNewsService()?.statusSnapshot?.() || null,
     getWikiCommonKnowledgeStatus: () => getWikiCommonKnowledgeStatus?.()
@@ -1536,6 +1564,14 @@ function createWebServer({
         await handlePsnNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
       case 'psn.library-tour':
         await handlePsnLibraryTourPush(body, res); break;
+      case 'credits.show':
+        handleRollCreditsPush(body, res); break;
+      case 'autodarts.now':
+        handleAutodartsNowPush({ ...body, mode: body?.mode || 'auto' }, res); break;
+      case 'autodarts.last-match':
+        handleAutodartsLastMatchPush({ ...body, mode: 'last-match' }, res); break;
+      case 'autodarts.dashboard':
+        handleAutodartsDashboardPush(body, res); break;
       case 'youtube.now-playing':
         await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
       case 'youtube.last-played':
@@ -2589,6 +2625,203 @@ function createWebServer({
     fs.createReadStream(entry.filePath).pipe(res);
   }
 
+  function rollCreditsError(res, error) {
+    const message = error?.message || String(error);
+    const status = /not found/i.test(message) ? 404
+      : /too large|body too large|exceeds/i.test(message) ? 413
+        : 400;
+    sendJson(res, status, { ok: false, error: message });
+  }
+
+  function handleRollCreditsMediaServe(pathname, res) {
+    const tail = pathname.slice(rollCreditsInstance.media.routePrefix.length);
+    try {
+      const filePath = rollCreditsInstance.media.absolutePath(decodeURIComponent(tail));
+      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Not found');
+        return;
+      }
+      const stat = fs.statSync(filePath);
+      res.writeHead(200, {
+        'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()]
+          || 'application/octet-stream',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
+      });
+      fs.createReadStream(filePath).pipe(res);
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+    }
+  }
+
+  function handleRollCreditsEvents(req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    });
+    res.write(': connected\n\n');
+    const send = (event) => {
+      try {
+        res.write(`event: roll-credits\ndata: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        // client gone
+      }
+    };
+    send({ reason: 'hello' });
+    const unsubscribe = rollCreditsInstance.onEvents?.(send) || (() => {});
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  }
+
+  function rollCreditsListOptions(searchParams) {
+    return Object.fromEntries([
+      'sort', 'dir', 'page', 'pageSize', 'system', 'yearBeaten', 'q', 'noDate',
+    ].map((key) => [key, searchParams.get(key)]).filter(([, value]) => value != null));
+  }
+
+  async function handleRollCreditsPost(pathname, body, res) {
+    const tail = pathname.slice('/api/roll-credits/'.length);
+    try {
+      if (tail === 'games') {
+        const game = body?.candidate
+          ? await rollCreditsInstance.createFromCandidate(body)
+          : rollCreditsInstance.createManual(body);
+        sendJson(res, 201, { ok: true, game });
+        return;
+      }
+      if (tail === 'games/bulk-delete') {
+        sendJson(res, 200, { ok: true, ...rollCreditsInstance.bulkDelete(body?.ids) });
+        return;
+      }
+      if (tail === 'search') {
+        const candidates = await rollCreditsInstance.search(body?.q, { limit: body?.limit });
+        sendJson(res, 200, { ok: true, candidates });
+        return;
+      }
+      if (tail === 'rescrape-bulk') {
+        const results = [];
+        const failed = [];
+        for (const id of Array.isArray(body?.ids) ? body.ids : []) {
+          try {
+            results.push(await rollCreditsInstance.rescrape(String(id), body));
+          } catch (error) {
+            failed.push({ id: String(id), error: error?.message || String(error) });
+          }
+        }
+        sendJson(res, 200, { ok: true, games: results, failed });
+        return;
+      }
+      if (tail === 'settings') {
+        const result = rollCreditsInstance.updateSettings(body);
+        sendJson(res, result.ok ? 200 : 500, result);
+        return;
+      }
+      if (tail === 'credentials') {
+        const result = rollCreditsInstance.saveCredentials(body);
+        sendJson(res, result.status || (result.ok ? 200 : 400), result);
+        return;
+      }
+      if (tail === 'credentials/test') {
+        sendJson(res, 200, await rollCreditsInstance.testCredentials());
+        return;
+      }
+      if (tail === 'prune-orphans') {
+        sendJson(res, 200, { ok: true, ...rollCreditsInstance.pruneOrphans() });
+        return;
+      }
+      const rescrapeMatch = /^games\/([^/]+)\/rescrape$/.exec(tail);
+      if (rescrapeMatch) {
+        const game = await rollCreditsInstance.rescrape(
+          decodeURIComponent(rescrapeMatch[1]),
+          body,
+        );
+        sendJson(res, 200, { ok: true, game });
+        return;
+      }
+      const mediaMatch = /^games\/([^/]+)\/media$/.exec(tail);
+      if (mediaMatch) {
+        const gameId = decodeURIComponent(mediaMatch[1]);
+        const media = body?.youtubeUrl
+          ? rollCreditsInstance.addYoutube(gameId, body)
+          : await rollCreditsInstance.addUploadedImage(gameId, body);
+        sendJson(res, 201, { ok: true, media });
+        return;
+      }
+      const retryMatch = /^games\/([^/]+)\/media\/([^/]+)\/retry$/.exec(tail);
+      if (retryMatch) {
+        const job = rollCreditsInstance.retryMedia(
+          decodeURIComponent(retryMatch[1]),
+          decodeURIComponent(retryMatch[2]),
+        );
+        sendJson(res, 202, { ok: true, job });
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+    } catch (error) {
+      rollCreditsError(res, error);
+    }
+  }
+
+  async function handleRollCreditsWrite(req, pathname, body, res) {
+    const tail = pathname.slice('/api/roll-credits/'.length);
+    try {
+      const uploadMatch = /^games\/([^/]+)\/media\/video-upload$/.exec(tail);
+      if (req.method === 'PUT' && uploadMatch) {
+        const row = await rollCreditsInstance.saveVideoUpload(
+          decodeURIComponent(uploadMatch[1]),
+          req,
+          {
+            mimeType: req.headers['content-type'],
+            contentLength: req.headers['content-length'],
+          },
+        );
+        sendJson(res, 201, { ok: true, media: row });
+        return;
+      }
+      const mediaMatch = /^games\/([^/]+)\/media\/([^/]+)$/.exec(tail);
+      if (req.method === 'DELETE' && mediaMatch) {
+        const media = rollCreditsInstance.deleteMedia(
+          decodeURIComponent(mediaMatch[1]),
+          decodeURIComponent(mediaMatch[2]),
+        );
+        sendJson(res, 200, { ok: true, media });
+        return;
+      }
+      const gameMatch = /^games\/([^/]+)$/.exec(tail);
+      if (gameMatch) {
+        const id = decodeURIComponent(gameMatch[1]);
+        if (req.method === 'PUT') {
+          const game = rollCreditsInstance.updateGame(id, body);
+          sendJson(res, game ? 200 : 404, game
+            ? { ok: true, game }
+            : { ok: false, error: 'Roll Credits game not found' });
+        } else {
+          const deleted = rollCreditsInstance.deleteGame(id);
+          sendJson(res, deleted ? 200 : 404, deleted
+            ? { ok: true, deleted: id }
+            : { ok: false, error: 'Roll Credits game not found' });
+        }
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+    } catch (error) {
+      req.resume?.();
+      rollCreditsError(res, error);
+    }
+  }
+
   // ---- Shared photo slideshow / Slideshow Manager ---------------------------
 
   function handlePhotosList(res) {
@@ -2841,6 +3074,184 @@ function createWebServer({
         return;
       }
       sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleRollCreditsPush(body, res) {
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    const scheduled = body?.triggeredBy === 'scheduler';
+    try {
+      const payload = rollCreditsPayload.buildTourStart({
+        loop: body?.loop != null ? body.loop !== false : !scheduled,
+        secondsPerGame: body?.secondsPerGame,
+        dashboardSeconds: body?.dashboardSeconds,
+        order: body?.order,
+        gameLimit: body?.gameLimit,
+      });
+      if (!payload) {
+        sendJson(res, 400, { ok: false, error: 'Roll Credits has no games to show' });
+        return;
+      }
+      const holdSeconds = payload.loop
+        ? 0
+        : payload.dashboardSeconds + payload.walkedCount * payload.secondsPerGame + 4;
+      if (typeof deliverTargetedPayload === 'function') {
+        deliverTargetedPayload(payload, targetId, { holdSeconds });
+      } else {
+        sendUdpPayload(payload, { holdSeconds });
+      }
+      sendJson(res, 200, {
+        ok: true,
+        tourId: payload.tourId,
+        count: payload.count,
+        walkedCount: payload.walkedCount,
+        loop: payload.loop,
+        persistent: payload.persistent,
+        estimatedDurationSeconds: holdSeconds || null,
+        targetId,
+      });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function autodartsSend(body) {
+    const targetId = targetIdFrom(body);
+    return {
+      targetId,
+      send: (payload, sendOptions = {}) => {
+        if (typeof deliverTargetedPayload === 'function') {
+          return deliverTargetedPayload(payload, targetId, sendOptions);
+        }
+        return sendUdpPayload(payload, sendOptions);
+      },
+    };
+  }
+
+  function handleAutodartsNowPush(body, res) {
+    try {
+      const { targetId, send } = autodartsSend(body);
+      const scheduled = body?.triggeredBy === 'scheduler';
+      const mode = scheduled
+        ? (body?.mode === 'last-match' ? 'last-match' : 'auto')
+        : (body?.mode || 'auto');
+      // Scheduled last-match must never take over a live match.
+      const result = mode === 'last-match'
+        ? autodartsInstance.pushLastMatch({ send })
+        : autodartsInstance.pushNow({ send, mode });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleAutodartsLastMatchPush(body, res) {
+    try {
+      const { targetId, send } = autodartsSend(body);
+      const result = autodartsInstance.pushLastMatch({ send });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleAutodartsDashboardPush(body, res) {
+    try {
+      const { targetId, send } = autodartsSend(body);
+      const result = autodartsInstance.pushDashboard({ send });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleAutodartsApi(method, pathname, body, res) {
+    const tail = pathname.slice('/api/autodarts/'.length);
+    try {
+      if (method === 'GET') {
+        if (tail === 'status') {
+          sendJson(res, 200, { ok: true, ...autodartsInstance.statusSnapshot() });
+          return;
+        }
+        if (tail === 'boards') {
+          sendJson(res, 200, await autodartsInstance.listBoards());
+          return;
+        }
+        if (tail === 'settings') {
+          sendJson(res, 200, { ok: true, settings: autodartsInstance.settings.get() });
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+      if (method === 'POST') {
+        if (tail === 'settings') {
+          sendJson(res, 200, autodartsInstance.updateSettings(body));
+          return;
+        }
+        if (tail === 'oauth') {
+          const result = autodartsInstance.saveOauthClient(body);
+          sendJson(res, result.status === 409 ? 409 : (result.ok ? 200 : 400), result);
+          return;
+        }
+        if (tail === 'oauth/fetch') {
+          sendJson(res, 200, await autodartsInstance.fetchCommunityOauth());
+          return;
+        }
+        if (tail === 'link/device') {
+          sendJson(res, 200, await autodartsInstance.beginDeviceLink());
+          return;
+        }
+        if (tail === 'link/cancel') {
+          sendJson(res, 200, autodartsInstance.stopDevicePoll());
+          return;
+        }
+        if (tail === 'link/password') {
+          const result = await autodartsInstance.loginWithPassword(body);
+          sendJson(res, result.status === 409 ? 409 : (result.ok ? 200 : 400), result);
+          return;
+        }
+        if (tail === 'unlink') {
+          const result = await autodartsInstance.unlink();
+          sendJson(res, result.status === 409 ? 409 : (result.ok ? 200 : 400), result);
+          return;
+        }
+        if (tail === 'board') {
+          const result = await autodartsInstance.selectBoard(body);
+          sendJson(res, result.ok ? 200 : 400, result);
+          return;
+        }
+        if (tail === 'test') {
+          sendJson(res, 200, await autodartsInstance.testConnection());
+          return;
+        }
+        if (tail === 'sync') {
+          sendJson(res, 202, await autodartsInstance.syncHistory(body));
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+      }
     } catch (error) {
       sendJson(res, 500, { ok: false, error: error?.message || String(error) });
     }
@@ -3609,6 +4020,10 @@ function createWebServer({
           await handleQrImageServe(pathname, res);
           return;
         }
+        if (pathname.startsWith(rollCreditsInstance.media.routePrefix)) {
+          handleRollCreditsMediaServe(pathname, res);
+          return;
+        }
         if (pathname.startsWith(TRIVIA_ARTWORK_ROUTE_PREFIX)) {
           handleTriviaArtworkServe(pathname, res);
           return;
@@ -3731,9 +4146,81 @@ function createWebServer({
           sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
           return;
         }
+        if (pathname.startsWith('/api/autodarts/')) {
+          if (!requireAdminSession(req, res)) return;
+          await handleAutodartsApi('GET', pathname, null, res);
+          return;
+        }
         if (pathname === '/api/photos') {
           if (!requireAdminSession(req, res)) return;
           handlePhotosList(res);
+          return;
+        }
+        if (pathname.startsWith('/api/roll-credits/')) {
+          const publicPlaylist = /^\/api\/roll-credits\/playlist\/([^/]+)$/.exec(pathname);
+          if (publicPlaylist) {
+            const playlist = rollCreditsPayload.getPlaylist(decodeURIComponent(publicPlaylist[1]));
+            sendJson(res, playlist ? 200 : 404, playlist
+              ? { ok: true, ...playlist }
+              : { ok: false, error: 'Roll Credits tour not found or expired' });
+            return;
+          }
+          if (pathname === '/api/roll-credits/card') {
+            const card = rollCreditsPayload.getCard(reqUrl.searchParams.get('id'), {
+              baseUrl: reqUrl.searchParams.get('baseUrl') || undefined,
+            });
+            sendJson(res, card ? 200 : 404, card
+              ? { ok: true, card }
+              : { ok: false, error: 'Roll Credits game not found' });
+            return;
+          }
+          if (!requireAdminSession(req, res)) return;
+          const tail = pathname.slice('/api/roll-credits/'.length);
+          if (tail === 'games') {
+            sendJson(res, 200, {
+              ok: true,
+              ...rollCreditsInstance.listGames(rollCreditsListOptions(reqUrl.searchParams)),
+            });
+            return;
+          }
+          if (tail === 'jobs') {
+            sendJson(res, 200, { ok: true, jobs: rollCreditsInstance.getJobs() });
+            return;
+          }
+          if (tail === 'stats') {
+            sendJson(res, 200, { ok: true, stats: rollCreditsInstance.getStats() });
+            return;
+          }
+          if (tail === 'settings') {
+            sendJson(res, 200, {
+              ok: true,
+              settings: rollCreditsInstance.getSettings(),
+              credentials: rollCreditsInstance.credentialsStatus(),
+              diskUsage: rollCreditsInstance.diskUsage(),
+            });
+            return;
+          }
+          if (tail === 'systems') {
+            sendJson(res, 200, {
+              ok: true,
+              systems: rollCreditsInstance.listSystems(),
+              usedSystems: rollCreditsInstance.getSystemUsage?.() || [],
+            });
+            return;
+          }
+          if (tail === 'events') {
+            handleRollCreditsEvents(req, res);
+            return;
+          }
+          const gameMatch = /^games\/([^/]+)$/.exec(tail);
+          if (gameMatch) {
+            const game = rollCreditsInstance.getGame(decodeURIComponent(gameMatch[1]));
+            sendJson(res, game ? 200 : 404, game
+              ? { ok: true, game }
+              : { ok: false, error: 'Roll Credits game not found' });
+            return;
+          }
+          sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
           return;
         }
         if (pathname === '/api/photos/events') {
@@ -3786,13 +4273,23 @@ function createWebServer({
       if (req.method === 'PUT' || req.method === 'DELETE') {
         const isScheduler = pathname.startsWith('/api/display-scheduler/');
         const isYoutube = pathname.startsWith('/api/youtube/');
-        if (!isScheduler && !isYoutube) {
+        const isRollCredits = pathname.startsWith('/api/roll-credits/');
+        if (!isScheduler && !isYoutube && !isRollCredits) {
           res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Method not allowed');
           return;
         }
         if (!requireAdminSession(req, res)) return;
-        const body = req.method === 'PUT' ? await readJsonBody(req, MAX_BODY_BYTES) : {};
+        const isVideoUpload = isRollCredits
+          && /\/media\/video-upload$/.test(pathname)
+          && req.method === 'PUT';
+        const body = req.method === 'PUT' && !isVideoUpload
+          ? await readJsonBody(req, MAX_BODY_BYTES)
+          : {};
+        if (isRollCredits) {
+          await handleRollCreditsWrite(req, pathname, body, res);
+          return;
+        }
         if (isScheduler) {
           await handleSchedulerWrite(req.method, pathname, body, res);
           return;
@@ -3818,8 +4315,14 @@ function createWebServer({
       if (req.method === 'POST') {
         // Uploaded photos are the one POST body that can legitimately exceed
         // the default JSON body cap (base64-encoded image data).
+        const isRollCreditsImage = /^\/api\/roll-credits\/games\/[^/]+\/media$/.test(pathname);
         const bodyLimit = pathname === '/api/qr/image-upload'
           ? Math.ceil(qrImageCache.maxBytes * QR_IMAGE_BODY_OVERHEAD_FACTOR) + QR_IMAGE_BODY_PADDING_BYTES
+          : isRollCreditsImage
+            ? Math.ceil(
+              rollCreditsInstance.getSettings().limits.maxImageBytes
+                * QR_IMAGE_BODY_OVERHEAD_FACTOR,
+            ) + QR_IMAGE_BODY_PADDING_BYTES
           : MAX_BODY_BYTES;
         const body = await readJsonBody(req, bodyLimit);
 
@@ -3866,6 +4369,10 @@ function createWebServer({
           await handleSchedulerWrite(req.method, pathname, body, res);
           return;
         }
+        if (pathname.startsWith('/api/roll-credits/')) {
+          await handleRollCreditsPost(pathname, body, res);
+          return;
+        }
 
         if (pathname.startsWith('/api/youtube/')) {
           const tail = pathname.slice('/api/youtube/'.length);
@@ -3876,6 +4383,10 @@ function createWebServer({
           const relinkMatch = /^devices\/([^/]+)\/relink$/.exec(tail);
           if (relinkMatch) { await handleYoutubeRelink(relinkMatch[1], res); return; }
           sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+          return;
+        }
+        if (pathname.startsWith('/api/autodarts/')) {
+          await handleAutodartsApi('POST', pathname, body, res);
           return;
         }
 
@@ -3948,6 +4459,18 @@ function createWebServer({
             return;
           case '/api/push/psn-library-tour':
             await handlePsnLibraryTourPush(body, res);
+            return;
+          case '/api/push/roll-credits':
+            handleRollCreditsPush(body, res);
+            return;
+          case '/api/push/autodarts-now':
+            handleAutodartsNowPush(body, res);
+            return;
+          case '/api/push/autodarts-last-match':
+            handleAutodartsLastMatchPush(body, res);
+            return;
+          case '/api/push/autodarts-dashboard':
+            handleAutodartsDashboardPush(body, res);
             return;
           case '/api/push/url':
             await handleUrlPush(body, res);
@@ -4079,6 +4602,12 @@ function createWebServer({
   }
 
   async function start() {
+    rollCreditsInstance.start?.();
+    // Listener already starts the shared Autodarts instance when injected;
+    // only start a locally created fallback (tests / standalone web).
+    if (!autodarts) {
+      autodartsInstance.start?.();
+    }
     if (!settings.enabled) {
       log.info('Control web server disabled via config');
       return null;
@@ -4168,6 +4697,10 @@ function createWebServer({
 
   function stop() {
     scheduler.stop();
+    rollCreditsInstance.close?.();
+    if (!autodarts) {
+      autodartsInstance.close?.();
+    }
     closeTeslaCallbackServer({ force: true });
     for (const target of [server, redirectServer]) {
       if (!target) {
@@ -4191,6 +4724,8 @@ function createWebServer({
     buildStatus,
     scheduler,
     airCommand,
+    getRollCredits: () => rollCreditsInstance,
+    getAutodarts: () => autodartsInstance,
   };
 }
 
