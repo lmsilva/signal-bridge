@@ -35,6 +35,9 @@ const PERSISTENT_HOLD_SECONDS = 15 * 60;
 function createDisplayBusy({ now = () => Date.now(), log = null } = {}) {
   /** @type {{type: string, until: number|null, since: number, source: string}|null} */
   let current = null;
+  // Increments on every page send so a slow command (air-quality enrich,
+  // Tesla wake) can tell whether a *newer* page already replaced it.
+  let generation = 0;
 
   function isPage(payload) {
     const type = String(payload?.type || '');
@@ -73,6 +76,7 @@ function createDisplayBusy({ now = () => Date.now(), log = null } = {}) {
     // as a long hold rather than forever, so a client that dies without sending
     // a close cannot wedge the scheduler off the display permanently.
     const persistent = payload?.persistent === true || !(seconds > 0);
+    generation += 1;
     current = {
       type,
       source,
@@ -82,6 +86,31 @@ function createDisplayBusy({ now = () => Date.now(), log = null } = {}) {
     };
     log?.debug?.(`display busy: ${type} for ${persistent ? 'until closed' : `${seconds}s`}`);
     return current;
+  }
+
+  function pageGeneration() {
+    return generation;
+  }
+
+  /**
+   * Gate late refreshes of one command. A cached preview may update itself;
+   * a newer page from another command must not be overwritten when the first
+   * command's fetch finally lands (admin AQ → Steam → stale AQ refresh).
+   */
+  function beginSendRequest() {
+    const baseline = generation;
+    let lastSent = null;
+    return {
+      maySend() {
+        if (lastSent != null) {
+          return generation === lastSent;
+        }
+        return generation === baseline;
+      },
+      rememberSent() {
+        lastSent = generation;
+      },
+    };
   }
 
   /** §6: true for manual pushes, interrupts, live events, and any page still
@@ -115,7 +144,7 @@ function createDisplayBusy({ now = () => Date.now(), log = null } = {}) {
     current = null;
   }
 
-  return { noteSent, isBusy, snapshot, release };
+  return { noteSent, isBusy, snapshot, release, pageGeneration, beginSendRequest };
 }
 
 module.exports = {

@@ -519,11 +519,24 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     }
 
     const voiceDelivery = displayRegistry.resolveDelivery(event?.targetId);
+    // Slow fetches (indoor AQ enrich, Tesla wake) send a preview then a
+    // second UDP later. If the user already pushed Steam/PSN/etc., that
+    // late refresh must not yank the newer page off the display.
+    const sendRequest = displayBusy.beginSendRequest();
     const emitVoicePayload = (payload) => {
       if (!payload) {
-        return;
+        return false;
+      }
+      if (!sendRequest.maySend()) {
+        log.info('Dropped stale display refresh — a newer page is already on screen', {
+          kind: event.kind,
+          type: payload.type,
+        });
+        return false;
       }
       sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+      sendRequest.rememberSent();
+      return true;
     };
 
     if (event.kind === 'time' && !voiceSettings.timeQueries) {
@@ -629,12 +642,12 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
         }
       }
       if (preview) {
-        emitVoicePayload(preview);
-        log.info(`Cached preview sent while refreshing (${event.kind}) for ${event.device}`);
+        if (emitVoicePayload(preview)) {
+          log.info(`Cached preview sent while refreshing (${event.kind}) for ${event.device}`);
+        }
       } else {
         const ack = buildProcessingAckPayload(event, config);
-        if (ack) {
-          emitVoicePayload(ack);
+        if (ack && emitVoicePayload(ack)) {
           log.info(`Processing ack sent (${event.kind}) for ${event.device}`);
         }
       }
@@ -646,8 +659,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
       // Web Quick Push has no Echo preferred device and no spoken answer —
       // household scan can take a few seconds; ack so the display reacts now.
       const ack = buildProcessingAckPayload(event, config);
-      if (ack) {
-        emitVoicePayload(ack);
+      if (ack && emitVoicePayload(ack)) {
         log.info(`Processing ack sent (music) for ${event.device}`);
       }
     }
@@ -914,8 +926,7 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
           reading: cachedAq.reading || reading,
           monitors: cachedAq.monitors,
         });
-        if (preview) {
-          emitVoicePayload(preview);
+        if (preview && emitVoicePayload(preview)) {
           log.info(`Cached preview sent while refreshing (air-quality) for ${event.device}`, {
             cachedAt: cachedAq.savedAt || null,
           });
@@ -1429,8 +1440,10 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
       return;
     }
 
+    if (!emitVoicePayload(payload)) {
+      return;
+    }
     voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
-    emitVoicePayload(payload);
     lastCaptureAt = Date.now();
     const logMeta = { query: event.query };
     if (event.kind === 'tesla-battery') {
