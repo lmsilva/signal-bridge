@@ -24,7 +24,7 @@ function buildDashboardPayload({
   now = Date.now(),
 } = {}) {
   const cfg = settings?.get?.() || settings || {};
-  const leaderboardSize = clampInt(cfg.dashboard?.leaderboardSize, 3, 16, 8);
+  const leaderboardSize = clampInt(cfg.dashboard?.leaderboardSize, 3, 16, 12);
   const displaySeconds = clampInt(cfg.dashboard?.displaySeconds, 30, 600, 120);
   const data = typeof aggregates?.get === 'function' ? aggregates.get() : aggregates;
   const players = Array.isArray(data?.players) ? data.players : [];

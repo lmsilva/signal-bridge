@@ -254,10 +254,17 @@ function createAutodartsService({
 
   function start() {
     live.start();
+    // Pull cloud Match History into the local archive (cache). Fail-soft if offline.
+    try {
+      history.schedule?.();
+    } catch (error) {
+      log?.warn?.('Autodarts history schedule failed', error?.message || error);
+    }
   }
 
   function close() {
     live.stop();
+    history.stop?.();
     auth.stopDevicePoll?.();
   }
 

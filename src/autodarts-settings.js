@@ -10,7 +10,7 @@ const DEFAULTS = Object.freeze({
     finalHoldSeconds: 60,
   }),
   dashboard: Object.freeze({
-    leaderboardSize: 8,
+    leaderboardSize: 12,
     displaySeconds: 120,
   }),
   lastMatch: Object.freeze({
@@ -18,7 +18,8 @@ const DEFAULTS = Object.freeze({
   }),
   sync: Object.freeze({
     historyBackfill: true,
-    historyEndpointConfirmed: false,
+    // Confirmed 2026-08-23: GET /as/v0/matches/filter
+    historyEndpointConfirmed: true,
   }),
 });
 
@@ -61,7 +62,7 @@ function sanitiseSettings(raw = {}, base = cloneDefaults()) {
     },
     sync: {
       historyBackfill: sync.historyBackfill !== false,
-      historyEndpointConfirmed: sync.historyEndpointConfirmed === true,
+      historyEndpointConfirmed: sync.historyEndpointConfirmed !== false,
     },
   };
 }

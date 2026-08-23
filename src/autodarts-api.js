@@ -228,6 +228,19 @@ function createAutodartsApi({
     getMatch: (matchId) => apiGet(`/gs/v0/matches/${encodeURIComponent(matchId)}`),
     getMatchState: (matchId) => apiGet(`/gs/v0/matches/${encodeURIComponent(matchId)}/state`),
     getMatchStats: (matchId) => apiGet(`/as/v0/matches/${encodeURIComponent(matchId)}/stats`),
+    /**
+     * Match history (play.autodarts.io Match History page).
+     * Confirmed 2026-08-23: GET /as/v0/matches/filter?size&page&sort=-finished_at
+     */
+    listMatchHistory: ({ size = 25, page = 0, sort = '-finished_at', variant, types } = {}) => {
+      const params = new URLSearchParams();
+      params.set('size', String(Math.max(1, Math.min(100, Number(size) || 25))));
+      params.set('page', String(Math.max(0, Number(page) || 0)));
+      params.set('sort', String(sort || '-finished_at'));
+      if (variant) params.set('variant', String(variant));
+      if (types) params.set('types', String(types));
+      return apiGet(`/as/v0/matches/filter?${params.toString()}`);
+    },
     getUserStats: (userId, variant = 'x01', limit = 100) => apiGet(
       `/as/v0/users/${encodeURIComponent(userId)}/stats/${encodeURIComponent(variant)}?limit=${limit}`,
     ),

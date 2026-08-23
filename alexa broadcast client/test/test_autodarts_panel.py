@@ -18,6 +18,9 @@ from src.autodarts_panel import (
     current_month_bar_color,
     dart_board_xy,
     format_game_shot,
+    format_last_played_label,
+    format_leaderboard_detail,
+    format_record_average,
     is_bouncer_dart,
     is_miss_dart,
     is_t20_in_treble_wedge,
@@ -163,7 +166,7 @@ class LayoutTests(unittest.TestCase):
     def assert_boxes_fit(self, boxes, width, height, timed=True):
         chrome = page_chrome(width, height, timed=timed)
         for name, box in boxes.items():
-            if name in ("portrait", "chrome"):
+            if name in ("portrait", "chrome", "finished") or box is None:
                 continue
             x0, y0, x1, y1 = box
             self.assertGreaterEqual(x0, chrome.content_x - 1, name)
@@ -213,6 +216,37 @@ class LayoutTests(unittest.TestCase):
     def test_game_shot_line(self):
         self.assertEqual(format_game_shot("D8"), "GAME SHOT — D8")
         self.assertEqual(format_game_shot(""), "")
+
+    def test_finished_match_reserves_result_band(self):
+        for size in ((1080, 1920), (1920, 1080)):
+            boxes = layout_match(*size, timed=True, player_count=2, finished=True)
+            self.assertTrue(boxes["finished"])
+            self.assertIsNotNone(boxes["result"])
+            self.assert_boxes_fit(boxes, *size, timed=True)
+            # Board must sit below the result banner.
+            self.assertGreaterEqual(boxes["board"][1], boxes["result"][3] - 1)
+
+
+class LabelFormatTests(unittest.TestCase):
+    def test_last_played_expands_relative(self):
+        self.assertEqual(format_last_played_label({"lastPlayedLabel": "22d"}), "22 days ago")
+        self.assertEqual(
+            format_last_played_label({"lastPlayedAt": "2026-08-01T00:00:00Z"}),
+            "Aug 01",
+        )
+
+    def test_leaderboard_detail_readable(self):
+        line = format_leaderboard_detail({
+            "wins": 11, "losses": 4, "winPct": 73,
+            "x01Average": 25.03, "bestCheckout": 48, "oneEighties": 0, "matches": 15,
+        })
+        self.assertIn("Record 11–4", line)
+        self.assertIn("Avg 25.0", line)
+        self.assertIn("Best out 48", line)
+
+    def test_record_average(self):
+        self.assertEqual(format_record_average(36.3), "36.3")
+        self.assertEqual(format_record_average(None), "—")
 
 
 class HitMapTests(unittest.TestCase):
