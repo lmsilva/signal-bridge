@@ -36,6 +36,15 @@ test('matchesNowPlayingQuery detects "what song is playing" style queries', () =
 test('matchesNowPlayingQuery falls back to spoken now-playing answers when transcript is empty', () => {
   assert.equal(matchesNowPlayingQuery('', 'Currently playing Bohemian Rhapsody by Queen'), true);
   assert.equal(matchesNowPlayingQuery(null, "This is Tennessee by Arrested Development"), true);
+  // Logged 2026-08-23: "what's playing" stored ASR-empty; only this TTS arrived.
+  assert.equal(
+    matchesNowPlayingQuery('', 'Highlife by Cypress Hill is playing on Amazon Music.'),
+    true,
+  );
+  assert.equal(
+    matchesNowPlayingQuery('', "Here's Hits from the Bong by Cypress Hill, on Amazon Music."),
+    true,
+  );
   assert.equal(matchesNowPlayingQuery('', 'The weather is sunny'), false);
 });
 
@@ -241,6 +250,18 @@ test('parseSpokenNowPlaying extracts song and artist from Alexa answers', () => 
   assert.equal(onDevice.song, 'Tennessee');
   assert.equal(onDevice.artist, 'Arrested Development');
   assert.equal(onDevice.device, 'Office Echo');
+
+  const amazonIsPlaying = parseSpokenNowPlaying(
+    'Highlife by Cypress Hill is playing on Amazon Music.',
+  );
+  assert.equal(amazonIsPlaying.song, 'Highlife');
+  assert.equal(amazonIsPlaying.artist, 'Cypress Hill');
+
+  const heresOnAmazon = parseSpokenNowPlaying(
+    "Here's Hits from the Bong by Cypress Hill, on Amazon Music.",
+  );
+  assert.equal(heresOnAmazon.song, 'Hits from the Bong');
+  assert.equal(heresOnAmazon.artist, 'Cypress Hill');
 
   assert.equal(parseSpokenNowPlaying('Nothing is playing right now'), null);
   assert.equal(parseSpokenNowPlaying('The weather is sunny'), null);
