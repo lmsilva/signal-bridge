@@ -11,6 +11,7 @@ from src.payload_utils import resolve_display_type, title_for_payload
 from src.roll_credits_panel import (
     RollCreditsPanel,
     choose_image_hero,
+    choose_showcase_shots,
     format_beaten,
     format_month_axis_label,
     layout_boxes,
@@ -36,6 +37,20 @@ class RollCreditsPayloadTests(unittest.TestCase):
         self.assertEqual(choose_image_hero(card)["url"], "shot.jpg")
         self.assertIsNone(choose_image_hero({"media": {"hero": {"kind": "video", "url": "x"}}}))
 
+    def test_cover_hero_keeps_screenshots_for_strip(self):
+        card = {
+            "media": {
+                "hero": {"id": "c1", "kind": "cover", "url": "cover.jpg"},
+                "screenshots": [
+                    {"id": "s1", "kind": "screenshot", "url": "shot1.jpg"},
+                    {"id": "s2", "kind": "screenshot", "url": "shot2.jpg"},
+                ],
+            }
+        }
+        self.assertEqual(choose_image_hero(card)["kind"], "cover")
+        shots = choose_showcase_shots(card)
+        self.assertEqual([s["url"] for s in shots], ["shot1.jpg", "shot2.jpg"])
+
     def test_cover_fallthrough_and_date_format(self):
         cover = {"kind": "cover", "url": "cover.jpg"}
         self.assertEqual(choose_image_hero({"media": {"hero": cover}}), cover)
@@ -58,6 +73,22 @@ class RollCreditsLayoutTests(unittest.TestCase):
     def test_dashboard_fits_portrait_and_landscape(self):
         self.assert_boxes_fit(1080, 1920, True)
         self.assert_boxes_fit(1920, 1080, True)
+
+    def test_portrait_dashboard_sections_do_not_overlap(self):
+        boxes = layout_boxes(1080, 1920, dashboard=True, timed=True)
+        ordered = ["hero", "counters", "months", "systems"]
+        for left, right in zip(ordered, ordered[1:]):
+            self.assertLessEqual(boxes[left][3], boxes[right][1] + 1, f"{left} overlaps {right}")
+        # Counters need room for notes + 2×2 stats.
+        self.assertGreaterEqual(boxes["counters"][3] - boxes["counters"][1], 180)
+
+    def test_portrait_showcase_keeps_shot_strip(self):
+        boxes = layout_boxes(1080, 1920, dashboard=False, timed=True)
+        shots_h = boxes["shots"][3] - boxes["shots"][1]
+        hero_h = boxes["hero"][3] - boxes["hero"][1]
+        self.assertGreaterEqual(shots_h, 180)
+        self.assertLess(hero_h, shots_h * 3)
+        self.assertLessEqual(boxes["facts"][3], boxes["shots"][1] + 1)
 
     def test_showcase_fits_portrait_and_landscape(self):
         self.assert_boxes_fit(1080, 1920, False)

@@ -32,15 +32,39 @@ def clamp_seconds(value, fallback, minimum=1, maximum=300):
 
 
 def choose_image_hero(card: dict) -> dict | None:
-    """Phase 1 safety: video can never become the display hero."""
+    """Prefer cover as hero when screenshots exist so the strip can show gameplay."""
     media = (card or {}).get("media") or {}
     hero = media.get("hero")
+    shots = [shot for shot in (media.get("screenshots") or [])
+             if isinstance(shot, dict) and shot.get("url")]
+    if isinstance(hero, dict) and hero.get("kind") == "cover" and hero.get("url"):
+        return hero
+    # If the bridge still picked a screenshot as hero, keep it when no cover URL.
     if isinstance(hero, dict) and hero.get("kind") in ("screenshot", "cover") and hero.get("url"):
         return hero
-    for shot in media.get("screenshots") or []:
-        if isinstance(shot, dict) and shot.get("url"):
-            return shot
+    for shot in shots:
+        return shot
     return None
+
+
+def choose_showcase_shots(card: dict, *, limit: int = 3) -> list:
+    """Screenshots for the strip — never leave portrait empty when shots exist."""
+    media = (card or {}).get("media") or {}
+    hero = media.get("hero") if isinstance(media.get("hero"), dict) else {}
+    hero_id = hero.get("id")
+    hero_url = hero.get("url")
+    shots = []
+    for shot in media.get("screenshots") or []:
+        if not isinstance(shot, dict) or not shot.get("url"):
+            continue
+        if hero_id and shot.get("id") == hero_id:
+            continue
+        if hero_url and shot.get("url") == hero_url and hero.get("kind") == "screenshot":
+            continue
+        shots.append(shot)
+        if len(shots) >= limit:
+            break
+    return shots
 
 
 def format_month_axis_label(label=None, key=None) -> str:
@@ -74,18 +98,20 @@ def layout_boxes(screen_w: int, screen_h: int, *, dashboard=False, timed=True) -
     u = chrome.u
     x0, x1 = chrome.content_x, chrome.content_x + chrome.content_w
     y0, y1 = chrome.content_top + 14 * u, chrome.content_bottom - 18 * u
-    gap = 20 * u
+    gap = 16 * u
     if dashboard:
         if chrome.portrait:
-            hero_h = min(440 * u, (y1 - y0) * 0.31)
-            counters_h = 150 * u
-            months_h = 285 * u
+            avail = max(500.0, y1 - y0)
+            hero_h = min(360 * u, avail * 0.26)
+            counters_h = 200 * u
+            months_h = min(260 * u, avail * 0.22)
+            systems_top = y0 + hero_h + counters_h + months_h + gap * 3
             return {
                 "hero": (x0, y0, x1, y0 + hero_h),
                 "counters": (x0, y0 + hero_h + gap, x1, y0 + hero_h + gap + counters_h),
                 "months": (x0, y0 + hero_h + counters_h + gap * 2, x1,
                            y0 + hero_h + counters_h + gap * 2 + months_h),
-                "systems": (x0, y0 + hero_h + counters_h + months_h + gap * 3, x1, y1),
+                "systems": (x0, systems_top, x1, y1),
             }
         left_w = chrome.content_w * 0.36
         top_h = 180 * u
@@ -96,15 +122,18 @@ def layout_boxes(screen_w: int, screen_h: int, *, dashboard=False, timed=True) -
             "systems": (x0 + left_w + (x1 - x0 - left_w) / 2 + gap, y0 + top_h + gap, x1, y1),
         }
     if chrome.portrait:
-        hero_h = min(820 * u, (y1 - y0) * 0.48)
-        title_h, facts_h, shots_h = 175 * u, 245 * u, 165 * u
+        avail = max(500.0, y1 - y0 - 50 * u)
+        # Cover on top, then title, facts, and a generous screenshot strip.
+        hero_h = min(520 * u, avail * 0.36)
+        title_h = 110 * u
+        facts_h = 160 * u
+        shots_top = y0 + hero_h + title_h + facts_h + gap * 3
         return {
             "hero": (x0, y0, x1, y0 + hero_h),
             "title": (x0, y0 + hero_h + gap, x1, y0 + hero_h + gap + title_h),
             "facts": (x0, y0 + hero_h + title_h + gap * 2, x1,
                       y0 + hero_h + title_h + gap * 2 + facts_h),
-            "shots": (x0, y0 + hero_h + title_h + facts_h + gap * 3, x1,
-                      min(y1 - 55 * u, y0 + hero_h + title_h + facts_h + gap * 3 + shots_h)),
+            "shots": (x0, shots_top, x1, y1 - 50 * u),
             "progress": (x0, y1 - 45 * u, x1, y1),
         }
     hero_w = chrome.content_w * 0.55
@@ -272,52 +301,88 @@ class RollCreditsPanel(BasePanel):
         for box in boxes.values():
             self._card(box)
         self._draw_latest(boxes["hero"], latest, stats)
-        self._draw_counters(boxes["counters"], stats)
+        self._draw_counters(boxes["counters"], stats, notes_from_latest=True, latest=latest)
         self._draw_months(boxes["months"], stats.get("months") or [], stats.get("undatedCount") or 0)
         self._draw_systems(boxes["systems"], stats.get("bySystem") or [], stats.get("beatenWith") or [])
 
     def _draw_latest(self, box, latest, stats=None):
         stats = stats or {}
         x0, y0, x1, y1 = box
-        pad = 24
+        pad = 18
         self._track(self.canvas.create_text(x0 + pad, y0 + pad, anchor="nw", text="LATEST INDUCTED",
-                                            fill=INK_2, font=self._font(18, True)))
+                                            fill=INK_2, font=self._font(16, True)))
         portrait_box = (x1 - x0) < 700
-        art_w = min((x1 - x0) * (0.42 if portrait_box else 0.5), y1 - y0 - 80)
-        art = (x0 + pad, y0 + 62, x0 + pad + art_w, y1 - pad)
+        # Keep all hero copy inside this card — overflow used to paint over COUNTERS.
+        art_w = min((x1 - x0) * (0.38 if portrait_box else 0.5), max(80, y1 - y0 - 70))
+        art = (x0 + pad, y0 + 48, x0 + pad + art_w, y1 - pad)
         self._draw_image_stage(art, choose_image_hero(latest))
-        tx = art[2] + 24
-        self._track(self.canvas.create_text(tx, y0 + 75, anchor="nw", text=latest.get("title") or "No games yet",
-                                            fill=INK, font=self._font(28, True), width=max(120, x1 - tx - pad)))
-        self._track(self.canvas.create_text(tx, y0 + 145, anchor="nw",
-                                            text=str(latest.get("systemLabel") or latest.get("system") or "").upper(),
-                                            fill=ACCENT, font=self._font(16, True)))
-        self._track(self.canvas.create_text(tx, y0 + 190, anchor="nw", text=format_beaten(latest.get("beatenAt")),
-                                            fill=INK_2, font=self._font(16)))
+        tx = art[2] + 18
+        text_bottom = y1 - pad
+        cursor = y0 + 52
+        self._track(self.canvas.create_text(tx, cursor, anchor="nw", text=latest.get("title") or "No games yet",
+                                            fill=INK, font=self._font(22 if portrait_box else 28, True),
+                                            width=max(100, x1 - tx - pad)))
+        cursor += 46 if portrait_box else 70
+        if cursor < text_bottom - 20:
+            self._track(self.canvas.create_text(tx, cursor, anchor="nw",
+                                                text=str(latest.get("systemLabel") or latest.get("system") or "").upper(),
+                                                fill=ACCENT, font=self._font(14, True)))
+            cursor += 28
+        if cursor < text_bottom - 20:
+            self._track(self.canvas.create_text(tx, cursor, anchor="nw", text=format_beaten(latest.get("beatenAt")),
+                                                fill=INK_2, font=self._font(14)))
+            cursor += 28
         induction = latest.get("induction")
-        self._track(self.canvas.create_text(tx, y0 + 245, anchor="nw",
-                                            text=f"GAME #{int(induction):03d}" if induction else "GAME #—",
-                                            fill=WARN, font=self._font(27, True)))
-        cursor_y = y0 + 305
-        if latest.get("beatenWith"):
-            self._track(self.canvas.create_text(tx, cursor_y, anchor="nw",
-                                                text=f"beaten with {latest['beatenWith']}",
-                                                fill=INK_2, font=self._font(15)))
-            cursor_y += 40
-        best = stats.get("bestMonth") or {}
-        if best.get("label") and best.get("count"):
-            self._track(self.canvas.create_text(tx, cursor_y, anchor="nw",
-                                                text=f"Best month · {best['label']} ({best['count']})",
-                                                fill=INK_3, font=self._font(14)))
-            cursor_y += 32
-        milestone = stats.get("latestMilestone")
-        if milestone:
-            self._track(self.canvas.create_text(tx, cursor_y, anchor="nw",
-                                                text=f"Milestone · {milestone} games beaten",
-                                                fill=WARN, font=self._font(14, True)))
+        if cursor < text_bottom - 20:
+            self._track(self.canvas.create_text(tx, cursor, anchor="nw",
+                                                text=f"GAME #{int(induction):03d}" if induction else "GAME #—",
+                                                fill=WARN, font=self._font(22 if portrait_box else 27, True)))
+            cursor += 40
+        # Landscape hero has room for secondary notes; portrait moves them to counters.
+        if not portrait_box:
+            if latest.get("beatenWith") and cursor < text_bottom - 20:
+                self._track(self.canvas.create_text(tx, cursor, anchor="nw",
+                                                    text=f"beaten with {latest['beatenWith']}",
+                                                    fill=INK_2, font=self._font(15)))
+                cursor += 36
+            best = stats.get("bestMonth") or {}
+            if best.get("label") and best.get("count") and cursor < text_bottom - 20:
+                self._track(self.canvas.create_text(tx, cursor, anchor="nw",
+                                                    text=f"Best month · {best['label']} ({best['count']})",
+                                                    fill=INK_3, font=self._font(14)))
+                cursor += 30
+            milestone = stats.get("latestMilestone")
+            if milestone and cursor < text_bottom - 20:
+                self._track(self.canvas.create_text(tx, cursor, anchor="nw",
+                                                    text=f"Milestone · {milestone} games beaten",
+                                                    fill=WARN, font=self._font(14, True)))
 
-    def _draw_counters(self, box, stats):
+    def _draw_counters(self, box, stats, *, notes_from_latest=False, latest=None):
         x0, y0, x1, y1 = box
+        pad = 16
+        latest = latest or {}
+        notes = []
+        if notes_from_latest and (x1 - x0) < 900:
+            if latest.get("beatenWith"):
+                notes.append(f"beaten with {latest['beatenWith']}")
+            best = stats.get("bestMonth") or {}
+            if best.get("label") and best.get("count"):
+                notes.append(f"Best month · {best['label']} ({best['count']})")
+            milestone = stats.get("latestMilestone")
+            if milestone:
+                notes.append(f"Milestone · {milestone} games beaten")
+        note_h = 0
+        if notes:
+            note_h = 22 * len(notes) + 8
+            cy = y0 + pad
+            for note in notes:
+                fill = WARN if note.startswith("Milestone") else INK_2
+                self._track(self.canvas.create_text(
+                    x0 + pad, cy, anchor="nw", text=note,
+                    fill=fill, font=self._font(13, True),
+                    width=max(80, int(x1 - x0 - pad * 2)),
+                ))
+                cy += 22
         top = stats.get("topBeatenWith") or {}
         buddy = str(top.get("name") or "").strip()
         values = [
@@ -327,13 +392,29 @@ class RollCreditsPanel(BasePanel):
         ]
         if buddy:
             values.append((top.get("count") or 0, f"WITH {buddy.upper()[:10]}"))
+        band_top = y0 + pad + note_h
+        band_h = max(60, y1 - band_top - pad)
+        # Portrait with 4 stats: 2×2 grid so labels never collide.
+        if (x1 - x0) < 900 and len(values) >= 4:
+            cols, rows = 2, 2
+            cell_w = (x1 - x0 - pad * 2) / cols
+            cell_h = band_h / rows
+            for index, (value, label) in enumerate(values[:4]):
+                col, row = index % cols, index // cols
+                cx = x0 + pad + cell_w * (col + 0.5)
+                cy = band_top + cell_h * (row + 0.5)
+                self._track(self.canvas.create_text(cx, cy - 12, text=str(value),
+                                                    fill=INK, font=self._font(28, True)))
+                self._track(self.canvas.create_text(cx, cy + 16, text=label,
+                                                    fill=INK_3, font=self._font(12, True)))
+            return
         width = (x1 - x0) / max(1, len(values))
         for index, (value, label) in enumerate(values):
             x = x0 + width * (index + 0.5)
-            self._track(self.canvas.create_text(x, y0 + (y1 - y0) * 0.42, text=str(value),
-                                                fill=INK, font=self._font(34, True)))
-            self._track(self.canvas.create_text(x, y0 + (y1 - y0) * 0.72, text=label,
-                                                fill=INK_3, font=self._font(13, True)))
+            self._track(self.canvas.create_text(x, band_top + band_h * 0.38, text=str(value),
+                                                fill=INK, font=self._font(32, True)))
+            self._track(self.canvas.create_text(x, band_top + band_h * 0.72, text=label,
+                                                fill=INK_3, font=self._font(12, True)))
 
     def _draw_months(self, box, months, undated):
         x0, y0, x1, y1 = box
@@ -596,8 +677,7 @@ class RollCreditsPanel(BasePanel):
                                             width=x1 - x0 - pad * 2))
 
     def _draw_shots(self, box, card):
-        shots = [shot for shot in ((card.get("media") or {}).get("screenshots") or [])
-                 if isinstance(shot, dict) and shot.get("url")][:3]
+        shots = choose_showcase_shots(card, limit=3)
         if not shots:
             return
         x0, y0, x1, y1 = box

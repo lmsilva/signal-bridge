@@ -97,10 +97,19 @@ function createRollCreditsPayload({
       .filter((item) => item && item.hidden !== true && item.status === 'ready'
         && item.path && DISPLAY_MEDIA_KINDS.includes(item.kind))
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
-    const selectedKind = priority.find((kind) => ready.some((item) => item.kind === kind)) || null;
-    const heroItem = selectedKind ? ready.find((item) => item.kind === selectedKind) : null;
-    const screenshots = ready
-      .filter((item) => item.kind === 'screenshot' && item.id !== heroItem?.id)
+    const covers = ready.filter((item) => item.kind === 'cover');
+    const shotItems = ready.filter((item) => item.kind === 'screenshot');
+    // Prefer cover as hero when screenshots exist so the wall can show gameplay
+    // stills in the strip instead of an empty portrait screenshot band.
+    let heroItem = null;
+    if (covers.length && shotItems.length) {
+      heroItem = covers[0];
+    } else {
+      const selectedKind = priority.find((kind) => ready.some((item) => item.kind === kind)) || null;
+      heroItem = selectedKind ? ready.find((item) => item.kind === selectedKind) : null;
+    }
+    const screenshots = shotItems
+      .filter((item) => item.id !== heroItem?.id)
       .slice(0, 3)
       .map((item) => ({
         id: item.id,
@@ -109,7 +118,7 @@ function createRollCreditsPayload({
         thumbUrl: mediaUrl(item, baseUrl, true),
       }));
     return {
-      selectedKind,
+      selectedKind: heroItem?.kind || null,
       hero: heroItem ? {
         id: heroItem.id,
         kind: heroItem.kind,

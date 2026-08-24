@@ -30,6 +30,7 @@ from src.autodarts_panel import (
     is_t20_in_treble_wedge_px,
     layout_dashboard,
     layout_match,
+    leaderboard_visible_rows,
     map_coords_to_px,
     match_fingerprint,
     normalize_hit_map,
@@ -171,7 +172,7 @@ class LayoutTests(unittest.TestCase):
     def assert_boxes_fit(self, boxes, width, height, timed=True):
         chrome = page_chrome(width, height, timed=timed)
         for name, box in boxes.items():
-            if name in ("portrait", "chrome", "finished", "player_count", "show_strip") or box is None:
+            if name in ("portrait", "chrome", "finished", "player_count", "show_strip", "omit_score_names") or box is None:
                 continue
             x0, y0, x1, y1 = box
             self.assertGreaterEqual(x0, chrome.content_x - 1, name)
@@ -191,7 +192,23 @@ class LayoutTests(unittest.TestCase):
             self.assert_boxes_fit(boxes, *size)
             # Room for version line + stats without overlap (was 150 → collided).
             board_h = boxes["board_info"][3] - boxes["board_info"][1]
-            self.assertGreaterEqual(board_h, 170)
+            self.assertGreaterEqual(board_h, 190)
+
+    def test_portrait_dashboard_boxes_do_not_overlap(self):
+        boxes = layout_dashboard(1080, 1920, timed=True)
+        ordered = ["totals", "board_info", "leaderboard", "months", "rivalry", "records"]
+        for left, right in zip(ordered, ordered[1:]):
+            self.assertLessEqual(boxes[left][3], boxes[right][1] + 1, f"{left} overlaps {right}")
+        rows = board_info_row_ys(boxes["board_info"][3] - boxes["board_info"][1])
+        self.assertTrue(rows["meta_clear_of_value"])
+        visible, row_h = leaderboard_visible_rows(boxes["leaderboard"][3] - boxes["leaderboard"][1], 12)
+        self.assertGreaterEqual(row_h, 58)
+        self.assertLessEqual(visible, 12)
+
+    def test_finished_portrait_omits_duplicate_score_names(self):
+        boxes = layout_match(1080, 1920, timed=True, player_count=2, finished=True, show_strip=False)
+        self.assertTrue(boxes.get("omit_score_names"))
+        self.assertGreaterEqual(boxes["board"][3] - boxes["board"][1], 400)
 
     def test_board_info_rows_keep_meta_clear_of_stats(self):
         rows = board_info_row_ys(178)
