@@ -6074,8 +6074,16 @@
     const options = creditsSystems.map((system) => (
       `<option value="${escapeHtml(system.id)}">${escapeHtml(system.label)}</option>`
     )).join('');
+    // Rebuilding <select> options clears the selection; restore so a quiet
+    // refresh (e.g. after re-scrape) cannot silently flip Arcade → NES.
+    const addSystem = $('credits-add-system')?.value;
+    const editSystem = $('credits-edit-system')?.value
+      || creditsEditGame?.system
+      || '';
     $('credits-add-system').innerHTML = options;
     $('credits-edit-system').innerHTML = options;
+    if (addSystem) $('credits-add-system').value = addSystem;
+    if (editSystem) $('credits-edit-system').value = editSystem;
     renderCreditsSystemFilters();
   }
 
@@ -6520,12 +6528,30 @@
       return;
     }
     const mode = document.querySelector('input[name="credits-rescrape-mode"]:checked')?.value || 'fill-gaps';
+    const body = { scopes, mode };
+    // When re-scraping from the open edit sheet, match against the title/system
+    // currently shown — including unsaved edits — not a stale stored provider id.
+    if (creditsRescrapeIds.length === 1
+      && creditsEditGame
+      && creditsRescrapeIds[0] === creditsEditGame.id) {
+      const title = $('credits-edit-title')?.value.trim();
+      const system = $('credits-edit-system')?.value;
+      if (title) body.title = title;
+      if (system) body.system = system;
+    }
     $('btn-credits-rescrape-confirm').disabled = true;
     try {
       if (creditsRescrapeIds.length === 1) {
-        await apiPost(`${CREDITS_ROUTE}/games/${encodeURIComponent(creditsRescrapeIds[0])}/rescrape`, { scopes, mode });
+        const result = await apiPost(
+          `${CREDITS_ROUTE}/games/${encodeURIComponent(creditsRescrapeIds[0])}/rescrape`,
+          body,
+        );
+        if (creditsEditGame && result?.game) {
+          creditsEditGame = result.game;
+          await openCreditsEdit(creditsEditGame.id);
+        }
       } else {
-        await apiPost(`${CREDITS_ROUTE}/rescrape-bulk`, { ids: creditsRescrapeIds, scopes, mode });
+        await apiPost(`${CREDITS_ROUTE}/rescrape-bulk`, { ids: creditsRescrapeIds, ...body });
       }
       $('credits-rescrape-sheet').hidden = true;
       toast(`Re-scrape started for ${creditsRescrapeIds.length} game${creditsRescrapeIds.length === 1 ? '' : 's'}`, 'good');

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Autodarts dashboard spacing + board stats)
+**Last updated:** 2026-08-23 (Roll Credits re-scrape keeps system)
 
 ---
 
@@ -534,6 +534,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-23: **Roll Credits re-scrape keeps title/system** — re-scrape rematches IGDB/Steam by the current title + system (including unsaved edit-sheet values), never flips the System dropdown to the first option (NES) when systems reload, and accepts admin scope arrays. Cache-bust `?v=signal75`. Deploy: `./recreate.sh`. Tests: `test/roll-credits-scraper.test.js`.
 
 - 2026-08-23: **Autodarts board stats + dashboard spacing** — board card reads `detections`/`state.status` from GET `/bs/v0/boards` list (detail often zeros stats); status shows Running/Stopped instead of Unknown; dashboard title “AUTODARTS DASHBOARD”; looser totals/board/H2H spacing. Deploy: `./recreate.sh` + portable client rebuild.
 - 2026-08-23: **Autodarts board card + live fallback** — dashboard UDP includes `board` (name, online/Running, version, up-to-date, OS, darts/corrections/accuracy from `/bs/v0/boards`); `autodarts.now` skips empty live shells and shows the last finished match with players/legs. Cache-bust not required for UDP. Deploy: `./recreate.sh` + portable client rebuild. Tests: `test/autodarts-payload.test.js`.
