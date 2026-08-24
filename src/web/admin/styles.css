@@ -3052,6 +3052,22 @@ textarea.field-input.text-input-area {
   .vb-tile.is-flipping { animation-duration: 1ms; }
 }
 
+.vb-board-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.vb-board-row {
+  padding: 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.vb-board-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vb-board-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.vb-board-actions .btn.confirming { border-color: var(--danger); color: var(--danger); }
+
+.vb-board-form { display: block; margin-top: 14px; }
+.vb-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.vb-form-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.vb-form-actions { display: flex; gap: 8px; margin-top: 14px; }
+
 .vb-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .vb-row {
   display: flex;

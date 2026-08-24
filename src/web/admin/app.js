@@ -7472,6 +7472,223 @@
     }
   }
 
+  // Vestaboards (Settings tab) -----------------------------------------------
+
+  const VB_HEALTH_TONE = {
+    ok: 'ok', degraded: 'warn', unhealthy: 'bad', offline: 'warn',
+  };
+  const VB_HEALTH_TEXT = {
+    ok: 'OK', degraded: 'Key refused', unhealthy: 'Not answering', offline: 'Off',
+  };
+
+  let vbBoards = [];
+
+  function vbBoardRow(board) {
+    const row = document.createElement('div');
+    row.className = 'vb-board-row';
+
+    const head = document.createElement('div');
+    head.className = 'vb-board-head';
+
+    const name = document.createElement('div');
+    name.className = 'auth-name';
+    name.textContent = board.name;
+
+    const pill = document.createElement('span');
+    pill.className = `status-pill ${VB_HEALTH_TONE[board.health] || 'warn'}`;
+    pill.textContent = board.enabled
+      ? (VB_HEALTH_TEXT[board.health] || board.health)
+      : 'Off';
+
+    head.append(name, pill);
+
+    const detail = document.createElement('div');
+    detail.className = 'auth-detail';
+    const bits = [board.simulator ? 'Simulator' : 'Local API'];
+    if (!board.hasKey) bits.push('no key yet');
+    detail.textContent = bits.join(' · ');
+
+    const actions = document.createElement('div');
+    actions.className = 'vb-board-actions';
+
+    const test = document.createElement('button');
+    test.type = 'button';
+    test.className = 'btn btn-outline btn-sm';
+    test.textContent = 'Test flip';
+    test.disabled = !board.enabled || !board.hasKey;
+    test.addEventListener('click', () => vbTestFlip(board.id, test));
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn btn-outline btn-sm';
+    toggle.textContent = board.enabled ? 'Switch off' : 'Switch on';
+    toggle.addEventListener('click', () => vbSetEnabled(board.id, !board.enabled));
+
+    actions.append(test, toggle);
+
+    if (!board.simulator) {
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-outline btn-sm';
+      edit.textContent = 'Edit';
+      edit.addEventListener('click', () => vbOpenForm(board));
+
+      actions.append(edit, vbRemoveButton(board));
+    }
+
+    row.append(head, detail, actions);
+    return row;
+  }
+
+  function vbRenderBoards() {
+    const host = $('vb-board-list');
+    if (!host) {
+      return;
+    }
+    if (!vbBoards.length) {
+      host.innerHTML = '<p class="hint">No boards yet.</p>';
+      return;
+    }
+    host.innerHTML = '';
+    for (const board of vbBoards) {
+      host.appendChild(vbBoardRow(board));
+    }
+  }
+
+  async function loadVestaboards() {
+    try {
+      const data = await apiGet('/api/vestaboards');
+      vbBoards = data.boards || [];
+      vbRenderBoards();
+    } catch {
+      const host = $('vb-board-list');
+      if (host) {
+        host.innerHTML = '<p class="hint">Vestaboards are switched off in config.</p>';
+      }
+    }
+  }
+
+  function vbOpenForm(board = null) {
+    const form = $('vb-board-form');
+    if (!form) {
+      return;
+    }
+    $('vb-form-id').value = board?.id || '';
+    $('vb-form-name').value = board?.name || '';
+    $('vb-form-url').value = board?.baseUrl || '';
+    $('vb-form-key').value = '';
+    $('vb-form-dwell').value = board?.dwellSeconds ?? 15;
+    $('vb-form-quiet-start').value = board?.quietHours?.start || '22:00';
+    $('vb-form-quiet-end').value = board?.quietHours?.end || '07:00';
+    $('vb-form-quiet-enabled').checked = board?.quietHours?.enabled !== false;
+    form.hidden = false;
+    $('btn-vb-add').hidden = true;
+    $('vb-form-name').focus();
+  }
+
+  function vbCloseForm() {
+    const form = $('vb-board-form');
+    if (form) form.hidden = true;
+    const add = $('btn-vb-add');
+    if (add) add.hidden = false;
+  }
+
+  async function vbTestFlip(id, button) {
+    button.disabled = true;
+    try {
+      const data = await apiPost('/api/vestaboards/test-flip', { id });
+      toast(data.queued ? 'Test flip queued' : 'Test flip sent', 'good');
+    } catch (error) {
+      toast(error?.message || 'Test flip failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function vbSetEnabled(id, enabled) {
+    try {
+      const data = await apiPost('/api/vestaboards/enable', { id, enabled });
+      vbBoards = data.boards || [];
+      vbRenderBoards();
+    } catch (error) {
+      toast(error?.message || 'Could not change the board', 'bad');
+    }
+  }
+
+  /** Two-tap remove, the same guard the Remote tab uses for its hard actions. */
+  function vbRemoveButton(board) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-outline btn-sm btn-danger';
+    button.textContent = 'Remove';
+
+    let armed = false;
+    let disarm = null;
+
+    button.addEventListener('click', async () => {
+      if (!armed) {
+        armed = true;
+        button.textContent = 'Tap to confirm';
+        button.classList.add('confirming');
+        disarm = window.setTimeout(() => {
+          armed = false;
+          button.textContent = 'Remove';
+          button.classList.remove('confirming');
+        }, 4000);
+        return;
+      }
+
+      window.clearTimeout(disarm);
+      try {
+        const data = await apiPost('/api/vestaboards/remove', { id: board.id });
+        vbBoards = data.boards || [];
+        vbRenderBoards();
+        toast('Board removed', 'good');
+      } catch (error) {
+        toast(error?.message || 'Could not remove the board', 'bad');
+      }
+    });
+
+    return button;
+  }
+
+  $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
+  $('btn-vb-cancel')?.addEventListener('click', () => vbCloseForm());
+
+  $('vb-board-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = $('vb-form-name').value.trim();
+    if (!name) {
+      toast('The board needs a name', 'bad');
+      return;
+    }
+    const payload = {
+      id: $('vb-form-id').value.trim() || name,
+      name,
+      baseUrl: $('vb-form-url').value.trim(),
+      dwellSeconds: Number($('vb-form-dwell').value) || 15,
+      quietHours: {
+        start: $('vb-form-quiet-start').value || '22:00',
+        end: $('vb-form-quiet-end').value || '07:00',
+        enabled: $('vb-form-quiet-enabled').checked,
+      },
+    };
+    const key = $('vb-form-key').value.trim();
+    if (key) {
+      payload.key = key;
+    }
+
+    try {
+      const data = await apiPost('/api/vestaboards', payload);
+      vbBoards = data.boards || [];
+      vbRenderBoards();
+      vbCloseForm();
+      toast('Board saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save the board', 'bad');
+    }
+  });
+
   // Vestaboard simulator -----------------------------------------------------
   // The page holds no opinion about what the board should show. It draws the
   // layout the simulator reports and animates whatever changed since the last
@@ -7760,6 +7977,10 @@
   document.querySelector('.tab-btn[data-tab="board"]')?.addEventListener('click', async () => {
     await loadVestaboardSim();
     startVestaboardSimEvents();
+  });
+
+  document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
+    loadVestaboards();
   });
 
   loadPushGrid();

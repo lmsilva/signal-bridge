@@ -19,7 +19,16 @@ function defaultRegistryPath(config) {
   return path.resolve(config.ROOT || path.resolve(__dirname, '..'), 'data', 'displays-registry.json');
 }
 
-function createDisplayRegistry(config, log = console) {
+/**
+ * @param {object} config
+ * @param {object} log
+ * @param {object} [options]
+ * @param {() => object[]} [options.staticEntries] Displays that never announce
+ *   themselves — Vestaboards, which are configured rather than discovered.
+ *   They are merged into `list()`/`get()` but never persisted here and never
+ *   pruned, because there is no heartbeat to miss.
+ */
+function createDisplayRegistry(config, log = console, { staticEntries = null } = {}) {
   const filePath = config.displaysRegistryPath || defaultRegistryPath(config);
   const discoverSweepMs = Number(config.discoverSweepMs) > 0
     ? Number(config.discoverSweepMs)
@@ -89,6 +98,11 @@ function createDisplayRegistry(config, log = console) {
         log.warn?.('Display registry listener failed', error?.message || error);
       }
     }
+  }
+
+  /** Tell watchers the list changed for a reason outside this module. */
+  function announce(detail = {}) {
+    notify(detail);
   }
 
   function onChange(listener) {
@@ -216,11 +230,38 @@ function createDisplayRegistry(config, log = console) {
     return entry;
   }
 
+  /** Configured displays (boards). Never persisted or pruned here. */
+  function statics() {
+    if (typeof staticEntries !== 'function') {
+      return [];
+    }
+    try {
+      const entries = staticEntries() || [];
+      return entries
+        .filter((entry) => entry?.id && entry?.name)
+        .map((entry) => ({
+          ...entry,
+          id: String(entry.id),
+          name: String(entry.name),
+          shortId: String(entry.shortId || shortIdFrom(entry.id)),
+          kind: entry.kind || 'vestaboard',
+          host: null,
+          port: null,
+          stale: false,
+          static: true,
+        }));
+    } catch (error) {
+      log.warn?.('Could not read static displays', error?.message || error);
+      return [];
+    }
+  }
+
   function get(id) {
     if (!id || id === ALL_TARGET_ID) {
       return null;
     }
-    return byId.get(String(id)) || null;
+    const key = String(id);
+    return byId.get(key) || statics().find((entry) => entry.id === key) || null;
   }
 
   function list({ skipPrune = false } = {}) {
@@ -230,9 +271,15 @@ function createDisplayRegistry(config, log = console) {
     const now = Date.now();
     const items = [...byId.values()].map((entry) => {
       const shortId = entry.shortId || shortIdFrom(entry.id);
+      // A display that predates board support is a full display.
       // After prune, remaining entries are fresh; keep stale:false for API compat.
-      return { ...entry, shortId, stale: isStaleEntry(entry, now) };
+      return {
+        ...entry, shortId, kind: entry.kind || 'full', stale: isStaleEntry(entry, now),
+      };
     });
+
+    // Boards are a real listing even when no Windows client is online at all.
+    items.push(...statics().filter((entry) => entry.enabled !== false));
 
     // When two PCs share displayName, disambiguate the picker label with shortId.
     // Targeting always uses entry.id (never the friendly name).
@@ -277,6 +324,17 @@ function createDisplayRegistry(config, log = console) {
     }
 
     const entry = get(raw);
+    if (entry?.static) {
+      // Boards are reached over HTTP by the Vestaboard router, never by UDP.
+      return {
+        target: { id: entry.id },
+        sendOptions: {},
+        entry,
+        isAll: false,
+        kind: entry.kind,
+        error: `"${entry.name}" is a Vestaboard — it is not reachable over UDP`,
+      };
+    }
     if (!entry?.host) {
       return {
         target: { id: raw },
@@ -329,6 +387,7 @@ function createDisplayRegistry(config, log = console) {
     scheduleDiscoverSweep,
     resolveDelivery,
     persist,
+    announce,
     onChange,
     stop,
   };

@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal78">
+  <link rel="stylesheet" href="styles.css?v=signal79">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1265,6 +1265,55 @@
           </div>
         </div>
 
+        <div class="card vb-settings-card">
+          <div class="section-label">Vestaboards</div>
+          <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network.</p>
+
+          <div class="vb-board-list" id="vb-board-list">
+            <p class="hint">Loading…</p>
+          </div>
+
+          <button type="button" class="btn btn-outline btn-block" id="btn-vb-add">Add a board</button>
+
+          <form class="vb-board-form" id="vb-board-form" hidden>
+            <input type="hidden" id="vb-form-id">
+            <label class="field-label field-label-spaced" for="vb-form-name">Name</label>
+            <input type="text" class="field-input" id="vb-form-name" placeholder="Kitchen Board" autocomplete="off">
+
+            <label class="field-label field-label-spaced" for="vb-form-url">Address</label>
+            <input type="text" class="field-input" id="vb-form-url" placeholder="http://192.168.1.42:7000" autocomplete="off" spellcheck="false">
+            <p class="hint">Use the board's IP rather than its .local name — mDNS does not resolve from inside Docker.</p>
+
+            <label class="field-label field-label-spaced" for="vb-form-key">Local API key</label>
+            <input type="password" class="field-input" id="vb-form-key" placeholder="Leave blank to keep the saved key" autocomplete="new-password" spellcheck="false">
+            <p class="hint">Request one from Vestaboard, then paste the key they email you.</p>
+
+            <div class="vb-form-row">
+              <label class="vb-form-field">
+                <span class="field-label">Dwell (s)</span>
+                <input type="number" class="field-input" id="vb-form-dwell" min="5" max="60" step="1" value="15">
+              </label>
+              <label class="vb-form-field">
+                <span class="field-label">Quiet from</span>
+                <input type="time" class="field-input" id="vb-form-quiet-start" value="22:00">
+              </label>
+              <label class="vb-form-field">
+                <span class="field-label">Quiet until</span>
+                <input type="time" class="field-input" id="vb-form-quiet-end" value="07:00">
+              </label>
+            </div>
+            <label class="trivia-check">
+              <input type="checkbox" id="vb-form-quiet-enabled" checked>
+              <span>Go quiet overnight (alarm and timer fires still come through)</span>
+            </label>
+
+            <div class="vb-form-actions">
+              <button type="submit" class="btn btn-accent">Save board</button>
+              <button type="button" class="btn btn-outline" id="btn-vb-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+
         <p class="hint" id="bridge-meta"></p>
       </div>
     </section>
@@ -1598,6 +1647,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal78"></script>
+  <script src="app.js?v=signal79"></script>
 </body>
 </html>
