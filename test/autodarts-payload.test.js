@@ -49,17 +49,19 @@ test('dashboard payload byte bound at leaderboardSize 16', () => {
   const payload = createAutodartsPayload({ archive, aggregates, settings }).buildDashboard({
     board: normalizeBoardInfo({
       name: 'Movie Theater Board',
-      status: 'Running',
       version: '1.0.7',
-      upToDate: true,
       os: 'linux',
-      stats: { darts: 3371, corrections: 53, accuracy: 98.43 },
+      detections: 3371,
+      corrections: 53,
+      accuracy: 0.9843,
+      state: { connected: true, status: 'Running' },
     }),
   });
   assert.equal(payload.type, 'autodarts.dashboard');
   assert.equal(payload.leaderboard.length, 16);
   assert.equal(payload.board.name, 'Movie Theater Board');
   assert.equal(payload.board.online, true);
+  assert.equal(payload.board.statusLabel, 'Running');
   assert.equal(payload.board.dartsThrown, 3371);
   assert.equal(payload.board.corrections, 53);
   assert.equal(payload.board.os, 'Linux');
@@ -71,19 +73,26 @@ test('dashboard payload byte bound at leaderboardSize 16', () => {
 test('normalizeBoardInfo maps Autodarts cloud board card fields', () => {
   const board = normalizeBoardInfo({
     name: 'Movie Theater Board',
-    status: 'Running',
     version: '1.0.7',
-    upToDate: true,
-    operatingSystem: 'linux',
-    dartsThrown: 3371,
+    os: 'linux',
+    detections: 3371,
     corrections: 53,
-    accuracy: 0.9843,
+    accuracy: 0.9842776624147137,
+    state: { connected: true, status: 'Stopped', event: 'Stopped', numThrows: 0 },
   });
-  assert.equal(board.statusLabel, 'Running');
+  assert.equal(board.statusLabel, 'Stopped');
   assert.equal(board.online, true);
   assert.equal(board.updateLabel, 'Up to date');
   assert.equal(board.os, 'Linux');
+  assert.equal(board.dartsThrown, 3371);
+  assert.equal(board.corrections, 53);
   assert.equal(board.accuracy, 98.43);
+});
+
+test('normalizeBoardInfo prefers detections and omits Unknown', () => {
+  const empty = normalizeBoardInfo({ name: 'Board' });
+  assert.equal(empty.statusLabel, null);
+  assert.equal(empty.dartsThrown, null);
 });
 
 test('empty live shell is not playable; last-match payload is finished with players', () => {
