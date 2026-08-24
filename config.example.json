@@ -37,6 +37,13 @@
   "slideshow": {
     "settingsFile": "data/slideshow-settings.json"
   },
+  "vestaboardSimulator": {
+    "enabled": true,
+    "port": 7000,
+    "host": "0.0.0.0",
+    "rateWindowSeconds": 15,
+    "stateFile": "data/vestaboard-simulator.json"
+  },
   "voiceEvents": {
     "enabled": true,
     "timeQueries": true,

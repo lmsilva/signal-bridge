@@ -10,6 +10,7 @@ const { createListener } = require('./listener');
 const { createWebServer } = require('./web-server');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { installRefreshPatch } = require('./auth-refresh-patch');
+const { createVestaboardSimulator } = require('./vestaboard/simulator');
 
 function registerShutdown(log) {
   const shutdown = (signal) => {
@@ -60,7 +61,18 @@ async function main() {
   try {
     await listener.start();
 
+    let vestaboardSimulator = null;
+    if (config.vestaboardSimulator?.enabled) {
+      vestaboardSimulator = createVestaboardSimulator({ config, log });
+      vestaboardSimulator.start().catch((error) => {
+        // A stand-in board is a development aid — never take the bridge down
+        // because its port is busy.
+        log.error('Vestaboard simulator unavailable', error?.message || error);
+      });
+    }
+
     const webServer = createWebServer({
+      vestaboardSimulator,
       config,
       log,
       sendUdpPayload: listener.sendUdpPayload,
