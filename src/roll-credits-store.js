@@ -3,8 +3,32 @@ const fs = require('fs');
 const path = require('path');
 
 const VERSION = 1;
-const SORT_COLUMNS = ['title', 'system', 'beatenAt', 'createdAt', 'induction'];
 const MILESTONES = [25, 50, 100, 150, 200, 250, 500, 750, 1000];
+const DIFFICULTY_RANK = { easy: 1, normal: 2, hard: 3, brutal: 4 };
+
+// Sortable columns for the management page. Each returns the value to compare;
+// `null` means "unknown" and always sinks to the bottom, whichever direction.
+const SORT_KEYS = {
+  induction: (game) => Number(game.induction) || 0,
+  title: (game) => String(game.title || '').trim() || null,
+  system: (game) => String(game.system || '').trim() || null,
+  beatenAt: (game) => (validDateOnly(game.beatenAt) ? String(game.beatenAt) : null),
+  createdAt: (game) => String(game.createdAt || '') || null,
+  difficulty: (game) => DIFFICULTY_RANK[
+    String(game.meta?.difficulty || '').trim().toLowerCase()
+  ] || null,
+  releaseDate: (game) => {
+    const text = String(game.meta?.releaseDate || '').trim();
+    const year = /^(\d{4})/.exec(text);
+    if (!year) return null;
+    return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : `${year[1]}-01-01`;
+  },
+  maxPlayers: (game) => {
+    const players = Number(game.meta?.maxPlayers);
+    return Number.isFinite(players) && players > 0 ? players : null;
+  },
+};
+const SORT_COLUMNS = Object.keys(SORT_KEYS);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -62,7 +86,7 @@ function createRollCreditsStore(config = {}, log = console) {
   const systemsPath = path.resolve(
     config.rollCreditsSystemsPath || path.join(__dirname, 'roll-credits-systems.json'),
   );
-  let data = { version: VERSION, games: [] };
+  let data = { version: VERSION, games: [], order: [], orderManual: false };
   const listeners = new Set();
 
   function notify(reason, gameId) {
@@ -86,7 +110,7 @@ function createRollCreditsStore(config = {}, log = console) {
   function load() {
     try {
       if (!fs.existsSync(storePath)) {
-        data = { version: VERSION, games: [] };
+        data = { version: VERSION, games: [], order: [], orderManual: false };
         return data;
       }
       const parsed = JSON.parse(fs.readFileSync(storePath, 'utf8'));
@@ -96,9 +120,12 @@ function createRollCreditsStore(config = {}, log = console) {
       data = {
         version: VERSION,
         games: parsed.games.filter((game) => game && typeof game === 'object'),
+        order: Array.isArray(parsed.order) ? parsed.order.map(String) : [],
+        orderManual: parsed.orderManual === true,
       };
+      resequence();
     } catch (error) {
-      data = { version: VERSION, games: [] };
+      data = { version: VERSION, games: [], order: [], orderManual: false };
       log?.warn?.('Could not read Roll Credits store — using an empty library', error?.message || error);
     }
     return data;
@@ -149,11 +176,110 @@ function createRollCreditsStore(config = {}, log = console) {
     ) || null;
   }
 
-  function nextInduction() {
-    return data.games.reduce(
-      (highest, game) => Math.max(highest, Number(game.induction) || 0),
-      0,
-    ) + 1;
+  // Induction order runs oldest → newest, so induction #1 is the first game you
+  // ever beat and the highest number is the most recent one. Games with no beat
+  // date sort ahead of every dated game, which parks them at the bottom of the
+  // "most recently inducted first" list the UI and the wall both show.
+  function autoOrderKey(game) {
+    const beaten = validDateOnly(game.beatenAt) ? String(game.beatenAt) : '';
+    return [beaten ? '1' : '0', beaten, String(game.createdAt || '')].join('|');
+  }
+
+  // Same-day entries can share a createdAt down to the millisecond, so the file
+  // position settles ties and keeps numbering stable across reloads.
+  function autoOrderedIds() {
+    return data.games
+      .map((game, index) => ({ game, index }))
+      .sort((a, b) => {
+        const left = autoOrderKey(a.game);
+        const right = autoOrderKey(b.game);
+        if (left !== right) return left < right ? -1 : 1;
+        return a.index - b.index;
+      })
+      .map((row) => row.game.id);
+  }
+
+  // Slots a game into a manual arrangement at its chronological spot, so adding
+  // a back-dated game still lands between the right neighbours after you have
+  // hand-sorted the list.
+  function insertByDate(order, byId, id) {
+    const key = autoOrderKey(byId.get(id));
+    const at = order.findIndex((other) => autoOrderKey(byId.get(other)) > key);
+    if (at < 0) order.push(id);
+    else order.splice(at, 0, id);
+  }
+
+  function inductionOrder() {
+    if (!data.orderManual) {
+      return autoOrderedIds();
+    }
+    const byId = new Map(data.games.map((game) => [game.id, game]));
+    const order = (data.order || []).filter((id) => byId.has(id));
+    const placed = new Set(order);
+    for (const id of autoOrderedIds()) {
+      if (!placed.has(id)) insertByDate(order, byId, id);
+    }
+    return order;
+  }
+
+  // Renumbers every game from the current order. Returns true when something
+  // actually moved so callers can skip a needless write.
+  function resequence() {
+    const order = inductionOrder();
+    const byId = new Map(data.games.map((game) => [game.id, game]));
+    let changed = order.length !== (data.order || []).length
+      || order.some((id, index) => data.order?.[index] !== id);
+    order.forEach((id, index) => {
+      const game = byId.get(id);
+      if (!game) return;
+      if (Number(game.induction) !== index + 1) {
+        game.induction = index + 1;
+        changed = true;
+      }
+    });
+    data.order = order;
+    return changed;
+  }
+
+  // The management page and the wall both read "most recently inducted first",
+  // so reorder requests arrive in that direction too.
+  function displayOrder() {
+    return [...inductionOrder()].reverse();
+  }
+
+  function reorderGames(ids = []) {
+    const wanted = Array.isArray(ids) ? ids.map(String) : [];
+    if (new Set(wanted).size !== wanted.length) {
+      throw new Error('Reorder list repeats a game');
+    }
+    const display = displayOrder();
+    const slots = wanted.map((id) => {
+      const at = display.indexOf(id);
+      if (at < 0) throw new Error(`Unknown game ${id}`);
+      return at;
+    }).sort((a, b) => a - b);
+    slots.forEach((slot, index) => {
+      display[slot] = wanted[index];
+    });
+    data.order = [...display].reverse();
+    data.orderManual = true;
+    resequence();
+    persist();
+    notify('reorder');
+    return { manual: true, order: [...data.order] };
+  }
+
+  function resetInductionOrder() {
+    data.orderManual = false;
+    data.order = [];
+    resequence();
+    persist();
+    notify('reorder');
+    return { manual: false, order: [...data.order] };
+  }
+
+  function isOrderManual() {
+    return data.orderManual === true;
   }
 
   function uniqueId() {
@@ -188,11 +314,12 @@ function createRollCreditsStore(config = {}, log = console) {
       system,
       beatenAt,
       beatenDateUnknown: unknownDate || beatenAt === null,
-      induction: nextInduction(),
+      induction: 0,
       createdAt: now,
       updatedAt: now,
     };
     data.games.push(game);
+    resequence();
     persist();
     notify('create', game.id);
     return {
@@ -210,7 +337,6 @@ function createRollCreditsStore(config = {}, log = console) {
     const existing = data.games[index];
     const next = { ...existing, ...clone(patch) };
     next.id = existing.id;
-    next.induction = existing.induction;
     next.createdAt = existing.createdAt;
     next.title = String(next.title || '').trim();
     next.system = String(next.system || 'other').trim().toLowerCase() || 'other';
@@ -225,9 +351,10 @@ function createRollCreditsStore(config = {}, log = console) {
     }
     next.updatedAt = new Date().toISOString();
     data.games[index] = next;
+    resequence();
     persist();
     notify('update', id);
-    return clone(next);
+    return clone(data.games[index]);
   }
 
   function deleteGame(id) {
@@ -236,6 +363,7 @@ function createRollCreditsStore(config = {}, log = console) {
       return false;
     }
     data.games.splice(index, 1);
+    resequence();
     persist();
     notify('delete', id);
     return true;
@@ -249,6 +377,7 @@ function createRollCreditsStore(config = {}, log = console) {
     if (deleted.length) {
       const deletedSet = new Set(deleted);
       data.games = data.games.filter((game) => !deletedSet.has(game.id));
+      resequence();
       persist();
       deleted.forEach((id) => notify('delete', id));
     }
@@ -303,12 +432,18 @@ function createRollCreditsStore(config = {}, log = console) {
       return true;
     });
 
+    const keyOf = SORT_KEYS[sort];
     games.sort((a, b) => {
-      const compared = compareValues(a[sort], b[sort]);
+      const left = keyOf(a);
+      const right = keyOf(b);
+      // Unknowns (no beat date, no difficulty, …) always sink to the bottom so
+      // flipping the direction never floats a pile of blanks to the top.
+      if ((left == null) !== (right == null)) return left == null ? 1 : -1;
+      const compared = left == null ? 0 : compareValues(left, right);
       if (compared !== 0) {
         return dir === 'asc' ? compared : -compared;
       }
-      return (Number(a.induction) || 0) - (Number(b.induction) || 0);
+      return (Number(b.induction) || 0) - (Number(a.induction) || 0);
     });
 
     const total = games.length;
@@ -319,6 +454,9 @@ function createRollCreditsStore(config = {}, log = console) {
       page: requestedPage,
       pageSize,
       pages: total === 0 ? 0 : Math.ceil(total / pageSize),
+      sort,
+      dir,
+      orderManual: data.orderManual === true,
     };
   }
 
@@ -471,6 +609,12 @@ function createRollCreditsStore(config = {}, log = console) {
     getGame,
     listGames,
     getAllGames,
+    reorderGames,
+    resetInductionOrder,
+    isOrderManual,
+    inductionOrder,
+    displayOrder,
+    sortColumns: () => [...SORT_COLUMNS],
     getStats,
     computeStats,
     loadSystems,

@@ -56,7 +56,7 @@ test('Roll Credits store performs CRUD and persists atomic JSON', () => {
   assert.equal(reloaded.deleteGame(created.id), false);
 });
 
-test('create assigns permanent induction numbers and reports duplicates without blocking', () => {
+test('create numbers games by beat date and reports duplicates without blocking', () => {
   const store = makeStore();
   const first = store.createGame({ title: 'Pokémon: Red!', system: 'gb', beatenAt: '2020-01-01' });
   const second = store.createGame({ title: 'Pokemon Red', system: 'GB', beatenAt: '2021-01-01' });
@@ -67,7 +67,125 @@ test('create assigns permanent induction numbers and reports duplicates without 
   assert.equal(first.duplicateWarning, false);
   assert.equal(second.duplicateWarning, true);
   assert.match(second.warning, /same title and system/i);
-  assert.equal(third.induction, 3);
+  // Deleting the 2020 clear closes the gap: 2021 is now #1, 2022 lands on #2.
+  assert.equal(store.getGame(second.id).induction, 1);
+  assert.equal(third.induction, 2);
+});
+
+test('induction order follows beat dates however games are entered', () => {
+  const store = makeStore();
+  const august1 = store.createGame({ title: 'First', system: 'pc', beatenAt: '2026-08-01' });
+  const august3 = store.createGame({ title: 'Third', system: 'pc', beatenAt: '2026-08-03' });
+  const august2 = store.createGame({ title: 'Second', system: 'pc', beatenAt: '2026-08-02' });
+
+  assert.deepEqual(
+    store.listGames({ sort: 'induction', dir: 'asc' }).games.map((game) => game.title),
+    ['First', 'Second', 'Third'],
+  );
+  assert.equal(store.getGame(august1.id).induction, 1);
+  assert.equal(store.getGame(august2.id).induction, 2);
+  assert.equal(store.getGame(august3.id).induction, 3);
+
+  // Undated games are captured but parked below every dated clear.
+  const unknown = store.createGame({ title: 'Someday', system: 'pc', beatenDateUnknown: true });
+  assert.equal(store.getGame(unknown.id).induction, 1);
+  assert.equal(store.getGame(august3.id).induction, 4);
+  assert.deepEqual(
+    store.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['Third', 'Second', 'First', 'Someday'],
+  );
+
+  // Correcting a date reshuffles the numbering rather than freezing it.
+  store.updateGame(august2.id, { beatenAt: '2026-08-09' });
+  assert.deepEqual(
+    store.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['Second', 'Third', 'First', 'Someday'],
+  );
+});
+
+test('manual reorder overrides the beat-date order and survives a reload', () => {
+  const storePath = tempStorePath();
+  const store = createRollCreditsStore({ rollCreditsPath: storePath });
+  const older = store.createGame({ title: 'Older', system: 'pc', beatenAt: '2026-01-01' });
+  const middle = store.createGame({ title: 'Middle', system: 'pc', beatenAt: '2026-02-01' });
+  const newer = store.createGame({ title: 'Newer', system: 'pc', beatenAt: '2026-03-01' });
+
+  assert.equal(store.isOrderManual(), false);
+  const result = store.reorderGames([older.id, newer.id, middle.id]);
+  assert.equal(result.manual, true);
+  assert.deepEqual(
+    store.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['Older', 'Newer', 'Middle'],
+  );
+  assert.equal(store.listGames({}).orderManual, true);
+
+  const reloaded = createRollCreditsStore({ rollCreditsPath: storePath });
+  assert.equal(reloaded.isOrderManual(), true);
+  assert.deepEqual(
+    reloaded.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['Older', 'Newer', 'Middle'],
+  );
+
+  // A back-dated addition still slots in chronologically around the hand-sort.
+  reloaded.createGame({ title: 'Backfill', system: 'pc', beatenAt: '2026-01-15' });
+  assert.deepEqual(
+    reloaded.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['Older', 'Newer', 'Middle', 'Backfill'],
+  );
+
+  reloaded.resetInductionOrder();
+  assert.equal(reloaded.isOrderManual(), false);
+  assert.deepEqual(
+    reloaded.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['Newer', 'Middle', 'Backfill', 'Older'],
+  );
+});
+
+test('reorder only shuffles the slots the listed games already hold', () => {
+  const store = makeStore();
+  const ids = ['A', 'B', 'C', 'D', 'E'].map((title, index) => store.createGame({
+    title,
+    system: 'pc',
+    beatenAt: `2026-01-0${index + 1}`,
+  }).id);
+  // Display order runs newest first: E D C B A. Handing back the two ends of a
+  // filtered view swaps them without disturbing C in between.
+  const [a, b, , d] = ids;
+
+  store.reorderGames([b, d]);
+  assert.deepEqual(
+    store.listGames({ sort: 'induction', dir: 'desc' }).games.map((game) => game.title),
+    ['E', 'B', 'C', 'D', 'A'],
+  );
+
+  assert.throws(() => store.reorderGames([a, a]), /repeats a game/i);
+  assert.throws(() => store.reorderGames(['nope']), /Unknown game/i);
+});
+
+test('list sorts by difficulty, release and players with unknowns pinned last', () => {
+  const store = makeStore();
+  store.createGame({
+    title: 'Brutal One',
+    system: 'pc',
+    beatenAt: '2026-01-01',
+    meta: { difficulty: 'Brutal', releaseDate: '1998-05-01', maxPlayers: 1 },
+  });
+  store.createGame({
+    title: 'Easy One',
+    system: 'pc',
+    beatenAt: '2026-01-02',
+    meta: { difficulty: 'Easy', releaseDate: '2024', maxPlayers: 4 },
+  });
+  store.createGame({ title: 'Unrated', system: 'pc', beatenAt: '2026-01-03', meta: {} });
+
+  const titles = (options) => store.listGames(options).games.map((game) => game.title);
+  assert.deepEqual(titles({ sort: 'difficulty', dir: 'desc' }), ['Brutal One', 'Easy One', 'Unrated']);
+  assert.deepEqual(titles({ sort: 'difficulty', dir: 'asc' }), ['Easy One', 'Brutal One', 'Unrated']);
+  assert.deepEqual(titles({ sort: 'releaseDate', dir: 'desc' }), ['Easy One', 'Brutal One', 'Unrated']);
+  assert.deepEqual(titles({ sort: 'maxPlayers', dir: 'desc' }), ['Easy One', 'Brutal One', 'Unrated']);
+  assert.deepEqual(titles({ sort: 'beatenAt', dir: 'asc' }), ['Brutal One', 'Easy One', 'Unrated']);
+  // An unknown sort column falls back to induction rather than throwing.
+  assert.deepEqual(titles({ sort: 'nonsense', dir: 'desc' }), ['Unrated', 'Easy One', 'Brutal One']);
 });
 
 test('bulk delete returns deleted and failed id lists', () => {
@@ -181,7 +299,8 @@ test('stats build month buckets across years and exclude undated games', () => {
   const stats = store.getStats();
   assert.equal(stats.total, 5);
   assert.equal(stats.systemsCount, 4);
-  assert.equal(stats.latest.id, store.getAllGames()[4].id);
+  // Latest inducted is the most recent clear, not the most recently typed in.
+  assert.equal(stats.latest.id, latest.id);
   assert.equal(stats.undatedCount, 1);
   assert.equal(stats.months.length, 12);
   assert.equal(stats.months.at(-2).count, 2);
@@ -195,7 +314,8 @@ test('stats build month buckets across years and exclude undated games', () => {
     { key: '1990s', label: '1990s', count: 1 },
     { key: '2020s', label: '2020s', count: 1 },
   ]);
-  assert.equal(latest.induction, 3);
+  // Undated first, then the two -2 month clears, then the two -1 month ones.
+  assert.equal(store.getGame(latest.id).induction, 5);
 });
 
 test('stats roll per-system counts into top eight plus Others and detect milestones', () => {

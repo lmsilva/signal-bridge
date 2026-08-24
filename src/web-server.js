@@ -2705,6 +2705,13 @@ function createWebServer({
         sendJson(res, 200, { ok: true, ...rollCreditsInstance.bulkDelete(body?.ids) });
         return;
       }
+      if (tail === 'games/reorder') {
+        const result = body?.reset === true
+          ? rollCreditsInstance.resetInductionOrder()
+          : rollCreditsInstance.reorderGames(body?.ids);
+        sendJson(res, 200, { ok: true, ...result });
+        return;
+      }
       if (tail === 'search') {
         const candidates = await rollCreditsInstance.search(body?.q, { limit: body?.limit });
         sendJson(res, 200, { ok: true, candidates });

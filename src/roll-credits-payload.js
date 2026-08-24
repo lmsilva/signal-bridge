@@ -24,13 +24,9 @@ function sortGames(games, order = 'recent', random = Math.random) {
   const rows = [...(games || [])];
   switch (order) {
     case 'oldest':
-      rows.sort((a, b) => {
-        if (!a.beatenAt && !b.beatenAt) return (Number(a.induction) || 0) - (Number(b.induction) || 0);
-        if (!a.beatenAt) return 1;
-        if (!b.beatenAt) return -1;
-        return String(a.beatenAt).localeCompare(String(b.beatenAt))
-          || (Number(a.induction) || 0) - (Number(b.induction) || 0);
-      });
+      // Induction order already encodes beat date plus any manual arrangement,
+      // so the wall follows whatever the management page shows.
+      rows.sort((a, b) => (Number(a.induction) || 0) - (Number(b.induction) || 0));
       break;
     case 'random':
       for (let index = rows.length - 1; index > 0; index -= 1) {
@@ -46,13 +42,7 @@ function sortGames(games, order = 'recent', random = Math.random) {
       break;
     case 'recent':
     default:
-      rows.sort((a, b) => {
-        if (!a.beatenAt && !b.beatenAt) return (Number(b.induction) || 0) - (Number(a.induction) || 0);
-        if (!a.beatenAt) return 1;
-        if (!b.beatenAt) return -1;
-        return String(b.beatenAt).localeCompare(String(a.beatenAt))
-          || (Number(b.induction) || 0) - (Number(a.induction) || 0);
-      });
+      rows.sort((a, b) => (Number(b.induction) || 0) - (Number(a.induction) || 0));
   }
   return rows;
 }
