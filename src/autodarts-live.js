@@ -3,7 +3,11 @@
  * Unofficial API; fail-soft. Injectable WebSocket + clock for tests.
  */
 
-const { buildMatchPayload, buildMatchClosePayload } = require('./autodarts-payload');
+const {
+  buildMatchPayload,
+  buildMatchClosePayload,
+  isEmptyMatchResult,
+} = require('./autodarts-payload');
 const { WS_URL: DEFAULT_WS_URL } = require('./autodarts-api');
 
 const WS_URL = DEFAULT_WS_URL || 'wss://play.ws.autodarts.com/ms/v0/subscribe';
@@ -443,6 +447,12 @@ function createAutodartsLive({
     match = next;
     lastEventAt = now();
     if (next.status === 'finished') {
+      // Autodarts sometimes emits "finished" for deleted/aborted shells (0–0, no winner).
+      // Treat those like an abort — close immediately and do not air a hollow FINAL card.
+      if (isEmptyMatchResult(next)) {
+        beginAbort('empty-finish');
+        return;
+      }
       beginFinal();
       return;
     }
