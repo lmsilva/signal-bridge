@@ -1,0 +1,412 @@
+// One send queue per board.
+//
+// A Vestaboard is a slow, physical thing: roughly fifteen seconds between
+// flips, and every flip is audible in the room. So this queue's job is less
+// about throughput than about restraint — deciding what is worth the noise.
+//
+// The rules, in the order they bite:
+//   - never post faster than the board can move (rateWindowSeconds)
+//   - an alert jumps the line and throws away the rotation it interrupted
+//   - repeats of the same thing replace each other instead of stacking
+//   - a layout identical to what is already showing is dropped, because the
+//     board would not flip anyway
+//   - during quiet hours only alarm and timer fires get through, and anything
+//     else is dropped rather than saved for morning; a stale snapshot at 7am
+//     is worse than no snapshot
+//
+// Time and the transport are injected so the whole thing can be tested
+// without waiting fifteen real seconds for anything.
+
+const DEFAULT_RATE_WINDOW_SECONDS = 15;
+const DEFAULT_DWELL_SECONDS = 15;
+const DEFAULT_ROTATION_GAP_SECONDS = 600;
+
+// Repeated commands for the same device inside this window collapse into one.
+const COALESCE_WINDOW_MS = 5 * 60 * 1000;
+
+// 7.3: two quick retries, then a slow one once the board is declared unhealthy.
+const RETRY_DELAYS_MS = [30_000, 60_000];
+const UNHEALTHY_RETRY_MS = 5 * 60 * 1000;
+const FAILURES_BEFORE_UNHEALTHY = 3;
+
+// The only things worth waking the house for.
+const QUIET_HOURS_EXEMPT = new Set(['alarm.fired', 'timer.fired']);
+
+function sameLayout(a, b) {
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** "22:00" -> minutes since midnight, or null if unusable. */
+function parseHhMm(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/**
+ * Quiet hours are local wall-clock and usually cross midnight, so the window
+ * is "start <= t OR t < end" whenever start is after end.
+ */
+function inQuietHours(date, quietHours) {
+  if (!quietHours || quietHours.enabled === false) return false;
+  const start = parseHhMm(quietHours.start);
+  const end = parseHhMm(quietHours.end);
+  if (start === null || end === null || start === end) return false;
+
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return start < end
+    ? minutes >= start && minutes < end
+    : minutes >= start || minutes < end;
+}
+
+function createQueue({
+  board = {},
+  transport,
+  log = console,
+  now = () => Date.now(),
+  setTimer = setInterval,
+  clearTimer = clearInterval,
+  tickMs = 1000,
+} = {}) {
+  let config = { ...board };
+  let nextItemId = 1;
+
+  const state = {
+    current: null,
+    lastSnapshot: null,
+    lastPostAt: null,
+    lastSchedulerFlipAt: null,
+    health: 'ok',
+    healthReason: null,
+    failures: 0,
+    retryNotBefore: null,
+    restoreAfter: null,
+  };
+
+  const items = [];
+  const coalesceSeen = new Map();
+  const listeners = new Set();
+  let timer = null;
+  let posting = false;
+
+  function rateWindowMs() {
+    const seconds = Number(config.rateWindowSeconds);
+    return (Number.isFinite(seconds) ? seconds : DEFAULT_RATE_WINDOW_SECONDS) * 1000;
+  }
+
+  function rotationGapMs() {
+    const seconds = Number(config.minRotationGapSeconds);
+    return (Number.isFinite(seconds) ? seconds : DEFAULT_ROTATION_GAP_SECONDS) * 1000;
+  }
+
+  function dwellMsOf(frame) {
+    const seconds = Number(frame?.dwellSeconds);
+    return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_DWELL_SECONDS) * 1000;
+  }
+
+  function emit(event, detail) {
+    for (const listener of listeners) {
+      try {
+        listener(event, detail);
+      } catch {
+        // A broken listener must not stall the board.
+      }
+    }
+  }
+
+  function pending() {
+    return items.map((item) => ({
+      label: item.frame.label || 'Frame',
+      source: item.frame.source || '',
+      priority: item.priority,
+      notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
+    }));
+  }
+
+  function announceQueue() {
+    emit('queue', { boardId: config.id, items: pending() });
+  }
+
+  function setHealth(health, reason = null) {
+    if (state.health === health && state.healthReason === reason) {
+      return;
+    }
+    state.health = health;
+    state.healthReason = reason;
+    log?.debug?.(`Vestaboard ${config.id} health ${health}${reason ? ` (${reason})` : ''}`);
+    emit('health', { boardId: config.id, health, reason });
+  }
+
+  function isExempt(frame, explicit) {
+    if (typeof explicit === 'boolean') return explicit;
+    const event = String(frame?.source || '').split(' ')[0];
+    return QUIET_HOURS_EXEMPT.has(event);
+  }
+
+  /**
+   * Take frames for the board.
+   *
+   * Snapshots queue in order and turn pages at their own dwell. An alert goes
+   * to the front and discards whatever rotation it interrupted — the sequence
+   * does not resume mid-list, the scheduler will bring it back around.
+   */
+  function submit(frames, options = {}) {
+    const list = (Array.isArray(frames) ? frames : [frames]).filter(Boolean);
+    if (!list.length) {
+      return { accepted: 0, dropped: 0, reason: 'empty' };
+    }
+
+    const priority = options.priority === 'alert' ? 'alert' : 'snapshot';
+    const at = now();
+
+    // A rotation flip too soon after the last one is dropped, not delayed:
+    // by the time the gap passes the content is stale anyway.
+    if (priority === 'snapshot' && options.scheduler && state.lastSchedulerFlipAt !== null) {
+      if (at - state.lastSchedulerFlipAt < rotationGapMs()) {
+        log?.debug?.(`Vestaboard ${config.id} skip (gap) ${list[0].label || ''}`.trim());
+        return { accepted: 0, dropped: list.length, reason: 'gap' };
+      }
+    }
+
+    // Repeated commands for one device replace each other rather than
+    // queueing a second flip for something the room already knows.
+    if (options.coalesceKey) {
+      const existing = items.find((item) => item.coalesceKey === options.coalesceKey);
+      const seenAt = coalesceSeen.get(options.coalesceKey);
+      if (existing && (seenAt === undefined || at - seenAt < COALESCE_WINDOW_MS)) {
+        existing.frame = list[0];
+        existing.quietHoursExempt = isExempt(list[0], options.quietHoursExempt);
+        coalesceSeen.set(options.coalesceKey, at);
+        log?.debug?.(`Vestaboard ${config.id} coalesce replace ${options.coalesceKey}`);
+        announceQueue();
+        return { accepted: 1, dropped: 0, reason: 'coalesced' };
+      }
+      coalesceSeen.set(options.coalesceKey, at);
+    }
+
+    const sequenceId = `s${nextItemId}`;
+    const made = list.map((frame) => ({
+      id: `i${nextItemId++}`,
+      frame,
+      priority,
+      // Only the first page may go immediately; later pages get their time
+      // when the page before them actually lands.
+      notBefore: null,
+      sequenceId: list.length > 1 ? sequenceId : null,
+      coalesceKey: options.coalesceKey || null,
+      quietHoursExempt: isExempt(frame, options.quietHoursExempt),
+      scheduler: Boolean(options.scheduler),
+    }));
+
+    let dropped = 0;
+    if (priority === 'alert') {
+      const heldAlerts = items.filter((item) => item.priority === 'alert');
+      dropped = items.length - heldAlerts.length;
+      items.length = 0;
+      items.push(...heldAlerts, ...made);
+      if (dropped) {
+        log?.debug?.(`Vestaboard ${config.id} alert dropped ${dropped} pending page(s)`);
+      }
+    } else {
+      items.push(...made);
+    }
+
+    announceQueue();
+    return { accepted: made.length, dropped, reason: 'queued' };
+  }
+
+  function dropHead(reason, item) {
+    items.shift();
+    log?.debug?.(`Vestaboard ${config.id} ${reason} ${item.frame.label || ''}`.trim());
+    announceQueue();
+  }
+
+  function onPosted(item, at) {
+    state.current = item.frame.rows;
+    state.lastPostAt = at;
+    state.failures = 0;
+    state.retryNotBefore = null;
+    setHealth('ok');
+
+    if (item.priority === 'alert') {
+      // Once the alert has had its time, the board should go back to what it
+      // was showing rather than sitting on a stale warning.
+      state.restoreAfter = at + dwellMsOf(item.frame);
+    } else {
+      state.lastSnapshot = item.frame;
+      state.restoreAfter = null;
+      if (item.scheduler) {
+        state.lastSchedulerFlipAt = at;
+      }
+    }
+
+    // Hand the next page of this sequence its turn.
+    const next = items[0];
+    if (next && item.sequenceId && next.sequenceId === item.sequenceId) {
+      next.notBefore = Math.max(next.notBefore || 0, at + dwellMsOf(item.frame));
+    }
+  }
+
+  function onFailed(reason, status) {
+    if (reason === 'auth') {
+      // A bad key will not fix itself; spinning on it just fills the log.
+      setHealth('degraded', 'auth');
+      log?.warn?.(`Vestaboard ${config.id} refused the key — check its settings`);
+      return;
+    }
+
+    state.failures += 1;
+    const delay = RETRY_DELAYS_MS[state.failures - 1] ?? UNHEALTHY_RETRY_MS;
+    state.retryNotBefore = now() + delay;
+    if (state.failures >= FAILURES_BEFORE_UNHEALTHY) {
+      setHealth('unhealthy', reason);
+    }
+    log?.debug?.(
+      `Vestaboard ${config.id} retry in ${Math.round(delay / 1000)}s after ${reason}`
+      + `${status ? ` (${status})` : ''}`,
+    );
+  }
+
+  /** Move the queue along by at most one post. Safe to call on a timer. */
+  async function tick() {
+    if (posting) {
+      return null;
+    }
+
+    const at = now();
+
+    if (!items.length) {
+      // Nothing waiting: put back whatever the alert covered up.
+      if (state.restoreAfter && at >= state.restoreAfter && state.lastSnapshot
+        && !sameLayout(state.lastSnapshot.rows, state.current)) {
+        state.restoreAfter = null;
+        submit([state.lastSnapshot], { priority: 'snapshot' });
+      }
+      return null;
+    }
+
+    if (state.health === 'degraded' && state.healthReason === 'auth') {
+      return null;
+    }
+
+    const item = items[0];
+    if (item.notBefore && at < item.notBefore) return null;
+    if (state.retryNotBefore && at < state.retryNotBefore) return null;
+    if (state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
+
+    if (!item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours)) {
+      dropHead('skip (quiet)', item);
+      return 'quiet';
+    }
+
+    // The physical board would not move for this, so neither should we.
+    if (sameLayout(item.frame.rows, state.current)) {
+      dropHead('dedupe drop', item);
+      return 'duplicate';
+    }
+
+    posting = true;
+    let outcome;
+    try {
+      outcome = await transport.post(item.frame.rows, {
+        strategy: config.transitionStrategy || null,
+      });
+    } catch (error) {
+      outcome = { ok: false, reason: 'network', retryable: true, message: error?.message };
+    } finally {
+      posting = false;
+    }
+
+    if (outcome.ok) {
+      items.shift();
+      onPosted(item, now());
+      announceQueue();
+      emit('posted', { boardId: config.id, frame: item.frame });
+      return 'posted';
+    }
+
+    if (outcome.reason === 'busy') {
+      // Ordinary back-pressure while the flaps finish. Wait out the rest of
+      // the window and try the very same frame again.
+      state.retryNotBefore = (state.lastPostAt || now()) + rateWindowMs() + 1000;
+      log?.debug?.(`Vestaboard ${config.id} 503 wait`);
+      return 'busy';
+    }
+
+    if (outcome.reason === 'layout') {
+      // Retrying an unshowable frame forever would wedge everything behind it.
+      log?.warn?.(`Vestaboard ${config.id} refused a layout: ${outcome.message || 'invalid'}`);
+      dropHead('skip (bad layout)', item);
+      return 'rejected';
+    }
+
+    onFailed(outcome.reason, outcome.status);
+    return 'failed';
+  }
+
+  return {
+    submit,
+    tick,
+    pending,
+    onChange(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    state: () => ({
+      boardId: config.id,
+      health: state.health,
+      healthReason: state.healthReason,
+      queued: items.length,
+      lastPostAt: state.lastPostAt,
+      quietHours: inQuietHours(new Date(now()), config.quietHours),
+    }),
+    /** Settings changes apply live — no restart, no lost queue. */
+    setConfig(next) {
+      config = { ...config, ...next };
+      if (state.health === 'degraded' && state.healthReason === 'auth') {
+        // A new key deserves a fresh attempt.
+        setHealth('ok');
+        state.failures = 0;
+        state.retryNotBefore = null;
+      }
+    },
+    config: () => ({ ...config }),
+    start() {
+      if (timer) return;
+      timer = setTimer(() => {
+        tick().catch((error) => {
+          log?.warn?.(`Vestaboard ${config.id} tick failed`, error?.message || error);
+        });
+      }, tickMs);
+      if (typeof timer?.unref === 'function') {
+        timer.unref();
+      }
+    },
+    stop() {
+      if (!timer) return;
+      clearTimer(timer);
+      timer = null;
+    },
+    clear() {
+      items.length = 0;
+      announceQueue();
+    },
+  };
+}
+
+module.exports = {
+  createQueue,
+  inQuietHours,
+  parseHhMm,
+  sameLayout,
+  COALESCE_WINDOW_MS,
+  RETRY_DELAYS_MS,
+  UNHEALTHY_RETRY_MS,
+  FAILURES_BEFORE_UNHEALTHY,
+  QUIET_HOURS_EXEMPT,
+  DEFAULT_RATE_WINDOW_SECONDS,
+};
