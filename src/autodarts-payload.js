@@ -18,6 +18,42 @@ function relativeAge(iso, now = Date.now()) {
 }
 
 /**
+ * Map Autodarts Board Manager status strings to the three wall labels.
+ * Never pass through raw faults such as "Error" (those used to paint green).
+ */
+function canonicalBoardStatus(bmStatus, connected) {
+  const raw = String(bmStatus || '').trim();
+  let online = null;
+  if (connected === true || connected === false) {
+    online = Boolean(connected);
+  }
+  const key = raw.toLowerCase();
+  if (key === 'running') {
+    return { online: true, statusLabel: 'Running' };
+  }
+  if (key === 'stopped' || key === 'idle') {
+    return {
+      online: online === false ? false : true,
+      statusLabel: online === false ? 'Offline' : 'Stopped',
+    };
+  }
+  if (key === 'offline' || key === 'disconnected') {
+    return { online: false, statusLabel: 'Offline' };
+  }
+  if (key && /^(error|failed|fault|starting|connecting|unknown)$/.test(key)) {
+    if (online === false) return { online: false, statusLabel: 'Offline' };
+    return { online: online !== false, statusLabel: 'Stopped' };
+  }
+  if (raw) {
+    if (online === false) return { online: false, statusLabel: 'Offline' };
+    return { online: online !== false, statusLabel: 'Stopped' };
+  }
+  if (online === true) return { online: true, statusLabel: 'Online' };
+  if (online === false) return { online: false, statusLabel: 'Offline' };
+  return { online: null, statusLabel: null };
+}
+
+/**
  * Normalise Autodarts board list/detail JSON into a dashboard "YOUR BOARD" card.
  *
  * Confirmed from GET /bs/v0/boards (2026-08-23):
@@ -44,29 +80,9 @@ function normalizeBoardInfo(raw, { fallbackName = null } = {}) {
 
   const connected = state.connected ?? raw.online ?? raw.connected ?? raw.running;
   const bmStatus = String(state.status || state.event || raw.status || '').trim();
-  let online = null;
-  let statusLabel = null;
-  if (connected === true || connected === false) {
-    online = Boolean(connected);
-  }
-  if (/^running$/i.test(bmStatus)) {
-    online = true;
-    statusLabel = 'Running';
-  } else if (/^(stopped|idle)$/i.test(bmStatus)) {
-    // Board Manager stopped but still reachable — not "Unknown".
-    online = online !== false;
-    statusLabel = connected === false ? 'Offline' : 'Stopped';
-  } else if (/^(offline|disconnected)$/i.test(bmStatus)) {
-    online = false;
-    statusLabel = 'Offline';
-  } else if (bmStatus) {
-    statusLabel = bmStatus;
-    if (online == null) online = true;
-  } else if (online === true) {
-    statusLabel = 'Online';
-  } else if (online === false) {
-    statusLabel = 'Offline';
-  }
+  const canonical = canonicalBoardStatus(bmStatus, connected);
+  let online = canonical.online;
+  let statusLabel = canonical.statusLabel;
   // Omit a useless "Unknown" label when we have no signal.
 
   const version = raw.version || raw.clientVersion || raw.softwareVersion
@@ -356,6 +372,7 @@ module.exports = {
   buildMatchPayload,
   buildMatchClosePayload,
   relativeAge,
+  canonicalBoardStatus,
   normalizeBoardInfo,
   isPlayableLiveMatch,
   isSuccessfulFinishedMatch,

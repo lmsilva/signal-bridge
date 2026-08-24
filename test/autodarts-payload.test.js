@@ -10,6 +10,7 @@ const {
   createAutodartsPayload,
   buildMatchPayload,
   normalizeBoardInfo,
+  canonicalBoardStatus,
   isPlayableLiveMatch,
 } = require('../src/autodarts-payload');
 const { createAutodartsHistory } = require('../src/autodarts-history');
@@ -93,6 +94,22 @@ test('normalizeBoardInfo prefers detections and omits Unknown', () => {
   const empty = normalizeBoardInfo({ name: 'Board' });
   assert.equal(empty.statusLabel, null);
   assert.equal(empty.dartsThrown, null);
+});
+
+test('canonicalBoardStatus never surfaces raw BM Error as a green chip', () => {
+  const connectedError = canonicalBoardStatus('Error', true);
+  assert.equal(connectedError.statusLabel, 'Stopped');
+  assert.equal(connectedError.online, true);
+  const offlineError = canonicalBoardStatus('Error', false);
+  assert.equal(offlineError.statusLabel, 'Offline');
+  assert.equal(offlineError.online, false);
+  const board = normalizeBoardInfo({
+    name: 'Movie Theater Board',
+    state: { connected: true, status: 'Error' },
+  });
+  assert.equal(board.statusLabel, 'Stopped');
+  assert.equal(board.online, true);
+  assert.notEqual(String(board.statusLabel).toLowerCase(), 'error');
 });
 
 test('empty live shell is not playable; last-match payload is finished with players', () => {

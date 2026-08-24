@@ -8,13 +8,15 @@ CLIENT_ROOT = Path(__file__).resolve().parents[1]
 if str(CLIENT_ROOT) not in sys.path:
     sys.path.insert(0, str(CLIENT_ROOT))
 
-from src.design_system import ACCENT, WARN, page_chrome
+from src.design_system import ACCENT, ALERT, INK_3, WARN, page_chrome
 from src.payload_utils import COMMAND_TYPES, resolve_display_type, title_for_payload
+from src.roll_credits_panel import months_chart_geom
 from src.autodarts_panel import (
     AutodartsPanel,
     R_TREBLE_INNER,
     R_TREBLE_OUTER,
     board_info_row_ys,
+    board_status_chip,
     board_radii,
     current_month_bar_color,
     dart_board_xy,
@@ -30,6 +32,8 @@ from src.autodarts_panel import (
     is_t20_in_treble_wedge_px,
     layout_dashboard,
     layout_match,
+    rivalry_row_ys,
+    rivalry_score_parts,
     leaderboard_visible_rows,
     map_coords_to_px,
     match_fingerprint,
@@ -193,6 +197,10 @@ class LayoutTests(unittest.TestCase):
             # Room for version line + stats without overlap (was 150 → collided).
             board_h = boxes["board_info"][3] - boxes["board_info"][1]
             self.assertGreaterEqual(board_h, 190)
+            if size[1] > size[0]:
+                self.assertGreaterEqual(boxes["months"][3] - boxes["months"][1], 210)
+                self.assertGreaterEqual(boxes["rivalry"][3] - boxes["rivalry"][1], 160)
+                self.assertGreaterEqual(boxes["records"][3] - boxes["records"][1], 180)
 
     def test_portrait_dashboard_boxes_do_not_overlap(self):
         boxes = layout_dashboard(1080, 1920, timed=True)
@@ -204,6 +212,11 @@ class LayoutTests(unittest.TestCase):
         visible, row_h = leaderboard_visible_rows(boxes["leaderboard"][3] - boxes["leaderboard"][1], 12)
         self.assertGreaterEqual(row_h, 58)
         self.assertLessEqual(visible, 12)
+        months = months_chart_geom(boxes["months"][3] - boxes["months"][1])
+        self.assertTrue(months["bars_clear_of_title"])
+        self.assertGreaterEqual(months["count_y"], months["title_bottom"])
+        rivalry = rivalry_row_ys(boxes["rivalry"][3] - boxes["rivalry"][1])
+        self.assertTrue(rivalry["stacked"])
 
     def test_finished_portrait_omits_duplicate_score_names(self):
         boxes = layout_match(1080, 1920, timed=True, player_count=2, finished=True, show_strip=False)
@@ -452,6 +465,34 @@ class DashboardContentTests(unittest.TestCase):
         self.assertTrue(payload["leaderboard"][0]["crown"])
         self.assertEqual(payload["moreCount"], 3)
         self.assertEqual(current_month_bar_color(11, 12), WARN)
+
+    def test_board_status_never_paints_raw_error(self):
+        label, fill = board_status_chip(True, "Error")
+        self.assertEqual(label, "Stopped")
+        self.assertEqual(fill, INK_3)
+        self.assertNotEqual(label.lower(), "error")
+        offline, alert = board_status_chip(False, "Error")
+        self.assertEqual(offline, "Offline")
+        self.assertEqual(alert, ALERT)
+        running, ok = board_status_chip(True, "Running")
+        self.assertEqual(running, "Running")
+        self.assertNotEqual(ok, ALERT)
+        self.assertNotEqual(ok, INK_3)
+
+    def test_rivalry_uses_three_columns_not_one_wrapping_line(self):
+        parts = rivalry_score_parts({
+            "a": "trashpanda", "b": "war d", "aWins": 4, "bWins": 11,
+            "lastWinner": "war d", "lastPlayedAt": "2026-08-01T00:00:00Z",
+        })
+        self.assertEqual(parts["left"], "trashpanda")
+        self.assertEqual(parts["right"], "war d")
+        self.assertEqual(parts["score"], "4 – 11")
+        self.assertNotIn("trashpanda", parts["score"])
+        self.assertIn("Last win", parts["footer"])
+        rows = rivalry_row_ys(168)
+        self.assertLess(rows["title"] + 20, rows["names"])
+        self.assertLess(rows["names"] + 20, rows["caption"])
+        self.assertLess(rows["caption"], rows["footer"])
 
 
 if __name__ == "__main__":
