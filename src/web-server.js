@@ -334,6 +334,7 @@ function createWebServer({
   getPsnLibraryCount = null,
   guestSnapsAuth: guestSnapsAuthInjected = null,
   vestaboardSimulator = null,
+  vestaboardHub = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -2930,6 +2931,70 @@ function createWebServer({
     });
   }
 
+  /** The board list for the Settings tab. Health comes from the live queues. */
+  function handleVestaboardsGet(res) {
+    if (!vestaboardHub) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+  }
+
+  function handleVestaboardSave(body, res) {
+    if (!vestaboardHub) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    const outcome = vestaboardHub.settings.upsert(body || {});
+    if (!outcome.ok) {
+      sendJson(res, 400, { ok: false, error: outcome.error });
+      return;
+    }
+    log.info(`Vestaboard ${outcome.created ? 'added' : 'updated'}: ${outcome.board.id}`);
+    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+  }
+
+  function handleVestaboardRemove(body, res) {
+    if (!vestaboardHub) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    const outcome = vestaboardHub.settings.remove(body?.id);
+    if (!outcome.ok) {
+      sendJson(res, 400, { ok: false, error: outcome.error });
+      return;
+    }
+    log.info(`Vestaboard removed: ${body.id}`);
+    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+  }
+
+  function handleVestaboardEnable(body, res) {
+    if (!vestaboardHub) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    if (typeof body?.enabled !== 'boolean') {
+      sendJson(res, 400, { ok: false, error: 'enabled must be true or false' });
+      return;
+    }
+    const outcome = vestaboardHub.settings.setEnabled(body.id, body.enabled);
+    if (!outcome.ok) {
+      sendJson(res, 400, { ok: false, error: outcome.error });
+      return;
+    }
+    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+  }
+
+  /** Proof that a board answers, its key works, and every flap still turns. */
+  async function handleVestaboardTestFlip(body, res) {
+    if (!vestaboardHub) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    const outcome = await vestaboardHub.testFlip(body?.id);
+    sendJson(res, outcome.ok ? 200 : 400, outcome);
+  }
+
   /** Everything the simulator page needs to draw itself from a cold start. */
   function handleVestaboardSimState(res) {
     if (!vestaboardSimulator) {
@@ -4374,6 +4439,11 @@ function createWebServer({
           handleSlideshowSettingsGet(res);
           return;
         }
+        if (pathname === '/api/vestaboards') {
+          if (!requireAdminSession(req, res)) return;
+          handleVestaboardsGet(res);
+          return;
+        }
         if (pathname === '/api/vestaboard-sim') {
           if (!requireAdminSession(req, res)) return;
           handleVestaboardSimState(res);
@@ -4604,6 +4674,18 @@ function createWebServer({
             return;
           case '/api/vestaboard-sim/online':
             handleVestaboardSimOnline(body, res);
+            return;
+          case '/api/vestaboards':
+            handleVestaboardSave(body, res);
+            return;
+          case '/api/vestaboards/remove':
+            handleVestaboardRemove(body, res);
+            return;
+          case '/api/vestaboards/enable':
+            handleVestaboardEnable(body, res);
+            return;
+          case '/api/vestaboards/test-flip':
+            await handleVestaboardTestFlip(body, res);
             return;
           case '/api/library-tour/settings':
             handleLibraryTourSettingsUpdate(body, res);

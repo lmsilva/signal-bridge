@@ -152,7 +152,7 @@ const PUSH_DOWN_POLL_MS = 15 * 1000;
 const HEALTH_LOG_MS = 5 * 60 * 1000;
 const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
-function createListener({ config, log, guestSnapsAuth = null } = {}) {
+function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = null } = {}) {
   const alexa = new Alexa();
   // Shared with the web server when index.js injects one; otherwise local.
   const snapsAuth = guestSnapsAuth || createGuestSnapsAuth(config, log);
@@ -167,7 +167,17 @@ function createListener({ config, log, guestSnapsAuth = null } = {}) {
     ...bridgeState,
     fingerprintFn: fingerprint,
   });
-  const displayRegistry = createDisplayRegistry(config, log);
+  // Boards are configured rather than discovered, so they join the registry
+  // as static entries alongside the Windows clients that announce themselves.
+  const displayRegistry = createDisplayRegistry(config, log, {
+    staticEntries: vestaboardHub ? () => vestaboardHub.registryEntries() : null,
+  });
+  // A board going degraded or unhealthy is a picker change like any other.
+  vestaboardHub?.onChange((event) => {
+    if (event === 'registry') {
+      displayRegistry.announce({ reason: 'vestaboard' });
+    }
+  });
   let steamNowPlaying = null;
   let psnNowPlaying = null;
   let libraryTourSettings = null;

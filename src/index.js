@@ -11,6 +11,7 @@ const { createWebServer } = require('./web-server');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { installRefreshPatch } = require('./auth-refresh-patch');
 const { createVestaboardSimulator } = require('./vestaboard/simulator');
+const { createVestaboardHub } = require('./vestaboard');
 
 function registerShutdown(log) {
   const shutdown = (signal) => {
@@ -51,7 +52,32 @@ async function main() {
   const log = createLogger(config);
   installRefreshPatch({ log });
   const guestSnapsAuth = createGuestSnapsAuth(config, log);
-  const listener = createListener({ config, log, guestSnapsAuth });
+
+  // The stand-in board comes up first so the hub can adopt it, and the hub
+  // before the listener so its boards are in the registry from the first
+  // picker request rather than appearing a moment later.
+  let vestaboardSimulator = null;
+  if (config.vestaboardSimulator?.enabled) {
+    vestaboardSimulator = createVestaboardSimulator({ config, log });
+    try {
+      await vestaboardSimulator.start();
+    } catch (error) {
+      // A development aid must never take the bridge down over a busy port.
+      log.error('Vestaboard simulator unavailable', error?.message || error);
+      vestaboardSimulator = null;
+    }
+  }
+
+  const vestaboardHub = createVestaboardHub({ config, log, simulator: vestaboardSimulator });
+  try {
+    await vestaboardHub.start();
+  } catch (error) {
+    log.error('Vestaboard boards unavailable', error?.message || error);
+  }
+
+  const listener = createListener({
+    config, log, guestSnapsAuth, vestaboardHub,
+  });
 
   registerShutdown(log);
 
@@ -61,18 +87,9 @@ async function main() {
   try {
     await listener.start();
 
-    let vestaboardSimulator = null;
-    if (config.vestaboardSimulator?.enabled) {
-      vestaboardSimulator = createVestaboardSimulator({ config, log });
-      vestaboardSimulator.start().catch((error) => {
-        // A stand-in board is a development aid — never take the bridge down
-        // because its port is busy.
-        log.error('Vestaboard simulator unavailable', error?.message || error);
-      });
-    }
-
     const webServer = createWebServer({
       vestaboardSimulator,
+      vestaboardHub,
       config,
       log,
       sendUdpPayload: listener.sendUdpPayload,

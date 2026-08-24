@@ -16,7 +16,10 @@ const httpMod = require('node:http');
 
 const { createWebServer } = require('../src/web-server');
 const { createVestaboardSimulator, ENABLEMENT_HEADER, KEY_HEADER } = require('../src/vestaboard/simulator');
+const { createVestaboardHub } = require('../src/vestaboard');
+const { createDisplayRegistry } = require('../src/display-registry');
 const { badgeFrame } = require('../src/vestaboard/frames');
+const { identityFrame } = require('../src/vestaboard/formatters/signal');
 
 const TEST_ADMIN_PASSWORD = 'vestaboard-admin-secret';
 
@@ -103,7 +106,7 @@ function makeWebRoot() {
   return dir;
 }
 
-async function startHarness({ withSimulator = true } = {}) {
+async function startHarness({ withSimulator = true, withHub = false } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vb-api-'));
   const config = {
     ROOT: dataDir,
@@ -146,12 +149,31 @@ async function startHarness({ withSimulator = true } = {}) {
     boardKey = enabled.body.apiKey;
   }
 
+  let hub = null;
+  let registry = null;
+  if (withHub) {
+    hub = createVestaboardHub({
+      config,
+      log: { info() {}, warn() {}, error() {}, debug() {} },
+      simulator,
+    });
+    await hub.start();
+    // Wired the way the listener wires it, so the picker sees boards.
+    registry = createDisplayRegistry(
+      config,
+      { info() {}, warn() {}, error() {}, debug() {} },
+      { staticEntries: () => hub.registryEntries() },
+    );
+  }
+
   const webServer = createWebServer({
     config,
     log: { info() {}, warn() {}, error() {}, debug() {} },
     sendUdpPayload: () => {},
     recordVoiceEvent: async () => {},
     vestaboardSimulator: simulator,
+    vestaboardHub: hub,
+    displayRegistry: registry,
     scheduleRestart: () => {},
     webRoot: makeWebRoot(),
   });
@@ -169,6 +191,7 @@ async function startHarness({ withSimulator = true } = {}) {
     base,
     cookie,
     simulator,
+    hub,
     boardBase,
     /** Post a frame to the board exactly the way the transport will. */
     flip: (frame) => request(`${boardBase}/local-api/message`, {
@@ -178,6 +201,8 @@ async function startHarness({ withSimulator = true } = {}) {
     }),
     async stop() {
       await new Promise((resolve) => server.close(resolve));
+      if (registry) registry.stop();
+      if (hub) hub.stop();
       if (simulator) await simulator.stop();
       fs.rmSync(dataDir, { recursive: true, force: true });
     },
@@ -315,6 +340,131 @@ test('the toggle insists on a real boolean', async () => {
       cookie: harness.cookie,
     });
     assert.equal(res.status, 400);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('the settings tab gets the whole board, health included, and never a key', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const res = await request(`${harness.base}/api/vestaboards`, { cookie: harness.cookie });
+    assert.equal(res.status, 200);
+
+    const [sim] = res.body.boards;
+    assert.equal(sim.id, 'sim');
+    assert.equal(sim.simulator, true);
+    assert.equal(sim.health, 'ok');
+    assert.equal(sim.hasKey, true);
+    // The edit form needs these to fill itself in.
+    assert.equal(typeof sim.dwellSeconds, 'number');
+    assert.equal(typeof sim.quietHours.start, 'string');
+
+    assert.ok(!res.text.includes(harness.hub.settings.keyFor('sim')));
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('a board can be added, edited and removed over the api', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const added = await request(`${harness.base}/api/vestaboards`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: {
+        id: 'kitchen', name: 'Kitchen Board', baseUrl: 'http://127.0.0.1:1', key: 'a-key',
+      },
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.boards.length, 2);
+    assert.ok(!added.text.includes('a-key'), 'a saved key never comes back out');
+
+    const edited = await request(`${harness.base}/api/vestaboards`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { id: 'kitchen', name: 'Kitchen', dwellSeconds: 25 },
+    });
+    const kitchen = edited.body.boards.find((board) => board.id === 'kitchen');
+    assert.equal(kitchen.name, 'Kitchen');
+    assert.equal(kitchen.dwellSeconds, 25);
+    assert.equal(kitchen.hasKey, true, 'editing without a key keeps the saved one');
+
+    const removed = await request(`${harness.base}/api/vestaboards/remove`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { id: 'kitchen' },
+    });
+    assert.equal(removed.body.boards.length, 1);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('a board with no id is refused rather than saved as junk', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const res = await request(`${harness.base}/api/vestaboards`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { name: 'No id' },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('switching a board off is live and takes it out of the picker', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const before = await request(`${harness.base}/api/displays`, { cookie: harness.cookie });
+    assert.equal(before.body.displays.some((d) => d.id === 'sim'), true);
+    assert.equal(before.body.displays.find((d) => d.id === 'sim').kind, 'vestaboard');
+
+    const off = await request(`${harness.base}/api/vestaboards/enable`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { id: 'sim', enabled: false },
+    });
+    assert.equal(off.status, 200);
+
+    const after = await request(`${harness.base}/api/displays`, { cookie: harness.cookie });
+    assert.equal(after.body.displays.some((d) => d.id === 'sim'), false);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('a test flip puts the identity frame on the board through the api', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const res = await request(`${harness.base}/api/vestaboards/test-flip`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { id: 'sim' },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+
+    assert.deepEqual(
+      harness.simulator.state().current,
+      identityFrame({ name: 'Vestaboard Simulator' }).rows,
+    );
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('the board settings surface is admin-only', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    assert.equal((await request(`${harness.base}/api/vestaboards`)).status, 401);
+    const save = await request(`${harness.base}/api/vestaboards`, {
+      method: 'POST',
+      body: { id: 'sneaky', name: 'Sneaky' },
+    });
+    assert.equal(save.status, 401);
   } finally {
     await harness.stop();
   }
