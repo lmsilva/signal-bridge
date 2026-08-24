@@ -3172,10 +3172,10 @@ function createWebServer({
     }
   }
 
-  function handleAutodartsDashboardPush(body, res) {
+  async function handleAutodartsDashboardPush(body, res) {
     try {
       const { targetId, send } = autodartsSend(body);
-      const result = autodartsInstance.pushDashboard({ send });
+      const result = await autodartsInstance.pushDashboard({ send });
       if (!result.ok) {
         sendJson(res, 400, result);
         return;
