@@ -9,6 +9,8 @@ const { createAutodartsSettings } = require('../src/autodarts-settings');
 const {
   createAutodartsPayload,
   buildMatchPayload,
+  normalizeBoardInfo,
+  isPlayableLiveMatch,
 } = require('../src/autodarts-payload');
 const { createAutodartsHistory } = require('../src/autodarts-history');
 const { normalizeDart } = require('../src/autodarts-live');
@@ -44,12 +46,76 @@ test('dashboard payload byte bound at leaderboardSize 16', () => {
     });
   }
   aggregates.recompute(archive.listAll());
-  const payload = createAutodartsPayload({ archive, aggregates, settings }).buildDashboard();
+  const payload = createAutodartsPayload({ archive, aggregates, settings }).buildDashboard({
+    board: normalizeBoardInfo({
+      name: 'Movie Theater Board',
+      status: 'Running',
+      version: '1.0.7',
+      upToDate: true,
+      os: 'linux',
+      stats: { darts: 3371, corrections: 53, accuracy: 98.43 },
+    }),
+  });
   assert.equal(payload.type, 'autodarts.dashboard');
   assert.equal(payload.leaderboard.length, 16);
+  assert.equal(payload.board.name, 'Movie Theater Board');
+  assert.equal(payload.board.online, true);
+  assert.equal(payload.board.dartsThrown, 3371);
+  assert.equal(payload.board.corrections, 53);
+  assert.equal(payload.board.os, 'Linux');
   assert.ok(payload.moreCount >= 0);
   const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
   assert.ok(bytes < 12_000, `dashboard payload too large: ${bytes}`);
+});
+
+test('normalizeBoardInfo maps Autodarts cloud board card fields', () => {
+  const board = normalizeBoardInfo({
+    name: 'Movie Theater Board',
+    status: 'Running',
+    version: '1.0.7',
+    upToDate: true,
+    operatingSystem: 'linux',
+    dartsThrown: 3371,
+    corrections: 53,
+    accuracy: 0.9843,
+  });
+  assert.equal(board.statusLabel, 'Running');
+  assert.equal(board.online, true);
+  assert.equal(board.updateLabel, 'Up to date');
+  assert.equal(board.os, 'Linux');
+  assert.equal(board.accuracy, 98.43);
+});
+
+test('empty live shell is not playable; last-match payload is finished with players', () => {
+  assert.equal(isPlayableLiveMatch({ status: 'live', matchId: 'x', players: [] }), false);
+  assert.equal(isPlayableLiveMatch({
+    status: 'live', matchId: 'x', players: [{ name: 'A', score: 501, legs: 0 }],
+  }), true);
+
+  const root = tempRoot();
+  const archive = createAutodartsArchive({ ROOT: root, autodartsArchivePath: path.join(root, 'm') });
+  const aggregates = createAutodartsAggregates({ ROOT: root, autodartsPlayersPath: path.join(root, 'p.json') });
+  const settings = createAutodartsSettings({ autodartsSettingsPath: path.join(root, 's.json') });
+  archive.append({
+    matchId: 'finished-1',
+    variant: 'X01',
+    settings: { baseScore: 501, inMode: 'Straight', outMode: 'Straight' },
+    finishedAt: '2026-08-01T00:10:00.000Z',
+    durationSec: 638,
+    winner: 'trashpanda',
+    players: [
+      { name: 'trashpanda', legsWon: 2, average: 40 },
+      { name: 'war d', legsWon: 1, average: 30 },
+    ],
+  });
+  const payload = createAutodartsPayload({ archive, aggregates, settings }).buildLastMatch();
+  assert.equal(payload.match.status, 'finished');
+  assert.equal(payload.persistent, false);
+  assert.equal(payload.match.players.length, 2);
+  assert.equal(payload.match.players[0].legs, 2);
+  assert.equal(payload.match.players[0].isWinner, true);
+  assert.match(payload.match.settingsLine, /501/);
+  assert.equal(payload.match.durationSec, 638);
 });
 
 test('match payload carries dart objects, prevTurn, and null coords passthrough', () => {

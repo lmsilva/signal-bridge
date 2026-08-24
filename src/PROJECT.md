@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Autodarts UI + history)
+**Last updated:** 2026-08-23 (Autodarts board card + live fallback)
 
 ---
 
@@ -535,6 +535,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-23: **Autodarts board card + live fallback** — dashboard UDP includes `board` (name, online/Running, version, up-to-date, OS, darts/corrections/accuracy from `/bs/v0/boards`); `autodarts.now` skips empty live shells and shows the last finished match with players/legs. Cache-bust not required for UDP. Deploy: `./recreate.sh` + portable client rebuild. Tests: `test/autodarts-payload.test.js`.
 - 2026-08-23: **Autodarts display polish + defaults** — dashboard labels clarified (Last played, readable leaderboard lines, Head-to-head / House records); default leaderboard size 12; admin cache-bust `?v=signal74`. Cloud history Sync remains on confirmed `/as/v0/matches/filter`. Deploy: `./recreate.sh`. Portable client rebuild for panel layout.
 - 2026-08-23: **Autodarts cloud history** — confirmed `GET /as/v0/matches/filter` (play Match History); Sync history + startup/6h schedule import finished matches into the local archive (stats per match; list-only fallback on 404). Local archive is the offline cache when cloud sync fails. Cache-bust `?v=signal73`. Deploy: `./recreate.sh`. Tests: `test/autodarts-history.test.js`.
 - 2026-08-23: **Roll Credits Filters compact** — open Filters is a single content-sized row (system chips wrap as needed; year + “No date” sit beside chips). Removed the wide two-column stretch that left a tall empty band. Cache-bust `?v=signal72`. Deploy: `./recreate.sh`.

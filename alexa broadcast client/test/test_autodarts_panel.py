@@ -17,6 +17,7 @@ from src.autodarts_panel import (
     board_radii,
     current_month_bar_color,
     dart_board_xy,
+    fit_player_name_size,
     format_game_shot,
     format_last_played_label,
     format_leaderboard_detail,
@@ -35,7 +36,7 @@ from src.autodarts_panel import (
 )
 
 
-T20_XY = (0.0, -((R_TREBLE_INNER + R_TREBLE_OUTER) / 2))
+T20_XY = (0.0, (R_TREBLE_INNER + R_TREBLE_OUTER) / 2)
 
 
 def sample_match(*, revision=41, status="live", with_turn=True, busted=False, players=2):
@@ -166,7 +167,7 @@ class LayoutTests(unittest.TestCase):
     def assert_boxes_fit(self, boxes, width, height, timed=True):
         chrome = page_chrome(width, height, timed=timed)
         for name, box in boxes.items():
-            if name in ("portrait", "chrome", "finished") or box is None:
+            if name in ("portrait", "chrome", "finished", "player_count") or box is None:
                 continue
             x0, y0, x1, y1 = box
             self.assertGreaterEqual(x0, chrome.content_x - 1, name)
@@ -180,6 +181,7 @@ class LayoutTests(unittest.TestCase):
         for size in ((1080, 1920), (1920, 1080)):
             boxes = layout_dashboard(*size, timed=True)
             self.assertIn("leaderboard", boxes)
+            self.assertIn("board_info", boxes)
             self.assertIn("months", boxes)
             self.assertIn("rivalry", boxes)
             self.assert_boxes_fit(boxes, *size)
@@ -249,6 +251,20 @@ class LabelFormatTests(unittest.TestCase):
     def test_record_average(self):
         self.assertEqual(format_record_average(36.3), "36.3")
         self.assertEqual(format_record_average(None), "—")
+
+    def test_name_size_stays_width_capped(self):
+        wide = fit_player_name_size("▶ trashpanda", 420, compact=False)
+        tall_narrow = fit_player_name_size("▶ trashpanda", 180, compact=False)
+        self.assertLessEqual(tall_narrow, 26)
+        self.assertLessEqual(tall_narrow, wide + 2)
+        self.assertGreaterEqual(tall_narrow, 13)
+
+    def test_s20_coords_map_near_top_of_board(self):
+        # Autodarts +y is toward 20; screen Y grows downward.
+        cx, cy, outer = 500.0, 500.0, 200.0
+        px, py = map_coords_to_px(0.0, 0.7, cx, cy, outer)
+        self.assertLess(py, cy)
+        self.assertTrue(is_t20_in_treble_wedge(*T20_XY))
 
 
 class HitMapTests(unittest.TestCase):

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Tesla landscape car + Autodarts crowns)
+**Last updated:** 2026-08-23 (Autodarts board card + dart Y fix)
 
 ---
 
@@ -268,6 +268,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-23: **Autodarts dart Y-axis + board card + names** — Autodarts `+y` toward 20 (was vertically mirrored on wall); width-capped thrower names for tall multi-player columns (up to 8); dashboard “YOUR BOARD” card (name, Running/Offline, version, OS, darts/corrections/accuracy). Ship: portable client rebuild required (not run).
 - 2026-08-23: **Autodarts crown spacing + clearer stats** — winner/leader crowns sit left of measured text (no overlap); leaderboard uses rank | crown | name columns; labels say “Highest checkout” and “180 scores”. Ship: portable client rebuild required (not run).
 - 2026-08-23: **Tesla landscape car tile** — mission-control car card centers the vehicle + lock/windows row in landscape (slightly shorter render); portrait stays top-padded. Tests: `test_tesla_battery_panel.py`. Ship: portable client rebuild required (not run).
 - 2026-08-23: **Autodarts FINAL + dashboard polish** — finished matches reserve a result band (board no longer covers names); larger player names; clearer totals (“Last played”), leaderboard detail lines, Head-to-head / House records; wider leaderboard column. Tests: `test_autodarts_panel.py`. Ship: portable client rebuild required (not run).

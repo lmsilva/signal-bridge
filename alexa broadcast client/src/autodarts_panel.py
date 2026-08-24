@@ -86,11 +86,11 @@ def segment_angle_rad(number: int) -> float | None:
 def board_xy_to_offset(x: float, y: float, outer_px: float) -> tuple[float, float]:
     """Autodarts normalised coords → pixel offset from centre.
 
-    Autodarts: 0,0 centre; distance 1.0 = double outer; negative y toward 20 (top).
-    Screen: +x right, +y down → ``(x * R, y * R)``.
+    Autodarts: 0,0 centre; distance 1.0 = double outer; **+y toward 20 (top)**.
+    Screen: +x right, +y down → ``(x * R, -y * R)``.
     """
     r = max(1.0, float(outer_px))
-    return float(x) * r, float(y) * r
+    return float(x) * r, -float(y) * r
 
 
 def map_coords_to_px(
@@ -125,7 +125,7 @@ def parse_segment(seg) -> tuple[str, int | None]:
 
 
 def segment_centroid(seg, *, miss_radius: float = R_MISS_FALLBACK) -> tuple[float, float]:
-    """Normalised board (x, y) at the visual centre of a segment bed."""
+    """Normalised board (x, y) at the visual centre of a segment bed (+y = 20/top)."""
     kind, number = parse_segment(seg)
     if kind == "miss":
         # Pin just outside the rim at a neutral angle (3-o'clock) — never invent a hit.
@@ -133,7 +133,7 @@ def segment_centroid(seg, *, miss_radius: float = R_MISS_FALLBACK) -> tuple[floa
     if kind == "bull":
         return 0.0, 0.0
     if kind == "outer_bull":
-        return 0.0, -(R_OUTER_BULL * 0.55)
+        return 0.0, (R_OUTER_BULL * 0.55)
     if number is None:
         return 0.0, 0.0
     angle = segment_angle_rad(number)
@@ -146,8 +146,8 @@ def segment_centroid(seg, *, miss_radius: float = R_MISS_FALLBACK) -> tuple[floa
     else:
         # Outer single bed (between treble and double) — most readable centroid.
         radius = (R_TREBLE_OUTER + R_DOUBLE_INNER) / 2
-    # x = r sin θ, y = −r cos θ (θ clockwise from top; y negative = top).
-    return radius * math.sin(angle), -radius * math.cos(angle)
+    # x = r sin θ, y = r cos θ (θ clockwise from top; +y = top / 20).
+    return radius * math.sin(angle), radius * math.cos(angle)
 
 
 def dart_board_xy(dart: dict | None) -> tuple[float, float] | None:
@@ -197,10 +197,10 @@ def wedge_contains_angle(number: int, angle_from_top_cw: float) -> bool:
 
 
 def point_board_radius_angle(x: float, y: float) -> tuple[float, float]:
-    """Normalised (x,y) → (radius, angle clockwise from top)."""
+    """Normalised (x,y) → (radius, angle clockwise from top). +y is toward 20."""
     radius = math.hypot(x, y)
-    # atan2(x, -y): 0 at top, clockwise positive when y-up-negative.
-    angle = math.atan2(x, -y) if radius > 1e-12 else 0.0
+    # atan2(x, y): 0 at top (+y), clockwise positive.
+    angle = math.atan2(x, y) if radius > 1e-12 else 0.0
     return radius, angle
 
 
@@ -222,8 +222,20 @@ def is_t20_in_treble_wedge_px(
     """Same check after mapping to screen pixels."""
     r = max(1.0, float(outer_px))
     x = (px - cx) / r
-    y = (py - cy) / r
+    y = -(py - cy) / r  # invert screen Y back to Autodarts (+y = top)
     return is_t20_in_treble_wedge(x, y)
+
+
+def fit_player_name_size(label: str, col_w: float, *, compact: bool = False) -> int:
+    """Width-driven name size so tall landscape columns cannot blow up type."""
+    text = str(label or "")
+    # Approximate Segoe UI bold advance (~0.62em); leave side padding.
+    usable = max(40.0, col_w - 20.0)
+    char_w = 0.62
+    by_width = int(usable / max(1, len(text) * char_w)) if text else 18
+    cap = 26 if not compact else 20
+    floor = 13 if not compact else 12
+    return int(max(floor, min(cap, by_width, col_w * 0.13)))
 
 
 def current_month_bar_color(index: int, count: int) -> str:
@@ -277,7 +289,7 @@ def dashboard_fingerprint(payload: dict | None) -> str:
             k: (payload or {}).get(k)
             for k in (
                 "totals", "leaderboard", "moreCount", "byMonth", "byVariant",
-                "rivalry", "records", "recent", "displaySeconds",
+                "rivalry", "records", "recent", "board", "displaySeconds",
             )
         }
         return json.dumps(body, sort_keys=True, default=str)
@@ -342,15 +354,18 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
     y0, y1 = chrome.content_top + 10 * u, chrome.content_bottom - 14 * u
     gap = 14 * u
     if chrome.portrait:
-        totals_h = 120 * u
-        board_h = min(680 * u, (y1 - y0) * 0.46)
-        months_h = 220 * u
-        rivalry_h = 140 * u
+        totals_h = 110 * u
+        board_info_h = 150 * u
+        board_h = min(560 * u, (y1 - y0) * 0.38)
+        months_h = 200 * u
+        rivalry_h = 130 * u
         y = y0
         boxes = {
             "totals": (x0, y, x1, y + totals_h),
         }
         y += totals_h + gap
+        boxes["board_info"] = (x0, y, x1, y + board_info_h)
+        y += board_info_h + gap
         boxes["leaderboard"] = (x0, y, x1, y + board_h)
         y += board_h + gap
         boxes["months"] = (x0, y, x1, y + months_h)
@@ -359,21 +374,24 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
         boxes["records"] = (x0, boxes["rivalry"][3] + gap, x1, y1)
         return boxes
     # Landscape: give the board more of the width so 12 rows can breathe.
-    left_w = chrome.content_w * 0.60
+    left_w = chrome.content_w * 0.58
     boxes = {
         "leaderboard": (x0, y0, x0 + left_w, y1),
     }
     rx0 = x0 + left_w + gap
-    totals_h = 120 * u
-    months_h = 240 * u
-    rivalry_h = 150 * u
+    totals_h = 100 * u
+    board_info_h = 150 * u
+    months_h = 190 * u
+    rivalry_h = 130 * u
     boxes["totals"] = (rx0, y0, x1, y0 + totals_h)
-    boxes["months"] = (rx0, y0 + totals_h + gap, x1, y0 + totals_h + gap + months_h)
+    boxes["board_info"] = (rx0, y0 + totals_h + gap, x1, y0 + totals_h + gap + board_info_h)
+    months_top = boxes["board_info"][3] + gap
+    boxes["months"] = (rx0, months_top, x1, months_top + months_h)
     boxes["rivalry"] = (
         rx0,
-        y0 + totals_h + months_h + gap * 2,
+        months_top + months_h + gap,
         x1,
-        y0 + totals_h + months_h + gap * 2 + rivalry_h,
+        months_top + months_h + gap + rivalry_h,
     )
     boxes["records"] = (rx0, boxes["rivalry"][3] + gap, x1, y1)
     return boxes
@@ -393,9 +411,14 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
     settings_h = 44 * u
     strip_h = 100 * u
     result_h = (64 * u) if finished else 0
-    players = max(2, min(4, int(player_count or 2)))
+    players = max(1, min(8, int(player_count or 2)))
     if chrome.portrait:
-        scores_h = (150 if players <= 2 else 200) * u
+        if players <= 2:
+            scores_h = 150 * u
+        elif players <= 4:
+            scores_h = 200 * u
+        else:
+            scores_h = 240 * u
         settings = (x0, y0, x1, y0 + settings_h)
         cursor = y0 + settings_h + 6 * u
         result = None
@@ -414,6 +437,7 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
             "portrait": True,
             "finished": finished,
             "chrome": chrome,
+            "player_count": players,
         }
     settings = (x0, y0, x1, y0 + settings_h)
     cursor = y0 + settings_h + 8 * u
@@ -422,7 +446,9 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
         result = (x0, cursor, x1, cursor + result_h)
         cursor = result[3] + 10 * u
     body_top = cursor
-    col_w = chrome.content_w * 0.22
+    # Narrower side columns when many players so the board stays readable.
+    col_frac = 0.18 if players >= 5 else (0.20 if players >= 3 else 0.22)
+    col_w = chrome.content_w * col_frac
     board_box = (x0 + col_w + 12 * u, body_top, x1 - col_w - 12 * u, y1 - strip_h - 8 * u)
     return {
         "settings": settings,
@@ -434,6 +460,7 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
         "portrait": False,
         "finished": finished,
         "chrome": chrome,
+        "player_count": players,
     }
 
 
@@ -752,8 +779,11 @@ class AutodartsPanel(BasePanel):
         screen_w, screen_h = self._screen()
         boxes = layout_dashboard(screen_w, screen_h, timed=True)
         for box in boxes.values():
+            if box is None or not isinstance(box, tuple) or len(box) != 4:
+                continue
             self._card(box)
         self._draw_totals(boxes["totals"], payload.get("totals") or {})
+        self._draw_board_info(boxes["board_info"], payload.get("board") or {})
         self._draw_leaderboard(
             boxes["leaderboard"],
             payload.get("leaderboard") or [],
@@ -762,6 +792,65 @@ class AutodartsPanel(BasePanel):
         self._draw_months(boxes["months"], payload.get("byMonth") or [])
         self._draw_rivalry(boxes["rivalry"], payload.get("rivalry"))
         self._draw_records(boxes["records"], payload.get("records"))
+
+    def _draw_board_info(self, box, board: dict):
+        x0, y0, x1, y1 = box
+        pad = 18
+        name = str(board.get("name") or "No board selected")
+        online = board.get("online")
+        status = str(board.get("statusLabel") or (
+            "Running" if online is True else ("Offline" if online is False else "Unknown")
+        ))
+        status_fill = "#3E9B5F" if online is True else (ALERT if online is False else INK_3)
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad, anchor="nw", text="YOUR BOARD",
+            fill=INK_2, font=self._font(14, True),
+        ))
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad + 28, anchor="nw", text=name,
+            fill=INK, font=self._font(22, True),
+        ))
+        # Status pill on the right of the name row.
+        self._track(self.canvas.create_text(
+            x1 - pad, y0 + pad + 32, anchor="ne", text=status,
+            fill=status_fill, font=self._font(16, True),
+        ))
+        version = board.get("version") or "—"
+        update = board.get("updateLabel") or ""
+        os_name = board.get("os") or ""
+        meta_bits = [f"v{version}" if version != "—" else "v—"]
+        if update:
+            meta_bits.append(update)
+        if os_name:
+            meta_bits.append(str(os_name))
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + pad + 58, anchor="nw",
+            text=" · ".join(meta_bits),
+            fill=INK_2, font=self._font(13),
+        ))
+        darts = board.get("dartsThrown")
+        corrections = board.get("corrections")
+        accuracy = board.get("accuracy")
+        cells = [
+            (darts if darts is not None else "—", "Darts"),
+            (corrections if corrections is not None else "—", "Corrections"),
+            (
+                f"{accuracy:.2f}%" if isinstance(accuracy, (int, float)) else "—",
+                "Accuracy",
+            ),
+        ]
+        cell_w = (x1 - x0 - pad * 2) / len(cells)
+        cy = y1 - 36
+        for index, (value, label) in enumerate(cells):
+            cx = x0 + pad + cell_w * (index + 0.5)
+            self._track(self.canvas.create_text(
+                cx, cy - 12, text=str(value),
+                fill=INK, font=self._font(20, True),
+            ))
+            self._track(self.canvas.create_text(
+                cx, cy + 12, text=label,
+                fill=INK_3, font=self._font(12, True),
+            ))
 
     def _draw_totals(self, box, totals: dict):
         x0, y0, x1, y1 = box
@@ -1108,7 +1197,8 @@ class AutodartsPanel(BasePanel):
                 ))
             self._draw_player_block(
                 x0, py0, x1, py1, player,
-                thrower=active, crown=index in leaders, compact=False, final=final,
+                thrower=active, crown=index in leaders,
+                compact=len(players) > 1, final=final,
             )
 
     def _draw_player_block(self, x0, y0, x1, y1, player, *, thrower, crown, compact, final=False):
@@ -1117,10 +1207,10 @@ class AutodartsPanel(BasePanel):
         col_h = max(80.0, y1 - y0)
         name = str(player.get("name") or "—")
         prefix = "▶ " if thrower else ""
-        # Names should read clearly from throwing distance — scale with the column.
-        name_size = int(min(52 if not compact else 36, max(28, col_w * 0.18, col_h * 0.16)))
-        score_size = int(min(72 if not compact else 44, max(36, col_h * 0.28)))
-        legs_size = int(min(22, max(14, col_h * 0.07)))
+        # Names are width-capped — tall side columns must not inflate type.
+        name_size = fit_player_name_size(f"{prefix}{name}", col_w, compact=compact)
+        score_size = int(min(64 if not compact else 40, max(28, min(col_w * 0.42, col_h * 0.26))))
+        legs_size = int(min(18, max(12, col_h * 0.07)))
         name_y = y0 + col_h * (0.14 if not compact else 0.16)
         self._track(self.canvas.create_text(
             cx, name_y, text=f"{prefix}{name}",

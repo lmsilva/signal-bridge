@@ -210,11 +210,49 @@ function createAutodartsService({
     return { ok: true, settings: next };
   }
 
-  function pushDashboard({ send } = {}) {
+  async function fetchBoardInfo() {
+    const stored = credentials.load();
+    const boardId = stored.boardId;
+    if (!boardId || !api?.getBoard) {
+      return normalizeBoardFallback(stored);
+    }
+    try {
+      let raw = null;
+      const detail = await api.getBoard(boardId);
+      if (detail?.ok && detail.json) {
+        raw = Array.isArray(detail.json)
+          ? detail.json.find((row) => (row.id || row.boardId) === boardId)
+          : detail.json;
+      }
+      if (!raw) {
+        const list = await api.getBoards();
+        if (list?.ok) {
+          const rows = Array.isArray(list.json) ? list.json
+            : (Array.isArray(list.json?.boards) ? list.json.boards : []);
+          raw = rows.find((row) => (row.id || row.boardId) === boardId) || null;
+        }
+      }
+      const { normalizeBoardInfo } = require('./autodarts-payload');
+      return normalizeBoardInfo(raw, { fallbackName: stored.boardName || boardId });
+    } catch (error) {
+      log?.warn?.('Autodarts board info fetch failed', error?.message || error);
+      return normalizeBoardFallback(stored);
+    }
+  }
+
+  function normalizeBoardFallback(stored = {}) {
+    const { normalizeBoardInfo } = require('./autodarts-payload');
+    return normalizeBoardInfo(null, {
+      fallbackName: stored.boardName || stored.boardId || null,
+    });
+  }
+
+  async function pushDashboard({ send } = {}) {
     if (archive.count() <= 0) {
       return { ok: false, error: 'No Autodarts matches archived yet — play one and the archive starts itself' };
     }
-    const body = payload.buildDashboard();
+    const board = await fetchBoardInfo();
+    const body = payload.buildDashboard({ board });
     const emit = typeof send === 'function' ? send : sendUdpPayload;
     if (!emit) return { ok: false, error: 'UDP sender unavailable' };
     emit(body, { source: 'manual' });
@@ -229,13 +267,14 @@ function createAutodartsService({
     const emit = typeof send === 'function' ? send : sendUdpPayload;
     if (!emit) return { ok: false, error: 'UDP sender unavailable' };
     emit(body, { source: 'manual' });
-    return { ok: true, type: body.type, displaySeconds: body.displaySeconds };
+    return { ok: true, type: body.type, displaySeconds: body.displaySeconds, mode: 'last-match' };
   }
 
   function pushNow({ send, mode = 'auto' } = {}) {
+    const { isPlayableLiveMatch } = require('./autodarts-payload');
     const liveMatch = live.getMatch();
     if ((mode === 'auto' || mode === 'now' || mode === 'now-playing')
-      && liveMatch?.status === 'live') {
+      && isPlayableLiveMatch(liveMatch)) {
       const body = payload.buildMatch(liveMatch, { persistent: true, status: 'live' });
       const emit = typeof send === 'function' ? send : sendUdpPayload;
       if (!emit) return { ok: false, error: 'UDP sender unavailable' };
@@ -243,6 +282,9 @@ function createAutodartsService({
       return { ok: true, type: body.type, mode: 'live' };
     }
     if (mode === 'now' || mode === 'now-playing') {
+      // Prefer last finished match over a hard error when the live shell is empty.
+      const last = pushLastMatch({ send });
+      if (last.ok) return { ...last, mode: 'last-match', note: 'No live match — showing last finished game' };
       return { ok: false, error: 'No live Autodarts match right now' };
     }
     // Scheduled last-match must never air a live takeover.
