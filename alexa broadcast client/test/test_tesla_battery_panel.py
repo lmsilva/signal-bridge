@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from src.display_panels import TeslaBatteryPanel
+from src.display_panels import TeslaBatteryPanel, TeslaDashboardPanel
 
 
 class TeslaBatteryBarHeightTests(unittest.TestCase):
@@ -18,6 +18,28 @@ class TeslaBatteryBarHeightTests(unittest.TestCase):
             self.assertEqual(
                 TeslaBatteryPanel.battery_bar_height(linespace, portrait=True), 72,
             )
+
+
+class TeslaDashboardCarCardLayoutTests(unittest.TestCase):
+    """Landscape centers the car+badge stack; portrait stays top-padded."""
+
+    def test_landscape_centers_when_tile_is_taller_than_content(self):
+        top = TeslaDashboardPanel.car_card_content_top(
+            100, 400, 220, center_vertically=True, pad=12,
+        )
+        self.assertEqual(top, 100 + (400 - 220) // 2)
+
+    def test_portrait_stays_top_padded(self):
+        top = TeslaDashboardPanel.car_card_content_top(
+            100, 400, 220, center_vertically=False, pad=12,
+        )
+        self.assertEqual(top, 112)
+
+    def test_landscape_falls_back_to_pad_when_block_fills_tile(self):
+        top = TeslaDashboardPanel.car_card_content_top(
+            50, 200, 190, center_vertically=True, pad=12,
+        )
+        self.assertEqual(top, 62)
 
 
 class TeslaBatteryRangeLabelTests(unittest.TestCase):

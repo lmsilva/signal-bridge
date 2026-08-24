@@ -4948,7 +4948,7 @@ class TeslaDashboardPanel(BasePanel):
         self._pulse_job = None
         self._pulse_items = []
 
-    def _draw_car_card(self, x, y, width, height, dashboard: dict):
+    def _draw_car_card(self, x, y, width, height, dashboard: dict, *, center_vertically=False):
         muted = self.config["mutedTextColor"]
         security = dashboard.get("security") or {}
         secure = security.get("secureTheme") == "green"
@@ -4961,25 +4961,46 @@ class TeslaDashboardPanel(BasePanel):
         )
 
         badge_row_h = 44
+        gap_img_badges = 10
+        pad = 12
         image_path = asset_path(self.CAR_IMAGE_NAME)
         img_w = min(width - 60, 460)
-        img_h = max(80, height - badge_row_h - 28)
-        img_bottom = y + 12 + img_h
+        # Room left for badges under the art.
+        max_img_h = max(80, height - badge_row_h - gap_img_badges - pad * 2)
+        if center_vertically:
+            # Landscape tiles are tall — keep the render a bit shorter and center
+            # the car + status row in the leftover vertical space.
+            max_img_h = min(max_img_h, int(height * 0.62))
+
+        image_h = 0
+        photo = None
         if image_path.exists() and Image is not None and ImageTk is not None:
             try:
                 image = Image.open(image_path).convert("RGBA")
-                image.thumbnail((int(img_w), int(img_h)), Image.LANCZOS)
-                self._car_photo = ImageTk.PhotoImage(image)
-                self._track(
-                    self.canvas.create_image(
-                        x + width // 2,
-                        y + 12 + image.height // 2,
-                        image=self._car_photo,
-                    )
-                )
-                img_bottom = y + 12 + image.height
+                image.thumbnail((int(img_w), int(max_img_h)), Image.LANCZOS)
+                photo = ImageTk.PhotoImage(image)
+                image_h = image.height
             except OSError:
-                pass
+                photo = None
+                image_h = 0
+
+        block_h = (image_h if image_h else min(120, max_img_h)) + gap_img_badges + badge_row_h
+        content_top = self.car_card_content_top(
+            y, height, block_h, center_vertically=center_vertically, pad=pad,
+        )
+
+        if photo is not None:
+            self._car_photo = photo
+            self._track(
+                self.canvas.create_image(
+                    x + width // 2,
+                    content_top + image_h // 2,
+                    image=self._car_photo,
+                )
+            )
+            img_bottom = content_top + image_h
+        else:
+            img_bottom = content_top + (block_h - gap_img_badges - badge_row_h)
 
         # Security status lives under the vehicle render — never on the art (§1.10).
         left_badges = []
@@ -4991,7 +5012,7 @@ class TeslaDashboardPanel(BasePanel):
             ("Windows up", True) if security.get("windowsUp", True) else ("Window open", False),
         ]
 
-        badge_y = min(img_bottom + 10, y + height - badge_row_h)
+        badge_y = min(img_bottom + gap_img_badges, y + height - badge_row_h)
         badge_x = x + 16
         for label in left_badges:
             h = self._pill(badge_x, badge_y, label, fill=secure_bg, fg=secure_color, outline=secure_bg)
@@ -5006,6 +5027,13 @@ class TeslaDashboardPanel(BasePanel):
             )
             badge_x -= self.shell.forecast_label_font.measure(label) + 36
             _ = h
+
+    @staticmethod
+    def car_card_content_top(card_y, card_h, block_h, *, center_vertically=False, pad=12):
+        """Top Y for the car+badge stack. Landscape centers; portrait stays top-padded."""
+        if center_vertically and block_h + pad * 2 < card_h:
+            return int(card_y + (card_h - block_h) / 2)
+        return int(card_y + pad)
 
     def _draw_battery_card(self, x, y, width, height, dashboard: dict):
         muted = self.config["mutedTextColor"]
@@ -5688,7 +5716,7 @@ class TeslaDashboardPanel(BasePanel):
 
         self._draw_map_card(inner_x, y, col_w, map_h, dashboard)
         mid_x = inner_x + col_w + gap
-        self._draw_car_card(mid_x, y, col_w, car_h, dashboard)
+        self._draw_car_card(mid_x, y, col_w, car_h, dashboard, center_vertically=True)
         self._draw_battery_card(mid_x, y + car_h + gap, col_w, min(battery_h, content_h - car_h - gap), dashboard)
 
         right_x = inner_x + (col_w + gap) * 2
