@@ -41,6 +41,138 @@ STEAM_TAG_BORDER = "#4A78A0"
 PRINT_BORDER = "#F4F2ED"
 
 
+# Tk font sizes are *points*, box geometry is pixels. Windows display scaling
+# (125% on the theatre wall) makes one point ~2.05px, so px offsets guessed from
+# the point size overlap. Panels measure the real value; this is the fallback.
+PX_PER_POINT = 2.05
+
+
+def text_line_h(points: float, *, u: float = 1.0, px_per_pt: float = PX_PER_POINT) -> float:
+    """Painted height of one text line, in the same px space as the layout boxes."""
+    scale = max(0.05, float(u))
+    return max(9.0, float(points) * scale * max(1.0, float(px_per_pt)))
+
+
+def stack_rows(
+    rows,
+    *,
+    top: float = 0.0,
+    available: float | None = None,
+    u: float = 1.0,
+    px_per_pt: float = PX_PER_POINT,
+    min_gap: float = 2.0,
+) -> dict:
+    """Lay out text rows top-down so painted glyphs can never overlap.
+
+    ``rows`` is ``[(key, points, gap_after)]`` in design units. Gaps compress
+    (never past ``min_gap``) first; if the type itself still cannot fit, the
+    returned ``font_scale`` shrinks it rather than letting a card overflow.
+    """
+    keys = [key for key, _points, _gap in rows]
+    points = {key: float(pt) for key, pt, _gap in rows}
+    gaps = {key: max(0.0, float(gap)) * max(0.05, float(u)) for key, _points, gap in rows}
+    floor = max(0.0, float(min_gap)) * max(0.05, float(u))
+    floor_total = floor * max(0, len(keys) - 1)
+
+    font_scale = 1.0
+    if available is not None and keys:
+        natural = sum(text_line_h(pt, u=u, px_per_pt=px_per_pt) for pt in points.values())
+        room = max(0.0, float(available)) - floor_total
+        if natural > room and natural > 0:
+            font_scale = max(0.55, room / natural)
+
+    heights = {
+        key: text_line_h(points[key] * font_scale, u=u, px_per_pt=px_per_pt) for key in keys
+    }
+    scale = 1.0
+    if available is not None and keys:
+        slack = sum(gaps[key] for key in keys[:-1])
+        room = max(0.0, float(available)) - sum(heights.values()) - floor_total
+        if slack > room:
+            scale = max(0.0, room / slack) if slack > 0 else 0.0
+    ys: dict[str, float] = {}
+    y = float(top)
+    bottom = float(top)
+    for index, key in enumerate(keys):
+        ys[key] = y
+        bottom = y + heights[key]
+        if index < len(keys) - 1:
+            y = bottom + floor + gaps[key] * scale
+    return {
+        "y": ys,
+        "h": heights,
+        "top": float(top),
+        "bottom": bottom,
+        "height": bottom - float(top),
+        "font_scale": font_scale,
+        "fits": available is None or bottom <= float(top) + float(available) + 0.5,
+    }
+
+
+def _finite(value) -> float | None:
+    """Tk (or a stubbed root) can hand back non-numbers — treat those as absent."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")) or number <= 0:
+        return None
+    return number
+
+
+def measure_px_per_point(root, u: float = 1.0, *, points: int = 20) -> float:
+    """Painted px per font point on this display, falling back to `PX_PER_POINT`."""
+    scale = max(0.05, float(u or 1.0))
+    try:
+        import tkinter.font as tkfont
+
+        size = max(8, int(round(points * scale)))
+        linespace = _finite(
+            tkfont.Font(root=root, family="Segoe UI", size=size).metrics("linespace")
+        )
+    except Exception:
+        linespace = None
+    if linespace is None:
+        return PX_PER_POINT
+    return max(1.2, linespace / max(1.0, points * scale))
+
+
+def text_measurer(root, font_spec):
+    """Callable returning painted px width, estimated when Tk cannot measure."""
+    size = float(font_spec[1] if len(font_spec) > 1 else 12)
+
+    def estimate(text, _size=size):
+        return len(str(text or "")) * _size * 0.72
+
+    try:
+        import tkinter.font as tkfont
+
+        font = tkfont.Font(
+            root=root,
+            family=font_spec[0],
+            size=int(font_spec[1]),
+            weight=font_spec[2] if len(font_spec) > 2 else "normal",
+        )
+        if _finite(font.measure("M")) is None:
+            return estimate
+
+        def measure(text):
+            width = _finite(font.measure(str(text or "")))
+            return width if width is not None else estimate(text)
+
+        return measure
+    except Exception:
+        return estimate
+
+
+def stack_overlaps(stack: dict) -> bool:
+    """True when any two rows in a `stack_rows` result collide."""
+    rows = sorted(stack["y"].items(), key=lambda item: item[1])
+    for (key, y), (_next_key, next_y) in zip(rows, rows[1:]):
+        if y + stack["h"][key] > next_y + 0.5:
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class PageChrome:
     """Shared page frame geometry in screen px."""
