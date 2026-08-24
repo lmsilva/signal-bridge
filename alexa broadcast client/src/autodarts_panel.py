@@ -24,7 +24,7 @@ from src.design_system import (
 )
 from src.display_panels import BasePanel
 from src.page_header import paint_page_header
-from src.roll_credits_panel import format_month_axis_label, month_axis_font_size
+from src.roll_credits_panel import format_month_axis_label, month_axis_font_size, months_chart_geom
 
 # Classic board order, clockwise from top (20).
 SEGMENT_ORDER = (
@@ -415,6 +415,82 @@ def board_info_row_ys(box_h: float, pad: float = 18) -> dict:
     }
 
 
+STATUS_OK = BAND_GREEN
+
+
+def board_status_chip(online, status_label) -> tuple[str, str]:
+    """Wall chip: Running / Stopped / Offline only — never raw BM 'Error'."""
+    raw = str(status_label or "").strip()
+    key = raw.lower()
+    if key in ("error", "failed", "fault", "starting", "connecting", "unknown"):
+        if online is False:
+            return "Offline", ALERT
+        return "Stopped", INK_3
+    if key == "running":
+        return "Running", STATUS_OK
+    if key in ("online", "connected"):
+        return raw.title() if raw else "Running", STATUS_OK
+    if key in ("offline", "disconnected") or online is False:
+        return "Offline", ALERT
+    if key in ("stopped", "idle"):
+        return "Stopped", INK_3
+    if not raw:
+        if online is True:
+            return "Running", STATUS_OK
+        return "", INK_3
+    if online is True:
+        return "Stopped", INK_3
+    return raw, INK_3
+
+
+def format_rivalry_footer(rivalry: dict) -> str:
+    last = (rivalry or {}).get("lastWinner") or ""
+    when = (rivalry or {}).get("lastPlayedAt") or ""
+    when_label = ""
+    if when:
+        try:
+            when_label = datetime.fromisoformat(str(when).replace("Z", "+00:00")).strftime("%b %d")
+        except ValueError:
+            when_label = str(when)[:10]
+    line = f"Last win: {last}" if last else "Last win: —"
+    if when_label:
+        line = f"{line} · {when_label}"
+    return line
+
+
+def rivalry_score_parts(rivalry) -> dict | None:
+    """Three columns — never one wrapping string (Tk stacks wrapped lines)."""
+    if not isinstance(rivalry, dict) or not rivalry.get("a"):
+        return None
+    try:
+        a_wins = int(rivalry.get("aWins") or 0)
+        b_wins = int(rivalry.get("bWins") or 0)
+    except (TypeError, ValueError):
+        a_wins, b_wins = 0, 0
+    return {
+        "left": str(rivalry.get("a") or ""),
+        "score": f"{a_wins} – {b_wins}",
+        "right": str(rivalry.get("b") or ""),
+        "caption": "wins each (most-played pairing)",
+        "footer": format_rivalry_footer(rivalry),
+    }
+
+
+def rivalry_row_ys(box_h: float, pad: float = 18) -> dict:
+    height = max(120.0, float(box_h))
+    title_y = pad
+    names_y = pad + 44
+    caption_y = names_y + 34
+    footer_y = min(height - pad - 2, caption_y + 26)
+    return {
+        "title": title_y,
+        "names": names_y,
+        "caption": caption_y,
+        "footer": footer_y,
+        "stacked": footer_y > caption_y > names_y > title_y,
+    }
+
+
 def leaderboard_visible_rows(box_h: float, row_count: int, *, header: float = 52, footer: float = 14) -> tuple[int, float]:
     """How many two-line leaderboard rows fit without overlapping."""
     usable = max(60.0, float(box_h) - header - footer)
@@ -435,9 +511,9 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
         avail = max(400.0, y1 - y0)
         totals_h = 96 * u
         board_info_h = 200 * u
-        months_h = 170 * u
-        rivalry_h = 150 * u
-        records_h = 150 * u
+        months_h = 220 * u
+        rivalry_h = 168 * u
+        records_h = 186 * u
         fixed = totals_h + board_info_h + months_h + rivalry_h + records_h + gap * 5
         board_h = max(240 * u, avail - fixed)
         y = y0
@@ -888,13 +964,7 @@ class AutodartsPanel(BasePanel):
         pad = 18
         rows = board_info_row_ys(y1 - y0, pad)
         name = str(board.get("name") or "No board selected")
-        online = board.get("online")
-        status = board.get("statusLabel")
-        if not status:
-            status = "Running" if online is True else ("Offline" if online is False else "")
-        status_fill = "#3E9B5F" if (
-            online is True or str(status).lower() in ("running", "online", "connected")
-        ) else (ALERT if online is False or str(status).lower() == "offline" else INK_3)
+        status, status_fill = board_status_chip(board.get("online"), board.get("statusLabel"))
         self._track(self.canvas.create_text(
             x0 + pad, y0 + rows["title"], anchor="nw", text="YOUR BOARD",
             fill=INK_2, font=self._font(14, True),
@@ -1032,17 +1102,17 @@ class AutodartsPanel(BasePanel):
     def _draw_months(self, box, months: list):
         x0, y0, x1, y1 = box
         pad = 22
+        geom = months_chart_geom(y1 - y0, pad)
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad, anchor="nw", text="MATCHES PER MONTH",
-            fill=INK_2, font=self._font(16, True),
+            x0 + pad, y0 + geom["title_y"], anchor="nw", text="MATCHES PER MONTH",
+            fill=INK_2, font=self._font(15, True),
         ))
         rows = list(months)[-12:]
         if not rows:
             return
         max_count = max([int(row.get("count") or 0) for row in rows] or [1]) or 1
-        axis_room = 50
-        # Leave room under the title for the tallest count label.
-        chart_top, chart_bottom = y0 + 78, y1 - axis_room
+        chart_top = y0 + geom["chart_top"]
+        chart_bottom = y0 + geom["chart_bottom"]
         usable = max(20.0, chart_bottom - chart_top)
         slot = (x1 - x0 - pad * 2) / max(1, len(rows))
         label_size = month_axis_font_size(slot)
@@ -1056,12 +1126,14 @@ class AutodartsPanel(BasePanel):
                 cx - bar_half, chart_bottom - height, cx + bar_half, chart_bottom,
                 fill=color, outline="",
             ))
+            count_y = max(y0 + geom["count_y"], chart_bottom - height - 4)
+            count_y = max(count_y, y0 + geom["title_bottom"] + 2)
             self._track(self.canvas.create_text(
-                cx, chart_bottom - height - 4, anchor="s", text=str(count),
+                cx, count_y, anchor="s", text=str(count),
                 fill=INK_2, font=self._font(11, True),
             ))
             self._track(self.canvas.create_text(
-                cx, chart_bottom + 10, anchor="n",
+                cx, y0 + geom["axis_y"], anchor="n",
                 text=format_month_axis_label(row.get("label"), row.get("key")),
                 fill=INK_3 if index < len(rows) - 1 else WARN,
                 font=self._font(label_size, True),
@@ -1070,47 +1142,41 @@ class AutodartsPanel(BasePanel):
     def _draw_rivalry(self, box, rivalry):
         x0, y0, x1, y1 = box
         pad = 18
+        rows = rivalry_row_ys(y1 - y0, pad)
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad, anchor="nw", text="HEAD-TO-HEAD",
-            fill=INK_2, font=self._font(16, True),
+            x0 + pad, y0 + rows["title"], anchor="nw", text="HEAD-TO-HEAD",
+            fill=INK_2, font=self._font(15, True),
         ))
-        if not isinstance(rivalry, dict) or not rivalry.get("a"):
+        parts = rivalry_score_parts(rivalry)
+        if not parts:
             self._track(self.canvas.create_text(
-                x0 + pad, y0 + 56, anchor="nw", text="Play a few rematches to fill this in",
+                x0 + pad, y0 + rows["names"], anchor="nw",
+                text="Play a few rematches to fill this in",
                 fill=INK_3, font=self._font(14),
             ))
             return
-        a = str(rivalry.get("a") or "")
-        b = str(rivalry.get("b") or "")
-        a_wins = rivalry.get("aWins") or 0
-        b_wins = rivalry.get("bWins") or 0
-        # Stack below the title — never share the title's vertical band.
-        line_y = y0 + pad + 48
+        mid = (x0 + x1) / 2
+        name_y = y0 + rows["names"]
+        # Three columns, no wrap width — Tk stacks wrapped lines on one baseline.
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, line_y, anchor="n",
-            text=f"{a}  {a_wins}  –  {b_wins}  {b}",
+            x0 + pad, name_y, anchor="w", text=parts["left"],
             fill=INK, font=self._font(20, True),
-            width=max(80, int(x1 - x0 - pad * 2)),
         ))
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, line_y + 36, anchor="n",
-            text="wins each (most-played pairing)",
-            fill=INK_3, font=self._font(12),
+            mid, name_y, text=parts["score"],
+            fill=WARN, font=self._font(22, True),
         ))
-        last = rivalry.get("lastWinner") or ""
-        when = rivalry.get("lastPlayedAt") or ""
-        when_label = ""
-        if when:
-            try:
-                when_label = datetime.fromisoformat(str(when).replace("Z", "+00:00")).strftime("%b %d")
-            except ValueError:
-                when_label = str(when)[:10]
-        line = f"Last win: {last}" if last else "Last win: —"
-        if when_label:
-            line = f"{line} · {when_label}"
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, min(y1 - 22, line_y + 62), anchor="n",
-            text=line, fill=INK_2, font=self._font(13),
+            x1 - pad, name_y, anchor="e", text=parts["right"],
+            fill=INK, font=self._font(20, True),
+        ))
+        self._track(self.canvas.create_text(
+            mid, y0 + rows["caption"], anchor="n",
+            text=parts["caption"], fill=INK_3, font=self._font(12),
+        ))
+        self._track(self.canvas.create_text(
+            mid, y0 + rows["footer"], anchor="n",
+            text=parts["footer"], fill=INK_2, font=self._font(13),
         ))
 
     def _draw_records(self, box, records):
@@ -1136,13 +1202,16 @@ class AutodartsPanel(BasePanel):
             (f"Highest checkout    {hi_s}" + (f"  ·  {hi_who}" if hi_who else ""), INK),
             (f"Total 180 scores    {int(total180)}", WARN),
         ]
-        y = y0 + 56
+        y = y0 + 52
+        step = min(40.0, max(28.0, (y1 - y - pad) / max(1, len(lines))))
         for line, color in lines:
+            if y > y1 - 18:
+                break
             self._track(self.canvas.create_text(
                 x0 + pad, y, anchor="nw", text=line,
-                fill=color, font=self._font(16, True),
+                fill=color, font=self._font(15, True),
             ))
-            y += 40
+            y += step
 
     # --- Match ----------------------------------------------------------------
 

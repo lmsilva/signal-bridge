@@ -11,12 +11,18 @@ try:
 except ImportError:  # pragma: no cover - portable/runtime dependency
     Image = ImageEnhance = ImageFilter = ImageTk = None
 
-from src.design_system import ACCENT, BG, FILL, INK, INK_2, INK_3, LINE, WARN, page_chrome
+from src.design_system import ACCENT, BG, FILL, INK, INK_2, INK_3, LINE, WARN, is_portrait, page_chrome
 from src.display_panels import BasePanel
 from src.game_library_tour_panel import _http_get_json
 from src.page_header import paint_page_header
+from src.shared_photos_page import next_in_seconds, rail_remaining_fraction
 from src.steam_now_playing_panel import SteamNowPlayingPanel, fit_image_contain, fit_image_cover
 from src.text_marquee import MarqueeLine
+
+TOUR_CHROME_H_U = 70
+RAIL_TRACK = "#3a4048"
+RAIL_DONE = "#6a7380"
+RAIL_SEGMENT_CAP = 20
 
 MONTH_ABBREVS = (
     "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
@@ -93,56 +99,228 @@ def month_axis_font_size(slot_px: float) -> int:
     return 9
 
 
+def tour_chrome_h(u: float) -> float:
+    return TOUR_CHROME_H_U * float(u)
+
+
+def next_in_label(remaining) -> str:
+    try:
+        left = max(0, int(remaining))
+    except (TypeError, ValueError):
+        left = 0
+    return f"NEXT IN {left}s"
+
+
+def tour_counter_label(index, total, *, dashboard=False) -> str:
+    if dashboard:
+        return "DASHBOARD"
+    try:
+        total_n = max(1, int(total or 1))
+        index_n = max(0, int(index or 0))
+    except (TypeError, ValueError):
+        total_n, index_n = 1, 0
+    return f"{index_n + 1:02d} / {total_n:02d}"
+
+
+def choose_counter_grid(portrait: bool, value_count: int) -> tuple[int, int]:
+    """Portrait with 4 stats must be 2×2 — a 1000px-wide 4-col row overlaps."""
+    n = max(1, int(value_count or 1))
+    if portrait and n >= 4:
+        return 2, 2
+    return n, 1
+
+
+def months_chart_geom(box_h: float, pad: float = 22) -> dict:
+    """Reserved title / count / plot / axis bands so bars never strike the title."""
+    height = max(120.0, float(box_h))
+    title_y = pad
+    title_bottom = pad + 24
+    count_band = 18
+    axis_band = 36
+    chart_top = title_bottom + count_band
+    chart_bottom = height - axis_band
+    if chart_bottom < chart_top + 24:
+        chart_bottom = chart_top + 24
+    return {
+        "title_y": title_y,
+        "title_bottom": title_bottom,
+        "count_y": chart_top - 3,
+        "chart_top": chart_top,
+        "chart_bottom": chart_bottom,
+        "axis_y": chart_bottom + 8,
+        "bars_clear_of_title": chart_top >= title_bottom + 16,
+    }
+
+
+def title_card_layout(box_h: float, pad: float = 16) -> dict:
+    """Title + one meta line only — companion/facts live in the facts card."""
+    height = max(70.0, float(box_h))
+    title_y = pad
+    meta_y = pad + 50
+    return {
+        "title_y": title_y,
+        "meta_y": meta_y,
+        "meta_fits": meta_y + 22 <= height - 6,
+    }
+
+
+def facts_card_layout(box_h: float, *, pad: float = 16, has_companion: bool = False) -> dict:
+    height = max(80.0, float(box_h))
+    companion_h = 24 if has_companion else 0
+    facts_reserve = 36
+    desc_top = pad + companion_h
+    desc_bottom = height - pad - facts_reserve
+    if desc_bottom < desc_top + 18:
+        desc_bottom = desc_top + 18
+    return {
+        "companion_y": pad if has_companion else None,
+        "desc_top": desc_top,
+        "desc_bottom": desc_bottom,
+        "desc_h": max(18.0, desc_bottom - desc_top),
+        "facts_y": height - pad,
+        "desc_clear_of_facts": desc_bottom <= height - pad - facts_reserve + 2,
+    }
+
+
+def clip_text_to_lines(text: str, *, width_px: float, font_size: int, max_lines: int) -> str:
+    """Word-wrap then hard-clip so Tk cannot stack description over the facts row."""
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return ""
+    max_lines = max(1, int(max_lines))
+    chars_per_line = max(8, int(float(width_px) / max(6.0, float(font_size) * 0.58)))
+    words = cleaned.split(" ")
+    lines: list[str] = []
+    current = ""
+    overflow = False
+    for word in words:
+        trial = word if not current else f"{current} {word}"
+        if len(trial) <= chars_per_line:
+            current = trial
+            continue
+        if current:
+            lines.append(current)
+        current = word
+        if len(lines) >= max_lines:
+            overflow = True
+            break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    elif current and len(lines) >= max_lines:
+        overflow = True
+    if overflow or " ".join(lines) != cleaned:
+        last = lines[-1] if lines else ""
+        clipped = last[: max(1, chars_per_line - 1)].rstrip(".,;: ")
+        if lines:
+            lines[-1] = f"{clipped}…"
+        else:
+            lines = [f"{clipped}…"]
+    return "\n".join(lines[:max_lines])
+
+
+def format_game_meta(card: dict) -> str:
+    induction = (card or {}).get("induction")
+    try:
+        game_no = f"GAME #{int(induction):03d}" if induction else "GAME #—"
+    except (TypeError, ValueError):
+        game_no = "GAME #—"
+    bits = [
+        str((card or {}).get("systemLabel") or (card or {}).get("system") or "").upper(),
+        game_no,
+        format_beaten((card or {}).get("beatenAt")),
+    ]
+    return "  ·  ".join(bit for bit in bits if bit)
+
+
+def tour_progress_layout(box, *, index: int = 0, total: int = 1) -> dict:
+    """Slideshow-style chrome: counter + NEXT IN + segmented or continuous rail."""
+    x0, y0, x1, y1 = box
+    pad = 8
+    label_y = y0 + 14
+    rail_top = y0 + 30
+    rail_h = max(8.0, min(14.0, (y1 - rail_top) - 8))
+    rail = (x0 + pad, rail_top, x1 - pad, rail_top + rail_h)
+    try:
+        total_n = max(1, int(total or 1))
+        index_n = max(0, min(total_n - 1, int(index or 0)))
+    except (TypeError, ValueError):
+        total_n, index_n = 1, 0
+    segmented = total_n <= RAIL_SEGMENT_CAP
+    segments = []
+    if segmented:
+        gap = 4
+        inner_w = max(8.0, rail[2] - rail[0])
+        seg_w = (inner_w - gap * (total_n - 1)) / total_n
+        for i in range(total_n):
+            sx = rail[0] + i * (seg_w + gap)
+            segments.append((sx, rail[1], sx + seg_w, rail[3]))
+    return {
+        "counter_xy": (x0 + pad, label_y),
+        "next_xy": (x1 - pad, label_y),
+        "rail": rail,
+        "segmented": segmented,
+        "segments": segments,
+        "current": index_n,
+        "total": total_n,
+        "rail_h": rail_h,
+    }
+
+
 def layout_boxes(screen_w: int, screen_h: int, *, dashboard=False, timed=True) -> dict:
     chrome = page_chrome(screen_w, screen_h, timed=timed)
     u = chrome.u
     x0, x1 = chrome.content_x, chrome.content_x + chrome.content_w
     y0, y1 = chrome.content_top + 14 * u, chrome.content_bottom - 18 * u
     gap = 16 * u
+    # Looping tours hide the overlay footer — always reserve in-panel NEXT IN chrome.
+    progress_h = tour_chrome_h(u)
+    y_body = y1 - progress_h - gap
     if dashboard:
         if chrome.portrait:
-            avail = max(500.0, y1 - y0)
-            hero_h = min(360 * u, avail * 0.26)
-            counters_h = 200 * u
-            months_h = min(260 * u, avail * 0.22)
+            avail = max(400.0, y_body - y0)
+            hero_h = min(340 * u, avail * 0.24)
+            counters_h = 260 * u
+            months_h = min(240 * u, max(200 * u, avail * 0.18))
             systems_top = y0 + hero_h + counters_h + months_h + gap * 3
             return {
                 "hero": (x0, y0, x1, y0 + hero_h),
                 "counters": (x0, y0 + hero_h + gap, x1, y0 + hero_h + gap + counters_h),
                 "months": (x0, y0 + hero_h + counters_h + gap * 2, x1,
                            y0 + hero_h + counters_h + gap * 2 + months_h),
-                "systems": (x0, systems_top, x1, y1),
+                "systems": (x0, systems_top, x1, y_body),
+                "progress": (x0, y1 - progress_h, x1, y1),
             }
         left_w = chrome.content_w * 0.36
         top_h = 180 * u
+        mid = x0 + left_w + (x1 - x0 - left_w) / 2
         return {
-            "hero": (x0, y0, x0 + left_w, y1),
+            "hero": (x0, y0, x0 + left_w, y_body),
             "counters": (x0 + left_w + gap, y0, x1, y0 + top_h),
-            "months": (x0 + left_w + gap, y0 + top_h + gap, x0 + left_w + (x1 - x0 - left_w) / 2, y1),
-            "systems": (x0 + left_w + (x1 - x0 - left_w) / 2 + gap, y0 + top_h + gap, x1, y1),
+            "months": (x0 + left_w + gap, y0 + top_h + gap, mid, y_body),
+            "systems": (mid + gap, y0 + top_h + gap, x1, y_body),
+            "progress": (x0, y1 - progress_h, x1, y1),
         }
     if chrome.portrait:
-        avail = max(500.0, y1 - y0 - 50 * u)
-        # Cover on top, then title, facts, and a generous screenshot strip.
-        hero_h = min(520 * u, avail * 0.36)
-        title_h = 110 * u
-        facts_h = 160 * u
+        avail = max(400.0, y_body - y0)
+        hero_h = min(480 * u, avail * 0.34)
+        title_h = 96 * u
+        facts_h = 200 * u
         shots_top = y0 + hero_h + title_h + facts_h + gap * 3
         return {
             "hero": (x0, y0, x1, y0 + hero_h),
             "title": (x0, y0 + hero_h + gap, x1, y0 + hero_h + gap + title_h),
             "facts": (x0, y0 + hero_h + title_h + gap * 2, x1,
                       y0 + hero_h + title_h + gap * 2 + facts_h),
-            "shots": (x0, shots_top, x1, y1 - 50 * u),
-            "progress": (x0, y1 - 45 * u, x1, y1),
+            "shots": (x0, shots_top, x1, y_body),
+            "progress": (x0, y1 - progress_h, x1, y1),
         }
     hero_w = chrome.content_w * 0.55
     return {
-        "hero": (x0, y0, x0 + hero_w, y1 - 50 * u),
-        "title": (x0 + hero_w + gap, y0, x1, y0 + 165 * u),
-        "facts": (x0 + hero_w + gap, y0 + 185 * u, x1, y0 + 500 * u),
-        "shots": (x0 + hero_w + gap, y0 + 520 * u, x1, y1 - 50 * u),
-        "progress": (x0, y1 - 42 * u, x1, y1),
+        "hero": (x0, y0, x0 + hero_w, y_body),
+        "title": (x0 + hero_w + gap, y0, x1, y0 + 140 * u),
+        "facts": (x0 + hero_w + gap, y0 + 156 * u, x1, y0 + 480 * u),
+        "shots": (x0 + hero_w + gap, y0 + 496 * u, x1, y_body),
+        "progress": (x0, y1 - progress_h, x1, y1),
     }
 
 
@@ -178,8 +356,17 @@ class RollCreditsPanel(BasePanel):
         self._image_ids = {}
         self._marquees = []
         self._dashboard_until = 0.0
+        self._phase_started = 0.0
+        self._phase_dwell = 0
+        self._chrome_job = None
+        self._chrome_token = 0
+        self._chrome_next_id = None
+        self._chrome_count_id = None
+        self._chrome_fill_id = None
+        self._chrome_geom = None
 
     def hide(self):
+        self._cancel_chrome_tick()
         if self._job is not None:
             try:
                 self.root.after_cancel(self._job)
@@ -200,6 +387,10 @@ class RollCreditsPanel(BasePanel):
             except Exception:
                 pass
         self._widgets = []
+        self._chrome_next_id = None
+        self._chrome_count_id = None
+        self._chrome_fill_id = None
+        self._chrome_geom = None
         super().hide()
 
     def _track(self, item_id):
@@ -225,6 +416,8 @@ class RollCreditsPanel(BasePanel):
         # Absolute deadline so playlist/prefetch races cannot leave the stats page early
         # (manual push was skipping the dashboard while scheduled walk-once looked fine).
         self._dashboard_until = time.monotonic() + self._tour["dashboardSeconds"]
+        self._phase_started = time.time()
+        self._phase_dwell = self._tour["dashboardSeconds"]
         self._draw_dashboard()
         self._schedule(self._tour["dashboardSeconds"], self._start_games)
         base = str(payload.get("cardBaseUrl") or "").rstrip("/")
@@ -239,7 +432,11 @@ class RollCreditsPanel(BasePanel):
                 self.root.after_cancel(self._job)
             except Exception:
                 pass
-        self._job = self.root.after(max(1, int(seconds)) * 1000, callback)
+        dwell = max(1, int(seconds))
+        self._phase_started = time.time()
+        self._phase_dwell = dwell
+        self._start_chrome_tick()
+        self._job = self.root.after(dwell * 1000, callback)
 
     def _playlist_worker(self, token, url):
         data = _http_get_json(url, timeout=45, config=self.config)
@@ -282,6 +479,10 @@ class RollCreditsPanel(BasePanel):
             except Exception:
                 pass
         self._widgets = []
+        self._chrome_next_id = None
+        self._chrome_count_id = None
+        self._chrome_fill_id = None
+        self._chrome_geom = None
 
     def _font(self, size, bold=False):
         return ("Segoe UI", max(10, int(size)), "bold" if bold else "normal")
@@ -298,12 +499,18 @@ class RollCreditsPanel(BasePanel):
         boxes = layout_boxes(screen_w, screen_h, dashboard=True, timed=timed)
         stats = self._tour.get("stats") or {}
         latest = stats.get("latest") or {}
-        for box in boxes.values():
+        for name, box in boxes.items():
+            if name == "progress" or not isinstance(box, tuple) or len(box) != 4:
+                continue
             self._card(box)
+        portrait = is_portrait(screen_w, screen_h)
         self._draw_latest(boxes["hero"], latest, stats)
-        self._draw_counters(boxes["counters"], stats, notes_from_latest=True, latest=latest)
+        self._draw_counters(
+            boxes["counters"], stats, notes_from_latest=portrait, latest=latest, portrait=portrait,
+        )
         self._draw_months(boxes["months"], stats.get("months") or [], stats.get("undatedCount") or 0)
         self._draw_systems(boxes["systems"], stats.get("bySystem") or [], stats.get("beatenWith") or [])
+        self._draw_tour_chrome(boxes["progress"], dashboard=True)
 
     def _draw_latest(self, box, latest, stats=None):
         stats = stats or {}
@@ -357,12 +564,12 @@ class RollCreditsPanel(BasePanel):
                                                     text=f"Milestone · {milestone} games beaten",
                                                     fill=WARN, font=self._font(14, True)))
 
-    def _draw_counters(self, box, stats, *, notes_from_latest=False, latest=None):
+    def _draw_counters(self, box, stats, *, notes_from_latest=False, latest=None, portrait=False):
         x0, y0, x1, y1 = box
         pad = 16
         latest = latest or {}
         notes = []
-        if notes_from_latest and (x1 - x0) < 900:
+        if notes_from_latest:
             if latest.get("beatenWith"):
                 notes.append(f"beaten with {latest['beatenWith']}")
             best = stats.get("bestMonth") or {}
@@ -373,7 +580,7 @@ class RollCreditsPanel(BasePanel):
                 notes.append(f"Milestone · {milestone} games beaten")
         note_h = 0
         if notes:
-            note_h = 22 * len(notes) + 8
+            note_h = min(22 * len(notes) + 8, max(28, (y1 - y0) * 0.34))
             cy = y0 + pad
             for note in notes:
                 fill = WARN if note.startswith("Milestone") else INK_2
@@ -383,6 +590,8 @@ class RollCreditsPanel(BasePanel):
                     width=max(80, int(x1 - x0 - pad * 2)),
                 ))
                 cy += 22
+                if cy > y0 + pad + note_h:
+                    break
         top = stats.get("topBeatenWith") or {}
         buddy = str(top.get("name") or "").strip()
         values = [
@@ -394,17 +603,16 @@ class RollCreditsPanel(BasePanel):
             values.append((top.get("count") or 0, f"WITH {buddy.upper()[:10]}"))
         band_top = y0 + pad + note_h
         band_h = max(60, y1 - band_top - pad)
-        # Portrait with 4 stats: 2×2 grid so labels never collide.
-        if (x1 - x0) < 900 and len(values) >= 4:
-            cols, rows = 2, 2
+        cols, rows = choose_counter_grid(portrait, len(values))
+        if rows > 1:
             cell_w = (x1 - x0 - pad * 2) / cols
             cell_h = band_h / rows
-            for index, (value, label) in enumerate(values[:4]):
+            for index, (value, label) in enumerate(values[: cols * rows]):
                 col, row = index % cols, index // cols
                 cx = x0 + pad + cell_w * (col + 0.5)
                 cy = band_top + cell_h * (row + 0.5)
-                self._track(self.canvas.create_text(cx, cy - 12, text=str(value),
-                                                    fill=INK, font=self._font(28, True)))
+                self._track(self.canvas.create_text(cx, cy - 14, text=str(value),
+                                                    fill=INK, font=self._font(26, True)))
                 self._track(self.canvas.create_text(cx, cy + 16, text=label,
                                                     fill=INK_3, font=self._font(12, True)))
             return
@@ -419,33 +627,45 @@ class RollCreditsPanel(BasePanel):
     def _draw_months(self, box, months, undated):
         x0, y0, x1, y1 = box
         pad = 22
-        self._track(self.canvas.create_text(x0 + pad, y0 + pad, anchor="nw", text="BEATEN PER MONTH",
-                                            fill=INK_2, font=self._font(16, True)))
+        geom = months_chart_geom(y1 - y0, pad)
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + geom["title_y"], anchor="nw", text="BEATEN PER MONTH",
+            fill=INK_2, font=self._font(15, True),
+        ))
         rows = list(months)[-12:]
-        max_count = max([int(row.get("count") or 0) for row in rows] or [1])
-        axis_room = 54
-        chart_top, chart_bottom = y0 + 65, y1 - axis_room
+        max_count = max([int(row.get("count") or 0) for row in rows] or [1]) or 1
+        chart_top = y0 + geom["chart_top"]
+        chart_bottom = y0 + geom["chart_bottom"]
+        usable = max(16.0, chart_bottom - chart_top)
         slot = (x1 - x0 - pad * 2) / max(1, len(rows))
         label_size = month_axis_font_size(slot)
         for index, row in enumerate(rows):
             count = int(row.get("count") or 0)
-            height = max(2, (chart_bottom - chart_top) * count / max_count)
+            height = max(2, usable * 0.88 * count / max_count)
             cx = x0 + pad + slot * (index + 0.5)
             color = month_bar_color(index, len(rows))
             bar_half = min(slot * 0.28, 18)
-            self._track(self.canvas.create_rectangle(cx - bar_half, chart_bottom - height,
-                                                     cx + bar_half, chart_bottom, fill=color, outline=""))
-            self._track(self.canvas.create_text(cx, chart_bottom - height - 6, anchor="s", text=str(count),
-                                                fill=INK_2, font=self._font(11, True)))
+            self._track(self.canvas.create_rectangle(
+                cx - bar_half, chart_bottom - height, cx + bar_half, chart_bottom,
+                fill=color, outline="",
+            ))
+            count_y = max(y0 + geom["count_y"], chart_bottom - height - 4)
+            count_y = max(count_y, y0 + geom["title_bottom"] + 2)
             self._track(self.canvas.create_text(
-                cx, chart_bottom + 10, anchor="n",
+                cx, count_y, anchor="s", text=str(count),
+                fill=INK_2, font=self._font(11, True),
+            ))
+            self._track(self.canvas.create_text(
+                cx, y0 + geom["axis_y"], anchor="n",
                 text=format_month_axis_label(row.get("label"), row.get("key")),
                 fill=INK_3 if index < len(rows) - 1 else WARN,
                 font=self._font(label_size, True),
             ))
         if undated:
-            self._track(self.canvas.create_text(x1 - pad, y0 + pad, anchor="ne", text=f"+{undated} undated",
-                                                fill=INK_3, font=self._font(12)))
+            self._track(self.canvas.create_text(
+                x1 - pad, y0 + geom["title_y"], anchor="ne", text=f"+{undated} undated",
+                fill=INK_3, font=self._font(12),
+            ))
 
     def _draw_systems(self, box, systems, beaten_with=None):
         x0, y0, x1, y1 = box
@@ -581,7 +801,7 @@ class RollCreditsPanel(BasePanel):
         self._draw_title(boxes["title"], card)
         self._draw_facts(boxes["facts"], card)
         self._draw_shots(boxes["shots"], card)
-        self._draw_progress(boxes["progress"])
+        self._draw_tour_chrome(boxes["progress"], dashboard=False)
 
     def _draw_image_stage(self, box, hero):
         x0, y0, x1, y1 = box
@@ -625,44 +845,56 @@ class RollCreditsPanel(BasePanel):
             return
 
     def _draw_title(self, box, card):
-        x0, y0, x1, _ = box
-        pad = 22
+        x0, y0, x1, y1 = box
+        pad = 16
+        layout = title_card_layout(y1 - y0, pad)
         title = card.get("title") or "Loading game…"
         title_w = max(80, int(x1 - x0 - pad * 2))
-        title_font = self._font(27, True)
+        title_font = self._font(26, True)
+        title_h = max(36, int(layout["meta_y"] - layout["title_y"] - 4))
         if title_needs_marquee(title, title_w):
             marquee = MarqueeLine(self.root)
             viewport = marquee.build(
                 parent=self.canvas, text=title, font=title_font, fill=INK,
-                width=title_w, height=52, bg=FILL, center=False,
+                width=title_w, height=title_h, bg=FILL, center=False,
             )
             self._marquees.append(marquee)
             self._widgets.append(viewport)
-            self._track(self.canvas.create_window(x0 + pad, y0 + pad, anchor="nw",
-                                                  window=viewport, width=title_w, height=52))
+            self._track(self.canvas.create_window(
+                x0 + pad, y0 + layout["title_y"], anchor="nw",
+                window=viewport, width=title_w, height=title_h,
+            ))
         else:
-            self._track(self.canvas.create_text(x0 + pad, y0 + pad, anchor="nw",
-                                                text=title, fill=INK, font=title_font))
-        induction = card.get("induction")
-        meta = [
-            str(card.get("systemLabel") or card.get("system") or "").upper(),
-            f"GAME #{int(induction):03d}" if induction else "GAME #—",
-            format_beaten(card.get("beatenAt")),
-        ]
-        self._track(self.canvas.create_text(x0 + pad, y0 + 92, anchor="nw", text="  ·  ".join(meta),
-                                            fill=WARN, font=self._font(15, True), width=x1 - x0 - pad * 2))
-        if card.get("beatenWith"):
-            self._track(self.canvas.create_text(x0 + pad, y0 + 130, anchor="nw",
-                                                text=f"beaten with {card['beatenWith']}",
-                                                fill=INK_2, font=self._font(14)))
+            self._track(self.canvas.create_text(
+                x0 + pad, y0 + layout["title_y"], anchor="nw",
+                text=title, fill=INK, font=title_font,
+            ))
+        if layout["meta_fits"]:
+            self._track(self.canvas.create_text(
+                x0 + pad, y0 + layout["meta_y"], anchor="nw",
+                text=format_game_meta(card), fill=WARN, font=self._font(14, True),
+            ))
 
     def _draw_facts(self, box, card):
         x0, y0, x1, y1 = box
-        pad = 22
+        pad = 16
+        companion = str(card.get("beatenWith") or "").strip()
+        layout = facts_card_layout(y1 - y0, pad=pad, has_companion=bool(companion))
+        text_w = max(80, int(x1 - x0 - pad * 2))
+        if companion and layout["companion_y"] is not None:
+            self._track(self.canvas.create_text(
+                x0 + pad, y0 + layout["companion_y"], anchor="nw",
+                text=f"beaten with {companion}", fill=INK_2, font=self._font(14, True),
+            ))
         description = str(card.get("description") or "No description available.").strip()
-        self._track(self.canvas.create_text(x0 + pad, y0 + pad, anchor="nw", text=description,
-                                            fill=INK_2, font=self._font(14),
-                                            width=x1 - x0 - pad * 2))
+        max_lines = max(1, int(layout["desc_h"] // 20))
+        clipped = clip_text_to_lines(
+            description, width_px=text_w, font_size=14, max_lines=max_lines,
+        )
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + layout["desc_top"], anchor="nw", text=clipped,
+            fill=INK_2, font=self._font(14), width=text_w,
+        ))
         facts = [
             f"{card.get('maxPlayers')} players" if card.get("maxPlayers") else None,
             card.get("difficulty"),
@@ -671,10 +903,12 @@ class RollCreditsPanel(BasePanel):
             card.get("publisher"),
             " · ".join(card.get("genres") or []),
         ]
-        self._track(self.canvas.create_text(x0 + pad, y1 - pad, anchor="sw",
-                                            text="  ·  ".join(str(value) for value in facts if value),
-                                            fill=ACCENT, font=self._font(12, True),
-                                            width=x1 - x0 - pad * 2))
+        fact_line = "  ·  ".join(str(value) for value in facts if value)
+        if fact_line:
+            self._track(self.canvas.create_text(
+                x0 + pad, y0 + layout["facts_y"], anchor="sw",
+                text=fact_line, fill=ACCENT, font=self._font(12, True),
+            ))
 
     def _draw_shots(self, box, card):
         shots = choose_showcase_shots(card, limit=3)
@@ -710,16 +944,88 @@ class RollCreditsPanel(BasePanel):
         except Exception:
             pass
 
-    def _draw_progress(self, box):
-        x0, y0, x1, y1 = box
-        total = max(1, len(self._games) or int(self._tour.get("walkedCount") or 1))
-        current = min(total, self._index + 1)
-        self._track(self.canvas.create_text(x0, (y0 + y1) / 2, anchor="w",
-                                            text=f"{current} / {total}", fill=INK_2,
-                                            font=self._font(14, True)))
-        bar_x = x0 + 100
-        self._track(self.canvas.create_rectangle(bar_x, (y0 + y1) / 2 - 3, x1, (y0 + y1) / 2 + 3,
-                                                 fill=LINE, outline=""))
-        self._track(self.canvas.create_rectangle(bar_x, (y0 + y1) / 2 - 3,
-                                                 bar_x + (x1 - bar_x) * current / total,
-                                                 (y0 + y1) / 2 + 3, fill=ACCENT, outline=""))
+    def _cancel_chrome_tick(self):
+        job = getattr(self, "_chrome_job", None)
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except Exception:
+                pass
+        self._chrome_job = None
+
+    def _start_chrome_tick(self):
+        self._cancel_chrome_tick()
+        self._chrome_token = getattr(self, "_chrome_token", 0) + 1
+        token = self._chrome_token
+        self._tick_chrome(token)
+
+    def _tick_chrome(self, token):
+        if token != getattr(self, "_chrome_token", 0) or not getattr(self, "visible", False):
+            return
+        self._refresh_tour_chrome()
+        try:
+            self._chrome_job = self.root.after(33, lambda: self._tick_chrome(token))
+        except Exception:
+            self._chrome_job = None
+
+    def _draw_tour_chrome(self, box, *, dashboard=False):
+        self._chrome_next_id = None
+        self._chrome_count_id = None
+        self._chrome_fill_id = None
+        self._chrome_geom = None
+        if not box:
+            return
+        total = max(1, len(self._games) or int(self._tour.get("count") or self._tour.get("walkedCount") or 1))
+        index = 0 if dashboard else max(0, int(self._index or 0))
+        layout = tour_progress_layout(box, index=index, total=1 if dashboard else total)
+        count_text = tour_counter_label(index, total, dashboard=dashboard)
+        left = next_in_seconds(self._phase_started or time.time(), self._phase_dwell or 1)
+        self._chrome_count_id = self._track(self.canvas.create_text(
+            *layout["counter_xy"], anchor="w", text=count_text,
+            fill=INK_2, font=self._font(14, True),
+        ))
+        self._chrome_next_id = self._track(self.canvas.create_text(
+            *layout["next_xy"], anchor="e", text=next_in_label(left),
+            fill=WARN, font=self._font(14, True),
+        ))
+        rx0, ry0, rx1, ry1 = layout["rail"]
+        if layout["segmented"] and layout["segments"]:
+            for i, (sx, sy, ex, ey) in enumerate(layout["segments"]):
+                fill = RAIL_DONE if i < layout["current"] else RAIL_TRACK
+                self._track(self.canvas.create_rectangle(sx, sy, ex, ey, fill=fill, outline=""))
+                if i == layout["current"]:
+                    fill_id = self.canvas.create_rectangle(sx, sy, sx, ey, fill=ACCENT, outline="")
+                    self._track(fill_id)
+                    self._chrome_fill_id = fill_id
+                    self._chrome_geom = ("h", sx, ex, sy, ey - sy)
+        else:
+            self._track(self.canvas.create_rectangle(rx0, ry0, rx1, ry1, fill=RAIL_TRACK, outline=""))
+            fill_id = self.canvas.create_rectangle(rx0, ry0, rx0, ry1, fill=ACCENT, outline="")
+            self._track(fill_id)
+            self._chrome_fill_id = fill_id
+            self._chrome_geom = ("h", rx0, rx1, ry0, ry1 - ry0)
+        self._refresh_tour_chrome()
+
+    def _refresh_tour_chrome(self):
+        next_id = getattr(self, "_chrome_next_id", None)
+        geom = getattr(self, "_chrome_geom", None)
+        fill_id = getattr(self, "_chrome_fill_id", None)
+        started = getattr(self, "_phase_started", 0.0) or time.time()
+        dwell = getattr(self, "_phase_dwell", 0) or 1
+        now = time.time()
+        if next_id is not None:
+            try:
+                self.canvas.itemconfigure(
+                    next_id, text=next_in_label(next_in_seconds(started, dwell, now=now)),
+                )
+            except Exception:
+                pass
+        if fill_id is None or geom is None:
+            return
+        remaining = rail_remaining_fraction(started, dwell * 1000, now=now)
+        elapsed = 1.0 - remaining
+        try:
+            _kind, x0, x1, y0, h = geom
+            self.canvas.coords(fill_id, x0, y0, x0 + (x1 - x0) * elapsed, y0 + h)
+        except Exception:
+            pass

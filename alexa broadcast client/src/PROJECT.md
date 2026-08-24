@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (portrait layout cleanup)
+**Last updated:** 2026-08-23 (portrait chrome + board status)
 
 ---
 
@@ -267,6 +267,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-23: **Portrait Autodarts + Roll Credits chrome** — YOUR BOARD maps BM `Error` to Stopped (never a green Error chip); MATCHES PER MONTH keeps a title band so bars cannot strike the heading; HEAD-TO-HEAD is three columns (no Tk wrap jumble); Roll Credits portrait counters are 2×2 even on a 1000px canvas; showcase title/facts stay inside their cards; looping tours draw slideshow-style NEXT IN + segmented/drain rail on dashboard and games. Tests: `test_autodarts_panel.py`, `test_roll_credits_panel.py`. Ship: portable client rebuild required (not run).
 
 - 2026-08-23: **Portrait Autodarts + Roll Credits cleanup** — dashboard/FINAL no longer overlap text in portrait; leaderboard rows are height-capped; FINAL omits duplicate names under the banner; Roll Credits counters use a 2×2 grid + notes band; showcase prefers cover hero and keeps a real screenshot strip. Ship: portable client rebuild required (not run).
 

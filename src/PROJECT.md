@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Roll Credits cover-hero display)
+**Last updated:** 2026-08-23 (Autodarts board Error status)
 
 ---
 
@@ -534,6 +534,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-23: **Autodarts YOUR BOARD never shows Error** — Board Manager `state.status: Error` (and failed/fault/starting) canonicalises to Stopped when connected, Offline when not; raw fault strings are not sent on the wall. Deploy: `./recreate.sh`. Tests: `test/autodarts-payload.test.js`.
 
 - 2026-08-23: **Roll Credits cover-hero display** — when cover + screenshots are ready, cards use the cover as hero and keep screenshots in the strip (portrait no longer looks empty). Deploy: `./recreate.sh`. Tests: `test/roll-credits-payload.test.js`.
 
