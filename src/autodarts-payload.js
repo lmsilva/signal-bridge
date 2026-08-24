@@ -19,14 +19,18 @@ function relativeAge(iso, now = Date.now()) {
 
 /**
  * Normalise Autodarts board list/detail JSON into a dashboard "YOUR BOARD" card.
- * Field names vary across /bs/v0/boards responses — accept several aliases.
+ *
+ * Confirmed from GET /bs/v0/boards (2026-08-23):
+ *   detections, corrections, accuracy (0–1), version, os,
+ *   state: { connected, status, event, numThrows }
+ * Prefer the boards *list* row — the per-board detail endpoint often zeros stats.
  */
 function normalizeBoardInfo(raw, { fallbackName = null } = {}) {
   if (!raw || typeof raw !== 'object') {
     return fallbackName ? {
       name: fallbackName,
       online: null,
-      statusLabel: 'Unknown',
+      statusLabel: null,
       version: null,
       updateLabel: null,
       os: null,
@@ -36,26 +40,34 @@ function normalizeBoardInfo(raw, { fallbackName = null } = {}) {
     } : null;
   }
   const stats = raw.stats && typeof raw.stats === 'object' ? raw.stats : {};
-  const onlineRaw = raw.online ?? raw.connected ?? raw.running ?? raw.status;
+  const state = raw.state && typeof raw.state === 'object' ? raw.state : {};
+
+  const connected = state.connected ?? raw.online ?? raw.connected ?? raw.running;
+  const bmStatus = String(state.status || state.event || raw.status || '').trim();
   let online = null;
   let statusLabel = null;
-  if (typeof onlineRaw === 'boolean') {
-    online = onlineRaw;
-  } else if (typeof onlineRaw === 'string') {
-    const lower = onlineRaw.toLowerCase();
-    if (['running', 'online', 'connected', 'active', 'true'].includes(lower)) {
-      online = true;
-      statusLabel = onlineRaw === 'Running' ? 'Running' : 'Online';
-    } else if (['offline', 'disconnected', 'stopped', 'false', 'idle'].includes(lower)) {
-      online = false;
-      statusLabel = 'Offline';
-    } else {
-      statusLabel = onlineRaw;
-    }
+  if (connected === true || connected === false) {
+    online = Boolean(connected);
   }
-  if (statusLabel == null) {
-    statusLabel = online === true ? 'Running' : (online === false ? 'Offline' : 'Unknown');
+  if (/^running$/i.test(bmStatus)) {
+    online = true;
+    statusLabel = 'Running';
+  } else if (/^(stopped|idle)$/i.test(bmStatus)) {
+    // Board Manager stopped but still reachable — not "Unknown".
+    online = online !== false;
+    statusLabel = connected === false ? 'Offline' : 'Stopped';
+  } else if (/^(offline|disconnected)$/i.test(bmStatus)) {
+    online = false;
+    statusLabel = 'Offline';
+  } else if (bmStatus) {
+    statusLabel = bmStatus;
+    if (online == null) online = true;
+  } else if (online === true) {
+    statusLabel = 'Online';
+  } else if (online === false) {
+    statusLabel = 'Offline';
   }
+  // Omit a useless "Unknown" label when we have no signal.
 
   const version = raw.version || raw.clientVersion || raw.softwareVersion
     || raw.boardVersion || stats.version || null;
@@ -76,9 +88,10 @@ function normalizeBoardInfo(raw, { fallbackName = null } = {}) {
     else if (lower.includes('darwin') || lower.includes('mac')) os = 'macOS';
   }
 
+  // Lifetime darts = `detections` on the boards list (not state.numThrows).
   const dartsThrown = firstNumber(
-    raw.dartsThrown, raw.darts, raw.numDarts, raw.throws,
-    stats.dartsThrown, stats.darts, stats.numDarts, stats.throws,
+    raw.detections, raw.dartsThrown, raw.darts, raw.numDarts, raw.throws,
+    stats.detections, stats.dartsThrown, stats.darts, stats.numDarts, stats.throws,
   );
   const corrections = firstNumber(
     raw.corrections, raw.numCorrections, raw.correctionCount,
@@ -89,6 +102,10 @@ function normalizeBoardInfo(raw, { fallbackName = null } = {}) {
   );
   if (accuracy != null && accuracy <= 1) accuracy *= 100;
   if (accuracy != null) accuracy = Math.round(accuracy * 100) / 100;
+  // Detail endpoint often returns zeros — treat all-zero as missing when we expect data.
+  const statsLookEmpty = (dartsThrown === 0 || dartsThrown == null)
+    && (corrections === 0 || corrections == null)
+    && (accuracy === 0 || accuracy == null);
 
   return {
     id: raw.id || raw.boardId || null,
@@ -98,9 +115,9 @@ function normalizeBoardInfo(raw, { fallbackName = null } = {}) {
     version: version != null ? String(version) : null,
     updateLabel,
     os,
-    dartsThrown,
-    corrections,
-    accuracy,
+    dartsThrown: statsLookEmpty && dartsThrown === 0 ? null : dartsThrown,
+    corrections: statsLookEmpty && corrections === 0 ? null : corrections,
+    accuracy: statsLookEmpty && accuracy === 0 ? null : accuracy,
   };
 }
 

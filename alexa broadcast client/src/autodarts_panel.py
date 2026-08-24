@@ -737,7 +737,7 @@ class AutodartsPanel(BasePanel):
     def _font(self, size, bold=False):
         return ("Segoe UI", max(10, int(size)), "bold" if bold else "normal")
 
-    def _paint_header(self, *, status_chip=None):
+    def _paint_header(self, *, status_chip=None, title="AUTODARTS"):
         screen_w, screen_h = self._screen()
         right_label, right_value = "", ""
         if status_chip == "LIVE":
@@ -748,7 +748,7 @@ class AutodartsPanel(BasePanel):
             self.canvas,
             screen_w=screen_w,
             screen_h=screen_h,
-            pill="autodarts",
+            pill=title,
             left_label="",
             left_value="",
             right_label=right_label,
@@ -775,7 +775,7 @@ class AutodartsPanel(BasePanel):
     # --- Dashboard ------------------------------------------------------------
 
     def _render_dashboard(self, payload: dict):
-        self._paint_header()
+        self._paint_header(title="AUTODARTS DASHBOARD")
         screen_w, screen_h = self._screen()
         boxes = layout_dashboard(screen_w, screen_h, timed=True)
         for box in boxes.values():
@@ -798,23 +798,25 @@ class AutodartsPanel(BasePanel):
         pad = 18
         name = str(board.get("name") or "No board selected")
         online = board.get("online")
-        status = str(board.get("statusLabel") or (
-            "Running" if online is True else ("Offline" if online is False else "Unknown")
-        ))
-        status_fill = "#3E9B5F" if online is True else (ALERT if online is False else INK_3)
+        status = board.get("statusLabel")
+        if not status:
+            status = "Running" if online is True else ("Offline" if online is False else "")
+        status_fill = "#3E9B5F" if (
+            online is True or str(status).lower() in ("running", "online", "connected")
+        ) else (ALERT if online is False or str(status).lower() == "offline" else INK_3)
         self._track(self.canvas.create_text(
             x0 + pad, y0 + pad, anchor="nw", text="YOUR BOARD",
             fill=INK_2, font=self._font(14, True),
         ))
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad + 28, anchor="nw", text=name,
+            x0 + pad, y0 + pad + 30, anchor="nw", text=name,
             fill=INK, font=self._font(22, True),
         ))
-        # Status pill on the right of the name row.
-        self._track(self.canvas.create_text(
-            x1 - pad, y0 + pad + 32, anchor="ne", text=status,
-            fill=status_fill, font=self._font(16, True),
-        ))
+        if status:
+            self._track(self.canvas.create_text(
+                x1 - pad, y0 + pad + 34, anchor="ne", text=status,
+                fill=status_fill, font=self._font(16, True),
+            ))
         version = board.get("version") or "—"
         update = board.get("updateLabel") or ""
         os_name = board.get("os") or ""
@@ -824,7 +826,7 @@ class AutodartsPanel(BasePanel):
         if os_name:
             meta_bits.append(str(os_name))
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad + 58, anchor="nw",
+            x0 + pad, y0 + pad + 66, anchor="nw",
             text=" · ".join(meta_bits),
             fill=INK_2, font=self._font(13),
         ))
@@ -832,23 +834,23 @@ class AutodartsPanel(BasePanel):
         corrections = board.get("corrections")
         accuracy = board.get("accuracy")
         cells = [
-            (darts if darts is not None else "—", "Darts"),
-            (corrections if corrections is not None else "—", "Corrections"),
+            (f"{int(darts):,}" if isinstance(darts, (int, float)) else "—", "Darts"),
+            (f"{int(corrections):,}" if isinstance(corrections, (int, float)) else "—", "Corrections"),
             (
                 f"{accuracy:.2f}%" if isinstance(accuracy, (int, float)) else "—",
                 "Accuracy",
             ),
         ]
         cell_w = (x1 - x0 - pad * 2) / len(cells)
-        cy = y1 - 36
+        cy = y1 - 40
         for index, (value, label) in enumerate(cells):
             cx = x0 + pad + cell_w * (index + 0.5)
             self._track(self.canvas.create_text(
-                cx, cy - 12, text=str(value),
+                cx, cy - 14, text=str(value),
                 fill=INK, font=self._font(20, True),
             ))
             self._track(self.canvas.create_text(
-                cx, cy + 12, text=label,
+                cx, cy + 14, text=label,
                 fill=INK_3, font=self._font(12, True),
             ))
 
@@ -862,15 +864,16 @@ class AutodartsPanel(BasePanel):
             (last, "Last played"),
         ]
         width = (x1 - x0) / len(cells)
+        mid_y = (y0 + y1) / 2
         for index, (value, label) in enumerate(cells):
             x = x0 + width * (index + 0.5)
-            value_size = 28 if isinstance(value, str) and len(str(value)) > 6 else 34
+            value_size = 26 if isinstance(value, str) and len(str(value)) > 6 else 32
             self._track(self.canvas.create_text(
-                x, y0 + (y1 - y0) * 0.40, text=str(value),
+                x, mid_y - 16, text=str(value),
                 fill=INK, font=self._font(value_size, True),
             ))
             self._track(self.canvas.create_text(
-                x, y0 + (y1 - y0) * 0.74, text=label,
+                x, mid_y + 18, text=label,
                 fill=INK_3, font=self._font(13, True),
             ))
 
@@ -912,17 +915,17 @@ class AutodartsPanel(BasePanel):
                 name_fill = INK
             name_size = 20 if crowned else 18
             self._track(self.canvas.create_text(
-                rank_x, cy - 12, anchor="w",
+                rank_x, cy - 14, anchor="w",
                 text=str(rank),
                 fill=name_fill, font=self._font(name_size, True),
             ))
             self._track(self.canvas.create_text(
-                name_x, cy - 12, anchor="w",
+                name_x, cy - 14, anchor="w",
                 text=name,
                 fill=name_fill, font=self._font(name_size, True),
             ))
             self._track(self.canvas.create_text(
-                name_x, cy + 14, anchor="w", text=format_leaderboard_detail(row),
+                name_x, cy + 16, anchor="w", text=format_leaderboard_detail(row),
                 fill=INK_2, font=self._font(12),
             ))
         if more_count > 0:
@@ -987,13 +990,14 @@ class AutodartsPanel(BasePanel):
         b = str(rivalry.get("b") or "")
         a_wins = rivalry.get("aWins") or 0
         b_wins = rivalry.get("bWins") or 0
+        mid = (y0 + y1) / 2
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, y0 + (y1 - y0) * 0.42, anchor="center",
+            (x0 + x1) / 2, mid - 18, anchor="center",
             text=f"{a}  {a_wins}  –  {b_wins}  {b}",
             fill=INK, font=self._font(22, True),
         ))
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, y0 + (y1 - y0) * 0.58, anchor="center",
+            (x0 + x1) / 2, mid + 12, anchor="center",
             text="wins each (most-played pairing)",
             fill=INK_3, font=self._font(13),
         ))
@@ -1009,7 +1013,7 @@ class AutodartsPanel(BasePanel):
         if when_label:
             line = f"{line} · {when_label}"
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, y0 + (y1 - y0) * 0.78, anchor="center",
+            (x0 + x1) / 2, mid + 40, anchor="center",
             text=line, fill=INK_2, font=self._font(14),
         ))
 
@@ -1042,7 +1046,7 @@ class AutodartsPanel(BasePanel):
                 x0 + pad, y, anchor="nw", text=line,
                 fill=color, font=self._font(16, True),
             ))
-            y += 34
+            y += 40
 
     # --- Match ----------------------------------------------------------------
 

@@ -213,23 +213,22 @@ function createAutodartsService({
   async function fetchBoardInfo() {
     const stored = credentials.load();
     const boardId = stored.boardId;
-    if (!boardId || !api?.getBoard) {
+    if (!boardId) {
       return normalizeBoardFallback(stored);
     }
     try {
+      // Prefer the boards *list* — GET /bs/v0/boards/{id} often returns detections=0.
       let raw = null;
-      const detail = await api.getBoard(boardId);
-      if (detail?.ok && detail.json) {
-        raw = Array.isArray(detail.json)
-          ? detail.json.find((row) => (row.id || row.boardId) === boardId)
-          : detail.json;
+      const list = await api.getBoards();
+      if (list?.ok) {
+        const rows = Array.isArray(list.json) ? list.json
+          : (Array.isArray(list.json?.boards) ? list.json.boards : []);
+        raw = rows.find((row) => (row.id || row.boardId) === boardId) || null;
       }
-      if (!raw) {
-        const list = await api.getBoards();
-        if (list?.ok) {
-          const rows = Array.isArray(list.json) ? list.json
-            : (Array.isArray(list.json?.boards) ? list.json.boards : []);
-          raw = rows.find((row) => (row.id || row.boardId) === boardId) || null;
+      if (!raw && api?.getBoard) {
+        const detail = await api.getBoard(boardId);
+        if (detail?.ok && detail.json && !Array.isArray(detail.json)) {
+          raw = detail.json;
         }
       }
       const { normalizeBoardInfo } = require('./autodarts-payload');
