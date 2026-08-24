@@ -137,6 +137,25 @@ function loadConfig() {
     ROOT,
     config.slideshow?.settingsFile || 'data/slideshow-settings.json',
   );
+  // The built-in Vestaboard stands in for hardware. It listens on the board's
+  // own port and speaks the Local API, so the send path is the same code
+  // whether or not a real board is on the wall.
+  config.vestaboardSimulator = {
+    enabled: fileConfig.vestaboardSimulator?.enabled !== false,
+    port: Number(
+      process.env.VESTABOARD_SIM_PORT
+      || fileConfig.vestaboardSimulator?.port
+      || 7000,
+    ),
+    host: process.env.VESTABOARD_SIM_HOST
+      || fileConfig.vestaboardSimulator?.host
+      || '0.0.0.0',
+    rateWindowSeconds: Number(fileConfig.vestaboardSimulator?.rateWindowSeconds ?? 15),
+  };
+  config.vestaboardSimulatorPath = path.resolve(
+    ROOT,
+    fileConfig.vestaboardSimulator?.stateFile || 'data/vestaboard-simulator.json',
+  );
 
   config.teslaFleet = resolveTeslaFleetConfig({ ...config, ROOT }, fileConfig);
   config.steam = resolveSteamConfig({ ...config, ROOT }, fileConfig);
