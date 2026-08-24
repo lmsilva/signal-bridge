@@ -62,13 +62,15 @@ test('explicit game limit wins and manual tours otherwise include all games', ()
   assert.equal(tours.buildTourStart({ loop: false, gameLimit: 1 }).walkedCount, 1);
 });
 
-test('display cards use absolute image URLs and never select video in Phase 1', () => {
+test('display cards prefer cover hero when screenshots exist', () => {
   const { service } = fixture();
   const tours = createRollCreditsPayload({ rollCredits: service });
   const card = tours.getCard('rc_new', { baseUrl: 'https://bridge:47810' });
-  assert.equal(card.media.selectedKind, 'screenshot');
-  assert.equal(card.media.hero.kind, 'screenshot');
-  assert.equal(card.media.hero.url, 'https://bridge:47810/roll-credits-media/rc_new/shot.jpg');
+  assert.equal(card.media.selectedKind, 'cover');
+  assert.equal(card.media.hero.kind, 'cover');
+  assert.equal(card.media.hero.url, 'https://bridge:47810/roll-credits-media/rc_new/cover.jpg');
+  assert.equal(card.media.screenshots.length, 1);
+  assert.equal(card.media.screenshots[0].kind, 'screenshot');
   assert.ok(!JSON.stringify(card.media).includes('.mp4'));
 });
 

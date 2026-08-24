@@ -351,7 +351,7 @@ def format_last_played_label(totals: dict | None) -> str:
     return label
 
 
-def format_leaderboard_detail(row: dict) -> str:
+def format_leaderboard_detail(row: dict, *, compact: bool = False) -> str:
     """Readable sub-line: checkout = finishing double; 180 = three T20s."""
     wins = int(row.get("wins") or 0)
     losses = int(row.get("losses") or 0)
@@ -363,6 +363,8 @@ def format_leaderboard_detail(row: dict) -> str:
     pct = f"{win_pct:.0f}%" if isinstance(win_pct, (int, float)) else "—"
     avg_s = f"{avg:.1f}" if isinstance(avg, (int, float)) else "—"
     hi_s = str(int(hi)) if isinstance(hi, (int, float)) and hi else "—"
+    if compact:
+        return f"{wins}–{losses} ({pct})  ·  Avg {avg_s}  ·  Out {hi_s}  ·  180×{one80}"
     return (
         f"Record {wins}–{losses} ({pct})  ·  Avg {avg_s}  ·  "
         f"Highest checkout {hi_s}  ·  180 scores {one80}  ·  {matches} games"
@@ -395,21 +397,32 @@ def format_final_scoreline(players) -> str:
 
 def board_info_row_ys(box_h: float, pad: float = 18) -> dict:
     """Vertical anchors inside the YOUR BOARD tile — keep meta clear of stats."""
-    height = max(120.0, float(box_h))
+    height = max(160.0, float(box_h))
     title_y = pad
-    name_y = pad + 28
-    meta_y = pad + 58
-    # Stats occupy the lower band only; never climb into the version line.
-    stats_top = meta_y + 28
+    name_y = pad + 26
+    meta_y = pad + 56
+    # Stats occupy the lower third only; never climb into the version line.
+    stats_top = max(meta_y + 32, height * 0.52)
     stats_bottom = height - pad
     stats_mid = (stats_top + stats_bottom) / 2
     return {
         "title": title_y,
         "name": name_y,
         "meta": meta_y,
-        "value": stats_mid - 12,
-        "label": stats_mid + 14,
+        "value": stats_mid - 14,
+        "label": stats_mid + 16,
+        "meta_clear_of_value": meta_y + 22 < (stats_mid - 14) - 8,
     }
+
+
+def leaderboard_visible_rows(box_h: float, row_count: int, *, header: float = 52, footer: float = 14) -> tuple[int, float]:
+    """How many two-line leaderboard rows fit without overlapping."""
+    usable = max(60.0, float(box_h) - header - footer)
+    min_row = 58.0
+    max_rows = max(1, int(usable // min_row))
+    visible = max(1, min(int(row_count or 0), max_rows))
+    row_h = usable / visible
+    return visible, row_h
 
 
 def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dict:
@@ -417,17 +430,18 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
     u = chrome.u
     x0, x1 = chrome.content_x, chrome.content_x + chrome.content_w
     y0, y1 = chrome.content_top + 10 * u, chrome.content_bottom - 14 * u
-    gap = 14 * u
+    gap = 12 * u
     if chrome.portrait:
-        totals_h = 110 * u
-        board_info_h = 178 * u
-        board_h = min(540 * u, (y1 - y0) * 0.36)
-        months_h = 200 * u
-        rivalry_h = 130 * u
+        avail = max(400.0, y1 - y0)
+        totals_h = 96 * u
+        board_info_h = 200 * u
+        months_h = 170 * u
+        rivalry_h = 150 * u
+        records_h = 150 * u
+        fixed = totals_h + board_info_h + months_h + rivalry_h + records_h + gap * 5
+        board_h = max(240 * u, avail - fixed)
         y = y0
-        boxes = {
-            "totals": (x0, y, x1, y + totals_h),
-        }
+        boxes = {"totals": (x0, y, x1, y + totals_h)}
         y += totals_h + gap
         boxes["board_info"] = (x0, y, x1, y + board_info_h)
         y += board_info_h + gap
@@ -435,8 +449,9 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
         y += board_h + gap
         boxes["months"] = (x0, y, x1, y + months_h)
         y += months_h + gap
-        boxes["rivalry"] = (x0, y, x1, min(y + rivalry_h, y1 - 80 * u))
-        boxes["records"] = (x0, boxes["rivalry"][3] + gap, x1, y1)
+        boxes["rivalry"] = (x0, y, x1, y + rivalry_h)
+        y += rivalry_h + gap
+        boxes["records"] = (x0, y, x1, min(y + records_h, y1))
         return boxes
     # Landscape: give the board more of the width so 12 rows can breathe.
     left_w = chrome.content_w * 0.58
@@ -445,9 +460,9 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
     }
     rx0 = x0 + left_w + gap
     totals_h = 100 * u
-    board_info_h = 178 * u
+    board_info_h = 200 * u
     months_h = 180 * u
-    rivalry_h = 130 * u
+    rivalry_h = 140 * u
     boxes["totals"] = (rx0, y0, x1, y0 + totals_h)
     boxes["board_info"] = (rx0, y0 + totals_h + gap, x1, y0 + totals_h + gap + board_info_h)
     months_top = boxes["board_info"][3] + gap
@@ -479,7 +494,11 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
     result_h = (64 * u) if finished else 0
     players = max(1, min(8, int(player_count or 2)))
     if chrome.portrait:
-        if players <= 2:
+        if finished and players <= 2:
+            # Banner already has names — keep the score row short (legs + avg only).
+            scores_h = 118 * u
+            result_h = 56 * u
+        elif players <= 2:
             scores_h = 150 * u
         elif players <= 4:
             scores_h = 200 * u
@@ -506,6 +525,7 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
             "chrome": chrome,
             "player_count": players,
             "show_strip": show_strip,
+            "omit_score_names": bool(finished and players <= 2),
         }
     settings = (x0, y0, x1, y0 + settings_h)
     cursor = y0 + settings_h + 8 * u
@@ -949,7 +969,8 @@ class AutodartsPanel(BasePanel):
 
     def _draw_leaderboard(self, box, rows: list, more_count: int):
         x0, y0, x1, y1 = box
-        pad = 22
+        pad = 18
+        portrait = (x1 - x0) < 900
         self._track(self.canvas.create_text(
             x0 + pad, y0 + pad, anchor="nw", text="BOARD LEADERBOARD",
             fill=INK_2, font=self._font(16, True),
@@ -960,17 +981,16 @@ class AutodartsPanel(BasePanel):
                 fill=INK_3, font=self._font(18),
             ))
             return
+        footer = 36 if more_count else 14
+        visible_n, row_h = leaderboard_visible_rows(y1 - y0, len(rows), footer=footer)
+        visible = list(rows)[:visible_n]
         top = y0 + 52
-        bottom = y1 - (36 if more_count else 14)
-        row_h = max(42, min(78, (bottom - top) / max(1, len(rows))))
         # Fixed columns so rank / crown / name never overlap.
         rank_x = x0 + pad
         icon_cx = rank_x + 34
         name_x = rank_x + 56
-        for index, row in enumerate(rows):
+        for index, row in enumerate(visible):
             cy = top + row_h * (index + 0.5)
-            if cy > bottom:
-                break
             rank = row.get("rank") or (index + 1)
             name = str(row.get("name") or "—")
             crowned = bool(row.get("crown")) or index == 0
@@ -979,29 +999,33 @@ class AutodartsPanel(BasePanel):
                     x0 + 10, cy - row_h * 0.42, x1 - 10, cy + row_h * 0.42,
                     fill="#1C2A1A", outline="",
                 ))
-                draw_crown(self.canvas, icon_cx, cy - 2, min(14, row_h * 0.28), track=self._track)
+                draw_crown(self.canvas, icon_cx, cy - row_h * 0.18, min(14, row_h * 0.22), track=self._track)
                 name_fill = WARN
             else:
                 name_fill = INK
-            name_size = 20 if crowned else 18
+            name_size = 18 if crowned else 16
+            name_y = cy - row_h * 0.18
+            detail_y = cy + row_h * 0.22
             self._track(self.canvas.create_text(
-                rank_x, cy - 14, anchor="w",
+                rank_x, name_y, anchor="w",
                 text=str(rank),
                 fill=name_fill, font=self._font(name_size, True),
             ))
             self._track(self.canvas.create_text(
-                name_x, cy - 14, anchor="w",
+                name_x, name_y, anchor="w",
                 text=name,
                 fill=name_fill, font=self._font(name_size, True),
             ))
             self._track(self.canvas.create_text(
-                name_x, cy + 16, anchor="w", text=format_leaderboard_detail(row),
-                fill=INK_2, font=self._font(12),
+                name_x, detail_y, anchor="w",
+                text=format_leaderboard_detail(row, compact=portrait),
+                fill=INK_2, font=self._font(11 if portrait else 12),
             ))
-        if more_count > 0:
+        hidden = max(0, len(rows) - visible_n) + max(0, int(more_count or 0))
+        if hidden > 0:
             self._track(self.canvas.create_text(
                 x0 + pad, y1 - 16, anchor="sw",
-                text=f"+ {more_count} more players",
+                text=f"+ {hidden} more players",
                 fill=INK_3, font=self._font(14, True),
             ))
 
@@ -1045,14 +1069,14 @@ class AutodartsPanel(BasePanel):
 
     def _draw_rivalry(self, box, rivalry):
         x0, y0, x1, y1 = box
-        pad = 22
+        pad = 18
         self._track(self.canvas.create_text(
             x0 + pad, y0 + pad, anchor="nw", text="HEAD-TO-HEAD",
             fill=INK_2, font=self._font(16, True),
         ))
         if not isinstance(rivalry, dict) or not rivalry.get("a"):
             self._track(self.canvas.create_text(
-                x0 + pad, y0 + 70, anchor="nw", text="Play a few rematches to fill this in",
+                x0 + pad, y0 + 56, anchor="nw", text="Play a few rematches to fill this in",
                 fill=INK_3, font=self._font(14),
             ))
             return
@@ -1060,16 +1084,18 @@ class AutodartsPanel(BasePanel):
         b = str(rivalry.get("b") or "")
         a_wins = rivalry.get("aWins") or 0
         b_wins = rivalry.get("bWins") or 0
-        mid = (y0 + y1) / 2
+        # Stack below the title — never share the title's vertical band.
+        line_y = y0 + pad + 48
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, mid - 18, anchor="center",
+            (x0 + x1) / 2, line_y, anchor="n",
             text=f"{a}  {a_wins}  –  {b_wins}  {b}",
-            fill=INK, font=self._font(22, True),
+            fill=INK, font=self._font(20, True),
+            width=max(80, int(x1 - x0 - pad * 2)),
         ))
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, mid + 12, anchor="center",
+            (x0 + x1) / 2, line_y + 36, anchor="n",
             text="wins each (most-played pairing)",
-            fill=INK_3, font=self._font(13),
+            fill=INK_3, font=self._font(12),
         ))
         last = rivalry.get("lastWinner") or ""
         when = rivalry.get("lastPlayedAt") or ""
@@ -1083,8 +1109,8 @@ class AutodartsPanel(BasePanel):
         if when_label:
             line = f"{line} · {when_label}"
         self._track(self.canvas.create_text(
-            (x0 + x1) / 2, mid + 40, anchor="center",
-            text=line, fill=INK_2, font=self._font(14),
+            (x0 + x1) / 2, min(y1 - 22, line_y + 62), anchor="n",
+            text=line, fill=INK_2, font=self._font(13),
         ))
 
     def _draw_records(self, box, records):
@@ -1155,7 +1181,10 @@ class AutodartsPanel(BasePanel):
             self._draw_final_banner(boxes, match, players)
 
         if boxes.get("portrait"):
-            self._draw_scores_row(boxes["scores"], match, players, final=finished)
+            self._draw_scores_row(
+                boxes["scores"], match, players, final=finished,
+                omit_names=bool(boxes.get("omit_score_names")),
+            )
         else:
             mid = (len(players) + 1) // 2
             self._draw_scores_column(boxes["scores_left"], match, players[:mid], 0, final=finished)
@@ -1228,7 +1257,7 @@ class AutodartsPanel(BasePanel):
             return set()
         return {i for i, p in enumerate(players) if int(p.get("legs") or 0) == best}
 
-    def _draw_scores_row(self, box, match, players, *, final: bool = False):
+    def _draw_scores_row(self, box, match, players, *, final: bool = False, omit_names: bool = False):
         x0, y0, x1, y1 = box
         n = max(1, len(players))
         width = (x1 - x0) / n
@@ -1246,6 +1275,7 @@ class AutodartsPanel(BasePanel):
             self._draw_player_block(
                 px0, y0, px1, y1, player,
                 thrower=active, crown=index in leaders, compact=n > 2, final=final,
+                omit_name=omit_names,
             )
 
     def _draw_scores_column(self, box, match, players, index_offset: int, *, final: bool = False):
@@ -1272,21 +1302,24 @@ class AutodartsPanel(BasePanel):
                 compact=len(players) > 1, final=final,
             )
 
-    def _draw_player_block(self, x0, y0, x1, y1, player, *, thrower, crown, compact, final=False):
+    def _draw_player_block(self, x0, y0, x1, y1, player, *, thrower, crown, compact, final=False,
+                           omit_name=False):
         cx = (x0 + x1) / 2
         col_w = max(80.0, x1 - x0)
         col_h = max(80.0, y1 - y0)
         name = str(player.get("name") or "—")
         prefix = "▶ " if thrower else ""
+        show_name = not omit_name
         # Names are width-capped — tall side columns must not inflate type.
         name_size = fit_player_name_size(f"{prefix}{name}", col_w, compact=compact)
-        score_size = int(min(64 if not compact else 40, max(28, min(col_w * 0.42, col_h * 0.26))))
+        score_size = int(min(64 if not compact else 40, max(28, min(col_w * 0.42, col_h * (0.34 if omit_name else 0.26)))))
         legs_size = int(min(18, max(12, col_h * 0.07)))
-        name_y = y0 + col_h * (0.14 if not compact else 0.16)
-        self._track(self.canvas.create_text(
-            cx, name_y, text=f"{prefix}{name}",
-            fill=ACCENT if thrower else INK, font=self._font(name_size, True),
-        ))
+        if show_name:
+            name_y = y0 + col_h * (0.14 if not compact else 0.16)
+            self._track(self.canvas.create_text(
+                cx, name_y, text=f"{prefix}{name}",
+                fill=ACCENT if thrower else INK, font=self._font(name_size, True),
+            ))
         if final:
             # Final card: legs are the headline number; remaining score is stale.
             headline = player.get("legs")
@@ -1294,13 +1327,13 @@ class AutodartsPanel(BasePanel):
         else:
             headline = player.get("score")
             headline_label = None
-        score_y = y0 + col_h * (0.48 if not compact else 0.52)
+        score_y = y0 + col_h * (0.38 if omit_name else (0.48 if not compact else 0.52))
         self._track(self.canvas.create_text(
             cx, score_y, text=str(headline if headline is not None else "—"),
             fill=INK, font=self._font(score_size, True),
         ))
         legs = player.get("legs")
-        legs_y = y0 + col_h * 0.72
+        legs_y = y0 + col_h * (0.68 if omit_name else 0.72)
         legs_text = headline_label or f"legs {legs if legs is not None else 0}"
         if final:
             legs_text = f"legs {legs if legs is not None else 0}"
@@ -1322,19 +1355,18 @@ class AutodartsPanel(BasePanel):
                     crown_size,
                     track=self._track,
                 )
-        if not compact:
-            avg = player.get("average")
-            last = player.get("lastTurnPoints")
-            bits = []
-            if isinstance(avg, (int, float)):
-                bits.append(f"avg {avg:.1f}")
-            if last is not None and not final:
-                bits.append(f"last {last}")
-            if bits:
-                self._track(self.canvas.create_text(
-                    cx, y0 + col_h * 0.88, text=" · ".join(bits),
-                    fill=INK_3, font=self._font(max(12, int(legs_size * 0.85))),
-                ))
+        avg = player.get("average")
+        last = player.get("lastTurnPoints")
+        bits = []
+        if isinstance(avg, (int, float)):
+            bits.append(f"avg {avg:.1f}")
+        if last is not None and not final:
+            bits.append(f"last {last}")
+        if bits and (omit_name or not compact):
+            self._track(self.canvas.create_text(
+                cx, y0 + col_h * (0.88 if omit_name else 0.88), text=" · ".join(bits),
+                fill=INK_3, font=self._font(max(12, int(legs_size * 0.85))),
+            ))
 
     def _draw_turn_markers(self, match: dict, cx: float, cy: float, outer_px: float):
         turn = match.get("turn") or {}

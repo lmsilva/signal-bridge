@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Autodarts FINAL hide empty strip)
+**Last updated:** 2026-08-23 (portrait layout cleanup)
 
 ---
 
@@ -267,6 +267,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-23: **Portrait Autodarts + Roll Credits cleanup** — dashboard/FINAL no longer overlap text in portrait; leaderboard rows are height-capped; FINAL omits duplicate names under the banner; Roll Credits counters use a 2×2 grid + notes band; showcase prefers cover hero and keeps a real screenshot strip. Ship: portable client rebuild required (not run).
 
 - 2026-08-23: **Autodarts FINAL hides empty turn strip** — no more “Match finished / — — — = 0” when there is no game-shot or last-turn content; caption never overlaps dart slots. Ship: portable client rebuild required (not run).
 
