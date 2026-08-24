@@ -312,6 +312,7 @@ def format_last_played_label(totals: dict | None) -> str:
 
 
 def format_leaderboard_detail(row: dict) -> str:
+    """Readable sub-line: checkout = finishing double; 180 = three T20s."""
     wins = int(row.get("wins") or 0)
     losses = int(row.get("losses") or 0)
     win_pct = row.get("winPct")
@@ -324,7 +325,7 @@ def format_leaderboard_detail(row: dict) -> str:
     hi_s = str(int(hi)) if isinstance(hi, (int, float)) and hi else "—"
     return (
         f"Record {wins}–{losses} ({pct})  ·  Avg {avg_s}  ·  "
-        f"Best out {hi_s}  ·  180s {one80}  ·  {matches} games"
+        f"Highest checkout {hi_s}  ·  180 scores {one80}  ·  {matches} games"
     )
 
 
@@ -800,6 +801,10 @@ class AutodartsPanel(BasePanel):
         top = y0 + 52
         bottom = y1 - (36 if more_count else 14)
         row_h = max(42, min(78, (bottom - top) / max(1, len(rows))))
+        # Fixed columns so rank / crown / name never overlap.
+        rank_x = x0 + pad
+        icon_cx = rank_x + 34
+        name_x = rank_x + 56
         for index, row in enumerate(rows):
             cy = top + row_h * (index + 0.5)
             if cy > bottom:
@@ -812,16 +817,19 @@ class AutodartsPanel(BasePanel):
                     x0 + 10, cy - row_h * 0.42, x1 - 10, cy + row_h * 0.42,
                     fill="#1C2A1A", outline="",
                 ))
-                draw_crown(self.canvas, x0 + pad + 14, cy, min(16, row_h * 0.32), track=self._track)
-                name_x = x0 + pad + 36
+                draw_crown(self.canvas, icon_cx, cy - 2, min(14, row_h * 0.28), track=self._track)
                 name_fill = WARN
             else:
-                name_x = x0 + pad + 8
                 name_fill = INK
             name_size = 20 if crowned else 18
             self._track(self.canvas.create_text(
+                rank_x, cy - 12, anchor="w",
+                text=str(rank),
+                fill=name_fill, font=self._font(name_size, True),
+            ))
+            self._track(self.canvas.create_text(
                 name_x, cy - 12, anchor="w",
-                text=f"{rank}  {name}",
+                text=name,
                 fill=name_fill, font=self._font(name_size, True),
             ))
             self._track(self.canvas.create_text(
@@ -935,18 +943,17 @@ class AutodartsPanel(BasePanel):
         hi_who = hi.get("player") or ""
         hi_s = str(int(hi_v)) if isinstance(hi_v, (int, float)) and hi_v else "—"
         lines = [
-            f"Best match average  {avg_v}" + (f"  ·  {avg_who}" if avg_who else ""),
-            f"Best checkout       {hi_s}" + (f"  ·  {hi_who}" if hi_who else ""),
-            f"Total 180s          {int(total180)}",
+            (f"Best match average  {avg_v}" + (f"  ·  {avg_who}" if avg_who else ""), INK),
+            (f"Highest checkout    {hi_s}" + (f"  ·  {hi_who}" if hi_who else ""), INK),
+            (f"Total 180 scores    {int(total180)}", WARN),
         ]
         y = y0 + 56
-        for line in lines:
+        for line, color in lines:
             self._track(self.canvas.create_text(
                 x0 + pad, y, anchor="nw", text=line,
-                fill=INK if "180" not in line else WARN,
-                font=self._font(16 if "180" not in line else 22, True),
+                fill=color, font=self._font(16, True),
             ))
-            y += 34 if "180" not in line else 40
+            y += 34
 
     # --- Match ----------------------------------------------------------------
 
@@ -1015,14 +1022,16 @@ class AutodartsPanel(BasePanel):
             self._draw_turn_strip(boxes["strip"], match.get("turn") or {}, u=u)
 
     def _draw_final_banner(self, boxes, match, players):
-        """Winner / legs result — only inside the reserved result band."""
+        """Winner / legs result — crown sits left of the scoreline with a gap."""
         box = boxes.get("result")
         if not box:
             return
         x0, y0, x1, y1 = box
         winner = next((p for p in players if p.get("isWinner")), None)
         if not winner and players:
-            winner = max(players, key=lambda p: p.get("legs") or 0)
+            best_legs = max(int(p.get("legs") or 0) for p in players)
+            if best_legs > 0:
+                winner = max(players, key=lambda p: p.get("legs") or 0)
         if len(players) >= 2:
             label = (
                 f"{players[0].get('name')}   {players[0].get('legs') or 0}"
@@ -1032,12 +1041,24 @@ class AutodartsPanel(BasePanel):
             label = "  —  ".join(f"{p.get('name')} {p.get('legs') or 0}" for p in players)
         cx = (x0 + x1) / 2
         cy = (y0 + y1) / 2
-        if winner:
-            draw_crown(self.canvas, cx - min(220, (x1 - x0) * 0.28), cy, 18, track=self._track)
-        self._track(self.canvas.create_text(
+        font = self._font(28, True)
+        text_id = self._track(self.canvas.create_text(
             cx, cy, text=label,
-            fill=WARN if winner else INK, font=self._font(28, True),
+            fill=WARN if winner else INK, font=font,
         ))
+        if winner:
+            bbox = self.canvas.bbox(text_id)
+            if bbox:
+                crown_size = 16
+                gap = 12
+                # Place crown fully left of the scoreline (never over the name).
+                draw_crown(
+                    self.canvas,
+                    bbox[0] - gap - crown_size * 0.55,
+                    cy,
+                    crown_size,
+                    track=self._track,
+                )
 
     def _leg_leader_indices(self, players: list) -> set[int]:
         if not players:
@@ -1119,16 +1140,27 @@ class AutodartsPanel(BasePanel):
         ))
         legs = player.get("legs")
         legs_y = y0 + col_h * 0.72
-        if crown and not final:
-            draw_crown(self.canvas, cx - 40, legs_y, max(12, legs_size - 2), track=self._track)
         legs_text = headline_label or f"legs {legs if legs is not None else 0}"
-        if final and crown:
-            draw_crown(self.canvas, cx - 48, legs_y, max(12, legs_size - 2), track=self._track)
-        self._track(self.canvas.create_text(
-            cx + (12 if crown else 0), legs_y,
-            text=legs_text if not final else (f"legs {legs if legs is not None else 0}"),
-            fill=WARN if crown else INK_2, font=self._font(legs_size, True),
+        if final:
+            legs_text = f"legs {legs if legs is not None else 0}"
+        legs_font = self._font(legs_size, True)
+        legs_id = self._track(self.canvas.create_text(
+            cx, legs_y,
+            text=legs_text,
+            fill=WARN if crown else INK_2, font=legs_font,
         ))
+        if crown:
+            bbox = self.canvas.bbox(legs_id)
+            if bbox:
+                crown_size = max(12, legs_size - 2)
+                gap = 10
+                draw_crown(
+                    self.canvas,
+                    bbox[0] - gap - crown_size * 0.55,
+                    legs_y,
+                    crown_size,
+                    track=self._track,
+                )
         if not compact:
             avg = player.get("average")
             last = player.get("lastTurnPoints")

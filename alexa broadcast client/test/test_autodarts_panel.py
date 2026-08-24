@@ -242,7 +242,9 @@ class LabelFormatTests(unittest.TestCase):
         })
         self.assertIn("Record 11–4", line)
         self.assertIn("Avg 25.0", line)
-        self.assertIn("Best out 48", line)
+        self.assertIn("Highest checkout 48", line)
+        self.assertIn("180 scores 0", line)
+        self.assertNotIn("Best out", line)
 
     def test_record_average(self):
         self.assertEqual(format_record_average(36.3), "36.3")
