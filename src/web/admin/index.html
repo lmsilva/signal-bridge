@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal77">
+  <link rel="stylesheet" href="styles.css?v=signal78">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1268,6 +1268,43 @@
         <p class="hint" id="bridge-meta"></p>
       </div>
     </section>
+
+    <section class="tab-panel" id="tab-board">
+      <div class="card-grid">
+        <div class="card vb-head-card">
+          <div class="vb-head">
+            <div class="vb-head-text">
+              <div class="auth-name">Vestaboard simulator</div>
+              <div class="auth-detail" id="vb-port">Local API on port 7000</div>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-vb-toggle">Turn off</button>
+          </div>
+          <div class="vb-pills">
+            <span class="status-pill ok" id="vb-pill-online">Online</span>
+            <span class="status-pill" id="vb-pill-rate">Next flip now</span>
+            <span class="status-pill warn" id="vb-pill-quiet" hidden>Quiet hours</span>
+          </div>
+        </div>
+
+        <div class="vb-bezel" id="vb-bezel">
+          <div class="vb-grid" id="vb-grid"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-label">Queue</div>
+          <div class="vb-list" id="vb-queue">
+            <p class="hint">Nothing queued.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-label">Recent API calls</div>
+          <div class="vb-list" id="vb-calls">
+            <p class="hint">No calls yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <nav class="tab-bar">
@@ -1294,6 +1331,10 @@
     <button class="tab-btn" data-tab="credits">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a4 4 0 0 0 4 4M16 6h3v1a4 4 0 0 1-4 4M12 12v4M8 20h8M9 16h6v4H9z"/></svg>
       <span class="tab-label"><span class="tab-label-full">Roll Credits</span><span class="tab-label-short">Credits</span></span>
+    </button>
+    <button class="tab-btn" data-tab="board">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Simulator</span><span class="tab-label-short">Board</span></span>
     </button>
     <button class="tab-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
@@ -1557,6 +1598,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal77"></script>
+  <script src="app.js?v=signal78"></script>
 </body>
 </html>
