@@ -18,9 +18,14 @@ function setup() {
     youtubeUrl: 'https://youtube.test/watch?v=1',
     provider: { igdbId: 3 },
   };
+  let searchRows = [];
+  const fetchCalls = [];
   const providers = {
-    search: async () => [],
-    fetchGame: async () => fetched,
+    search: async () => searchRows,
+    fetchGame: async (candidate, options) => {
+      fetchCalls.push({ candidate, options });
+      return fetched;
+    },
   };
   const settings = {
     get: () => ({
@@ -33,7 +38,9 @@ function setup() {
   return {
     store,
     queued,
+    fetchCalls,
     setFetched: (value) => { fetched = value; },
+    setSearchRows: (rows) => { searchRows = rows; },
     scraper: createRollCreditsScraper({ store, providers, settings, jobs }),
   };
 }
@@ -81,4 +88,61 @@ test('re-scrape scopes preserve edits and user media', async () => {
   assert.ok(result.media.some((row) => row.id === 'upload'));
   assert.ok(result.media.some((row) => row.id === 'youtube'));
   assert.ok(!result.media.some((row) => row.id === 'old'));
+});
+
+test('re-scrape rematches by title and system, keeps system, accepts scope arrays', async () => {
+  const { store, scraper, setFetched, setSearchRows, fetchCalls } = setup();
+  const created = store.createGame({
+    title: 'Rambo',
+    system: 'arcade',
+    meta: { description: '' },
+    provider: { igdbId: 999 }, // stale NES id
+  });
+  setSearchRows([
+    { provider: 'igdb', providerId: 111, name: 'Rambo', platforms: ['nes'] },
+    { provider: 'igdb', providerId: 222, name: 'Rambo', platforms: ['arcade'] },
+  ]);
+  setFetched({
+    name: 'Rambo',
+    meta: { description: 'Arcade light gun shooter' },
+    provider: { igdbId: 222 },
+    coverUrl: 'arcade-cover.jpg',
+  });
+  const result = await scraper.rescrape(created.id, {
+    scopes: ['metadata', 'cover'],
+    mode: 'fill-gaps',
+  });
+  assert.equal(result.system, 'arcade');
+  assert.equal(result.title, 'Rambo');
+  assert.equal(result.provider.igdbId, 222);
+  assert.equal(result.meta.description, 'Arcade light gun shooter');
+  assert.equal(fetchCalls[0].candidate.providerId, 222);
+  assert.equal(fetchCalls[0].options.system, 'arcade');
+  assert.ok(result.media.some((row) => row.kind === 'cover'));
+});
+
+test('re-scrape uses title/system overrides from the edit form', async () => {
+  const { store, scraper, setFetched, setSearchRows, fetchCalls } = setup();
+  const created = store.createGame({
+    title: 'Rambo',
+    system: 'nes',
+    provider: { igdbId: 111 },
+  });
+  setSearchRows([
+    { provider: 'igdb', providerId: 222, name: 'Rambo', platforms: ['arcade'] },
+  ]);
+  setFetched({
+    meta: { description: 'Arcade entry' },
+    provider: { igdbId: 222 },
+  });
+  const result = await scraper.rescrape(created.id, {
+    scopes: { metadata: true },
+    mode: 'fill-gaps',
+    title: 'Rambo',
+    system: 'arcade',
+  });
+  assert.equal(result.system, 'arcade');
+  assert.equal(result.provider.igdbId, 222);
+  assert.equal(fetchCalls[0].options.system, 'arcade');
+  assert.equal(fetchCalls[0].options.title, 'Rambo');
 });
