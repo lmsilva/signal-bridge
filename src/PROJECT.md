@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-24 (Roll Credits video loops, clip trimming, admin sheet dismissal)
+**Last updated:** 2026-08-24 (Docker yt-dlp PyPI flake fallback)
 
 ---
 
@@ -534,6 +534,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-24: **Docker build survives QNAP DNS flakes on yt-dlp** — `./recreate.sh --build` was dying at the Python venv step with `Could not find a version that satisfies yt-dlp==2026.8.19 (from versions: none)`. That message is a red herring: the pin is real on PyPI; the builder lost DNS mid-pip (`[Errno -3] Try again`). Pip now uses `--retries 10 --timeout 60`, and if the PyPI install still fails the Dockerfile drops in the matching GitHub release binary (`YT_DLP_GITHUB_TAG=2026.08.19`, kept in sync with `requirements-roll-credits.txt`). `yt-dlp --version` runs at build time so a silent miss cannot ship. Deploy: `./recreate.sh --build`.
 
 - 2026-08-24: **Roll Credits video reaches the wall as a looping preview** — the display client cannot decode video, so every clip is reduced at ingest to a **poster JPEG + short silent animated WebP** (`renderVideoPreview` in `roll-credits-media.js`, ffmpeg → raw RGBA → sharp; `ffmpeg` added to the `Dockerfile`). Video is back in `DISPLAY_MEDIA_KINDS` and wins the hero slot when the game's media priority lists it first, travelling as `hero.url` = the WebP with `animated: true` and `hero.thumbUrl` = the poster — the source `.mp4` is never sent. A clip with no rendered preview is skipped rather than shipped. Deploy: `./recreate.sh --build` (new ffmpeg dependency). Tests: `test/roll-credits-media.test.js`, `test/roll-credits-payload.test.js`.
 

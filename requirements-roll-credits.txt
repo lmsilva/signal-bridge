@@ -1,1 +1,5 @@
+# Roll Credits YouTube downloads. Keep this pin in lockstep with
+# Dockerfile ENV YT_DLP_GITHUB_TAG (PyPI 2026.8.19 ↔ GitHub tag 2026.08.19).
+# The image prefers this PyPI install and falls back to the GitHub binary when
+# QNAP DNS flakes mid-build.
 yt-dlp==2026.8.19
