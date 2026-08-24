@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-24 (Roll Credits induction order + management sorting)
+**Last updated:** 2026-08-24 (Roll Credits video loops, clip trimming, admin sheet dismissal)
 
 ---
 
@@ -128,9 +128,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/roll-credits-credentials.js` | Encrypted IGDB client id/secret persistence; `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` environment values take precedence and block admin replacement |
 | `src/roll-credits-providers.js` | Roll Credits IGDB + Steam adapters: Twitch token caching, 4/s IGDB spacing, platform mapping, negative lookup caching, provider-order fallback, and gap-only enrichment |
 | `src/roll-credits-scraper.js` | Add-from-candidate/manual flows plus scoped re-scrape modes; scraper metadata never writes difficulty and scrape replacement preserves uploads/YouTube rows |
-| `src/roll-credits-media.js` | `data/roll-credits-media/` paths, 360px sharp thumbs, capped image uploads, direct/yt-dlp downloads, priority resolution, disk usage, and orphan cleanup |
+| `src/roll-credits-media.js` | `data/roll-credits-media/` paths, 360px sharp thumbs, capped image uploads, direct/yt-dlp downloads, **video poster + looping animated-WebP previews via ffmpeg (`renderVideoPreview`, trim-aware `previewWindow`)**, priority resolution, disk usage, and orphan cleanup |
 | `src/roll-credits-jobs.js` | Restart-safe sequential media download queue; persists ready/failed state and exposes change listeners for later SSE wiring |
-| `src/roll-credits-service.js` | Roll Credits facade joining store, settings, credentials, providers, scraper, media, and jobs; owns API-facing change events, upload/delete/retry helpers, and maintenance/status hooks |
+| `src/roll-credits-service.js` | Roll Credits facade joining store, settings, credentials, providers, scraper, media, and jobs; owns API-facing change events, upload/delete/retry/**trim** helpers, and maintenance/status hooks |
 | `src/autodarts-settings.js` | Live/dashboard/last-match/sync defaults in `data/autodarts-settings.json` |
 | `src/autodarts-credentials.js` | Encrypted Autodarts tokens + board choice; `AUTODARTS_EMAIL`/`PASSWORD` env wins with 409 overwrite |
 | `src/autodarts-api.js` | Read-only HTTP client (GET + `auth/v1` login / device / refresh only; Keycloak removed) |
@@ -534,6 +534,12 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-24: **Roll Credits video reaches the wall as a looping preview** — the display client cannot decode video, so every clip is reduced at ingest to a **poster JPEG + short silent animated WebP** (`renderVideoPreview` in `roll-credits-media.js`, ffmpeg → raw RGBA → sharp; `ffmpeg` added to the `Dockerfile`). Video is back in `DISPLAY_MEDIA_KINDS` and wins the hero slot when the game's media priority lists it first, travelling as `hero.url` = the WebP with `animated: true` and `hero.thumbUrl` = the poster — the source `.mp4` is never sent. A clip with no rendered preview is skipped rather than shipped. Deploy: `./recreate.sh --build` (new ffmpeg dependency). Tests: `test/roll-credits-media.test.js`, `test/roll-credits-payload.test.js`.
+
+- 2026-08-24: **Pick the part of a clip that loops** — `POST /api/roll-credits/games/:id/media/:mediaId/trim` (`{ trimStart, trimEnd }`, empty body restores the automatic window) stores the range on the media row and rebuilds the preview from it; `previewWindow` honours a hand-set range, clamps it to the clip and caps it at `PREVIEW_MAX_SECONDS` (15s) so a long trim cannot exhaust memory. Media serving now answers **HTTP Range** requests, which is what lets the admin's `<video>` scrub while choosing the range. Tests: `test/roll-credits-trim.test.js`, `test/web-server.test.js`, `test/roll-credits-media.test.js`.
+
+- 2026-08-24: **Roll Credits admin sheets close like the photo lightbox** — Escape or a click on the dimmed backdrop dismisses any Roll Credits sheet; the edit sheet asks **Save and close / Discard / Keep editing** when there are unsaved edits instead of refusing to close. Media rows open a preview (cover, screenshots, and the stored video with controls) straight from the edit sheet, with the clip trimmer inline for videos. The toolbar row pins every control to one height (`--credits-control-h`) and moves the Sort caption inline, fixing the stair-stepped Grid/List · Sort · Reorder · Zoom · Select alignment. Cache-bust `?v=signal77`. Tests: `test/web-server.test.js`.
 
 - 2026-08-24: **Roll Credits induction order you control** — induction numbers are now **derived from the beaten date** instead of insertion order: back-dating a game slots it between the right neighbours, #1 is the oldest clear, the highest number is the newest, and games with no date sink to the bottom of the list (lowest numbers). `reorderGames(ids)` takes a list in display order and gives those games *the slots they already hold* in the new order, so dragging inside a filtered or paginated view is safe; the arrangement persists in `data/roll-credits.json` (`order` + `orderManual`) and later additions still slot in chronologically around it. `resetInductionOrder()` returns to pure beat-date order. New route `POST /api/roll-credits/games/reorder` (`{ ids }` or `{ reset: true }`). `listGames` gained **difficulty / releaseDate / maxPlayers** sorts and now always sinks unknown values to the bottom whichever direction you pick, and returns `orderManual`. The wall's `recent`/`oldest` tour order reads induction directly so a manual arrangement carries to the display. Admin page: a Sort dropdown (induction, beaten, difficulty, title, system, release, players, added) that works in grid **and** list, plus a **Reorder** mode with drag-and-drop and ↑ ↓ steppers in both views and a "Reset to beaten-date order" button. Cache-bust `?v=signal76`. Deploy: `./recreate.sh`. Tests: `test/roll-credits-store.test.js`, `test/web-server.test.js`.
 

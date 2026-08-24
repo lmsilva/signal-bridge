@@ -5683,6 +5683,7 @@
   let creditsCandidate = null;
   let creditsAddBeatenAt = '';
   let creditsPendingDelete = null;
+  let creditsPreviewMedia = null;
   let creditsRescrapeIds = [];
   let creditsSettingsLoaded = false;
   let creditsResizeTimer = null;
@@ -6413,6 +6414,59 @@
     if ($('btn-credits-edit-save')) $('btn-credits-edit-save').disabled = false;
   }
 
+  // Listed bottom-of-stack first: the last visible one is what Escape or a
+  // backdrop click should dismiss.
+  const CREDITS_SHEET_IDS = [
+    'credits-add-sheet',
+    'credits-edit-sheet',
+    'credits-preview-sheet',
+    'credits-delete-sheet',
+    'credits-rescrape-sheet',
+    'credits-unsaved-sheet',
+  ];
+
+  function creditsTopSheetId() {
+    for (let index = CREDITS_SHEET_IDS.length - 1; index >= 0; index -= 1) {
+      const node = $(CREDITS_SHEET_IDS[index]);
+      if (node && !node.hidden) return CREDITS_SHEET_IDS[index];
+    }
+    return null;
+  }
+
+  function closeCreditsPreview() {
+    const video = $('credits-preview-video');
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+    const img = $('credits-preview-img');
+    if (img) img.removeAttribute('src');
+    creditsPreviewMedia = null;
+    if ($('credits-preview-sheet')) $('credits-preview-sheet').hidden = true;
+  }
+
+  function requestCreditsEditClose() {
+    if (creditsEditDirty) {
+      $('credits-unsaved-sheet').hidden = false;
+      return;
+    }
+    $('credits-edit-sheet').hidden = true;
+  }
+
+  function closeCreditsSheetById(id) {
+    if (id === 'credits-edit-sheet') {
+      requestCreditsEditClose();
+      return;
+    }
+    if (id === 'credits-preview-sheet') {
+      closeCreditsPreview();
+      return;
+    }
+    const node = $(id);
+    if (node) node.hidden = true;
+  }
+
   function renderCreditsPriorities() {
     $('credits-global-priority').innerHTML = creditsPriorityHtml(creditsGlobalPriority, 'global');
     $('credits-game-priority').innerHTML = creditsPriorityHtml(creditsGamePriority, 'game');
@@ -6474,15 +6528,24 @@
   function renderCreditsMedia() {
     const media = creditsEditGame?.media || [];
     $('credits-media-list').innerHTML = media.length ? media.map((row, index) => {
+      const label = CREDITS_PRIORITY_LABELS[row.kind] || row.kind;
+      const canPreview = creditsCanPreviewMedia(row);
+      const thumb = canPreview
+        ? `<button type="button" class="credits-media-thumb-btn" data-media-action="preview" data-media-index="${index}" aria-label="Preview ${escapeHtml(label)}">${creditsMediaThumbHtml(row)}</button>`
+        : creditsMediaThumbHtml(row);
+      const trimmed = row.kind === 'video' && (row.trimStart !== null && row.trimStart !== undefined)
+        ? ` · clip ${creditsClock(row.trimStart) || '0:00'}–${creditsClock(row.trimEnd) || 'end'}`
+        : '';
       return `<div class="credits-media-row" draggable="true" data-media-id="${escapeHtml(row.id)}" data-media-index="${index}">
         <span class="credits-media-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
-        ${creditsMediaThumbHtml(row)}
-        <div class="credits-media-copy"><strong>${escapeHtml(CREDITS_PRIORITY_LABELS[row.kind] || row.kind)}</strong>
-          ${escapeHtml(row.source || 'unknown')} · ${escapeHtml(row.status || 'ready')}${row.resolution ? ` · ${row.resolution}p` : ''}
+        ${thumb}
+        <div class="credits-media-copy"><strong>${escapeHtml(label)}</strong>
+          ${escapeHtml(row.source || 'unknown')} · ${escapeHtml(row.status || 'ready')}${row.resolution ? ` · ${row.resolution}p` : ''}${trimmed}
           ${row.statusDetail ? `<br>${escapeHtml(row.statusDetail)}` : ''}</div>
         <div class="credits-media-actions">
           <button type="button" class="credits-mini-btn" data-media-action="up" data-media-index="${index}" aria-label="Move up"${index === 0 ? ' disabled' : ''}>↑</button>
           <button type="button" class="credits-mini-btn" data-media-action="down" data-media-index="${index}" aria-label="Move down"${index >= media.length - 1 ? ' disabled' : ''}>↓</button>
+          ${canPreview ? `<button type="button" class="credits-mini-btn" data-media-action="preview" data-media-index="${index}">${row.kind === 'video' ? 'Preview / trim' : 'Preview'}</button>` : ''}
           <button type="button" class="credits-mini-btn" data-media-action="hide" data-media-index="${index}">${row.hidden ? 'Show' : 'Hide'}</button>
           ${row.status === 'failed' ? `<button type="button" class="credits-mini-btn" data-media-action="retry" data-media-index="${index}">Retry</button>` : ''}
           <button type="button" class="credits-mini-btn" data-media-action="delete" data-media-index="${index}">Delete</button>
@@ -6534,10 +6597,139 @@
     return true;
   }
 
+  function creditsClock(seconds) {
+    const total = Number(seconds);
+    if (!Number.isFinite(total) || total <= 0) return '';
+    const mins = Math.floor(total / 60);
+    const secs = Math.round(total % 60);
+    return `${mins}:${String(Math.min(59, secs)).padStart(2, '0')}`;
+  }
+
+  function creditsTrimStatus(message, tone = '') {
+    const node = $('credits-trim-status');
+    if (!node) return;
+    node.textContent = message || '';
+    node.className = `credits-trim-status${tone ? ` is-${tone}` : ''}`;
+  }
+
+  function creditsPreviewStill(row) {
+    if (row.kind !== 'video') return creditsMediaUrl(row.path || row.thumbPath);
+    return creditsMediaUrl(row.thumbPath) || creditsYoutubeThumbUrl(row.youtubeUrl);
+  }
+
+  function creditsCanPreviewMedia(row) {
+    return Boolean(creditsMediaUrl(row?.path) || creditsPreviewStill(row || {}));
+  }
+
+  function openCreditsPreview(index) {
+    const row = (creditsEditGame?.media || [])[index];
+    if (!row) return;
+    creditsPreviewMedia = { ...row, index };
+
+    const img = $('credits-preview-img');
+    const video = $('credits-preview-video');
+    const isVideo = row.kind === 'video';
+    const fileUrl = creditsMediaUrl(row.path);
+
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    if (isVideo && fileUrl) {
+      video.src = fileUrl;
+      video.hidden = false;
+      img.hidden = true;
+      img.removeAttribute('src');
+    } else {
+      const still = creditsPreviewStill(row);
+      img.src = still;
+      img.hidden = !still;
+      video.hidden = true;
+    }
+
+    $('credits-preview-title').textContent = CREDITS_PRIORITY_LABELS[row.kind] || row.kind;
+    const parts = [row.source || 'unknown', row.status || 'ready'];
+    if (row.resolution) parts.push(`${row.resolution}p`);
+    const clock = creditsClock(row.durationSeconds);
+    if (clock) parts.push(clock);
+    if (isVideo && !fileUrl) parts.push('not downloaded yet');
+    $('credits-preview-caption').textContent = parts.join(' · ');
+
+    const canTrim = isVideo && Boolean(fileUrl);
+    $('credits-trim').hidden = !canTrim;
+    if (canTrim) {
+      const start = Number(row.trimStart);
+      const end = Number(row.trimEnd);
+      $('credits-trim-start').value = Number.isFinite(start) && row.trimStart !== null ? String(start) : '0';
+      $('credits-trim-end').value = Number.isFinite(end) && row.trimEnd ? String(end) : '';
+      creditsTrimStatus(row.trimStart === null || row.trimStart === undefined
+        ? 'No range picked yet — the display takes a few seconds from near the start.'
+        : 'Using your saved range.');
+    }
+    $('credits-preview-sheet').hidden = false;
+  }
+
+  function creditsTrimTimeFromVideo(fieldId) {
+    const video = $('credits-preview-video');
+    if (!video || video.hidden || !Number.isFinite(video.currentTime)) return;
+    $(fieldId).value = (Math.round(video.currentTime * 10) / 10).toFixed(1);
+    creditsTrimStatus('Range changed — save it to rebuild the wall clip.');
+  }
+
+  async function saveCreditsTrim({ clear = false } = {}) {
+    if (!creditsPreviewMedia || !creditsEditGame) return;
+    const startRaw = clear ? '' : $('credits-trim-start').value.trim();
+    const endRaw = clear ? '' : $('credits-trim-end').value.trim();
+    const trimStart = startRaw === '' ? null : Number(startRaw);
+    const trimEnd = endRaw === '' ? null : Number(endRaw);
+    if ((trimStart !== null && !Number.isFinite(trimStart))
+      || (trimEnd !== null && !Number.isFinite(trimEnd))) {
+      creditsTrimStatus('Enter the start and end in seconds.', 'bad');
+      return;
+    }
+    if (trimStart !== null && trimEnd !== null && trimEnd <= trimStart) {
+      creditsTrimStatus('The end has to come after the start.', 'bad');
+      return;
+    }
+
+    const button = $('btn-credits-trim-save');
+    button.disabled = true;
+    creditsTrimStatus('Rebuilding the wall clip…');
+    try {
+      const { media: updated } = await apiPost(
+        `${CREDITS_ROUTE}/games/${encodeURIComponent(creditsEditGame.id)}`
+        + `/media/${encodeURIComponent(creditsPreviewMedia.id)}/trim`,
+        { trimStart, trimEnd },
+      );
+      const rows = creditsEditGame.media || [];
+      const at = rows.findIndex((item) => item.id === updated.id);
+      if (at >= 0) rows[at] = updated;
+      creditsPreviewMedia = { ...updated, index: creditsPreviewMedia.index };
+      if (clear) {
+        $('credits-trim-start').value = '0';
+        $('credits-trim-end').value = '';
+      }
+      renderCreditsMedia();
+      creditsTrimStatus(
+        updated.previewPath
+          ? (clear ? 'Back to the automatic range.' : 'Clip range saved.')
+          : (updated.statusDetail || 'Saved, but the clip could not be rebuilt.'),
+        updated.previewPath ? 'good' : 'bad',
+      );
+    } catch (error) {
+      creditsTrimStatus(error.message || 'Could not save the clip range.', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   function updateCreditsMedia(action, index) {
     const media = creditsEditGame?.media || [];
     const row = media[index];
     if (!row) return;
+    if (action === 'preview') {
+      openCreditsPreview(index);
+      return;
+    }
     if (action === 'hide') {
       row.hidden = !row.hidden;
       markCreditsEditDirty();
@@ -7058,14 +7250,42 @@
     $('btn-credits-prev')?.addEventListener('click', () => { creditsPage -= 1; loadCredits(); });
     $('btn-credits-next')?.addEventListener('click', () => { creditsPage += 1; loadCredits(); });
     document.querySelectorAll('[data-close-credits-sheet]').forEach((button) => {
-      button.addEventListener('click', () => {
-        if (button.dataset.closeCreditsSheet === 'credits-edit-sheet' && creditsEditDirty) {
-          toast('Save the game before closing, or reload it to discard changes', 'bad');
-          return;
-        }
-        $(button.dataset.closeCreditsSheet).hidden = true;
+      button.addEventListener('click', () => closeCreditsSheetById(button.dataset.closeCreditsSheet));
+    });
+    // Clicking the dimmed area outside a card dismisses it, matching the photo
+    // lightbox. The unsaved prompt stays put so the choice is deliberate.
+    CREDITS_SHEET_IDS.filter((id) => id !== 'credits-unsaved-sheet').forEach((id) => {
+      $(id)?.addEventListener('click', (event) => {
+        if (event.target === $(id)) closeCreditsSheetById(id);
       });
     });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      const top = creditsTopSheetId();
+      if (!top) return;
+      event.preventDefault();
+      if (top === 'credits-unsaved-sheet') {
+        $('credits-unsaved-sheet').hidden = true;
+        return;
+      }
+      closeCreditsSheetById(top);
+    });
+    $('btn-credits-unsaved-cancel')?.addEventListener('click', () => {
+      $('credits-unsaved-sheet').hidden = true;
+    });
+    $('btn-credits-unsaved-discard')?.addEventListener('click', () => {
+      creditsEditDirty = false;
+      $('credits-unsaved-sheet').hidden = true;
+      $('credits-edit-sheet').hidden = true;
+    });
+    $('btn-credits-unsaved-save')?.addEventListener('click', () => {
+      $('credits-unsaved-sheet').hidden = true;
+      saveCreditsEdit();
+    });
+    $('btn-credits-trim-start')?.addEventListener('click', () => creditsTrimTimeFromVideo('credits-trim-start'));
+    $('btn-credits-trim-end')?.addEventListener('click', () => creditsTrimTimeFromVideo('credits-trim-end'));
+    $('btn-credits-trim-save')?.addEventListener('click', () => saveCreditsTrim());
+    $('btn-credits-trim-clear')?.addEventListener('click', () => saveCreditsTrim({ clear: true }));
     $('btn-credits-add-search')?.addEventListener('click', searchCreditsCandidates);
     $('credits-add-search')?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') searchCreditsCandidates();

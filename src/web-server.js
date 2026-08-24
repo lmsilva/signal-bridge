@@ -2633,7 +2633,25 @@ function createWebServer({
     sendJson(res, status, { ok: false, error: message });
   }
 
-  function handleRollCreditsMediaServe(pathname, res) {
+  /** Parses a single `bytes=a-b` range against a known size, or null. */
+  function parseByteRange(header, size) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(String(header || '').trim());
+    if (!match || (!match[1] && !match[2])) return null;
+    let start;
+    let end;
+    if (match[1]) {
+      start = Number(match[1]);
+      end = match[2] ? Number(match[2]) : size - 1;
+    } else {
+      // Suffix form: the last N bytes.
+      start = Math.max(0, size - Number(match[2]));
+      end = size - 1;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) return null;
+    return { start, end: Math.min(end, size - 1) };
+  }
+
+  function handleRollCreditsMediaServe(pathname, res, req = null) {
     const tail = pathname.slice(rollCreditsInstance.media.routePrefix.length);
     try {
       const filePath = rollCreditsInstance.media.absolutePath(decodeURIComponent(tail));
@@ -2643,12 +2661,34 @@ function createWebServer({
         return;
       }
       const stat = fs.statSync(filePath);
-      res.writeHead(200, {
+      const headers = {
         'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()]
           || 'application/octet-stream',
         'Cache-Control': 'public, max-age=31536000, immutable',
         ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
-      });
+        'Accept-Ranges': 'bytes',
+      };
+      // Seeking in the admin's <video> trimmer depends on range replies; without
+      // them the browser can only play a stored clip straight through.
+      const range = parseByteRange(req?.headers?.range, stat.size);
+      if (range) {
+        res.writeHead(206, {
+          ...headers,
+          'Content-Range': `bytes ${range.start}-${range.end}/${stat.size}`,
+          'Content-Length': range.end - range.start + 1,
+        });
+        if (req?.method === 'HEAD') {
+          res.end();
+          return;
+        }
+        fs.createReadStream(filePath, { start: range.start, end: range.end }).pipe(res);
+        return;
+      }
+      res.writeHead(200, { ...headers, 'Content-Length': stat.size });
+      if (req?.method === 'HEAD') {
+        res.end();
+        return;
+      }
       fs.createReadStream(filePath).pipe(res);
     } catch {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -2773,6 +2813,16 @@ function createWebServer({
           decodeURIComponent(retryMatch[2]),
         );
         sendJson(res, 202, { ok: true, job });
+        return;
+      }
+      const trimMatch = /^games\/([^/]+)\/media\/([^/]+)\/trim$/.exec(tail);
+      if (trimMatch) {
+        const media = await rollCreditsInstance.setMediaTrim(
+          decodeURIComponent(trimMatch[1]),
+          decodeURIComponent(trimMatch[2]),
+          { trimStart: body?.trimStart ?? null, trimEnd: body?.trimEnd ?? null },
+        );
+        sendJson(res, 200, { ok: true, media });
         return;
       }
       sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
@@ -4028,7 +4078,7 @@ function createWebServer({
           return;
         }
         if (pathname.startsWith(rollCreditsInstance.media.routePrefix)) {
-          handleRollCreditsMediaServe(pathname, res);
+          handleRollCreditsMediaServe(pathname, res, req);
           return;
         }
         if (pathname.startsWith(TRIVIA_ARTWORK_ROUTE_PREFIX)) {

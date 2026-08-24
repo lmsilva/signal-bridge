@@ -126,7 +126,7 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
   }
 
   function removeMediaFiles(row) {
-    for (const relativePath of [row?.path, row?.thumbPath].filter(Boolean)) {
+    for (const relativePath of [row?.path, row?.thumbPath, row?.previewPath].filter(Boolean)) {
       try {
         fs.rmSync(media.absolutePath(relativePath), { force: true });
       } catch (error) {
@@ -157,6 +157,54 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     return job;
   }
 
+  /**
+   * Stores a hand-picked clip range and rebuilds the looping wall preview from
+   * it. Passing no range restores the automatic window.
+   */
+  async function setMediaTrim(gameId, mediaId, { trimStart = null, trimEnd = null } = {}) {
+    const game = store.getGame(gameId);
+    if (!game) throw new Error('Roll Credits game not found');
+    const rows = game.media || [];
+    const row = rows.find((item) => item.id === mediaId);
+    if (!row) throw new Error('Roll Credits media not found');
+    if (row.kind !== 'video') throw new Error('Only video media can be trimmed');
+    if (!row.path) throw new Error('This video has not finished downloading yet');
+
+    // Number(null) is 0, so an absent bound has to be rejected before it reads
+    // as a deliberate "start at zero" and suppresses the automatic window.
+    const bound = (value) => {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+    const start = bound(trimStart);
+    const rawEnd = bound(trimEnd);
+    const end = rawEnd === null || rawEnd === 0 ? null : rawEnd;
+    if (start !== null && end !== null && end <= start) {
+      throw new Error('The clip end must come after its start');
+    }
+
+    const preview = typeof media.renderVideoPreview === 'function'
+      ? await media.renderVideoPreview(row.path, { trimStart: start, trimEnd: end })
+      : { error: 'preview rendering is unavailable' };
+
+    const updated = {
+      ...row,
+      trimStart: start,
+      trimEnd: end,
+      thumbPath: preview.posterPath || row.thumbPath || null,
+      previewPath: preview.previewPath || null,
+      durationSeconds: preview.durationSeconds ?? row.durationSeconds ?? null,
+      statusDetail: preview.previewPath
+        ? null
+        : `Saved, but the wall preview could not be built: ${preview.error || 'unknown reason'}`,
+    };
+    store.updateGame(gameId, {
+      media: rows.map((item) => (item.id === mediaId ? updated : item)),
+    });
+    return updated;
+  }
+
   async function saveVideoUpload(gameId, input, { mimeType, contentLength } = {}) {
     const game = store.getGame(gameId);
     if (!game) throw new Error('Roll Credits game not found');
@@ -172,11 +220,15 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
       source: 'upload',
       path: saved.path,
       thumbPath: saved.thumbPath,
+      previewPath: saved.previewPath || null,
+      durationSeconds: saved.durationSeconds || null,
       resolution: null,
       order: (game.media || []).filter((item) => item.kind === 'video').length,
       hidden: false,
       status: 'ready',
-      statusDetail: null,
+      statusDetail: saved.previewPath
+        ? null
+        : `Saved, but the wall preview could not be built: ${saved.previewError || 'unknown reason'}`,
     };
     store.updateGame(gameId, { media: [...(game.media || []), row] });
     return row;
@@ -271,6 +323,7 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     addYoutube,
     deleteMedia,
     retryMedia,
+    setMediaTrim,
     saveVideoUpload,
     onEvents,
     listSystems: store.loadSystems,

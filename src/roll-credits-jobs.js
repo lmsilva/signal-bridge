@@ -79,12 +79,25 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
         maxBytes: item.kind === 'video' ? limits.maxVideoBytes : limits.maxImageBytes,
       });
     }
-    patchMedia(job.gameId, job.mediaId, {
+    const patch = {
       status: 'ready',
       statusDetail: null,
       path: result.path || outPath,
       thumbPath: result.thumbPath || null,
-    });
+    };
+    // The wall cannot decode video, so a downloaded clip is only useful once it
+    // has a poster still and a looping preview. Failing that is not fatal — the
+    // clip stays playable in the admin and the card falls back to cover art.
+    if (item.kind === 'video' && typeof media.renderVideoPreview === 'function') {
+      const preview = await media.renderVideoPreview(patch.path);
+      patch.thumbPath = preview.posterPath || patch.thumbPath;
+      patch.previewPath = preview.previewPath || null;
+      patch.durationSeconds = preview.durationSeconds || null;
+      if (!preview.previewPath) {
+        patch.statusDetail = `Saved, but the wall preview could not be built: ${preview.error || 'unknown reason'}`;
+      }
+    }
+    patchMedia(job.gameId, job.mediaId, patch);
   }
 
   async function drain() {

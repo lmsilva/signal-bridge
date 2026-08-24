@@ -2189,14 +2189,50 @@ textarea.field-input.text-input-area {
 .credits-refresh.is-loading svg { animation: slideshow-spin 700ms linear infinite; }
 .credits-toolbar-secondary .segmented,
 .credits-zoom-wrap { margin: 0; }
+/* Every control on this row is pinned to one height so the segmented toggle,
+   sort field, buttons and zoom stepper line up instead of stair-stepping. */
+.credits-toolbar-secondary {
+  --credits-control-h: 42px;
+  align-items: center;
+}
+.credits-toolbar-secondary > .btn,
+.credits-toolbar-secondary .credits-view-toggle,
+.credits-toolbar-secondary .credits-sort-field .field-input,
+.credits-toolbar-secondary .credits-zoom-btn,
+.credits-toolbar-secondary .credits-zoom-slider {
+  height: var(--credits-control-h);
+  min-height: var(--credits-control-h);
+}
+.credits-toolbar-secondary > .btn {
+  padding-top: 0;
+  padding-bottom: 0;
+  flex: none;
+}
 .credits-view-toggle { width: min(210px, 52vw); flex: none; }
+.credits-sort-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 320px;
+}
+.credits-sort-field .credits-control-label { flex: none; }
+.credits-sort-field .field-input {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 .credits-zoom-wrap {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 160px;
+  flex: 0 1 200px;
   min-width: 0;
-  max-width: 280px;
+  max-width: 240px;
 }
 .credits-zoom-btn {
   appearance: none;
@@ -2219,7 +2255,6 @@ textarea.field-input.text-input-area {
   accent-color: var(--accent);
   /* Left (−) = more tiles; right (+) = fewer tiles. */
   direction: rtl;
-  height: 34px;
 }
 .credits-toolbar-secondary > #btn-credits-select { margin-left: auto; }
 .credits-selection-tools strong { margin-right: auto; }
@@ -2721,6 +2756,61 @@ textarea.field-input.text-input-area {
   background: var(--bg-elev-2);
   flex: none;
 }
+.credits-media-thumb-btn {
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: none;
+  border-radius: 7px;
+  flex: none;
+  cursor: zoom-in;
+  display: block;
+  line-height: 0;
+}
+.credits-media-thumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.credits-media-thumb-btn:hover .credits-media-thumb { filter: brightness(1.15); }
+
+/* Media preview + clip trimmer */
+.credits-preview { max-width: min(760px, 94vw); }
+.credits-preview-stage {
+  display: grid;
+  place-items: center;
+  background: #05070d;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 180px;
+  max-height: 54vh;
+}
+.credits-preview-img,
+.credits-preview-video {
+  display: block;
+  max-width: 100%;
+  max-height: 54vh;
+  width: auto;
+  height: auto;
+}
+.credits-trim {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.credits-trim-heading { font-size: 0.95rem; }
+.credits-trim .hint { margin: 0; }
+.credits-trim-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.credits-trim-row .credits-inline-field { flex: 0 1 150px; min-width: 110px; }
+.credits-trim-row .btn { flex: none; min-height: 42px; padding-top: 0; padding-bottom: 0; }
+.credits-trim-status { margin: 2px 0 0; color: var(--text-dim); font-size: 0.8rem; min-height: 1.1em; }
+.credits-trim-status.is-good { color: var(--good); }
+.credits-trim-status.is-bad { color: var(--warn); }
+.credits-trim-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .credits-media-thumb-video {
   position: relative;
   display: grid;
@@ -2813,13 +2903,28 @@ textarea.field-input.text-input-area {
   .credits-view-toggle {
     width: 100%;
     max-width: none;
+    grid-column: 1;
+    grid-row: 1;
   }
   .credits-toolbar-secondary > #btn-credits-select {
     margin-left: 0;
     justify-self: end;
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .credits-sort-field {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none;
+  }
+  .credits-toolbar-secondary > #btn-credits-reorder {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    width: 100%;
   }
   .credits-zoom-wrap {
     grid-column: 1 / -1;
+    grid-row: 4;
     max-width: none;
     width: 100%;
     flex: none;

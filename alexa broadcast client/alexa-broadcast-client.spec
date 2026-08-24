@@ -61,6 +61,10 @@ a = Analysis(
         'PIL',
         'PIL.Image',
         'PIL.ImageDraw',
+        # Roll Credits loops video as an animated WebP; both the sequence helper
+        # and the WebP plugin are resolved lazily and would be dropped otherwise.
+        'PIL.ImageSequence',
+        'PIL.WebPImagePlugin',
         # qrcode's PIL image factory is imported lazily inside make_image();
         # list it explicitly (same reasoning as the pynput backends below).
         'qrcode',

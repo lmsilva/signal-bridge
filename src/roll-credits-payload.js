@@ -2,7 +2,9 @@ const crypto = require('crypto');
 const { resolveCardBaseUrl } = require('./steam-library-tour');
 
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
-const DISPLAY_MEDIA_KINDS = ['screenshot', 'cover'];
+// The wall cannot decode video, so a clip only reaches it as the short looping
+// WebP built at ingest; a row without that preview is not display material.
+const DISPLAY_MEDIA_KINDS = ['video', 'screenshot', 'cover'];
 
 function clampInt(value, min, max, fallback) {
   const number = Number(value);
@@ -75,6 +77,29 @@ function createRollCreditsPayload({
     return relative ? absoluteUrl(rollCredits.media.publicUrl(relative), baseUrl) : null;
   }
 
+  /** A clip is only shippable once its looping preview has been rendered. */
+  function displayable(item) {
+    return item.kind === 'video' ? Boolean(item.previewPath) : Boolean(item.path);
+  }
+
+  /** Videos travel as their WebP loop, with the poster still as the fallback. */
+  function displayUrls(item, baseUrl) {
+    if (item.kind !== 'video') {
+      return {
+        url: mediaUrl(item, baseUrl),
+        thumbUrl: mediaUrl(item, baseUrl, true),
+        animated: false,
+      };
+    }
+    return {
+      url: absoluteUrl(rollCredits.media.publicUrl(item.previewPath), baseUrl),
+      thumbUrl: item.thumbPath
+        ? absoluteUrl(rollCredits.media.publicUrl(item.thumbPath), baseUrl)
+        : null,
+      animated: true,
+    };
+  }
+
   function resolveDisplayMedia(game, settings, baseUrl) {
     const configured = Array.isArray(game?.mediaPriorityOverride) && game.mediaPriorityOverride.length
       ? game.mediaPriorityOverride
@@ -85,14 +110,17 @@ function createRollCreditsPayload({
     }
     const ready = (game?.media || [])
       .filter((item) => item && item.hidden !== true && item.status === 'ready'
-        && item.path && DISPLAY_MEDIA_KINDS.includes(item.kind))
+        && DISPLAY_MEDIA_KINDS.includes(item.kind) && displayable(item))
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+    const videos = ready.filter((item) => item.kind === 'video');
     const covers = ready.filter((item) => item.kind === 'cover');
     const shotItems = ready.filter((item) => item.kind === 'screenshot');
-    // Prefer cover as hero when screenshots exist so the wall can show gameplay
-    // stills in the strip instead of an empty portrait screenshot band.
     let heroItem = null;
-    if (covers.length && shotItems.length) {
+    if (priority[0] === 'video' && videos.length) {
+      heroItem = videos[0];
+    } else if (covers.length && shotItems.length) {
+      // Prefer cover as hero when screenshots exist so the wall can show gameplay
+      // stills in the strip instead of an empty portrait screenshot band.
       heroItem = covers[0];
     } else {
       const selectedKind = priority.find((kind) => ready.some((item) => item.kind === kind)) || null;
@@ -104,16 +132,14 @@ function createRollCreditsPayload({
       .map((item) => ({
         id: item.id,
         kind: item.kind,
-        url: mediaUrl(item, baseUrl),
-        thumbUrl: mediaUrl(item, baseUrl, true),
+        ...displayUrls(item, baseUrl),
       }));
     return {
       selectedKind: heroItem?.kind || null,
       hero: heroItem ? {
         id: heroItem.id,
         kind: heroItem.kind,
-        url: mediaUrl(heroItem, baseUrl),
-        thumbUrl: mediaUrl(heroItem, baseUrl, true),
+        ...displayUrls(heroItem, baseUrl),
       } : null,
       screenshots,
     };

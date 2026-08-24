@@ -5,7 +5,9 @@ WORKDIR /app
 # tini: PID 1; certbot: host-driven Let's Encrypt DNS-01 (manual TXT) inside the container
 # python3/py3-pip: the YouTube Lounge sidecar (pyytlounge) — there is no Node
 # client for YouTube's undocumented Lounge API, so detection runs in Python.
-RUN apk add --no-cache tini certbot python3 py3-pip
+# ffmpeg: Roll Credits poster frames and animated video previews (ffprobe comes
+# with it), and it also lets yt-dlp merge separate video+audio streams.
+RUN apk add --no-cache tini certbot python3 py3-pip ffmpeg
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev

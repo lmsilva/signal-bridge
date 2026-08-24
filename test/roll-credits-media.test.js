@@ -7,6 +7,12 @@ const {
   createRollCreditsMedia,
   resolveMediaPriority,
   summariseYtDlpFailure,
+  parseProbeOutput,
+  previewFrameSize,
+  previewWindow,
+  splitRawFrames,
+  PREVIEW_SECONDS,
+  PREVIEW_MAX_SECONDS,
 } = require('../src/roll-credits-media');
 
 function fakeSharp() {
@@ -59,6 +65,54 @@ test('image writes generate a 360px thumb only when sharp exists', async () => {
   const fallback = await withoutSharp.writeImageBuffer('rc_test', 'cover.jpg', Buffer.from('image'));
   assert.equal(fallback.thumbPath, null);
   assert.equal(fallback.thumbUrl, null);
+});
+
+test('ffprobe output becomes width, height and duration', () => {
+  assert.deepEqual(parseProbeOutput('width=1920\nheight=1080\nduration=63.400000\n'), {
+    width: 1920, height: 1080, durationSeconds: 63.4,
+  });
+  assert.deepEqual(parseProbeOutput('width=N/A\nduration=0\n'), {
+    width: null, height: null, durationSeconds: null,
+  });
+});
+
+test('preview frames shrink into the box on even edges', () => {
+  assert.deepEqual(previewFrameSize(1920, 1080, 512), { width: 512, height: 288 });
+  assert.deepEqual(previewFrameSize(320, 240, 512), { width: 320, height: 240 });
+  const odd = previewFrameSize(1001, 667, 512);
+  assert.equal(odd.width % 2, 0);
+  assert.equal(odd.height % 2, 0);
+});
+
+test('preview window skips the intro unless a clip range is set', () => {
+  assert.deepEqual(previewWindow(60), { start: 3, seconds: PREVIEW_SECONDS });
+  // A clip shorter than the loop is used whole.
+  assert.deepEqual(previewWindow(2), { start: 0, seconds: 2 });
+  // Unknown duration still yields a usable request for ffmpeg.
+  assert.deepEqual(previewWindow(null), { start: 0, seconds: PREVIEW_SECONDS });
+});
+
+test('a hand-picked clip range wins over the automatic window', () => {
+  assert.deepEqual(previewWindow(120, { trimStart: 42, trimEnd: 50 }), { start: 42, seconds: 8 });
+  // Start only: take the default length from there rather than the intro skip.
+  assert.deepEqual(previewWindow(120, { trimStart: 42 }), { start: 42, seconds: PREVIEW_SECONDS });
+  // The range is clamped to the clip and to the memory ceiling.
+  assert.deepEqual(previewWindow(30, { trimStart: 10, trimEnd: 900 }), { start: 10, seconds: 15 });
+  assert.deepEqual(previewWindow(30, { trimStart: 22, trimEnd: 900 }), { start: 22, seconds: 8 });
+  assert.deepEqual(
+    previewWindow(600, { trimStart: 0, trimEnd: 500 }),
+    { start: 0, seconds: PREVIEW_MAX_SECONDS },
+  );
+  // A backwards range falls back to the automatic window.
+  assert.deepEqual(previewWindow(60, { trimStart: 50, trimEnd: 20 }), { start: 50, seconds: PREVIEW_SECONDS });
+});
+
+test('raw ffmpeg output splits into whole frames', () => {
+  const frame = 2 * 2 * 4;
+  const frames = splitRawFrames(Buffer.alloc(frame * 3 + 5), 2, 2);
+  assert.equal(frames.length, 3);
+  assert.equal(frames[0].length, frame);
+  assert.deepEqual(splitRawFrames(null, 2, 2), []);
 });
 
 test('uploaded image cap and orphan pruning are enforced', async () => {

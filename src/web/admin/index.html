@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal76">
+  <link rel="stylesheet" href="styles.css?v=signal77">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -436,7 +436,8 @@
               <button type="button" class="segmented-btn active" data-credits-view="grid">Grid</button>
               <button type="button" class="segmented-btn" data-credits-view="list">List</button>
             </div>
-            <label class="credits-inline-field credits-sort-field">Sort
+            <label class="credits-sort-field">
+              <span class="credits-control-label">Sort</span>
               <select class="field-input" id="credits-sort-select">
                 <optgroup label="Induction">
                   <option value="induction:desc">Newest inducted first</option>
@@ -1454,6 +1455,55 @@
     </div>
   </div>
 
+  <!-- Roll Credits unsaved-changes prompt -->
+  <div class="sheet-backdrop" id="credits-unsaved-sheet" hidden>
+    <div class="sheet sheet-confirm">
+      <div class="sheet-title">Save your changes?</div>
+      <p class="sheet-subtext">This game has edits you haven't saved yet.</p>
+      <div class="sheet-actions sheet-actions-stack">
+        <button type="button" class="btn btn-accent btn-block" id="btn-credits-unsaved-save">Save and close</button>
+        <button type="button" class="btn btn-danger btn-block" id="btn-credits-unsaved-discard">Discard changes</button>
+        <button type="button" class="btn btn-outline btn-block" id="btn-credits-unsaved-cancel">Keep editing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roll Credits media preview / clip trimmer -->
+  <div class="sheet-backdrop" id="credits-preview-sheet" hidden>
+    <div class="sheet credits-sheet credits-preview">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="credits-preview-title">Preview</div>
+        <button type="button" class="credits-sheet-close" data-close-credits-sheet="credits-preview-sheet" aria-label="Close">×</button>
+      </div>
+      <div class="credits-preview-stage" id="credits-preview-stage">
+        <img class="credits-preview-img" id="credits-preview-img" alt="" hidden>
+        <video class="credits-preview-video" id="credits-preview-video" controls playsinline preload="metadata" hidden></video>
+      </div>
+      <p class="hint" id="credits-preview-caption"></p>
+      <div class="credits-trim" id="credits-trim" hidden>
+        <strong class="credits-trim-heading">Clip shown on the wall</strong>
+        <p class="hint">Pick the part worth looping — the display gets a short silent clip from this range.</p>
+        <div class="credits-trim-row">
+          <label class="credits-inline-field">Start (s)
+            <input class="field-input" id="credits-trim-start" type="number" min="0" step="0.1" value="0">
+          </label>
+          <button type="button" class="btn btn-outline" id="btn-credits-trim-start">Use current time</button>
+        </div>
+        <div class="credits-trim-row">
+          <label class="credits-inline-field">End (s)
+            <input class="field-input" id="credits-trim-end" type="number" min="0" step="0.1">
+          </label>
+          <button type="button" class="btn btn-outline" id="btn-credits-trim-end">Use current time</button>
+        </div>
+        <p class="credits-trim-status" id="credits-trim-status"></p>
+        <div class="credits-trim-actions">
+          <button type="button" class="btn btn-outline" id="btn-credits-trim-clear">Use whole clip</button>
+          <button type="button" class="btn btn-accent" id="btn-credits-trim-save">Save clip range</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Roll Credits delete confirmation -->
   <div class="sheet-backdrop" id="credits-delete-sheet" hidden>
     <div class="sheet sheet-confirm">
@@ -1507,6 +1557,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal76"></script>
+  <script src="app.js?v=signal77"></script>
 </body>
 </html>

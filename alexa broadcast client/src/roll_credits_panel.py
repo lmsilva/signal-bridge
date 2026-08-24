@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from datetime import datetime
 
 try:
-    from PIL import Image, ImageEnhance, ImageFilter, ImageTk
+    from PIL import Image, ImageEnhance, ImageFilter, ImageSequence, ImageTk
 except ImportError:  # pragma: no cover - portable/runtime dependency
-    Image = ImageEnhance = ImageFilter = ImageTk = None
+    Image = ImageEnhance = ImageFilter = ImageSequence = ImageTk = None
 
 from src.design_system import (
     ACCENT,
@@ -47,10 +48,19 @@ from src.display_panels import BasePanel
 from src.game_library_tour_panel import _http_get_json
 from src.page_header import paint_page_header
 from src.shared_photos_page import next_in_seconds, rail_remaining_fraction
-from src.steam_now_playing_panel import SteamNowPlayingPanel, fit_image_contain, fit_image_cover
+from src.steam_now_playing_panel import (
+    SteamNowPlayingPanel,
+    fit_image_contain,
+    fit_image_cover,
+    steam_image_cache_path,
+)
 from src.text_marquee import MarqueeLine
 
 TOUR_CHROME_H_U = 70
+# A clip arrives as an animated WebP. Every frame becomes a Tk PhotoImage held
+# in RAM, so the loop is sampled down rather than played frame-for-frame.
+LOOP_MAX_FRAMES = 24
+LOOP_MIN_DELAY_MS = 60
 RAIL_TRACK = "#3a4048"
 RAIL_DONE = "#6a7380"
 RAIL_SEGMENT_CAP = 20
@@ -68,16 +78,117 @@ def clamp_seconds(value, fallback, minimum=1, maximum=300):
         return fallback
 
 
+def decode_animation(source, max_frames: int = LOOP_MAX_FRAMES):
+    """Sample an animated image down to a few RGB frames and the delay between them."""
+    if Image is None or ImageSequence is None or max_frames < 2:
+        return [], 0
+    try:
+        animation = Image.open(source)
+        count = int(getattr(animation, "n_frames", 1))
+    except Exception:
+        return [], 0
+    if count < 2:
+        return [], 0
+    stride = max(1, math.ceil(count / max_frames))
+    frames = []
+    # WebP only reports a frame's duration once it has been seeked to, so the
+    # gap is read while walking rather than from the freshly opened file.
+    frame_ms = 0
+    try:
+        for index, frame in enumerate(ImageSequence.Iterator(animation)):
+            if not frame_ms:
+                frame_ms = int(animation.info.get("duration") or 0)
+            if index % stride:
+                continue
+            frames.append(frame.convert("RGB"))
+            if len(frames) >= max_frames:
+                break
+    except Exception:
+        return [], 0
+    if len(frames) < 2:
+        return [], 0
+    return frames, max(LOOP_MIN_DELAY_MS, (frame_ms or 100) * stride)
+
+
+def load_hero_frames(url: str, width: int, height: int, max_frames: int = LOOP_MAX_FRAMES):
+    """Animated hero frames, fitted to the stage, read back from the artwork cache."""
+    try:
+        cache_file = steam_image_cache_path(url)
+        if not cache_file.exists():
+            return [], 0
+    except Exception:
+        return [], 0
+    frames, delay = decode_animation(cache_file, max_frames=max_frames)
+    if not frames:
+        return [], 0
+    return [fit_image_contain(frame, width, height) for frame in frames], delay
+
+
+class HeroLoop:
+    """Cycles pre-built hero frames on the Tk main loop, as MarqueeLine does for text."""
+
+    def __init__(self, root):
+        self.root = root
+        self._job = None
+        self._frames = []
+        self._index = 0
+        self._delay = 100
+        self._canvas = None
+        self._item_id = None
+
+    def start(self, canvas, item_id, frames, delay_ms):
+        self.stop()
+        if item_id is None or len(frames or []) < 2:
+            return
+        self._canvas = canvas
+        self._item_id = item_id
+        self._frames = list(frames)
+        self._delay = max(LOOP_MIN_DELAY_MS, int(delay_ms or 100))
+        self._index = 0
+        self._schedule()
+
+    def _schedule(self):
+        try:
+            self._job = self.root.after(self._delay, self._tick)
+        except Exception:
+            self._job = None
+
+    def _tick(self):
+        self._job = None
+        if not self._frames:
+            return
+        self._index = (self._index + 1) % len(self._frames)
+        try:
+            self._canvas.itemconfigure(self._item_id, image=self._frames[self._index])
+        except Exception:
+            return
+        self._schedule()
+
+    def stop(self):
+        if self._job is not None:
+            try:
+                self.root.after_cancel(self._job)
+            except Exception:
+                pass
+            self._job = None
+        self._frames = []
+
+
 def choose_image_hero(card: dict) -> dict | None:
     """Prefer cover as hero when screenshots exist so the strip can show gameplay."""
     media = (card or {}).get("media") or {}
     hero = media.get("hero")
     shots = [shot for shot in (media.get("screenshots") or [])
              if isinstance(shot, dict) and shot.get("url")]
+    # A clip only counts once the bridge has reduced it to a looping WebP; a
+    # bare video URL is still a file this panel cannot decode.
+    if (isinstance(hero, dict) and hero.get("kind") == "video"
+            and hero.get("url") and hero.get("animated")):
+        return hero
     if isinstance(hero, dict) and hero.get("kind") == "cover" and hero.get("url"):
         return hero
     # If the bridge still picked a screenshot as hero, keep it when no cover URL.
-    if isinstance(hero, dict) and hero.get("kind") in ("screenshot", "cover") and hero.get("url"):
+    if isinstance(hero, dict) and hero.get("kind") == "screenshot" and hero.get("url"):
         return hero
     for shot in shots:
         return shot
@@ -584,6 +695,7 @@ class RollCreditsPanel(BasePanel):
         self._photo_refs = []
         self._image_ids = {}
         self._marquees = []
+        self._loops = []
         self._dashboard_until = 0.0
         self._phase_started = 0.0
         self._phase_dwell = 0
@@ -613,6 +725,9 @@ class RollCreditsPanel(BasePanel):
         for marquee in self._marquees:
             marquee.stop()
         self._marquees = []
+        for loop in self._loops:
+            loop.stop()
+        self._loops = []
         for widget in list(self._widgets):
             try:
                 widget.destroy()
@@ -705,6 +820,9 @@ class RollCreditsPanel(BasePanel):
         for marquee in self._marquees:
             marquee.stop()
         self._marquees = []
+        for loop in self._loops:
+            loop.stop()
+        self._loops = []
         for widget in list(self._widgets):
             try:
                 widget.destroy()
@@ -1191,16 +1309,23 @@ class RollCreditsPanel(BasePanel):
             token = self._token
             threading.Thread(
                 target=self._image_worker,
-                args=(token, str(hero["url"]), tuple(box)),
+                args=(token, str(hero["url"]), tuple(box), bool(hero.get("animated"))),
                 daemon=True,
             ).start()
 
-    def _image_worker(self, token, url, box):
+    def _image_worker(self, token, url, box, animated=False):
         width, height = max(40, int(box[2] - box[0])), max(40, int(box[3] - box[1]))
         image = SteamNowPlayingPanel._fetch_photo(url, width, height, raw=True)
-        self.root.after(0, lambda: self._apply_hero(token, image, width, height))
+        frames, delay = [], 0
+        # _fetch_photo flattens to the first frame but leaves the bytes on disk,
+        # so the rest of the loop is read back from that cache entry.
+        if animated and image is not None:
+            frames, delay = load_hero_frames(url, max(40, width - 28), max(40, height - 28))
+        self.root.after(
+            0, lambda: self._apply_hero(token, image, width, height, frames, delay),
+        )
 
-    def _apply_hero(self, token, image, width, height):
+    def _apply_hero(self, token, image, width, height, frames=(), delay=0):
         if token != self._token or not self.visible or image is None or ImageTk is None:
             return
         try:
@@ -1214,6 +1339,18 @@ class RollCreditsPanel(BasePanel):
             self.canvas.itemconfigure(self._image_ids.get("hero"), image=fg_photo)
         except Exception:
             return
+        if len(frames) < 2:
+            return
+        # Only the foreground cycles — the blurred backdrop stays on frame one so
+        # a clip costs one PhotoImage per frame rather than two.
+        try:
+            photos = [ImageTk.PhotoImage(frame) for frame in frames]
+        except Exception:
+            return
+        self._photo_refs.extend(photos)
+        loop = HeroLoop(self.root)
+        self._loops.append(loop)
+        loop.start(self.canvas, self._image_ids.get("hero"), photos, delay)
 
     def _draw_title(self, box, card):
         x0, y0, x1, y1 = box

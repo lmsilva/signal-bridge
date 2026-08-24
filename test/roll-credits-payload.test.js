@@ -74,6 +74,86 @@ test('display cards prefer cover hero when screenshots exist', () => {
   assert.ok(!JSON.stringify(card.media).includes('.mp4'));
 });
 
+function videoFixture({ previewPath, mediaPriority }) {
+  const game = {
+    id: 'rc_clip',
+    title: 'Clip Test',
+    system: 'pc',
+    beatenAt: '2026-08-20',
+    induction: 1,
+    mediaPriorityOverride: mediaPriority,
+    media: [
+      {
+        id: 'v1',
+        kind: 'video',
+        status: 'ready',
+        order: 0,
+        path: 'rc_clip/video/clip.mp4',
+        thumbPath: 'rc_clip/thumbs/clip.poster.jpg',
+        previewPath,
+      },
+      {
+        id: 'c1', kind: 'cover', status: 'ready', order: 1, path: 'rc_clip/cover.jpg',
+      },
+    ],
+  };
+  return {
+    store: {
+      getAllGames: () => [JSON.parse(JSON.stringify(game))],
+      getSystemById: (id) => ({ id, label: String(id).toUpperCase() }),
+    },
+    media: { publicUrl: (value) => `/roll-credits-media/${value}` },
+    getSettings: () => ({ mediaPriority: ['video', 'screenshot', 'cover'], display: {} }),
+    getGame: (id) => (id === game.id ? JSON.parse(JSON.stringify(game)) : null),
+    getStats: () => ({
+      total: 1, thisYear: 1, systemsCount: 1, latest: game, months: [], bySystem: [], undatedCount: 0,
+    }),
+  };
+}
+
+test('a top-priority video ships as its looping preview, never the source file', () => {
+  const tours = createRollCreditsPayload({
+    rollCredits: videoFixture({
+      previewPath: 'rc_clip/thumbs/clip.preview.webp',
+      mediaPriority: ['video', 'cover', 'screenshot'],
+    }),
+  });
+  const card = tours.getCard('rc_clip', { baseUrl: 'https://bridge:47810' });
+  assert.equal(card.media.selectedKind, 'video');
+  assert.equal(card.media.hero.animated, true);
+  assert.equal(
+    card.media.hero.url,
+    'https://bridge:47810/roll-credits-media/rc_clip/thumbs/clip.preview.webp',
+  );
+  // The poster still is what the wall paints until the loop is decoded.
+  assert.equal(
+    card.media.hero.thumbUrl,
+    'https://bridge:47810/roll-credits-media/rc_clip/thumbs/clip.poster.jpg',
+  );
+  assert.ok(!JSON.stringify(card.media).includes('.mp4'));
+});
+
+test('a video without a rendered preview is skipped rather than sent as video', () => {
+  const tours = createRollCreditsPayload({
+    rollCredits: videoFixture({ previewPath: null, mediaPriority: ['video', 'cover', 'screenshot'] }),
+  });
+  const card = tours.getCard('rc_clip', { baseUrl: '' });
+  assert.equal(card.media.selectedKind, 'cover');
+  assert.equal(card.media.hero.animated, false);
+  assert.ok(!JSON.stringify(card.media).includes('.mp4'));
+});
+
+test('video only wins the hero slot when the priority asks for it first', () => {
+  const tours = createRollCreditsPayload({
+    rollCredits: videoFixture({
+      previewPath: 'rc_clip/thumbs/clip.preview.webp',
+      mediaPriority: ['cover', 'video', 'screenshot'],
+    }),
+  });
+  const card = tours.getCard('rc_clip', { baseUrl: '' });
+  assert.equal(card.media.selectedKind, 'cover');
+});
+
 test('playlist sessions expire', () => {
   const { service } = fixture();
   let now = 1000;
