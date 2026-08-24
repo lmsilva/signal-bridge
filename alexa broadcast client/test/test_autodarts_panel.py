@@ -35,6 +35,8 @@ from src.autodarts_panel import (
     normalize_hit_map,
     segment_centroid,
     should_show_ghosts,
+    should_show_turn_strip,
+    turn_has_content,
 )
 
 
@@ -169,7 +171,7 @@ class LayoutTests(unittest.TestCase):
     def assert_boxes_fit(self, boxes, width, height, timed=True):
         chrome = page_chrome(width, height, timed=timed)
         for name, box in boxes.items():
-            if name in ("portrait", "chrome", "finished", "player_count") or box is None:
+            if name in ("portrait", "chrome", "finished", "player_count", "show_strip") or box is None:
                 continue
             x0, y0, x1, y1 = box
             self.assertGreaterEqual(x0, chrome.content_x - 1, name)
@@ -240,6 +242,14 @@ class LayoutTests(unittest.TestCase):
             # Board must sit below the result banner.
             self.assertGreaterEqual(boxes["board"][1], boxes["result"][3] - 1)
 
+    def test_finished_without_strip_gives_board_the_space(self):
+        with_strip = layout_match(1920, 1080, timed=True, player_count=2, finished=True, show_strip=True)
+        without = layout_match(1920, 1080, timed=True, player_count=2, finished=True, show_strip=False)
+        self.assertIsNotNone(with_strip["strip"])
+        self.assertIsNone(without["strip"])
+        self.assertGreater(without["board"][3] - without["board"][1],
+                           with_strip["board"][3] - with_strip["board"][1])
+
 
 class LabelFormatTests(unittest.TestCase):
     def test_last_played_expands_relative(self):
@@ -267,6 +277,20 @@ class LabelFormatTests(unittest.TestCase):
         self.assertIn("kylie", four)
         self.assertIn("·", four)
         self.assertNotIn("—", four)
+
+    def test_final_hides_empty_turn_strip(self):
+        empty = {"status": "finished", "turn": {"points": 0, "darts": [None, None, None]}}
+        self.assertFalse(should_show_turn_strip(empty, finished=True))
+        self.assertFalse(turn_has_content(empty["turn"]))
+        with_shot = {**empty, "gameShot": "D16"}
+        self.assertTrue(should_show_turn_strip(with_shot, finished=True))
+        with_darts = {
+            "status": "finished",
+            "turn": {"points": 60, "darts": [{"seg": "T20"}, None, None]},
+        }
+        self.assertTrue(should_show_turn_strip(with_darts, finished=True))
+        self.assertTrue(should_show_turn_strip({"status": "live", "turn": {}}, finished=False))
+        self.assertEqual(format_game_shot("D16"), "GAME SHOT — D16")
 
     def test_leaderboard_detail_readable(self):
         line = format_leaderboard_detail({

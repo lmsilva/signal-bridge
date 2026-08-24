@@ -276,6 +276,34 @@ def format_game_shot(value) -> str:
     return f"GAME SHOT — {upper}"
 
 
+def turn_has_content(turn: dict | None) -> bool:
+    """True when the turn strip would show real darts / points / bust (not empty dashes)."""
+    if not isinstance(turn, dict):
+        return False
+    if turn.get("busted"):
+        return True
+    points = turn.get("points")
+    if isinstance(points, (int, float)) and float(points) != 0:
+        return True
+    for dart in turn.get("darts") or []:
+        if not isinstance(dart, dict):
+            continue
+        seg = str(dart.get("seg") or dart.get("segment") or "").strip()
+        if seg and seg != "—":
+            return True
+    return False
+
+
+def should_show_turn_strip(match: dict | None, *, finished: bool) -> bool:
+    """Live always shows the strip; FINAL only when game-shot or last-turn content exists."""
+    match = match or {}
+    if format_game_shot(match.get("gameShot")):
+        return True
+    if finished:
+        return turn_has_content(match.get("turn"))
+    return True
+
+
 def match_fingerprint(match: dict | None) -> str:
     try:
         return json.dumps(match or {}, sort_keys=True, default=str)
@@ -435,10 +463,11 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
 
 
 def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int = 2,
-                 finished: bool = False) -> dict:
+                 finished: bool = False, show_strip: bool = True) -> dict:
     """Portrait: scores / board / strip fill height (board absorbs slack).
     Landscape: player | board | player with strip under the board.
     Finished cards reserve a result band so the board never covers names.
+    When ``show_strip`` is False (empty FINAL), the board takes that space.
     """
     chrome = page_chrome(screen_w, screen_h, timed=timed)
     u = chrome.u
@@ -446,7 +475,7 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
     y0 = chrome.content_top + 8 * u
     y1 = chrome.content_bottom - 10 * u
     settings_h = 44 * u
-    strip_h = 100 * u
+    strip_h = (100 * u) if show_strip else 0
     result_h = (64 * u) if finished else 0
     players = max(1, min(8, int(player_count or 2)))
     if chrome.portrait:
@@ -463,8 +492,9 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
             result = (x0, cursor, x1, cursor + result_h)
             cursor = result[3] + 8 * u
         scores = (x0, cursor, x1, cursor + scores_h)
-        strip = (x0, y1 - strip_h, x1, y1)
-        board = (x0, scores[3] + 10 * u, x1, strip[1] - 10 * u)
+        strip = (x0, y1 - strip_h, x1, y1) if show_strip else None
+        board_bottom = (strip[1] - 10 * u) if strip else y1
+        board = (x0, scores[3] + 10 * u, x1, board_bottom)
         return {
             "settings": settings,
             "result": result,
@@ -475,6 +505,7 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
             "finished": finished,
             "chrome": chrome,
             "player_count": players,
+            "show_strip": show_strip,
         }
     settings = (x0, y0, x1, y0 + settings_h)
     cursor = y0 + settings_h + 8 * u
@@ -486,18 +517,20 @@ def layout_match(screen_w: int, screen_h: int, *, timed: bool, player_count: int
     # Narrower side columns when many players so the board stays readable.
     col_frac = 0.18 if players >= 5 else (0.20 if players >= 3 else 0.22)
     col_w = chrome.content_w * col_frac
-    board_box = (x0 + col_w + 12 * u, body_top, x1 - col_w - 12 * u, y1 - strip_h - 8 * u)
+    body_bottom = (y1 - strip_h - 8 * u) if show_strip else y1
+    board_box = (x0 + col_w + 12 * u, body_top, x1 - col_w - 12 * u, body_bottom)
     return {
         "settings": settings,
         "result": result,
-        "scores_left": (x0, body_top, x0 + col_w, y1 - strip_h - 8 * u),
-        "scores_right": (x1 - col_w, body_top, x1, y1 - strip_h - 8 * u),
+        "scores_left": (x0, body_top, x0 + col_w, body_bottom),
+        "scores_right": (x1 - col_w, body_top, x1, body_bottom),
         "board": board_box,
-        "strip": (board_box[0], y1 - strip_h, board_box[2], y1),
+        "strip": (board_box[0], y1 - strip_h, board_box[2], y1) if show_strip else None,
         "portrait": False,
         "finished": finished,
         "chrome": chrome,
         "player_count": players,
+        "show_strip": show_strip,
     }
 
 
@@ -1096,12 +1129,14 @@ class AutodartsPanel(BasePanel):
         self._paint_header(status_chip=chip)
 
         players = list(match.get("players") or [])
+        show_strip = should_show_turn_strip(match, finished=finished)
         screen_w, screen_h = self._screen()
         boxes = layout_match(
             screen_w, screen_h,
             timed=timed,
             player_count=len(players) or 2,
             finished=finished,
+            show_strip=show_strip,
         )
         u = boxes["chrome"].u
 
@@ -1140,16 +1175,14 @@ class AutodartsPanel(BasePanel):
             if not finished:
                 self._draw_turn_markers(match, cx, cy, outer)
 
-        if finished:
-            game_shot = format_game_shot(match.get("gameShot"))
+        if show_strip and boxes.get("strip"):
+            game_shot = format_game_shot(match.get("gameShot")) if finished else ""
             self._draw_turn_strip(
                 boxes["strip"],
                 match.get("turn") or {},
                 u=u,
-                caption=game_shot or "Match finished",
+                caption=game_shot or None,
             )
-        else:
-            self._draw_turn_strip(boxes["strip"], match.get("turn") or {}, u=u)
 
     def _draw_final_banner(self, boxes, match, players):
         """Winner / legs result — crown sits left of the scoreline with a gap."""
@@ -1340,25 +1373,38 @@ class AutodartsPanel(BasePanel):
         fill = "#3f1220" if busted else FILL
         outline = ALERT if busted else LINE
         self._track(self.canvas.create_rectangle(x0, y0, x1, y1, fill=fill, outline=outline, width=2))
-        if caption:
+        has_darts = turn_has_content(turn)
+        # Game-shot only (no last-turn darts): one centered line, no empty — boxes.
+        if caption and not has_darts:
             self._track(self.canvas.create_text(
-                x0 + 20 * u, y0 + 10 * u, anchor="nw", text=caption,
-                fill=INK_3, font=self._font(12, True),
+                (x0 + x1) / 2, (y0 + y1) / 2, text=caption,
+                fill=WARN, font=self._font(22, True),
             ))
+            return
+        # Caption sits in its own top band so it never overlaps the dart slots.
+        content_top = y0
+        if caption:
+            caption_band = max(22 * u, 28)
+            self._track(self.canvas.create_text(
+                (x0 + x1) / 2, y0 + caption_band / 2, text=caption,
+                fill=INK_3, font=self._font(13, True),
+            ))
+            content_top = y0 + caption_band
         darts = list(turn.get("darts") or [None, None, None])
         while len(darts) < 3:
             darts.append(None)
         darts = darts[:3]
         slot_w = min(160 * u, (x1 - x0 - 200 * u) / 3)
         start_x = x0 + 24 * u
-        cy = (y0 + y1) / 2 + (6 * u if caption else 0)
+        cy = (content_top + y1) / 2
+        slot_half = min(28 * u, max(16 * u, (y1 - content_top) * 0.38))
         for index, dart in enumerate(darts):
             sx = start_x + index * (slot_w + 12 * u)
             label = "—"
             if isinstance(dart, dict):
                 label = str(dart.get("seg") or dart.get("segment") or "—")
             self._track(self.canvas.create_rectangle(
-                sx, cy - 28 * u, sx + slot_w, cy + 28 * u,
+                sx, cy - slot_half, sx + slot_w, cy + slot_half,
                 fill=BG, outline=ALERT if busted else ACCENT, width=2,
             ))
             self._track(self.canvas.create_text(

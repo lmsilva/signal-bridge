@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Autodarts FINAL multi-player + board spacing)
+**Last updated:** 2026-08-23 (Autodarts FINAL hide empty strip)
 
 ---
 
@@ -267,6 +267,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-23: **Autodarts FINAL hides empty turn strip** — no more “Match finished / — — — = 0” when there is no game-shot or last-turn content; caption never overlaps dart slots. Ship: portable client rebuild required (not run).
 
 - 2026-08-23: **Autodarts FINAL multi-player banner** — 3+ player finals list every name+legs (`·` separated); two-player keeps the head-to-head dash. Ship: portable client rebuild required (not run).
 - 2026-08-23: **Autodarts YOUR BOARD spacing** — version/OS line no longer overlaps Darts/Corrections/Accuracy (taller tile + banded row anchors). Tests: `test_autodarts_panel.py`. Ship: portable client rebuild required (not run).
