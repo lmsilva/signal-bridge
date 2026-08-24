@@ -14,17 +14,31 @@ except ImportError:  # pragma: no cover - portable/runtime dependency
 from src.design_system import (
     ACCENT,
     BG,
+    BG_DEEP,
+    CARD_LO,
+    EDGE_SOFT,
     FILL,
     INK,
     INK_2,
     INK_3,
     LINE,
+    PLATE_GOLD,
     PX_PER_POINT,
+    TRACK,
     WARN,
     design_u,
     is_portrait,
+    letterspace,
     measure_px_per_point,
+    mix,
     page_chrome,
+    paint_backdrop,
+    paint_bar,
+    paint_card,
+    paint_column,
+    paint_meter,
+    paint_round_rect,
+    paint_section_title,
     stack_rows,
     text_line_h,
     text_measurer,
@@ -196,7 +210,7 @@ def counters_layout(
     # numbers off the notes even when the card is short.
     spec = [(f"note{i}", 12, 4 if i < notes - 1 else 12) for i in range(notes)]
     for row in range(rows):
-        spec.append((f"value{row}", 24, 2))
+        spec.append((f"value{row}", 26, 2))
         spec.append((f"label{row}", 11, 12 if row < rows - 1 else 0))
     stack = stack_rows(
         spec, top=pad_px, available=height - pad_px * 2, u=u, px_per_pt=px_per_pt,
@@ -240,24 +254,34 @@ def latest_layout(
     pad: float = 18,
     u: float = 1.0,
     px_per_pt: float = PX_PER_POINT,
+    game_row: bool = True,
 ) -> dict:
-    """LATEST INDUCTED: cover on the left, a vertically centred copy stack right."""
+    """LATEST INDUCTED: cover on the left, a vertically centred copy stack right.
+
+    ``game_row=False`` drops the inline GAME #nnn pill — a wide (portrait) card
+    shows the induction number as a plate in the otherwise empty right third.
+    """
     width = max(200.0, float(box_w))
     height = max(160.0, float(box_h))
     pad_px = pad * u
     header_h = text_line_h(15, u=u, px_per_pt=px_per_pt)
     art_top = pad_px + header_h + 10 * u
-    art_h = max(60.0, height - art_top - pad_px)
-    art_w = min(width * 0.38, art_h)
-    rows = [("title", 24, 8), ("system", 14, 6), ("beaten", 13, 10), ("game", 22, 12)]
+    band = max(60.0, height - art_top - pad_px)
+    art_w = min(width * 0.38, band)
+    # A tall column would stretch the cover into a letterbox slot — keep the
+    # frame roughly box-art shaped and centre it in the band instead.
+    art_h = min(band, art_w * 1.4) if band > art_w * 1.5 else band
+    art_y = art_top + (band - art_h) / 2
+    rows = [("title", 24, 8), ("system", 14, 6), ("beaten", 13, 10)]
+    if game_row:
+        rows.append(("game", 22, 12))
     for index in range(max(0, int(note_count or 0))):
         rows.append((f"note{index}", 13, 6))
     rows[-1] = (rows[-1][0], rows[-1][1], 0)
-    band_h = height - art_top - pad_px
-    stack = stack_rows(rows, top=art_top, available=band_h, u=u, px_per_pt=px_per_pt)
-    drop = max(0.0, (band_h - (stack["bottom"] - art_top)) / 2)
+    stack = stack_rows(rows, top=art_top, available=band, u=u, px_per_pt=px_per_pt)
+    drop = max(0.0, (band - (stack["bottom"] - art_top)) / 2)
     return {
-        "art": (pad_px, art_top, pad_px + art_w, art_top + art_h),
+        "art": (pad_px, art_y, pad_px + art_w, art_y + art_h),
         "header_y": pad_px,
         "text_x": pad_px + art_w + 18 * u,
         "y": {key: y + drop for key, y in stack["y"].items()},
@@ -434,7 +458,41 @@ def tour_progress_layout(
     }
 
 
-def layout_boxes(screen_w: int, screen_h: int, *, dashboard=False, timed=True) -> dict:
+def layout_boxes(
+    screen_w: int, screen_h: int, *, dashboard=False, timed=True, shots: bool = True,
+) -> dict:
+    """Card boxes for a phase. ``shots=False`` reinvests the screenshot strip's
+    height instead of framing an empty rectangle — portrait grows the box art
+    (and a little of the blurb), landscape centres the copy beside a tall still.
+    """
+    boxes = _layout_boxes(screen_w, screen_h, dashboard=dashboard, timed=timed)
+    if dashboard or shots or "shots" not in boxes:
+        return boxes
+    chrome = page_chrome(screen_w, screen_h, timed=timed)
+    band_bottom = boxes["shots"][3]
+    spare = max(0.0, band_bottom - boxes["facts"][3])
+    boxes.pop("shots")
+
+    def shift(key, dy, grow=0.0):
+        x0, y0, x1, y1 = boxes[key]
+        boxes[key] = (x0, y0 + dy, x1, y1 + dy + grow)
+
+    facts_grow = min(spare * 0.3, 90 * chrome.u)
+    if chrome.portrait:
+        hero_grow = spare - facts_grow
+        hx0, hy0, hx1, hy1 = boxes["hero"]
+        boxes["hero"] = (hx0, hy0, hx1, hy1 + hero_grow)
+        shift("title", hero_grow)
+        shift("facts", hero_grow, facts_grow)
+        return boxes
+    shift("facts", 0.0, facts_grow)
+    drop = max(0.0, (band_bottom - boxes["facts"][3]) / 2)
+    shift("title", drop)
+    shift("facts", drop)
+    return boxes
+
+
+def _layout_boxes(screen_w: int, screen_h: int, *, dashboard=False, timed=True) -> dict:
     chrome = page_chrome(screen_w, screen_h, timed=timed)
     u = chrome.u
     x0, x1 = chrome.content_x, chrome.content_x + chrome.content_w
@@ -678,23 +736,35 @@ class RollCreditsPanel(BasePanel):
             self._font_cache[key] = cached
         return cached
 
-    def _card(self, box):
-        return self._track(self.canvas.create_rectangle(*box, fill=FILL, outline=LINE, width=2))
+    def _card(self, box, *, accent=None, lift=0.0):
+        return paint_card(
+            self.canvas, box, u=self._scale, accent=accent, lift=lift, track=self._track,
+        )
+
+    def _title(self, x, y, text, *, size=14, fill=INK_2, accent=ACCENT, fs=1.0):
+        return paint_section_title(
+            self.canvas, x, y, text=text, font=self._font(size * fs, True),
+            u=self._scale, fill=fill, accent=accent,
+            line_h=text_line_h(size * fs, u=self._scale, px_per_pt=self._px_per_pt),
+            track=self._track,
+        )
 
     def _draw_dashboard(self):
         self._phase = "dashboard"
         self._clear_page()
         self._sync_metrics()
-        self._paint_header()
         screen_w, screen_h = self._screen()
+        paint_backdrop(self.canvas, screen_w, screen_h, track=self._track)
+        self._paint_header()
         timed = self._tour.get("loop") is False
         boxes = layout_boxes(screen_w, screen_h, dashboard=True, timed=timed)
         stats = self._tour.get("stats") or {}
         latest = stats.get("latest") or {}
+        accents = {"hero": WARN, "counters": ACCENT}
         for name, box in boxes.items():
             if name == "progress" or not isinstance(box, tuple) or len(box) != 4:
                 continue
-            self._card(box)
+            self._card(box, accent=accents.get(name))
         portrait = is_portrait(screen_w, screen_h)
         self._draw_latest(boxes["hero"], latest, stats, notes=not portrait)
         self._draw_counters(
@@ -709,24 +779,30 @@ class RollCreditsPanel(BasePanel):
         x0, y0, x1, y1 = box
         u = self._scale
         note_lines = list(self._stat_notes(stats, latest)) if notes else []
+        # A wide card leaves the right third empty next to the copy — give the
+        # induction number a plate there instead of an inline pill.
+        plate = (x1 - x0) > (y1 - y0) * 1.6
         layout = latest_layout(
             x1 - x0, y1 - y0, note_count=len(note_lines), u=u, px_per_pt=self._px_per_pt,
+            game_row=not plate,
         )
         fs = layout["font_scale"]
-        self._track(self.canvas.create_text(
-            x0 + 18 * u, y0 + layout["header_y"], anchor="nw", text="LATEST INDUCTED",
-            fill=INK_2, font=self._font(15 * fs, True),
-        ))
+        self._title(x0 + 18 * u, y0 + layout["header_y"], "LATEST INDUCTED", size=15, accent=WARN)
         ax0, ay0, ax1, ay1 = layout["art"]
         self._draw_image_stage((x0 + ax0, y0 + ay0, x0 + ax1, y0 + ay1), choose_image_hero(latest))
         tx = x0 + layout["text_x"]
-        text_w = max(100, int(x1 - tx - 18 * u))
         induction = latest.get("induction")
+        right = x1 - 18 * u
+        if plate:
+            right = self._induction_plate(
+                (x1 - 18 * u, y0 + ay0, y0 + ay1), induction, u=u,
+            )
+        text_w = max(100, int(right - tx - 18 * u))
         rows = [
             ("title", latest.get("title") or "No games yet", INK, 24, True),
             ("system", str(latest.get("systemLabel") or latest.get("system") or "").upper(),
              ACCENT, 14, True),
-            ("beaten", format_beaten(latest.get("beatenAt")), INK_2, 13, False),
+            ("beaten", format_beaten(latest.get("beatenAt")), INK_3, 13, False),
             ("game", f"GAME #{int(induction):03d}" if induction else "GAME #—", WARN, 22, True),
         ]
         for index, (text, fill) in enumerate(note_lines):
@@ -734,15 +810,72 @@ class RollCreditsPanel(BasePanel):
         for key, text, fill, size, bold in rows:
             if key not in layout["y"] or not text:
                 continue
+            row_y = y0 + layout["y"][key]
+            row_h = layout["h"].get(key, text_line_h(size * fs, u=u, px_per_pt=self._px_per_pt))
+            if key in ("system", "game"):
+                self._pill_text(
+                    tx, row_y, row_h, text, size=size * fs,
+                    color=fill, plate=PLATE_GOLD if key == "game" else mix(CARD_LO, ACCENT, 0.16),
+                )
+                continue
             # One line per row — Tk wrapping would push the stack past the card.
             line = clip_text_to_lines(
                 text, width_px=text_w, font_size=size * fs, max_lines=1,
                 measure=self._measure(size * fs, bold),
             )
             self._track(self.canvas.create_text(
-                tx, y0 + layout["y"][key], anchor="nw", text=line,
+                tx, row_y, anchor="nw", text=line,
                 fill=fill, font=self._font(size * fs, bold),
             ))
+
+    def _induction_plate(self, anchor, induction, *, u):
+        """Big gold induction number pinned to the right of a wide hero card."""
+        right, top, bottom = anchor
+        number = f"#{int(induction):03d}" if induction else "#—"
+        height = bottom - top
+        num_size = max(20, min(52, height * 0.30 / max(1.0, self._px_per_pt)))
+        cap_size = max(9, num_size * 0.26)
+        width = max(
+            150 * u,
+            self._measure(num_size, True)(number) + 52 * u,
+            self._measure(cap_size, True)(letterspace("INDUCTION")) + 34 * u,
+        )
+        box = (right - width, top, right, bottom)
+        paint_round_rect(
+            self.canvas, box, radius=16 * u, fill=PLATE_GOLD,
+            outline=mix(PLATE_GOLD, WARN, 0.45), width=max(1, 2 * u), track=self._track,
+        )
+        cx = (box[0] + box[2]) / 2
+        cy = (top + bottom) / 2
+        num_h = text_line_h(num_size, u=u, px_per_pt=self._px_per_pt)
+        cap_h = text_line_h(cap_size, u=u, px_per_pt=self._px_per_pt)
+        total = num_h + 6 * u + cap_h
+        self._track(self.canvas.create_text(
+            cx, cy - total / 2 + num_h / 2, text=number, fill=WARN,
+            font=self._font(num_size, True),
+        ))
+        self._track(self.canvas.create_text(
+            cx, cy + total / 2 - cap_h / 2, text=letterspace("INDUCTION"),
+            fill=mix(WARN, INK_3, 0.45), font=self._font(cap_size, True),
+        ))
+        return box[0]
+
+    def _pill_text(self, x, y, row_h, text, *, size, color, plate, letterspaced=True):
+        """Badge-style label: tinted plate behind tracked caps."""
+        u = self._scale
+        label = letterspace(text) if letterspaced else text
+        font = self._font(size, True)
+        width = self._measure(size, True)(label) + 24 * u
+        box = (x, y - 3 * u, x + width, y + row_h + 3 * u)
+        paint_bar(self.canvas, box, radius=8 * u, fill=plate, track=self._track)
+        paint_bar(
+            self.canvas, box, radius=8 * u, fill="",
+            outline=mix(plate, color, 0.35), track=self._track,
+        )
+        self._track(self.canvas.create_text(
+            x + 12 * u, y, anchor="nw", text=label, fill=color, font=font,
+        ))
+        return box
 
     @staticmethod
     def _stat_notes(stats, latest):
@@ -782,22 +915,49 @@ class RollCreditsPanel(BasePanel):
             key = f"note{index}"
             if key not in layout["notes"]:
                 continue
+            note_y = y0 + layout["notes"][key]
+            note_h = layout["note_h"][key]
+            self._track(self.canvas.create_rectangle(
+                x0 + pad, note_y + note_h * 0.2, x0 + pad + max(2.0, 3 * u),
+                note_y + note_h * 0.85, fill=fill, outline="",
+            ))
             self._track(self.canvas.create_text(
-                x0 + pad, y0 + layout["notes"][key], anchor="nw", text=note,
+                x0 + pad + 12 * u, note_y, anchor="nw", text=note,
                 fill=fill, font=self._font(12 * fs, True),
             ))
         cols, rows = layout["cols"], layout["rows"]
         cell_w = (x1 - x0 - pad * 2) / max(1, cols)
+        tones = (WARN, INK, INK, ACCENT)
+        grid_top = y0 + layout["cells"][0]["value_y"] - 10 * u
+        grid_bottom = (
+            y0 + layout["cells"][-1]["label_y"] + layout["cells"][-1]["label_h"] + 6 * u
+        )
+        if notes:
+            rule_y = y0 + layout["notes_bottom"] + (grid_top - y0 - layout["notes_bottom"]) / 2
+            self._track(self.canvas.create_line(
+                x0 + pad, rule_y, x1 - pad, rule_y, fill=EDGE_SOFT, width=1,
+            ))
+        for row in range(1, rows):
+            cell = layout["cells"][row]
+            self._track(self.canvas.create_line(
+                x0 + pad * 2, y0 + cell["value_y"] - 8 * u,
+                x1 - pad * 2, y0 + cell["value_y"] - 8 * u, fill=EDGE_SOFT, width=1,
+            ))
         for index, (value, label) in enumerate(values[: cols * rows]):
             col, row = index % cols, index // cols
             cx = x0 + pad + cell_w * (col + 0.5)
             cell = layout["cells"][row]
+            if col:
+                self._track(self.canvas.create_line(
+                    x0 + pad + cell_w * col, grid_top, x0 + pad + cell_w * col, grid_bottom,
+                    fill=EDGE_SOFT, width=1,
+                ))
             self._track(self.canvas.create_text(
                 cx, y0 + cell["value_y"], anchor="n", text=str(value),
-                fill=INK, font=self._font(24 * fs, True),
+                fill=tones[index % len(tones)], font=self._font(26 * fs, True),
             ))
             self._track(self.canvas.create_text(
-                cx, y0 + cell["label_y"], anchor="n", text=label,
+                cx, y0 + cell["label_y"], anchor="n", text=letterspace(label),
                 fill=INK_3, font=self._font(11 * fs, True),
             ))
 
@@ -806,10 +966,7 @@ class RollCreditsPanel(BasePanel):
         u = self._scale
         pad = 20 * u
         geom = months_chart_geom(y1 - y0, 20, u=u, px_per_pt=self._px_per_pt)
-        self._track(self.canvas.create_text(
-            x0 + pad, y0 + geom["title_y"], anchor="nw", text="BEATEN PER MONTH",
-            fill=INK_2, font=self._font(14, True),
-        ))
+        self._title(x0 + pad, y0 + geom["title_y"], "BEATEN PER MONTH", size=14)
         rows = list(months)[-12:]
         max_count = max([int(row.get("count") or 0) for row in rows] or [1]) or 1
         chart_top = y0 + geom["chart_top"]
@@ -817,26 +974,37 @@ class RollCreditsPanel(BasePanel):
         usable = max(16.0, chart_bottom - chart_top)
         slot = (x1 - x0 - pad * 2) / max(1, len(rows))
         label_size = month_axis_font_size(slot / max(0.05, u))
+        self._track(self.canvas.create_line(
+            x0 + pad, chart_bottom, x1 - pad, chart_bottom, fill=EDGE_SOFT, width=max(1, u),
+        ))
         for index, row in enumerate(rows):
             count = int(row.get("count") or 0)
-            height = max(2, usable * 0.88 * count / max_count)
+            current = index == len(rows) - 1
             cx = x0 + pad + slot * (index + 0.5)
             color = month_bar_color(index, len(rows))
-            bar_half = min(slot * 0.28, 18 * u)
-            self._track(self.canvas.create_rectangle(
-                cx - bar_half, chart_bottom - height, cx + bar_half, chart_bottom,
-                fill=color, outline="",
-            ))
-            count_y = min(chart_bottom - height - 2 * u, y0 + geom["count_y"])
+            bar_half = min(slot * 0.3, 20 * u)
+            paint_bar(
+                self.canvas, (cx - bar_half, chart_top, cx + bar_half, chart_bottom),
+                radius=bar_half * 0.5, fill=mix(TRACK, CARD_LO, 0.4), track=self._track,
+            )
+            height = 0.0
+            if count > 0:
+                height = max(6 * u, usable * 0.9 * count / max_count)
+                paint_column(
+                    self.canvas, cx, chart_bottom, bar_half, height, color,
+                    u=u, track=self._track,
+                )
+            count_y = min(chart_bottom - height - 4 * u, y0 + geom["count_y"])
             count_y = max(count_y, y0 + geom["title_bottom"] + 2 * u)
             self._track(self.canvas.create_text(
                 cx, count_y, anchor="s", text=str(count),
-                fill=INK_2, font=self._font(11, True),
+                fill=(WARN if current else INK) if count else INK_3,
+                font=self._font(11, True),
             ))
             self._track(self.canvas.create_text(
                 cx, y0 + geom["axis_y"], anchor="n",
                 text=format_month_axis_label(row.get("label"), row.get("key")),
-                fill=INK_3 if index < len(rows) - 1 else WARN,
+                fill=WARN if current else INK_3,
                 font=self._font(label_size, True),
             ))
         if undated:
@@ -846,73 +1014,62 @@ class RollCreditsPanel(BasePanel):
             ))
 
     def _draw_systems(self, box, systems, beaten_with=None):
+        """Two ranked lists sharing one card — systems on top, companions pinned
+        to the bottom edge so the middle can never open up as dead space."""
         x0, y0, x1, y1 = box
         u = self._scale
         pad = 20 * u
         companions = list(beaten_with or [])[:4]
         title_h = text_line_h(14, u=u, px_per_pt=self._px_per_pt)
-        row_min = text_line_h(12, u=u, px_per_pt=self._px_per_pt) + 8 * u
-        band_h = (y1 - y0) - pad * 2
-        companion_band = 0.0
-        if companions:
-            companion_band = title_h + 10 * u + row_min * len(companions)
-            companion_band = min(companion_band, band_h * 0.45)
-        systems_bottom = y1 - pad - (companion_band + 12 * u if companions else 0)
-        self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad, anchor="nw", text="BY SYSTEM",
-            fill=INK_2, font=self._font(14, True),
-        ))
-        rows_top = y0 + pad + title_h + 10 * u
-        rows = list(systems)[: (5 if companions else 9)]
-        max_count = max([int(row.get("count") or 0) for row in rows] or [1])
-        room = max(row_min, systems_bottom - rows_top)
-        row_h = max(row_min, min(48 * u, room / max(1, len(rows))))
-        bar_half = min(7 * u, row_h * 0.28)
-        for index, row in enumerate(rows):
-            cy = rows_top + row_h * (index + 0.5)
-            if cy + row_h * 0.5 > systems_bottom + 0.5:
-                break
-            label = str(row.get("label") or row.get("id") or "Other")
-            count = int(row.get("count") or 0)
-            self._track(self.canvas.create_text(
-                x0 + pad, cy, anchor="w", text=label[:12],
-                fill=INK_2, font=self._font(12, True),
-            ))
-            bar_x = x0 + min(150 * u, (x1 - x0) * 0.32)
-            bar_w = max(20 * u, (x1 - bar_x - 55 * u) * count / max_count)
-            self._track(self.canvas.create_rectangle(
-                bar_x, cy - bar_half, bar_x + bar_w, cy + bar_half, fill=ACCENT, outline="",
-            ))
-            self._track(self.canvas.create_text(
-                x1 - pad, cy, anchor="e", text=str(count), fill=INK, font=self._font(12, True),
-            ))
+        row_min = text_line_h(13, u=u, px_per_pt=self._px_per_pt) + 10 * u
+        head_h = title_h + 14 * u
+        rows = list(systems)[: (6 if companions else 10)]
+        section_gap = 18 * u
+        available = (
+            (y1 - pad) - (y0 + pad)
+            - head_h * (2 if companions else 1)
+            - (section_gap if companions else 0)
+        )
+        total_rows = max(1, len(rows) + len(companions))
+        row_h = max(row_min, min(84 * u, available / total_rows))
+        comp_top = y1 - pad - (head_h + row_h * len(companions)) if companions else y1 - pad
+        rows_top = y0 + pad + head_h
+        while len(rows) > 1 and rows_top + row_h * len(rows) > comp_top - section_gap * 0.5:
+            rows = rows[:-1]
+        self._title(x0 + pad, y0 + pad, "BY SYSTEM", size=14)
+        self._ranked_rows(x0, x1, rows_top, row_h, rows, ACCENT, key="label")
         if not companions:
             return
-        band_top = systems_bottom + 12 * u
-        self._track(self.canvas.create_text(
-            x0 + pad, band_top, anchor="nw", text="BEATEN WITH",
-            fill=INK_2, font=self._font(14, True),
-        ))
-        max_buddy = max([int(row.get("count") or 0) for row in companions] or [1])
-        buddy_top = band_top + title_h + 10 * u
-        buddy_h = max(row_min, min(40 * u, (y1 - pad - buddy_top) / max(1, len(companions))))
-        for index, row in enumerate(companions):
-            cy = buddy_top + buddy_h * (index + 0.5)
-            if cy + buddy_h * 0.5 > y1 - pad * 0.5 + 0.5:
-                break
-            name = str(row.get("name") or "—")
+        self._title(x0 + pad, comp_top, "BEATEN WITH", size=14, accent=WARN)
+        self._ranked_rows(
+            x0, x1, comp_top + head_h, row_h, companions, WARN, key="name",
+        )
+
+    def _ranked_rows(self, x0, x1, top, row_h, rows, color, *, key="label"):
+        u = self._scale
+        pad = 20 * u
+        if not rows:
+            return
+        max_count = max([int(row.get("count") or 0) for row in rows] or [1]) or 1
+        bar_x = x0 + max(150 * u, (x1 - x0) * 0.3)
+        bar_x1 = x1 - pad - 46 * u
+        bar_h = min(12 * u, row_h * 0.34)
+        for index, row in enumerate(rows):
+            cy = top + row_h * (index + 0.5)
+            label = str(row.get(key) or row.get("id") or "Other")
             count = int(row.get("count") or 0)
             self._track(self.canvas.create_text(
-                x0 + pad, cy, anchor="w", text=name[:16],
-                fill=INK_2, font=self._font(12, True),
+                x0 + pad, cy, anchor="w", text=label[:16],
+                fill=INK if index == 0 else INK_2, font=self._font(13, True),
             ))
-            bar_x = x0 + min(150 * u, (x1 - x0) * 0.32)
-            bar_w = max(20 * u, (x1 - bar_x - 55 * u) * count / max_buddy)
-            self._track(self.canvas.create_rectangle(
-                bar_x, cy - bar_half, bar_x + bar_w, cy + bar_half, fill=WARN, outline="",
-            ))
+            paint_meter(
+                self.canvas, (bar_x, cy - bar_h / 2, bar_x1, cy + bar_h / 2),
+                count / max_count, color if index == 0 else mix(color, TRACK, 0.3),
+                track=self._track,
+            )
             self._track(self.canvas.create_text(
-                x1 - pad, cy, anchor="e", text=str(count), fill=INK, font=self._font(12, True),
+                x1 - pad, cy, anchor="e", text=str(count),
+                fill=INK if index == 0 else INK_2, font=self._font(13, True),
             ))
 
     def _start_games(self):
@@ -996,20 +1153,30 @@ class RollCreditsPanel(BasePanel):
         self._phase = "showcase"
         self._clear_page()
         self._sync_metrics()
-        self._paint_header()
         screen_w, screen_h = self._screen()
-        boxes = layout_boxes(screen_w, screen_h, timed=self._tour.get("loop") is False)
+        paint_backdrop(self.canvas, screen_w, screen_h, track=self._track)
+        self._paint_header()
+        shots = choose_showcase_shots(card, limit=3)
+        boxes = layout_boxes(
+            screen_w, screen_h, timed=self._tour.get("loop") is False, shots=bool(shots),
+        )
         self._draw_image_stage(boxes["hero"], choose_image_hero(card))
-        for key in ("title", "facts", "shots"):
-            self._card(boxes[key])
+        self._card(boxes["title"], accent=WARN)
+        self._card(boxes["facts"])
         self._draw_title(boxes["title"], card)
         self._draw_facts(boxes["facts"], card)
-        self._draw_shots(boxes["shots"], card)
+        if shots and boxes.get("shots"):
+            self._card(boxes["shots"])
+            self._draw_shots(boxes["shots"], card)
         self._draw_tour_chrome(boxes["progress"], dashboard=False)
 
     def _draw_image_stage(self, box, hero):
         x0, y0, x1, y1 = box
-        self._track(self.canvas.create_rectangle(*box, fill="#061230", outline=LINE, width=2))
+        u = self._scale
+        self._track(self.canvas.create_rectangle(
+            x0 + 8 * u, y0 + 8 * u, x1 - 8 * u, y1 + 7 * u, fill=BG_DEEP, outline="",
+        ))
+        self._track(self.canvas.create_rectangle(*box, fill="#050D22", outline=EDGE_SOFT, width=2))
         self._image_ids["hero_bg"] = self._track(self.canvas.create_image((x0 + x1) / 2, (y0 + y1) / 2))
         self._image_ids["hero"] = self._track(self.canvas.create_image((x0 + x1) / 2, (y0 + y1) / 2))
         tick = 24 * self._scale
@@ -1076,9 +1243,35 @@ class RollCreditsPanel(BasePanel):
                 text=title, fill=INK, font=title_font,
             ))
         if layout["meta_fits"]:
+            self._draw_meta_chips(
+                x0 + pad, y0 + layout["meta_y"], layout["meta_h"], card, fs=fs,
+                limit=x1 - pad,
+            )
+
+    def _draw_meta_chips(self, x, y, row_h, card, *, fs=1.0, limit=None):
+        """System / game number / beaten date as separate badges."""
+        u = self._scale
+        induction = card.get("induction")
+        try:
+            game_no = f"GAME #{int(induction):03d}" if induction else "GAME #—"
+        except (TypeError, ValueError):
+            game_no = "GAME #—"
+        chips = [
+            (str(card.get("systemLabel") or card.get("system") or "").upper(),
+             ACCENT, mix(CARD_LO, ACCENT, 0.16)),
+            (game_no, WARN, PLATE_GOLD),
+        ]
+        cursor = x
+        for text, color, plate in chips:
+            if not text:
+                continue
+            box = self._pill_text(cursor, y, row_h, text, size=13 * fs, color=color, plate=plate)
+            cursor = box[2] + 10 * u
+        beaten = format_beaten(card.get("beatenAt"))
+        if beaten and (limit is None or cursor < limit - 40 * u):
             self._track(self.canvas.create_text(
-                x0 + pad, y0 + layout["meta_y"], anchor="nw",
-                text=format_game_meta(card), fill=WARN, font=self._font(13 * fs, True),
+                cursor + 2 * u, y, anchor="nw", text=beaten,
+                fill=INK_3, font=self._font(13 * fs, True),
             ))
 
     def _draw_facts(self, box, card):
@@ -1092,10 +1285,11 @@ class RollCreditsPanel(BasePanel):
         fs = layout["font_scale"]
         text_w = max(80, int(x1 - x0 - pad * 2))
         if companion and layout["companion_y"] is not None:
-            self._track(self.canvas.create_text(
-                x0 + pad, y0 + layout["companion_y"], anchor="nw",
-                text=f"beaten with {companion}", fill=INK_2, font=self._font(13 * fs, True),
-            ))
+            self._pill_text(
+                x0 + pad, y0 + layout["companion_y"], layout["companion_h"],
+                f"beaten with {companion}", size=13 * fs, color=WARN, plate=PLATE_GOLD,
+                letterspaced=False,
+            )
         description = str(card.get("description") or "No description available.").strip()
         clipped = clip_text_to_lines(
             description, width_px=text_w, font_size=13 * fs,
@@ -1115,6 +1309,10 @@ class RollCreditsPanel(BasePanel):
         ]
         fact_line = "  ·  ".join(str(value) for value in facts if value)
         if fact_line:
+            self._track(self.canvas.create_line(
+                x0 + pad, y0 + layout["facts_y"] - 8 * u, x1 - pad, y0 + layout["facts_y"] - 8 * u,
+                fill=EDGE_SOFT, width=1,
+            ))
             self._track(self.canvas.create_text(
                 x0 + pad, y0 + layout["facts_y"], anchor="nw",
                 text=fact_line, fill=ACCENT, font=self._font(11 * fs, True),
@@ -1194,7 +1392,7 @@ class RollCreditsPanel(BasePanel):
         count_text = tour_counter_label(index, total, dashboard=dashboard)
         left = next_in_seconds(self._phase_started or time.time(), self._phase_dwell or 1)
         self._chrome_count_id = self._track(self.canvas.create_text(
-            *layout["counter_xy"], anchor="w", text=count_text,
+            *layout["counter_xy"], anchor="w", text=letterspace(count_text),
             fill=INK_2, font=self._font(13, True),
         ))
         self._chrome_next_id = self._track(self.canvas.create_text(
@@ -1205,14 +1403,14 @@ class RollCreditsPanel(BasePanel):
         if layout["segmented"] and layout["segments"]:
             for i, (sx, sy, ex, ey) in enumerate(layout["segments"]):
                 fill = RAIL_DONE if i < layout["current"] else RAIL_TRACK
-                self._track(self.canvas.create_rectangle(sx, sy, ex, ey, fill=fill, outline=""))
+                paint_bar(self.canvas, (sx, sy, ex, ey), fill=fill, track=self._track)
                 if i == layout["current"]:
                     fill_id = self.canvas.create_rectangle(sx, sy, sx, ey, fill=ACCENT, outline="")
                     self._track(fill_id)
                     self._chrome_fill_id = fill_id
                     self._chrome_geom = ("h", sx, ex, sy, ey - sy)
         else:
-            self._track(self.canvas.create_rectangle(rx0, ry0, rx1, ry1, fill=RAIL_TRACK, outline=""))
+            paint_bar(self.canvas, (rx0, ry0, rx1, ry1), fill=RAIL_TRACK, track=self._track)
             fill_id = self.canvas.create_rectangle(rx0, ry0, rx0, ry1, fill=ACCENT, outline="")
             self._track(fill_id)
             self._chrome_fill_id = fill_id

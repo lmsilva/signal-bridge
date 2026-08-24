@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -24,6 +25,306 @@ FILL = "#141F35"  # ≈ rgba(255,255,255,.045) over BG
 CARD = FILL
 CARD_EDGE = LINE
 CONTAINER = BG
+
+# --- Depth tokens (§1.4b) ----------------------------------------------------
+# Tk has no alpha, gradients or radii, so the "glass card" look is built from
+# pre-blended tones: a page wash, a card body that lifts toward its top edge,
+# a hairline bevel and an offset shadow.
+BG_DEEP = "#050B1A"  # page bottom / vignette
+BG_WASH = "#123056"  # page top
+CARD_HI = "#16294F"  # card top
+CARD_LO = "#0C1730"  # card bottom
+CARD_BEVEL = "#4E7BB4"  # top edge highlight
+EDGE = "#284A78"  # card border
+EDGE_SOFT = "#1E3860"  # inner rules / row separators
+SHADOW = "#03070F"
+TRACK = "#152443"  # empty part of a bar / rail
+GOLD = "#F5C453"
+SILVER = "#C9D6EA"
+BRONZE = "#E09256"
+MEDALS = (GOLD, SILVER, BRONZE)
+# Hand-tuned plates: blending an accent into navy desaturates to grey, so the
+# tinted surfaces behind chips and winner rows are authored directly.
+PLATE_GOLD = "#46300F"
+PLATE_ACCENT = "#0E3252"
+PLATE_GOOD = "#0F3527"
+PLATE_ALERT = "#3D1421"
+PLATE_MUTED = "#1A2540"
+
+
+def plate_for(color: str) -> str:
+    """Tinted surface that matches an accent without going grey."""
+    return {
+        GOLD: PLATE_GOLD,
+        ACCENT: PLATE_ACCENT,
+        GOOD: PLATE_GOOD,
+        ALERT: PLATE_ALERT,
+    }.get(color, PLATE_MUTED)
+
+
+def _channels(color: str) -> tuple[int, int, int]:
+    text = str(color or "").strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        text = "0B1730"
+    try:
+        return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
+    except ValueError:
+        return 0x0B, 0x17, 0x30
+
+
+def mix(color_a: str, color_b: str, t: float) -> str:
+    """Blend two hex colours (`t=0` → a, `t=1` → b)."""
+    ratio = max(0.0, min(1.0, float(t)))
+    ar, ag, ab = _channels(color_a)
+    br, bg_, bb = _channels(color_b)
+    return "#%02x%02x%02x" % (
+        int(round(ar + (br - ar) * ratio)),
+        int(round(ag + (bg_ - ag) * ratio)),
+        int(round(ab + (bb - ab) * ratio)),
+    )
+
+
+def tint(color: str, amount: float, *, over: str = BG) -> str:
+    """Push a colour toward white (`amount > 0`) or toward the page (`< 0`)."""
+    if amount >= 0:
+        return mix(color, "#FFFFFF", amount)
+    return mix(color, over, -amount)
+
+
+def rounded_points(box, radius: float) -> list[float]:
+    """Point list for `create_polygon(..., smooth=True)` shaped as a round-rect."""
+    x0, y0, x1, y1 = (float(value) for value in box)
+    if x1 < x0:
+        x0, x1 = x1, x0
+    if y1 < y0:
+        y0, y1 = y1, y0
+    r = max(0.0, min(float(radius), (x1 - x0) / 2, (y1 - y0) / 2))
+    return [
+        x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r,
+        x1, y1 - r, x1, y1, x1 - r, y1, x0 + r, y1,
+        x0, y1, x0, y1 - r, x0, y0 + r, x0, y0,
+    ]
+
+
+def _corner_inset(y: float, y0: float, y1: float, radius: float) -> float:
+    """How far a horizontal slice at `y` must pull in to follow a round-rect."""
+    if radius <= 0:
+        return 0.0
+    if y < y0 + radius:
+        dy = radius - (y - y0)
+    elif y > y1 - radius:
+        dy = radius - (y1 - y)
+    else:
+        return 0.0
+    dy = max(0.0, min(radius, dy))
+    return radius - math.sqrt(max(0.0, radius * radius - dy * dy))
+
+
+def paint_gradient(
+    canvas,
+    box,
+    top_color: str,
+    bottom_color: str,
+    *,
+    radius: float = 0.0,
+    bands: int = 18,
+    track=None,
+):
+    """Vertical gradient as banded rectangles, clipped to a round-rect outline."""
+    x0, y0, x1, y1 = (float(value) for value in box)
+    height = y1 - y0
+    if height <= 0 or x1 <= x0:
+        return []
+    count = max(2, int(bands))
+    step = height / count
+    r = max(0.0, min(float(radius), (x1 - x0) / 2, height / 2))
+    ids = []
+    if r > 0:
+        # Bands are rectangles, so their stepped corners would let whatever sits
+        # behind the card (its own shadow) show through. Seat them on the shape.
+        base = paint_round_rect(
+            canvas, box, radius=r, fill=mix(top_color, bottom_color, 0.5), track=track,
+        )
+        ids.append(base)
+    for index in range(count):
+        band_top = y0 + step * index
+        band_bottom = min(y1, band_top + step + 0.6)  # overlap hides seams
+        color = mix(top_color, bottom_color, index / max(1, count - 1))
+        inset = max(
+            _corner_inset(band_top, y0, y1, r),
+            _corner_inset(band_bottom, y0, y1, r),
+        )
+        item = canvas.create_rectangle(
+            x0 + inset, band_top, x1 - inset, band_bottom, fill=color, outline="",
+        )
+        ids.append(item)
+        if track:
+            track(item)
+    return ids
+
+
+def paint_backdrop(canvas, screen_w: int, screen_h: int, *, track=None, accent: str = BG_WASH):
+    """Page wash — a lit top fading into a deep bottom, instead of flat navy."""
+    ids = paint_gradient(
+        canvas, (0, 0, screen_w, screen_h), mix(BG, accent, 0.55), BG_DEEP,
+        bands=26, track=track,
+    )
+    return ids
+
+
+def paint_round_rect(
+    canvas, box, *, radius: float = 0.0, fill: str = "", outline: str = "",
+    width: float = 1, track=None,
+):
+    item = canvas.create_polygon(
+        *rounded_points(box, radius),
+        fill=fill or "",
+        outline=outline or "",
+        width=max(1, int(round(width))),
+        smooth=True,
+    )
+    if track:
+        track(item)
+    return item
+
+
+def paint_card(
+    canvas,
+    box,
+    *,
+    u: float = 1.0,
+    radius: float | None = None,
+    accent: str | None = None,
+    lift: float = 0.0,
+    track=None,
+    shadow: bool = True,
+):
+    """Layered card: shadow, top-lit gradient body, hairline edge and bevel."""
+    x0, y0, x1, y1 = (float(value) for value in box)
+    r = (18 * u) if radius is None else float(radius)
+    r = max(0.0, min(r, (x1 - x0) / 2, (y1 - y0) / 2))
+    top = mix(CARD_HI, accent, 0.10) if accent else CARD_HI
+    bottom = CARD_LO
+    if lift:
+        top = tint(top, lift)
+        bottom = tint(bottom, lift * 0.6)
+    if shadow:
+        # Inset horizontally so the shadow only reads as a soft seat under the
+        # card instead of a hard band down its right edge.
+        paint_round_rect(
+            canvas, (x0 + 8 * u, y0 + 8 * u, x1 - 8 * u, y1 + 7 * u),
+            radius=r, fill=mix(BG_DEEP, SHADOW, 0.6), outline="", track=track,
+        )
+    paint_gradient(canvas, box, top, bottom, radius=r, bands=16, track=track)
+    edge = mix(EDGE, accent, 0.45) if accent else EDGE
+    paint_round_rect(canvas, box, radius=r, fill="", outline=edge, width=max(1, 2 * u), track=track)
+    # Bevel: a short lit run along the top edge sells the glass.
+    bevel = canvas.create_line(
+        x0 + r * 0.8, y0 + max(1.0, 1.5 * u), x1 - r * 0.8, y0 + max(1.0, 1.5 * u),
+        fill=mix(top, CARD_BEVEL, 0.55), width=max(1, int(round(1.5 * u))),
+    )
+    if track:
+        track(bevel)
+    return bevel
+
+
+def paint_bar(
+    canvas, box, *, radius: float | None = None, fill: str = ACCENT, outline: str = "",
+    track=None,
+):
+    """Rounded bar/pill; falls back to a rectangle when it is too small to round."""
+    x0, y0, x1, y1 = (float(value) for value in box)
+    if x1 < x0:
+        x0, x1 = x1, x0
+    if y1 < y0:
+        y0, y1 = y1, y0
+    short = min(x1 - x0, y1 - y0)
+    r = (short / 2) if radius is None else max(0.0, min(float(radius), short / 2))
+    if short < 3 or r < 1.2:
+        item = canvas.create_rectangle(x0, y0, x1, y1, fill=fill, outline=outline or "")
+        if track:
+            track(item)
+        return item
+    return paint_round_rect(
+        canvas, (x0, y0, x1, y1), radius=r, fill=fill, outline=outline, track=track,
+    )
+
+
+def paint_column(canvas, cx: float, baseline: float, half: float, height: float, color: str,
+                 *, u: float = 1.0, track=None):
+    """Chart bar with a rounded cap that still sits flat on the axis."""
+    top = baseline - max(0.0, height)
+    radius = min(half, max(0.0, height) / 2)
+    paint_bar(canvas, (cx - half, top, cx + half, baseline), radius=radius, fill=color,
+              track=track)
+    if height > radius * 2:
+        item = canvas.create_rectangle(
+            cx - half, baseline - radius, cx + half, baseline, fill=color, outline="",
+        )
+        if track:
+            track(item)
+    cap = canvas.create_line(
+        cx - half * 0.55, top + max(1.0, u), cx + half * 0.55, top + max(1.0, u),
+        fill=mix(color, "#FFFFFF", 0.45), width=max(1, int(round(2 * u))),
+    )
+    if track:
+        track(cap)
+
+
+def paint_meter(canvas, box, fraction: float, color: str, *, track=None, track_color=TRACK):
+    """Horizontal track with a proportional fill — used by every stat bar."""
+    x0, y0, x1, y1 = (float(value) for value in box)
+    paint_bar(canvas, (x0, y0, x1, y1), fill=track_color, track=track)
+    share = max(0.0, min(1.0, float(fraction or 0.0)))
+    if share <= 0:
+        return
+    height = y1 - y0
+    end = x0 + max(height, (x1 - x0) * share)
+    paint_bar(canvas, (x0, y0, min(x1, end), y1), fill=color, track=track)
+
+
+THIN_SPACE = "\u2009"
+
+
+def letterspace(text: str, *, gap: str = THIN_SPACE) -> str:
+    """Fake tracking for small-caps labels (Tk has no letter-spacing)."""
+    letters = str(text or "")
+    if len(letters) < 2:
+        return letters
+    return gap.join(letters)
+
+
+def paint_section_title(
+    canvas,
+    x: float,
+    y: float,
+    *,
+    text: str,
+    font,
+    u: float = 1.0,
+    fill: str = INK_2,
+    accent: str = ACCENT,
+    line_h: float = 0.0,
+    track=None,
+):
+    """Accent tick + tracked caps label — the shared card header treatment."""
+    tick_w = max(2.0, 3 * u)
+    tick_h = max(8.0, line_h * 0.72 if line_h else 14 * u)
+    tick_top = y + max(0.0, (line_h - tick_h) / 2) if line_h else y
+    bar = canvas.create_rectangle(
+        x, tick_top, x + tick_w, tick_top + tick_h, fill=accent, outline="",
+    )
+    if track:
+        track(bar)
+    label_x = x + tick_w + 9 * u
+    item = canvas.create_text(
+        label_x, y, anchor="nw", text=letterspace(text), fill=fill, font=font,
+    )
+    if track:
+        track(item)
+    return {"text_x": label_x, "tick_w": tick_w}
 # Timer rings — muted arc for non-soonest; track under every ring.
 MUTE_ARC = "#606878"  # ≈ rgba(255,255,255,.35) on BG
 RING_TRACK = "#232E45"  # ≈ rgba(255,255,255,.10) on BG

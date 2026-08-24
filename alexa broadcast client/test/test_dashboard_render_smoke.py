@@ -16,9 +16,14 @@ CLIENT_ROOT = Path(__file__).resolve().parents[1]
 if str(CLIENT_ROOT) not in sys.path:
     sys.path.insert(0, str(CLIENT_ROOT))
 
-from src.autodarts_panel import AutodartsPanel, layout_dashboard
+from src.autodarts_panel import (
+    AutodartsPanel,
+    layout_dashboard,
+    layout_match,
+    should_show_turn_strip,
+)
 from src.design_system import PX_PER_POINT, page_chrome, text_line_h
-from src.roll_credits_panel import RollCreditsPanel, layout_boxes
+from src.roll_credits_panel import RollCreditsPanel, choose_showcase_shots, layout_boxes
 
 SCREENS = ((1080, 1920), (1200, 1920), (900, 1600), (1920, 1080))
 
@@ -177,6 +182,27 @@ def sample_dashboard():
     }
 
 
+def sample_match(*, finished=False, players=2):
+    names = ["war d", "trashpanda", "kylie", "tommy"][:players]
+    return {
+        "type": "autodarts.match",
+        "match": {
+            "status": "finished" if finished else "live",
+            "settingsLine": "X01 501 · Best of 5",
+            "durationSec": 742,
+            "currentPlayerIndex": 0,
+            "gameShot": "D20" if finished else None,
+            "players": [
+                {"name": name, "score": 141 + index * 40, "legs": 3 - index,
+                 "average": 24.8 - index, "lastTurnPoints": 60 - index * 5,
+                 "isWinner": finished and index == 0}
+                for index, name in enumerate(names)
+            ],
+            "turn": {"points": 60, "darts": [{"seg": "T20"}, {"seg": "S5"}, {"seg": "S1"}]},
+        },
+    }
+
+
 def sample_tour():
     return {
         "type": "roll-credits.tour",
@@ -248,6 +274,52 @@ class DashboardRenderTests(unittest.TestCase):
                 screen=screen, label="autodarts",
             )
 
+    def test_autodarts_match_keeps_every_string_inside_its_card(self):
+        """Score cards size their headline from the card, so a wall-sized number
+        must still clear the name, legs and averages around it."""
+        for finished in (False, True):
+            for players in (2, 4):
+                for screen in SCREENS:
+                    panel, canvas = make_panel(AutodartsPanel, screen)
+                    payload = sample_match(finished=finished, players=players)
+                    panel._render_match(payload)
+                    self.assertGreater(len(canvas.texts()), 6, f"nothing painted for {screen}")
+                    boxes = layout_match(
+                        *screen, timed=finished, player_count=players, finished=finished,
+                        show_strip=should_show_turn_strip(
+                            payload["match"], finished=finished,
+                        ),
+                    )
+                    cards = {
+                        key: box for key, box in boxes.items()
+                        if isinstance(box, tuple) and len(box) == 4
+                    }
+                    # Each player owns a slice of the score band — check those,
+                    # not the band, so a spilling column cannot hide next door.
+                    for key in ("scores", "scores_left", "scores_right"):
+                        box = cards.pop(key, None)
+                        if not box:
+                            continue
+                        count = players if key == "scores" else max(1, players // 2)
+                        if key == "scores":
+                            width = (box[2] - box[0]) / count
+                            for index in range(count):
+                                cards[f"{key}{index}"] = (
+                                    box[0] + width * index, box[1],
+                                    box[0] + width * (index + 1), box[3],
+                                )
+                        else:
+                            height = (box[3] - box[1]) / count
+                            for index in range(count):
+                                cards[f"{key}{index}"] = (
+                                    box[0], box[1] + height * index,
+                                    box[2], box[1] + height * (index + 1),
+                                )
+                    self.assert_text_inside_cards(
+                        canvas, cards, screen=screen,
+                        label=f"autodarts match ({players}p{' final' if finished else ''})",
+                    )
+
     def test_roll_credits_dashboard_keeps_every_string_inside_its_card(self):
         for screen in SCREENS:
             panel, canvas = make_panel(RollCreditsPanel, screen)
@@ -270,17 +342,23 @@ class DashboardRenderTests(unittest.TestCase):
             "developer": "Black Rock Studio", "publisher": "Disney Interactive",
             "genres": ["Racing", "Action"],
         }
-        for screen in SCREENS:
-            panel, canvas = make_panel(RollCreditsPanel, screen)
-            panel._tour = sample_tour()
-            panel._games = [{"id": "g1"}]
-            panel._index = 0
-            panel._draw_showcase(card)
-            self.assertGreater(len(canvas.texts()), 3, f"nothing painted for {screen}")
-            boxes = layout_boxes(*screen, dashboard=False, timed=False)
-            self.assert_text_inside_cards(
-                canvas, boxes, screen=screen, label="roll credits showcase",
-            )
+        shots = dict(card, screenshots=[f"http://x/{n}.jpg" for n in range(3)])
+        # Missing screenshots reflow the whole page, so cover both shapes.
+        for variant in (card, shots):
+            for screen in SCREENS:
+                panel, canvas = make_panel(RollCreditsPanel, screen)
+                panel._tour = sample_tour()
+                panel._games = [{"id": "g1"}]
+                panel._index = 0
+                panel._draw_showcase(variant)
+                self.assertGreater(len(canvas.texts()), 3, f"nothing painted for {screen}")
+                boxes = layout_boxes(
+                    *screen, dashboard=False, timed=False,
+                    shots=bool(choose_showcase_shots(variant)),
+                )
+                self.assert_text_inside_cards(
+                    canvas, boxes, screen=screen, label="roll credits showcase",
+                )
 
 
 if __name__ == "__main__":
