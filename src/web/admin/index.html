@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal75">
+  <link rel="stylesheet" href="styles.css?v=signal76">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -436,6 +436,36 @@
               <button type="button" class="segmented-btn active" data-credits-view="grid">Grid</button>
               <button type="button" class="segmented-btn" data-credits-view="list">List</button>
             </div>
+            <label class="credits-inline-field credits-sort-field">Sort
+              <select class="field-input" id="credits-sort-select">
+                <optgroup label="Induction">
+                  <option value="induction:desc">Newest inducted first</option>
+                  <option value="induction:asc">Oldest inducted first</option>
+                </optgroup>
+                <optgroup label="Beaten">
+                  <option value="beatenAt:desc">Most recently beaten</option>
+                  <option value="beatenAt:asc">Beaten longest ago</option>
+                </optgroup>
+                <optgroup label="Difficulty">
+                  <option value="difficulty:desc">Hardest first</option>
+                  <option value="difficulty:asc">Easiest first</option>
+                </optgroup>
+                <optgroup label="Game">
+                  <option value="title:asc">Title A → Z</option>
+                  <option value="title:desc">Title Z → A</option>
+                  <option value="system:asc">System A → Z</option>
+                  <option value="system:desc">System Z → A</option>
+                  <option value="releaseDate:desc">Newest release</option>
+                  <option value="releaseDate:asc">Oldest release</option>
+                  <option value="maxPlayers:desc">Most players</option>
+                </optgroup>
+                <optgroup label="Library">
+                  <option value="createdAt:desc">Recently added</option>
+                  <option value="createdAt:asc">Added longest ago</option>
+                </optgroup>
+              </select>
+            </label>
+            <button type="button" class="btn btn-outline" id="btn-credits-reorder">Reorder</button>
             <div class="credits-zoom-wrap" id="credits-density-wrap">
               <span class="credits-control-label">Zoom</span>
               <button type="button" class="credits-zoom-btn" id="btn-credits-zoom-out" aria-label="Zoom out — more tiles per row">−</button>
@@ -450,6 +480,12 @@
             <button type="button" class="btn btn-outline" id="btn-credits-rescrape-selected" disabled>Re-scrape selected</button>
             <button type="button" class="btn btn-danger" id="btn-credits-delete-selected" disabled>Delete selected</button>
             <button type="button" class="btn btn-outline" id="btn-credits-cancel-select">Cancel</button>
+          </div>
+          <div class="credits-reorder-bar" id="credits-reorder-bar" hidden>
+            <strong>Reorder mode</strong>
+            <span id="credits-reorder-copy">Drag a game, or use ↑ ↓, to set the induction order.</span>
+            <button type="button" class="btn btn-outline" id="btn-credits-reorder-reset">Reset to beaten-date order</button>
+            <button type="button" class="btn btn-accent" id="btn-credits-reorder-done">Done</button>
           </div>
           <p class="credits-job-status" id="credits-job-status">Checking media jobs…</p>
         </div>
@@ -489,7 +525,7 @@
             <table class="credits-table">
               <thead><tr>
                 <th class="credits-select-col" aria-label="Selected"></th>
-                <th class="credits-induction-col">#</th>
+                <th class="credits-induction-col"><button type="button" data-credits-sort="induction">#</button></th>
                 <th><button type="button" data-credits-sort="title">Title</button></th>
                 <th><button type="button" data-credits-sort="system">System</button></th>
                 <th><button type="button" data-credits-sort="beatenAt">Beaten</button></th>
@@ -1471,6 +1507,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal75"></script>
+  <script src="app.js?v=signal76"></script>
 </body>
 </html>

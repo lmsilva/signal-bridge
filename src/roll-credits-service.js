@@ -225,6 +225,14 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     return store.updateGame(id, patch);
   }
 
+  function reorderGames(ids) {
+    return store.reorderGames(ids);
+  }
+
+  function resetInductionOrder() {
+    return store.resetInductionOrder();
+  }
+
   function createManual(value) {
     return scraper.createManual(value);
   }
@@ -255,6 +263,8 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     listGames: store.listGames,
     getStats: store.getStats,
     updateGame,
+    reorderGames,
+    resetInductionOrder,
     deleteGame,
     bulkDelete,
     addUploadedImage,

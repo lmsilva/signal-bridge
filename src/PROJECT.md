@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Autodarts board Error status)
+**Last updated:** 2026-08-24 (Roll Credits induction order + management sorting)
 
 ---
 
@@ -122,7 +122,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/web-tls.js` | Loads/generates cert in `data/web-certs/` (camera QR needs HTTPS on iOS Chrome); reuses existing PEMs (e.g. Let's Encrypt from `issue-letsencrypt-cert.sh`); optional `WEB_TLS_CERT_FILE` / `WEB_TLS_KEY_FILE` |
 | `src/qr-image-cache.js` | Stores "QR code → embedded photo" uploads under `data/qr-image-cache/` **indefinitely** (no automatic expiry) — serves them back at `/qr-images/<token>.<ext>`; writes compact JPEG grid thumbs at `/qr-images/thumbs/<token>.180.jpg` (on upload, startup backfill, and on-demand `ensureThumb` via `sharp`); `list()` returns every stored photo newest-first with `{token,path,thumbPath,thumbReady,createdAt}` for the Slideshow Manager tab / Shared Photo Slideshow tile; `delete(token)` removes original + thumb; `onChange(listener)` fires on every `store()`/`delete()`/thumb ready (with the fresh `list()`) so `GET /api/photos/events` (SSE) can push live camera-roll updates to every open browser tab |
 | `src/slideshow-settings.js` | Persists Shared Photo Slideshow prefs — playback order (`recent` \| `oldest` \| `random`, default `recent`) and seconds per photo (5–60, default 5) — to `data/slideshow-settings.json`; getters reload from disk so admin UI and Alexa voice stay in sync |
-| `src/roll-credits-store.js` | Roll Credits storage: atomic `data/roll-credits.json` CRUD, permanent induction numbers, list/filter/page, canonical-system mapping, duplicate warnings, dashboard stats, and mutation listeners used by SSE |
+| `src/roll-credits-store.js` | Roll Credits storage: atomic `data/roll-credits.json` CRUD, **beat-date induction ordering with a manual override** (`reorderGames`/`resetInductionOrder`), list/filter/page/sort (title, system, beatenAt, createdAt, induction, difficulty, releaseDate, maxPlayers), canonical-system mapping, duplicate warnings, dashboard stats, and mutation listeners used by SSE |
 | `src/roll-credits-settings.js` | Roll Credits persisted media/scrape/display/size settings in `data/roll-credits-settings.json`; getters reload from disk and writes use temp-file rename |
 | `src/roll-credits-systems.json` | Shipped canonical console/handheld/PC list and IGDB platform-id mapping for Roll Credits |
 | `src/roll-credits-credentials.js` | Encrypted IGDB client id/secret persistence; `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` environment values take precedence and block admin replacement |
@@ -534,6 +534,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-24: **Roll Credits induction order you control** — induction numbers are now **derived from the beaten date** instead of insertion order: back-dating a game slots it between the right neighbours, #1 is the oldest clear, the highest number is the newest, and games with no date sink to the bottom of the list (lowest numbers). `reorderGames(ids)` takes a list in display order and gives those games *the slots they already hold* in the new order, so dragging inside a filtered or paginated view is safe; the arrangement persists in `data/roll-credits.json` (`order` + `orderManual`) and later additions still slot in chronologically around it. `resetInductionOrder()` returns to pure beat-date order. New route `POST /api/roll-credits/games/reorder` (`{ ids }` or `{ reset: true }`). `listGames` gained **difficulty / releaseDate / maxPlayers** sorts and now always sinks unknown values to the bottom whichever direction you pick, and returns `orderManual`. The wall's `recent`/`oldest` tour order reads induction directly so a manual arrangement carries to the display. Admin page: a Sort dropdown (induction, beaten, difficulty, title, system, release, players, added) that works in grid **and** list, plus a **Reorder** mode with drag-and-drop and ↑ ↓ steppers in both views and a "Reset to beaten-date order" button. Cache-bust `?v=signal76`. Deploy: `./recreate.sh`. Tests: `test/roll-credits-store.test.js`, `test/web-server.test.js`.
 
 - 2026-08-23: **Autodarts YOUR BOARD never shows Error** — Board Manager `state.status: Error` (and failed/fault/starting) canonicalises to Stopped when connected, Offline when not; raw fault strings are not sent on the wall. Deploy: `./recreate.sh`. Tests: `test/autodarts-payload.test.js`.
 

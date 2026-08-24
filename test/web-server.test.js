@@ -1407,6 +1407,47 @@ test('Roll Credits push creates a public playlist and card', async (t) => {
   assert.equal(sent[1].displaySeconds, 25 + 20 + 4);
 });
 
+test('Roll Credits reorder endpoint forwards ids and resets to the automatic order', async (t) => {
+  const calls = [];
+  const rollCredits = {
+    store: { getAllGames: () => [], getSystemById: () => null },
+    media: {
+      routePrefix: '/roll-credits-media/',
+      publicUrl: (value) => `/roll-credits-media/${value}`,
+      absolutePath: () => path.join(os.tmpdir(), 'missing-roll-credits-test-media'),
+    },
+    statusSnapshot: () => ({ gameCount: 0 }),
+    getSettings: () => ({ display: {}, limits: { maxImageBytes: 1024 } }),
+    reorderGames: (ids) => {
+      calls.push(['reorder', ids]);
+      return { manual: true, order: [...ids].reverse() };
+    },
+    resetInductionOrder: () => {
+      calls.push(['reset']);
+      return { manual: false, order: [] };
+    },
+    start: () => {},
+    close: () => {},
+  };
+  const { webServer, base } = await startTestServer({ rollCredits });
+  t.after(() => webServer.stop());
+
+  const moved = await postJson(base, '/api/roll-credits/games/reorder', { ids: ['a', 'b'] });
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.manual, true);
+  assert.deepEqual(moved.body.order, ['b', 'a']);
+
+  const reset = await postJson(base, '/api/roll-credits/games/reorder', { reset: true });
+  assert.equal(reset.status, 200);
+  assert.equal(reset.body.manual, false);
+  assert.deepEqual(calls, [['reorder', ['a', 'b']], ['reset']]);
+
+  rollCredits.reorderGames = () => { throw new Error('Unknown game zzz'); };
+  const bad = await postJson(base, '/api/roll-credits/games/reorder', { ids: ['zzz'] });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /Unknown game/);
+});
+
 test('air-quality and now-playing quick-push tiles feed synthetic events', async () => {
   const { webServer, base, recorded } = await startTestServer();
   try {

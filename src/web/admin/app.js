@@ -5689,6 +5689,51 @@
   let creditsMediaDragIndex = null;
   let creditsFiltersOpen = false;
   let creditsKnownYears = [];
+  let creditsReordering = false;
+  let creditsOrderManual = false;
+  let creditsDragId = null;
+
+  const CREDITS_DIFFICULTY_RANK = {
+    easy: 1, normal: 2, hard: 3, brutal: 4,
+  };
+
+  // Mirrors the store's sort keys so the multi-system merge path (which pulls
+  // one request per system) orders exactly like a single server-side list.
+  function creditsSortValue(game, column) {
+    switch (column) {
+      case 'induction': return Number(game.induction) || 0;
+      case 'beatenAt': return creditsIsDateOnly(game.beatenAt) ? game.beatenAt : null;
+      case 'difficulty':
+        return CREDITS_DIFFICULTY_RANK[String(game.meta?.difficulty || '').toLowerCase()] || null;
+      case 'releaseDate': {
+        const text = String(game.meta?.releaseDate || '').trim();
+        const year = /^(\d{4})/.exec(text);
+        if (!year) return null;
+        return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : `${year[1]}-01-01`;
+      }
+      case 'maxPlayers': {
+        const players = Number(game.meta?.maxPlayers);
+        return Number.isFinite(players) && players > 0 ? players : null;
+      }
+      default: return String(game[column] || '').trim() || null;
+    }
+  }
+
+  function creditsCompare(a, b) {
+    const left = creditsSortValue(a, creditsSort);
+    const right = creditsSortValue(b, creditsSort);
+    if ((left == null) !== (right == null)) return left == null ? 1 : -1;
+    if (left == null) return (Number(b.induction) || 0) - (Number(a.induction) || 0);
+    const compared = typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+    if (compared !== 0) return creditsDir === 'asc' ? compared : -compared;
+    return (Number(b.induction) || 0) - (Number(a.induction) || 0);
+  }
+
+  function creditsCanReorder() {
+    return creditsSort === 'induction';
+  }
 
   function creditsViewportWidth() {
     return Math.max(320, Number(window.innerWidth) || 390);
@@ -5909,10 +5954,8 @@
         const merged = responses.flatMap((result) => result.games || []);
         const seen = new Set();
         const unique = merged.filter((game) => !seen.has(game.id) && seen.add(game.id));
-        const direction = creditsDir === 'asc' ? 1 : -1;
-        unique.sort((a, b) => direction * String(a[creditsSort] ?? '').localeCompare(
-          String(b[creditsSort] ?? ''), undefined, { numeric: true, sensitivity: 'base' },
-        ));
+        unique.sort(creditsCompare);
+        creditsOrderManual = responses.some((result) => result.orderManual === true);
         creditsTotal = unique.length;
         creditsPages = Math.ceil(unique.length / pageSize) || (unique.length ? 1 : 0);
         creditsPage = Math.min(Math.max(1, creditsPage), Math.max(1, creditsPages));
@@ -5921,6 +5964,7 @@
         const size = creditsView === 'grid' ? 500 : 50;
         const result = await apiGet(`${CREDITS_ROUTE}/games?${creditsListQuery(size)}`);
         creditsGames = result.games || [];
+        creditsOrderManual = result.orderManual === true;
         creditsTotal = Number(result.total) || 0;
         creditsPages = Number(result.pages) || (creditsTotal ? Math.ceil(creditsTotal / size) : 0);
         creditsPage = Number(result.page) || 1;
@@ -5963,6 +6007,58 @@
     if (creditsView === 'grid') renderCreditsGrid();
   }
 
+  function syncCreditsSortChrome() {
+    const select = $('credits-sort-select');
+    if (select) select.value = `${creditsSort}:${creditsDir}`;
+    const toggle = $('btn-credits-reorder');
+    if (toggle) {
+      toggle.classList.toggle('active', creditsReordering);
+      toggle.textContent = creditsReordering ? 'Done reordering' : 'Reorder';
+    }
+    const bar = $('credits-reorder-bar');
+    if (bar) bar.hidden = !creditsReordering;
+    const copy = $('credits-reorder-copy');
+    if (copy) {
+      copy.textContent = creditsOrderManual
+        ? 'Custom order is on — drag a game, or use ↑ ↓, to change it.'
+        : 'Order follows beaten dates. Drag a game, or use ↑ ↓, to take over.';
+    }
+    const reset = $('btn-credits-reorder-reset');
+    if (reset) reset.disabled = !creditsOrderManual;
+  }
+
+  function setCreditsReordering(on) {
+    creditsReordering = Boolean(on);
+    if (creditsReordering) {
+      creditsSelecting = false;
+      creditsSelected.clear();
+      // Dragging only means something against the induction order, so entering
+      // reorder mode from any other sort snaps back to it first.
+      if (!creditsCanReorder()) {
+        creditsSort = 'induction';
+        creditsDir = 'desc';
+        creditsPage = 1;
+        loadCredits();
+        return;
+      }
+    }
+    renderCredits();
+  }
+
+  // Rendered as spans, not buttons: grid tiles are themselves <button> elements
+  // and nested buttons get hoisted out of the tile by the parser.
+  function creditsMoveButtons(index) {
+    if (!creditsReordering) return '';
+    const step = (delta, glyph, label, disabled) => `<span
+      class="credits-move-btn${disabled ? ' is-disabled' : ''}"
+      data-credits-move="${delta}" data-credits-move-index="${index}"
+      title="${label}">${glyph}</span>`;
+    return `<span class="credits-move">
+      ${step(-1, '↑', 'Move up — inducted more recently', index === 0)}
+      ${step(1, '↓', 'Move down — inducted earlier', index >= creditsGames.length - 1)}
+    </span>`;
+  }
+
   function renderCredits() {
     const empty = creditsTotal === 0;
     const filtered = creditsHasActiveFilters();
@@ -5981,6 +6077,7 @@
     });
     syncCreditsZoomControls();
     syncCreditsFiltersChrome();
+    syncCreditsSortChrome();
     renderCreditsSelection();
     if (creditsView === 'grid') renderCreditsGrid();
     else renderCreditsList();
@@ -5989,6 +6086,7 @@
   function renderCreditsGrid() {
     const host = $('credits-grid');
     syncCreditsZoomControls();
+    host.classList.toggle('is-reordering', creditsReordering);
     host.style.setProperty('--credits-columns', String(creditsGridColumns()));
     host.innerHTML = creditsGames.map((game, index) => {
       const thumb = creditsThumb(game);
@@ -6001,10 +6099,11 @@
         ? '<span class="credits-media-badge" title="Media pending">↻</span>'
         : state === 'failed' ? '<span class="credits-media-badge failed" title="Media failed">!</span>' : '';
       return `<button type="button" class="credits-tile${creditsSelected.has(game.id) ? ' selected' : ''}"
-        data-credits-id="${escapeHtml(game.id)}">
+        data-credits-id="${escapeHtml(game.id)}"${creditsReordering ? ' draggable="true"' : ''}>
         ${creditsSelecting ? '<span class="credits-tile-check"></span>' : ''}
         <span class="credits-cover">${art}${badge}
           <span class="credits-induction">#${String(game.induction || 0).padStart(3, '0')}</span>
+          ${creditsMoveButtons(index)}
         </span>
         <span class="credits-tile-copy">
           <strong class="credits-tile-title">${escapeHtml(game.title || 'Untitled game')}</strong>
@@ -6020,17 +6119,19 @@
   }
 
   function renderCreditsList() {
+    $('credits-table-body')?.classList.toggle('is-reordering', creditsReordering);
+    const headings = {
+      induction: '#', beatenAt: 'Beaten', createdAt: 'Added', title: 'Title', system: 'System',
+    };
     document.querySelectorAll('[data-credits-sort]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.creditsSort === creditsSort);
-      button.textContent = `${button.dataset.creditsSort === 'beatenAt' ? 'Beaten'
-        : button.dataset.creditsSort === 'createdAt' ? 'Added'
-          : button.dataset.creditsSort[0].toUpperCase() + button.dataset.creditsSort.slice(1)
-      }${creditsSortMark(button.dataset.creditsSort)}`;
+      const column = button.dataset.creditsSort;
+      button.classList.toggle('active', column === creditsSort);
+      button.textContent = `${headings[column] || column}${creditsSortMark(column)}`;
     });
-    $('credits-table-body').innerHTML = creditsGames.map((game) => `<tr data-credits-id="${escapeHtml(game.id)}"
-      class="${creditsSelected.has(game.id) ? 'selected' : ''}">
+    $('credits-table-body').innerHTML = creditsGames.map((game, index) => `<tr data-credits-id="${escapeHtml(game.id)}"
+      class="${creditsSelected.has(game.id) ? 'selected' : ''}"${creditsReordering ? ' draggable="true"' : ''}>
       <td>${creditsSelecting ? `<input type="checkbox" aria-label="Select ${escapeHtml(game.title)}"${creditsSelected.has(game.id) ? ' checked' : ''}>` : ''}</td>
-      <td class="credits-induction-col"><span class="credits-induction">#${String(game.induction || 0).padStart(3, '0')}</span></td>
+      <td class="credits-induction-col"><span class="credits-induction">#${String(game.induction || 0).padStart(3, '0')}</span>${creditsMoveButtons(index)}</td>
       <td><strong>${escapeHtml(game.title)}</strong></td>
       <td><span class="credits-system-chip">${escapeHtml(creditsSystemLabel(game.system))}</span></td>
       <td>${escapeHtml(creditsDate(game.beatenAt))}</td>
@@ -6042,6 +6143,51 @@
       ? `Page ${creditsPage} of ${creditsPages}` : 'Page 1 of 1';
     $('btn-credits-prev').disabled = creditsPage <= 1;
     $('btn-credits-next').disabled = creditsPage >= Math.max(1, creditsPages);
+  }
+
+  // The server treats the posted ids as "these games keep the slots they already
+  // hold, in this order", so a filtered or paginated view reorders safely.
+  async function commitCreditsOrder() {
+    const ids = creditsGames.map((game) => game.id);
+    try {
+      const result = await apiPost(`${CREDITS_ROUTE}/games/reorder`, { ids });
+      creditsOrderManual = result.manual === true;
+      await loadCredits({ quiet: true });
+    } catch (error) {
+      toast(error.message || 'Could not save the order', 'bad');
+      await loadCredits({ quiet: true });
+    }
+  }
+
+  function moveCreditsGame(index, delta) {
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= creditsGames.length) return;
+    const [moved] = creditsGames.splice(index, 1);
+    creditsGames.splice(target, 0, moved);
+    renderCredits();
+    commitCreditsOrder();
+  }
+
+  function dropCreditsGame(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return;
+    const from = creditsGames.findIndex((game) => game.id === fromId);
+    const to = creditsGames.findIndex((game) => game.id === toId);
+    if (from < 0 || to < 0) return;
+    const [moved] = creditsGames.splice(from, 1);
+    creditsGames.splice(to, 0, moved);
+    renderCredits();
+    commitCreditsOrder();
+  }
+
+  async function resetCreditsOrder() {
+    try {
+      await apiPost(`${CREDITS_ROUTE}/games/reorder`, { reset: true });
+      creditsOrderManual = false;
+      toast('Induction order follows beaten dates again', 'good');
+      await loadCredits({ quiet: true });
+    } catch (error) {
+      toast(error.message || 'Could not reset the order', 'bad');
+    }
   }
 
   function renderCreditsSelection() {
@@ -6056,6 +6202,7 @@
 
   function setCreditsSelecting(on) {
     creditsSelecting = on;
+    if (on) creditsReordering = false;
     if (!on) creditsSelected.clear();
     renderCredits();
   }
@@ -6793,18 +6940,80 @@
     });
     $('btn-credits-delete-selected')?.addEventListener('click', () => openCreditsDelete([...creditsSelected]));
     $('btn-credits-rescrape-selected')?.addEventListener('click', () => openCreditsRescrape([...creditsSelected]));
-    $('credits-grid')?.addEventListener('click', (event) => {
-      const tile = event.target.closest('[data-credits-id]');
-      if (!tile) return;
-      if (creditsSelecting) toggleCreditSelected(tile.dataset.creditsId);
-      else openCreditsEdit(tile.dataset.creditsId);
+    const openOrSelectCredit = (event) => {
+      const step = event.target.closest('[data-credits-move]');
+      if (step) {
+        if (!step.classList.contains('is-disabled')) {
+          moveCreditsGame(Number(step.dataset.creditsMoveIndex), Number(step.dataset.creditsMove));
+        }
+        return;
+      }
+      const host = event.target.closest('[data-credits-id]');
+      if (!host) return;
+      if (creditsReordering) return;
+      if (creditsSelecting) toggleCreditSelected(host.dataset.creditsId);
+      else openCreditsEdit(host.dataset.creditsId);
+    };
+    $('credits-grid')?.addEventListener('click', openOrSelectCredit);
+    $('credits-table-body')?.addEventListener('click', openOrSelectCredit);
+    for (const hostId of ['credits-grid', 'credits-table-body']) {
+      const host = $(hostId);
+      if (!host) continue;
+      host.addEventListener('dragstart', (event) => {
+        const item = event.target.closest('[data-credits-id]');
+        if (!item || !creditsReordering) return;
+        creditsDragId = item.dataset.creditsId;
+        item.classList.add('is-dragging');
+        try {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', creditsDragId);
+        } catch {
+          // Older WebViews reject setData; the drag still works locally.
+        }
+      });
+      host.addEventListener('dragover', (event) => {
+        if (!creditsDragId) return;
+        const item = event.target.closest('[data-credits-id]');
+        if (!item) return;
+        event.preventDefault();
+        try { event.dataTransfer.dropEffect = 'move'; } catch { /* ignore */ }
+        host.querySelectorAll('.is-drop-target').forEach((el) => {
+          if (el !== item) el.classList.remove('is-drop-target');
+        });
+        item.classList.add('is-drop-target');
+      });
+      host.addEventListener('dragleave', (event) => {
+        const item = event.target.closest('[data-credits-id]');
+        if (item && !item.contains(event.relatedTarget)) item.classList.remove('is-drop-target');
+      });
+      host.addEventListener('dragend', () => {
+        host.querySelectorAll('.is-dragging, .is-drop-target').forEach((el) => {
+          el.classList.remove('is-dragging', 'is-drop-target');
+        });
+        creditsDragId = null;
+      });
+      host.addEventListener('drop', (event) => {
+        const item = event.target.closest('[data-credits-id]');
+        if (!item || !creditsDragId) return;
+        event.preventDefault();
+        const fromId = creditsDragId;
+        creditsDragId = null;
+        item.classList.remove('is-drop-target');
+        dropCreditsGame(fromId, item.dataset.creditsId);
+      });
+    }
+    $('credits-sort-select')?.addEventListener('change', (event) => {
+      const [column, dir] = String(event.target.value || '').split(':');
+      if (!column) return;
+      creditsSort = column;
+      creditsDir = dir === 'asc' ? 'asc' : 'desc';
+      if (creditsReordering && !creditsCanReorder()) creditsReordering = false;
+      creditsPage = 1;
+      loadCredits();
     });
-    $('credits-table-body')?.addEventListener('click', (event) => {
-      const row = event.target.closest('[data-credits-id]');
-      if (!row) return;
-      if (creditsSelecting) toggleCreditSelected(row.dataset.creditsId);
-      else openCreditsEdit(row.dataset.creditsId);
-    });
+    $('btn-credits-reorder')?.addEventListener('click', () => setCreditsReordering(!creditsReordering));
+    $('btn-credits-reorder-done')?.addEventListener('click', () => setCreditsReordering(false));
+    $('btn-credits-reorder-reset')?.addEventListener('click', resetCreditsOrder);
     $('credits-q')?.addEventListener('input', () => {
       clearTimeout(creditsSearchTimer);
       creditsSearchTimer = setTimeout(() => { creditsPage = 1; loadCredits(); }, 250);
@@ -6842,6 +7051,7 @@
         creditsSort = button.dataset.creditsSort;
         creditsDir = 'asc';
       }
+      if (creditsReordering && !creditsCanReorder()) creditsReordering = false;
       creditsPage = 1;
       loadCredits();
     }));
