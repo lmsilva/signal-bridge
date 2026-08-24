@@ -9,7 +9,15 @@ import tkinter as tk
 import tkinter.font as tkfont
 from typing import Callable
 
-from src.design_system import ACCENT, INK, design_u
+from src.design_system import (
+    ACCENT,
+    CARD_LO,
+    INK,
+    PX_PER_POINT,
+    design_u,
+    mix,
+    paint_round_rect,
+)
 
 
 def _font_spec(family: str, size: int, *, weight: str = "normal") -> tuple:
@@ -28,11 +36,13 @@ def _tk_font(font_spec) -> tkfont.Font:
 
 
 def _measure(font_spec, text: str) -> int:
+    # Fall back in *px*: font sizes are points, so an estimate that forgets the
+    # px-per-point ratio draws a pill narrower than the glyphs it must hold.
     try:
         return int(_tk_font(font_spec).measure(text))
     except Exception:
         size = font_spec[1] if len(font_spec) > 1 else 16
-        return int(len(text) * size * 0.55)
+        return int(len(text) * size * PX_PER_POINT * 0.62)
 
 
 def _linespace(font_spec) -> int:
@@ -40,7 +50,7 @@ def _linespace(font_spec) -> int:
         return int(_tk_font(font_spec).metrics("linespace"))
     except Exception:
         size = font_spec[1] if len(font_spec) > 1 else 16
-        return size + 4
+        return int(size * PX_PER_POINT)
 
 
 def _stack_column(
@@ -79,6 +89,20 @@ def _stack_column(
         add(canvas.create_text(
             x, y, anchor=anchor, text=val, fill=value_fill, font=value_font,
         ))
+
+
+def pill_frame(
+    text: str, *, mid_x: float, cy: float, u: float, text_w: float, text_h: float,
+) -> tuple[float, float, float, float]:
+    """Rounded frame around the page title, sized from the *painted* string.
+
+    Font sizes are points and the box is px, so a box sized from the point
+    size clips the caps once Windows display scaling stretches the glyphs.
+    """
+    pad_x, pad_y = 26 * u, 8 * u
+    width = max(0.0, float(text_w)) + pad_x * 2
+    height = max(max(18 * u, float(text_h)) + pad_y * 2, 36 * u)
+    return (mid_x - width / 2, cy - height / 2, mid_x + width / 2, cy + height / 2)
 
 
 def paint_page_header(
@@ -135,16 +159,16 @@ def paint_page_header(
     )
 
     pill_text = (pill or "").upper()
-    pad_x, pad_y = 24 * u, 9 * u
-    tw = _measure(pill_font, pill_text)
-    th = max(18, int(round(24 * u)))
-    bw = tw + pad_x * 2
-    bh = max(th + pad_y * 2, 36 * u)
-    # Spec: 2px border at ~45% white, radius 0.
     border = max(1, int(round(2 * u)))
-    add(canvas.create_rectangle(
-        mid_x - bw / 2, cy - bh / 2, mid_x + bw / 2, cy + bh / 2,
-        outline="#a8b0bc", width=border, fill="",
+    pill_box = pill_frame(
+        pill_text, mid_x=mid_x, cy=cy, u=u,
+        text_w=_measure(pill_font, pill_text),
+        text_h=_linespace(pill_font),
+    )
+    bh = pill_box[3] - pill_box[1]
+    add(paint_round_rect(
+        canvas, pill_box, radius=bh / 2,
+        fill=mix(CARD_LO, ACCENT, 0.08), outline=mix("#a8b0bc", ACCENT, 0.45), width=border,
     ))
     add(canvas.create_text(
         mid_x, cy, anchor="center", text=pill_text, fill=INK, font=pill_font,

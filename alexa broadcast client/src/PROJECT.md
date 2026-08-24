@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (render smoke tests for painted text)
+**Last updated:** 2026-08-24 (depth/gradient design pass on Autodarts + Roll Credits)
 
 ---
 
@@ -72,7 +72,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `test/send_test.py` | Manual UDP smoke tests (`--type … autodarts-dashboard|autodarts-match|autodarts-final|autodarts-match-close|roll-credits|overhead|…`) |
 | `test/run_tests.bat` | Python `unittest` for `test_*.py` |
 | `test/test_*.py` | Unit tests — payload utils, config, weather fetch, main timer routing, `QrPanel`, `PhotoSlideshowPanel`, `map_tiles` (incl. `zoom_to_fit`), `place_facts`, `RoutePlannerPanel` layout math + formatting helpers, `TeslaBatteryPanel.battery_bar_height`, `input_control`/display remote, `text_marquee` (`MarqueeLine` fit-vs-overflow, tick/pause/reset cycle, `stop()`) |
-| `test/test_dashboard_render_smoke.py` | Render smoke — paints Autodarts dashboard + Roll Credits dashboard/showcase onto a recording canvas and asserts no painted string escapes its card or overlaps another string in the same card, across four screen sizes |
+| `test/test_dashboard_render_smoke.py` | Render smoke — paints the Autodarts dashboard, the Autodarts match/FINAL (2 and 4 players, per-player score slices) and Roll Credits dashboard/showcase (with and without screenshots) onto a recording canvas and asserts no painted string escapes its card or overlaps another string in the same card, across four screen sizes |
 | `README.md` | User-facing setup / portable build guide |
 
 ---
@@ -214,7 +214,7 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only (615 tests)
+test\run_tests.bat              # client unit tests only (620 tests)
 ```
 
 From repo root (bridge + client):
@@ -268,6 +268,8 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 ---
 
 ## Recent changes
+
+- 2026-08-24: **Depth design pass — Autodarts + Roll Credits** — Tk has no alpha, radii or gradients, so `design_system` now builds the "glass card" look from pre-blended tones: depth tokens (`BG_DEEP`/`BG_WASH`, `CARD_HI`/`CARD_LO`, `CARD_BEVEL`, `EDGE_SOFT`, `SHADOW`, `TRACK`, `MEDALS`, hand-tuned `PLATE_*` surfaces) plus painters `mix()`, `tint()`, `paint_backdrop()`, `paint_gradient()`, `paint_round_rect()`, `paint_card()`, `paint_bar()`, `paint_column()`, `paint_meter()`, `letterspace()` and `paint_section_title()`. Every page gets a lit-top page wash; cards are rounded, top-lit, bevelled and seated on a shadow (gradient bands sit on a solid round-rect base so the shadow cannot show through their stepped corners). Autodarts: status pill on YOUR BOARD, medal rank chips + win-share meters on the leaderboard, tracked month columns on a baseline, score pill + two-tone share bar for HEAD-TO-HEAD, three record chips, segment-coloured dart chips (`segment_accent()`), drawn thrower caret. Roll Credits: induction plate in the wide hero's empty right third, pill badges, ranked bars for systems/companions. Layout: portrait match spends the slack the width-bound board cannot use (bigger score cards + taller strip) and the player headline sizes from its card; a showcase with no screenshots grows the box art (portrait) or centres the copy beside a full-height still (landscape) instead of stretching the blurb into an empty rectangle; a tall hero keeps the cover box-art shaped. Tests: match render smoke (2/4 players × live/final × 4 sizes), showcase smoke with and without screenshots, `layout_boxes(shots=False)`, portrait match slack. Ship: portable client rebuild required (not run).
 
 - 2026-08-23: **Render smoke tests + leaderboard measuring** — `test_dashboard_render_smoke.py` renders the Autodarts dashboard and both Roll Credits phases onto a recording canvas and asserts every painted string sits inside a card and never overlaps another string in that card, at four portrait/landscape sizes. It caught two real collisions: leaderboard detail lines could strike the name above them, and long detail strings ran under the rank column. `leaderboard_row_ys()` now spaces name-over-detail from measured line heights and `_fit_leaderboard_detail()` measures the painted width to pick the compact form. `design_system.text_measurer()` / `measure_px_per_point()` fall back to estimates when Tk cannot measure. Ship: portable client rebuild required (not run).
 

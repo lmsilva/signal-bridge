@@ -11,6 +11,7 @@ if str(CLIENT_ROOT) not in sys.path:
 from src.design_system import (
     ACCENT,
     ALERT,
+    GOOD,
     INK_3,
     WARN,
     design_u,
@@ -26,7 +27,8 @@ from src.autodarts_panel import (
     board_info_row_ys,
     board_status_chip,
     board_radii,
-    records_row_ys,
+    records_chip_ys,
+    segment_accent,
     totals_row_ys,
     current_month_bar_color,
     dart_board_xy,
@@ -277,12 +279,20 @@ class LayoutTests(unittest.TestCase):
                 ]), f"rivalry rows collide — {where}")
 
                 records_h = boxes["records"][3] - boxes["records"][1]
-                records = records_row_ys(records_h, 3, u=u, px_per_pt=ppp)
+                records = records_chip_ys(records_h, u=u, px_per_pt=ppp)
                 self.assertTrue(records["fits"], f"house records clipped — {where}")
-                self.assertFalse(spans_overlap(
-                    [(records["title"], records["line_h"])]
-                    + [(y, records["line_h"]) for y in records["lines"]]
-                ), f"records rows collide — {where}")
+                self.assertFalse(spans_overlap([
+                    (records[key], records["heights"][key])
+                    for key in ("title", "value", "label", "who")
+                ]), f"records rows collide — {where}")
+                self.assertLessEqual(
+                    records["chip"][0], records["value"],
+                    f"record chip starts under its number — {where}",
+                )
+                self.assertGreaterEqual(
+                    records["chip"][1], records["who"] + records["heights"]["who"],
+                    f"record chip clips its holder — {where}",
+                )
 
                 months = months_chart_geom(
                     boxes["months"][3] - boxes["months"][1], u=u, px_per_pt=ppp,
@@ -319,6 +329,18 @@ class LayoutTests(unittest.TestCase):
         strip_h = boxes["strip"][3] - boxes["strip"][1]
         self.assertGreater(board_h, scores_h)
         self.assertGreater(board_h, strip_h)
+        self.assert_boxes_fit(boxes, 1080, 1920, timed=False)
+
+    def test_match_portrait_spends_the_slack_it_cannot_give_the_board(self):
+        """The board is width-bound in portrait; the leftover height used to sit
+        as a void above and below it."""
+        boxes = layout_match(1080, 1920, timed=False, player_count=2)
+        board = boxes["board"]
+        side = min(board[2] - board[0], board[3] - board[1]) * 0.92
+        void = (board[3] - board[1]) - side
+        self.assertLess(void, 240, "board floats in dead space")
+        self.assertGreater(boxes["scores"][3] - boxes["scores"][1], 380)
+        self.assertGreater(boxes["strip"][3] - boxes["strip"][1], 110)
         self.assert_boxes_fit(boxes, 1080, 1920, timed=False)
 
     def test_match_landscape_player_board_player(self):
@@ -413,6 +435,21 @@ class LabelFormatTests(unittest.TestCase):
         self.assertIn("Highest checkout 48", line)
         self.assertIn("180 scores 0", line)
         self.assertNotIn("Best out", line)
+        # Compact rows drop the win % — the row paints a meter for that.
+        compact = format_leaderboard_detail({
+            "wins": 11, "losses": 4, "winPct": 73,
+            "x01Average": 25.03, "bestCheckout": 48, "oneEighties": 0, "matches": 15,
+        }, compact=True)
+        self.assertIn("11–4", compact)
+        self.assertNotIn("73%", compact)
+        self.assertLess(len(compact), len(line))
+
+    def test_segment_accent_colours_the_turn_chips(self):
+        self.assertEqual(segment_accent("T20"), GOOD)
+        self.assertEqual(segment_accent("D16"), WARN)
+        self.assertEqual(segment_accent("S5"), ACCENT)
+        self.assertEqual(segment_accent("BULL"), ALERT)
+        self.assertEqual(segment_accent("—"), INK_3)
 
     def test_record_average(self):
         self.assertEqual(format_record_average(36.3), "36.3")

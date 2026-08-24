@@ -212,6 +212,42 @@ class RollCreditsLayoutTests(unittest.TestCase):
         self.assertLessEqual(boxes["title"][3], boxes["facts"][1] + 1)
         self.assertLessEqual(boxes["shots"][3], boxes["progress"][1] + 1)
 
+    def test_showcase_without_shots_reinvests_the_strip(self):
+        """A game with no screenshots used to stretch the blurb card into a
+        mostly-empty rectangle. Portrait grows the art, landscape centres."""
+        for screen in ((1080, 1920), (1920, 1080)):
+            with_shots = layout_boxes(*screen, dashboard=False, timed=True)
+            bare = layout_boxes(*screen, dashboard=False, timed=True, shots=False)
+            self.assertNotIn("shots", bare)
+            band_bottom = with_shots["shots"][3]
+            facts_h = bare["facts"][3] - bare["facts"][1]
+            # The blurb keeps a modest lift, never the whole strip.
+            self.assertLess(
+                facts_h, (with_shots["facts"][3] - with_shots["facts"][1]) + 130,
+                f"blurb card ballooned — {screen}",
+            )
+            self.assertLessEqual(bare["facts"][3], band_bottom + 1)
+            self.assertLessEqual(bare["title"][3], bare["facts"][1] + 1)
+            if screen[1] > screen[0]:
+                self.assertGreater(
+                    bare["hero"][3] - bare["hero"][1],
+                    with_shots["hero"][3] - with_shots["hero"][1] + 200,
+                    "portrait art should absorb the strip",
+                )
+                self.assertLessEqual(bare["hero"][3], bare["title"][1] + 1)
+            else:
+                # Copy block sits centred against the full-height still.
+                head = bare["title"][1] - with_shots["title"][1]
+                tail = band_bottom - bare["facts"][3]
+                self.assertLess(abs(head - tail), 4, "copy block is not centred")
+
+    def test_wide_hero_moves_the_induction_number_to_a_plate(self):
+        wide = latest_layout(1000, 340, note_count=0, game_row=False)
+        tall = latest_layout(380, 1400, note_count=3)
+        self.assertNotIn("game", wide["y"])
+        self.assertIn("game", tall["y"])
+        self.assertTrue(wide["fits"])
+
     def test_showcase_fits_portrait_and_landscape(self):
         self.assert_boxes_fit(1080, 1920, False)
         self.assert_boxes_fit(1920, 1080, False)
