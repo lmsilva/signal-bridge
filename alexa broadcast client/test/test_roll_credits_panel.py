@@ -1,6 +1,13 @@
+import io
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
+
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover - Pillow is a runtime dependency
+    Image = None
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
 if str(CLIENT_ROOT) not in sys.path:
@@ -9,10 +16,14 @@ if str(CLIENT_ROOT) not in sys.path:
 from src.design_system import ACCENT, WARN, design_u, page_chrome, text_line_h
 from src.payload_utils import resolve_display_type, title_for_payload
 from src.roll_credits_panel import (
+    LOOP_MAX_FRAMES,
+    LOOP_MIN_DELAY_MS,
+    HeroLoop,
     RollCreditsPanel,
     choose_counter_grid,
     choose_image_hero,
     choose_showcase_shots,
+    decode_animation,
     clip_text_to_lines,
     counters_layout,
     facts_card_layout,
@@ -49,7 +60,8 @@ class RollCreditsPayloadTests(unittest.TestCase):
         self.assertEqual(resolve_display_type(payload), "roll-credits.tour")
         self.assertEqual(title_for_payload(payload), ("Signal", "Roll Credits"))
 
-    def test_video_is_never_the_phase_one_hero(self):
+    def test_a_raw_video_hero_is_never_used(self):
+        # Without a rendered loop the panel has nothing it can decode.
         card = {
             "media": {
                 "hero": {"kind": "video", "url": "hero.mp4"},
@@ -58,6 +70,18 @@ class RollCreditsPayloadTests(unittest.TestCase):
         }
         self.assertEqual(choose_image_hero(card)["url"], "shot.jpg")
         self.assertIsNone(choose_image_hero({"media": {"hero": {"kind": "video", "url": "x"}}}))
+
+    def test_an_animated_video_hero_outranks_the_stills(self):
+        hero = {"kind": "video", "url": "clip.preview.webp", "animated": True}
+        card = {
+            "media": {
+                "hero": hero,
+                "screenshots": [{"kind": "screenshot", "url": "shot.jpg"}],
+            }
+        }
+        self.assertEqual(choose_image_hero(card), hero)
+        # The strip still carries the screenshots alongside the loop.
+        self.assertEqual([s["url"] for s in choose_showcase_shots(card)], ["shot.jpg"])
 
     def test_cover_hero_keeps_screenshots_for_strip(self):
         card = {
@@ -78,6 +102,93 @@ class RollCreditsPayloadTests(unittest.TestCase):
         self.assertEqual(choose_image_hero({"media": {"hero": cover}}), cover)
         self.assertEqual(format_beaten("2026-08-14"), "BEATEN AUG 14 2026")
         self.assertEqual(format_beaten(None), "DATE UNKNOWN")
+
+
+def make_animation(frame_count, duration_ms=100, size=(8, 6)):
+    """An in-memory animated WebP with distinguishable frames."""
+    frames = [
+        Image.new("RGB", size, (index * 8 % 256, 20, 40))
+        for index in range(frame_count)
+    ]
+    buffer = io.BytesIO()
+    frames[0].save(
+        buffer, format="WEBP", save_all=True, append_images=frames[1:],
+        duration=duration_ms, loop=0,
+    )
+    buffer.seek(0)
+    return buffer
+
+
+@unittest.skipIf(Image is None, "Pillow is required to build the fixture animation")
+class RollCreditsAnimatedHeroTests(unittest.TestCase):
+    def test_animation_decodes_to_frames_and_a_delay(self):
+        frames, delay = decode_animation(make_animation(6, duration_ms=120))
+        self.assertEqual(len(frames), 6)
+        self.assertEqual(delay, 120)
+        self.assertEqual(frames[0].mode, "RGB")
+
+    def test_long_animations_are_sampled_down_and_slowed_to_match(self):
+        count = LOOP_MAX_FRAMES * 3
+        frames, delay = decode_animation(make_animation(count, duration_ms=50))
+        self.assertLessEqual(len(frames), LOOP_MAX_FRAMES)
+        self.assertGreater(len(frames), 1)
+        # Dropping two frames of every three has to triple the gap or the loop
+        # would play three times too fast.
+        self.assertEqual(delay, 150)
+
+    def test_a_still_image_yields_no_loop(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (8, 6), (10, 20, 30)).save(buffer, format="WEBP")
+        buffer.seek(0)
+        self.assertEqual(decode_animation(buffer), ([], 0))
+        self.assertEqual(decode_animation(io.BytesIO(b"not an image")), ([], 0))
+
+    def test_delay_never_drops_below_the_floor(self):
+        _, delay = decode_animation(make_animation(4, duration_ms=1))
+        self.assertGreaterEqual(delay, LOOP_MIN_DELAY_MS)
+
+
+class HeroLoopTests(unittest.TestCase):
+    def setUp(self):
+        self.root = MagicMock()
+        self.canvas = MagicMock()
+        self.jobs = []
+        self.root.after.side_effect = lambda delay, fn: self.jobs.append((delay, fn)) or len(self.jobs)
+
+    def run_ticks(self, count):
+        for _ in range(count):
+            self.assertTrue(self.jobs, "loop stopped scheduling early")
+            _, callback = self.jobs.pop()
+            callback()
+
+    def test_the_loop_advances_and_wraps_around(self):
+        loop = HeroLoop(self.root)
+        loop.start(self.canvas, "hero", ["a", "b", "c"], 100)
+        self.run_ticks(4)
+        shown = [call.kwargs["image"] for call in self.canvas.itemconfigure.call_args_list]
+        self.assertEqual(shown, ["b", "c", "a", "b"])
+
+    def test_a_single_frame_never_schedules(self):
+        loop = HeroLoop(self.root)
+        loop.start(self.canvas, "hero", ["only"], 100)
+        self.assertEqual(self.jobs, [])
+        loop.start(self.canvas, None, ["a", "b"], 100)
+        self.assertEqual(self.jobs, [])
+
+    def test_stopping_cancels_the_pending_frame(self):
+        loop = HeroLoop(self.root)
+        loop.start(self.canvas, "hero", ["a", "b"], 100)
+        loop.stop()
+        self.root.after_cancel.assert_called_once()
+        # A stopped loop must not repaint even if a stale callback fires.
+        self.canvas.itemconfigure.reset_mock()
+        self.jobs.pop()[1]()
+        self.canvas.itemconfigure.assert_not_called()
+
+    def test_the_delay_floor_is_enforced_at_playback(self):
+        loop = HeroLoop(self.root)
+        loop.start(self.canvas, "hero", ["a", "b"], 5)
+        self.assertEqual(self.jobs[0][0], LOOP_MIN_DELAY_MS)
 
 
 class RollCreditsLayoutTests(unittest.TestCase):

@@ -18,12 +18,14 @@ const { COMMANDS } = require('../src/command-registry');
 // previous server used, making fetch reuse a dead socket (ECONNRESET).
 const TEST_ADMIN_PASSWORD = 'test-admin-secret';
 
-function request(url, { method = 'GET', body = null, cookie = null } = {}) {
+function request(url, {
+  method = 'GET', body = null, cookie = null, extraHeaders = null,
+} = {}) {
   return new Promise((resolve, reject) => {
     const data = body != null ? JSON.stringify(body) : null;
     const isHttps = String(url).startsWith('https:');
     const transport = isHttps ? httpsMod : httpMod;
-    const headers = {};
+    const headers = { ...(extraHeaders || {}) };
     if (data) {
       headers['Content-Type'] = 'application/json';
       headers['Content-Length'] = Buffer.byteLength(data);
@@ -1448,6 +1450,99 @@ test('Roll Credits reorder endpoint forwards ids and resets to the automatic ord
   assert.match(bad.body.error, /Unknown game/);
 });
 
+test('Roll Credits trim endpoint forwards the clip range to the service', async (t) => {
+  const calls = [];
+  const rollCredits = {
+    store: { getAllGames: () => [], getSystemById: () => null },
+    media: {
+      routePrefix: '/roll-credits-media/',
+      publicUrl: (value) => `/roll-credits-media/${value}`,
+      absolutePath: () => path.join(os.tmpdir(), 'missing-roll-credits-test-media'),
+    },
+    statusSnapshot: () => ({ gameCount: 0 }),
+    getSettings: () => ({ display: {}, limits: { maxImageBytes: 1024 } }),
+    setMediaTrim: async (gameId, mediaId, range) => {
+      calls.push([gameId, mediaId, range]);
+      return { id: mediaId, kind: 'video', ...range, previewPath: 'rc_1/thumbs/clip.preview.webp' };
+    },
+    start: () => {},
+    close: () => {},
+  };
+  const { webServer, base } = await startTestServer({ rollCredits });
+  t.after(() => webServer.stop());
+
+  const saved = await postJson(base, '/api/roll-credits/games/rc_1/media/md_1/trim', {
+    trimStart: 12.5,
+    trimEnd: 20,
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.media.previewPath, 'rc_1/thumbs/clip.preview.webp');
+  assert.deepEqual(calls, [['rc_1', 'md_1', { trimStart: 12.5, trimEnd: 20 }]]);
+
+  // An empty body clears the range back to the automatic window.
+  const cleared = await postJson(base, '/api/roll-credits/games/rc_1/media/md_1/trim', {});
+  assert.equal(cleared.status, 200);
+  assert.deepEqual(calls[1][2], { trimStart: null, trimEnd: null });
+
+  rollCredits.setMediaTrim = async () => { throw new Error('Only video media can be trimmed'); };
+  const rejected = await postJson(base, '/api/roll-credits/games/rc_1/media/md_2/trim', {});
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.body.error, /Only video media/);
+});
+
+test('Roll Credits media serves byte ranges so the admin can scrub a clip', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'roll-credits-range-'));
+  const clip = path.join(root, 'clip.mp4');
+  const bytes = Buffer.from('0123456789abcdef');
+  fs.writeFileSync(clip, bytes);
+  const rollCredits = {
+    store: { getAllGames: () => [], getSystemById: () => null },
+    media: {
+      routePrefix: '/roll-credits-media/',
+      publicUrl: (value) => `/roll-credits-media/${value}`,
+      absolutePath: (relative) => path.join(root, path.basename(relative)),
+    },
+    statusSnapshot: () => ({ gameCount: 0 }),
+    getSettings: () => ({ display: {}, limits: { maxImageBytes: 1024 } }),
+    start: () => {},
+    close: () => {},
+  };
+  const { webServer, base } = await startTestServer({ rollCredits });
+  t.after(() => webServer.stop());
+
+  const whole = await getJson(base, '/roll-credits-media/clip.mp4', null);
+  assert.equal(whole.status, 200);
+  assert.equal(whole.headers['accept-ranges'], 'bytes');
+  assert.equal(whole.headers['content-length'], String(bytes.length));
+
+  const middle = await request(`${base}/roll-credits-media/clip.mp4`, {
+    extraHeaders: { Range: 'bytes=4-7' },
+  });
+  assert.equal(middle.status, 206);
+  assert.equal(middle.headers['content-range'], `bytes 4-7/${bytes.length}`);
+  assert.equal(middle.text, '4567');
+
+  // Open-ended and suffix forms both resolve against the real size.
+  const tail = await request(`${base}/roll-credits-media/clip.mp4`, {
+    extraHeaders: { Range: 'bytes=12-' },
+  });
+  assert.equal(tail.status, 206);
+  assert.equal(tail.text, 'cdef');
+
+  const suffix = await request(`${base}/roll-credits-media/clip.mp4`, {
+    extraHeaders: { Range: 'bytes=-3' },
+  });
+  assert.equal(suffix.status, 206);
+  assert.equal(suffix.text, 'def');
+
+  // Nonsense ranges fall back to the whole file rather than failing playback.
+  const bogus = await request(`${base}/roll-credits-media/clip.mp4`, {
+    extraHeaders: { Range: 'bytes=900-999' },
+  });
+  assert.equal(bogus.status, 200);
+  assert.equal(bogus.text, bytes.toString());
+});
+
 test('air-quality and now-playing quick-push tiles feed synthetic events', async () => {
   const { webServer, base, recorded } = await startTestServer();
   try {
@@ -2103,4 +2198,55 @@ test('Roll Credits edit media can reorder video across kinds and supports drag-a
   assert.match(css, /select\.field-input\s*\{/);
   assert.match(css, /-webkit-appearance:\s*none/);
   assert.match(css, /\.credits-media-row\.is-drop-target/);
+});
+
+test('Roll Credits edit sheet closes on Escape or an outside click, prompting when dirty', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+
+  // The old behavior refused to close and only nagged with a toast.
+  assert.doesNotMatch(js, /Save the game before closing/);
+  assert.match(html, /id="credits-unsaved-sheet"/);
+  assert.match(html, /id="btn-credits-unsaved-save"/);
+  assert.match(html, /id="btn-credits-unsaved-discard"/);
+  assert.match(html, /id="btn-credits-unsaved-cancel"/);
+  assert.match(js, /function requestCreditsEditClose\(/);
+  assert.match(js, /function closeCreditsSheetById\(/);
+  assert.match(js, /function creditsTopSheetId\(/);
+  assert.match(js, /event\.key !== 'Escape'/);
+  // Backdrop clicks are wired for every credits sheet except the prompt itself.
+  assert.match(js, /CREDITS_SHEET_IDS\.filter\(\(id\) => id !== 'credits-unsaved-sheet'\)/);
+});
+
+test('Roll Credits toolbar controls share one height and the sort label sits inline', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  // A stacked label made the sort field taller than its neighbors.
+  assert.doesNotMatch(html, /class="credits-inline-field credits-sort-field"/);
+  assert.match(html, /<label class="credits-sort-field">\s*<span class="credits-control-label">Sort<\/span>/);
+  assert.match(css, /--credits-control-h:/);
+  assert.match(css, /\.credits-toolbar-secondary\s*>\s*\.btn,/);
+  assert.match(css, /\.credits-sort-field \.field-input \{[^}]*margin-top: 0;/);
+});
+
+test('Roll Credits media rows open a preview and videos expose clip trimming', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  assert.match(html, /id="credits-preview-sheet"/);
+  assert.match(html, /id="credits-preview-img"/);
+  assert.match(html, /<video class="credits-preview-video"[^>]*controls/);
+  assert.match(html, /id="credits-trim-start"/);
+  assert.match(html, /id="credits-trim-end"/);
+  assert.match(html, /id="btn-credits-trim-save"/);
+  assert.match(html, /id="btn-credits-trim-clear"/);
+  assert.match(js, /function openCreditsPreview\(/);
+  assert.match(js, /data-media-action="preview"/);
+  assert.match(js, /\/media\/\$\{encodeURIComponent\(creditsPreviewMedia\.id\)\}\/trim/);
+  // The stored clip is released so it stops downloading once the sheet closes.
+  assert.match(js, /function closeCreditsPreview\(\)[\s\S]{0,220}removeAttribute\('src'\)/);
+  assert.match(css, /\.credits-media-thumb-btn \{/);
+  assert.match(css, /\.credits-trim \{/);
 });

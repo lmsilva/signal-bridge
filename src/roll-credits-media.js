@@ -5,6 +5,16 @@ const { spawn } = require('child_process');
 
 const ROUTE_PREFIX = '/roll-credits-media/';
 const THUMB_MAX_EDGE = 360;
+// The wall cannot decode video, so every clip is reduced to a short silent
+// animated WebP it can loop inside the card, plus a poster still for fallback.
+const PREVIEW_MAX_EDGE = 512;
+const PREVIEW_SECONDS = 5;
+const PREVIEW_FPS = 10;
+const PREVIEW_SKIP_SECONDS = 3;
+// A hand-picked trim may be longer than the default, but not unbounded: every
+// frame is held in memory as RGBA before it is encoded.
+const PREVIEW_MAX_SECONDS = 15;
+const PREVIEW_MAX_RAW_BYTES = 96 * 1024 * 1024;
 const MIME_EXT = {
   'image/jpeg': '.jpg',
   'image/jpg': '.jpg',
@@ -83,6 +93,125 @@ async function renderThumbnail(buffer, sharpImpl = defaultSharp) {
         withoutEnlargement: true,
       })
       .jpeg({ quality: 70, chromaSubsampling: '4:2:0' })
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+/** Reads `width=`/`height=`/`duration=` lines out of an ffprobe default dump. */
+function parseProbeOutput(text) {
+  const fields = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = /^([a-z_]+)=(.*)$/i.exec(line.trim());
+    if (match) fields.set(match[1].toLowerCase(), match[2].trim());
+  }
+  const number = (key) => {
+    const value = Number(fields.get(key));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  };
+  return {
+    width: number('width'),
+    height: number('height'),
+    durationSeconds: number('duration'),
+  };
+}
+
+/** Scales a clip into the preview box, keeping both edges even for the encoder. */
+function previewFrameSize(width, height, maxEdge = PREVIEW_MAX_EDGE) {
+  const sourceW = Number(width) > 0 ? Number(width) : maxEdge;
+  const sourceH = Number(height) > 0 ? Number(height) : maxEdge;
+  const scale = Math.min(1, maxEdge / Math.max(sourceW, sourceH));
+  const even = (value) => Math.max(2, Math.round(value * scale / 2) * 2);
+  return { width: even(sourceW), height: even(sourceH) };
+}
+
+/**
+ * Picks the slice of a video the wall loop is built from. A hand-set trim wins;
+ * otherwise we skip a few seconds to dodge fade-ins and black title cards, but
+ * never past the end of a short clip.
+ */
+function previewWindow(durationSeconds, {
+  skip = PREVIEW_SKIP_SECONDS,
+  seconds = PREVIEW_SECONDS,
+  trimStart = null,
+  trimEnd = null,
+  maxSeconds = PREVIEW_MAX_SECONDS,
+} = {}) {
+  const total = Number(durationSeconds);
+  const hasTotal = Number.isFinite(total) && total > 0;
+  // Number(null) and Number('') are both 0, so an unset bound has to be
+  // rejected before it looks like a deliberate "start at zero".
+  const bound = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
+  const rawStart = bound(trimStart);
+  const rawEnd = bound(trimEnd);
+  const trimmedStart = rawStart === null
+    ? null
+    : (hasTotal ? Math.min(rawStart, Math.max(0, total - 0.1)) : rawStart);
+  const trimmedEnd = rawEnd === null || rawEnd <= 0
+    ? null
+    : (hasTotal ? Math.min(rawEnd, total) : rawEnd);
+
+  if (trimmedStart !== null || trimmedEnd !== null) {
+    const from = trimmedStart ?? 0;
+    const to = trimmedEnd !== null && trimmedEnd > from
+      ? trimmedEnd
+      : from + Math.min(seconds, maxSeconds);
+    const span = Math.min(to - from, maxSeconds);
+    if (span > 0) return { start: from, seconds: span };
+  }
+
+  if (!hasTotal) return { start: 0, seconds };
+  if (total <= seconds) return { start: 0, seconds: total };
+  return { start: Math.min(skip, Math.max(0, total - seconds)), seconds };
+}
+
+function splitRawFrames(buffer, width, height, channels = 4) {
+  const frameBytes = width * height * channels;
+  if (!Buffer.isBuffer(buffer) || frameBytes <= 0) return [];
+  const count = Math.floor(buffer.length / frameBytes);
+  const frames = [];
+  for (let index = 0; index < count; index += 1) {
+    frames.push(buffer.subarray(index * frameBytes, (index + 1) * frameBytes));
+  }
+  return frames;
+}
+
+/**
+ * Stacks raw RGBA frames into an animated WebP. libvips reads a multi-page raw
+ * buffer when `pageHeight` is set inside the raw options — encoding through
+ * sharp keeps this independent of how ffmpeg happens to be compiled.
+ */
+async function encodeAnimatedWebp(frames, { width, height, delayMs = 100 }, sharpImpl = defaultSharp) {
+  if (!sharpImpl || !Array.isArray(frames) || frames.length < 2) return null;
+  try {
+    return await sharpImpl(Buffer.concat(frames), {
+      raw: {
+        width, height: height * frames.length, channels: 4, pageHeight: height,
+      },
+    })
+      .webp({ loop: 0, delay: Math.max(20, Math.round(delayMs)), quality: 72, effort: 4 })
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function encodeRawPoster(frame, { width, height }, sharpImpl = defaultSharp) {
+  if (!sharpImpl || !frame) return null;
+  try {
+    return await sharpImpl(frame, { raw: { width, height, channels: 4 } })
+      .resize({
+        width: THUMB_MAX_EDGE,
+        height: THUMB_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 72, chromaSubsampling: '4:2:0' })
       .toBuffer();
   } catch {
     return null;
@@ -260,9 +389,13 @@ function createRollCreditsMedia(config = {}, log = console, {
       if (!bytes) throw new Error('Video upload is empty');
       fs.renameSync(temporaryPath, finalPath);
       const relative = `${id}/${fileName}`;
+      const preview = await renderVideoPreview(relative);
       return {
         path: relative,
-        thumbPath: null,
+        thumbPath: preview.posterPath,
+        previewPath: preview.previewPath,
+        durationSeconds: preview.durationSeconds,
+        previewError: preview.error,
         url: publicUrl(relative),
         mimeType: normalizedMime,
         bytes,
@@ -327,6 +460,153 @@ function createRollCreditsMedia(config = {}, log = console, {
     return { removed, count: removed.length };
   }
 
+  function ffmpegBinary(name) {
+    const key = name === 'ffprobe' ? 'FFPROBE_BIN' : 'FFMPEG_BIN';
+    return config[key] || process.env[key] || name;
+  }
+
+  /**
+   * Runs an ffmpeg/ffprobe command, buffering stdout. Rejects with a short
+   * message so a broken clip never writes multi-KB of ffmpeg chatter into the
+   * admin status line.
+   */
+  function runFfmpeg(name, args, { maxStdoutBytes = PREVIEW_MAX_RAW_BYTES } = {}) {
+    const binary = ffmpegBinary(name);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let child;
+      try {
+        child = spawnImpl(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      } catch (error) {
+        reject(new Error(`${name} could not start: ${error.message}`));
+        return;
+      }
+      const chunks = [];
+      let stdoutBytes = 0;
+      let stderr = '';
+      child.stdout?.on?.('data', (chunk) => {
+        stdoutBytes += chunk.length;
+        if (stdoutBytes > maxStdoutBytes) {
+          if (settled) return;
+          settled = true;
+          try { child.kill('SIGKILL'); } catch { /* already gone */ }
+          reject(new Error(`${name} produced more data than the preview budget allows`));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      child.stderr?.on?.('data', (chunk) => {
+        if (stderr.length < 4000) stderr += chunk;
+      });
+      child.once('error', (error) => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(error?.code === 'ENOENT'
+          ? `${name} is missing — rebuild the image with ./recreate.sh --build`
+          : `${name} failed: ${error.message}`));
+      });
+      child.once('close', (code) => {
+        if (settled) return;
+        settled = true;
+        if (code !== 0) {
+          const detail = String(stderr).trim().split(/\r?\n/).filter(Boolean).pop() || `exit ${code}`;
+          reject(new Error(`${name} failed: ${detail.slice(0, 240)}`));
+          return;
+        }
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  async function probeVideo(absoluteVideoPath) {
+    const output = await runFfmpeg('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1',
+      absoluteVideoPath,
+    ], { maxStdoutBytes: 64 * 1024 });
+    return parseProbeOutput(output.toString('utf8'));
+  }
+
+  /**
+   * Builds the wall-facing artefacts for a stored clip: a poster still and a
+   * short looping animated WebP. Never throws — a clip that cannot be decoded
+   * simply keeps its cover art on the display, and the reason is returned for
+   * the admin status line.
+   */
+  async function renderVideoPreview(relativeVideoPath, {
+    seconds = PREVIEW_SECONDS,
+    fps = PREVIEW_FPS,
+    maxEdge = PREVIEW_MAX_EDGE,
+    trimStart = null,
+    trimEnd = null,
+  } = {}) {
+    const empty = {
+      posterPath: null, previewPath: null, durationSeconds: null, frameCount: 0, error: null,
+    };
+    if (!sharpImpl) return { ...empty, error: 'sharp is unavailable' };
+    let relative;
+    try {
+      relative = cleanRelativePath(relativeVideoPath);
+    } catch (error) {
+      return { ...empty, error: error.message };
+    }
+    const source = absolutePath(relative);
+    const gameId = relative.split('/')[0];
+    const stem = path.basename(relative).replace(/\.[^.]+$/, '');
+    try {
+      const probe = await probeVideo(source);
+      const frame = previewFrameSize(probe.width, probe.height, maxEdge);
+      const window = previewWindow(probe.durationSeconds, { seconds, trimStart, trimEnd });
+      const raw = await runFfmpeg('ffmpeg', [
+        '-v', 'error',
+        '-ss', String(Math.round(window.start * 1000) / 1000),
+        '-i', source,
+        '-t', String(Math.round(window.seconds * 1000) / 1000),
+        '-an',
+        '-vf', `fps=${fps},scale=${frame.width}:${frame.height}`,
+        '-pix_fmt', 'rgba',
+        '-f', 'rawvideo',
+        '-',
+      ]);
+      const frames = splitRawFrames(raw, frame.width, frame.height);
+      if (!frames.length) {
+        return { ...empty, durationSeconds: probe.durationSeconds, error: 'no frames decoded' };
+      }
+      fs.mkdirSync(path.dirname(absolutePath(`${gameId}/thumbs/${stem}.jpg`)), { recursive: true });
+
+      let posterPath = null;
+      const poster = await encodeRawPoster(frames[0], frame, sharpImpl);
+      if (poster) {
+        posterPath = `${gameId}/thumbs/${stem}.poster.jpg`;
+        fs.writeFileSync(absolutePath(posterPath), poster);
+      }
+
+      let previewPath = null;
+      const animation = await encodeAnimatedWebp(
+        frames, { ...frame, delayMs: 1000 / Math.max(1, fps) }, sharpImpl,
+      );
+      if (animation) {
+        previewPath = `${gameId}/thumbs/${stem}.preview.webp`;
+        fs.writeFileSync(absolutePath(previewPath), animation);
+      }
+
+      return {
+        posterPath,
+        previewPath,
+        durationSeconds: probe.durationSeconds,
+        previewStart: window.start,
+        previewSeconds: window.seconds,
+        frameCount: frames.length,
+        error: posterPath || previewPath ? null : 'preview encoding failed',
+      };
+    } catch (error) {
+      return { ...empty, error: error?.message || String(error) };
+    }
+  }
+
   function downloadYoutube(url, resolution, outPath) {
     const target = absolutePath(outPath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -378,6 +658,8 @@ function createRollCreditsMedia(config = {}, log = console, {
     saveUploadedImage,
     saveUploadedVideo,
     downloadYoutube,
+    probeVideo,
+    renderVideoPreview,
     diskUsage,
     pruneOrphans,
     mediaRoot,
@@ -390,8 +672,17 @@ module.exports = {
   createRollCreditsMedia,
   resolveMediaPriority,
   parseImageDataUrl,
+  parseProbeOutput,
+  previewFrameSize,
+  previewWindow,
+  splitRawFrames,
+  encodeAnimatedWebp,
   renderThumbnail,
   summariseYtDlpFailure,
   ROUTE_PREFIX,
   THUMB_MAX_EDGE,
+  PREVIEW_MAX_EDGE,
+  PREVIEW_SECONDS,
+  PREVIEW_FPS,
+  PREVIEW_MAX_SECONDS,
 };
