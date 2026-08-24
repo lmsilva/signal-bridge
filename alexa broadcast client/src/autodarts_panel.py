@@ -347,6 +347,43 @@ def format_record_average(value) -> str:
     return f"{float(value):.1f}"
 
 
+def format_final_scoreline(players) -> str:
+    """FINAL banner: two-player head-to-head, or every name+legs for 3+."""
+    rows = [p for p in (players or []) if isinstance(p, dict)]
+    if not rows:
+        return ""
+    if len(rows) == 1:
+        return f"{rows[0].get('name') or '—'}   {rows[0].get('legs') or 0}"
+    if len(rows) == 2:
+        left, right = rows[0], rows[1]
+        return (
+            f"{left.get('name') or '—'}   {left.get('legs') or 0}"
+            f"  —  {right.get('legs') or 0}   {right.get('name') or '—'}"
+        )
+    return "  ·  ".join(
+        f"{row.get('name') or '—'} {row.get('legs') or 0}" for row in rows
+    )
+
+
+def board_info_row_ys(box_h: float, pad: float = 18) -> dict:
+    """Vertical anchors inside the YOUR BOARD tile — keep meta clear of stats."""
+    height = max(120.0, float(box_h))
+    title_y = pad
+    name_y = pad + 28
+    meta_y = pad + 58
+    # Stats occupy the lower band only; never climb into the version line.
+    stats_top = meta_y + 28
+    stats_bottom = height - pad
+    stats_mid = (stats_top + stats_bottom) / 2
+    return {
+        "title": title_y,
+        "name": name_y,
+        "meta": meta_y,
+        "value": stats_mid - 12,
+        "label": stats_mid + 14,
+    }
+
+
 def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dict:
     chrome = page_chrome(screen_w, screen_h, timed=timed)
     u = chrome.u
@@ -355,8 +392,8 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
     gap = 14 * u
     if chrome.portrait:
         totals_h = 110 * u
-        board_info_h = 150 * u
-        board_h = min(560 * u, (y1 - y0) * 0.38)
+        board_info_h = 178 * u
+        board_h = min(540 * u, (y1 - y0) * 0.36)
         months_h = 200 * u
         rivalry_h = 130 * u
         y = y0
@@ -380,8 +417,8 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
     }
     rx0 = x0 + left_w + gap
     totals_h = 100 * u
-    board_info_h = 150 * u
-    months_h = 190 * u
+    board_info_h = 178 * u
+    months_h = 180 * u
     rivalry_h = 130 * u
     boxes["totals"] = (rx0, y0, x1, y0 + totals_h)
     boxes["board_info"] = (rx0, y0 + totals_h + gap, x1, y0 + totals_h + gap + board_info_h)
@@ -796,6 +833,7 @@ class AutodartsPanel(BasePanel):
     def _draw_board_info(self, box, board: dict):
         x0, y0, x1, y1 = box
         pad = 18
+        rows = board_info_row_ys(y1 - y0, pad)
         name = str(board.get("name") or "No board selected")
         online = board.get("online")
         status = board.get("statusLabel")
@@ -805,16 +843,16 @@ class AutodartsPanel(BasePanel):
             online is True or str(status).lower() in ("running", "online", "connected")
         ) else (ALERT if online is False or str(status).lower() == "offline" else INK_3)
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad, anchor="nw", text="YOUR BOARD",
+            x0 + pad, y0 + rows["title"], anchor="nw", text="YOUR BOARD",
             fill=INK_2, font=self._font(14, True),
         ))
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad + 30, anchor="nw", text=name,
+            x0 + pad, y0 + rows["name"], anchor="nw", text=name,
             fill=INK, font=self._font(22, True),
         ))
         if status:
             self._track(self.canvas.create_text(
-                x1 - pad, y0 + pad + 34, anchor="ne", text=status,
+                x1 - pad, y0 + rows["name"] + 4, anchor="ne", text=status,
                 fill=status_fill, font=self._font(16, True),
             ))
         version = board.get("version") or "—"
@@ -826,7 +864,7 @@ class AutodartsPanel(BasePanel):
         if os_name:
             meta_bits.append(str(os_name))
         self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad + 66, anchor="nw",
+            x0 + pad, y0 + rows["meta"], anchor="nw",
             text=" · ".join(meta_bits),
             fill=INK_2, font=self._font(13),
         ))
@@ -842,15 +880,14 @@ class AutodartsPanel(BasePanel):
             ),
         ]
         cell_w = (x1 - x0 - pad * 2) / len(cells)
-        cy = y1 - 40
         for index, (value, label) in enumerate(cells):
             cx = x0 + pad + cell_w * (index + 0.5)
             self._track(self.canvas.create_text(
-                cx, cy - 14, text=str(value),
+                cx, y0 + rows["value"], text=str(value),
                 fill=INK, font=self._font(20, True),
             ))
             self._track(self.canvas.create_text(
-                cx, cy + 14, text=label,
+                cx, y0 + rows["label"], text=label,
                 fill=INK_3, font=self._font(12, True),
             ))
 
@@ -1125,24 +1162,21 @@ class AutodartsPanel(BasePanel):
             best_legs = max(int(p.get("legs") or 0) for p in players)
             if best_legs > 0:
                 winner = max(players, key=lambda p: p.get("legs") or 0)
-        if len(players) >= 2:
-            label = (
-                f"{players[0].get('name')}   {players[0].get('legs') or 0}"
-                f"  —  {players[1].get('legs') or 0}   {players[1].get('name')}"
-            )
-        else:
-            label = "  —  ".join(f"{p.get('name')} {p.get('legs') or 0}" for p in players)
+        label = format_final_scoreline(players)
         cx = (x0 + x1) / 2
         cy = (y0 + y1) / 2
-        font = self._font(28, True)
+        # Shrink type when many names share the banner.
+        font_size = 28 if len(players) <= 2 else (22 if len(players) <= 4 else 18)
+        font = self._font(font_size, True)
         text_id = self._track(self.canvas.create_text(
             cx, cy, text=label,
             fill=WARN if winner else INK, font=font,
+            width=max(80, int(x1 - x0 - 48)),
         ))
         if winner:
             bbox = self.canvas.bbox(text_id)
             if bbox:
-                crown_size = 16
+                crown_size = 16 if len(players) <= 2 else 13
                 gap = 12
                 # Place crown fully left of the scoreline (never over the name).
                 draw_crown(

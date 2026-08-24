@@ -127,6 +127,64 @@ test('empty live shell is not playable; last-match payload is finished with play
   assert.equal(payload.match.durationSec, 638);
 });
 
+test('last match skips aborted and empty shells', () => {
+  const root = tempRoot();
+  const archive = createAutodartsArchive({ ROOT: root, autodartsArchivePath: path.join(root, 'm2') });
+  const aggregates = createAutodartsAggregates({ ROOT: root, autodartsPlayersPath: path.join(root, 'p2.json') });
+  const settings = createAutodartsSettings({ autodartsSettingsPath: path.join(root, 's2.json') });
+  archive.append({
+    matchId: 'good',
+    variant: 'X01',
+    finishedAt: '2026-08-01T00:00:00.000Z',
+    winner: 'trashpanda',
+    players: [
+      { name: 'trashpanda', legsWon: 2 },
+      { name: 'war d', legsWon: 1 },
+    ],
+  });
+  archive.append({
+    matchId: 'aborted-late',
+    aborted: true,
+    source: 'live-abort',
+    finishedAt: '2026-08-23T20:00:00.000Z',
+    players: [
+      { name: 'trashpanda', legsWon: 0 },
+      { name: 'war d', legsWon: 0 },
+      { name: 'tommy', legsWon: 0 },
+      { name: 'kylie', legsWon: 0 },
+    ],
+  });
+  archive.append({
+    matchId: 'empty-finish',
+    finishedAt: '2026-08-23T21:00:00.000Z',
+    players: [
+      { name: 'a', legsWon: 0 },
+      { name: 'b', legsWon: 0 },
+    ],
+  });
+  const payload = createAutodartsPayload({ archive, aggregates, settings }).buildLastMatch();
+  assert.equal(payload.match.matchId, 'good');
+  assert.equal(payload.match.players[0].name, 'trashpanda');
+});
+
+test('isSuccessfulFinishedMatch rejects aborted zero-leg shells', () => {
+  const { isSuccessfulFinishedMatch, isEmptyMatchResult } = require('../src/autodarts-payload');
+  assert.equal(isSuccessfulFinishedMatch({
+    aborted: true,
+    players: [{ name: 'a', legsWon: 0 }, { name: 'b', legsWon: 0 }],
+  }), false);
+  assert.equal(isSuccessfulFinishedMatch({
+    winner: 'a',
+    players: [{ name: 'a', legsWon: 2 }, { name: 'b', legsWon: 0 }],
+  }), true);
+  assert.equal(isEmptyMatchResult({
+    players: [{ name: 'a', legs: 0 }, { name: 'b', legs: 0 }],
+  }), true);
+  assert.equal(isEmptyMatchResult({
+    players: [{ name: 'a', legs: 1 }, { name: 'b', legs: 0 }],
+  }), false);
+});
+
 test('match payload carries dart objects, prevTurn, and null coords passthrough', () => {
   const payload = buildMatchPayload({
     matchId: 'm1',

@@ -168,3 +168,30 @@ test('finish archives once via stats path', async () => {
   assert.equal(archive.append({ matchId: 'match-4' }).deduped, true);
   assert.ok(aggregates.get().players.length >= 1);
 });
+
+test('empty finished shell aborts instead of FINAL', async () => {
+  const { live, archive, sent } = harness();
+  await live.forceSeed('match-empty');
+  live.ingestEvent({
+    channel: 'autodarts.matches',
+    matchId: 'match-empty',
+    event: 'match.finished',
+    data: {
+      finished: true,
+      players: [
+        { name: 'trashpanda', score: 121, legs: 0 },
+        { name: 'war d', score: 121, legs: 0 },
+        { name: 'tommy', score: 121, legs: 0 },
+        { name: 'kylie', score: 121, legs: 0 },
+      ],
+    },
+  });
+  assert.equal(live.statusSnapshot().phase, 'idle');
+  assert.equal(archive.has('match-empty'), true);
+  const archived = archive.listAll().find((row) => row.matchId === 'match-empty');
+  assert.equal(archived.aborted, true);
+  assert.ok(sent.some((payload) => payload.type === 'autodarts.match.close'));
+  assert.ok(!sent.some((payload) => (
+    payload.type === 'autodarts.match' && payload.match?.status === 'finished'
+  )));
+});

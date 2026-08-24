@@ -138,6 +138,47 @@ function isPlayableLiveMatch(match) {
   return players.length >= 1;
 }
 
+function playerLegs(row = {}) {
+  return Number(row.legsWon ?? row.legs ?? 0) || 0;
+}
+
+/**
+ * A finished match worth showing on the wall / last-match push.
+ * Aborted games and 0–0 shells with no winner are skipped.
+ */
+function isSuccessfulFinishedMatch(match) {
+  if (!match || match.aborted === true) return false;
+  if (String(match.source || '') === 'live-abort') return false;
+  const players = Array.isArray(match.players) ? match.players : [];
+  if (!players.length) return false;
+  const totalLegs = players.reduce((sum, row) => sum + playerLegs(row), 0);
+  if (totalLegs > 0) return true;
+  const winner = match.winner;
+  if (winner == null || winner === '' || Number(winner) === -1) return false;
+  return String(winner).trim().length > 0;
+}
+
+/** Live shell that Autodarts marked finished but never produced a result. */
+function isEmptyMatchResult(match) {
+  if (!match) return true;
+  if (match.aborted === true) return true;
+  const players = Array.isArray(match.players) ? match.players : [];
+  if (!players.length) return true;
+  const totalLegs = players.reduce((sum, row) => sum + playerLegs(row), 0);
+  if (totalLegs > 0) return false;
+  const winner = match.winner;
+  if (winner == null || winner === '' || Number(winner) === -1) return true;
+  return !String(winner).trim();
+}
+
+function pickLastSuccessfulMatch(archive) {
+  const rows = (typeof archive?.listAll === 'function' ? archive.listAll() : [])
+    .filter(isSuccessfulFinishedMatch)
+    .sort((a, b) => String(b.finishedAt || b.startedAt || '')
+      .localeCompare(String(a.finishedAt || a.startedAt || '')));
+  return rows[0] || null;
+}
+
 function buildDashboardPayload({
   aggregates,
   archive,
@@ -163,13 +204,17 @@ function buildDashboardPayload({
     matches: row.matches,
     isGuest: row.isGuest === true,
   }));
-  const recent = (archive?.latest?.(3) || []).map((match) => ({
-    variant: match.variant || 'Match',
-    players: (match.players || []).map((p) => p.name).filter(Boolean),
-    result: (match.players || []).map((p) => p.legsWon ?? 0).join('—'),
-    winner: match.winner || null,
-    when: match.finishedAt || match.startedAt || null,
-  }));
+  const recent = (typeof archive?.listAll === 'function' ? archive.listAll() : (archive?.latest?.(12) || []))
+    .filter(isSuccessfulFinishedMatch)
+    .sort((a, b) => String(b.finishedAt || '').localeCompare(String(a.finishedAt || '')))
+    .slice(0, 3)
+    .map((match) => ({
+      variant: match.variant || 'Match',
+      players: (match.players || []).map((p) => p.name).filter(Boolean),
+      result: (match.players || []).map((p) => p.legsWon ?? 0).join('—'),
+      winner: match.winner || null,
+      when: match.finishedAt || match.startedAt || null,
+    }));
 
   const payload = {
     version: 2,
@@ -260,7 +305,7 @@ function createAutodartsPayload({ archive, aggregates, settings } = {}) {
     buildMatch: (match, options) => buildMatchPayload(match, options),
     buildClose: (matchId, reason) => buildMatchClosePayload(matchId, reason),
     buildLastMatch: () => {
-      const [latest] = archive.latest(1);
+      const latest = pickLastSuccessfulMatch(archive);
       if (!latest) return null;
       const cfg = settings.get();
       const players = (latest.players || []).map((row) => ({
@@ -313,4 +358,7 @@ module.exports = {
   relativeAge,
   normalizeBoardInfo,
   isPlayableLiveMatch,
+  isSuccessfulFinishedMatch,
+  isEmptyMatchResult,
+  pickLastSuccessfulMatch,
 };

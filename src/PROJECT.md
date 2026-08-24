@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-23 (Roll Credits re-scrape keeps system)
+**Last updated:** 2026-08-23 (Autodarts last-match + FINAL banner)
 
 ---
 
@@ -534,6 +534,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-23: **Autodarts last successful match + multi-player FINAL** — last-match / now-playing skips aborted and 0–0 empty shells; live empty “finished” events abort instead of FINAL; FINAL banner lists every player (not only first two). Deploy: `./recreate.sh` + portable client rebuild. Tests: `autodarts-payload`, `autodarts-live`, `test_autodarts_panel`.
 
 - 2026-08-23: **Roll Credits re-scrape keeps title/system** — re-scrape rematches IGDB/Steam by the current title + system (including unsaved edit-sheet values), never flips the System dropdown to the first option (NES) when systems reload, and accepts admin scope arrays. Cache-bust `?v=signal75`. Deploy: `./recreate.sh`. Tests: `test/roll-credits-scraper.test.js`.
 

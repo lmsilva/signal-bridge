@@ -14,10 +14,12 @@ from src.autodarts_panel import (
     AutodartsPanel,
     R_TREBLE_INNER,
     R_TREBLE_OUTER,
+    board_info_row_ys,
     board_radii,
     current_month_bar_color,
     dart_board_xy,
     fit_player_name_size,
+    format_final_scoreline,
     format_game_shot,
     format_last_played_label,
     format_leaderboard_detail,
@@ -185,6 +187,16 @@ class LayoutTests(unittest.TestCase):
             self.assertIn("months", boxes)
             self.assertIn("rivalry", boxes)
             self.assert_boxes_fit(boxes, *size)
+            # Room for version line + stats without overlap (was 150 → collided).
+            board_h = boxes["board_info"][3] - boxes["board_info"][1]
+            self.assertGreaterEqual(board_h, 170)
+
+    def test_board_info_rows_keep_meta_clear_of_stats(self):
+        rows = board_info_row_ys(178)
+        # Meta baseline sits above the value row with room for ~13px type.
+        self.assertLess(rows["meta"] + 20, rows["value"] - 10)
+        self.assertLess(rows["value"] + 10, rows["label"])
+        self.assertLess(rows["label"], 178 - 10)
 
     def test_match_portrait_board_absorbs_slack(self):
         boxes = layout_match(1080, 1920, timed=False, player_count=2)
@@ -236,6 +248,25 @@ class LabelFormatTests(unittest.TestCase):
             format_last_played_label({"lastPlayedAt": "2026-08-01T00:00:00Z"}),
             "Aug 01",
         )
+
+    def test_final_scoreline_lists_all_players(self):
+        two = format_final_scoreline([
+            {"name": "trashpanda", "legs": 2},
+            {"name": "war d", "legs": 1},
+        ])
+        self.assertIn("—", two)
+        self.assertIn("trashpanda", two)
+        self.assertIn("war d", two)
+        four = format_final_scoreline([
+            {"name": "trashpanda", "legs": 0},
+            {"name": "tommy", "legs": 0},
+            {"name": "war d", "legs": 0},
+            {"name": "kylie", "legs": 0},
+        ])
+        self.assertIn("tommy", four)
+        self.assertIn("kylie", four)
+        self.assertIn("·", four)
+        self.assertNotIn("—", four)
 
     def test_leaderboard_detail_readable(self):
         line = format_leaderboard_detail({
