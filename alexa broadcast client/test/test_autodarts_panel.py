@@ -8,7 +8,15 @@ CLIENT_ROOT = Path(__file__).resolve().parents[1]
 if str(CLIENT_ROOT) not in sys.path:
     sys.path.insert(0, str(CLIENT_ROOT))
 
-from src.design_system import ACCENT, ALERT, INK_3, WARN, page_chrome
+from src.design_system import (
+    ACCENT,
+    ALERT,
+    INK_3,
+    WARN,
+    design_u,
+    page_chrome,
+    text_line_h,
+)
 from src.payload_utils import COMMAND_TYPES, resolve_display_type, title_for_payload
 from src.roll_credits_panel import months_chart_geom
 from src.autodarts_panel import (
@@ -18,6 +26,8 @@ from src.autodarts_panel import (
     board_info_row_ys,
     board_status_chip,
     board_radii,
+    records_row_ys,
+    totals_row_ys,
     current_month_bar_color,
     dart_board_xy,
     fit_player_name_size,
@@ -46,6 +56,17 @@ from src.autodarts_panel import (
 
 
 T20_XY = (0.0, (R_TREBLE_INNER + R_TREBLE_OUTER) / 2)
+
+# Tk paints points, not px. The wall runs Windows display scaling, so the same
+# layout must stay clear from 96 DPI (1.6 px/pt) up to 150% scaling (2.4).
+DPI_CASES = (1.6, 2.05, 2.4)
+SCREEN_CASES = ((1080, 1920), (1200, 1920), (900, 1600), (1920, 1080))
+
+
+def spans_overlap(spans):
+    """`spans` are (top, height) pairs — True when any two painted rows collide."""
+    ordered = sorted(spans, key=lambda span: span[0])
+    return any(a[0] + a[1] > b[0] + 0.5 for a, b in zip(ordered, ordered[1:]))
 
 
 def sample_match(*, revision=41, status="live", with_turn=True, busted=False, players=2):
@@ -196,11 +217,11 @@ class LayoutTests(unittest.TestCase):
             self.assert_boxes_fit(boxes, *size)
             # Room for version line + stats without overlap (was 150 → collided).
             board_h = boxes["board_info"][3] - boxes["board_info"][1]
-            self.assertGreaterEqual(board_h, 190)
+            self.assertGreaterEqual(board_h, 220 if size[1] > size[0] else 200)
             if size[1] > size[0]:
-                self.assertGreaterEqual(boxes["months"][3] - boxes["months"][1], 210)
-                self.assertGreaterEqual(boxes["rivalry"][3] - boxes["rivalry"][1], 160)
-                self.assertGreaterEqual(boxes["records"][3] - boxes["records"][1], 180)
+                self.assertGreaterEqual(boxes["months"][3] - boxes["months"][1], 225)
+                self.assertGreaterEqual(boxes["rivalry"][3] - boxes["rivalry"][1], 190)
+                self.assertGreaterEqual(boxes["records"][3] - boxes["records"][1], 185)
 
     def test_portrait_dashboard_boxes_do_not_overlap(self):
         boxes = layout_dashboard(1080, 1920, timed=True)
@@ -210,7 +231,7 @@ class LayoutTests(unittest.TestCase):
         rows = board_info_row_ys(boxes["board_info"][3] - boxes["board_info"][1])
         self.assertTrue(rows["meta_clear_of_value"])
         visible, row_h = leaderboard_visible_rows(boxes["leaderboard"][3] - boxes["leaderboard"][1], 12)
-        self.assertGreaterEqual(row_h, 58)
+        self.assertGreaterEqual(row_h, text_line_h(18) + text_line_h(12))
         self.assertLessEqual(visible, 12)
         months = months_chart_geom(boxes["months"][3] - boxes["months"][1])
         self.assertTrue(months["bars_clear_of_title"])
@@ -218,17 +239,77 @@ class LayoutTests(unittest.TestCase):
         rivalry = rivalry_row_ys(boxes["rivalry"][3] - boxes["rivalry"][1])
         self.assertTrue(rivalry["stacked"])
 
+    def test_dashboard_text_never_overlaps_at_any_display_scaling(self):
+        """Point-sized type in px-sized tiles: the wall's 125% scaling used to
+        drop HEAD-TO-HEAD's caption onto its last-win line and push YOUR BOARD's
+        stat captions onto the leaderboard card."""
+        for screen in SCREEN_CASES:
+            u = design_u(*screen)
+            boxes = layout_dashboard(*screen, timed=True)
+            for ppp in DPI_CASES:
+                where = f"{screen} @ {ppp}px/pt"
+                totals_h = boxes["totals"][3] - boxes["totals"][1]
+                totals = totals_row_ys(totals_h, u=u, px_per_pt=ppp)
+                self.assertTrue(totals["fits"], f"totals overflow — {where}")
+                self.assertFalse(spans_overlap([
+                    (totals["value"], totals["heights"]["value"]),
+                    (totals["label"], totals["heights"]["label"]),
+                ]), f"totals rows collide — {where}")
+
+                info_h = boxes["board_info"][3] - boxes["board_info"][1]
+                info = board_info_row_ys(info_h, u=u, px_per_pt=ppp)
+                self.assertTrue(info["fits"], f"board info overflows its card — {where}")
+                self.assertTrue(info["meta_clear_of_value"], f"meta on stats — {where}")
+                self.assertFalse(spans_overlap([
+                    (info[key], info["heights"][key])
+                    for key in ("title", "name", "meta", "value", "label")
+                ]), f"board info rows collide — {where}")
+
+                rivalry_h = boxes["rivalry"][3] - boxes["rivalry"][1]
+                rivalry = rivalry_row_ys(rivalry_h, u=u, px_per_pt=ppp)
+                self.assertTrue(rivalry["fits"], f"rivalry overflows its card — {where}")
+                self.assertTrue(rivalry["stacked"], f"caption on last-win line — {where}")
+                self.assertFalse(spans_overlap([
+                    (rivalry["title"], rivalry["heights"]["title"]),
+                    (rivalry["names_top"], rivalry["heights"]["names"]),
+                    (rivalry["caption"], rivalry["heights"]["caption"]),
+                    (rivalry["footer"], rivalry["heights"]["footer"]),
+                ]), f"rivalry rows collide — {where}")
+
+                records_h = boxes["records"][3] - boxes["records"][1]
+                records = records_row_ys(records_h, 3, u=u, px_per_pt=ppp)
+                self.assertTrue(records["fits"], f"house records clipped — {where}")
+                self.assertFalse(spans_overlap(
+                    [(records["title"], records["line_h"])]
+                    + [(y, records["line_h"]) for y in records["lines"]]
+                ), f"records rows collide — {where}")
+
+                months = months_chart_geom(
+                    boxes["months"][3] - boxes["months"][1], u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(months["fits"], f"month axis clipped — {where}")
+                self.assertTrue(months["bars_clear_of_title"], f"bars on title — {where}")
+
+                visible, row_h = leaderboard_visible_rows(
+                    boxes["leaderboard"][3] - boxes["leaderboard"][1], 12,
+                    header=text_line_h(15, u=u, px_per_pt=ppp) + 28 * u,
+                    u=u, px_per_pt=ppp,
+                )
+                two_lines = text_line_h(18, u=u, px_per_pt=ppp) + text_line_h(12, u=u, px_per_pt=ppp)
+                self.assertGreaterEqual(row_h, two_lines, f"leaderboard rows collide — {where}")
+                self.assertGreaterEqual(visible, 1)
+
     def test_finished_portrait_omits_duplicate_score_names(self):
         boxes = layout_match(1080, 1920, timed=True, player_count=2, finished=True, show_strip=False)
         self.assertTrue(boxes.get("omit_score_names"))
         self.assertGreaterEqual(boxes["board"][3] - boxes["board"][1], 400)
 
     def test_board_info_rows_keep_meta_clear_of_stats(self):
-        rows = board_info_row_ys(178)
-        # Meta baseline sits above the value row with room for ~13px type.
-        self.assertLess(rows["meta"] + 20, rows["value"] - 10)
-        self.assertLess(rows["value"] + 10, rows["label"])
-        self.assertLess(rows["label"], 178 - 10)
+        rows = board_info_row_ys(226)
+        self.assertLess(rows["meta"] + rows["heights"]["meta"], rows["value"])
+        self.assertLess(rows["value"] + rows["heights"]["value"], rows["label"])
+        self.assertLess(rows["label"] + rows["heights"]["label"], 226)
+        self.assertTrue(rows["fits"])
 
     def test_match_portrait_board_absorbs_slack(self):
         boxes = layout_match(1080, 1920, timed=False, player_count=2)
@@ -489,10 +570,11 @@ class DashboardContentTests(unittest.TestCase):
         self.assertEqual(parts["score"], "4 – 11")
         self.assertNotIn("trashpanda", parts["score"])
         self.assertIn("Last win", parts["footer"])
-        rows = rivalry_row_ys(168)
-        self.assertLess(rows["title"] + 20, rows["names"])
-        self.assertLess(rows["names"] + 20, rows["caption"])
-        self.assertLess(rows["caption"], rows["footer"])
+        rows = rivalry_row_ys(196)
+        self.assertLess(rows["title"] + rows["heights"]["title"], rows["names_top"])
+        self.assertLess(rows["names_top"] + rows["heights"]["names"], rows["caption"])
+        self.assertLess(rows["caption"] + rows["heights"]["caption"], rows["footer"])
+        self.assertTrue(rows["fits"])
 
 
 if __name__ == "__main__":

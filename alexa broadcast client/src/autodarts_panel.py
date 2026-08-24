@@ -19,8 +19,14 @@ from src.design_system import (
     INK_2,
     INK_3,
     LINE,
+    PX_PER_POINT,
     WARN,
+    design_u,
+    measure_px_per_point,
     page_chrome,
+    stack_rows,
+    text_line_h,
+    text_measurer,
 )
 from src.display_panels import BasePanel
 from src.page_header import paint_page_header
@@ -395,23 +401,77 @@ def format_final_scoreline(players) -> str:
     )
 
 
-def board_info_row_ys(box_h: float, pad: float = 18) -> dict:
+def board_info_row_ys(
+    box_h: float, pad: float = 18, *, u: float = 1.0, px_per_pt: float = PX_PER_POINT,
+) -> dict:
     """Vertical anchors inside the YOUR BOARD tile — keep meta clear of stats."""
     height = max(160.0, float(box_h))
-    title_y = pad
-    name_y = pad + 26
-    meta_y = pad + 56
-    # Stats occupy the lower third only; never climb into the version line.
-    stats_top = max(meta_y + 32, height * 0.52)
-    stats_bottom = height - pad
-    stats_mid = (stats_top + stats_bottom) / 2
+    pad_px = pad * u
+    stack = stack_rows(
+        [("title", 13, 6), ("name", 21, 4), ("meta", 12, 10), ("value", 19, 2), ("label", 11, 0)],
+        top=pad_px, available=height - pad_px * 2, u=u, px_per_pt=px_per_pt,
+    )
+    ys = dict(stack["y"])
+    # Stats hug the bottom edge; the header keeps the top.
+    drop = max(0.0, height - pad_px - stack["bottom"])
+    ys["value"] += drop
+    ys["label"] += drop
     return {
-        "title": title_y,
-        "name": name_y,
-        "meta": meta_y,
-        "value": stats_mid - 14,
-        "label": stats_mid + 16,
-        "meta_clear_of_value": meta_y + 22 < (stats_mid - 14) - 8,
+        "title": ys["title"],
+        "name": ys["name"],
+        "meta": ys["meta"],
+        "value": ys["value"],
+        "label": ys["label"],
+        "heights": stack["h"],
+        "font_scale": stack["font_scale"],
+        "meta_clear_of_value": ys["value"] >= ys["meta"] + stack["h"]["meta"] - 0.5,
+        "fits": stack["fits"] and ys["label"] + stack["h"]["label"] <= height - pad_px * 0.5 + 0.5,
+    }
+
+
+def totals_row_ys(
+    box_h: float, *, u: float = 1.0, px_per_pt: float = PX_PER_POINT, pad: float = 10,
+) -> dict:
+    """Big number over its caption, vertically centred in the totals strip."""
+    height = max(60.0, float(box_h))
+    stack = stack_rows(
+        [("value", 28, 4), ("label", 12, 0)],
+        top=0.0, available=height - pad * u * 2, u=u, px_per_pt=px_per_pt,
+    )
+    top = max(pad * u, (height - stack["bottom"]) / 2)
+    return {
+        "value": top + stack["y"]["value"],
+        "label": top + stack["y"]["label"],
+        "heights": stack["h"],
+        "font_scale": stack["font_scale"],
+        "fits": top + stack["bottom"] <= height + 0.5,
+    }
+
+
+def records_row_ys(
+    box_h: float,
+    line_count: int = 3,
+    *,
+    pad: float = 20,
+    u: float = 1.0,
+    px_per_pt: float = PX_PER_POINT,
+) -> dict:
+    """HOUSE RECORDS: title plus one row per record, always inside the card."""
+    height = max(100.0, float(box_h))
+    lines = max(1, int(line_count or 1))
+    rows = [("title", 14, 12)] + [
+        (f"line{i}", 14, 8 if i < lines - 1 else 0) for i in range(lines)
+    ]
+    stack = stack_rows(
+        rows, top=pad * u, available=height - pad * 2 * u, u=u, px_per_pt=px_per_pt,
+    )
+    return {
+        "title": stack["y"]["title"],
+        "lines": [stack["y"][f"line{i}"] for i in range(lines)],
+        "line_h": stack["h"]["line0"],
+        "title_h": stack["h"]["title"],
+        "font_scale": stack["font_scale"],
+        "fits": stack["fits"],
     }
 
 
@@ -476,25 +536,67 @@ def rivalry_score_parts(rivalry) -> dict | None:
     }
 
 
-def rivalry_row_ys(box_h: float, pad: float = 18) -> dict:
+def rivalry_row_ys(
+    box_h: float, pad: float = 18, *, u: float = 1.0, px_per_pt: float = PX_PER_POINT,
+) -> dict:
+    """Title / names+score / caption / last-win, measured so nothing collides."""
     height = max(120.0, float(box_h))
-    title_y = pad
-    names_y = pad + 44
-    caption_y = names_y + 34
-    footer_y = min(height - pad - 2, caption_y + 26)
+    stack = stack_rows(
+        [("title", 14, 12), ("names", 20, 10), ("caption", 11, 6), ("footer", 12, 0)],
+        top=pad * u, available=height - pad * 2 * u, u=u, px_per_pt=px_per_pt,
+    )
+    ys = stack["y"]
     return {
-        "title": title_y,
-        "names": names_y,
-        "caption": caption_y,
-        "footer": footer_y,
-        "stacked": footer_y > caption_y > names_y > title_y,
+        "title": ys["title"],
+        "names": ys["names"] + stack["h"]["names"] / 2,
+        "names_top": ys["names"],
+        "caption": ys["caption"],
+        "footer": ys["footer"],
+        "heights": stack["h"],
+        "font_scale": stack["font_scale"],
+        "stacked": ys["footer"] >= ys["caption"] + stack["h"]["caption"] - 0.5,
+        "fits": stack["fits"],
     }
 
 
-def leaderboard_visible_rows(box_h: float, row_count: int, *, header: float = 52, footer: float = 14) -> tuple[int, float]:
+def leaderboard_row_ys(
+    row_h: float,
+    *,
+    crowned: bool = False,
+    u: float = 1.0,
+    px_per_pt: float = PX_PER_POINT,
+) -> dict:
+    """Name over detail, centred in the row — measured so the two never touch."""
+    name_h = text_line_h(18 if crowned else 16, u=u, px_per_pt=px_per_pt)
+    detail_h = text_line_h(12, u=u, px_per_pt=px_per_pt)
+    gap = 2 * u
+    group = name_h + gap + detail_h
+    top = -group / 2
+    return {
+        "name_dy": top + name_h / 2,
+        "detail_dy": top + name_h + gap + detail_h / 2,
+        "name_h": name_h,
+        "detail_h": detail_h,
+        "fits": group <= float(row_h) + 0.5,
+    }
+
+
+def leaderboard_visible_rows(
+    box_h: float,
+    row_count: int,
+    *,
+    header: float = 52,
+    footer: float = 14,
+    u: float = 1.0,
+    px_per_pt: float = PX_PER_POINT,
+) -> tuple[int, float]:
     """How many two-line leaderboard rows fit without overlapping."""
-    usable = max(60.0, float(box_h) - header - footer)
-    min_row = 58.0
+    usable = max(60.0 * u, float(box_h) - header - footer)
+    min_row = (
+        text_line_h(18, u=u, px_per_pt=px_per_pt)
+        + text_line_h(12, u=u, px_per_pt=px_per_pt)
+        + 8 * u
+    )
     max_rows = max(1, int(usable // min_row))
     visible = max(1, min(int(row_count or 0), max_rows))
     row_h = usable / visible
@@ -509,11 +611,11 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
     gap = 12 * u
     if chrome.portrait:
         avail = max(400.0, y1 - y0)
-        totals_h = 96 * u
-        board_info_h = 200 * u
-        months_h = 220 * u
-        rivalry_h = 168 * u
-        records_h = 186 * u
+        totals_h = 116 * u
+        board_info_h = 226 * u
+        months_h = 230 * u
+        rivalry_h = 196 * u
+        records_h = 192 * u
         fixed = totals_h + board_info_h + months_h + rivalry_h + records_h + gap * 5
         board_h = max(240 * u, avail - fixed)
         y = y0
@@ -535,21 +637,16 @@ def layout_dashboard(screen_w: int, screen_h: int, *, timed: bool = True) -> dic
         "leaderboard": (x0, y0, x0 + left_w, y1),
     }
     rx0 = x0 + left_w + gap
-    totals_h = 100 * u
-    board_info_h = 200 * u
-    months_h = 180 * u
-    rivalry_h = 140 * u
-    boxes["totals"] = (rx0, y0, x1, y0 + totals_h)
-    boxes["board_info"] = (rx0, y0 + totals_h + gap, x1, y0 + totals_h + gap + board_info_h)
-    months_top = boxes["board_info"][3] + gap
-    boxes["months"] = (rx0, months_top, x1, months_top + months_h)
-    boxes["rivalry"] = (
-        rx0,
-        months_top + months_h + gap,
-        x1,
-        months_top + months_h + gap + rivalry_h,
-    )
-    boxes["records"] = (rx0, boxes["rivalry"][3] + gap, x1, y1)
+    # The right rail is height-bound in landscape: share it out by weight so
+    # HOUSE RECORDS keeps a real card instead of the leftover sliver.
+    rail_h = max(360.0, (y1 - y0) - gap * 4)
+    weights = (("totals", 0.115), ("board_info", 0.255), ("months", 0.195),
+               ("rivalry", 0.205), ("records", 0.23))
+    heights = {name: rail_h * weight for name, weight in weights}
+    y = y0
+    for name, _weight in weights:
+        boxes[name] = (rx0, y, x1, y + heights[name])
+        y += heights[name] + gap
     return boxes
 
 
@@ -813,6 +910,8 @@ class AutodartsPanel(BasePanel):
         self._dashboard_fp = None
         self._payload = None
         self._draw_count = 0
+        self._scale = 1.0
+        self._px_per_pt = PX_PER_POINT
 
     def show(self, payload: dict):
         payload_type = str((payload or {}).get("type") or "")
@@ -901,7 +1000,14 @@ class AutodartsPanel(BasePanel):
         return int(self.shell.screen_w), int(self.shell.screen_h)
 
     def _font(self, size, bold=False):
-        return ("Segoe UI", max(10, int(size)), "bold" if bold else "normal")
+        scaled = max(8, int(round(float(size) * float(getattr(self, "_scale", 1.0) or 1.0))))
+        return ("Segoe UI", scaled, "bold" if bold else "normal")
+
+    def _sync_metrics(self):
+        """Fonts are points, boxes are px — measure the ratio for this display."""
+        screen_w, screen_h = self._screen()
+        self._scale = design_u(screen_w, screen_h)
+        self._px_per_pt = measure_px_per_point(self.root, self._scale)
 
     def _paint_header(self, *, status_chip=None, title="AUTODARTS"):
         screen_w, screen_h = self._screen()
@@ -941,6 +1047,7 @@ class AutodartsPanel(BasePanel):
     # --- Dashboard ------------------------------------------------------------
 
     def _render_dashboard(self, payload: dict):
+        self._sync_metrics()
         self._paint_header(title="AUTODARTS DASHBOARD")
         screen_w, screen_h = self._screen()
         boxes = layout_dashboard(screen_w, screen_h, timed=True)
@@ -961,22 +1068,24 @@ class AutodartsPanel(BasePanel):
 
     def _draw_board_info(self, box, board: dict):
         x0, y0, x1, y1 = box
-        pad = 18
-        rows = board_info_row_ys(y1 - y0, pad)
+        u = self._scale
+        pad = 18 * u
+        rows = board_info_row_ys(y1 - y0, 18, u=u, px_per_pt=self._px_per_pt)
+        fs = rows["font_scale"]
         name = str(board.get("name") or "No board selected")
         status, status_fill = board_status_chip(board.get("online"), board.get("statusLabel"))
         self._track(self.canvas.create_text(
             x0 + pad, y0 + rows["title"], anchor="nw", text="YOUR BOARD",
-            fill=INK_2, font=self._font(14, True),
+            fill=INK_2, font=self._font(13 * fs, True),
         ))
         self._track(self.canvas.create_text(
             x0 + pad, y0 + rows["name"], anchor="nw", text=name,
-            fill=INK, font=self._font(22, True),
+            fill=INK, font=self._font(21 * fs, True),
         ))
         if status:
             self._track(self.canvas.create_text(
-                x1 - pad, y0 + rows["name"] + 4, anchor="ne", text=status,
-                fill=status_fill, font=self._font(16, True),
+                x1 - pad, y0 + rows["name"], anchor="ne", text=status,
+                fill=status_fill, font=self._font(15 * fs, True),
             ))
         version = board.get("version") or "—"
         update = board.get("updateLabel") or ""
@@ -989,7 +1098,7 @@ class AutodartsPanel(BasePanel):
         self._track(self.canvas.create_text(
             x0 + pad, y0 + rows["meta"], anchor="nw",
             text=" · ".join(meta_bits),
-            fill=INK_2, font=self._font(13),
+            fill=INK_2, font=self._font(12 * fs),
         ))
         darts = board.get("dartsThrown")
         corrections = board.get("corrections")
@@ -1006,16 +1115,17 @@ class AutodartsPanel(BasePanel):
         for index, (value, label) in enumerate(cells):
             cx = x0 + pad + cell_w * (index + 0.5)
             self._track(self.canvas.create_text(
-                cx, y0 + rows["value"], text=str(value),
-                fill=INK, font=self._font(20, True),
+                cx, y0 + rows["value"], anchor="n", text=str(value),
+                fill=INK, font=self._font(19 * fs, True),
             ))
             self._track(self.canvas.create_text(
-                cx, y0 + rows["label"], text=label,
-                fill=INK_3, font=self._font(12, True),
+                cx, y0 + rows["label"], anchor="n", text=label,
+                fill=INK_3, font=self._font(11 * fs, True),
             ))
 
     def _draw_totals(self, box, totals: dict):
         x0, y0, x1, y1 = box
+        u = self._scale
         last = format_last_played_label(totals)
         cells = [
             (totals.get("matches") or 0, "Matches"),
@@ -1023,27 +1133,30 @@ class AutodartsPanel(BasePanel):
             (totals.get("thisMonth") or 0, "This month"),
             (last, "Last played"),
         ]
+        rows = totals_row_ys(y1 - y0, u=u, px_per_pt=self._px_per_pt)
+        fs = rows["font_scale"]
         width = (x1 - x0) / len(cells)
-        mid_y = (y0 + y1) / 2
         for index, (value, label) in enumerate(cells):
             x = x0 + width * (index + 0.5)
-            value_size = 26 if isinstance(value, str) and len(str(value)) > 6 else 32
+            value_size = 22 if isinstance(value, str) and len(str(value)) > 6 else 28
             self._track(self.canvas.create_text(
-                x, mid_y - 16, text=str(value),
-                fill=INK, font=self._font(value_size, True),
+                x, y0 + rows["value"], anchor="n", text=str(value),
+                fill=INK, font=self._font(value_size * fs, True),
             ))
             self._track(self.canvas.create_text(
-                x, mid_y + 18, text=label,
-                fill=INK_3, font=self._font(13, True),
+                x, y0 + rows["label"], anchor="n", text=label,
+                fill=INK_3, font=self._font(12 * fs, True),
             ))
 
     def _draw_leaderboard(self, box, rows: list, more_count: int):
         x0, y0, x1, y1 = box
-        pad = 18
-        portrait = (x1 - x0) < 900
+        u = self._scale
+        pad = 18 * u
+        portrait = (x1 - x0) < 900 * u
+        title_h = text_line_h(15, u=u, px_per_pt=self._px_per_pt)
         self._track(self.canvas.create_text(
             x0 + pad, y0 + pad, anchor="nw", text="BOARD LEADERBOARD",
-            fill=INK_2, font=self._font(16, True),
+            fill=INK_2, font=self._font(15, True),
         ))
         if not rows:
             self._track(self.canvas.create_text(
@@ -1051,14 +1164,18 @@ class AutodartsPanel(BasePanel):
                 fill=INK_3, font=self._font(18),
             ))
             return
-        footer = 36 if more_count else 14
-        visible_n, row_h = leaderboard_visible_rows(y1 - y0, len(rows), footer=footer)
+        header = pad + title_h + 10 * u
+        footer_h = text_line_h(13, u=u, px_per_pt=self._px_per_pt) + 10 * u
+        footer = footer_h if more_count else 12 * u
+        visible_n, row_h = leaderboard_visible_rows(
+            y1 - y0, len(rows), header=header, footer=footer, u=u, px_per_pt=self._px_per_pt,
+        )
         visible = list(rows)[:visible_n]
-        top = y0 + 52
+        top = y0 + header
         # Fixed columns so rank / crown / name never overlap.
         rank_x = x0 + pad
-        icon_cx = rank_x + 34
-        name_x = rank_x + 56
+        icon_cx = rank_x + 34 * u
+        name_x = rank_x + 56 * u
         for index, row in enumerate(visible):
             cy = top + row_h * (index + 0.5)
             rank = row.get("rank") or (index + 1)
@@ -1066,16 +1183,22 @@ class AutodartsPanel(BasePanel):
             crowned = bool(row.get("crown")) or index == 0
             if crowned:
                 self._track(self.canvas.create_rectangle(
-                    x0 + 10, cy - row_h * 0.42, x1 - 10, cy + row_h * 0.42,
+                    x0 + 10 * u, cy - row_h * 0.42, x1 - 10 * u, cy + row_h * 0.42,
                     fill="#1C2A1A", outline="",
                 ))
-                draw_crown(self.canvas, icon_cx, cy - row_h * 0.18, min(14, row_h * 0.22), track=self._track)
+                draw_crown(
+                    self.canvas, icon_cx, cy - row_h * 0.18,
+                    min(14 * u, row_h * 0.22), track=self._track,
+                )
                 name_fill = WARN
             else:
                 name_fill = INK
             name_size = 18 if crowned else 16
-            name_y = cy - row_h * 0.18
-            detail_y = cy + row_h * 0.22
+            geom = leaderboard_row_ys(
+                row_h, crowned=crowned, u=u, px_per_pt=self._px_per_pt,
+            )
+            name_y = cy + geom["name_dy"]
+            detail_y = cy + geom["detail_dy"]
             self._track(self.canvas.create_text(
                 rank_x, name_y, anchor="w",
                 text=str(rank),
@@ -1088,24 +1211,33 @@ class AutodartsPanel(BasePanel):
             ))
             self._track(self.canvas.create_text(
                 name_x, detail_y, anchor="w",
-                text=format_leaderboard_detail(row, compact=portrait),
-                fill=INK_2, font=self._font(11 if portrait else 12),
+                text=self._fit_leaderboard_detail(row, x1 - pad - name_x),
+                fill=INK_2, font=self._font(12),
             ))
         hidden = max(0, len(rows) - visible_n) + max(0, int(more_count or 0))
         if hidden > 0:
             self._track(self.canvas.create_text(
-                x0 + pad, y1 - 16, anchor="sw",
+                x0 + pad, y1 - 10 * u, anchor="sw",
                 text=f"+ {hidden} more players",
-                fill=INK_3, font=self._font(14, True),
+                fill=INK_3, font=self._font(13, True),
             ))
+
+    def _fit_leaderboard_detail(self, row, available_px):
+        """Full stat line when it measures short enough, compact otherwise."""
+        measure = text_measurer(self.root, self._font(12))
+        full = format_leaderboard_detail(row, compact=False)
+        if measure(full) <= max(40.0, available_px):
+            return full
+        return format_leaderboard_detail(row, compact=True)
 
     def _draw_months(self, box, months: list):
         x0, y0, x1, y1 = box
-        pad = 22
-        geom = months_chart_geom(y1 - y0, pad)
+        u = self._scale
+        pad = 20 * u
+        geom = months_chart_geom(y1 - y0, 20, u=u, px_per_pt=self._px_per_pt)
         self._track(self.canvas.create_text(
             x0 + pad, y0 + geom["title_y"], anchor="nw", text="MATCHES PER MONTH",
-            fill=INK_2, font=self._font(15, True),
+            fill=INK_2, font=self._font(14, True),
         ))
         rows = list(months)[-12:]
         if not rows:
@@ -1115,19 +1247,19 @@ class AutodartsPanel(BasePanel):
         chart_bottom = y0 + geom["chart_bottom"]
         usable = max(20.0, chart_bottom - chart_top)
         slot = (x1 - x0 - pad * 2) / max(1, len(rows))
-        label_size = month_axis_font_size(slot)
+        label_size = month_axis_font_size(slot / max(0.05, u))
         for index, row in enumerate(rows):
             count = int(row.get("count") or 0)
             height = max(2, usable * 0.88 * count / max_count)
             cx = x0 + pad + slot * (index + 0.5)
             color = current_month_bar_color(index, len(rows))
-            bar_half = min(slot * 0.28, 18)
+            bar_half = min(slot * 0.28, 18 * u)
             self._track(self.canvas.create_rectangle(
                 cx - bar_half, chart_bottom - height, cx + bar_half, chart_bottom,
                 fill=color, outline="",
             ))
-            count_y = max(y0 + geom["count_y"], chart_bottom - height - 4)
-            count_y = max(count_y, y0 + geom["title_bottom"] + 2)
+            count_y = min(chart_bottom - height - 2 * u, y0 + geom["count_y"])
+            count_y = max(count_y, y0 + geom["title_bottom"] + 2 * u)
             self._track(self.canvas.create_text(
                 cx, count_y, anchor="s", text=str(count),
                 fill=INK_2, font=self._font(11, True),
@@ -1141,16 +1273,18 @@ class AutodartsPanel(BasePanel):
 
     def _draw_rivalry(self, box, rivalry):
         x0, y0, x1, y1 = box
-        pad = 18
-        rows = rivalry_row_ys(y1 - y0, pad)
+        u = self._scale
+        pad = 18 * u
+        rows = rivalry_row_ys(y1 - y0, 18, u=u, px_per_pt=self._px_per_pt)
+        fs = rows["font_scale"]
         self._track(self.canvas.create_text(
             x0 + pad, y0 + rows["title"], anchor="nw", text="HEAD-TO-HEAD",
-            fill=INK_2, font=self._font(15, True),
+            fill=INK_2, font=self._font(14 * fs, True),
         ))
         parts = rivalry_score_parts(rivalry)
         if not parts:
             self._track(self.canvas.create_text(
-                x0 + pad, y0 + rows["names"], anchor="nw",
+                x0 + pad, y0 + rows["names_top"], anchor="nw",
                 text="Play a few rematches to fill this in",
                 fill=INK_3, font=self._font(14),
             ))
@@ -1160,32 +1294,29 @@ class AutodartsPanel(BasePanel):
         # Three columns, no wrap width — Tk stacks wrapped lines on one baseline.
         self._track(self.canvas.create_text(
             x0 + pad, name_y, anchor="w", text=parts["left"],
-            fill=INK, font=self._font(20, True),
+            fill=INK, font=self._font(19 * fs, True),
         ))
         self._track(self.canvas.create_text(
             mid, name_y, text=parts["score"],
-            fill=WARN, font=self._font(22, True),
+            fill=WARN, font=self._font(20 * fs, True),
         ))
         self._track(self.canvas.create_text(
             x1 - pad, name_y, anchor="e", text=parts["right"],
-            fill=INK, font=self._font(20, True),
+            fill=INK, font=self._font(19 * fs, True),
         ))
         self._track(self.canvas.create_text(
             mid, y0 + rows["caption"], anchor="n",
-            text=parts["caption"], fill=INK_3, font=self._font(12),
+            text=parts["caption"], fill=INK_3, font=self._font(11 * fs),
         ))
         self._track(self.canvas.create_text(
             mid, y0 + rows["footer"], anchor="n",
-            text=parts["footer"], fill=INK_2, font=self._font(13),
+            text=parts["footer"], fill=INK_2, font=self._font(12 * fs),
         ))
 
     def _draw_records(self, box, records):
         x0, y0, x1, y1 = box
-        pad = 22
-        self._track(self.canvas.create_text(
-            x0 + pad, y0 + pad, anchor="nw", text="HOUSE RECORDS",
-            fill=INK_2, font=self._font(16, True),
-        ))
+        u = self._scale
+        pad = 20 * u
         records = records or {}
         best = records.get("bestMatchAverage") or {}
         hi = records.get("highestCheckout") or {}
@@ -1202,20 +1333,23 @@ class AutodartsPanel(BasePanel):
             (f"Highest checkout    {hi_s}" + (f"  ·  {hi_who}" if hi_who else ""), INK),
             (f"Total 180 scores    {int(total180)}", WARN),
         ]
-        y = y0 + 52
-        step = min(40.0, max(28.0, (y1 - y - pad) / max(1, len(lines))))
-        for line, color in lines:
-            if y > y1 - 18:
-                break
+        rows = records_row_ys(y1 - y0, len(lines), pad=20, u=u, px_per_pt=self._px_per_pt)
+        fs = rows["font_scale"]
+        self._track(self.canvas.create_text(
+            x0 + pad, y0 + rows["title"], anchor="nw", text="HOUSE RECORDS",
+            fill=INK_2, font=self._font(14 * fs, True),
+        ))
+        for (line, color), row_y in zip(lines, rows["lines"]):
             self._track(self.canvas.create_text(
-                x0 + pad, y, anchor="nw", text=line,
-                fill=color, font=self._font(15, True),
+                x0 + pad, y0 + row_y, anchor="nw", text=line,
+                fill=color, font=self._font(14 * fs, True),
             ))
-            y += step
 
     # --- Match ----------------------------------------------------------------
 
     def _render_match(self, payload: dict):
+        # Match type is already sized from its boxes; keep the point sizes as authored.
+        self._scale = 1.0
         match = (payload or {}).get("match") or {}
         status = str(match.get("status") or "live").lower()
         finished = status in ("finished", "final", "complete", "completed")

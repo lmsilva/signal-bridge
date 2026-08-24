@@ -6,7 +6,7 @@ CLIENT_ROOT = Path(__file__).resolve().parents[1]
 if str(CLIENT_ROOT) not in sys.path:
     sys.path.insert(0, str(CLIENT_ROOT))
 
-from src.design_system import ACCENT, WARN, page_chrome
+from src.design_system import ACCENT, WARN, design_u, page_chrome, text_line_h
 from src.payload_utils import resolve_display_type, title_for_payload
 from src.roll_credits_panel import (
     RollCreditsPanel,
@@ -14,10 +14,12 @@ from src.roll_credits_panel import (
     choose_image_hero,
     choose_showcase_shots,
     clip_text_to_lines,
+    counters_layout,
     facts_card_layout,
     format_beaten,
     format_game_meta,
     format_month_axis_label,
+    latest_layout,
     layout_boxes,
     month_axis_font_size,
     month_bar_color,
@@ -28,6 +30,17 @@ from src.roll_credits_panel import (
     tour_counter_label,
     tour_progress_layout,
 )
+
+# Tk paints points, not px — the same tile must stay clear from 96 DPI
+# (1.6 px/pt) through the wall's 125% scaling and beyond.
+DPI_CASES = (1.6, 2.05, 2.4)
+SCREEN_CASES = ((1080, 1920), (1200, 1920), (900, 1600), (1920, 1080))
+
+
+def spans_overlap(spans):
+    """`spans` are (top, height) pairs — True when any two painted rows collide."""
+    ordered = sorted(spans, key=lambda span: span[0])
+    return any(a[0] + a[1] > b[0] + 0.5 for a, b in zip(ordered, ordered[1:]))
 
 
 class RollCreditsPayloadTests(unittest.TestCase):
@@ -94,9 +107,86 @@ class RollCreditsLayoutTests(unittest.TestCase):
         for left, right in zip(ordered, ordered[1:]):
             self.assertLessEqual(boxes[left][3], boxes[right][1] + 1, f"{left} overlaps {right}")
         # Counters need room for notes + 2×2 stats (portrait width is ~1000px).
-        self.assertGreaterEqual(boxes["counters"][3] - boxes["counters"][1], 240)
+        self.assertGreaterEqual(boxes["counters"][3] - boxes["counters"][1], 270)
         self.assertIn("progress", boxes)
         self.assertGreaterEqual(boxes["progress"][3] - boxes["progress"][1], 60)
+
+    def test_dashboard_text_never_overlaps_at_any_display_scaling(self):
+        """The counters grid used to be painted straight over the notes band and
+        the hero copy ran past its card once Windows scaling inflated the type."""
+        for screen in SCREEN_CASES:
+            u = design_u(*screen)
+            portrait = screen[1] > screen[0]
+            boxes = layout_boxes(*screen, dashboard=True, timed=True)
+            for ppp in DPI_CASES:
+                where = f"{screen} @ {ppp}px/pt"
+                hero = boxes["hero"]
+                notes = 0 if portrait else 3
+                latest = latest_layout(
+                    hero[2] - hero[0], hero[3] - hero[1],
+                    note_count=notes, u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(latest["fits"], f"hero copy overflows — {where}")
+                self.assertFalse(spans_overlap(
+                    [(y, latest["h"][key]) for key, y in latest["y"].items()]
+                ), f"hero rows collide — {where}")
+                self.assertGreater(latest["text_x"], latest["art"][2], f"copy on art — {where}")
+
+                counters_h = boxes["counters"][3] - boxes["counters"][1]
+                counters = counters_layout(
+                    counters_h, note_count=3 if portrait else 0, value_count=4,
+                    portrait=portrait, u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(counters["fits"], f"counters overflow — {where}")
+                self.assertTrue(counters["grid_clear_of_notes"], f"grid on notes — {where}")
+                cell_spans = []
+                for cell in counters["cells"]:
+                    cell_spans.append((cell["value_y"], cell["value_h"]))
+                    cell_spans.append((cell["label_y"], cell["label_h"]))
+                note_spans = [
+                    (y, counters["note_h"][key]) for key, y in counters["notes"].items()
+                ]
+                self.assertFalse(
+                    spans_overlap(note_spans + cell_spans), f"counter rows collide — {where}",
+                )
+
+                months = months_chart_geom(
+                    boxes["months"][3] - boxes["months"][1], u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(months["fits"], f"month axis clipped — {where}")
+                self.assertTrue(months["bars_clear_of_title"], f"bars on title — {where}")
+
+                chrome = tour_progress_layout(
+                    boxes["progress"], index=0, total=12, u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(chrome["fits"], f"tour rail clipped — {where}")
+
+    def test_showcase_text_never_overlaps_at_any_display_scaling(self):
+        for screen in SCREEN_CASES:
+            u = design_u(*screen)
+            boxes = layout_boxes(*screen, dashboard=False, timed=True)
+            for ppp in DPI_CASES:
+                where = f"{screen} @ {ppp}px/pt"
+                title = title_card_layout(
+                    boxes["title"][3] - boxes["title"][1], u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(title["fits"], f"title card overflows — {where}")
+                self.assertFalse(spans_overlap([
+                    (title["title_y"], title["title_h"]),
+                    (title["meta_y"], title["meta_h"]),
+                ]), f"title over meta — {where}")
+
+                facts = facts_card_layout(
+                    boxes["facts"][3] - boxes["facts"][1],
+                    has_companion=True, u=u, px_per_pt=ppp,
+                )
+                self.assertTrue(facts["fits"], f"facts card overflows — {where}")
+                self.assertTrue(facts["desc_clear_of_facts"], f"blurb on facts — {where}")
+                self.assertFalse(spans_overlap([
+                    (facts["companion_y"], facts["companion_h"]),
+                    (facts["desc_top"], facts["desc_lines"] * facts["desc_line_h"]),
+                    (facts["facts_y"], facts["facts_h"]),
+                ]), f"facts rows collide — {where}")
 
     def test_portrait_counters_use_2x2_even_when_wide(self):
         # 1080-wide portrait content is ~1000px — the old width<900 check used 4 columns.
@@ -115,7 +205,7 @@ class RollCreditsLayoutTests(unittest.TestCase):
         self.assertLessEqual(boxes["facts"][3], boxes["shots"][1] + 1)
         title_h = boxes["title"][3] - boxes["title"][1]
         facts_h = boxes["facts"][3] - boxes["facts"][1]
-        self.assertGreaterEqual(title_h, 88)
+        self.assertGreaterEqual(title_h, 112)
         self.assertGreaterEqual(facts_h, 180)
         self.assertTrue(title_card_layout(title_h)["meta_fits"])
         self.assertTrue(facts_card_layout(facts_h, has_companion=True)["desc_clear_of_facts"])
@@ -133,6 +223,10 @@ class RollCreditsLayoutTests(unittest.TestCase):
     def test_long_titles_request_marquee(self):
         self.assertTrue(title_needs_marquee("A very long game title that cannot fit", 180))
         self.assertFalse(title_needs_marquee("Portal", 300))
+        # A measured font wins over the estimate — wide type marquees sooner.
+        wide = lambda text: len(text) * 60  # noqa: E731
+        self.assertTrue(title_needs_marquee("Portal", 300, measure=wide))
+        self.assertFalse(title_needs_marquee("Portal", 300, measure=lambda text: 40))
 
     def test_tour_chrome_matches_slideshow_language(self):
         self.assertEqual(next_in_label(12), "NEXT IN 12s")
@@ -141,7 +235,8 @@ class RollCreditsLayoutTests(unittest.TestCase):
         rail = tour_progress_layout((40, 1700, 1040, 1770), index=0, total=12)
         self.assertTrue(rail["segmented"])
         self.assertEqual(len(rail["segments"]), 12)
-        self.assertGreaterEqual(rail["rail_h"], 8)
+        self.assertGreaterEqual(rail["rail_h"], 6)
+        self.assertTrue(rail["fits"])
         wide = tour_progress_layout((40, 1700, 1040, 1770), index=0, total=29)
         self.assertFalse(wide["segmented"])
 
