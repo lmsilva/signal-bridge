@@ -70,6 +70,10 @@ const { createWebAdminAuth } = require('./web-admin-auth');
 const { createCommandRegistry } = require('./command-registry');
 const { createDisplayScheduler } = require('./display-scheduler');
 const {
+  CHAR_BY_CODE: VESTABOARD_CHAR_BY_CODE,
+  CHIPS: VESTABOARD_CHIPS,
+} = require('./vestaboard/encoder');
+const {
   ARTWORK_ROUTE_PREFIX: TRIVIA_ARTWORK_ROUTE_PREFIX,
 } = require('./trivia-categories');
 const {
@@ -329,6 +333,7 @@ function createWebServer({
   getSteamLibraryCount = null,
   getPsnLibraryCount = null,
   guestSnapsAuth: guestSnapsAuthInjected = null,
+  vestaboardSimulator = null,
   scheduleRestart,
   webRoot,
 } = {}) {
@@ -2925,6 +2930,85 @@ function createWebServer({
     });
   }
 
+  /** Everything the simulator page needs to draw itself from a cold start. */
+  function handleVestaboardSimState(res) {
+    if (!vestaboardSimulator) {
+      sendJson(res, 404, { ok: false, error: 'Simulator is not running' });
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      state: vestaboardSimulator.state(),
+      calls: vestaboardSimulator.calls(),
+      queue: [],
+      // The page owns no knowledge of the character set; it renders whatever
+      // the encoder says each code looks like.
+      glyphs: Object.fromEntries(VESTABOARD_CHAR_BY_CODE),
+      chips: VESTABOARD_CHIPS,
+      port: vestaboardSimulator.port,
+    });
+  }
+
+  /** Live board updates, same pattern as `handlePhotoEvents`. */
+  function handleVestaboardSimEvents(req, res) {
+    if (!vestaboardSimulator) {
+      sendJson(res, 404, { ok: false, error: 'Simulator is not running' });
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    });
+    res.write(': connected\n\n');
+
+    const send = (name, detail) => {
+      try {
+        res.write(`event: ${name}\ndata: ${JSON.stringify(detail)}\n\n`);
+      } catch {
+        // client gone
+      }
+    };
+
+    send('sim.state', vestaboardSimulator.state());
+
+    const unsubscribe = vestaboardSimulator.onChange((event, detail) => {
+      if (event === 'state') send('sim.state', detail);
+      else if (event === 'flip') send('sim.flip', detail);
+      else if (event === 'call') send('sim.call', detail);
+      else if (event === 'queue') send('sim.queue', detail);
+    });
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  }
+
+  /** Toggling off is how board error paths get exercised on purpose. */
+  function handleVestaboardSimOnline(body, res) {
+    if (!vestaboardSimulator) {
+      sendJson(res, 404, { ok: false, error: 'Simulator is not running' });
+      return;
+    }
+    if (typeof body?.online !== 'boolean') {
+      sendJson(res, 400, { ok: false, error: 'online must be true or false' });
+      return;
+    }
+    const state = vestaboardSimulator.setOnline(body.online);
+    log.info(`Vestaboard simulator turned ${state.online ? 'on' : 'off'}`);
+    sendJson(res, 200, { ok: true, state });
+  }
+
   function handlePhotoDelete(body, res) {
     const tokens = Array.isArray(body?.tokens)
       ? body.tokens
@@ -4290,6 +4374,16 @@ function createWebServer({
           handleSlideshowSettingsGet(res);
           return;
         }
+        if (pathname === '/api/vestaboard-sim') {
+          if (!requireAdminSession(req, res)) return;
+          handleVestaboardSimState(res);
+          return;
+        }
+        if (pathname === '/api/vestaboard-sim/events') {
+          if (!requireAdminSession(req, res)) return;
+          handleVestaboardSimEvents(req, res);
+          return;
+        }
         // Display clients fetch playlists + rich cards during a tour — no admin
         // session (same trust model as trivia artwork / QR image URLs on the LAN).
         if (pathname === '/api/library-tour/card') {
@@ -4507,6 +4601,9 @@ function createWebServer({
             return;
           case '/api/slideshow/settings':
             handleSlideshowSettingsUpdate(body, res);
+            return;
+          case '/api/vestaboard-sim/online':
+            handleVestaboardSimOnline(body, res);
             return;
           case '/api/library-tour/settings':
             handleLibraryTourSettingsUpdate(body, res);

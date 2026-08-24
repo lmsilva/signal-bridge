@@ -7472,6 +7472,296 @@
     }
   }
 
+  // Vestaboard simulator -----------------------------------------------------
+  // The page holds no opinion about what the board should show. It draws the
+  // layout the simulator reports and animates whatever changed since the last
+  // one, so what you see here is exactly what a real board would have flipped.
+
+  const VB_ROWS = 6;
+  const VB_COLS = 22;
+  const VB_TILES = VB_ROWS * VB_COLS;
+  // 63 and up are the solid colour chips; everything below is a glyph.
+  const VB_CHIP_MIN = 63;
+  const VB_MAX_CALLS = 20;
+
+  let vbGlyphs = {};
+  let vbTiles = null;
+  let vbCurrent = null;
+  let vbCalls = [];
+  let vbEvents = null;
+  let vbRateTimer = null;
+
+  function vbBuildGrid() {
+    const grid = $('vb-grid');
+    if (!grid || vbTiles) {
+      return;
+    }
+    vbTiles = [];
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < VB_TILES; i += 1) {
+      const tile = document.createElement('div');
+      tile.className = 'vb-tile';
+      frag.appendChild(tile);
+      vbTiles.push(tile);
+    }
+    grid.appendChild(frag);
+    vbCurrent = new Array(VB_TILES).fill(0);
+  }
+
+  function vbPaintTile(tile, code) {
+    if (code >= VB_CHIP_MIN) {
+      tile.classList.add('is-chip');
+      tile.dataset.chip = String(code);
+      tile.textContent = '';
+      return;
+    }
+    tile.classList.remove('is-chip');
+    delete tile.dataset.chip;
+    tile.textContent = vbGlyphs[code] || '';
+  }
+
+  function vbApplyLayout(layout, animate) {
+    if (!Array.isArray(layout) || !vbTiles) {
+      return;
+    }
+    const flat = [];
+    for (const row of layout) {
+      for (const code of row) {
+        flat.push(Number(code) || 0);
+      }
+    }
+
+    for (let index = 0; index < VB_TILES; index += 1) {
+      const code = flat[index] ?? 0;
+      const tile = vbTiles[index];
+      if (!tile || vbCurrent[index] === code) {
+        continue;
+      }
+      vbCurrent[index] = code;
+
+      if (!animate) {
+        vbPaintTile(tile, code);
+        continue;
+      }
+
+      // Sweep left to right with a little scatter, the way a real board
+      // clatters through a change rather than repainting like a spreadsheet.
+      const delay = (index % VB_COLS) * 14 + Math.random() * 90;
+      tile.style.animationDelay = `${delay}ms`;
+      tile.classList.remove('is-flipping');
+      void tile.offsetWidth;
+      tile.classList.add('is-flipping');
+      // Swap the face while the flap is edge-on and the change is hidden.
+      window.setTimeout(() => vbPaintTile(tile, code), delay + 215);
+      window.setTimeout(() => {
+        tile.classList.remove('is-flipping');
+        tile.style.animationDelay = '';
+      }, delay + 480);
+    }
+  }
+
+  function vbStartRateCountdown(cooldownMs) {
+    window.clearInterval(vbRateTimer);
+    const pill = $('vb-pill-rate');
+    if (!pill) {
+      return;
+    }
+    const until = Date.now() + Math.max(0, cooldownMs || 0);
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      pill.textContent = left > 0 ? `Next flip in ${left}s` : 'Next flip now';
+      pill.className = `status-pill ${left > 0 ? 'warn' : 'ok'}`;
+      if (left <= 0) {
+        window.clearInterval(vbRateTimer);
+      }
+    };
+    tick();
+    vbRateTimer = window.setInterval(tick, 250);
+  }
+
+  function vbRenderState(state) {
+    if (!state) {
+      return;
+    }
+    const pill = $('vb-pill-online');
+    if (pill) {
+      pill.textContent = state.online ? 'Online' : 'Offline';
+      pill.className = `status-pill ${state.online ? 'ok' : 'bad'}`;
+    }
+    $('vb-bezel')?.classList.toggle('is-offline', !state.online);
+    const toggle = $('btn-vb-toggle');
+    if (toggle) {
+      toggle.textContent = state.online ? 'Turn off' : 'Turn on';
+    }
+    const quiet = $('vb-pill-quiet');
+    if (quiet) {
+      quiet.hidden = !state.quietHours;
+    }
+    vbStartRateCountdown(state.cooldownMs);
+  }
+
+  function vbClockOf(iso) {
+    try {
+      return new Date(iso).toLocaleTimeString([], { hour12: false });
+    } catch {
+      return '';
+    }
+  }
+
+  function vbResultTone(result) {
+    if (result.startsWith('200')) return 'ok';
+    if (result.startsWith('503')) return 'warn';
+    return 'bad';
+  }
+
+  function vbRenderCalls() {
+    const host = $('vb-calls');
+    if (!host) {
+      return;
+    }
+    if (!vbCalls.length) {
+      host.innerHTML = '<p class="hint">No calls yet.</p>';
+      return;
+    }
+    host.innerHTML = '';
+    for (const call of [...vbCalls].reverse()) {
+      const row = document.createElement('div');
+      row.className = 'vb-row';
+
+      const time = document.createElement('span');
+      time.className = 'vb-row-time';
+      time.textContent = vbClockOf(call.at);
+
+      const main = document.createElement('span');
+      main.className = 'vb-row-main';
+      main.textContent = call.method;
+
+      const result = document.createElement('span');
+      result.className = `vb-row-result ${vbResultTone(call.result)}`;
+      result.textContent = call.result;
+
+      row.append(time, main, result);
+      host.appendChild(row);
+    }
+  }
+
+  function vbRenderQueue(items) {
+    const host = $('vb-queue');
+    if (!host) {
+      return;
+    }
+    if (!items || !items.length) {
+      host.innerHTML = '<p class="hint">Nothing queued.</p>';
+      return;
+    }
+    host.innerHTML = '';
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'vb-row';
+
+      const main = document.createElement('span');
+      main.className = 'vb-row-main';
+      main.textContent = item.label || 'Frame';
+
+      const state = document.createElement('span');
+      state.className = 'vb-row-result';
+      state.textContent = item.notBefore
+        ? `not before ${vbClockOf(item.notBefore)}`
+        : 'waiting';
+
+      const source = document.createElement('span');
+      source.className = 'vb-row-time';
+      source.textContent = item.source || '';
+
+      row.append(source, main, state);
+      host.appendChild(row);
+    }
+  }
+
+  async function loadVestaboardSim() {
+    let data;
+    try {
+      data = await apiGet('/api/vestaboard-sim');
+    } catch {
+      const port = $('vb-port');
+      if (port) {
+        port.textContent = 'Simulator is switched off in config';
+      }
+      return;
+    }
+    if (!data?.ok) {
+      return;
+    }
+
+    vbGlyphs = data.glyphs || {};
+    vbBuildGrid();
+    vbApplyLayout(data.state?.current, false);
+    vbRenderState(data.state);
+    vbCalls = data.calls || [];
+    vbRenderCalls();
+    vbRenderQueue(data.queue);
+
+    const port = $('vb-port');
+    if (port && data.port) {
+      port.textContent = `Local API on port ${data.port}`;
+    }
+  }
+
+  function startVestaboardSimEvents() {
+    if (vbEvents) {
+      return;
+    }
+    try {
+      vbEvents = new EventSource(appUrl('/api/vestaboard-sim/events'));
+    } catch {
+      return;
+    }
+
+    const on = (name, handler) => {
+      vbEvents.addEventListener(name, (event) => {
+        try {
+          handler(JSON.parse(event.data));
+        } catch {
+          // ignore malformed events
+        }
+      });
+    };
+
+    on('sim.state', (state) => vbRenderState(state));
+    on('sim.flip', (detail) => vbApplyLayout(detail.layout, true));
+    on('sim.call', (call) => {
+      vbCalls.push(call);
+      while (vbCalls.length > VB_MAX_CALLS) {
+        vbCalls.shift();
+      }
+      vbRenderCalls();
+    });
+    on('sim.queue', (detail) => vbRenderQueue(detail.items));
+
+    vbEvents.onerror = () => {
+      // Browser will retry EventSource automatically.
+    };
+  }
+
+  $('btn-vb-toggle')?.addEventListener('click', async () => {
+    const button = $('btn-vb-toggle');
+    const turningOn = button.textContent.trim() === 'Turn on';
+    button.disabled = true;
+    try {
+      const data = await apiPost('/api/vestaboard-sim/online', { online: turningOn });
+      vbRenderState(data.state);
+    } catch (error) {
+      toast(error?.message || 'Could not reach the simulator', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('.tab-btn[data-tab="board"]')?.addEventListener('click', async () => {
+    await loadVestaboardSim();
+    startVestaboardSimEvents();
+  });
+
   loadPushGrid();
   refreshDisplays({ quiet: true });
   startDisplayEvents();

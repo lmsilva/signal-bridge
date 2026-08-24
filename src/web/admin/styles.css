@@ -2968,3 +2968,104 @@ textarea.field-input.text-input-area {
 @media (min-width: 860px) {
   .credits-wide-col { display: table-cell; }
 }
+
+/* Vestaboard simulator ---------------------------------------------------- */
+
+.vb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vb-head-text { min-width: 0; }
+.vb-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* The bezel is deliberately not a .card — a real board is a slab on a wall,
+   not a panel in a list. */
+.vb-bezel {
+  background: #0a0a0c;
+  border: 1px solid #000;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 24px rgba(0, 0, 0, 0.45);
+  transition: opacity 200ms ease, filter 200ms ease;
+}
+.vb-bezel.is-offline { opacity: 0.42; filter: grayscale(0.7); }
+
+.vb-grid {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(22, 1fr);
+  gap: 1.5px;
+  perspective: 700px;
+}
+
+.vb-tile {
+  position: relative;
+  aspect-ratio: 5 / 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1b1b1f;
+  border-radius: 1.5px;
+  color: #f3f1ea;
+  /* Sized against the board's own width so the glyphs stay proportional at
+     any viewport, phone included. */
+  font-size: 2.5cqw;
+  font-family: "Helvetica Neue", "Arial Narrow", Roboto, sans-serif;
+  font-weight: 600;
+  font-stretch: condensed;
+  line-height: 1;
+  letter-spacing: 0;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+/* The split down the middle of every flap, visible even on a blank board. */
+.vb-tile::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.vb-tile.is-chip { color: transparent; }
+.vb-tile[data-chip="63"] { background: #e03c31; }
+.vb-tile[data-chip="64"] { background: #f58220; }
+.vb-tile[data-chip="65"] { background: #ffd200; }
+.vb-tile[data-chip="66"] { background: #22a24b; }
+.vb-tile[data-chip="67"] { background: #0f62c8; }
+.vb-tile[data-chip="68"] { background: #7b3f98; }
+.vb-tile[data-chip="69"] { background: #f2f2f2; }
+.vb-tile[data-chip="70"] { background: #101013; }
+.vb-tile[data-chip="71"] { background: #6e6e6e; }
+
+.vb-tile.is-flipping { animation: vb-flap 450ms ease-in-out both; }
+
+@keyframes vb-flap {
+  0% { transform: rotateX(0deg); }
+  48% { transform: rotateX(-88deg); filter: brightness(0.35); }
+  52% { transform: rotateX(-88deg); filter: brightness(0.35); }
+  100% { transform: rotateX(0deg); filter: brightness(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vb-tile.is-flipping { animation-duration: 1ms; }
+}
+
+.vb-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.vb-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--bg-elev-2);
+  border-radius: 9px;
+  font-size: 0.86rem;
+}
+.vb-row-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vb-row-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex: none; }
+.vb-row-result { font-variant-numeric: tabular-nums; flex: none; }
+.vb-row-result.ok { color: var(--good); }
+.vb-row-result.warn { color: var(--warn); }
+.vb-row-result.bad { color: var(--danger); }
