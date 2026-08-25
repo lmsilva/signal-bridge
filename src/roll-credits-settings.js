@@ -185,5 +185,6 @@ module.exports = {
   createRollCreditsSettings,
   DEFAULTS,
   VALID_ORDERS,
+  VALID_RESOLUTIONS,
   sanitiseSettings,
 };

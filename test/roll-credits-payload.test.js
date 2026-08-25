@@ -50,6 +50,9 @@ test('tour start is small and scheduled limits apply', () => {
   assert.equal(payload.loop, false);
   assert.equal(payload.displaySeconds, 25 + 2 * 12 + 4);
   assert.ok(Buffer.byteLength(JSON.stringify(payload)) < 16_000);
+  assert.equal(payload.games[0].title, 'Newest');
+  assert.equal(payload.games[0].beatenAt, '2026-08-20');
+  assert.equal(payload.games[0].systemLabel, 'PS5');
   const playlist = tours.getPlaylist(payload.tourId);
   assert.deepEqual(playlist.games.map((game) => game.id), ['rc_new', 'rc_mid']);
 });

@@ -68,7 +68,10 @@ function fakeRegistry(overrides = {}) {
  *
  * `clock.t` is the only source of time; nothing here calls `Date.now()`.
  */
-function build({ rules = [], settings = {}, registry = fakeRegistry(), busy = () => false, airImpl } = {}) {
+function build({
+  rules = [], settings = {}, registry = fakeRegistry(), busy = () => false, airImpl,
+  isBoardTarget = () => false,
+} = {}) {
   const root = tempRoot();
   const clock = { t: Date.parse('2026-03-10T15:00:00Z') };
   const aired = [];
@@ -78,11 +81,12 @@ function build({ rules = [], settings = {}, registry = fakeRegistry(), busy = ()
     commandRegistry: registry,
     now: () => clock.t,
     isBusy: busy,
+    isBoardTarget,
     // Never install a real interval: `tick()` is called explicitly.
     setTimer: () => null,
     clearTimer: () => {},
     timeZone: 'UTC',
-    air: airImpl || ((rule) => { aired.push({ ruleId: rule.id, at: clock.t }); }),
+    air: airImpl || ((rule) => { aired.push({ ruleId: rule.id, at: clock.t, target: rule.target }); }),
   });
   scheduler.updateSettings({
     active: true, tickSeconds: 30, globalMinGapSeconds: 0,
@@ -199,6 +203,60 @@ test('content-checked commands default their guard on', () => {
     { command: { title: 'Weather', supportsContentCheck: false } },
   );
   assert.equal(plain.guard, undefined);
+});
+
+test('existing rules load as target full so boards stay quiet', () => {
+  const inherited = normaliseRule({ commandId: 'alexa.weather' });
+  assert.equal(inherited.target, 'full');
+  assert.equal(normaliseRule({ commandId: 'alexa.weather', target: 'all' }).target, 'all');
+  assert.equal(normaliseRule({ commandId: 'alexa.weather', target: '*' }).target, 'all');
+  assert.equal(normaliseRule({ commandId: 'alexa.weather', target: 'vestaboard' }).target, 'vestaboard');
+  assert.equal(normaliseRule({ commandId: 'alexa.weather', target: 'sim' }).target, 'sim');
+});
+
+test('a vestaboard-targeted rule airs even while the overlay is busy', async () => {
+  const { scheduler, clock, aired } = build({
+    busy: () => true,
+    isBoardTarget: (id) => id === 'sim',
+    rules: [
+      { id: 'weather', commandId: 'alexa.weather', intervalSeconds: 3600, probability: 100, target: 'full' },
+      { id: 'board', commandId: 'alexa.weather', intervalSeconds: 3600, probability: 100, target: 'vestaboard' },
+    ],
+  });
+  await scheduler.tick();
+  assert.deepEqual(aired.map((row) => row.ruleId), ['board']);
+  assert.equal(aired[0].target, 'vestaboard');
+  const events = scheduler.activity.query({ limit: 20 });
+  assert.equal(events.find((event) => event.ruleId === 'board').target, 'vestaboard');
+  assert.equal(events.some((event) => event.ruleId === 'weather'), false);
+});
+
+test('a board rule and a full-display rule can air on the same tick', async () => {
+  const { scheduler, aired } = build({
+    isBoardTarget: (id) => id === 'sim',
+    rules: [
+      { id: 'weather', commandId: 'alexa.weather', intervalSeconds: 3600, probability: 100, target: 'full' },
+      { id: 'board', commandId: 'alexa.weather', intervalSeconds: 3600, probability: 100, target: 'sim' },
+    ],
+  });
+  const result = await scheduler.tick();
+  assert.equal(aired.length, 2);
+  assert.ok(aired.some((row) => row.ruleId === 'weather' && row.target === 'full'));
+  assert.ok(aired.some((row) => row.ruleId === 'board' && row.target === 'sim'));
+  assert.equal(result.aired, 'weather');
+  assert.equal(result.boardAired, 'board');
+});
+
+test('a full-display rule still waits when the overlay is busy', async () => {
+  const { scheduler, aired } = build({
+    busy: () => true,
+    rules: [
+      { id: 'weather', commandId: 'alexa.weather', intervalSeconds: 3600, probability: 100 },
+    ],
+  });
+  const result = await scheduler.tick();
+  assert.equal(result.reason, 'blocked-display');
+  assert.equal(aired.length, 0);
 });
 
 // -------------------------------------------------------------- the tick
@@ -714,6 +772,29 @@ test('stats aggregate hit rate, gaps and the dominant reason for skipping', () =
   assert.ok(Math.abs(stats.hitRate - 2 / 3) < 0.001);
   assert.equal(stats.avgGapSeconds, 3600);
   assert.deepEqual(stats.dominantSkip, { outcome: 'blocked-guard', count: 21 });
+});
+
+test('stats roll up per-board outcomes on an airing', () => {
+  const dir = path.join(tempRoot(), 'activity');
+  const log = createActivityLog(dir, { timeZone: 'UTC' });
+  const at = new Date().toISOString();
+  log.record({
+    ruleId: 'board-weather',
+    outcome: 'aired',
+    at,
+    target: 'sim',
+    boardOutcomes: [{ boardId: 'sim', reason: 'queued' }],
+  });
+  log.record({
+    ruleId: 'board-weather',
+    outcome: 'aired',
+    at,
+    target: 'sim',
+    boardOutcomes: [{ boardId: 'sim', reason: 'gap' }],
+  });
+  const [stats] = log.stats({ from: new Date(Date.now() - HOUR).toISOString() });
+  assert.equal(stats.aired, 2);
+  assert.deepEqual(stats.boards.sim, { queued: 1, gap: 1 });
 });
 
 test('the heatmap counts only airings, in local hours', () => {

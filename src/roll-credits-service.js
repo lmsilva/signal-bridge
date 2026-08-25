@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createRollCreditsStore } = require('./roll-credits-store');
-const { createRollCreditsSettings } = require('./roll-credits-settings');
+const { createRollCreditsSettings, VALID_RESOLUTIONS } = require('./roll-credits-settings');
 const { createRollCreditsCredentials } = require('./roll-credits-credentials');
 const { createProviders } = require('./roll-credits-providers');
 const { createRollCreditsMedia } = require('./roll-credits-media');
@@ -155,6 +155,36 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     const job = jobs.retry(mediaId)
       || jobs.enqueueDownload({ gameId, mediaId, kind: row.kind });
     return job;
+  }
+
+  /**
+   * Re-download a YouTube clip at another height. Trim bounds are kept and
+   * applied when the wall preview is rebuilt after the new file lands.
+   */
+  function setMediaResolution(gameId, mediaId, resolution) {
+    const height = Number(resolution);
+    if (!VALID_RESOLUTIONS.includes(height)) {
+      throw new Error('Pick 360p, 480p, 720p or 1080p');
+    }
+    const game = store.getGame(gameId);
+    if (!game) throw new Error('Roll Credits game not found');
+    const rows = game.media || [];
+    const row = rows.find((item) => item.id === mediaId);
+    if (!row) throw new Error('Roll Credits media not found');
+    if (row.kind !== 'video') throw new Error('Only video media has a download resolution');
+    if (!String(row.youtubeUrl || '').trim() && row.source !== 'youtube') {
+      throw new Error('Only YouTube videos can be re-downloaded at another resolution');
+    }
+    if (settings.get().youtube?.downloadEnabled === false) {
+      throw new Error('YouTube downloads are disabled in Roll Credits settings');
+    }
+    const updated = { ...row, resolution: height, status: 'pending', statusDetail: null };
+    store.updateGame(gameId, {
+      media: rows.map((item) => (item.id === mediaId ? updated : item)),
+    });
+    const job = jobs.retry(mediaId)
+      || jobs.enqueueDownload({ gameId, mediaId, kind: 'video' });
+    return { media: updated, job };
   }
 
   /**
@@ -324,6 +354,7 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     deleteMedia,
     retryMedia,
     setMediaTrim,
+    setMediaResolution,
     saveVideoUpload,
     onEvents,
     listSystems: store.loadSystems,

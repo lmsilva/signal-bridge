@@ -173,6 +173,11 @@ function isLegalCode(code) {
   return Number.isInteger(code) && LEGAL_CODES.has(code) && !UNUSED_CODES.has(code);
 }
 
+/** Codes in the order a module walks them. Unused slots are skipped. */
+function drumOrder() {
+  return [...LEGAL_CODES].sort((a, b) => a - b);
+}
+
 /** Fold text and turn it into character codes. */
 function encodeText(text) {
   const folded = fold(text);
@@ -408,6 +413,7 @@ module.exports = {
   CHIPS,
   UNUSED_CODES,
   LEGAL_CODES,
+  drumOrder,
   CODE_BY_CHAR,
   CHAR_BY_CODE,
   fold,

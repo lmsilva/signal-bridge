@@ -38,7 +38,7 @@ test('display registry upserts announce and resolves unicast delivery', () => {
     const all = registry.resolveDelivery(ALL_TARGET_ID);
     assert.equal(all.isAll, true);
     assert.deepEqual(all.target, { all: true });
-    assert.deepEqual(all.sendOptions, { hosts: ['192.168.1.50'] });
+    assert.deepEqual(all.sendOptions, { hosts: ['192.168.1.50'], targetId: 'all' });
   } finally {
     registry.stop();
   }
@@ -65,6 +65,18 @@ test('resolveDelivery for all fans out to every registered display host', () => 
     const all = registry.resolveDelivery('all');
     assert.equal(all.isAll, true);
     assert.deepEqual(all.sendOptions.hosts.sort(), ['192.168.1.10', '192.168.1.20']);
+    assert.equal(all.sendOptions.targetId, 'all');
+
+    const full = registry.resolveDelivery('full');
+    assert.equal(full.kind, 'full');
+    assert.equal(full.isAll, true);
+    assert.equal(full.sendOptions.targetId, 'full');
+    assert.deepEqual(full.sendOptions.hosts.sort(), ['192.168.1.10', '192.168.1.20']);
+
+    const boards = registry.resolveDelivery('vestaboard');
+    assert.equal(boards.kind, 'vestaboard');
+    assert.equal(boards.isAll, false);
+    assert.deepEqual(boards.sendOptions, { targetId: 'vestaboard' });
   } finally {
     registry.stop();
   }

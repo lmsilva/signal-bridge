@@ -305,6 +305,14 @@ test('the clock shows a two digit hour without a leading zero before ten', () =>
   assert.match(midnight.split('\n')[3], /AM$/);
 });
 
+test('the clock face honours an IANA zone', () => {
+  const drawn = formatLayout(blockTime('2026-08-24T22:09:00.000Z', {
+    timeZone: 'America/Denver',
+  }));
+  assert.match(drawn.split('\n')[3], /PM$/);
+  assert.ok(drawn.split('\n')[0].startsWith('    '), '4:09pm has no tens digit');
+});
+
 test('page counters only appear once there is more than one page', () => {
   assert.equal(pageCounter(1, 3), '1/3');
   assert.equal(pageCounter(1, 1), '');

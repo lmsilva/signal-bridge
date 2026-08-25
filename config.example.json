@@ -61,6 +61,7 @@
     "vivintAlarmQueries": true,
     "notificationQueries": true,
     "routeQueries": true,
+    "localTimeZone": "America/Denver",
     "eventsLogFile": "data/voice-events.jsonl",
     "defaultLocation": {
       "name": "Saratoga Springs, UT",

@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal79">
+  <link rel="stylesheet" href="styles.css?v=signal89">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1323,10 +1323,13 @@
         <div class="card vb-head-card">
           <div class="vb-head">
             <div class="vb-head-text">
-              <div class="auth-name">Vestaboard simulator</div>
+              <div class="auth-name">Vestaboard Simulator</div>
               <div class="auth-detail" id="vb-port">Local API on port 7000</div>
             </div>
-            <button type="button" class="btn btn-outline btn-sm" id="btn-vb-toggle">Turn off</button>
+            <div class="vb-head-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-vb-sound" title="Flipping clicks. Browsers stay silent until you tap.">Sound on</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-vb-toggle">Turn off</button>
+            </div>
           </div>
           <div class="vb-pills">
             <span class="status-pill ok" id="vb-pill-online">Online</span>
@@ -1337,6 +1340,7 @@
 
         <div class="vb-bezel" id="vb-bezel">
           <div class="vb-grid" id="vb-grid"></div>
+          <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
         </div>
 
         <div class="card">
@@ -1383,7 +1387,7 @@
     </button>
     <button class="tab-btn" data-tab="board">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
-      <span class="tab-label"><span class="tab-label-full">Simulator</span><span class="tab-label-short">Board</span></span>
+      <span class="tab-label"><span class="tab-label-full">Vestaboard Simulator</span><span class="tab-label-short">Board</span></span>
     </button>
     <button class="tab-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
@@ -1574,16 +1578,27 @@
         <strong class="credits-trim-heading">Clip shown on the wall</strong>
         <p class="hint">Pick the part worth looping — the display gets a short silent clip from this range.</p>
         <div class="credits-trim-row">
-          <label class="credits-inline-field">Start (s)
-            <input class="field-input" id="credits-trim-start" type="number" min="0" step="0.1" value="0">
+          <label class="credits-inline-field">Start
+            <input class="field-input" id="credits-trim-start" type="text" inputmode="text" placeholder="00m00s" autocomplete="off">
           </label>
           <button type="button" class="btn btn-outline" id="btn-credits-trim-start">Use current time</button>
         </div>
         <div class="credits-trim-row">
-          <label class="credits-inline-field">End (s)
-            <input class="field-input" id="credits-trim-end" type="number" min="0" step="0.1">
+          <label class="credits-inline-field">End
+            <input class="field-input" id="credits-trim-end" type="text" inputmode="text" placeholder="00m00s" autocomplete="off">
           </label>
           <button type="button" class="btn btn-outline" id="btn-credits-trim-end">Use current time</button>
+        </div>
+        <div class="credits-trim-row" id="credits-resolution-row" hidden>
+          <label class="credits-inline-field">Resolution
+            <select class="field-input" id="credits-trim-resolution">
+              <option value="360">360p</option>
+              <option value="480">480p</option>
+              <option value="720">720p</option>
+              <option value="1080">1080p</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-outline" id="btn-credits-resolution-save">Re-download</button>
         </div>
         <p class="credits-trim-status" id="credits-trim-status"></p>
         <div class="credits-trim-actions">
@@ -1647,6 +1662,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal79"></script>
+  <script src="app.js?v=signal89"></script>
 </body>
 </html>

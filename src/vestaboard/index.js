@@ -2,14 +2,17 @@
 //
 // Owns the board list, a queue and a transport per enabled board, and the
 // view of those boards that the display registry merges in. Everything above
-// this — the router, the formatters, the scheduler — talks to `submit()` and
-// never learns whether the board on the other end is hardware or the
-// simulator.
+// this — the router, the formatters, the scheduler — talks to `pushEvent()`
+// or `submit()` and never learns whether the board on the other end is
+// hardware or the simulator.
 
+const { resolveGuestPhotoboothSettings } = require('../guest-photobooth');
 const { createVestaboardSettings, SIMULATOR_ID } = require('./settings');
 const { createTransport } = require('./transport');
 const { createQueue } = require('./queue');
 const { identityFrame } = require('./formatters/signal');
+const { routeEvent } = require('./router');
+const { houseTimeZone } = require('./clock');
 
 const REAL_BOARD_PORT = 7000;
 
@@ -53,6 +56,7 @@ function createVestaboardHub({
 
     const queue = createQueue({
       board, transport, log, now,
+      timeZone: houseTimeZone(config),
     });
 
     const unsubscribe = queue.onChange((event, detail) => {
@@ -95,10 +99,12 @@ function createVestaboardHub({
       // Settings changes apply live rather than waiting for a restart.
       existing.board = board;
       existing.queue.setConfig(board);
-      existing.transport = createTransport({
+      const nextTransport = createTransport({
         baseUrl: baseUrlFor(board),
         key: settings.keyFor(board.id) || '',
       });
+      existing.transport = nextTransport;
+      existing.queue.setTransport(nextTransport);
     }
 
     emit('registry', { boardId: null });
@@ -118,9 +124,9 @@ function createVestaboardHub({
     const port = simulator.address()?.port || simulator.port;
     settings.seedSimulator({ port, apiKey: null });
 
-    if (settings.hasKey(SIMULATOR_ID)) {
-      return;
-    }
+    // Always walk the handshake. Enabling twice returns the same live key,
+    // and a stored key that no longer matches (simulator state was reset)
+    // would otherwise 401 forever and the queue would stop.
     const transport = createTransport({ baseUrl: `http://127.0.0.1:${port}` });
     const outcome = await transport.enable(simulator.enablementToken());
     if (outcome.ok && outcome.apiKey) {
@@ -170,6 +176,62 @@ function createVestaboardHub({
   }
 
   /**
+   * Format one payload and offer it to the boards that should show it.
+   *
+   * Voice, admin push, and (later) the scheduler all come through here.
+   * The UDP path is unchanged: this only talks to boards. A payload a board
+   * cannot show is skipped with one debug line, never a blank flip.
+   */
+  function pushEvent(payload, options = {}) {
+    if (!payload) {
+      return { boards: [] };
+    }
+
+    const ctx = { ...(options.ctx || {}) };
+    if (!ctx.timeZone) {
+      ctx.timeZone = houseTimeZone(config);
+    }
+    if (payload.type === 'guest.photobooth') {
+      // The UDP payload ships a Wi-Fi QR string, not the typed password a
+      // board has to print. Pull the house settings once so every path —
+      // voice, Push, request-PIN — shows the same SSID and password.
+      const guest = resolveGuestPhotoboothSettings(config);
+      ctx.ssid = ctx.ssid || guest.ssid;
+      ctx.password = ctx.password || guest.password;
+      ctx.boothUrl = ctx.boothUrl || guest.boothUrl;
+    }
+
+    const results = routeEvent({
+      payload,
+      boards: [...boards.values()].map((entry) => ({ board: entry.board })),
+      targetId: options.targetId,
+      commandId: options.commandId || null,
+      explicit: options.explicit != null
+        ? Boolean(options.explicit)
+        : !options.scheduler,
+      scheduler: Boolean(options.scheduler),
+      ctx,
+      now,
+      submit,
+      log,
+    });
+    // Kick the queue now rather than waiting up to a second for the timer.
+    // `submit()` itself stays synchronous so unit tests can assert pending
+    // items before an explicit tick.
+    const kicked = new Set();
+    for (const row of results) {
+      if (!(row?.accepted > 0) || kicked.has(row.boardId)) {
+        continue;
+      }
+      kicked.add(row.boardId);
+      queueFor(row.boardId)?.tick()?.catch((error) => {
+        log?.warn?.(`Vestaboard ${row.boardId} tick failed`, error?.message || error);
+      });
+    }
+    return { boards: results };
+  }
+
+  /**
    * Hand frames to one board. Returns why nothing happened when nothing did,
    * so callers can say something useful rather than failing silently.
    */
@@ -212,6 +274,7 @@ function createVestaboardHub({
     registryEntries,
     settingsView,
     queueFor,
+    pushEvent,
     submit,
     testFlip,
     boards: () => [...boards.values()].map((entry) => ({ ...entry.board })),

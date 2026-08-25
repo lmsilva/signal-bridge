@@ -21,6 +21,8 @@ const {
   contentLength,
 } = require('./encoder');
 
+const { dateParts } = require('./clock');
+
 // Badge frames keep chips in both top and bottom corners, so the title and
 // footer live in the middle. Content spans columns 3..18 inclusive.
 const BADGE_TEXT_FROM = 3;
@@ -307,17 +309,18 @@ function placeBlockDigit(layout, digit, column, chip) {
  * meridiem beside the last row. The tens-of-hours slot stays blank before
  * 10 o'clock rather than showing a leading zero.
  */
-function blockTime(date, { footer = '', color = 'white', footerColor = 'white' } = {}) {
+function blockTime(date, { footer = '', color = 'white', footerColor = 'white', timeZone } = {}) {
   const chip = chipCode(color);
   const when = date instanceof Date ? date : new Date(date);
+  const parts = dateParts(when, timeZone) || dateParts(when);
 
-  let hours = when.getHours();
+  let hours = parts.hour;
   const meridiem = hours >= 12 ? 'PM' : 'AM';
   hours %= 12;
   if (hours === 0) {
     hours = 12;
   }
-  const minutes = when.getMinutes();
+  const minutes = parts.minute;
 
   const digits = Array.from({ length: 5 }, () => blankRow(COLS));
 

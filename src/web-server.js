@@ -69,10 +69,13 @@ const { createQrImageCache, parseThumbRouteTail } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
 const { createCommandRegistry } = require('./command-registry');
 const { createDisplayScheduler } = require('./display-scheduler');
+const { normaliseTarget: normaliseSchedulerTarget } = require('./scheduler-rules');
 const {
   CHAR_BY_CODE: VESTABOARD_CHAR_BY_CODE,
   CHIPS: VESTABOARD_CHIPS,
+  drumOrder: vestaboardDrumOrder,
 } = require('./vestaboard/encoder');
+const { SIMULATOR_ID } = require('./vestaboard/settings');
 const {
   ARTWORK_ROUTE_PREFIX: TRIVIA_ARTWORK_ROUTE_PREFIX,
 } = require('./trivia-categories');
@@ -129,6 +132,7 @@ const MIME_TYPES = {
   '.jpeg': 'image/jpeg',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.wav': 'audio/wav',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
@@ -302,10 +306,10 @@ function indoorTemperatureQuickPushQuery(config = {}) {
 function createWebServer({
   config,
   log,
-  sendUdpPayload,
+  sendUdpPayload: sendUdpPayloadIn,
   recordVoiceEvent,
   displayRegistry = null,
-  deliverTargetedPayload = null,
+  deliverTargetedPayload: deliverTargetedPayloadIn = null,
   requestTimerPoll = null,
   requestAlarmPoll = null,
   recordSteamPresence = null,
@@ -338,6 +342,25 @@ function createWebServer({
   scheduleRestart,
   webRoot,
 } = {}) {
+  let schedulerAir = null;
+
+  function sendUdpPayload(payload, options = {}) {
+    if (typeof sendUdpPayloadIn !== 'function') {
+      return undefined;
+    }
+    return sendUdpPayloadIn(payload, { ...options, ...(schedulerAir || {}) });
+  }
+
+  function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
+    if (typeof deliverTargetedPayloadIn !== 'function') {
+      return sendUdpPayload(payload, extraSendOptions);
+    }
+    return deliverTargetedPayloadIn(payload, targetId, {
+      ...extraSendOptions,
+      ...(schedulerAir || {}),
+    });
+  }
+
   const settings = {
     enabled: config.webServer?.enabled !== false,
     // Allow port 0 (ephemeral) for tests — `Number(0) || DEFAULT` would wrongly use 47810.
@@ -1520,7 +1543,10 @@ function createWebServer({
    * a parallel dispatch path would drift the moment one of them is fixed. The
    * handlers speak HTTP, so a capturing shim stands in for `res`.
    */
-  async function airCommand(commandId, params = {}, { device = 'Scheduler' } = {}) {
+  async function airCommand(commandId, params = {}, {
+    device = 'Scheduler',
+    targetId = 'full',
+  } = {}) {
     const command = commandRegistry.get(commandId);
     if (!command) {
       throw new Error(`Unknown command: ${commandId}`);
@@ -1537,57 +1563,65 @@ function createWebServer({
       },
       setHeader() {},
     };
-    // Scheduler airings always go to every display: a rule has no notion of a
-    // selected target, and "all" is what an ambient page wants anyway.
-    const body = { ...(command.body || {}), ...params, device, targetId: '*', triggeredBy: 'scheduler' };
+    const deliveryId = normaliseSchedulerTarget(targetId);
+    const body = {
+      ...(command.body || {}),
+      ...params,
+      device,
+      targetId: deliveryId,
+      triggeredBy: 'scheduler',
+    };
 
-    switch (commandId) {
-      case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
-      case 'tesla.battery': handleTeslaPush('tesla-battery', body, res); break;
-      case 'alexa.weather':
-        handleVoiceQueryPush('weather', 'what is the weather', 'weather-query', body, res); break;
-      case 'alexa.shopping-list':
-        handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res); break;
-      case 'alexa.timers': handleTimersPush(body, res); break;
-      case 'alexa.alarms': handleAlarmsPush(body, res); break;
-      case 'alexa.air-quality':
-        handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res); break;
-      case 'alexa.now-playing':
-        handleVoiceQueryPush('music', "what's playing", 'music-query', body, res); break;
-      case 'signal.slideshow': handlePhotoSlideshowPush(body, res); break;
-      case 'signal.guest-snaps': handleGuestPhotoboothPush(body, res); break;
-      case 'steam.now-playing':
-        // Push tiles post an empty body (auto). Scheduler rules must not: a
-        // "now playing" rule that quietly airs last-played is a different page.
-        await handleSteamNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
-      case 'steam.last-played':
-        await handleSteamNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
-      case 'steam.library-tour':
-        await handleSteamLibraryTourPush(body, res); break;
-      case 'psn.now-playing':
-        await handlePsnNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
-      case 'psn.last-played':
-        await handlePsnNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
-      case 'psn.library-tour':
-        await handlePsnLibraryTourPush(body, res); break;
-      case 'credits.show':
-        handleRollCreditsPush(body, res); break;
-      case 'autodarts.now':
-        handleAutodartsNowPush({ ...body, mode: body?.mode || 'auto' }, res); break;
-      case 'autodarts.last-match':
-        handleAutodartsLastMatchPush({ ...body, mode: 'last-match' }, res); break;
-      case 'autodarts.dashboard':
-        handleAutodartsDashboardPush(body, res); break;
-      case 'youtube.now-playing':
-        await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
-      case 'youtube.last-played':
-        await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
-      case 'trivia.show': handleTriviaPush(body, res); break;
-      case 'goodnews.show': handleUpsideNewsPush(body, res); break;
-      case 'wiki.show': handleWikiPush(body, res); break;
-      case 'overhead.show': await handleOverheadPush(body, res); break;
-      default:
-        throw new Error(`Command "${commandId}" has no scheduler dispatch`);
+    schedulerAir = { source: 'scheduler', targetId: deliveryId };
+    try {
+      switch (commandId) {
+        case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
+        case 'tesla.battery': handleTeslaPush('tesla-battery', body, res); break;
+        case 'alexa.weather':
+          await handleVoiceQueryPush('weather', 'what is the weather', 'weather-query', body, res); break;
+        case 'alexa.shopping-list':
+          await handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res); break;
+        case 'alexa.timers': handleTimersPush(body, res); break;
+        case 'alexa.alarms': handleAlarmsPush(body, res); break;
+        case 'alexa.air-quality':
+          await handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res); break;
+        case 'alexa.now-playing':
+          await handleVoiceQueryPush('music', "what's playing", 'music-query', body, res); break;
+        case 'signal.slideshow': handlePhotoSlideshowPush(body, res); break;
+        case 'signal.guest-snaps': await handleGuestPhotoboothPush(body, res); break;
+        case 'steam.now-playing':
+          await handleSteamNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+        case 'steam.last-played':
+          await handleSteamNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+        case 'steam.library-tour':
+          await handleSteamLibraryTourPush(body, res); break;
+        case 'psn.now-playing':
+          await handlePsnNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+        case 'psn.last-played':
+          await handlePsnNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+        case 'psn.library-tour':
+          await handlePsnLibraryTourPush(body, res); break;
+        case 'credits.show':
+          handleRollCreditsPush(body, res); break;
+        case 'autodarts.now':
+          handleAutodartsNowPush({ ...body, mode: body?.mode || 'auto' }, res); break;
+        case 'autodarts.last-match':
+          handleAutodartsLastMatchPush({ ...body, mode: 'last-match' }, res); break;
+        case 'autodarts.dashboard':
+          handleAutodartsDashboardPush(body, res); break;
+        case 'youtube.now-playing':
+          await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+        case 'youtube.last-played':
+          await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+        case 'trivia.show': handleTriviaPush(body, res); break;
+        case 'goodnews.show': handleUpsideNewsPush(body, res); break;
+        case 'wiki.show': handleWikiPush(body, res); break;
+        case 'overhead.show': await handleOverheadPush(body, res); break;
+        default:
+          throw new Error(`Command "${commandId}" has no scheduler dispatch`);
+      }
+    } finally {
+      schedulerAir = null;
     }
 
     if (captured.status >= 400) {
@@ -1596,7 +1630,10 @@ function createWebServer({
     if (!captured.status) {
       throw new Error(`Command "${commandId}" produced no response`);
     }
-    return captured.body;
+    return {
+      ...captured.body,
+      boardOutcomes: captured.body?.vestaboard?.boards || captured.body?.boardOutcomes,
+    };
   }
 
   const scheduler = createDisplayScheduler({
@@ -1605,7 +1642,14 @@ function createWebServer({
     commandRegistry,
     isBusy: () => Boolean(displayBusy?.isBusy?.()),
     timeZone: config.voiceEvents?.localTimeZone || null,
-    air: (rule) => airCommand(rule.commandId, rule.params, { device: 'Scheduler' }),
+    isBoardTarget: (id) => {
+      const entry = displayRegistry?.get?.(id);
+      return Boolean(entry && (entry.kind === 'vestaboard' || entry.static));
+    },
+    air: (rule) => airCommand(rule.commandId, rule.params, {
+      device: 'Scheduler',
+      targetId: rule.target,
+    }),
   });
 
   function schedulerRules() {
@@ -2035,17 +2079,16 @@ function createWebServer({
   }
 
   function sendCommandPayload(payload, targetId, res, okBody = {}) {
-    if (typeof deliverTargetedPayload === 'function') {
-      const delivery = deliverTargetedPayload(payload, targetId);
-      if (delivery?.error && !delivery.isAll) {
-        sendJson(res, 404, { ok: false, error: delivery.error });
-        return false;
-      }
-      sendJson(res, 200, { ok: true, target: delivery.target, ...okBody });
-      return true;
+    const delivery = deliverTargetedPayload(payload, targetId);
+    if (delivery?.error && !delivery.isAll) {
+      sendJson(res, 404, { ok: false, error: delivery.error });
+      return false;
     }
-    sendUdpPayload(payload);
-    sendJson(res, 200, { ok: true, ...okBody });
+    sendJson(res, 200, {
+      ok: true,
+      ...(delivery?.target ? { target: delivery.target } : {}),
+      ...okBody,
+    });
     return true;
   }
 
@@ -2072,6 +2115,7 @@ function createWebServer({
       timestamp: Date.now(),
       spokenResponse: null,
       targetId,
+      triggeredBy: body?.triggeredBy || 'web-api',
     };
     // Fire and forget: Tesla fetches can take up to 30s (vehicle wake); the
     // voice pipeline already sends a cached preview / processing ack first.
@@ -2086,7 +2130,7 @@ function createWebServer({
   // Tesla ("web push" trigger), just with a kind/query/trigger tailored to
   // what the voice-query path would have produced for "what's the weather"
   // or "show my shopping list".
-  function handleVoiceQueryPush(kind, query, trigger, body, res) {
+  async function handleVoiceQueryPush(kind, query, trigger, body, res) {
     if (typeof recordVoiceEvent !== 'function') {
       sendJson(res, 503, { ok: false, error: 'Push unavailable — listener not ready' });
       return;
@@ -2107,8 +2151,15 @@ function createWebServer({
       timestamp: Date.now(),
       spokenResponse: null,
       targetId,
+      triggeredBy: body?.triggeredBy || trigger,
     };
-    recordVoiceEvent(event).catch((error) => {
+    const pending = recordVoiceEvent(event);
+    if (body?.triggeredBy === 'scheduler') {
+      const vestaboard = await pending;
+      sendJson(res, 202, { ok: true, kind, targetId, vestaboard });
+      return;
+    }
+    pending.catch((error) => {
       log.error(`Web push ${kind} failed`, error?.message || error);
     });
     log.info(`Web push accepted (${kind})`, { device: event.device, targetId });
@@ -2137,7 +2188,7 @@ function createWebServer({
     sendJson(res, 202, { ok: true, kind: 'alarms' });
   }
 
-  function handleGuestPhotoboothPush(body, res) {
+  async function handleGuestPhotoboothPush(body, res) {
     if (typeof recordVoiceEvent !== 'function') {
       sendJson(res, 503, { ok: false, error: 'Push unavailable — listener not ready' });
       return;
@@ -2150,12 +2201,14 @@ function createWebServer({
       });
       return;
     }
-    // Always all displays (same as the Alexa path).
-    handleVoiceQueryPush(
+    const targetId = body?.triggeredBy === 'scheduler'
+      ? (body.targetId || 'full')
+      : '*';
+    await handleVoiceQueryPush(
       'guest-photobooth',
       'open guest snaps',
       'web-api',
-      { ...(body || {}), targetId: '*' },
+      { ...(body || {}), targetId },
       res,
     );
   }
@@ -2831,6 +2884,16 @@ function createWebServer({
         sendJson(res, 200, { ok: true, media });
         return;
       }
+      const resolutionMatch = /^games\/([^/]+)\/media\/([^/]+)\/resolution$/.exec(tail);
+      if (resolutionMatch) {
+        const result = rollCreditsInstance.setMediaResolution(
+          decodeURIComponent(resolutionMatch[1]),
+          decodeURIComponent(resolutionMatch[2]),
+          body?.resolution,
+        );
+        sendJson(res, 202, { ok: true, ...result });
+        return;
+      }
       sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
     } catch (error) {
       rollCreditsError(res, error);
@@ -2951,6 +3014,7 @@ function createWebServer({
       return;
     }
     log.info(`Vestaboard ${outcome.created ? 'added' : 'updated'}: ${outcome.board.id}`);
+    displayRegistry?.announce?.({ vestaboard: outcome.board.id });
     sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
   }
 
@@ -2965,6 +3029,7 @@ function createWebServer({
       return;
     }
     log.info(`Vestaboard removed: ${body.id}`);
+    displayRegistry?.announce?.({ vestaboard: body.id, removed: true });
     sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
   }
 
@@ -2982,6 +3047,7 @@ function createWebServer({
       sendJson(res, 400, { ok: false, error: outcome.error });
       return;
     }
+    displayRegistry?.announce?.({ vestaboard: body.id, enabled: body.enabled });
     sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
   }
 
@@ -2995,6 +3061,10 @@ function createWebServer({
     sendJson(res, outcome.ok ? 200 : 400, outcome);
   }
 
+  function vestaboardSimQueue() {
+    return vestaboardHub?.queueFor?.(SIMULATOR_ID)?.pending?.() || [];
+  }
+
   /** Everything the simulator page needs to draw itself from a cold start. */
   function handleVestaboardSimState(res) {
     if (!vestaboardSimulator) {
@@ -3005,11 +3075,14 @@ function createWebServer({
       ok: true,
       state: vestaboardSimulator.state(),
       calls: vestaboardSimulator.calls(),
-      queue: [],
+      queue: vestaboardSimQueue(),
       // The page owns no knowledge of the character set; it renders whatever
       // the encoder says each code looks like.
       glyphs: Object.fromEntries(VESTABOARD_CHAR_BY_CODE),
       chips: VESTABOARD_CHIPS,
+      // Drum order lives here so the page can walk flaps without owning the
+      // character set. Unused codes are already omitted.
+      drum: vestaboardDrumOrder(),
       port: vestaboardSimulator.port,
     });
   }
@@ -3037,13 +3110,19 @@ function createWebServer({
     };
 
     send('sim.state', vestaboardSimulator.state());
+    send('sim.queue', { boardId: SIMULATOR_ID, items: vestaboardSimQueue() });
 
-    const unsubscribe = vestaboardSimulator.onChange((event, detail) => {
+    const unsubscribeSim = vestaboardSimulator.onChange((event, detail) => {
       if (event === 'state') send('sim.state', detail);
       else if (event === 'flip') send('sim.flip', detail);
       else if (event === 'call') send('sim.call', detail);
-      else if (event === 'queue') send('sim.queue', detail);
     });
+
+    const unsubscribeHub = vestaboardHub?.onChange?.((event, detail) => {
+      if (event === 'queue' && (!detail?.boardId || detail.boardId === SIMULATOR_ID)) {
+        send('sim.queue', detail);
+      }
+    }) || (() => {});
 
     const heartbeat = setInterval(() => {
       try {
@@ -3055,11 +3134,12 @@ function createWebServer({
 
     req.on('close', () => {
       clearInterval(heartbeat);
-      unsubscribe();
+      unsubscribeSim();
+      unsubscribeHub();
     });
   }
 
-  /** Toggling off is how board error paths get exercised on purpose. */
+  /** Board-tab power switch: Local API 503s, and the sim leaves the picker. */
   function handleVestaboardSimOnline(body, res) {
     if (!vestaboardSimulator) {
       sendJson(res, 404, { ok: false, error: 'Simulator is not running' });
@@ -3070,6 +3150,13 @@ function createWebServer({
       return;
     }
     const state = vestaboardSimulator.setOnline(body.online);
+    // The Board-tab toggle is the sim's power switch. An off board must leave
+    // the display picker the same way a disabled board does, or Push still
+    // offers "Vestaboard Simulator" and the queue keeps retrying 503s.
+    if (vestaboardHub?.settings?.setEnabled) {
+      vestaboardHub.settings.setEnabled(SIMULATOR_ID, state.online);
+    }
+    displayRegistry?.announce?.({ simulatorOnline: state.online });
     log.info(`Vestaboard simulator turned ${state.online ? 'on' : 'off'}`);
     sendJson(res, 200, { ok: true, state });
   }
@@ -3311,9 +3398,9 @@ function createWebServer({
         ? 0
         : payload.dashboardSeconds + payload.walkedCount * payload.secondsPerGame + 4;
       if (typeof deliverTargetedPayload === 'function') {
-        deliverTargetedPayload(payload, targetId, { holdSeconds });
+        deliverTargetedPayload(payload, targetId, { holdSeconds, commandId: 'credits.show' });
       } else {
-        sendUdpPayload(payload, { holdSeconds });
+        sendUdpPayload(payload, { holdSeconds, commandId: 'credits.show' });
       }
       sendJson(res, 200, {
         ok: true,
