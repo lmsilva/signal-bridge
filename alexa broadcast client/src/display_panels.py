@@ -114,6 +114,11 @@ class BasePanel:
             except Exception:
                 pass
         self._item_ids.clear()
+        try:
+            from src.design_system import release_photos
+            release_photos(self.canvas)
+        except Exception:
+            pass
         for widget in list(self._widgets):
             # Nested marquees/scrollers may already be destroy()'d by a panel
             # subclass — place_forget on a dead widget raises and used to abort

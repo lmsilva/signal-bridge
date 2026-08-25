@@ -168,6 +168,18 @@ function createRollCreditsPayload({
     };
   }
 
+  function compactGame(game) {
+    const system = rollCredits.store.getSystemById?.(game.system);
+    return {
+      id: game.id,
+      title: game.title || 'Unknown game',
+      system: game.system || 'other',
+      systemLabel: system?.label || game.system || 'Other',
+      beatenAt: game.beatenAt || null,
+      induction: Number(game.induction) || null,
+    };
+  }
+
   function getCard(gameId, options = {}) {
     return cardFor(rollCredits.getGame?.(String(gameId || '')), {
       ...options,
@@ -201,16 +213,18 @@ function createRollCreditsPayload({
 
     const tourId = crypto.randomBytes(8).toString('hex');
     const origin = baseUrl != null ? String(baseUrl).replace(/\/+$/, '') : resolveCardBaseUrl(config);
-    const stats = rollCredits.getStats();
-    if (stats?.latest) stats.latest = cardFor(stats.latest, { baseUrl: origin, settings });
+    const stats = rollCredits.getStats() || {};
+    if (stats.latest) {
+      try {
+        stats.latest = cardFor(stats.latest, { baseUrl: origin, settings }) || stats.latest;
+      } catch {
+        // Keep the store row. The board only needs title / system / beatenAt.
+      }
+    }
+    const compact = walked.map((game) => compactGame(game));
     const session = {
       tourId,
-      games: walked.map((game) => ({
-        id: game.id,
-        title: game.title || 'Unknown game',
-        system: game.system || 'other',
-        induction: Number(game.induction) || null,
-      })),
+      games: compact,
       count: allGames.length,
       walkedCount: walked.length,
       loop: loop !== false,
@@ -237,6 +251,7 @@ function createRollCreditsPayload({
       playlistPath: `/api/roll-credits/playlist/${tourId}`,
       cardBaseUrl: origin,
       stats,
+      games: compact,
     };
   }
 

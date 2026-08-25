@@ -20,6 +20,8 @@ const {
   formatCount,
   contentLength,
   UNUSED_CODES,
+  LEGAL_CODES,
+  drumOrder,
 } = require('../src/vestaboard/encoder');
 
 const { parseLayout, formatLayout } = require('../src/vestaboard/notation');
@@ -268,4 +270,16 @@ test('every layout the notation produces passes validation', () => {
   ].join('\n'));
 
   assert.equal(validate(rows).ok, true);
+});
+
+test('the drum is every legal code in order, unused slots skipped', () => {
+  const drum = drumOrder();
+  assert.equal(drum.length, LEGAL_CODES.size);
+  assert.deepEqual(drum, [...drum].sort((a, b) => a - b));
+  assert.equal(drum[0], BLANK);
+  assert.equal(drum.includes(1), true);
+  assert.equal(drum.includes(CHIPS.filled), true);
+  for (const code of UNUSED_CODES) {
+    assert.equal(drum.includes(code), false);
+  }
 });

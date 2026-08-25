@@ -317,22 +317,50 @@ function createDisplayRegistry(config, log = console, { staticEntries = null } =
       )];
       return {
         target: { all: true },
-        sendOptions: hosts.length ? { hosts } : {},
+        sendOptions: hosts.length ? { hosts, targetId: 'all' } : { targetId: 'all' },
         entry: null,
         isAll: true,
       };
     }
 
+    const className = raw.toLowerCase();
+    if (className === 'full') {
+      // UDP to every Windows client, never to a board. Same host list as
+      // "all" because boards have no IP; the targetId is what the router uses.
+      const hosts = [...new Set(
+        list({ skipPrune: true })
+          .map((entry) => String(entry.host || '').trim())
+          .filter(Boolean),
+      )];
+      return {
+        target: { all: true, class: 'full' },
+        sendOptions: hosts.length ? { hosts, targetId: 'full' } : { targetId: 'full' },
+        entry: null,
+        isAll: true,
+        kind: 'full',
+      };
+    }
+    if (className === 'vestaboard') {
+      return {
+        target: { class: 'vestaboard' },
+        sendOptions: { targetId: 'vestaboard' },
+        entry: null,
+        isAll: false,
+        kind: 'vestaboard',
+      };
+    }
+
     const entry = get(raw);
-    if (entry?.static) {
+    if (entry?.static || entry?.kind === 'vestaboard') {
       // Boards are reached over HTTP by the Vestaboard router, never by UDP.
+      // This is not an error — a targeted push is valid; the listener just
+      // must not unicast. sendOptions stay empty so a naive UDP send is a no-op.
       return {
         target: { id: entry.id },
         sendOptions: {},
         entry,
         isAll: false,
-        kind: entry.kind,
-        error: `"${entry.name}" is a Vestaboard — it is not reachable over UDP`,
+        kind: entry.kind || 'vestaboard',
       };
     }
     if (!entry?.host) {

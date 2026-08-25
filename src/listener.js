@@ -289,7 +289,65 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     return map;
   }
 
+  function payloadTargetId(payload, options = {}) {
+    if (options.targetId != null && String(options.targetId).trim() !== '') {
+      return String(options.targetId).trim();
+    }
+    if (payload?.target?.class) {
+      return String(payload.target.class);
+    }
+    if (payload?.target?.all) {
+      return 'all';
+    }
+    if (payload?.target?.id) {
+      return String(payload.target.id);
+    }
+    return 'all';
+  }
+
+  function isVestaboardOnlyTarget(payload, options = {}) {
+    const targetId = payloadTargetId(payload, options);
+    const raw = String(targetId || '').trim().toLowerCase();
+    if (raw === 'vestaboard') {
+      return true;
+    }
+    if (!raw || raw === '*' || raw === 'all' || raw === 'full') {
+      return false;
+    }
+    const entry = displayRegistry.get(targetId);
+    return Boolean(entry && (entry.static || entry.kind === 'vestaboard'));
+  }
+
+  /**
+   * Offer the same payload to every board that can show it. The board router
+   * decides per display; a photo never becomes an HTTP call.
+   */
+  function fanOutToBoards(payload, options = {}) {
+    if (!vestaboardHub?.pushEvent || !payload) {
+      return null;
+    }
+    return vestaboardHub.pushEvent(payload, {
+      targetId: payloadTargetId(payload, options),
+      commandId: options.commandId || null,
+      explicit: options.explicit != null
+        ? Boolean(options.explicit)
+        : options.source !== 'scheduler',
+      scheduler: Boolean(
+        options.scheduler
+        || options.source === 'scheduler'
+        || payload?.triggeredBy === 'scheduler'
+      ),
+      ctx: options.ctx,
+    });
+  }
+
   function sendUdpPayload(payload, options = {}) {
+    const vestaboard = fanOutToBoards(payload, options);
+    // A push aimed at one board is HTTP-only. Marking the Windows overlay
+    // busy would lock the scheduler out of a display that never showed this.
+    if (isVestaboardOnlyTarget(payload, options)) {
+      return { ok: true, skippedUdp: true, vestaboard };
+    }
     if (shouldSuppressNowPlayingForPayload(payload)) {
       steamNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
       psnNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
@@ -302,16 +360,35 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       holdSeconds: options.holdSeconds,
       source: options.source || 'event',
     });
-    return udpBroadcaster.send(payload, options);
+    const sent = udpBroadcaster.send(payload, options);
+    if (sent && typeof sent.then === 'function') {
+      sent.vestaboard = vestaboard;
+      return sent;
+    }
+    if (sent && typeof sent === 'object') {
+      return { ...sent, vestaboard };
+    }
+    return { ok: true, vestaboard };
   }
 
   function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
     const delivery = displayRegistry.resolveDelivery(targetId);
+    if ((delivery.kind === 'vestaboard' || delivery.entry?.static) && !delivery.isAll) {
+      const vestaboard = fanOutToBoards(payload, {
+        ...(extraSendOptions || {}),
+        targetId: targetId || delivery.entry?.id,
+      });
+      return { ...delivery, vestaboard };
+    }
     if (delivery.error && !delivery.isAll) {
       return delivery;
     }
     const out = attachTarget(payload, delivery.target);
-    sendUdpPayload(out, { ...(delivery.sendOptions || {}), ...(extraSendOptions || {}) });
+    sendUdpPayload(out, {
+      ...(delivery.sendOptions || {}),
+      ...(extraSendOptions || {}),
+      targetId: targetId || (delivery.isAll ? 'all' : delivery.entry?.id) || 'all',
+    });
     return delivery;
   }
 
@@ -539,6 +616,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     // second UDP later. If the user already pushed Steam/PSN/etc., that
     // late refresh must not yank the newer page off the display.
     const sendRequest = displayBusy.beginSendRequest();
+    let voiceFanout = null;
     const emitVoicePayload = (payload) => {
       if (!payload) {
         return false;
@@ -550,7 +628,18 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         });
         return false;
       }
-      sendUdpPayload(attachTarget(payload, voiceDelivery.target), voiceDelivery.sendOptions);
+      const stamped = event.triggeredBy === 'scheduler'
+        ? { ...payload, triggeredBy: 'scheduler' }
+        : payload;
+      // Re-resolve so a guest-snaps path that rewrites targetId is honoured.
+      const delivery = displayRegistry.resolveDelivery(event?.targetId);
+      const result = sendUdpPayload(attachTarget(stamped, delivery.target), {
+        ...delivery.sendOptions,
+        ...(event.triggeredBy === 'scheduler'
+          ? { source: 'scheduler', targetId: event.targetId }
+          : {}),
+      });
+      voiceFanout = result?.vestaboard || voiceFanout;
       sendRequest.rememberSent();
       return true;
     };
@@ -1428,9 +1517,11 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         });
         return;
       }
-      // Party welcome always fans out to every display, ignoring any single-target
-      // selection from the admin quick-push picker.
-      event = { ...event, targetId: '*' };
+      // Party welcome fans out to every display unless a scheduler rule named
+      // a specific board — the overlay still wants everyone, the board does not.
+      if (event.triggeredBy !== 'scheduler') {
+        event = { ...event, targetId: '*' };
+      }
       const pinInfo = snapsAuth.getPinForDisplay();
       payload = buildGuestPhotoboothPayload(event, config, {
         ...settings,
@@ -1443,8 +1534,9 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         log.warn('Guest photo booth payload build failed', { query: event.query });
         return;
       }
-      const allDelivery = displayRegistry.resolveDelivery('*');
-      sendUdpPayload(attachTarget(payload, allDelivery.target), allDelivery.sendOptions);
+      if (!emitVoicePayload(payload)) {
+        return;
+      }
       voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
       lastCaptureAt = Date.now();
       log.info(`Voice event sent (guest-photobooth) for ${event.device}`, {
@@ -1452,7 +1544,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         ssid: settings.ssid,
         boothUrl: settings.boothUrl,
       });
-      return;
+      return voiceFanout;
     } else if (event.kind === 'photo-slideshow') {
       const listed = qrImageCache.list();
       const photos = photosToSlideshowEntries(listed, config);
@@ -1523,6 +1615,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       logMeta.destination = payload?.destination?.name ?? null;
     }
     log.info(`Voice event captured (${payload.type}) from ${event.device}`, logMeta);
+    return voiceFanout;
   }
 
   function handleAlarmSnapshot(snapshot) {

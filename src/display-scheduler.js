@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createRuleStore, scoreRule, expectedPerDay, gapProfile } = require('./scheduler-rules');
+const { createRuleStore, scoreRule, expectedPerDay, gapProfile, normaliseTarget } = require('./scheduler-rules');
 const {
   createActivityLog, localDateKey, localParts, withinWindow,
 } = require('./scheduler-activity');
@@ -97,6 +97,7 @@ function createDisplayScheduler(deps = {}) {
     setTimer = setInterval,
     clearTimer = clearInterval,
     timeZone = config.voiceEvents?.localTimeZone || null,
+    isBoardTarget = () => false,
   } = deps;
 
   const root = config.ROOT || path.resolve(__dirname, '..');
@@ -189,13 +190,27 @@ function createDisplayScheduler(deps = {}) {
 
   // -------------------------------------------------------------- tick
 
-  function collectCandidates(nowMs) {
+  function collectCandidates(nowMs, { overlayBlocked = false } = {}) {
     const candidates = [];
     for (const rule of store.all()) {
       try {
         rollDailyCounter(rule, nowMs);
 
         if (!rule.enabled) {
+          continue;
+        }
+
+        // A busy overlay must not freeze a kitchen board, but it also must
+        // not roll dice for a Windows page that cannot air. Pending display
+        // rules still expire so a long trivia round does not fire hours later.
+        if (overlayBlocked && !isBoardOnlyRule(rule)) {
+          if (rule.pending) {
+            const since = Date.parse(rule.pendingSince || rule.nextEvalAt);
+            if (Number.isFinite(since) && nowMs - since > rule.intervalSeconds * 1000) {
+              record(rule, 'expired-pending');
+              advance(rule, nowMs);
+            }
+          }
           continue;
         }
 
@@ -276,6 +291,54 @@ function createDisplayScheduler(deps = {}) {
     }
   }
 
+  function isBoardOnlyRule(rule) {
+    const target = normaliseTarget(rule?.target);
+    if (target === 'vestaboard') {
+      return true;
+    }
+    if (target === 'full' || target === 'all') {
+      return false;
+    }
+    return Boolean(isBoardTarget(target));
+  }
+
+  function displayBlockedReason(nowMs) {
+    if (nowMs < suppressUntil) {
+      return 'blocked-global-gap';
+    }
+    if (lastAiringAt && nowMs - lastAiringAt < settings.globalMinGapSeconds * 1000) {
+      return 'blocked-global-gap';
+    }
+    if (isBusy()) {
+      return 'blocked-display';
+    }
+    if (settings.respectPresence && !isPresent()) {
+      return 'blocked-presence';
+    }
+    return null;
+  }
+
+  async function pickAndAir(candidates, nowMs, { holdsDisplay }) {
+    const scored = candidates
+      .map((rule) => ({ rule, score: scoreRule(rule, nowMs) }))
+      .sort((a, b) => b.score - a.score);
+    const winner = scored[0];
+    const competingRuleIds = scored.map((entry) => entry.rule.id);
+    const event = await airRule(winner.rule, {
+      score: winner.score,
+      competingRuleIds,
+      nowMs,
+      holdsDisplay,
+    });
+    for (const loser of scored.slice(1)) {
+      record(loser.rule, 'lost-tiebreak', {
+        score: loser.score,
+        competingRuleIds,
+      });
+    }
+    return { winner: winner.rule, event, competingRuleIds };
+  }
+
   async function runTick() {
     const nowMs = now();
     maybePrune(nowMs);
@@ -286,46 +349,47 @@ function createDisplayScheduler(deps = {}) {
     if (inQuietHours(nowMs)) {
       return { aired: null, reason: 'blocked-quiet-hours' };
     }
-    if (nowMs < suppressUntil) {
-      return { aired: null, reason: 'blocked-global-gap' };
-    }
-    if (lastAiringAt && nowMs - lastAiringAt < settings.globalMinGapSeconds * 1000) {
-      return { aired: null, reason: 'blocked-global-gap' };
-    }
-    if (isBusy()) {
-      return { aired: null, reason: 'blocked-display' };
-    }
-    if (settings.respectPresence && !isPresent()) {
-      return { aired: null, reason: 'blocked-presence' };
-    }
 
-    const candidates = collectCandidates(nowMs);
+    const blocked = displayBlockedReason(nowMs);
+    const candidates = collectCandidates(nowMs, { overlayBlocked: Boolean(blocked) });
     store.persist();
-    if (!candidates.length) {
-      return { aired: null, reason: 'no-candidates' };
+    const boardCandidates = candidates.filter((rule) => isBoardOnlyRule(rule));
+    const displayCandidates = candidates.filter((rule) => !isBoardOnlyRule(rule));
+
+    let displayResult = null;
+    if (!blocked && displayCandidates.length) {
+      displayResult = await pickAndAir(displayCandidates, nowMs, { holdsDisplay: true });
     }
 
-    const scored = candidates
-      .map((rule) => ({ rule, score: scoreRule(rule, nowMs) }))
-      .sort((a, b) => b.score - a.score);
-    const winner = scored[0];
-    const competingRuleIds = scored.map((entry) => entry.rule.id);
-
-    const event = await airRule(winner.rule, {
-      score: winner.score,
-      competingRuleIds,
-      nowMs,
-    });
-
-    for (const loser of scored.slice(1)) {
-      // Stays pending: no re-roll, no timer advance (§4.3).
-      record(loser.rule, 'lost-tiebreak', {
-        score: loser.score,
-        competingRuleIds,
-      });
+    let boardResult = null;
+    if (boardCandidates.length) {
+      // Boards have their own queue, gap, and quiet hours. A busy overlay
+      // must not freeze the kitchen board, and a board flip must not lock
+      // the Windows display.
+      boardResult = await pickAndAir(boardCandidates, nowMs, { holdsDisplay: false });
     }
+
     store.persist();
-    return { aired: winner.rule.id, event, candidates: competingRuleIds };
+    if (displayResult) {
+      return {
+        aired: displayResult.winner.id,
+        event: displayResult.event,
+        candidates: displayResult.competingRuleIds,
+        boardAired: boardResult?.winner?.id || null,
+      };
+    }
+    if (boardResult) {
+      return {
+        aired: boardResult.winner.id,
+        event: boardResult.event,
+        candidates: boardResult.competingRuleIds,
+        boardOnly: true,
+      };
+    }
+    if (blocked) {
+      return { aired: null, reason: blocked };
+    }
+    return { aired: null, reason: 'no-candidates' };
   }
 
   /**
@@ -335,7 +399,13 @@ function createDisplayScheduler(deps = {}) {
    * starts. For a fixed page the difference is negligible; for a two-minute
    * trivia round it is the whole point (§7.4).
    */
-  async function airRule(rule, { score = null, competingRuleIds = [], nowMs = now(), manual = false } = {}) {
+  async function airRule(rule, {
+    score = null,
+    competingRuleIds = [],
+    nowMs = now(),
+    manual = false,
+    holdsDisplay,
+  } = {}) {
     const command = commandRegistry?.get?.(rule.commandId);
     if (!command) {
       const event = record(rule, 'error', { detail: `Unknown command: ${rule.commandId}` });
@@ -348,13 +418,17 @@ function createDisplayScheduler(deps = {}) {
       displayDurationSeconds: rule.displayDurationSeconds,
     }) || command.defaultDurationSeconds || 60;
 
+    const lockDisplay = holdsDisplay !== false && !isBoardOnlyRule(rule);
+
     let event;
     try {
-      await air?.(rule, command, { durationSeconds: planned, manual });
+      const airResult = await air?.(rule, command, { durationSeconds: planned, manual });
       event = record(rule, 'aired', {
         score,
         competingRuleIds: competingRuleIds.length > 1 ? competingRuleIds : undefined,
         durationSeconds: planned,
+        target: normaliseTarget(rule.target),
+        boardOutcomes: Array.isArray(airResult?.boardOutcomes) ? airResult.boardOutcomes : undefined,
       });
     } catch (error) {
       // §11.13 — a failing air must not take the tick down.
@@ -373,8 +447,10 @@ function createDisplayScheduler(deps = {}) {
     const endsAt = nowMs + planned * 1000;
     rule.lastAiredAt = new Date(endsAt).toISOString();
     advance(rule, endsAt);
-    lastAiringAt = endsAt;
-    activeAiring = { ruleId: rule.id, eventId: event.id, startedAt: nowMs, plannedSeconds: planned };
+    if (lockDisplay) {
+      lastAiringAt = endsAt;
+      activeAiring = { ruleId: rule.id, eventId: event.id, startedAt: nowMs, plannedSeconds: planned };
+    }
     store.persist();
     return event;
   }

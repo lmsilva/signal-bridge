@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-24 (Roll Credits looping video heroes)
+**Last updated:** 2026-08-24 (smooth Autodarts/Roll Credits cards)
 
 ---
 
@@ -37,7 +37,7 @@ The client does **not** talk to Amazon. Weather may be **fetched client-side** (
 | `src/main.py` | Entry: UDP listener + tray + Tk main loop; timer in-place updates + local fire handler; reconfigures `stdout`/`stderr` to UTF-8 (`errors="backslashreplace"`) at startup so a stray non-ASCII character in any `print()`/log call can't silently kill a background thread (Windows consoles often default to `cp1252`) |
 | `src/listener.py` | `UdpListener` — background thread; decrypts v3 AES-GCM envelopes when `udpSecret` set, then JSON decode / `on_message` |
 | `src/lan_crypto.py` | Shared-secret AES-256-GCM seal/open for UDP (`udpSecret` must match bridge `LAN_UDP_SECRET`); stamps `sentAt` at seal; ±120s freshness on `sentAt` |
-| `src/design_system.py` | Shared tokens (`#0B1730` bg, ink/accent/status, Steam + print-border colours) + `design_u` / `page_chrome()` (header 32–116, content 136→footer) + text metrics (`PX_PER_POINT`, `text_line_h()`, `stack_rows()`, `measure_px_per_point()`, `text_measurer()`) for overlap-proof stacked rows |
+| `src/design_system.py` | Shared tokens (`#0B1730` bg, ink/accent/status, Steam + print-border colours) + `design_u` / `page_chrome()` (header 32–116, content 136→footer) + text metrics (`PX_PER_POINT`, `text_line_h()`, `stack_rows()`, `measure_px_per_point()`, `text_measurer()`) for overlap-proof stacked rows. Cards: circular-corner polygons (no banded rects, no rounded PhotoImages) + page-wash PIL gradient |
 | `src/page_header.py` | Shared 3-column header (left / pill / right); used by overlay shell + Shared Photos |
 | `src/overhead_panel.py` | Overhead flight-radar — `overhead.round` scope + paginated list (portrait scope top / landscape scope left); vector aircraft icons, dead-reckon motion, stale freeze/fade, `overhead.update` in-place refresh, `overhead.close` |
 | `src/steam_now_playing_panel.py` | Persistent Steam Now Playing — fixed 1000×1100 art stage (blur ambient + contain crisp, corner ticks only), STEAM chip in tag row (never on art), description in a clipped nested canvas that pause/scroll/loops when taller than the reserved band (never paints over screenshots), screenshots + stats pinned to bottom; `enrichPending` reserves desc/shots/footer and spins dual-arc placeholders until library-tour enrich lands; `steam.now-playing` / close; `SOURCE_CHIP` / `PAYLOAD_KEY` overridable |
@@ -214,7 +214,7 @@ Timer and fired-timer overlays use the payload's full `displaySeconds` (not shor
 ## Testing
 
 ```powershell
-test\run_tests.bat              # client unit tests only (620 tests)
+test\run_tests.bat              # client unit tests only (634 tests)
 ```
 
 From repo root (bridge + client):
@@ -269,6 +269,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-24: **Autodarts + Roll Credits cards lost the square corners** — the "glass" fill was 16 horizontal rectangles inset to fake a round-rect, and the outline was an 8-point spline with control points on the box corners, so every card showed banding and a light square at each corner. Card bodies are now one circular-corner polygon (no PhotoImage: Tk drops the alpha and the rectangular bitmap becomes the same square ears). `rounded_points` follows the quarter-circles; `paint_round_rect` no longer uses `smooth=True`. The page wash can still use a full-rect PIL gradient. Tests: `test_design_system.py`, `test_dashboard_render_smoke.py`. Ship: portable client rebuild required (not run).
 - 2026-08-24: **Roll Credits plays video as a silent looping hero** — Tk cannot decode video, so the bridge now ships a clip as a short animated WebP and the panel loops it in place of a still. `choose_image_hero()` accepts a `kind: "video"` hero **only** when it carries `animated: true` (a bare `.mp4` URL is still ignored, so an older bridge cannot wedge the tour); `decode_animation()` samples the file down to at most `LOOP_MAX_FRAMES` (24) RGB frames and scales the frame gap by the stride it skipped, and `HeroLoop` cycles the pre-built `PhotoImage`s on the Tk main loop the way `MarqueeLine` drives text. Only the foreground animates — the blurred backdrop stays on frame one, halving the images held in RAM — and every loop is stopped in `_clear_page()`/`hide()`. Frames are read back from the artwork cache `_fetch_photo` already wrote, so there is no second download. `PIL.ImageSequence` + `PIL.WebPImagePlugin` added to the PyInstaller spec's `hiddenimports` (both resolve lazily and would otherwise be dropped from the freeze). Tests: `test_roll_credits_panel.py`. Ship: portable client rebuild required (not run).
 
 - 2026-08-24: **Depth design pass — Autodarts + Roll Credits** — Tk has no alpha, radii or gradients, so `design_system` now builds the "glass card" look from pre-blended tones: depth tokens (`BG_DEEP`/`BG_WASH`, `CARD_HI`/`CARD_LO`, `CARD_BEVEL`, `EDGE_SOFT`, `SHADOW`, `TRACK`, `MEDALS`, hand-tuned `PLATE_*` surfaces) plus painters `mix()`, `tint()`, `paint_backdrop()`, `paint_gradient()`, `paint_round_rect()`, `paint_card()`, `paint_bar()`, `paint_column()`, `paint_meter()`, `letterspace()` and `paint_section_title()`. Every page gets a lit-top page wash; cards are rounded, top-lit, bevelled and seated on a shadow (gradient bands sit on a solid round-rect base so the shadow cannot show through their stepped corners). Autodarts: status pill on YOUR BOARD, medal rank chips + win-share meters on the leaderboard, tracked month columns on a baseline, score pill + two-tone share bar for HEAD-TO-HEAD, three record chips, segment-coloured dart chips (`segment_accent()`), drawn thrower caret. Roll Credits: induction plate in the wide hero's empty right third, pill badges, ranked bars for systems/companions. Layout: portrait match spends the slack the width-bound board cannot use (bigger score cards + taller strip) and the player headline sizes from its card; a showcase with no screenshots grows the box art (portrait) or centres the copy beside a full-height still (landscape) instead of stretching the blurb into an empty rectangle; a tall hero keeps the cover box-art shaped. Tests: match render smoke (2/4 players × live/final × 4 sizes), showcase smoke with and without screenshots, `layout_boxes(shots=False)`, portrait match slack. Ship: portable client rebuild required (not run).

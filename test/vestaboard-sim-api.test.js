@@ -91,6 +91,48 @@ function collectEvents(url, cookie, wanted, timeoutMs = 4000) {
   });
 }
 
+/** Resolve on the first SSE event that satisfies `predicate`. */
+function collectUntil(url, cookie, predicate, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    const seen = [];
+    const req = httpMod.request(url, { agent: false, headers: { Cookie: cookie } }, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(`stream refused: ${res.statusCode}`));
+        return;
+      }
+      let buffer = '';
+      res.on('data', (chunk) => {
+        buffer += chunk.toString('utf8');
+        let split = buffer.indexOf('\n\n');
+        while (split !== -1) {
+          const frame = buffer.slice(0, split);
+          buffer = buffer.slice(split + 2);
+          const name = /^event: (.+)$/m.exec(frame)?.[1];
+          const data = /^data: (.+)$/m.exec(frame)?.[1];
+          if (name) {
+            const parsed = data ? JSON.parse(data) : null;
+            seen.push({ name, data: parsed });
+            if (predicate(name, parsed, seen)) {
+              req.destroy();
+              resolve(seen);
+              return;
+            }
+          }
+          split = buffer.indexOf('\n\n');
+        }
+      });
+    });
+    req.on('error', (error) => {
+      if (error.code !== 'ECONNRESET') reject(error);
+    });
+    req.end();
+    setTimeout(() => {
+      req.destroy();
+      reject(new Error(`timed out; saw ${seen.map((e) => e.name).join(', ') || 'nothing'}`));
+    }, timeoutMs).unref();
+  });
+}
+
 function makeWebRoot() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vb-web-'));
   fs.mkdirSync(path.join(dir, 'admin'), { recursive: true });
@@ -224,7 +266,13 @@ test('the state fetch gives the page everything it needs to draw itself', async 
     assert.equal(res.body.glyphs['1'], 'A');
     assert.equal(res.body.glyphs['0'], ' ');
     assert.equal(res.body.chips.red, 63);
+    assert.ok(Array.isArray(res.body.drum));
+    assert.equal(res.body.drum[0], 0);
+    assert.equal(res.body.drum.includes(1), true);
+    assert.equal(res.body.drum.includes(43), false);
+    assert.equal(res.body.drum.includes(63), true);
     assert.ok(Array.isArray(res.body.calls));
+    assert.ok(Array.isArray(res.body.queue));
   } finally {
     await harness.stop();
   }
@@ -262,11 +310,14 @@ test('the stream opens with the current state', async () => {
     const events = await collectEvents(
       `${harness.base}/api/vestaboard-sim/events`,
       harness.cookie,
-      ['sim.state'],
+      ['sim.state', 'sim.queue'],
     );
     const hello = events.find((e) => e.name === 'sim.state');
     assert.equal(hello.data.online, true);
     assert.equal(hello.data.current.length, 6);
+    const queued = events.find((e) => e.name === 'sim.queue');
+    assert.ok(queued, 'the stream opens with the current hub queue');
+    assert.ok(Array.isArray(queued.data.items));
   } finally {
     await harness.stop();
   }
@@ -415,6 +466,37 @@ test('a board with no id is refused rather than saved as junk', async () => {
   }
 });
 
+test('turning the simulator off drops it from the display picker', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const before = await request(`${harness.base}/api/displays`, { cookie: harness.cookie });
+    assert.equal(before.body.displays.some((d) => d.id === 'sim'), true);
+
+    const off = await request(`${harness.base}/api/vestaboard-sim/online`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { online: false },
+    });
+    assert.equal(off.status, 200);
+    assert.equal(off.body.state.online, false);
+
+    const hidden = await request(`${harness.base}/api/displays`, { cookie: harness.cookie });
+    assert.equal(hidden.body.displays.some((d) => d.id === 'sim'), false);
+
+    const back = await request(`${harness.base}/api/vestaboard-sim/online`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { online: true },
+    });
+    assert.equal(back.body.state.online, true);
+
+    const shown = await request(`${harness.base}/api/displays`, { cookie: harness.cookie });
+    assert.equal(shown.body.displays.some((d) => d.id === 'sim'), true);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('switching a board off is live and takes it out of the picker', async () => {
   const harness = await startHarness({ withHub: true });
   try {
@@ -456,6 +538,83 @@ test('a test flip puts the identity frame on the board through the api', async (
   }
 });
 
+test('the state fetch includes frames waiting on the hub queue', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const layout = badgeFrame({ color: 'blue', title: 'SHOPPING LIST', rows: ['MILK'] });
+    const outcome = harness.hub.submit('sim', [{
+      rows: layout,
+      label: 'Shopping',
+      source: 'shopping-list.snapshot',
+      dwellSeconds: 15,
+    }]);
+    assert.equal(outcome.accepted, 1);
+
+    const res = await request(`${harness.base}/api/vestaboard-sim`, { cookie: harness.cookie });
+    assert.equal(res.body.queue.length, 1);
+    assert.equal(res.body.queue[0].label, 'Shopping');
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('queueing a frame on the hub reaches the page as sim.queue', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const waiting = collectUntil(
+      `${harness.base}/api/vestaboard-sim/events`,
+      harness.cookie,
+      (name, data) => name === 'sim.queue' && Array.isArray(data?.items) && data.items.length > 0,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    harness.hub.submit('sim', [{
+      rows: badgeFrame({ color: 'blue', title: 'SHOPPING LIST', rows: ['MILK'] }),
+      label: 'Shopping',
+      source: 'shopping-list.snapshot',
+      dwellSeconds: 15,
+    }]);
+
+    const events = await waiting;
+    const queued = [...events].reverse().find((e) => e.name === 'sim.queue');
+    assert.equal(queued.data.items[0].label, 'Shopping');
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('a hub push flips the simulator and the page stream sees it', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const waiting = collectUntil(
+      `${harness.base}/api/vestaboard-sim/events`,
+      harness.cookie,
+      (name) => name === 'sim.flip',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const outcome = harness.hub.pushEvent({
+      type: 'weather.query',
+      weather: {
+        current: { temperatureF: 72, condition: 'sunny' },
+        next7Days: [{ date: '2026-08-24', highF: 80, lowF: 60, condition: 'sunny' }],
+      },
+    }, { targetId: 'sim', explicit: true });
+    assert.equal(outcome.boards[0].reason, 'queued');
+
+    const events = await waiting;
+    const flip = events.find((e) => e.name === 'sim.flip');
+    assert.ok(Array.isArray(flip.data.layout));
+    assert.equal(flip.data.layout.length, 6);
+    assert.ok(
+      harness.simulator.calls().some((entry) => String(entry.result).includes('200')),
+      'the simulator recorded the Local API post',
+    );
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('the board settings surface is admin-only', async () => {
   const harness = await startHarness({ withHub: true });
   try {
@@ -486,4 +645,29 @@ test('with the simulator switched off in config the page is told so plainly', as
   } finally {
     await harness.stop();
   }
+});
+
+test('the simulator page walks the drum slowly and can click', () => {
+  const root = path.join(__dirname, '..', 'src', 'web', 'admin');
+  const js = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(js, /AudioContext/);
+  assert.match(js, /vbDrumSteps/);
+  assert.match(js, /VB_FLAP_MS = 100/);
+  assert.match(js, /VB_CASCADE_MS = 5616/);
+  assert.match(js, /function vbCascadeMs\(/);
+  assert.match(css, /vb-flap 100ms/);
+  assert.equal(/vb-flap 450ms/.test(css), false);
+  assert.match(js, /function vbPlayCascade\(/);
+  assert.match(js, /vb-flip\.wav/);
+  assert.match(html, /btn-vb-sound/);
+  assert.match(html, /app\.js\?v=signal\d+/);
+  const wavPath = path.join(root, 'vb-flip.wav');
+  assert.equal(fs.existsSync(wavPath), true);
+  const wav = fs.readFileSync(wavPath);
+  assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(wav.readUInt16LE(22), 1, 'mono');
+  const seconds = wav.readUInt32LE(40) / (wav.readUInt32LE(24) * 2);
+  assert.ok(seconds > 5.4 && seconds < 6, `clip is ${seconds.toFixed(3)}s`);
 });

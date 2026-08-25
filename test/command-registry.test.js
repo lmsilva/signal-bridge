@@ -5,9 +5,13 @@ const path = require('path');
 
 const {
   COMMANDS,
+  BOARD_COMMAND_IDS,
+  kindsOf,
+  supportsKind,
   assertValid,
   createCommandRegistry,
 } = require('../src/command-registry');
+const { COMMAND_TO_TYPE, formatterFor } = require('../src/vestaboard/router');
 
 test('the shipped command table is well formed', () => {
   assert.equal(assertValid(), true);
@@ -116,6 +120,38 @@ test('list() is JSON-serialisable and carries scheduler metadata', () => {
     assert.equal(typeof command.variableDuration, 'boolean');
     assert.equal(typeof command.supportsContentCheck, 'boolean');
     assert.ok(Array.isArray(command.params));
+    assert.ok(Array.isArray(command.kinds) && command.kinds.length);
+    assert.ok(command.kinds.includes('full'));
+  }
+});
+
+test('every command declares the display kinds it can air on', () => {
+  for (const command of COMMANDS) {
+    const kinds = kindsOf(command);
+    assert.ok(kinds.includes('full'), `${command.id} must work on a full display`);
+    if (BOARD_COMMAND_IDS.has(command.id)) {
+      assert.ok(kinds.includes('vestaboard'), `${command.id} is board-capable`);
+    } else {
+      assert.equal(
+        kinds.includes('vestaboard'),
+        false,
+        `${command.id} is full-display only (photos, tours, remote)`,
+      );
+    }
+  }
+  assert.equal(supportsKind('signal.slideshow', 'vestaboard'), false);
+  assert.equal(supportsKind('signal.slideshow', 'full'), true);
+  assert.equal(supportsKind('alexa.weather', 'vestaboard'), true);
+  assert.equal(supportsKind('alexa.weather', 'all'), true);
+});
+
+test('every board-capable command has a Vestaboard formatter', () => {
+  for (const id of BOARD_COMMAND_IDS) {
+    const type = COMMAND_TO_TYPE[id] || id;
+    assert.ok(
+      formatterFor(type) || formatterFor(id),
+      `${id} is board-capable but the router has no formatter for ${type}`,
+    );
   }
 });
 

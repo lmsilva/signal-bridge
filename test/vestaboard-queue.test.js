@@ -79,6 +79,43 @@ test('the first frame goes straight to the board', async () => {
   assert.equal(h.queue.pending().length, 0);
 });
 
+test('replacing the transport is what the next tick actually calls', async () => {
+  const h = makeQueue();
+  const next = fakeTransport();
+  h.queue.setTransport(next);
+  h.queue.submit([frame('SHOPPING', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 0, 'the original client is no longer used');
+  assert.equal(next.posts.length, 1);
+});
+
+test('overlapping ticks wait for the in-flight post rather than no-opping', async () => {
+  let unblock;
+  const gate = new Promise((resolve) => { unblock = resolve; });
+  const posts = [];
+  const queue = createQueue({
+    board: { id: 'sim', rateWindowSeconds: 0 },
+    transport: {
+      async post(layout, options) {
+        posts.push({ layout, options });
+        await gate;
+        return { ok: true, reason: 'ok', status: 200 };
+      },
+    },
+    log: silentLog(),
+    now: () => 1_000_000,
+  });
+
+  queue.submit([frame('ONE', 1)]);
+  queue.submit([frame('TWO', 2)]);
+  const first = queue.tick();
+  const second = queue.tick();
+  unblock();
+  assert.equal(await first, 'posted');
+  assert.equal(await second, 'posted');
+  assert.equal(posts.length, 2);
+});
+
 test('a second frame waits out the board rate window', async () => {
   const h = makeQueue();
   h.queue.submit([frame('ONE', 1)]);
@@ -357,6 +394,33 @@ test('quiet hours read as a window on the clock, including across midnight', () 
   assert.equal(inQuietHours(at(23), null), false);
   assert.equal(inQuietHours(at(23), { start: '22:00', end: '07:00', enabled: false }), false);
   assert.equal(inQuietHours(at(23), { start: 'nope', end: '07:00' }), false);
+});
+
+test('quiet hours follow the household timezone, not the process clock', () => {
+  // 8:25pm MDT is 02:25 UTC. A UTC Docker host would treat that as 2am quiet.
+  const eveningUtah = new Date('2026-08-25T02:25:00.000Z');
+  const quiet = { start: '22:00', end: '07:00' };
+  assert.equal(inQuietHours(eveningUtah, quiet, 'America/Denver'), false);
+  assert.equal(inQuietHours(eveningUtah, quiet, 'UTC'), true);
+});
+
+test('a snapshot at 8:25pm Utah is not dropped as quiet hours on a UTC host', async () => {
+  const clock = Date.parse('2026-08-25T02:25:00.000Z');
+  const transport = fakeTransport();
+  const log = silentLog();
+  const queue = createQueue({
+    board: {
+      id: 'sim',
+      rateWindowSeconds: 0,
+      quietHours: { start: '22:00', end: '07:00', enabled: true },
+    },
+    transport,
+    log,
+    now: () => clock,
+    timeZone: 'America/Denver',
+  });
+  queue.submit([frame('ROLL CREDITS', 1)]);
+  assert.equal(await queue.tick(), 'posted');
 });
 
 test('clock strings parse only when they are real times', () => {

@@ -77,9 +77,49 @@
     return value || ALL_DISPLAYS;
   }
 
+  function selectedDisplayEntry() {
+    const id = selectedTargetId();
+    if (!id || id === ALL_DISPLAYS) {
+      return null;
+    }
+    return knownDisplays.find((d) => d.id === id) || null;
+  }
+
+  function selectedDisplayKind() {
+    return selectedDisplayEntry()?.kind || null;
+  }
+
   function isSingleDisplaySelected() {
     const id = selectedTargetId();
     return Boolean(id) && id !== ALL_DISPLAYS;
+  }
+
+  /** Remote control (mouse, keys, power) only exists on the Windows overlay. */
+  function isFullDisplaySelected() {
+    const entry = selectedDisplayEntry();
+    return Boolean(entry) && entry.kind !== 'vestaboard';
+  }
+
+  function vestaboardHealthSuffix(health) {
+    switch (health) {
+      case 'degraded':
+        return 'key refused';
+      case 'unhealthy':
+        return 'not answering';
+      case 'offline':
+        return 'off';
+      default:
+        return null;
+    }
+  }
+
+  function displayOptionLabel(d) {
+    const label = d.label || d.name;
+    if (d.kind === 'vestaboard') {
+      const suffix = vestaboardHealthSuffix(d.health);
+      return suffix ? `${label} (${suffix})` : label;
+    }
+    return d.stale ? `${label} (offline?)` : label;
   }
 
   // Client-side cap on how long an unlock lasts — after this the user must
@@ -146,7 +186,7 @@
   let knownDisplays = [];
 
   function updateControlLockUi() {
-    const single = isSingleDisplaySelected();
+    const single = isFullDisplaySelected();
     const unlocked = single && isDisplayUnlocked();
     const unlockBtn = $('btn-display-unlock');
     if (unlockBtn) {
@@ -176,7 +216,7 @@
   setInterval(updateControlLockUi, 60_000);
 
   function updateControlTabVisibility() {
-    const single = isSingleDisplaySelected();
+    const single = isFullDisplaySelected();
     const remoteBtn = $('tab-btn-remote');
     const controlBtn = $('tab-btn-control');
     if (remoteBtn) {
@@ -209,8 +249,12 @@
     }
     if (!knownDisplays.length) {
       hint.textContent = 'No displays yet — tap refresh after the client starts, or wait for the 5‑minute heartbeat.';
+    } else if (selectedDisplayKind() === 'vestaboard') {
+      const entry = selectedDisplayEntry();
+      const label = entry?.label || entry?.name || 'Vestaboard';
+      hint.textContent = `${label} — showing board-capable pushes only.`;
     } else if (single) {
-      const entry = knownDisplays.find((d) => d.id === selectedTargetId());
+      const entry = selectedDisplayEntry();
       const label = entry?.label || entry?.name || 'selected display';
       if (entry?.stale) {
         hint.textContent = `${label} looks offline (no recent heartbeat).`;
@@ -226,7 +270,7 @@
 
   function displaysFingerprint(displays) {
     return (displays || [])
-      .map((d) => `${d.id}|${d.name}|${d.host || ''}|${d.stale ? 1 : 0}|${d.lastSeen || ''}`)
+      .map((d) => `${d.id}|${d.name}|${d.host || ''}|${d.stale ? 1 : 0}|${d.lastSeen || ''}|${d.kind || ''}|${d.health || ''}`)
       .join(';');
   }
 
@@ -266,8 +310,7 @@
     for (const d of knownDisplays) {
       const opt = document.createElement('option');
       opt.value = d.id; // always unique — never target by friendly name
-      const label = d.label || d.name;
-      opt.textContent = d.stale ? `${label} (offline?)` : label;
+      opt.textContent = displayOptionLabel(d);
       select.appendChild(opt);
     }
     const allOpt = document.createElement('option');
@@ -300,6 +343,10 @@
     }
     localStorage.setItem(STORAGE_TARGET_KEY, select.value);
     updateControlTabVisibility();
+    renderPushGrid();
+    if (typeof renderSchedRules === 'function') {
+      renderSchedRules();
+    }
 
     if (!quiet && knownDisplays.length > previousCount) {
       const newest = pickNewestDisplay(added.length ? added : knownDisplays);
@@ -365,6 +412,7 @@
   $('display-select')?.addEventListener('change', () => {
     localStorage.setItem(STORAGE_TARGET_KEY, selectedTargetId());
     updateControlTabVisibility();
+    renderPushGrid();
   });
 
   $('btn-display-refresh')?.addEventListener('click', async () => {
@@ -408,6 +456,9 @@
   // ------------------------------------------------------------------- Tabs
 
   function activateTab(tabId) {
+    // Lets a tab widen the content column — the Vestaboard needs more room
+    // than a stack of settings cards.
+    document.body.dataset.tab = tabId;
     document.querySelectorAll('.tab-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.tab === tabId);
     });
@@ -431,6 +482,13 @@
     } else if (tabId === 'settings') {
       initCreditsUi();
       loadCreditsSettings();
+    } else if (tabId === 'board') {
+      vbUnlockAudio();
+      if (vbSoundOn && !vbHeardSample && !vbReducedMotion()) {
+        vbHeardSample = true;
+        vbPlayCascade();
+      }
+      loadVestaboardSim().then(() => startVestaboardSimEvents());
     }
   }
 
@@ -726,10 +784,27 @@
     'signal.slideshow': 'Play every <span class="push-booth-link" data-booth-link role="link" tabindex="0">uploaded photo</span>',
   };
 
+  let allPushCommands = [];
   let pushCommands = [];
 
+  function commandSupportsSelectedKind(command) {
+    const kind = selectedDisplayKind();
+    if (!kind) {
+      return true;
+    }
+    const kinds = Array.isArray(command.kinds) && command.kinds.length
+      ? command.kinds
+      : ['full'];
+    return kinds.includes(kind);
+  }
+
   function renderPushGrid(commands) {
-    pushCommands = (commands || []).filter((command) => command.pushable);
+    if (commands) {
+      allPushCommands = commands;
+    }
+    pushCommands = allPushCommands.filter(
+      (command) => command.pushable && commandSupportsSelectedKind(command),
+    );
     document.querySelectorAll('[data-push-row]').forEach((row) => {
       const groups = String(row.dataset.pushRow || '').split(',').map((g) => g.trim());
       const mine = pushCommands.filter((command) => groups.includes(command.group));
@@ -2192,6 +2267,34 @@
     return schedCommands.find((entry) => entry.id === commandId) || null;
   }
 
+  function schedTargetOptions(rule) {
+    const command = schedCommandById(rule.commandId);
+    const kinds = Array.isArray(command?.kinds) && command.kinds.length
+      ? command.kinds
+      : ['full'];
+    const boardCapable = kinds.includes('vestaboard');
+    const current = rule.target || 'full';
+    const options = [
+      ['full', 'Full displays'],
+      ['all', 'All displays'],
+    ];
+    if (boardCapable) {
+      options.push(['vestaboard', 'Vestaboards']);
+      for (const display of knownDisplays.filter((entry) => entry.kind === 'vestaboard')) {
+        options.push([display.id, display.label || display.name]);
+      }
+    }
+    for (const display of knownDisplays.filter((entry) => entry.kind !== 'vestaboard')) {
+      options.push([display.id, display.label || display.name]);
+    }
+    if (current && !options.some(([value]) => value === current)) {
+      options.push([current, current]);
+    }
+    return options.map(([value, label]) => (
+      `<option value="${escapeHtml(value)}"${value === current ? ' selected' : ''}>${escapeHtml(label)}</option>`
+    )).join('');
+  }
+
   function schedRuleParamsHtml(rule) {
     const command = schedCommandById(rule.commandId);
     const defs = Array.isArray(command?.params) ? command.params : [];
@@ -2245,6 +2348,8 @@
       <div class="sched-field-row">
         <label class="field-label" for="int-${escapeHtml(rule.id)}">Every</label>
         <select class="field-input" id="int-${escapeHtml(rule.id)}" data-sched-field="intervalSeconds">${intervalOptions}</select>
+        <label class="field-label" for="tgt-${escapeHtml(rule.id)}">Show on</label>
+        <select class="field-input" id="tgt-${escapeHtml(rule.id)}" data-sched-field="target">${schedTargetOptions(rule)}</select>
       </div>
       ${schedRuleParamsHtml(rule)}
       <div class="slider-row">
@@ -2309,6 +2414,7 @@
       intervalSeconds: Number(value('intervalSeconds')?.value) || 2700,
       probability: Number(value('probability')?.value) || 0,
       importance: Number(value('importance')?.value) || 3,
+      target: value('target')?.value || 'full',
       maxPerDay: num('maxPerDay'),
       cooldownSeconds: cooldownMinutes == null ? null : cooldownMinutes * 60,
       jitterPercent: num('jitterPercent'),
@@ -2621,6 +2727,21 @@
     if (event.score != null) {
       rows.push(['Score', event.score.toFixed(2)]);
     }
+    if (event.target) {
+      const targetLabels = {
+        full: 'Full displays',
+        all: 'All displays',
+        vestaboard: 'Vestaboards',
+      };
+      const named = knownDisplays.find((entry) => entry.id === event.target);
+      rows.push(['Target', targetLabels[event.target]
+        || named?.label || named?.name || event.target]);
+    }
+    if (event.boardOutcomes?.length) {
+      rows.push(['Boards', event.boardOutcomes.map((row) => (
+        `${row.boardId}: ${row.reason || (row.skipped ? 'skipped' : 'posted')}`
+      )).join(', ')]);
+    }
     if (event.competingRuleIds?.length > 1) {
       // The payoff feature: "why didn't the slideshow show at 3pm" in two clicks.
       rows.push(['Competed against', event.competingRuleIds
@@ -2673,8 +2794,27 @@
     ? `<div class="sched-warning">⚠ ${skip.count} skipped — ${escapeHtml(
       (OUTCOME_LABELS[skip.outcome] || skip.outcome).toLowerCase(),
     )}</div>` : ''}
+        ${schedBoardStatsHtml(entry.boards)}
       </div>`;
     }).join('');
+  }
+
+  function schedBoardStatsHtml(boards) {
+    if (!boards || typeof boards !== 'object') {
+      return '';
+    }
+    const ids = Object.keys(boards);
+    if (!ids.length) {
+      return '';
+    }
+    const lines = ids.map((id) => {
+      const named = knownDisplays.find((entry) => entry.id === id);
+      const counts = Object.entries(boards[id])
+        .map(([reason, count]) => `${count} ${reason}`)
+        .join(', ');
+      return `${named?.label || named?.name || id}: ${counts}`;
+    });
+    return `<div class="sched-readout">${escapeHtml(lines.join(' · '))}</div>`;
   }
 
   function sparklineHtml(series, color) {
@@ -5866,6 +6006,12 @@
     return `/roll-credits-media/${value.replace(/^\/+/, '')}`;
   }
 
+  function creditsBustedMediaUrl(path) {
+    const url = creditsMediaUrl(path);
+    if (!url) return '';
+    return `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  }
+
   function creditsYoutubeId(url) {
     const text = String(url || '').trim();
     if (!text) return '';
@@ -6436,6 +6582,7 @@
   function closeCreditsPreview() {
     const video = $('credits-preview-video');
     if (video) {
+      creditsUnbindPreviewLoop(video);
       video.pause();
       video.removeAttribute('src');
       video.load();
@@ -6534,7 +6681,7 @@
         ? `<button type="button" class="credits-media-thumb-btn" data-media-action="preview" data-media-index="${index}" aria-label="Preview ${escapeHtml(label)}">${creditsMediaThumbHtml(row)}</button>`
         : creditsMediaThumbHtml(row);
       const trimmed = row.kind === 'video' && (row.trimStart !== null && row.trimStart !== undefined)
-        ? ` · clip ${creditsClock(row.trimStart) || '0:00'}–${creditsClock(row.trimEnd) || 'end'}`
+        ? ` · clip ${creditsClock(row.trimStart) || '00m00s'}–${creditsClock(row.trimEnd) || 'end'}`
         : '';
       return `<div class="credits-media-row" draggable="true" data-media-id="${escapeHtml(row.id)}" data-media-index="${index}">
         <span class="credits-media-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
@@ -6598,11 +6745,25 @@
   }
 
   function creditsClock(seconds) {
-    const total = Number(seconds);
-    if (!Number.isFinite(total) || total <= 0) return '';
+    if (seconds === null || seconds === undefined || seconds === '') return '';
+    const parsed = Number(seconds);
+    if (!Number.isFinite(parsed) || parsed < 0) return '';
+    const total = Math.round(parsed);
     const mins = Math.floor(total / 60);
-    const secs = Math.round(total % 60);
-    return `${mins}:${String(Math.min(59, secs)).padStart(2, '0')}`;
+    const secs = total % 60;
+    return `${String(mins).padStart(2, '0')}m${String(secs).padStart(2, '0')}s`;
+  }
+
+  function parseCreditsClock(text) {
+    const raw = String(text || '').trim();
+    if (raw === '') return null;
+    const mmss = /^(\d+)\s*m\s*(\d+(?:\.\d+)?)\s*s$/i.exec(raw);
+    if (mmss) return Number(mmss[1]) * 60 + Number(mmss[2]);
+    const colon = /^(\d+):(\d+(?:\.\d+)?)$/.exec(raw);
+    if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
+    const justSec = Number(raw);
+    if (Number.isFinite(justSec) && justSec >= 0) return justSec;
+    return NaN;
   }
 
   function creditsTrimStatus(message, tone = '') {
@@ -6610,6 +6771,74 @@
     if (!node) return;
     node.textContent = message || '';
     node.className = `credits-trim-status${tone ? ` is-${tone}` : ''}`;
+  }
+
+  function creditsUnbindPreviewLoop(video) {
+    if (!video) return;
+    if (video._creditsOnTime) {
+      video.removeEventListener('timeupdate', video._creditsOnTime);
+      video._creditsOnTime = null;
+    }
+    if (video._creditsOnMeta) {
+      video.removeEventListener('loadedmetadata', video._creditsOnMeta);
+      video._creditsOnMeta = null;
+    }
+    if (video._creditsOnPlay) {
+      video.removeEventListener('play', video._creditsOnPlay);
+      video._creditsOnPlay = null;
+    }
+    if (video._creditsOnEnded) {
+      video.removeEventListener('ended', video._creditsOnEnded);
+      video._creditsOnEnded = null;
+    }
+  }
+
+  function creditsPreviewRangeFromFields() {
+    const start = parseCreditsClock($('credits-trim-start')?.value);
+    const end = parseCreditsClock($('credits-trim-end')?.value);
+    return {
+      start: Number.isFinite(start) ? start : 0,
+      end: Number.isFinite(end) && end > 0 ? end : null,
+    };
+  }
+
+  function creditsBindPreviewLoop(video) {
+    if (!video) return;
+    creditsUnbindPreviewLoop(video);
+    const { start, end } = creditsPreviewRangeFromFields();
+    const from = Math.max(0, start || 0);
+    const to = end !== null && end > from ? end : null;
+    const seekStart = () => {
+      if (!Number.isFinite(video.duration)) return;
+      const clamped = Math.min(from, Math.max(0, video.duration - 0.05));
+      if (Math.abs(video.currentTime - clamped) > 0.15) {
+        video.currentTime = clamped;
+      }
+    };
+    video._creditsOnMeta = seekStart;
+    video._creditsOnPlay = () => {
+      if (video.currentTime < from - 0.08) video.currentTime = from;
+    };
+    video._creditsOnTime = () => {
+      if (!Number.isFinite(video.currentTime)) return;
+      if (video.currentTime < from - 0.08) {
+        video.currentTime = from;
+        return;
+      }
+      if (to === null) return;
+      if (video.currentTime >= to - 0.05) {
+        video.currentTime = from;
+      }
+    };
+    video._creditsOnEnded = () => {
+      video.currentTime = from;
+      video.play().catch(() => {});
+    };
+    video.addEventListener('loadedmetadata', video._creditsOnMeta);
+    video.addEventListener('play', video._creditsOnPlay);
+    video.addEventListener('timeupdate', video._creditsOnTime);
+    video.addEventListener('ended', video._creditsOnEnded);
+    if (video.readyState >= 1) seekStart();
   }
 
   function creditsPreviewStill(row) {
@@ -6632,10 +6861,11 @@
     const fileUrl = creditsMediaUrl(row.path);
 
     video.pause();
+    creditsUnbindPreviewLoop(video);
     video.removeAttribute('src');
     video.load();
     if (isVideo && fileUrl) {
-      video.src = fileUrl;
+      video.src = creditsBustedMediaUrl(row.path);
       video.hidden = false;
       img.hidden = true;
       img.removeAttribute('src');
@@ -6656,14 +6886,25 @@
 
     const canTrim = isVideo && Boolean(fileUrl);
     $('credits-trim').hidden = !canTrim;
+    const canRes = canTrim && Boolean(row.youtubeUrl || row.source === 'youtube');
+    if ($('credits-resolution-row')) $('credits-resolution-row').hidden = !canRes;
     if (canTrim) {
       const start = Number(row.trimStart);
       const end = Number(row.trimEnd);
-      $('credits-trim-start').value = Number.isFinite(start) && row.trimStart !== null ? String(start) : '0';
-      $('credits-trim-end').value = Number.isFinite(end) && row.trimEnd ? String(end) : '';
+      $('credits-trim-start').value = Number.isFinite(start) && row.trimStart !== null
+        ? creditsClock(start)
+        : '00m00s';
+      $('credits-trim-end').value = Number.isFinite(end) && row.trimEnd
+        ? creditsClock(end)
+        : '';
+      if ($('credits-trim-resolution')) {
+        $('credits-trim-resolution').value = String(row.resolution || $('credits-youtube-resolution')?.value || 720);
+      }
       creditsTrimStatus(row.trimStart === null || row.trimStart === undefined
         ? 'No range picked yet — the display takes a few seconds from near the start.'
         : 'Using your saved range.');
+      creditsBindPreviewLoop(video);
+      video.play().catch(() => {});
     }
     $('credits-preview-sheet').hidden = false;
   }
@@ -6671,19 +6912,20 @@
   function creditsTrimTimeFromVideo(fieldId) {
     const video = $('credits-preview-video');
     if (!video || video.hidden || !Number.isFinite(video.currentTime)) return;
-    $(fieldId).value = (Math.round(video.currentTime * 10) / 10).toFixed(1);
+    $(fieldId).value = creditsClock(video.currentTime);
     creditsTrimStatus('Range changed — save it to rebuild the wall clip.');
+    creditsBindPreviewLoop(video);
   }
 
   async function saveCreditsTrim({ clear = false } = {}) {
     if (!creditsPreviewMedia || !creditsEditGame) return;
     const startRaw = clear ? '' : $('credits-trim-start').value.trim();
     const endRaw = clear ? '' : $('credits-trim-end').value.trim();
-    const trimStart = startRaw === '' ? null : Number(startRaw);
-    const trimEnd = endRaw === '' ? null : Number(endRaw);
+    const trimStart = startRaw === '' ? null : parseCreditsClock(startRaw);
+    const trimEnd = endRaw === '' ? null : parseCreditsClock(endRaw);
     if ((trimStart !== null && !Number.isFinite(trimStart))
       || (trimEnd !== null && !Number.isFinite(trimEnd))) {
-      creditsTrimStatus('Enter the start and end in seconds.', 'bad');
+      creditsTrimStatus('Enter the start and end as 01m03s.', 'bad');
       return;
     }
     if (trimStart !== null && trimEnd !== null && trimEnd <= trimStart) {
@@ -6705,9 +6947,13 @@
       if (at >= 0) rows[at] = updated;
       creditsPreviewMedia = { ...updated, index: creditsPreviewMedia.index };
       if (clear) {
-        $('credits-trim-start').value = '0';
+        $('credits-trim-start').value = '00m00s';
         $('credits-trim-end').value = '';
+      } else {
+        $('credits-trim-start').value = trimStart !== null ? creditsClock(trimStart) : '00m00s';
+        $('credits-trim-end').value = trimEnd !== null ? creditsClock(trimEnd) : '';
       }
+      creditsBindPreviewLoop($('credits-preview-video'));
       renderCreditsMedia();
       creditsTrimStatus(
         updated.previewPath
@@ -6719,6 +6965,81 @@
       creditsTrimStatus(error.message || 'Could not save the clip range.', 'bad');
     } finally {
       button.disabled = false;
+    }
+  }
+
+  async function waitForCreditsMediaReady(gameId, mediaId) {
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < deadline) {
+      if (!creditsPreviewMedia || creditsPreviewMedia.id !== mediaId) return null;
+      const [{ jobs = [] }, { game }] = await Promise.all([
+        apiGet(`${CREDITS_ROUTE}/jobs`),
+        apiGet(`${CREDITS_ROUTE}/games/${encodeURIComponent(gameId)}`),
+      ]);
+      const row = (game?.media || []).find((item) => item.id === mediaId);
+      const job = [...jobs].reverse().find((item) => (
+        item.gameId === gameId && item.mediaId === mediaId
+      ));
+      if (job?.state === 'failed' || row?.status === 'failed') {
+        throw new Error(job?.error || row?.statusDetail || 'Download failed');
+      }
+      if (row && row.status === 'ready' && (!job || job.state === 'done')) {
+        return { game, row };
+      }
+      creditsTrimStatus(`Re-downloading${row?.resolution ? ` at ${row.resolution}p` : ''}…`);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    throw new Error('Timed out waiting for the new file');
+  }
+
+  function applyCreditsPreviewFile(row) {
+    const video = $('credits-preview-video');
+    if (!video || row?.kind !== 'video' || !row.path) return;
+    creditsUnbindPreviewLoop(video);
+    video.pause();
+    video.src = creditsBustedMediaUrl(row.path);
+    video.hidden = false;
+    video.load();
+    creditsBindPreviewLoop(video);
+    video.play().catch(() => {});
+  }
+
+  async function saveCreditsResolution() {
+    if (!creditsPreviewMedia || !creditsEditGame) return;
+    const resolution = Number($('credits-trim-resolution')?.value);
+    const gameId = creditsEditGame.id;
+    const mediaId = creditsPreviewMedia.id;
+    const button = $('btn-credits-resolution-save');
+    if (button) button.disabled = true;
+    creditsTrimStatus(`Re-downloading at ${resolution}p…`);
+    try {
+      const data = await apiPost(
+        `${CREDITS_ROUTE}/games/${encodeURIComponent(gameId)}`
+        + `/media/${encodeURIComponent(mediaId)}/resolution`,
+        { resolution },
+      );
+      const queued = data.media || data;
+      const rows = creditsEditGame.media || [];
+      const at = rows.findIndex((item) => item.id === mediaId);
+      if (at >= 0) rows[at] = { ...rows[at], ...queued };
+      creditsPreviewMedia = { ...creditsPreviewMedia, ...queued };
+      renderCreditsMedia();
+      const ready = await waitForCreditsMediaReady(gameId, mediaId);
+      if (!ready) return;
+      creditsEditGame.media = ready.game.media;
+      creditsPreviewMedia = { ...ready.row, index: creditsPreviewMedia.index };
+      renderCreditsMedia();
+      applyCreditsPreviewFile(ready.row);
+      const parts = [ready.row.source || 'unknown', ready.row.status || 'ready'];
+      if (ready.row.resolution) parts.push(`${ready.row.resolution}p`);
+      const clock = creditsClock(ready.row.durationSeconds);
+      if (clock) parts.push(clock);
+      $('credits-preview-caption').textContent = parts.join(' · ');
+      creditsTrimStatus(`${resolution}p is ready — preview updated.`, 'good');
+    } catch (error) {
+      creditsTrimStatus(error.message || 'Could not change the resolution.', 'bad');
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -7286,6 +7607,9 @@
     $('btn-credits-trim-end')?.addEventListener('click', () => creditsTrimTimeFromVideo('credits-trim-end'));
     $('btn-credits-trim-save')?.addEventListener('click', () => saveCreditsTrim());
     $('btn-credits-trim-clear')?.addEventListener('click', () => saveCreditsTrim({ clear: true }));
+    $('btn-credits-resolution-save')?.addEventListener('click', () => saveCreditsResolution());
+    $('credits-trim-start')?.addEventListener('change', () => creditsBindPreviewLoop($('credits-preview-video')));
+    $('credits-trim-end')?.addEventListener('change', () => creditsBindPreviewLoop($('credits-preview-video')));
     $('btn-credits-add-search')?.addEventListener('click', searchCreditsCandidates);
     $('credits-add-search')?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') searchCreditsCandidates();
@@ -7700,17 +8024,217 @@
   // 63 and up are the solid colour chips; everything below is a glyph.
   const VB_CHIP_MIN = 63;
   const VB_MAX_CALLS = 20;
+  // One mechanical click. Keep in sync with `.vb-tile.is-flipping .vb-flap`.
+  const VB_FLAP_MS = 100;
+  // Cap so a blank→chip wrap cannot take the whole cascade on one module.
+  const VB_MAX_DRUM_STEPS = 24;
+  // Full-board rewrite length. Fallback until <audio> reports duration;
+  // keep in sync with `vb-flip.wav` (~5.6s after trim).
+  const VB_CASCADE_MS = 5616;
+  const VB_SOUND_KEY = 'signal.vbSound';
 
   let vbGlyphs = {};
+  let vbDrum = [];
   let vbTiles = null;
   let vbCurrent = null;
+  let vbShown = null;
+  let vbGen = null;
   let vbCalls = [];
   let vbEvents = null;
   let vbRateTimer = null;
+  let vbSoundOn = (() => {
+    try {
+      return window.localStorage.getItem(VB_SOUND_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  })();
+  let vbAudioCtx = null;
+  let vbAudioMaster = null;
+  let vbClickBuffers = [];
+  let vbHeardSample = false;
+  let vbFlipSample = null;
+  let vbFlipSampleReady = false;
+
+  function vbLoadFlipSample() {
+    if (vbFlipSample) {
+      return vbFlipSample;
+    }
+    try {
+      vbFlipSample = new Audio('vb-flip.wav?v=signal89');
+      vbFlipSample.preload = 'auto';
+      vbFlipSample.addEventListener('canplaythrough', () => {
+        vbFlipSampleReady = true;
+      }, { once: true });
+      vbFlipSample.load();
+    } catch {
+      vbFlipSample = null;
+    }
+    return vbFlipSample;
+  }
+
+  function vbCascadeMs() {
+    const seconds = Number(vbFlipSample?.duration);
+    if (Number.isFinite(seconds) && seconds > 1 && seconds < 20) {
+      return Math.round(seconds * 1000);
+    }
+    return VB_CASCADE_MS;
+  }
+
+  function vbStaggerBudgetMs() {
+    const walk = VB_MAX_DRUM_STEPS * VB_FLAP_MS;
+    return Math.max(400, vbCascadeMs() - walk);
+  }
+
+  function vbReducedMotion() {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+  }
+
+  function vbBuildClickBuffer(ctx, variant) {
+    const duration = 0.028;
+    const n = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, n, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    const thudF = 155 + variant * 32;
+    const tickF = 2200 + variant * 380;
+    for (let i = 0; i < n; i += 1) {
+      const t = i / ctx.sampleRate;
+      const snap = Math.exp(-t * 220);
+      const body = Math.exp(-t * 85);
+      const noise = (Math.random() * 2 - 1) * snap * 0.62;
+      const thud = Math.sin(2 * Math.PI * thudF * t) * body * 0.48;
+      const tick = Math.sin(2 * Math.PI * tickF * t) * snap * 0.42;
+      data[i] = noise + thud + tick;
+    }
+    return buffer;
+  }
+
+  function vbEnsureAudio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) {
+      return null;
+    }
+    if (!vbAudioCtx) {
+      vbAudioCtx = new AC();
+      const compressor = vbAudioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -18;
+      compressor.knee.value = 10;
+      compressor.ratio.value = 6;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.09;
+      vbAudioMaster = vbAudioCtx.createGain();
+      vbAudioMaster.gain.value = 0.55;
+      compressor.connect(vbAudioMaster);
+      vbAudioMaster.connect(vbAudioCtx.destination);
+      vbAudioMaster._in = compressor;
+      vbClickBuffers = [0, 1, 2, 3].map((v) => vbBuildClickBuffer(vbAudioCtx, v));
+    }
+    return vbAudioCtx;
+  }
+
+  function vbUnlockAudio() {
+    const ctx = vbEnsureAudio();
+    if (!ctx) {
+      return;
+    }
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    // iOS only fully unlocks after a buffer plays inside the gesture.
+    try {
+      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = silent;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {
+      // ignore
+    }
+  }
+
+  function vbPlayClick() {
+    if (!vbSoundOn || vbReducedMotion() || document.hidden) {
+      return;
+    }
+    const ctx = vbAudioCtx;
+    if (!ctx || ctx.state !== 'running' || !vbClickBuffers.length) {
+      return;
+    }
+    const buffer = vbClickBuffers[Math.floor(Math.random() * vbClickBuffers.length)];
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = 0.9 + Math.random() * 0.24;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.55 + Math.random() * 0.4;
+    src.connect(gain);
+    gain.connect(vbAudioMaster?._in || ctx.destination);
+    src.start(ctx.currentTime + Math.random() * 0.004);
+  }
+
+  function vbStopCascade() {
+    if (vbFlipSample) {
+      try {
+        vbFlipSample.pause();
+        vbFlipSample.currentTime = 0;
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  function vbPlayCascade() {
+    if (!vbSoundOn || vbReducedMotion() || document.hidden) {
+      return;
+    }
+    const sample = vbLoadFlipSample();
+    if (sample && (vbFlipSampleReady || sample.readyState >= 2)) {
+      try {
+        sample.pause();
+        sample.currentTime = 0;
+        sample.volume = 0.78;
+        const played = sample.play();
+        if (played && typeof played.catch === 'function') {
+          played.catch(() => vbPlaySampleRattle());
+        }
+        return;
+      } catch {
+        // fall through to the synthesized swarm
+      }
+    }
+    vbPlaySampleRattle();
+  }
+
+  function vbPlaySampleRattle() {
+    vbUnlockAudio();
+    const ctx = vbAudioCtx;
+    if (!ctx) {
+      return;
+    }
+    const start = () => {
+      for (let i = 0; i < 8; i += 1) {
+        window.setTimeout(vbPlayClick, i * 70);
+      }
+    };
+    if (ctx.state === 'running') {
+      start();
+    } else {
+      ctx.resume().then(start).catch(() => {});
+    }
+  }
+
+  function vbSyncSoundButton() {
+    const button = $('btn-vb-sound');
+    if (button) {
+      button.textContent = vbSoundOn ? 'Sound on' : 'Sound off';
+    }
+  }
 
   function vbBuildGrid() {
     const grid = $('vb-grid');
-    if (!grid || vbTiles) {
+    if (!grid) {
+      return;
+    }
+    if (vbTiles) {
       return;
     }
     vbTiles = [];
@@ -7718,26 +8242,150 @@
     for (let i = 0; i < VB_TILES; i += 1) {
       const tile = document.createElement('div');
       tile.className = 'vb-tile';
+      // Perspective lives on the cell; the flap is the card that actually
+      // rotates so a click reads as a split-flap drop, not a 2D squash.
+      const flap = document.createElement('div');
+      flap.className = 'vb-flap';
+      const glyph = document.createElement('span');
+      glyph.className = 'vb-glyph';
+      flap.appendChild(glyph);
+      tile.appendChild(flap);
       frag.appendChild(tile);
       vbTiles.push(tile);
     }
     grid.appendChild(frag);
     vbCurrent = new Array(VB_TILES).fill(0);
+    vbShown = new Array(VB_TILES).fill(0);
+    vbGen = new Array(VB_TILES).fill(0);
+  }
+
+  function vbEnsureGrid() {
+    if (!vbTiles) {
+      vbBuildGrid();
+    }
   }
 
   function vbPaintTile(tile, code) {
+    const glyph = tile.querySelector('.vb-glyph');
     if (code >= VB_CHIP_MIN) {
       tile.classList.add('is-chip');
       tile.dataset.chip = String(code);
-      tile.textContent = '';
+      if (glyph) {
+        glyph.textContent = '';
+      }
       return;
     }
     tile.classList.remove('is-chip');
     delete tile.dataset.chip;
-    tile.textContent = vbGlyphs[code] || '';
+    if (glyph) {
+      glyph.textContent = vbGlyphs[code] ?? vbGlyphs[String(code)] ?? '';
+    }
   }
 
-  function vbApplyLayout(layout, animate) {
+  function vbStopTile(index) {
+    if (vbGen) {
+      vbGen[index] += 1;
+    }
+    const tile = vbTiles?.[index];
+    if (tile) {
+      tile.classList.remove('is-flipping');
+    }
+  }
+
+  function vbFlipDelay(index, strategy) {
+    const row = Math.floor(index / VB_COLS);
+    const col = index % VB_COLS;
+    const budget = vbStaggerBudgetMs();
+    const jitter = Math.random() * 40;
+    switch (strategy) {
+      case 'reverse-column':
+        return ((VB_COLS - 1 - col) / (VB_COLS - 1)) * budget + jitter;
+      case 'row':
+        return (row / Math.max(1, VB_ROWS - 1)) * budget + jitter;
+      case 'diagonal':
+        return ((row + col) / (VB_ROWS + VB_COLS - 2)) * budget + jitter;
+      case 'edges-to-center': {
+        const dist = Math.min(col, VB_COLS - 1 - col);
+        const maxDist = Math.max(1, Math.floor((VB_COLS - 1) / 2));
+        return (dist / maxDist) * budget + jitter;
+      }
+      case 'random':
+        return Math.random() * budget;
+      case 'column':
+      default:
+        return (col / (VB_COLS - 1)) * budget + jitter;
+    }
+  }
+
+  function vbDrumSteps(from, to) {
+    const drum = vbDrum;
+    if (!Array.isArray(drum) || drum.length < 2 || from === to) {
+      return [to];
+    }
+    let fromIdx = drum.indexOf(from);
+    let toIdx = drum.indexOf(to);
+    if (fromIdx < 0) fromIdx = 0;
+    if (toIdx < 0) toIdx = 0;
+    const len = drum.length;
+    const distance = (toIdx - fromIdx + len) % len;
+    if (distance === 0) {
+      return [to];
+    }
+    const stride = distance > VB_MAX_DRUM_STEPS
+      ? Math.ceil(distance / VB_MAX_DRUM_STEPS)
+      : 1;
+    const steps = [];
+    for (let walked = stride; walked < distance; walked += stride) {
+      steps.push(drum[(fromIdx + walked) % len]);
+    }
+    steps.push(to);
+    return steps;
+  }
+
+  function vbRunFlips(index, codes, startDelay) {
+    const tile = vbTiles[index];
+    if (!tile || !codes.length) {
+      return;
+    }
+    const gen = (vbGen[index] += 1);
+    const flapMs = vbReducedMotion() ? 1 : VB_FLAP_MS;
+    const swapAt = Math.max(1, Math.floor(flapMs * 0.48));
+
+    const run = (step) => {
+      if (vbGen[index] !== gen) {
+        return;
+      }
+      if (step >= codes.length) {
+        tile.classList.remove('is-flipping');
+        return;
+      }
+      const code = codes[step];
+      tile.classList.remove('is-flipping');
+      void tile.offsetWidth;
+      tile.classList.add('is-flipping');
+      if (!vbFlipSampleReady) {
+        vbPlayClick();
+      }
+      window.setTimeout(() => {
+        if (vbGen[index] !== gen) {
+          return;
+        }
+        vbPaintTile(tile, code);
+        vbShown[index] = code;
+      }, swapAt);
+      window.setTimeout(() => run(step + 1), flapMs);
+    };
+
+    window.setTimeout(() => {
+      if (vbGen[index] !== gen) {
+        return;
+      }
+      run(0);
+    }, startDelay);
+  }
+
+  function vbApplyLayout(layout, animate, strategy) {
+    vbEnsureGrid();
     if (!Array.isArray(layout) || !vbTiles) {
       return;
     }
@@ -7748,32 +8396,36 @@
       }
     }
 
+    let starting = 0;
     for (let index = 0; index < VB_TILES; index += 1) {
       const code = flat[index] ?? 0;
       const tile = vbTiles[index];
-      if (!tile || vbCurrent[index] === code) {
+      if (!tile) {
         continue;
       }
-      vbCurrent[index] = code;
 
-      if (!animate) {
+      if (!animate || vbReducedMotion()) {
+        // A later sim.state with the same target must not snap a drum that's
+        // still walking — only jump when the committed code actually changed.
+        if (vbCurrent[index] === code) {
+          continue;
+        }
+        vbStopTile(index);
+        vbCurrent[index] = code;
+        vbShown[index] = code;
         vbPaintTile(tile, code);
         continue;
       }
 
-      // Sweep left to right with a little scatter, the way a real board
-      // clatters through a change rather than repainting like a spreadsheet.
-      const delay = (index % VB_COLS) * 14 + Math.random() * 90;
-      tile.style.animationDelay = `${delay}ms`;
-      tile.classList.remove('is-flipping');
-      void tile.offsetWidth;
-      tile.classList.add('is-flipping');
-      // Swap the face while the flap is edge-on and the change is hidden.
-      window.setTimeout(() => vbPaintTile(tile, code), delay + 215);
-      window.setTimeout(() => {
-        tile.classList.remove('is-flipping');
-        tile.style.animationDelay = '';
-      }, delay + 480);
+      if (vbCurrent[index] === code) {
+        continue;
+      }
+      vbCurrent[index] = code;
+      starting += 1;
+      vbRunFlips(index, vbDrumSteps(vbShown[index], code), vbFlipDelay(index, strategy));
+    }
+    if (starting) {
+      vbPlayCascade();
     }
   }
 
@@ -7815,6 +8467,9 @@
       quiet.hidden = !state.quietHours;
     }
     vbStartRateCountdown(state.cooldownMs);
+    if (Array.isArray(state.current)) {
+      vbApplyLayout(state.current, false);
+    }
   }
 
   function vbClockOf(iso) {
@@ -7896,6 +8551,7 @@
   }
 
   async function loadVestaboardSim() {
+    vbLoadFlipSample();
     let data;
     try {
       data = await apiGet('/api/vestaboard-sim');
@@ -7911,7 +8567,9 @@
     }
 
     vbGlyphs = data.glyphs || {};
+    vbDrum = Array.isArray(data.drum) ? data.drum.map((code) => Number(code) || 0) : [];
     vbBuildGrid();
+    vbSyncSoundButton();
     vbApplyLayout(data.state?.current, false);
     vbRenderState(data.state);
     vbCalls = data.calls || [];
@@ -7945,7 +8603,7 @@
     };
 
     on('sim.state', (state) => vbRenderState(state));
-    on('sim.flip', (detail) => vbApplyLayout(detail.layout, true));
+    on('sim.flip', (detail) => vbApplyLayout(detail.layout, true, detail.strategy));
     on('sim.call', (call) => {
       vbCalls.push(call);
       while (vbCalls.length > VB_MAX_CALLS) {
@@ -7959,6 +8617,28 @@
       // Browser will retry EventSource automatically.
     };
   }
+
+  $('btn-vb-sound')?.addEventListener('click', () => {
+    vbSoundOn = !vbSoundOn;
+    try {
+      window.localStorage.setItem(VB_SOUND_KEY, vbSoundOn ? '1' : '0');
+    } catch {
+      // private mode
+    }
+    vbSyncSoundButton();
+    vbUnlockAudio();
+    if (vbSoundOn) {
+      vbHeardSample = true;
+      vbPlayCascade();
+    } else {
+      vbStopCascade();
+    }
+  });
+  vbSyncSoundButton();
+
+  document.addEventListener('pointerdown', vbUnlockAudio, { capture: true, passive: true });
+  document.addEventListener('keydown', vbUnlockAudio, { capture: true });
+  vbLoadFlipSample();
 
   $('btn-vb-toggle')?.addEventListener('click', async () => {
     const button = $('btn-vb-toggle');
@@ -7974,11 +8654,6 @@
     }
   });
 
-  document.querySelector('.tab-btn[data-tab="board"]')?.addEventListener('click', async () => {
-    await loadVestaboardSim();
-    startVestaboardSimEvents();
-  });
-
   document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
     loadVestaboards();
   });
@@ -7988,6 +8663,7 @@
   startDisplayEvents();
   startPolling();
   applySteamReturnTab();
+  loadVestaboardSim().then(() => startVestaboardSimEvents());
   // Fallback poll if EventSource is blocked or drops (SSE is primary).
   setInterval(() => refreshDisplays({ quiet: true }), 60000);
 })();

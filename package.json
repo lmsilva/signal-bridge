@@ -14,7 +14,8 @@
     "tesla-register": "node src/tesla-register.js",
     "tesla-verify-register": "node src/tesla-register.js --verify-only",
     "test": "node --test --test-force-exit test/**/*.test.js",
-    "test:client": "cd \"alexa broadcast client\" && python -m unittest discover -s test -p test_*.py -v"
+    "test:client": "cd \"alexa broadcast client\" && python -m unittest discover -s test -p test_*.py -v",
+    "board-replay": "node src/vestaboard/replay.js"
   },
   "engines": {
     "node": ">=18.0.0"

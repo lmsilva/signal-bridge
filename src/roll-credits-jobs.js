@@ -85,11 +85,21 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
       path: result.path || outPath,
       thumbPath: result.thumbPath || null,
     };
+    if (item.path && item.path !== patch.path) {
+      try {
+        fs.rmSync(media.absolutePath(item.path), { force: true });
+      } catch {
+        // leftover file at the previous resolution — not fatal
+      }
+    }
     // The wall cannot decode video, so a downloaded clip is only useful once it
     // has a poster still and a looping preview. Failing that is not fatal — the
     // clip stays playable in the admin and the card falls back to cover art.
     if (item.kind === 'video' && typeof media.renderVideoPreview === 'function') {
-      const preview = await media.renderVideoPreview(patch.path);
+      const preview = await media.renderVideoPreview(patch.path, {
+        trimStart: item.trimStart ?? null,
+        trimEnd: item.trimEnd ?? null,
+      });
       patch.thumbPath = preview.posterPath || patch.thumbPath;
       patch.previewPath = preview.previewPath || null;
       patch.durationSeconds = preview.durationSeconds || null;

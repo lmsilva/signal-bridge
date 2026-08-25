@@ -12,10 +12,14 @@
 //     board would not flip anyway
 //   - during quiet hours only alarm and timer fires get through, and anything
 //     else is dropped rather than saved for morning; a stale snapshot at 7am
-//     is worse than no snapshot
+//     is worse than no snapshot. The window is household wall-clock
+//     (`timeZone`), not the process TZ, so a UTC container does not treat
+//     8pm Utah as 2am quiet.
 //
 // Time and the transport are injected so the whole thing can be tested
 // without waiting fifteen real seconds for anything.
+
+const { dateParts } = require('./clock');
 
 const DEFAULT_RATE_WINDOW_SECONDS = 15;
 const DEFAULT_DWELL_SECONDS = 15;
@@ -51,13 +55,15 @@ function parseHhMm(value) {
  * Quiet hours are local wall-clock and usually cross midnight, so the window
  * is "start <= t OR t < end" whenever start is after end.
  */
-function inQuietHours(date, quietHours) {
+function inQuietHours(date, quietHours, timeZone) {
   if (!quietHours || quietHours.enabled === false) return false;
   const start = parseHhMm(quietHours.start);
   const end = parseHhMm(quietHours.end);
   if (start === null || end === null || start === end) return false;
 
-  const minutes = date.getHours() * 60 + date.getMinutes();
+  const parts = dateParts(date, timeZone);
+  if (!parts) return false;
+  const minutes = parts.hour * 60 + parts.minute;
   return start < end
     ? minutes >= start && minutes < end
     : minutes >= start || minutes < end;
@@ -65,14 +71,16 @@ function inQuietHours(date, quietHours) {
 
 function createQueue({
   board = {},
-  transport,
+  transport: initialTransport,
   log = console,
   now = () => Date.now(),
   setTimer = setInterval,
   clearTimer = clearInterval,
   tickMs = 1000,
+  timeZone = null,
 } = {}) {
   let config = { ...board };
+  let transport = initialTransport;
   let nextItemId = 1;
 
   const state = {
@@ -92,6 +100,7 @@ function createQueue({
   const listeners = new Set();
   let timer = null;
   let posting = false;
+  let tickTail = Promise.resolve();
 
   function rateWindowMs() {
     const seconds = Number(config.rateWindowSeconds);
@@ -129,6 +138,15 @@ function createQueue({
 
   function announceQueue() {
     emit('queue', { boardId: config.id, items: pending() });
+  }
+
+  function recoverFromBadKey() {
+    if (state.health === 'degraded' && state.healthReason === 'auth') {
+      // A new key (or a new client holding one) deserves a fresh attempt.
+      setHealth('ok');
+      state.failures = 0;
+      state.retryNotBefore = null;
+    }
   }
 
   function setHealth(health, reason = null) {
@@ -271,12 +289,14 @@ function createQueue({
     );
   }
 
-  /** Move the queue along by at most one post. Safe to call on a timer. */
-  async function tick() {
-    if (posting) {
-      return null;
-    }
-
+  /**
+   * Move the queue along by at most one post.
+   *
+   * Overlapping calls wait for the in-flight post instead of no-opping, so a
+   * kick from `pushEvent` and the 1s timer (or a test drain) cannot miss
+   * `lastSchedulerFlipAt` being set.
+   */
+  async function tickOnce() {
     const at = now();
 
     if (!items.length) {
@@ -298,7 +318,7 @@ function createQueue({
     if (state.retryNotBefore && at < state.retryNotBefore) return null;
     if (state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
 
-    if (!item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours)) {
+    if (!item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
       dropHead('skip (quiet)', item);
       return 'quiet';
     }
@@ -348,6 +368,12 @@ function createQueue({
     return 'failed';
   }
 
+  function tick() {
+    const run = tickTail.then(tickOnce, tickOnce);
+    tickTail = run.then(() => {}, () => {});
+    return run;
+  }
+
   return {
     submit,
     tick,
@@ -362,17 +388,23 @@ function createQueue({
       healthReason: state.healthReason,
       queued: items.length,
       lastPostAt: state.lastPostAt,
-      quietHours: inQuietHours(new Date(now()), config.quietHours),
+      quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
     /** Settings changes apply live — no restart, no lost queue. */
     setConfig(next) {
       config = { ...config, ...next };
-      if (state.health === 'degraded' && state.healthReason === 'auth') {
-        // A new key deserves a fresh attempt.
-        setHealth('ok');
-        state.failures = 0;
-        state.retryNotBefore = null;
+      recoverFromBadKey();
+    },
+    /**
+     * A URL or key change must replace the HTTP client the timer closes
+     * over. Assigning `entry.transport` on the hub is not enough.
+     */
+    setTransport(next) {
+      if (!next) {
+        return;
       }
+      transport = next;
+      recoverFromBadKey();
     },
     config: () => ({ ...config }),
     start() {

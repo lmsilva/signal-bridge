@@ -1490,6 +1490,38 @@ test('Roll Credits trim endpoint forwards the clip range to the service', async 
   assert.match(rejected.body.error, /Only video media/);
 });
 
+test('Roll Credits resolution endpoint re-queues a YouTube download', async (t) => {
+  const calls = [];
+  const rollCredits = {
+    store: { getAllGames: () => [], getSystemById: () => null },
+    media: {
+      routePrefix: '/roll-credits-media/',
+      publicUrl: (value) => `/roll-credits-media/${value}`,
+      absolutePath: () => path.join(os.tmpdir(), 'missing-roll-credits-test-media'),
+    },
+    statusSnapshot: () => ({ gameCount: 0 }),
+    getSettings: () => ({ display: {}, limits: { maxImageBytes: 1024 } }),
+    setMediaResolution: (gameId, mediaId, resolution) => {
+      calls.push([gameId, mediaId, resolution]);
+      return {
+        media: { id: mediaId, kind: 'video', resolution, status: 'pending' },
+        job: { id: 'job_1', state: 'queued' },
+      };
+    },
+    start: () => {},
+    close: () => {},
+  };
+  const { webServer, base } = await startTestServer({ rollCredits });
+  t.after(() => webServer.stop());
+
+  const saved = await postJson(base, '/api/roll-credits/games/rc_1/media/md_1/resolution', {
+    resolution: 1080,
+  });
+  assert.equal(saved.status, 202);
+  assert.deepEqual(calls, [['rc_1', 'md_1', 1080]]);
+  assert.equal(saved.body.media.resolution, 1080);
+});
+
 test('Roll Credits media serves byte ranges so the admin can scrub a clip', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'roll-credits-range-'));
   const clip = path.join(root, 'clip.mp4');
@@ -2240,13 +2272,22 @@ test('Roll Credits media rows open a preview and videos expose clip trimming', (
   assert.match(html, /<video class="credits-preview-video"[^>]*controls/);
   assert.match(html, /id="credits-trim-start"/);
   assert.match(html, /id="credits-trim-end"/);
+  assert.match(html, /placeholder="00m00s"/);
+  assert.match(html, /id="credits-trim-resolution"/);
+  assert.match(html, /id="btn-credits-resolution-save"/);
   assert.match(html, /id="btn-credits-trim-save"/);
   assert.match(html, /id="btn-credits-trim-clear"/);
   assert.match(js, /function openCreditsPreview\(/);
+  assert.match(js, /function parseCreditsClock\(/);
+  assert.match(js, /function creditsBindPreviewLoop\(/);
+  assert.match(js, /function waitForCreditsMediaReady\(/);
+  assert.match(js, /function applyCreditsPreviewFile\(/);
+  assert.match(js, /01m03s|00m00s/);
   assert.match(js, /data-media-action="preview"/);
   assert.match(js, /\/media\/\$\{encodeURIComponent\(creditsPreviewMedia\.id\)\}\/trim/);
+  assert.match(js, /\/media\/\$\{encodeURIComponent\(mediaId\)\}\/resolution/);
   // The stored clip is released so it stops downloading once the sheet closes.
-  assert.match(js, /function closeCreditsPreview\(\)[\s\S]{0,220}removeAttribute\('src'\)/);
+  assert.match(js, /function closeCreditsPreview\(\)[\s\S]{0,500}removeAttribute\('src'\)/);
   assert.match(css, /\.credits-media-thumb-btn \{/);
   assert.match(css, /\.credits-trim \{/);
 });

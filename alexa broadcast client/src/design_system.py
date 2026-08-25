@@ -9,6 +9,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+try:
+    from PIL import Image, ImageDraw, ImageTk
+except Exception:  # pragma: no cover - Pillow is a runtime dep; tests may stub.
+    Image = ImageDraw = ImageTk = None
+
 
 # --- Colour tokens -----------------------------------------------------------
 BG = "#0B1730"
@@ -27,9 +32,12 @@ CARD_EDGE = LINE
 CONTAINER = BG
 
 # --- Depth tokens (§1.4b) ----------------------------------------------------
-# Tk has no alpha, gradients or radii, so the "glass card" look is built from
-# pre-blended tones: a page wash, a card body that lifts toward its top edge,
-# a hairline bevel and an offset shadow.
+# Tk has no native alpha or radii. Cards used to fake both with 16 banded
+# rectangles and an 8-point spline that put control points on the box
+# corners — that is what read as square "ears" and striped fills on the
+# wall. Card bodies are now one circular-corner polygon; the page wash can
+# still use a full-rect PIL gradient (a rounded PhotoImage becomes the
+# same square ears when Tk drops the alpha).
 BG_DEEP = "#050B1A"  # page bottom / vignette
 BG_WASH = "#123056"  # page top
 CARD_HI = "#16294F"  # card top
@@ -93,33 +101,90 @@ def tint(color: str, amount: float, *, over: str = BG) -> str:
     return mix(color, over, -amount)
 
 
-def rounded_points(box, radius: float) -> list[float]:
-    """Point list for `create_polygon(..., smooth=True)` shaped as a round-rect."""
+def rounded_points(box, radius: float, *, steps: int = 16) -> list[float]:
+    """Vertices along a true round-rect — circular corners, never the box corner.
+
+    The old 8-point `smooth=True` spline put a control point on each bounding-box
+    corner, which reads as a square "ear" on the wall. These points follow the
+    quarter-circles instead, so `create_polygon` can stay unsmoothed.
+    """
     x0, y0, x1, y1 = (float(value) for value in box)
     if x1 < x0:
         x0, x1 = x1, x0
     if y1 < y0:
         y0, y1 = y1, y0
     r = max(0.0, min(float(radius), (x1 - x0) / 2, (y1 - y0) / 2))
-    return [
-        x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r,
-        x1, y1 - r, x1, y1, x1 - r, y1, x0 + r, y1,
-        x0, y1, x0, y1 - r, x0, y0 + r, x0, y0,
-    ]
+    if r <= 0.6:
+        return [x0, y0, x1, y0, x1, y1, x0, y1]
+    count = max(4, int(steps))
+    points: list[float] = []
+    corners = (
+        (x0 + r, y0 + r, math.pi, math.pi * 1.5),
+        (x1 - r, y0 + r, math.pi * 1.5, math.pi * 2.0),
+        (x1 - r, y1 - r, 0.0, math.pi * 0.5),
+        (x0 + r, y1 - r, math.pi * 0.5, math.pi),
+    )
+    for cx, cy, start, end in corners:
+        for index in range(count + 1):
+            angle = start + (end - start) * (index / count)
+            points.extend((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    return points
 
 
-def _corner_inset(y: float, y0: float, y1: float, radius: float) -> float:
-    """How far a horizontal slice at `y` must pull in to follow a round-rect."""
-    if radius <= 0:
-        return 0.0
-    if y < y0 + radius:
-        dy = radius - (y - y0)
-    elif y > y1 - radius:
-        dy = radius - (y1 - y)
+def retain_photo(canvas, photo) -> None:
+    """Keep a PhotoImage alive — Tk drops it the moment Python's last ref dies."""
+    if photo is None:
+        return
+    bucket = getattr(canvas, "_design_photos", None)
+    if not isinstance(bucket, list):
+        bucket = []
+        try:
+            canvas._design_photos = bucket
+        except Exception:
+            return
+    bucket.append(photo)
+
+
+def release_photos(canvas) -> None:
+    bucket = getattr(canvas, "_design_photos", None)
+    if isinstance(bucket, list):
+        bucket.clear()
+
+
+def _canvas_can_photo(canvas) -> bool:
+    return ImageTk is not None and Image is not None and hasattr(canvas, "tk")
+
+
+def _gradient_image(width: int, height: int, top_color: str, bottom_color: str, radius: float):
+    """Per-pixel vertical gradient clipped to a circular-corner round-rect."""
+    w = max(1, int(width))
+    h = max(1, int(height))
+    r = max(0, min(int(round(radius)), w // 2, h // 2))
+    scale = 2
+    sw, sh, sr = w * scale, h * scale, r * scale
+    top = _channels(top_color)
+    bot = _channels(bottom_color)
+    column = Image.new("RGB", (1, sh))
+    pixels = column.load()
+    denom = max(1, sh - 1)
+    for y in range(sh):
+        t = y / denom
+        pixels[0, y] = (
+            int(round(top[0] + (bot[0] - top[0]) * t)),
+            int(round(top[1] + (bot[1] - top[1]) * t)),
+            int(round(top[2] + (bot[2] - top[2]) * t)),
+        )
+    grad = column.resize((sw, sh), Image.Resampling.BILINEAR)
+    if sr > 0:
+        mask = Image.new("L", (sw, sh), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, sw - 1, sh - 1), radius=sr, fill=255)
+        image = grad.convert("RGBA")
+        image.putalpha(mask)
     else:
-        return 0.0
-    dy = max(0.0, min(radius, dy))
-    return radius - math.sqrt(max(0.0, radius * radius - dy * dy))
+        image = grad.convert("RGBA")
+    if scale != 1:
+        image = image.resize((w, h), Image.Resampling.LANCZOS)
+    return image
 
 
 def paint_gradient(
@@ -132,37 +197,41 @@ def paint_gradient(
     bands: int = 18,
     track=None,
 ):
-    """Vertical gradient as banded rectangles, clipped to a round-rect outline."""
+    """Page wash (radius 0) can be a PhotoImage; rounded boxes stay polygons."""
+    del bands
     x0, y0, x1, y1 = (float(value) for value in box)
+    width = x1 - x0
     height = y1 - y0
-    if height <= 0 or x1 <= x0:
+    if height <= 0 or width <= 0:
         return []
-    count = max(2, int(bands))
-    step = height / count
-    r = max(0.0, min(float(radius), (x1 - x0) / 2, height / 2))
-    ids = []
-    if r > 0:
-        # Bands are rectangles, so their stepped corners would let whatever sits
-        # behind the card (its own shadow) show through. Seat them on the shape.
-        base = paint_round_rect(
-            canvas, box, radius=r, fill=mix(top_color, bottom_color, 0.5), track=track,
-        )
-        ids.append(base)
-    for index in range(count):
-        band_top = y0 + step * index
-        band_bottom = min(y1, band_top + step + 0.6)  # overlap hides seams
-        color = mix(top_color, bottom_color, index / max(1, count - 1))
-        inset = max(
-            _corner_inset(band_top, y0, y1, r),
-            _corner_inset(band_bottom, y0, y1, r),
-        )
-        item = canvas.create_rectangle(
-            x0 + inset, band_top, x1 - inset, band_bottom, fill=color, outline="",
-        )
-        ids.append(item)
-        if track:
-            track(item)
-    return ids
+    r = max(0.0, min(float(radius), width / 2, height / 2))
+    # Rounded fills must be polygons. A PhotoImage is a rectangle; Windows Tk
+    # often drops the alpha, which paints a light square at every card corner —
+    # the same artifact the old banded-rect fill produced.
+    if r > 0.6:
+        return [paint_round_rect(
+            canvas, box, radius=r, fill=mix(top_color, bottom_color, 0.38), track=track,
+        )]
+    if _canvas_can_photo(canvas):
+        try:
+            image = _gradient_image(
+                max(1, int(round(width))),
+                max(1, int(round(height))),
+                top_color,
+                bottom_color,
+                0,
+            )
+            photo = ImageTk.PhotoImage(image, master=canvas)
+            retain_photo(canvas, photo)
+            item = canvas.create_image(x0, y0, image=photo, anchor="nw")
+            if track:
+                track(item)
+            return [item]
+        except Exception:
+            pass
+    return [paint_round_rect(
+        canvas, box, radius=0, fill=mix(top_color, bottom_color, 0.42), track=track,
+    )]
 
 
 def paint_backdrop(canvas, screen_w: int, screen_h: int, *, track=None, accent: str = BG_WASH):
@@ -183,7 +252,8 @@ def paint_round_rect(
         fill=fill or "",
         outline=outline or "",
         width=max(1, int(round(width))),
-        smooth=True,
+        smooth=False,
+        joinstyle="round",
     )
     if track:
         track(item)
@@ -201,7 +271,7 @@ def paint_card(
     track=None,
     shadow: bool = True,
 ):
-    """Layered card: shadow, top-lit gradient body, hairline edge and bevel."""
+    """Layered card: shadow, solid round body, hairline edge and top bevel."""
     x0, y0, x1, y1 = (float(value) for value in box)
     r = (18 * u) if radius is None else float(radius)
     r = max(0.0, min(r, (x1 - x0) / 2, (y1 - y0) / 2))

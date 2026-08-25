@@ -817,6 +817,11 @@ class RollCreditsPanel(BasePanel):
         self._item_ids.clear()
         self._photo_refs = []
         self._image_ids = {}
+        try:
+            from src.design_system import release_photos
+            release_photos(self.canvas)
+        except Exception:
+            pass
         for marquee in self._marquees:
             marquee.stop()
         self._marquees = []

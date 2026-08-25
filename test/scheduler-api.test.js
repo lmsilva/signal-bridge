@@ -145,6 +145,7 @@ test('rules can be created, listed, edited and deleted through the API', async (
     const rule = created.body.rule;
     assert.equal(rule.commandId, 'signal.slideshow');
     assert.equal(rule.label, 'Shared Photo Slideshow', 'defaults to the command title');
+    assert.equal(rule.target, 'full', 'existing-style rules stay on the Windows overlay');
     assert.match(rule.color, /^#[0-9A-F]{6}$/i);
     // §4.5 readouts must come back with the rule so the editor can show them live.
     assert.equal(rule.expectedPerDay, 28.8);
@@ -155,10 +156,11 @@ test('rules can be created, listed, edited and deleted through the API', async (
 
     const edited = await api(`${ROUTE}/rules/${rule.id}`, {
       method: 'PUT',
-      body: { probability: 50, label: 'Family photos' },
+      body: { probability: 50, label: 'Family photos', target: 'vestaboard' },
     });
     assert.equal(edited.body.rule.probability, 50);
     assert.equal(edited.body.rule.label, 'Family photos');
+    assert.equal(edited.body.rule.target, 'vestaboard');
     assert.equal(edited.body.rule.color, rule.color, 'colour is stable across edits');
 
     const removed = await api(`${ROUTE}/rules/${rule.id}`, { method: 'DELETE' });
@@ -233,6 +235,9 @@ test('air-now fires the real push handler and records an airing', async () => {
     assert.ok(recorded.length > before);
     assert.equal(recorded.at(-1).kind, 'weather');
     assert.equal(recorded.at(-1).trigger, 'weather-query');
+    assert.equal(recorded.at(-1).targetId, 'full');
+    assert.equal(recorded.at(-1).triggeredBy, 'scheduler');
+    assert.equal(fired.body.event.target, 'full');
 
     const activity = await api(`${ROUTE}/activity`);
     assert.equal(activity.body.events.filter((e) => e.outcome === 'aired').length, 1);

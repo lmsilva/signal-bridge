@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createRollCreditsService } = require('../src/roll-credits-service');
 
 /** Service wired to in-memory stubs so trimming can be checked without ffmpeg. */
-function makeService({ media: mediaRows, renderVideoPreview } = {}) {
+function makeService({ media: mediaRows, renderVideoPreview, jobs } = {}) {
   const game = {
     id: 'rc_1',
     title: 'Trim Test',
@@ -33,7 +33,7 @@ function makeService({ media: mediaRows, renderVideoPreview } = {}) {
       settings: { get: () => ({ limits: {}, display: {} }) },
       credentials: { resolveCredentials: () => ({}) },
       providers: {},
-      jobs: { retry: () => null, enqueueDownload: () => null },
+      jobs: jobs || { retry: () => null, enqueueDownload: () => null },
       scraper: {},
       media: {
         routePrefix: '/roll-credits-media/',
@@ -124,5 +124,46 @@ test('trimming is refused for images, unknown rows and backwards ranges', async 
   await assert.rejects(
     service.setMediaTrim('rc_1', 'md_video', { trimStart: 20, trimEnd: 5 }),
     /end must come after/,
+  );
+});
+
+test('changing resolution queues a re-download and keeps the clip range', () => {
+  const queued = [];
+  const { service, game } = makeService({
+    jobs: {
+      retry: () => null,
+      enqueueDownload: (job) => {
+        queued.push(job);
+        return { id: 'job_1', state: 'queued', ...job };
+      },
+    },
+  });
+  game.media[0].youtubeUrl = 'https://youtu.be/abc';
+  game.media[0].resolution = 720;
+  game.media[0].trimStart = 12;
+  game.media[0].trimEnd = 20;
+
+  const result = service.setMediaResolution('rc_1', 'md_video', 1080);
+
+  assert.equal(result.media.resolution, 1080);
+  assert.equal(result.media.status, 'pending');
+  assert.equal(result.media.trimStart, 12);
+  assert.equal(result.media.trimEnd, 20);
+  assert.deepEqual(queued, [{ gameId: 'rc_1', mediaId: 'md_video', kind: 'video' }]);
+  assert.equal(game.media[0].resolution, 1080);
+});
+
+test('resolution redo is YouTube-only and rejects junk heights', () => {
+  const { service } = makeService({
+    media: [{ id: 'md_up', kind: 'video', source: 'upload', status: 'ready', path: 'x.mp4' }],
+  });
+  assert.throws(
+    () => service.setMediaResolution('rc_1', 'md_up', 1080),
+    /YouTube/,
+  );
+  const { service: youtube } = makeService();
+  assert.throws(
+    () => youtube.setMediaResolution('rc_1', 'md_video', 144),
+    /360p/,
   );
 });

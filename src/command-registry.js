@@ -31,7 +31,64 @@ const { estimateDuration: estimateOverheadDuration } = require('./overhead-setti
  * @property {boolean} supportsContentCheck
  * @property {boolean} variableDuration
  * @property {number|null} defaultDurationSeconds
+ * @property {string[]} [kinds] Display kinds this command can air on
+ *   (`full`, `vestaboard`). Omitted means derived from {@link BOARD_COMMAND_IDS}.
  */
+
+const DISPLAY_KINDS = Object.freeze(['full', 'vestaboard']);
+
+/**
+ * Commands a Vestaboard can actually show. Photos, library tours, posters,
+ * and remote input stay full-display only — the router skips them on a board
+ * with one debug line rather than flipping a blank face.
+ */
+const BOARD_COMMAND_IDS = new Set([
+  'tesla.dashboard',
+  'tesla.battery',
+  'alexa.weather',
+  'alexa.shopping-list',
+  'alexa.timers',
+  'signal.guest-snaps',
+  'alexa.air-quality',
+  'alexa.now-playing',
+  'alexa.alarms',
+  'steam.now-playing',
+  'steam.last-played',
+  'psn.now-playing',
+  'psn.last-played',
+  'credits.show',
+  'autodarts.now',
+  'autodarts.last-match',
+  'autodarts.dashboard',
+  'trivia.show',
+  'goodnews.show',
+  'wiki.show',
+  'overhead.show',
+  'youtube.now-playing',
+  'youtube.last-played',
+]);
+
+function kindsOf(command) {
+  if (Array.isArray(command?.kinds) && command.kinds.length) {
+    return [...command.kinds];
+  }
+  return BOARD_COMMAND_IDS.has(command?.id)
+    ? ['full', 'vestaboard']
+    : ['full'];
+}
+
+function supportsKind(commandOrId, kind) {
+  const command = typeof commandOrId === 'string'
+    ? COMMANDS.find((entry) => entry.id === commandOrId)
+    : commandOrId;
+  if (!command) {
+    return false;
+  }
+  if (!kind || kind === '*' || kind === 'all') {
+    return true;
+  }
+  return kindsOf(command).includes(kind);
+}
 
 /** @type {CommandDescriptor[]} */
 const COMMANDS = [
@@ -478,6 +535,15 @@ function assertValid(commands = COMMANDS) {
     if (!command.variableDuration && !(command.defaultDurationSeconds > 0)) {
       throw new Error(`Command "${command.id}" needs a positive defaultDurationSeconds`);
     }
+    const kinds = kindsOf(command);
+    if (!kinds.length) {
+      throw new Error(`Command "${command.id}" needs at least one display kind`);
+    }
+    for (const kind of kinds) {
+      if (!DISPLAY_KINDS.includes(kind)) {
+        throw new Error(`Command "${command.id}" has unknown kind "${kind}"`);
+      }
+    }
   }
   return true;
 }
@@ -770,6 +836,7 @@ function createCommandRegistry(deps = {}) {
         supportsContentCheck: Boolean(command.supportsContentCheck),
         variableDuration: Boolean(command.variableDuration),
         defaultDurationSeconds: command.defaultDurationSeconds ?? null,
+        kinds: kindsOf(command),
         hasContent: command.supportsContentCheck ? hasContent(command.id) : true,
         estimatedDurationSeconds: estimateDuration(command.id),
       }));
@@ -786,6 +853,10 @@ function createCommandRegistry(deps = {}) {
 
 module.exports = {
   COMMANDS,
+  DISPLAY_KINDS,
+  BOARD_COMMAND_IDS,
+  kindsOf,
+  supportsKind,
   assertValid,
   createCommandRegistry,
 };

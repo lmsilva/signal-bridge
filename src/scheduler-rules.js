@@ -62,6 +62,29 @@ function normaliseDays(value) {
   return days.length && days.length < 7 ? days : undefined;
 }
 
+const TARGET_CLASSES = new Set(['all', 'full', 'vestaboard']);
+
+/**
+ * `"all"` | `"full"` | `"vestaboard"` | a display id.
+ *
+ * Missing / blank becomes `"full"` so a rules file from before boards existed
+ * keeps its old behaviour: UDP to the Windows clients, nothing on a Vestaboard.
+ */
+function normaliseTarget(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) {
+    return 'full';
+  }
+  const lower = raw.toLowerCase();
+  if (lower === '*' || lower === 'all') {
+    return 'all';
+  }
+  if (TARGET_CLASSES.has(lower)) {
+    return lower;
+  }
+  return raw;
+}
+
 function pickColor(existingRules = []) {
   const used = new Set(existingRules.map((rule) => rule.color));
   return RULE_PALETTE.find((color) => !used.has(color))
@@ -116,6 +139,9 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
   if (base.displayDurationSeconds != null) {
     rule.displayDurationSeconds = clampInt(base.displayDurationSeconds, 5, 3600, undefined);
   }
+  // Existing rules have no target; they were written for the Windows overlay
+  // and must keep airing there, not suddenly start flipping the kitchen board.
+  rule.target = normaliseTarget(base.target);
   // §7.3: default the guard on wherever it is supported — an empty "now
   // playing" panel is worse than showing nothing.
   if (base.guard === 'requires-content') {
@@ -254,7 +280,9 @@ module.exports = {
   RULE_PALETTE,
   MIN_INTERVAL_SECONDS,
   MAX_INTERVAL_SECONDS,
+  TARGET_CLASSES,
   normaliseRule,
+  normaliseTarget,
   scoreRule,
   expectedPerDay,
   gapProfile,

@@ -158,6 +158,9 @@ function createActivityLog(
       ...(event.durationSeconds != null ? { durationSeconds: event.durationSeconds } : {}),
       ...(event.interrupted ? { interrupted: true } : {}),
       ...(event.detail ? { detail: String(event.detail).slice(0, 400) } : {}),
+      ...(event.target ? { target: String(event.target) } : {}),
+      ...(Array.isArray(event.boardOutcomes) && event.boardOutcomes.length
+        ? { boardOutcomes: event.boardOutcomes } : {}),
     };
     const dateKey = localDateKey(Date.parse(at), timeZone);
     if (dateKey !== cacheKey) {
@@ -250,6 +253,7 @@ function createActivityLog(
           outcomes: {},
           airedAt: [],
           totalDurationSeconds: 0,
+          boards: {},
         });
       }
       const bucket = perRule.get(event.ruleId);
@@ -262,6 +266,17 @@ function createActivityLog(
         bucket.aired += 1;
         bucket.airedAt.push(Date.parse(event.at));
         bucket.totalDurationSeconds += Number(event.durationSeconds || 0);
+      }
+      for (const row of event.boardOutcomes || []) {
+        const boardId = String(row.boardId || row.id || '').trim();
+        if (!boardId) {
+          continue;
+        }
+        const reason = String(row.reason || (row.skipped ? 'skipped' : 'posted'));
+        if (!bucket.boards[boardId]) {
+          bucket.boards[boardId] = {};
+        }
+        bucket.boards[boardId][reason] = (bucket.boards[boardId][reason] || 0) + 1;
       }
     }
 
@@ -285,6 +300,7 @@ function createActivityLog(
         longestGapSeconds: gaps.length ? Math.round(Math.max(...gaps)) : null,
         totalDurationSeconds: Math.round(bucket.totalDurationSeconds),
         dominantSkip: blocking ? { outcome: blocking[0], count: blocking[1] } : null,
+        boards: Object.keys(bucket.boards).length ? bucket.boards : undefined,
       };
     }).sort((a, b) => b.aired - a.aired);
   }

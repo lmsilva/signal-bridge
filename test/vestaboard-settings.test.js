@@ -222,8 +222,10 @@ test('a board is not something the UDP path will try to reach', () => {
   );
 
   const delivery = registry.resolveDelivery('sim');
-  assert.match(delivery.error, /not reachable over UDP/);
+  assert.equal(delivery.kind, 'vestaboard');
+  assert.equal(delivery.error, undefined);
   assert.deepEqual(delivery.sendOptions, {});
+  assert.deepEqual(delivery.target, { id: 'sim' });
 
   // And a push to everything never tries to unicast at it.
   registry.upsertFromAnnounce(
@@ -308,6 +310,34 @@ test('a test flip puts the identity frame on the board', async () => {
 
     const shown = h.simulator.state().current;
     assert.deepEqual(shown, identityFrame({ name: 'Vestaboard Simulator' }).rows);
+  } finally {
+    await h.stop();
+  }
+});
+
+test('a second boot re-enables the simulator so a stale stored key cannot wedge the queue', async () => {
+  const h = await makeHub();
+  try {
+    h.hub.settings.setKey('sim', 'stale-wrong-key');
+    h.hub.stop();
+
+    const hub2 = createVestaboardHub({
+      config: { ROOT: h.root, vestaboardSimulator: { port: 0, host: '127.0.0.1', rateWindowSeconds: 0 } },
+      log: silentLog(),
+      simulator: h.simulator,
+    });
+    await hub2.start();
+    try {
+      assert.equal(hub2.settings.keyFor('sim'), h.simulator.apiKey());
+      const outcome = await hub2.testFlip('sim');
+      assert.equal(outcome.ok, true);
+      assert.deepEqual(
+        h.simulator.state().current,
+        identityFrame({ name: 'Vestaboard Simulator' }).rows,
+      );
+    } finally {
+      hub2.stop();
+    }
   } finally {
     await h.stop();
   }
