@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autodarts — hand-off wireframes</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background:#05070d; color:#cdd6e4;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:28px 18px 60px; }
+  .head { max-width:1080px; margin:0 auto 6px; }
+  .head h1 { color:#f0f4fb; font-size:22px; }
+  .head p { font-size:13px; color:#8b96ab; margin-top:6px; max-width:720px; line-height:1.45; }
+  .legend { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 4px; }
+  .legend span { font-size:11px; border:1px solid #223047; border-radius:999px; padding:3px 10px; color:#9fb0c9; }
+  .legend i { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; vertical-align:-1px; }
+  .gallery { max-width:1080px; margin:18px auto 0; display:flex; flex-wrap:wrap; gap:26px; align-items:flex-start; }
+  figure.wf { margin:0; }
+  figcaption { font-size:12px; color:#8b96ab; margin:0 0 8px 2px; }
+  figcaption b { color:#dfe7f3; font-weight:600; }
+
+  /* ===== ADMIN frame (tokens: src/web/admin/styles.css) ===== */
+  .admin { --bg:#0f172a; --elev:#16213b; --elev2:#1c2947; --line:#263450;
+    --text:#e2e8f0; --dim:#8fa3c4; --accent:#38bdf8; --aink:#082f49;
+    --good:#34d399; --gold:#fbbf24;
+    width:300px; background:var(--bg); color:var(--text);
+    border:1px solid #1d2a44; border-radius:22px; padding:10px; font-size:11px;
+    box-shadow:0 18px 40px rgba(0,0,0,.45); }
+  .card { background:var(--elev); border:1px solid var(--line); border-radius:14px; padding:11px; }
+  .card h4 { font-size:12px; margin-bottom:2px; }
+  .lbl { font-size:9px; letter-spacing:.8px; color:var(--dim); text-transform:uppercase; margin:10px 0 5px; }
+  .rowf { display:flex; gap:7px; align-items:center; }
+  .btn { border:1px solid var(--line); border-radius:10px; background:var(--elev2);
+    color:var(--text); font-size:10.5px; padding:6px 10px; text-align:center; }
+  .btn.pri { background:var(--accent); color:var(--aink); border-color:var(--accent); font-weight:700; }
+  .field { background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:6px 9px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .seg > span { padding:4px 7px; color:var(--dim); }
+  .seg > b { padding:4px 7px; background:var(--elev2); color:var(--text); font-weight:600; }
+  .toggle { width:26px; height:15px; border-radius:999px; border:1px solid var(--accent);
+    background:rgba(56,189,248,.3); position:relative; display:inline-block; vertical-align:middle; }
+  .toggle::after { content:""; position:absolute; top:1.5px; right:2px; width:10px; height:10px;
+    border-radius:50%; background:var(--accent); }
+  .slider { height:4px; background:var(--elev2); border-radius:999px; position:relative; flex:1; }
+  .slider i { position:absolute; left:0; top:0; bottom:0; background:var(--accent); border-radius:999px; }
+  .slider::after { content:""; position:absolute; top:-4px; width:12px; height:12px;
+    border-radius:50%; background:var(--accent); left:var(--x,40%); }
+  .okline { color:var(--good); font-size:10px; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--good); margin-right:4px; }
+  .code { letter-spacing:3px; font-weight:800; background:var(--bg); border:1px dashed var(--line);
+    border-radius:8px; padding:5px 10px; text-align:center; color:var(--gold); }
+  .dimtx { color:var(--dim); }
+
+  /* ===== DISPLAY frames (tokens: client design_system.py) ===== */
+  .disp { --bg:#0B1730; --fill:#141F35; --line:#264060;
+    --ink:#F2F7FF; --ink2:#A4ACC0; --ink3:#6B7388;
+    --accent:#5FD0FF; --gold:#F5C453; --alert:#FF7A6B;
+    background:var(--bg); color:var(--ink); border:1px solid #1c2c4d;
+    font-size:9px; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 18px 40px rgba(0,0,0,.5); }
+  .disp * { border-radius:0 !important; }
+  .disp.portrait { width:272px; height:486px; }
+  .disp.landscape { width:486px; height:276px; max-width:100%; }
+  .dhead { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; }
+  .dhead .t { color:var(--ink3); font-size:8.5px; }
+  .pill { border:1px solid var(--line); background:var(--fill); color:var(--ink2);
+    padding:2px 10px; font-size:8.5px; letter-spacing:1.2px; }
+  .live { border:1px solid var(--alert); color:var(--alert); padding:1px 7px;
+    font-size:8px; letter-spacing:1.5px; font-weight:700; }
+  .final { border:1px solid var(--line); background:var(--fill); color:var(--ink2);
+    padding:1px 7px; font-size:8px; letter-spacing:1.5px; font-weight:700; }
+  .dbody { flex:1; padding:0 10px; display:flex; flex-direction:column; gap:7px; min-height:0; }
+  .eyebrow { color:var(--ink3); font-size:7.5px; letter-spacing:1.6px; }
+  .metal { color:var(--ink2); font-size:8px; }
+  .gold { color:var(--gold); font-weight:800; }
+  .dfoot { border-top:1px solid var(--line); color:var(--ink3); font-size:8px;
+    display:flex; align-items:center; gap:8px; justify-content:center; padding:5px 10px 6px; }
+  .rail { width:74px; height:3px; background:#232E45; position:relative; }
+  .rail i { position:absolute; inset:0; right:38%; background:var(--accent); }
+  .counters { display:flex; border:1px solid var(--line); background:var(--fill); }
+  .counters > div { flex:1; text-align:center; padding:6px 2px; }
+  .counters > div + div { border-left:1px solid var(--line); }
+  .counters b { display:block; font-size:14px; }
+  .counters span { color:var(--ink3); font-size:6.6px; letter-spacing:1.1px; }
+  .panel { border:1px solid var(--line); background:var(--fill); padding:7px 8px; }
+  .ptitle { color:var(--ink3); font-size:7px; letter-spacing:1.4px; margin-bottom:6px; }
+  .mchart { display:flex; align-items:flex-end; gap:3px; height:40px; }
+  .mchart i { flex:1; background:var(--accent); opacity:.9; }
+  .mchart i.g { background:var(--gold); }
+  .mlabels { display:flex; gap:3px; color:var(--ink3); font-size:6px; margin-top:3px; }
+  .mlabels span { flex:1; text-align:center; }
+
+  /* leaderboard */
+  .lb { border:1px solid var(--line); background:var(--fill); }
+  .lbrow { display:flex; align-items:baseline; gap:6px; padding:5px 8px; font-size:8.2px;
+    border-top:1px solid var(--line); }
+  .lbrow:first-child { border-top:0; }
+  .lbrow.champ { background:rgba(245,196,83,.08); }
+  .lbrow .rk { width:14px; color:var(--ink3); }
+  .lbrow .nm { flex:1; font-weight:700; font-size:9px; white-space:nowrap; overflow:hidden; }
+  .lbrow .st { color:var(--ink2); }
+  .lbsub { padding:0 8px 5px 28px; color:var(--ink3); font-size:7.2px; }
+  .more { padding:4px 8px 6px; color:var(--ink3); font-size:7.2px; border-top:1px solid var(--line); }
+
+  /* live scoreboard */
+  .pcol { flex:1; border:1px solid var(--line); background:var(--fill); padding:8px;
+    display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+  .pcol.throw { border-color:var(--accent); }
+  .pcol .pname { font-weight:800; font-size:9.5px; letter-spacing:.5px; white-space:nowrap; }
+  .pcol .score { font-size:34px; font-weight:800; line-height:1.05; }
+  .pcol .sub { color:var(--ink2); font-size:7.6px; text-align:center; }
+  .slots { display:flex; gap:6px; align-items:center; justify-content:center; }
+  .slot { border:1px solid var(--line); background:var(--bg); min-width:34px; text-align:center;
+    padding:5px 4px; font-weight:800; font-size:11px; }
+  .slot.empty { color:var(--ink3); }
+  .turntotal { font-size:11px; font-weight:800; color:var(--accent); }
+  .marker { color:var(--accent); font-weight:800; }
+
+  /* drawn dartboard — faithful classic render (see §12); one SVG def, reused at any size */
+  .board { position:relative; }
+  .rbsvg { display:block; width:100%; height:100%; }
+  .dart { position:absolute; width:13px; height:13px; margin:-6.5px 0 0 -6.5px;
+    border-radius:50% !important; background:var(--accent); border:1.5px solid #fff;
+    color:#08111f; font-size:7px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; z-index:2;
+    box-shadow:0 0 4px rgba(0,0,0,.6); }
+  .ghost { position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px;
+    border-radius:50% !important; background:var(--ink2); border:1px solid #0a0a0a; opacity:.85; }
+  .missx { position:absolute; color:var(--ink2); font-weight:800; font-size:10px; z-index:2; }
+  .blegend { color:var(--ink3); font-size:7px; text-align:center; }
+  .mdot { position:absolute; width:4px; height:4px; margin:-2px 0 0 -2px;
+    border-radius:50% !important; background:var(--accent); box-shadow:0 0 2px rgba(0,0,0,.7); }
+  .pcol.sm { padding:6px; }
+  .pcol.sm .score { font-size:19px; }
+
+  .foot { max-width:1080px; margin:34px auto 0; font-size:11px; color:#67718a; line-height:1.5; }
+  code { color:#9fb0c9; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="rb"><circle r="128" fill="#111111"/><path d="M-1.46,-9.23 A9.35,9.35 0 0 1 1.46,-9.23 L9.10,-57.48 A58.20,58.20 0 0 0 -9.10,-57.48 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-9.10,-57.48 A58.20,58.20 0 0 1 9.10,-57.48 L9.84,-62.13 A62.90,62.90 0 0 0 -9.84,-62.13 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-9.84,-62.13 A62.90,62.90 0 0 1 9.84,-62.13 L14.91,-94.13 A95.30,95.30 0 0 0 -14.91,-94.13 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-14.91,-94.13 A95.30,95.30 0 0 1 14.91,-94.13 L15.64,-98.77 A100.00,100.00 0 0 0 -15.64,-98.77 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M1.46,-9.23 A9.35,9.35 0 0 1 4.24,-8.33 L26.42,-51.86 A58.20,58.20 0 0 0 9.10,-57.48 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M9.10,-57.48 A58.20,58.20 0 0 1 26.42,-51.86 L28.56,-56.04 A62.90,62.90 0 0 0 9.84,-62.13 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M9.84,-62.13 A62.90,62.90 0 0 1 28.56,-56.04 L43.27,-84.91 A95.30,95.30 0 0 0 14.91,-94.13 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M14.91,-94.13 A95.30,95.30 0 0 1 43.27,-84.91 L45.40,-89.10 A100.00,100.00 0 0 0 15.64,-98.77 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M4.24,-8.33 A9.35,9.35 0 0 1 6.61,-6.61 L41.15,-41.15 A58.20,58.20 0 0 0 26.42,-51.86 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M26.42,-51.86 A58.20,58.20 0 0 1 41.15,-41.15 L44.48,-44.48 A62.90,62.90 0 0 0 28.56,-56.04 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M28.56,-56.04 A62.90,62.90 0 0 1 44.48,-44.48 L67.39,-67.39 A95.30,95.30 0 0 0 43.27,-84.91 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M43.27,-84.91 A95.30,95.30 0 0 1 67.39,-67.39 L70.71,-70.71 A100.00,100.00 0 0 0 45.40,-89.10 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M6.61,-6.61 A9.35,9.35 0 0 1 8.33,-4.24 L51.86,-26.42 A58.20,58.20 0 0 0 41.15,-41.15 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M41.15,-41.15 A58.20,58.20 0 0 1 51.86,-26.42 L56.04,-28.56 A62.90,62.90 0 0 0 44.48,-44.48 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M44.48,-44.48 A62.90,62.90 0 0 1 56.04,-28.56 L84.91,-43.27 A95.30,95.30 0 0 0 67.39,-67.39 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M67.39,-67.39 A95.30,95.30 0 0 1 84.91,-43.27 L89.10,-45.40 A100.00,100.00 0 0 0 70.71,-70.71 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M8.33,-4.24 A9.35,9.35 0 0 1 9.23,-1.46 L57.48,-9.10 A58.20,58.20 0 0 0 51.86,-26.42 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M51.86,-26.42 A58.20,58.20 0 0 1 57.48,-9.10 L62.13,-9.84 A62.90,62.90 0 0 0 56.04,-28.56 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M56.04,-28.56 A62.90,62.90 0 0 1 62.13,-9.84 L94.13,-14.91 A95.30,95.30 0 0 0 84.91,-43.27 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M84.91,-43.27 A95.30,95.30 0 0 1 94.13,-14.91 L98.77,-15.64 A100.00,100.00 0 0 0 89.10,-45.40 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M9.23,-1.46 A9.35,9.35 0 0 1 9.23,1.46 L57.48,9.10 A58.20,58.20 0 0 0 57.48,-9.10 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M57.48,-9.10 A58.20,58.20 0 0 1 57.48,9.10 L62.13,9.84 A62.90,62.90 0 0 0 62.13,-9.84 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M62.13,-9.84 A62.90,62.90 0 0 1 62.13,9.84 L94.13,14.91 A95.30,95.30 0 0 0 94.13,-14.91 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M94.13,-14.91 A95.30,95.30 0 0 1 94.13,14.91 L98.77,15.64 A100.00,100.00 0 0 0 98.77,-15.64 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M9.23,1.46 A9.35,9.35 0 0 1 8.33,4.24 L51.86,26.42 A58.20,58.20 0 0 0 57.48,9.10 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M57.48,9.10 A58.20,58.20 0 0 1 51.86,26.42 L56.04,28.56 A62.90,62.90 0 0 0 62.13,9.84 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M62.13,9.84 A62.90,62.90 0 0 1 56.04,28.56 L84.91,43.27 A95.30,95.30 0 0 0 94.13,14.91 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M94.13,14.91 A95.30,95.30 0 0 1 84.91,43.27 L89.10,45.40 A100.00,100.00 0 0 0 98.77,15.64 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M8.33,4.24 A9.35,9.35 0 0 1 6.61,6.61 L41.15,41.15 A58.20,58.20 0 0 0 51.86,26.42 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M51.86,26.42 A58.20,58.20 0 0 1 41.15,41.15 L44.48,44.48 A62.90,62.90 0 0 0 56.04,28.56 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M56.04,28.56 A62.90,62.90 0 0 1 44.48,44.48 L67.39,67.39 A95.30,95.30 0 0 0 84.91,43.27 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M84.91,43.27 A95.30,95.30 0 0 1 67.39,67.39 L70.71,70.71 A100.00,100.00 0 0 0 89.10,45.40 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M6.61,6.61 A9.35,9.35 0 0 1 4.24,8.33 L26.42,51.86 A58.20,58.20 0 0 0 41.15,41.15 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M41.15,41.15 A58.20,58.20 0 0 1 26.42,51.86 L28.56,56.04 A62.90,62.90 0 0 0 44.48,44.48 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M44.48,44.48 A62.90,62.90 0 0 1 28.56,56.04 L43.27,84.91 A95.30,95.30 0 0 0 67.39,67.39 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M67.39,67.39 A95.30,95.30 0 0 1 43.27,84.91 L45.40,89.10 A100.00,100.00 0 0 0 70.71,70.71 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M4.24,8.33 A9.35,9.35 0 0 1 1.46,9.23 L9.10,57.48 A58.20,58.20 0 0 0 26.42,51.86 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M26.42,51.86 A58.20,58.20 0 0 1 9.10,57.48 L9.84,62.13 A62.90,62.90 0 0 0 28.56,56.04 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M28.56,56.04 A62.90,62.90 0 0 1 9.84,62.13 L14.91,94.13 A95.30,95.30 0 0 0 43.27,84.91 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M43.27,84.91 A95.30,95.30 0 0 1 14.91,94.13 L15.64,98.77 A100.00,100.00 0 0 0 45.40,89.10 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M1.46,9.23 A9.35,9.35 0 0 1 -1.46,9.23 L-9.10,57.48 A58.20,58.20 0 0 0 9.10,57.48 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M9.10,57.48 A58.20,58.20 0 0 1 -9.10,57.48 L-9.84,62.13 A62.90,62.90 0 0 0 9.84,62.13 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M9.84,62.13 A62.90,62.90 0 0 1 -9.84,62.13 L-14.91,94.13 A95.30,95.30 0 0 0 14.91,94.13 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M14.91,94.13 A95.30,95.30 0 0 1 -14.91,94.13 L-15.64,98.77 A100.00,100.00 0 0 0 15.64,98.77 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-1.46,9.23 A9.35,9.35 0 0 1 -4.24,8.33 L-26.42,51.86 A58.20,58.20 0 0 0 -9.10,57.48 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-9.10,57.48 A58.20,58.20 0 0 1 -26.42,51.86 L-28.56,56.04 A62.90,62.90 0 0 0 -9.84,62.13 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-9.84,62.13 A62.90,62.90 0 0 1 -28.56,56.04 L-43.27,84.91 A95.30,95.30 0 0 0 -14.91,94.13 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-14.91,94.13 A95.30,95.30 0 0 1 -43.27,84.91 L-45.40,89.10 A100.00,100.00 0 0 0 -15.64,98.77 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-4.24,8.33 A9.35,9.35 0 0 1 -6.61,6.61 L-41.15,41.15 A58.20,58.20 0 0 0 -26.42,51.86 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-26.42,51.86 A58.20,58.20 0 0 1 -41.15,41.15 L-44.48,44.48 A62.90,62.90 0 0 0 -28.56,56.04 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-28.56,56.04 A62.90,62.90 0 0 1 -44.48,44.48 L-67.39,67.39 A95.30,95.30 0 0 0 -43.27,84.91 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-43.27,84.91 A95.30,95.30 0 0 1 -67.39,67.39 L-70.71,70.71 A100.00,100.00 0 0 0 -45.40,89.10 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-6.61,6.61 A9.35,9.35 0 0 1 -8.33,4.24 L-51.86,26.42 A58.20,58.20 0 0 0 -41.15,41.15 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-41.15,41.15 A58.20,58.20 0 0 1 -51.86,26.42 L-56.04,28.56 A62.90,62.90 0 0 0 -44.48,44.48 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-44.48,44.48 A62.90,62.90 0 0 1 -56.04,28.56 L-84.91,43.27 A95.30,95.30 0 0 0 -67.39,67.39 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-67.39,67.39 A95.30,95.30 0 0 1 -84.91,43.27 L-89.10,45.40 A100.00,100.00 0 0 0 -70.71,70.71 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-8.33,4.24 A9.35,9.35 0 0 1 -9.23,1.46 L-57.48,9.10 A58.20,58.20 0 0 0 -51.86,26.42 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-51.86,26.42 A58.20,58.20 0 0 1 -57.48,9.10 L-62.13,9.84 A62.90,62.90 0 0 0 -56.04,28.56 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-56.04,28.56 A62.90,62.90 0 0 1 -62.13,9.84 L-94.13,14.91 A95.30,95.30 0 0 0 -84.91,43.27 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-84.91,43.27 A95.30,95.30 0 0 1 -94.13,14.91 L-98.77,15.64 A100.00,100.00 0 0 0 -89.10,45.40 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-9.23,1.46 A9.35,9.35 0 0 1 -9.23,-1.46 L-57.48,-9.10 A58.20,58.20 0 0 0 -57.48,9.10 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-57.48,9.10 A58.20,58.20 0 0 1 -57.48,-9.10 L-62.13,-9.84 A62.90,62.90 0 0 0 -62.13,9.84 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-62.13,9.84 A62.90,62.90 0 0 1 -62.13,-9.84 L-94.13,-14.91 A95.30,95.30 0 0 0 -94.13,14.91 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-94.13,14.91 A95.30,95.30 0 0 1 -94.13,-14.91 L-98.77,-15.64 A100.00,100.00 0 0 0 -98.77,15.64 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-9.23,-1.46 A9.35,9.35 0 0 1 -8.33,-4.24 L-51.86,-26.42 A58.20,58.20 0 0 0 -57.48,-9.10 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-57.48,-9.10 A58.20,58.20 0 0 1 -51.86,-26.42 L-56.04,-28.56 A62.90,62.90 0 0 0 -62.13,-9.84 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-62.13,-9.84 A62.90,62.90 0 0 1 -56.04,-28.56 L-84.91,-43.27 A95.30,95.30 0 0 0 -94.13,-14.91 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-94.13,-14.91 A95.30,95.30 0 0 1 -84.91,-43.27 L-89.10,-45.40 A100.00,100.00 0 0 0 -98.77,-15.64 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-8.33,-4.24 A9.35,9.35 0 0 1 -6.61,-6.61 L-41.15,-41.15 A58.20,58.20 0 0 0 -51.86,-26.42 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-51.86,-26.42 A58.20,58.20 0 0 1 -41.15,-41.15 L-44.48,-44.48 A62.90,62.90 0 0 0 -56.04,-28.56 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-56.04,-28.56 A62.90,62.90 0 0 1 -44.48,-44.48 L-67.39,-67.39 A95.30,95.30 0 0 0 -84.91,-43.27 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-84.91,-43.27 A95.30,95.30 0 0 1 -67.39,-67.39 L-70.71,-70.71 A100.00,100.00 0 0 0 -89.10,-45.40 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-6.61,-6.61 A9.35,9.35 0 0 1 -4.24,-8.33 L-26.42,-51.86 A58.20,58.20 0 0 0 -41.15,-41.15 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-41.15,-41.15 A58.20,58.20 0 0 1 -26.42,-51.86 L-28.56,-56.04 A62.90,62.90 0 0 0 -44.48,-44.48 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-44.48,-44.48 A62.90,62.90 0 0 1 -28.56,-56.04 L-43.27,-84.91 A95.30,95.30 0 0 0 -67.39,-67.39 Z" fill="#161616" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-67.39,-67.39 A95.30,95.30 0 0 1 -43.27,-84.91 L-45.40,-89.10 A100.00,100.00 0 0 0 -70.71,-70.71 Z" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-4.24,-8.33 A9.35,9.35 0 0 1 -1.46,-9.23 L-9.10,-57.48 A58.20,58.20 0 0 0 -26.42,-51.86 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-26.42,-51.86 A58.20,58.20 0 0 1 -9.10,-57.48 L-9.84,-62.13 A62.90,62.90 0 0 0 -28.56,-56.04 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-28.56,-56.04 A62.90,62.90 0 0 1 -9.84,-62.13 L-14.91,-94.13 A95.30,95.30 0 0 0 -43.27,-84.91 Z" fill="#F2ECD8" stroke="#0a0a0a" stroke-width="0.7"/><path d="M-43.27,-84.91 A95.30,95.30 0 0 1 -14.91,-94.13 L-15.64,-98.77 A100.00,100.00 0 0 0 -45.40,-89.10 Z" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><circle r="9.35" fill="#3E9B5F" stroke="#0a0a0a" stroke-width="0.7"/><circle r="3.7" fill="#D64541" stroke="#0a0a0a" stroke-width="0.7"/><circle r="100" fill="none" stroke="#0a0a0a" stroke-width="1"/><text x="0.0" y="-114.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(0 0.0 -114.0)">20</text><text x="35.2" y="-108.4" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(18 35.2 -108.4)">1</text><text x="67.0" y="-92.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(36 67.0 -92.2)">18</text><text x="92.2" y="-67.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(54 92.2 -67.0)">4</text><text x="108.4" y="-35.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(72 108.4 -35.2)">13</text><text x="114.0" y="-0.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(90 114.0 -0.0)">6</text><text x="108.4" y="35.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(108 108.4 35.2)">10</text><text x="92.2" y="67.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(126 92.2 67.0)">15</text><text x="67.0" y="92.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(144 67.0 92.2)">2</text><text x="35.2" y="108.4" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(162 35.2 108.4)">17</text><text x="0.0" y="114.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(180 0.0 114.0)">3</text><text x="-35.2" y="108.4" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(198 -35.2 108.4)">19</text><text x="-67.0" y="92.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(216 -67.0 92.2)">7</text><text x="-92.2" y="67.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(234 -92.2 67.0)">16</text><text x="-108.4" y="35.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(252 -108.4 35.2)">8</text><text x="-114.0" y="0.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(270 -114.0 0.0)">11</text><text x="-108.4" y="-35.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(288 -108.4 -35.2)">14</text><text x="-92.2" y="-67.0" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(306 -92.2 -67.0)">9</text><text x="-67.0" y="-92.2" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(324 -67.0 -92.2)">12</text><text x="-35.2" y="-108.4" fill="#F2F7FF" font-size="13" font-weight="600" font-family="inherit" text-anchor="middle" dominant-baseline="central" transform="rotate(342 -35.2 -108.4)">5</text></g></defs></svg>
+
+<div class="head">
+  <h1>Autodarts — hand-off wireframes</h1>
+  <p>Illustrative companions to <code>autodarts-requirements.md</code> §13, which stays normative for
+  placement. Colors are the real product tokens — the admin frame uses <code>src/web/admin/styles.css</code>,
+  display frames use the client's <code>design_system.py</code>. Gold is achievement-only (crown, leader row,
+  180s, records); the coral LIVE chip is the only alert-colored element and appears only during a real match.
+  Sample data mirrors the household board: TRASHPANDA, WAR D, KYLIE, TOMMY.</p>
+  <div class="legend">
+    <span><i style="background:#0f172a;border:1px solid #263450"></i>Admin surface</span>
+    <span><i style="background:#0B1730;border:1px solid #264060"></i>Display surface</span>
+    <span><i style="background:#5FD0FF"></i>Display accent</span>
+    <span><i style="background:#F5C453"></i>Achievement gold</span>
+    <span><i style="background:#FF7A6B"></i>LIVE</span>
+  </div>
+</div>
+
+<div class="gallery">
+
+  <!-- 13.1 Admin settings card -->
+  <figure class="wf">
+    <figcaption><b>13.1</b> · Admin — Settings card (link, board, live, dashboard, archive)</figcaption>
+    <div class="admin"><div class="card">
+      <h4>Autodarts</h4>
+      <div class="lbl">Account</div>
+      <div class="rowf" style="justify-content:space-between">
+        <span>Linked as <b>TRASHPANDA</b></span>
+        <span class="rowf"><span class="btn">Re-link</span><span class="btn">Unlink</span></span>
+      </div>
+      <div class="dimtx" style="margin-top:6px;font-size:9.5px">Unlinked state:</div>
+      <div class="rowf" style="margin-top:4px"><span class="code">4F7-K2</span>
+        <span class="btn pri" style="flex:1">Open autodarts.io to approve</span></div>
+      <div class="lbl">Board</div>
+      <div class="rowf"><span class="field" style="flex:1">Game Room ▾</span>
+        <span><span class="dot"></span>online</span></div>
+      <div class="lbl">Live match</div>
+      <div class="rowf" style="justify-content:space-between">
+        <span>Auto-push to display</span><span class="toggle"></span></div>
+      <div class="rowf" style="margin-top:6px">inactivity
+        <span class="seg"><span>5</span><span>10</span><b>15</b><span>30</span><span>60</span></span> min</div>
+      <div class="rowf" style="margin-top:8px">final card hold
+        <span class="slider" style="--x:22%"><i style="width:24%"></i></span> 60s</div>
+      <div class="lbl">Dashboard</div>
+      <div class="rowf">leaderboard size <span class="field" style="padding:3px 8px">8</span></div>
+      <div class="rowf" style="margin-top:8px">on screen
+        <span class="slider" style="--x:35%"><i style="width:37%"></i></span> 120s</div>
+      <div class="lbl">Archive</div>
+      <div class="dimtx" style="font-size:10px">412 matches · last sync 2h ago</div>
+      <div class="rowf" style="margin-top:6px"><span class="btn">Sync history</span><span class="btn">Test</span>
+        <span class="okline">✓ board online</span></div>
+    </div></div>
+  </figure>
+
+  <!-- 13.2 Dashboard portrait -->
+  <figure class="wf">
+    <figcaption><b>13.2</b> · Display — dashboard, portrait (1080×1920)</figcaption>
+    <div class="disp portrait">
+      <div class="dhead"><span class="t">◷ 8:41</span><span class="pill">autodarts</span><span class="t">SAT</span></div>
+      <div class="dbody">
+        <div class="counters">
+          <div><b>412</b><span>MATCHES</span></div>
+          <div><b>1,204</b><span>LEGS</span></div>
+          <div><b>18</b><span>THIS MO</span></div>
+          <div><b>2d</b><span>LAST</span></div>
+        </div>
+        <div class="lb">
+          <div class="ptitle" style="padding:6px 8px 0">BOARD LEADERBOARD</div>
+          <div class="lbrow champ"><span class="rk gold">👑</span><span class="nm">TRASHPANDA</span>
+            <span class="st"><b>23-14</b> · 62%</span></div>
+          <div class="lbsub">X01 avg 25.0 · hi 48 · <span class="gold">180: 0</span> · 37 matches</div>
+          <div class="lbrow"><span class="rk">2</span><span class="nm">WAR D</span>
+            <span class="st"><b>14-23</b> · 38%</span></div>
+          <div class="lbsub">X01 avg 20.9 · hi 40 · 37 matches</div>
+          <div class="lbrow"><span class="rk">3</span><span class="nm">KYLIE</span>
+            <span class="st"><b>3-2</b> · 60%</span></div>
+          <div class="lbrow"><span class="rk">4</span><span class="nm">TOMMY</span>
+            <span class="st"><b>1-4</b> · 20%</span></div>
+          <div class="more">+ 3 more players</div>
+        </div>
+        <div class="panel">
+          <div class="ptitle">MATCHES PER MONTH</div>
+          <div class="mchart"><i style="height:30%"></i><i style="height:52%"></i><i style="height:38%"></i><i style="height:72%"></i><i style="height:46%"></i><i style="height:60%"></i><i style="height:26%"></i><i style="height:84%"></i><i style="height:40%"></i><i style="height:55%"></i><i style="height:68%"></i><i class="g" style="height:100%"></i></div>
+          <div class="mlabels"><span>S</span><span>O</span><span>N</span><span>D</span><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span></div>
+        </div>
+        <div class="panel">
+          <div class="ptitle">RIVALRY</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:9px">TRASHPANDA</b><b style="font-size:12px">23 — 14</b><b style="font-size:9px">WAR D</b>
+          </div>
+          <div class="metal" style="margin-top:3px">last: TRASHPANDA won · Aug 1</div>
+        </div>
+        <div class="panel" style="display:flex;justify-content:space-between;align-items:baseline">
+          <span class="ptitle" style="margin:0">RECORDS</span>
+          <span class="metal">best avg 36.3 · hi 48</span>
+          <span class="gold" style="font-size:11px">180s: 0</span>
+        </div>
+      </div>
+      <div class="dfoot">Dismisses in 92s <span class="rail"><i></i></span></div>
+    </div>
+  </figure>
+
+  <!-- 13.3 Dashboard landscape -->
+  <figure class="wf">
+    <figcaption><b>13.3</b> · Display — dashboard, landscape (1920×1080)</figcaption>
+    <div class="disp landscape">
+      <div class="dhead"><span class="t">◷ 8:41</span><span class="pill">autodarts</span><span class="t">SAT</span></div>
+      <div class="dbody" style="flex-direction:row">
+        <div style="width:55%;min-width:0">
+          <div class="lb">
+            <div class="ptitle" style="padding:6px 8px 0">BOARD LEADERBOARD</div>
+            <div class="lbrow champ"><span class="rk gold">👑</span><span class="nm">TRASHPANDA</span>
+              <span class="st">23-14 · 62% · avg 25.0</span></div>
+            <div class="lbsub">hi 48 · <span class="gold">180: 0</span> · 37 matches</div>
+            <div class="lbrow"><span class="rk">2</span><span class="nm">WAR D</span>
+              <span class="st">14-23 · 38% · avg 20.9</span></div>
+            <div class="lbrow"><span class="rk">3</span><span class="nm">KYLIE</span>
+              <span class="st">3-2 · 60% · avg 18.4</span></div>
+            <div class="lbrow"><span class="rk">4</span><span class="nm">TOMMY</span>
+              <span class="st">1-4 · 20% · avg 15.1</span></div>
+            <div class="more">+ 3 more players</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+          <div class="counters">
+            <div><b>412</b><span>MATCHES</span></div>
+            <div><b>1,204</b><span>LEGS</span></div>
+            <div><b>18</b><span>THIS MO</span></div>
+            <div><b>2d</b><span>LAST</span></div>
+          </div>
+          <div class="panel">
+            <div class="ptitle">MATCHES PER MONTH</div>
+            <div class="mchart" style="height:30px"><i style="height:30%"></i><i style="height:52%"></i><i style="height:38%"></i><i style="height:72%"></i><i style="height:46%"></i><i style="height:60%"></i><i style="height:26%"></i><i style="height:84%"></i><i style="height:40%"></i><i style="height:55%"></i><i style="height:68%"></i><i class="g" style="height:100%"></i></div>
+          </div>
+          <div class="panel" style="display:flex;justify-content:space-between;align-items:baseline">
+            <span class="ptitle" style="margin:0">RIVALRY</span>
+            <span style="font-size:8.4px"><b>TRASHPANDA</b> 23 — 14 <b>WAR D</b></span>
+          </div>
+          <div class="panel" style="display:flex;justify-content:space-between;align-items:baseline">
+            <span class="ptitle" style="margin:0">RECORDS</span>
+            <span class="metal">avg 36.3 · hi 48</span>
+            <span class="gold">180s: 0</span>
+          </div>
+        </div>
+      </div>
+      <div class="dfoot">Dismisses in 92s <span class="rail"><i></i></span></div>
+    </div>
+  </figure>
+
+  <!-- 13.4 Live portrait -->
+  <figure class="wf">
+    <figcaption><b>13.4</b> · Display — live match, portrait (board centerpiece, full-height spread)</figcaption>
+    <div class="disp portrait">
+      <div class="dhead"><span class="t">◷ 8:41</span><span class="pill">autodarts</span><span class="live">LIVE</span></div>
+      <div class="dbody" style="justify-content:space-between;padding-bottom:9px">
+        <div class="metal" style="text-align:center">501 · SI-DO · First to 2 legs · 6m52</div>
+        <div style="display:flex;gap:7px">
+          <div class="pcol sm throw">
+            <div class="pname"><span class="marker">▶</span> TRASHPANDA</div>
+            <div class="score" style="font-size:23px">261</div>
+            <div class="sub">legs <span class="gold">👑 1</span> · avg 25.03</div>
+          </div>
+          <div class="pcol sm">
+            <div class="pname">WAR D</div>
+            <div class="score" style="font-size:23px">356</div>
+            <div class="sub">legs 0 · avg 20.89</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+          <div class="board" style="width:212px;height:212px">
+            <svg class="rbsvg" viewBox="-128 -128 256 256"><use href="#rb"/></svg>
+            <span class="dart" style="left:50%;top:26.4%">1</span>
+            <span class="dart" style="left:40.5%;top:20.7%">2</span>
+            <span class="ghost" style="left:50%;top:18.8%"></span>
+            <span class="ghost" style="left:59.7%;top:20.3%"></span>
+            <span class="missx" style="left:88%;top:33%">✕</span>
+          </div>
+          <div class="blegend">① ② this turn · ∘ last turn · ✕ miss</div>
+        </div>
+        <div class="panel">
+          <div class="ptitle">THIS TURN</div>
+          <div class="slots">
+            <span class="slot">T20</span><span class="slot">5</span><span class="slot empty">—</span>
+            <span class="turntotal">= 65</span>
+          </div>
+        </div>
+        <div class="metal" style="text-align:center;color:var(--ink3)">persistent · resumes after interruptions</div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- 13.5 Live landscape -->
+  <figure class="wf">
+    <figcaption><b>13.5</b> · Display — live match, landscape (player · board · player)</figcaption>
+    <div class="disp landscape">
+      <div class="dhead"><span class="t">◷ 8:41</span><span class="pill">autodarts</span><span class="live">LIVE</span></div>
+      <div class="dbody" style="padding-bottom:8px">
+        <div class="metal" style="text-align:center">501 · SI-DO · First to 2 legs · 6m52</div>
+        <div style="display:flex;gap:7px;flex:1;min-height:0;align-items:stretch">
+          <div class="pcol throw" style="justify-content:center">
+            <div class="pname"><span class="marker">▶</span> TRASHPANDA</div>
+            <div class="score" style="font-size:32px">261</div>
+            <div class="sub">legs <span class="gold">👑 1</span></div>
+            <div class="sub">avg 25.03 · last 85</div>
+          </div>
+          <div style="flex:1.2;display:flex;flex-direction:column;align-items:center;justify-content:space-between;min-width:0;padding:2px 0">
+            <div class="board" style="width:152px;height:152px">
+              <svg class="rbsvg" viewBox="-128 -128 256 256"><use href="#rb"/></svg>
+              <span class="dart" style="left:50%;top:26.4%">1</span>
+              <span class="dart" style="left:40.5%;top:20.7%">2</span>
+              <span class="ghost" style="left:50%;top:18.8%"></span>
+              <span class="ghost" style="left:59.7%;top:20.3%"></span>
+              <span class="missx" style="left:88%;top:33%">✕</span>
+            </div>
+            <div class="slots"><span class="slot">T20</span><span class="slot">5</span>
+              <span class="slot empty">—</span><span class="turntotal">= 65</span></div>
+          </div>
+          <div class="pcol" style="justify-content:center">
+            <div class="pname">WAR D</div>
+            <div class="score" style="font-size:32px">356</div>
+            <div class="sub">legs 0</div>
+            <div class="sub">avg 20.89 · last 41</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <!-- 13.6 Final card portrait -->
+  <figure class="wf">
+    <figcaption><b>13.6</b> · Display — final card, with the match hit-map (also the last-match card)</figcaption>
+    <div class="disp portrait" style="height:368px">
+      <div class="dhead"><span class="t">◷ 8:52</span><span class="pill">autodarts</span><span class="final">FINAL</span></div>
+      <div class="dbody" style="justify-content:space-between;padding-bottom:2px">
+        <div class="metal" style="text-align:center">501 · SI-DO · 10m38s</div>
+        <div style="display:flex;gap:7px;align-items:stretch">
+          <div class="pcol sm" style="border-color:var(--gold)">
+            <div class="pname"><span class="gold">👑</span> TRASHPANDA</div>
+            <div class="score" style="font-size:22px">2</div>
+            <div class="sub">avg 25.03 · co 14%</div>
+          </div>
+          <div class="pcol sm">
+            <div class="pname">WAR D</div>
+            <div class="score" style="font-size:22px">0</div>
+            <div class="sub">avg 20.89 · co 0%</div>
+          </div>
+        </div>
+        <div class="panel" style="text-align:center">
+          <span class="gold" style="font-size:11px;letter-spacing:1px">GAME SHOT — D8</span>
+        </div>
+        <div class="panel">
+          <div class="ptitle">MATCH HIT-MAP</div>
+          <div style="display:flex;justify-content:space-evenly;align-items:flex-end">
+            <div style="text-align:center">
+              <div class="board" style="width:72px;height:72px;display:inline-block">
+                <svg class="rbsvg" viewBox="-128 -128 256 256"><use href="#rb"/></svg>
+                <span class="mdot" style="left:51%;top:30%"></span><span class="mdot" style="left:45%;top:36%"></span>
+                <span class="mdot" style="left:57%;top:39%"></span><span class="mdot" style="left:40%;top:48%"></span>
+                <span class="mdot" style="left:50%;top:55%"></span><span class="mdot" style="left:61%;top:58%"></span>
+                <span class="mdot" style="left:35%;top:62%"></span><span class="mdot" style="left:47%;top:69%"></span>
+              </div>
+              <div class="metal" style="font-size:7px">TRASHPANDA</div>
+            </div>
+            <div style="text-align:center">
+              <div class="board" style="width:72px;height:72px;display:inline-block">
+                <svg class="rbsvg" viewBox="-128 -128 256 256"><use href="#rb"/></svg>
+                <span class="mdot" style="left:47%;top:33%"></span><span class="mdot" style="left:58%;top:42%"></span>
+                <span class="mdot" style="left:37%;top:47%"></span><span class="mdot" style="left:55%;top:57%"></span>
+                <span class="mdot" style="left:43%;top:64%"></span><span class="mdot" style="left:63%;top:67%"></span>
+              </div>
+              <div class="metal" style="font-size:7px">WAR D</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dfoot">Dismisses in 60s <span class="rail"><i style="right:60%"></i></span></div>
+    </div>
+  </figure>
+
+</div>
+
+<div class="foot">
+  Not shown as visuals: the 3–4 player live layout (compact rows, thrower highlighted — §11.2) and the
+  generic non-X01 variant layout; their §13/§11 text plus these frames fully specify them. Proportions
+  are approximate; display geometry comes from <code>design_u</code> / <code>page_chrome()</code> per §12. The board here is a true mini render — real wedge geometry, per-segment red/green alternation, white numbers ring — the same construction the client draws at full fidelity per §12.
+</div>
+
+</body>
+</html>
