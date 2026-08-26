@@ -299,6 +299,40 @@ function createDisplayRegistry(config, log = console, { staticEntries = null } =
   }
 
   /**
+   * IPs of announced Windows clients. Boards have no overlay port, so they
+   * never belong on this list — Vestaboard traffic is HTTP from the hub.
+   */
+  function registeredUdpHosts() {
+    return [...new Set(
+      list({ skipPrune: true })
+        .filter((entry) => !entry.static && entry.kind !== 'vestaboard')
+        .map((entry) => String(entry.host || '').trim())
+        .filter(Boolean),
+    )];
+  }
+
+  /**
+   * Lounge / Steam / PSN auto-pushes call sendUdpPayload with no host. A
+   * broadcast-only send often never reaches the poster PC (the same LAN
+   * failure that made scheduler "all" look broken), while the board still
+   * flips because it is local HTTP. Fill in registered unicast hosts unless
+   * the caller already named one.
+   */
+  function withRegisteredUdpHosts(options = {}) {
+    const hasHost = Boolean(String(options.host || '').trim());
+    const hasHosts = Array.isArray(options.hosts)
+      && options.hosts.some((host) => String(host || '').trim());
+    if (hasHost || hasHosts) {
+      return options;
+    }
+    const hosts = registeredUdpHosts();
+    if (!hosts.length) {
+      return options;
+    }
+    return { ...options, hosts };
+  }
+
+  /**
    * Resolve control-page targetId to UDP delivery options + payload target block.
    * @param {string|null|undefined} targetId - display id, "*", "all", or empty (= all)
    */
@@ -310,11 +344,7 @@ function createDisplayRegistry(config, log = console, { staticEntries = null } =
       // often never reaches a poster PC on real LANs / Docker host networking,
       // while the Push tab's selected-display unicast does — so "Air now" looked
       // broken for scheduler rules that fan out to "all".
-      const hosts = [...new Set(
-        list({ skipPrune: true })
-          .map((entry) => String(entry.host || '').trim())
-          .filter(Boolean),
-      )];
+      const hosts = registeredUdpHosts();
       return {
         target: { all: true },
         sendOptions: hosts.length ? { hosts, targetId: 'all' } : { targetId: 'all' },
@@ -327,11 +357,7 @@ function createDisplayRegistry(config, log = console, { staticEntries = null } =
     if (className === 'full') {
       // UDP to every Windows client, never to a board. Same host list as
       // "all" because boards have no IP; the targetId is what the router uses.
-      const hosts = [...new Set(
-        list({ skipPrune: true })
-          .map((entry) => String(entry.host || '').trim())
-          .filter(Boolean),
-      )];
+      const hosts = registeredUdpHosts();
       return {
         target: { all: true, class: 'full' },
         sendOptions: hosts.length ? { hosts, targetId: 'full' } : { targetId: 'full' },
@@ -414,6 +440,8 @@ function createDisplayRegistry(config, log = console, { staticEntries = null } =
     pruneNotSeenSince,
     scheduleDiscoverSweep,
     resolveDelivery,
+    registeredUdpHosts,
+    withRegisteredUdpHosts,
     persist,
     announce,
     onChange,
