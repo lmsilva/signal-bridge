@@ -14,7 +14,7 @@ const WS_URL = DEFAULT_WS_URL || 'wss://play.ws.autodarts.com/ms/v0/subscribe';
 const STATS_RETRY_MS = Object.freeze([45_000, 90_000, 180_000, 300_000]);
 const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 60_000;
-const BOARD_POLL_MS = 20_000;
+const BOARD_POLL_MS = 60_000;
 
 function resolveWebSocketImpl(explicit) {
   // Tests pass `null` to disable sockets; omit / undefined → auto-detect.
@@ -234,6 +234,7 @@ function createAutodartsLive({
   payload,
   sendUdpPayload,
   displayBusy = null,
+  rateLimit = null,
   log = console,
   now = () => Date.now(),
   WebSocketImpl,
@@ -687,11 +688,17 @@ function createAutodartsLive({
       || null;
   }
 
+  function wsConnected() {
+    return Boolean(socket && socket.readyState === 1);
+  }
+
   async function pollBoardForMatch() {
     if (!started) return;
+    if (wsConnected()) return;
+    if (rateLimit?.isPaused?.()) return;
     const boardId = credentials.load()?.boardId;
     if (!boardId || !api?.getBoardState) return;
-    // WS is primary; polling only fills gaps when we have no live match yet.
+    // WS is primary; polling only fills gaps when the socket is down.
     if (match?.status === 'live' && phase === 'live') return;
     try {
       const result = await api.getBoardState(boardId);
@@ -714,12 +721,23 @@ function createAutodartsLive({
 
   function scheduleBoardPoll() {
     clearTimer(boardPollTimer);
+    boardPollTimer = null;
+    if (!started || wsConnected()) return;
     boardPollTimer = setInterval(() => {
+      if (wsConnected()) {
+        clearTimer(boardPollTimer);
+        boardPollTimer = null;
+        return;
+      }
       pollBoardForMatch().catch(() => {});
     }, BOARD_POLL_MS);
     if (typeof boardPollTimer.unref === 'function') boardPollTimer.unref();
-    // Immediate check after connect / start.
     pollBoardForMatch().catch(() => {});
+  }
+
+  function stopBoardPoll() {
+    clearTimer(boardPollTimer);
+    boardPollTimer = null;
   }
 
   function handleWsMessage(raw) {
@@ -894,10 +912,10 @@ function createAutodartsLive({
   function onOpen() {
     reconnectAttempt = 0;
     unavailableReason = null;
+    stopBoardPoll();
     const boardId = credentials.load().boardId;
     if (boardId) subscribeBoard(boardId);
     if (match?.matchId && match.status === 'live') subscribeMatch(match.matchId);
-    scheduleBoardPoll();
     log?.info?.('Autodarts live WebSocket connected', { url: WS_URL });
   }
 
@@ -905,11 +923,23 @@ function createAutodartsLive({
     socket = null;
     if (!started) return;
     unavailableReason = unavailableReason || 'Autodarts subscription closed';
+    scheduleBoardPoll();
     scheduleReconnect();
   }
 
   function scheduleReconnect() {
     clearTimer(reconnectTimer);
+    if (rateLimit?.isPaused?.()) {
+      const waitMs = Math.max(5_000, (rateLimit.snapshot()?.pausedUntil
+        ? Date.parse(rateLimit.snapshot().pausedUntil) - now()
+        : RECONNECT_MAX_MS));
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        scheduleReconnect();
+      }, Math.min(RECONNECT_MAX_MS, waitMs));
+      if (typeof reconnectTimer.unref === 'function') reconnectTimer.unref();
+      return;
+    }
     const delay = Math.min(
       RECONNECT_MAX_MS,
       RECONNECT_BASE_MS * (2 ** Math.min(reconnectAttempt, 5)),
@@ -930,7 +960,6 @@ function createAutodartsLive({
     connect().catch((error) => {
       unavailableReason = error?.message || String(error);
     });
-    scheduleBoardPoll();
   }
 
   function stop() {

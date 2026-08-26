@@ -6,6 +6,7 @@ const { createAutodartsSettings } = require('./autodarts-settings');
 const { createAutodartsCredentials } = require('./autodarts-credentials');
 const { createAutodartsApi } = require('./autodarts-api');
 const { createAutodartsAuth } = require('./autodarts-auth');
+const { createAutodartsRateLimit } = require('./autodarts-rate-limit');
 const { createAutodartsArchive } = require('./autodarts-archive');
 const { createAutodartsAggregates } = require('./autodarts-aggregates');
 const { createAutodartsHistory } = require('./autodarts-history');
@@ -21,10 +22,12 @@ function createAutodartsService({
 } = {}) {
   const settings = dependencies.settings || createAutodartsSettings(config, log);
   const credentials = dependencies.credentials || createAutodartsCredentials(config);
+  const rateLimit = dependencies.rateLimit || createAutodartsRateLimit({ log });
   const authRef = { current: null };
   const api = dependencies.api || createAutodartsApi({
     fetchImpl: dependencies.fetchImpl || global.fetch,
     accessTokenProvider: async () => authRef.current.getAccessToken(),
+    rateLimit,
     clientId: process.env.AUTODARTS_CLIENT_ID,
     clientSecret: process.env.AUTODARTS_CLIENT_SECRET || '',
     log,
@@ -32,6 +35,7 @@ function createAutodartsService({
   const auth = dependencies.auth || createAutodartsAuth({
     credentials,
     api,
+    rateLimit,
     env: config.env || process.env,
     log,
   });
@@ -51,6 +55,7 @@ function createAutodartsService({
     aggregates,
     api,
     settings,
+    rateLimit,
     log,
   });
   const payload = dependencies.payload || createAutodartsPayload({
@@ -68,6 +73,7 @@ function createAutodartsService({
     payload,
     sendUdpPayload,
     displayBusy,
+    rateLimit,
     log,
     WebSocketImpl: dependencies.WebSocketImpl,
   });
@@ -81,6 +87,7 @@ function createAutodartsService({
       oauth: credentials.oauthStatus(),
       live: liveStatus,
       settings: settings.get(),
+      rateLimit: rateLimit.snapshot(),
       archive: {
         count: archive.count(),
         ...historyStatus,
@@ -314,6 +321,7 @@ function createAutodartsService({
     credentials,
     auth,
     api,
+    rateLimit,
     archive,
     aggregates,
     history,

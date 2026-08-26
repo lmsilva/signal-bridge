@@ -4259,13 +4259,18 @@
     const detail = $('autodarts-status-detail');
     const linked = Boolean(status.linked);
     const needsRelink = Boolean(status.needsRelink);
+    const ratePaused = Boolean(status.rateLimit?.paused || status.archive?.rateLimit?.paused);
     if (pill) {
-      pill.textContent = needsRelink ? 'Re-link needed' : (linked ? 'Linked' : 'Not linked');
-      pill.className = `status-pill${needsRelink ? ' bad' : (linked ? ' good' : '')}`;
+      pill.textContent = needsRelink ? 'Re-link needed' : (ratePaused ? 'Cloud paused' : (linked ? 'Linked' : 'Not linked'));
+      pill.className = `status-pill${needsRelink || ratePaused ? ' bad' : (linked ? ' good' : '')}`;
     }
     if (detail) {
       if (needsRelink) {
         detail.textContent = status.unavailableReason || 'Re-link Autodarts in Settings';
+      } else if (ratePaused) {
+        detail.textContent = status.rateLimit?.reason
+          || status.archive?.rateLimit?.reason
+          || 'Autodarts cloud is rate-limited — waiting before retrying';
       } else if (linked) {
         detail.textContent = `Linked as ${status.userName || status.userId || 'account'}`
           + (status.boardName ? ` · board ${status.boardName}` : '');
@@ -4323,10 +4328,13 @@
     const syncBtn = $('btn-autodarts-sync');
     if (syncBtn) {
       const syncReady = archive.enabled !== false;
-      syncBtn.disabled = !syncReady || archive.running === true;
-      syncBtn.title = syncReady
-        ? 'Pull Match History from Autodarts (local archive is the offline cache)'
-        : 'History sync is disabled in settings';
+      const ratePaused = Boolean(status.rateLimit?.paused || archive.rateLimit?.paused);
+      syncBtn.disabled = !syncReady || archive.running === true || ratePaused;
+      syncBtn.title = ratePaused
+        ? 'Autodarts cloud is rate-limited — wait for the cooldown before syncing again'
+        : (syncReady
+          ? 'Pull Match History from Autodarts (local archive is the offline cache)'
+          : 'History sync is disabled in settings');
     }
     const boardStatus = $('autodarts-board-status');
     if (boardStatus) {
