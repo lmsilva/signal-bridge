@@ -88,6 +88,9 @@ function createYoutubeLounge({
         deviceId,
         provisional: null,
         provisionalSince: null,
+        // Which provisional video we have already reported as held, so the 2s
+        // confirm retry logs once rather than forever.
+        confirmBlockedFor: null,
         confirmTimer: null,
         stopTimer: null,
         active: null,
@@ -466,11 +469,22 @@ function createYoutubeLounge({
     // Apple TV also parks in Stopped between sparse Playing ticks — retry soon.
     // Buffering/Starting count as confirmable; only true Stopped/Paused/Ad wait.
     if (device.adPlaying || !CONFIRMABLE_STATES.has(device.state)) {
+      // Said once per video, not every 2s: a provisional that never confirms is
+      // invisible otherwise — no push, no history, no warning, just silence.
+      if (device.confirmBlockedFor !== device.provisional) {
+        device.confirmBlockedFor = device.provisional;
+        log?.info?.(
+          `YouTube holding ${device.provisional} on ${device.deviceId}`
+          + ` — state=${device.state}${device.adPlaying ? ' ad=yes' : ''}`,
+        );
+      }
       if (!device.confirmTimer) {
         scheduleConfirm(device, CONFIRM_RETRY_MS);
       }
       return;
     }
+    device.confirmBlockedFor = null;
+    log?.info?.(`YouTube confirmed ${device.provisional} on ${device.deviceId}`);
     clearConfirmTimer(device);
     clearStopTimer(device);
     const videoId = device.provisional;

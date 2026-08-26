@@ -373,7 +373,12 @@ function createYoutubeNowPlaying({
         if (row?.deviceId) {
           reported.add(String(row.deviceId));
         }
-        if (row?.ok === false && (row.error === 'not-connected' || !row.error)) {
+        // Any failed row means the bind is not delivering. Matching only
+        // `not-connected` left the worst case invisible: the sidecar task is
+        // still alive — so the device is listed and looks healthy — while its
+        // bind is dead and `get_now_playing()` raises. That device was never
+        // re-bound, and the TV stayed `linked` and silent until a restart.
+        if (row?.ok === false) {
           scheduleReconnect(row.deviceId, row.error || 'not-connected');
         }
       }
