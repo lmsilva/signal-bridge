@@ -5,7 +5,13 @@
 # process inside the bridge image. Everything else — credentials, caching,
 # history, display — stays in Node.
 #
-# Pinned to the 3.x line: 3.0 moved `State` off `pyytlounge.wrapper` and changed
-# every listener callback to take a typed event object, so a 2.x install cannot
-# run `youtube_lounge_agent.py`.
-pyytlounge>=3.3,<4
+# Pinned exactly, not to a range. 3.0 moved `State` off `pyytlounge.wrapper` and
+# changed every listener callback to take a typed event object, so a 2.x install
+# cannot run `youtube_lounge_agent.py` — but the range that guarded against that
+# had a worse failure mode of its own. `src` is bind-mounted, so a rebuild only
+# ever changes dependencies; a floating range meant each rebuild silently
+# re-resolved the client for an undocumented protocol against whatever PyPI
+# served that day. An Aug 25 rebuild moved 3.3.0 -> 3.4.0 with no commit to show
+# for it, which cost a long debugging session. Bump this deliberately and read
+# the changelog first: minor releases here carry breaking `State` changes.
+pyytlounge==3.4.0

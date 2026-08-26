@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import socket
 import sys
 from typing import Any, Dict, Optional
@@ -49,6 +50,7 @@ try:  # pragma: no cover - exercised only where the dependency is installed
     # the wrong module silently disabled the whole agent, so keep every name in
     # this block resolvable from the documented public surface.
     from pyytlounge import EventListener, State, YtLoungeApi
+    from pyytlounge.api import api_base as LOUNGE_API_BASE
     from pyytlounge.dial import get_screen_id_from_dial
 
     LOUNGE_AVAILABLE = True
@@ -58,6 +60,7 @@ except Exception as error:  # pragma: no cover - the bridge degrades instead of 
     EventListener = object  # type: ignore[assignment]
     State = None  # type: ignore[assignment]
     get_screen_id_from_dial = None  # type: ignore[assignment]
+    LOUNGE_API_BASE = "https://www.youtube.com/api/lounge"
     LOUNGE_AVAILABLE = False
     # The reason matters: "pyytlounge is absent" and "pyytlounge is present but
     # its API moved" need different fixes, and both look identical downstream.
@@ -66,6 +69,17 @@ except Exception as error:  # pragma: no cover - the bridge degrades instead of 
 
 DEVICE_NAME = "Signal Bridge"
 SSDP_TARGET = "urn:dial-multiscreen-org:service:dial:1"
+# A bind that opens, stays open, and delivers nothing is indistinguishable from
+# a TV that is switched off, because the only party that can see the raw Lounge
+# stream is the library. Setting YOUTUBE_LOUNGE_DEBUG=1 promotes its logger to
+# DEBUG so that stream lands in `docker logs`. Verbose by design; leave it off
+# unless a screen is bound and silent.
+LOUNGE_DEBUG = os.environ.get("YOUTUBE_LOUNGE_DEBUG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 # Lounge long-polls end routinely (TV sleep, network blip, server close).
 # Without a loop the bridge looks "linked" forever while hearing nothing.
 SUBSCRIBE_RETRY_SECONDS = 1.0
@@ -88,7 +102,13 @@ class _EmitHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         level = "warn" if record.levelno >= logging.WARNING else "info"
-        log(level, f"pyytlounge: {record.getMessage()}")
+        try:
+            message = record.getMessage()
+        except Exception:
+            # A broken format string in the library must not silence the stream
+            # we are reading it for.
+            message = str(record.msg)
+        log(level, f"pyytlounge: {message}")
 
 
 def library_logger() -> logging.Logger:
@@ -101,7 +121,7 @@ def library_logger() -> logging.Logger:
     if not logger.handlers:
         logger.addHandler(_EmitHandler())
         logger.propagate = False
-    logger.setLevel(logging.WARNING)
+    logger.setLevel(logging.DEBUG if LOUNGE_DEBUG else logging.WARNING)
     return logger
 
 
@@ -154,15 +174,124 @@ def screen_device_name_of(api: Any) -> Optional[str]:
         return None
 
 
+def parse_backchannel_ack(text: str) -> Optional[bool]:
+    """Is the screen's event backchannel attached, per a /bc/bind POST reply?
+
+    A command POST answers with a BrowserChannel acknowledgement shaped
+    `[backchannel_present, last_array_id, outstanding_bytes]` — for example
+    `8\\n[1,6,0]`. pyytlounge reads this body only to check the HTTP status and
+    then discards it, which throws away the one health signal that distinguishes
+    "the screen never got our request" from "the screen got it and did not
+    answer". Those two look identical in every other log line, and telling them
+    apart is the difference between debugging the bridge and the television.
+
+    Returns None when the shape is anything unexpected; this is a diagnostic and
+    must never be the reason a poll fails.
+    """
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if not stripped.startswith("["):
+            continue
+        try:
+            ack = json.loads(stripped)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(ack, list) and ack and isinstance(ack[0], int):
+            return ack[0] == 1
+        return None
+    return None
+
+
+async def request_now_playing(api: Any) -> bool:
+    """Ask the screen what is playing, and report whether it can even answer.
+
+    The reply carries no playback data — the screen answers on the `subscribe()`
+    backchannel — but it does say whether that backchannel is attached. A poll
+    that is accepted (`[1,...]`) and still yields no now-playing event means the
+    screen is ignoring us rather than failing to hear us, and no other log line
+    can tell those apart. Uses private attributes to read a body the library
+    discards; each is probed first, so a pyytlounge that moves them degrades to
+    the stock call rather than breaking detection outright.
+    """
+    session = getattr(api, "_required_session", None)
+    connection_params = getattr(api, "_common_connection_parameters", None)
+    if not (session and connection_params):
+        return bool(await api.get_now_playing())
+
+    # Mirror the library's own offsets: `ofs` is the pre-increment value and
+    # `RID` the post-increment one. Diverging desynchronises the session.
+    offset = int(getattr(api, "_command_offset", 1))
+    body = {"count": 1, "ofs": offset, "req0__sc": "getNowPlaying"}
+    api._command_offset = offset + 1
+    params = {**connection_params(), "RID": offset + 1}
+    async with session.post(
+        url=f"{LOUNGE_API_BASE}/bc/bind", data=body, params=params,
+    ) as resp:
+        if resp.status != 200:
+            log("warn", f"getNowPlaying replied {resp.status} {resp.reason}")
+            return False
+        text = await resp.text()
+    if LOUNGE_DEBUG:
+        attached = parse_backchannel_ack(text)
+        log(
+            "info",
+            f"getNowPlaying accepted, backchannel attached={attached}"
+            f" — reply {text[:120]!r}",
+        )
+    return True
+
+
+async def log_bound(device_id: str, api: Any, note: str = "") -> None:
+    """Report a bind together with whether the screen is actually reachable.
+
+    "Bound" and "receiving playback events" are different things, and only the
+    first was ever observable — which is how a dead screen registration passed
+    for a healthy one across several debugging sessions.
+    """
+    log(
+        "info",
+        f"Lounge bound {device_id}{note} (screen={screen_name_of(api)},"
+        f" available={await screen_is_available(api)})",
+    )
+
+
+async def screen_is_available(api: Any) -> Optional[bool]:
+    """Does YouTube consider the paired screen online?
+
+    A bind can succeed against a screen registration the TV itself no longer
+    honours: the Lounge service accepts the token and returns cached state, so
+    `connect()` looks healthy, while the TV pushes nothing because it has no
+    controller attached. This is the only cheap way to tell those apart, so it
+    is worth one request per bind. None means the question could not be asked.
+    """
+    if not hasattr(api, "is_available"):
+        return None
+    try:
+        return bool(await api.is_available())
+    except Exception:
+        return None
+
+
 class BridgeListener(EventListener):  # type: ignore[misc]
     """Forwards the five events the bridge cares about (youtube.md §3.1).
 
     pyytlounge hands every callback a typed event object; the bridge speaks in
     flat JSON, so this is the only place that knows either shape.
+
+    Every callback the base class defines is overridden, including the four the
+    bridge has no use for. That is deliberate: the library logs only event types
+    it cannot parse, so a *known* event landing on an un-overridden no-op is
+    invisible. "The TV sent nothing" and "the TV sent something we ignore" then
+    look identical, which is precisely the ambiguity that made a bound-but-silent
+    screen so hard to diagnose. Under YOUTUBE_LOUNGE_DEBUG every callback speaks.
     """
 
     def __init__(self, device_id: str):
         self.device_id = device_id
+
+    def _trace(self, name: str, detail: str = "") -> None:
+        if LOUNGE_DEBUG:
+            log("info", f"lounge event {name} on {self.device_id}{f' — {detail}' if detail else ''}")
 
     async def now_playing_changed(self, event: Any) -> None:
         video_id = getattr(event, "video_id", None)
@@ -210,17 +339,35 @@ class BridgeListener(EventListener):  # type: ignore[misc]
         emit(payload)
 
     async def ad_playing_changed(self, event: Any) -> None:
+        self._trace("ad-playing", f"state={state_name(getattr(event, 'ad_state', None))}")
         self._emit_ad(event)
 
     async def ad_state_changed(self, event: Any) -> None:
+        self._trace("ad-state", f"state={state_name(getattr(event, 'ad_state', None))}")
         self._emit_ad(event)
 
     async def autoplay_up_next_changed(self, event: Any) -> None:
         video_id = getattr(event, "video_id", None)
+        self._trace("up-next", f"video={video_id}")
         if video_id:
             emit({"event": "up-next", "deviceId": self.device_id, "videoId": str(video_id)})
 
+    # The bridge acts on none of the following four, but seeing them proves the
+    # subscribe stream is delivering rather than merely open.
+    async def volume_changed(self, event: Any) -> None:
+        self._trace("volume", f"level={getattr(event, 'volume', None)}")
+
+    async def autoplay_changed(self, event: Any) -> None:
+        self._trace("autoplay", f"enabled={getattr(event, 'enabled', None)}")
+
+    async def subtitles_track_changed(self, event: Any) -> None:
+        self._trace("subtitles")
+
+    async def playback_speed_changed(self, event: Any) -> None:
+        self._trace("playback-speed", f"rate={getattr(event, 'speed', None)}")
+
     async def disconnected(self, event: Any) -> None:
+        self._trace("disconnected", f"reason={getattr(event, 'reason', None)}")
         emit(
             {
                 "event": "disconnected",
@@ -405,7 +552,7 @@ class Agent:
         delay = CONNECT_RETRY_SECONDS
         while not self.stopping:
             try:
-                await api.get_now_playing()
+                await request_now_playing(api)
             except Exception as error:
                 log("warn", f"Now-playing poll for {device_id} failed: {error}")
             try:
@@ -479,10 +626,7 @@ class Agent:
         """Returns None on success, or the failure result to report."""
         self._restore_auth(api, device)
 
-        if api.linked():
-            if not await api.refresh_auth():
-                return {"ok": False, "error": "needs-relink"}
-        else:
+        if not api.linked():
             # §8.3 layer 2: a wiped token store costs nothing as long as the
             # screen ID survived, because re-pairing needs no code.
             screen_id = device.get("screenId")
@@ -490,13 +634,33 @@ class Agent:
                 return {"ok": False, "error": "needs-relink"}
             if not await api.pair_with_screen_id(screen_id):
                 return {"ok": False, "error": "needs-relink"}
+            self._emit_auth(device_id, api)
+
+        # Bind with the token already held. This used to refresh unconditionally
+        # on every connect, which — with a five-minute subscribe cycle and a
+        # reconnect on every blip — minted hundreds of lounge sessions a day
+        # against a single screen, each one orphaning the last. `_reestablish`
+        # was already changed to reconnect-then-refresh; this path was not, and
+        # it is the door connections actually come in by, so the churn survived.
+        try:
+            if await api.connect():
+                await log_bound(device_id, api)
+                return None
+        except Exception as error:
+            log("warn", f"Lounge connect for {device_id} failed: {error}")
+
+        # Only after a failed bind is the stored token genuinely suspect.
+        try:
+            if not await api.refresh_auth():
+                return {"ok": False, "error": "needs-relink"}
+        except Exception as error:
+            log("warn", f"Lounge auth refresh for {device_id} failed: {error}")
+            return {"ok": False, "error": "needs-relink"}
         self._emit_auth(device_id, api)
 
         if not await api.connect():
             return {"ok": False, "error": "unreachable"}
-        # "Bound" and "receiving playback events" are different things, and only
-        # the first was ever observable. Say so, so a silent screen is legible.
-        log("info", f"Lounge bound {device_id} (screen={screen_name_of(api)})")
+        await log_bound(device_id, api, " after an auth refresh")
         return None
 
     async def disconnect(self, device_id: str) -> Dict[str, Any]:
@@ -589,7 +753,7 @@ class Agent:
         if api is None:
             return {"ok": False, "error": "not-connected"}
         try:
-            await api.get_now_playing()
+            await request_now_playing(api)
             return {"ok": True}
         except Exception as error:
             return {"ok": False, "error": str(error)}
