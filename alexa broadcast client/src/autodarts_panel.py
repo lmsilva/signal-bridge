@@ -375,6 +375,10 @@ def format_last_played_label(totals: dict | None) -> str:
     if iso:
         try:
             when = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+            # The bridge stamps UTC, so an evening match reads as tomorrow
+            # unless it is pulled back into this display's own zone first.
+            if when.tzinfo is not None:
+                when = when.astimezone()
             return when.strftime("%b %d")
         except ValueError:
             pass

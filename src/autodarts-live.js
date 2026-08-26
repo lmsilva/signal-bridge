@@ -257,6 +257,10 @@ function createAutodartsLive({
   let suppressedAt = 0;
   let dormantMatchId = null;
   let statsTask = null;
+  // `match` is cleared once the FINAL card stops airing, but the stats fetch can still
+  // be retrying minutes later (STATS_RETRY_MS runs well past finalHoldSeconds). Hold the
+  // finished match here so the archive row keeps its roster, winner and variant.
+  let finishedSnapshot = null;
   let boardOnline = null;
 
   function clearTimer(handle) {
@@ -489,6 +493,7 @@ function createAutodartsLive({
       lastPushedJson = null;
     }, finalHoldMs());
     if (typeof finalTimer.unref === 'function') finalTimer.unref();
+    finishedSnapshot = match;
     scheduleArchive(match?.matchId);
   }
 
@@ -501,9 +506,18 @@ function createAutodartsLive({
     finalTimer = null;
     suppressed = false;
     const matchId = match.matchId;
+    // Autodarts tears the match object down moments after a game ends, so a delete
+    // arriving during the FINAL hold is cleanup rather than an abandoned game. Filing
+    // it as an abort would drop a completed match out of every dashboard stat, and the
+    // abort row would block the real one because the archive dedupes on match id.
+    const finished = phase === 'final';
     refreshDuration();
-    log?.info?.('Autodarts match aborted — closing display', { matchId, reason });
-    archiveAbort(matchId, reason);
+    if (finished) {
+      log?.info?.('Autodarts match closed after finishing', { matchId, reason });
+    } else {
+      log?.info?.('Autodarts match aborted — closing display', { matchId, reason });
+      archiveAbort(matchId, reason);
+    }
     pushClose(reason);
     phase = 'idle';
     match = null;
@@ -534,7 +548,9 @@ function createAutodartsLive({
       source: 'live-abort',
       revision: match?.revision || 0,
     });
-    // Do not recompute aggregates — aborted matches are excluded from W–L / averages.
+    // A race ended early still counts once a leg was decided, so rebuild rather than
+    // leave the wall on a stale day. Shells with no completed leg change nothing.
+    aggregates.recompute(archive.listAll());
   }
 
   function scheduleArchive(matchId) {
@@ -572,10 +588,25 @@ function createAutodartsLive({
     run().catch(() => {});
   }
 
+  /** The live match if it is still the one we are archiving, else the finished snapshot. */
+  function archiveSource(matchId) {
+    const id = String(matchId);
+    if (match && String(match.matchId) === id) return match;
+    if (finishedSnapshot && String(finishedSnapshot.matchId) === id) return finishedSnapshot;
+    return null;
+  }
+
   function archiveKnown(matchId, statsJson) {
     if (archive.has(matchId)) return;
+    const source = archiveSource(matchId);
+    if (!source) {
+      // With no roster left to describe it, an archive row would count as a played match
+      // while contributing no players. Leave it for the cloud history sync to import.
+      log?.warn?.('Autodarts archive skipped — no match snapshot', matchId);
+      return;
+    }
     const statsPlayers = statsJson?.players || statsJson?.stats || [];
-    const players = (match?.players || []).map((row, index) => {
+    const players = (source.players || []).map((row, index) => {
       const fromStats = statsPlayers[index] || statsPlayers.find(
         (item) => String(item.name || '').toLowerCase() === String(row.name || '').toLowerCase(),
       ) || {};
@@ -595,25 +626,28 @@ function createAutodartsLive({
         counts: fromStats.counts || {},
       };
     });
-    const winner = match?.winner
+    const winner = source.winner
       || players.find((row) => row.isWinner)?.name
-      || (match?.players || []).find((row) => row.isWinner)?.name
+      || (source.players || []).find((row) => row.isWinner)?.name
       || null;
     archive.append({
       matchId,
-      variant: match?.variant || 'X01',
-      settings: match?.settings || null,
-      local: match?.local !== false,
-      startedAt: match?.startedAt || null,
+      variant: source.variant || 'X01',
+      settings: source.settings || null,
+      local: source.local !== false,
+      startedAt: source.startedAt || null,
       finishedAt: new Date(now()).toISOString(),
-      durationSec: match?.durationSec || 0,
+      durationSec: source.durationSec || 0,
       players,
       winner,
-      gameShot: match?.gameShot || null,
-      hitMap: match?.hitMap || statsJson?.hitMap || null,
+      gameShot: source.gameShot || null,
+      hitMap: source.hitMap || statsJson?.hitMap || null,
       source: 'live',
-      revision: match?.revision || 0,
+      revision: source.revision || 0,
     });
+    if (finishedSnapshot && String(finishedSnapshot.matchId) === String(matchId)) {
+      finishedSnapshot = null;
+    }
     aggregates.recompute(archive.listAll());
   }
 
@@ -909,6 +943,7 @@ function createAutodartsLive({
     boardPollTimer = null;
     if (statsTask?.timer) clearTimer(statsTask.timer);
     statsTask = null;
+    finishedSnapshot = null;
     try {
       socket?.close?.();
     } catch {

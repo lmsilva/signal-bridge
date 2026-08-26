@@ -14,7 +14,7 @@ function tempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'autodarts-live-'));
 }
 
-function harness() {
+function harness({ getMatchStats } = {}) {
   const root = tempRoot();
   const sent = [];
   const settings = createAutodartsSettings({ autodartsSettingsPath: path.join(root, 's.json') });
@@ -39,7 +39,7 @@ function harness() {
           turn: { points: 0, darts: [null, null, null] },
         },
       }),
-      getMatchStats: async () => ({
+      getMatchStats: getMatchStats || (async () => ({
         ok: true,
         status: 200,
         json: {
@@ -48,7 +48,7 @@ function harness() {
             { name: 'B', average: 30, dartsThrown: 30, pointsScored: 300, counts: { 180: 0 } },
           ],
         },
-      }),
+      })),
     },
     credentials: { load: () => ({ boardId: 'board-1', boardName: 'Game Room' }) },
     settings,
@@ -194,4 +194,47 @@ test('empty finished shell aborts instead of FINAL', async () => {
   assert.ok(!sent.some((payload) => (
     payload.type === 'autodarts.match' && payload.match?.status === 'finished'
   )));
+});
+
+test('delete during the FINAL hold keeps the finished match, not an abort row', async () => {
+  // Autodarts drops the match object right after a game ends, and the /stats call it
+  // needs is often still 404ing at that point. Filing that delete as an abort used to
+  // wipe a real game from the dashboard, and dedupe on match id made it permanent.
+  let resolveStats;
+  const statsReady = new Promise((resolve) => { resolveStats = resolve; });
+  const { live, archive, aggregates } = harness({ getMatchStats: () => statsReady });
+  await live.forceSeed('match-race');
+  live.ingestEvent({
+    channel: 'autodarts.matches',
+    matchId: 'match-race',
+    event: 'match.finished',
+    data: {
+      finished: true,
+      winner: 'A',
+      gameShot: 'D16',
+      players: [{ name: 'A', score: 0, legs: 2, isWinner: true }, { name: 'B', score: 120, legs: 0 }],
+    },
+  });
+  assert.equal(live.statusSnapshot().phase, 'final');
+
+  live.ingestEvent({ channel: 'autodarts.matches', matchId: 'match-race', event: 'delete' });
+  assert.equal(live.statusSnapshot().phase, 'idle');
+  assert.equal(archive.has('match-race'), false);
+
+  resolveStats({
+    ok: true,
+    status: 200,
+    json: { players: [{ name: 'A', average: 40, dartsThrown: 30 }, { name: 'B', average: 30, dartsThrown: 30 }] },
+  });
+  for (let i = 0; i < 40 && !archive.has('match-race'); i += 1) {
+    await new Promise((r) => setTimeout(r, 25));
+  }
+
+  // The live match is long gone by now, so the roster has to come from the snapshot.
+  const archived = archive.listAll().find((row) => row.matchId === 'match-race');
+  assert.ok(archived);
+  assert.equal(archived.aborted, undefined);
+  assert.equal(archived.winner, 'A');
+  assert.deepEqual(archived.players.map((row) => row.name), ['A', 'B']);
+  assert.equal(aggregates.get().totals.matches, 1);
 });
