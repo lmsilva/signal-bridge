@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-25 (YouTube device status no longer pins a stale failure)
+**Last updated:** 2026-08-25 (YouTube keep-alive re-binds a dropped lounge session)
 
 ---
 
@@ -445,7 +445,7 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (1464 tests)
+npm test                    # bridge only (1467 tests)
 run_all_tests.bat           # repo root — bridge + Windows client (1330 + 631)
 ```
 
@@ -572,6 +572,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-25: **A silently dropped YouTube lounge session now re-binds itself** — `_run_device` pops a dead session from the sidecar's table, so `poll-all` omits that TV entirely instead of reporting `not-connected`. `keepAlivePoll` treated the resulting empty `devices: []` as "all healthy", so the TV stayed `linked` and detected nothing until a container restart — every video after the drop went unrecorded. The poll now reconnects any enabled device the agent did not report at all. Tests: `test/youtube-now-playing.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-25: **A healthy YouTube device stops reporting an old failure** — `sanitiseDevice` merged `statusDetail` with `??`, so `markDeviceStatus(id, 'linked', null)` fell through to the previous value and a re-linked TV kept reading `needs-relink` forever. That made the Apple TV look broken while it was watching fine, which is why a missed video was misdiagnosed. Now only an absent field inherits. Tests: `test/youtube-now-playing.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-25: **YouTube (and other lounge auto-pushes) reach the poster PC** — Vestaboard flipped because it is local HTTP, but `sendUdpPayload` with no host only broadcast to `255.255.255.255`, which often never hits the Movie Poster box. Untargeted sends now unicast to every announced full-display IP the same way scheduler/Push already do. Tests: `test/display-registry.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-24: **Simulator flip uses the recorded Vestaboard sample** — `vestaboard-sample.wav` is converted to mono PCM `src/web/admin/vb-flip.wav` (~5.6s). A full drum walk is staggered to that length so the flaps and the rattle end together. Cache-bust `?v=signal89`. Tests: `test/vestaboard-sim-api.test.js`.
