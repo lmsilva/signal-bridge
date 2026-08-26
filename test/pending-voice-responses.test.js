@@ -149,3 +149,55 @@ test('pending route expires after TTL and is not completed', () => {
   );
   assert.equal(completed, null);
 });
+
+test('tryComplete attaches delivery detail to pending Amazon Shopping intro', () => {
+  const pending = createPendingVoiceResponses();
+  pending.remember({
+    kind: 'alexa-notifications',
+    device: 'Master Bathroom Echo',
+    query: "You have one new notification from Amazon Shopping.",
+    spokenResponse: "You have one new notification from Amazon Shopping.",
+    trigger: 'amazon-delivery-passive',
+    activityId: 'intro-delivery',
+  });
+
+  const detail = 'Your package was delivered today and left on the porch.';
+  const completed = pending.tryComplete(
+    { creationTimestamp: Date.now() },
+    detail,
+    {
+      getDeviceName: () => 'Master Bathroom Echo',
+      getActivityId: () => 'detail-delivery',
+      matchesShoppingListSpeech: () => false,
+    },
+  );
+
+  assert.equal(completed?.spokenResponse, detail);
+  assert.equal(completed?.trigger, 'amazon-delivery-response');
+  assert.equal(completed?.sourceActivityId, 'intro-delivery');
+});
+
+test('tryComplete clears pending delivery on dismissal TTS', () => {
+  const pending = createPendingVoiceResponses();
+  pending.remember({
+    kind: 'alexa-notifications',
+    device: 'Master Bathroom Echo',
+    query: "You've got one new notification from Amazon Shopping.",
+    spokenResponse: "You've got one new notification from Amazon Shopping.",
+    trigger: 'amazon-delivery-passive',
+    activityId: 'intro-delivery',
+  });
+
+  const completed = pending.tryComplete(
+    { creationTimestamp: Date.now() },
+    "Alright, no problem. That's all your notifications.",
+    {
+      getDeviceName: () => 'Master Bathroom Echo',
+      getActivityId: () => 'dismiss-delivery',
+      matchesShoppingListSpeech: () => false,
+    },
+  );
+
+  assert.equal(completed, null);
+  assert.equal(pending.hasPending('Master Bathroom Echo', 'amazon-delivery-passive'), false);
+});

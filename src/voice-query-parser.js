@@ -26,7 +26,11 @@ const {
   matchesAutodartsNowQuery,
 } = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
-const { matchesNotificationsQuery } = require('./alexa-notifications');
+const {
+  matchesNotificationsQuery,
+  matchesPassiveAmazonDeliveryNotification,
+  isNotificationDismissal,
+} = require('./alexa-notifications');
 const {
   matchesShowAlarmsQuery,
   matchesAlarmSetQuery,
@@ -330,6 +334,22 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
         query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'alexa-notifications-query',
+      };
+    }
+
+    if (matchesPassiveAmazonDeliveryNotification(matchSummary, response)) {
+      if (isNotificationDismissal(response)) {
+        return null;
+      }
+      return {
+        kind: 'alexa-notifications',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: response || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'amazon-delivery-passive',
       };
     }
 

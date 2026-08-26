@@ -6171,6 +6171,7 @@ class NotificationsPanel(BasePanel):
         empty = bool(notifications.get("empty"))
         summary = notifications.get("summary")
         spoken = payload.get("spokenResponse") or notifications.get("body") or ""
+        category = notifications.get("category")
 
         if self._looks_like_empty_notification_message(spoken):
             empty = True
@@ -6191,6 +6192,8 @@ class NotificationsPanel(BasePanel):
         self._draw_bell_icon(x + 28, y + banner_h // 2, 22, self.config.get("overlayBackground", "#0b0f14"))
 
         banner_text = summary or ("0 notifications" if empty else "Notification")
+        if category == "delivery" and not empty:
+            banner_text = summary or "Amazon delivery"
         self._track(
             self.canvas.create_text(
                 x + 56,
