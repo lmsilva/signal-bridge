@@ -222,6 +222,14 @@ test('slideshow has content only when photos exist', () => {
   assert.equal(registry.hasContent('signal.slideshow'), true);
 });
 
+test('notifications push has content only when a notification was captured', () => {
+  let status = { hasContent: false };
+  const registry = createCommandRegistry({ getNotificationsCacheStatus: () => status });
+  assert.equal(registry.hasContent('alexa.notifications'), false);
+  status = { hasContent: true };
+  assert.equal(registry.hasContent('alexa.notifications'), true);
+});
+
 test('estimateDuration falls back to the descriptor default', () => {
   const registry = createCommandRegistry();
   assert.equal(registry.estimateDuration('alexa.weather'), 60);
