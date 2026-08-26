@@ -13,13 +13,13 @@ import tkinter.font as tkfont
 from typing import Callable
 
 
-from src.design_system import design_u
+from src.design_system import FOOTER_BAND_H_U, design_u, footer_band_h
 
 
 # Design canvas: 1080 × 1920. All geometry derives from --u (§8).
 # Slightly tighter than the 96u design band — wall displays read better with
 # a compact chrome strip (still full-bleed; content clears via footer_height).
-BAND_H_U = 64
+BAND_H_U = FOOTER_BAND_H_U
 RAIL_H_U = 4
 LABEL_SIZE_U = 22
 ENDING_SEC = 10
@@ -46,7 +46,8 @@ def dismiss_u(screen_w: int, screen_h: int) -> float:
 
 
 def footer_height(screen_w: int, screen_h: int) -> int:
-    return max(48, int(round(BAND_H_U * dismiss_u(screen_w, screen_h))))
+    """Painted band height — the same value `page_chrome` reserves for it."""
+    return int(footer_band_h(dismiss_u(screen_w, screen_h)))
 
 
 def format_dismiss_value(remaining_seconds: int) -> str:

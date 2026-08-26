@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-24 (smooth Autodarts/Roll Credits cards)
+**Last updated:** 2026-08-25 (broadcast message viewport no longer covers the dismiss rail)
 
 ---
 
@@ -269,6 +269,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-25: **Broadcast message viewport stopped burying the dismiss rail** — the painted band clamps to `max(48, 64u)` but `page_chrome` reserved a bare `64 * u`, so on any screen whose short edge is under 810px the content zone ran 1–5px past the band top. Broadcast is the only page whose content is a child `tk.Canvas` widget, and a widget always stacks above canvas items, so it covered the 3px rail across everything except the left/right margins while YouTube (canvas items, footer raised over them) looked correct. `footer_band_h` is now the single clamped source of truth and `dismiss_footer.footer_height` delegates to it. Tests: `test_dismiss_footer.py` (band/reserved-gap parity and content-clears-rail across 12 screen sizes). Ship: portable client rebuild required (not run).
 - 2026-08-24: **Autodarts + Roll Credits cards lost the square corners** — the "glass" fill was 16 horizontal rectangles inset to fake a round-rect, and the outline was an 8-point spline with control points on the box corners, so every card showed banding and a light square at each corner. Card bodies are now one circular-corner polygon (no PhotoImage: Tk drops the alpha and the rectangular bitmap becomes the same square ears). `rounded_points` follows the quarter-circles; `paint_round_rect` no longer uses `smooth=True`. The page wash can still use a full-rect PIL gradient. Tests: `test_design_system.py`, `test_dashboard_render_smoke.py`. Ship: portable client rebuild required (not run).
 - 2026-08-24: **Roll Credits plays video as a silent looping hero** — Tk cannot decode video, so the bridge now ships a clip as a short animated WebP and the panel loops it in place of a still. `choose_image_hero()` accepts a `kind: "video"` hero **only** when it carries `animated: true` (a bare `.mp4` URL is still ignored, so an older bridge cannot wedge the tour); `decode_animation()` samples the file down to at most `LOOP_MAX_FRAMES` (24) RGB frames and scales the frame gap by the stride it skipped, and `HeroLoop` cycles the pre-built `PhotoImage`s on the Tk main loop the way `MarqueeLine` drives text. Only the foreground animates — the blurred backdrop stays on frame one, halving the images held in RAM — and every loop is stopped in `_clear_page()`/`hide()`. Frames are read back from the artwork cache `_fetch_photo` already wrote, so there is no second download. `PIL.ImageSequence` + `PIL.WebPImagePlugin` added to the PyInstaller spec's `hiddenimports` (both resolve lazily and would otherwise be dropped from the freeze). Tests: `test_roll_credits_panel.py`. Ship: portable client rebuild required (not run).
 

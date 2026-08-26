@@ -2,8 +2,10 @@ import time
 import unittest
 from unittest import mock
 
+from src.design_system import footer_band_h, page_chrome
 from src.dismiss_footer import (
     BAND_H_U,
+    RAIL_H_U,
     DismissFooter,
     format_dismiss_parts,
     format_dismiss_value,
@@ -42,6 +44,39 @@ class DismissFooterGeometryTests(unittest.TestCase):
 
     def test_footer_scales_down_on_smaller_screen(self):
         self.assertLess(footer_height(540, 960), BAND_H_U)
+
+
+class DismissFooterContentClearanceTests(unittest.TestCase):
+    """The band the footer paints and the gap pages leave for it must agree.
+
+    Broadcast puts its message area in a child widget, and a widget always
+    stacks above canvas items — so when the reserved gap was smaller than the
+    painted band, the viewport hung over the band and buried the draining rail
+    with no way to raise it back out.
+    """
+
+    # Anything under 810 wide lands on the band's minimum height, which is
+    # where the reserved gap and the painted band used to disagree.
+    SCREENS = (
+        (1080, 1920), (1920, 1080), (1200, 1920), (900, 1600), (810, 1440),
+        (800, 1422), (768, 1366), (720, 1280), (1366, 768), (1280, 720),
+        (2160, 3840), (3840, 2160),
+    )
+
+    def test_painted_band_matches_the_reserved_band(self):
+        for w, h in self.SCREENS:
+            with self.subTest(screen=f"{w}x{h}"):
+                self.assertEqual(footer_height(w, h), int(footer_band_h(dismiss_u(w, h))))
+
+    def test_page_content_stops_above_the_rail(self):
+        for w, h in self.SCREENS:
+            with self.subTest(screen=f"{w}x{h}"):
+                content_bottom = int(round(page_chrome(w, h, timed=True).content_bottom))
+                band_top = h - footer_height(w, h)
+                rail_h = max(2, int(round(RAIL_H_U * dismiss_u(w, h))))
+                # Last row the page may paint must sit above the rail's first.
+                self.assertLessEqual(content_bottom - 1, band_top - 1)
+                self.assertGreater(band_top + rail_h, band_top)
 
 
 class DismissFooterRailTests(unittest.TestCase):
