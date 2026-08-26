@@ -573,9 +573,18 @@ def is_portrait(screen_w: int, screen_h: int) -> bool:
     return int(screen_h) >= int(screen_w)
 
 
+FOOTER_BAND_H_U = 64
+# The painted band never goes below this, so neither may the space reserved
+# for content. When the two disagreed, a page whose content is a child widget
+# (the broadcast message viewport) hung over the band and covered the rail —
+# and a widget always stacks above canvas items, so raising the footer could
+# not fix it.
+FOOTER_BAND_MIN_H = 48
+
+
 def footer_band_h(u: float) -> float:
-    # Keep in sync with dismiss_footer.BAND_H_U (compact chrome strip).
-    return 64 * u
+    """Height of the shared dismiss band. Canonical — `dismiss_footer` uses it."""
+    return float(max(FOOTER_BAND_MIN_H, int(round(FOOTER_BAND_H_U * u))))
 
 
 def page_chrome(screen_w: int, screen_h: int, *, timed: bool = True) -> PageChrome:
