@@ -205,6 +205,35 @@ test('the autodarts dashboard reads record objects, not the objects themselves',
   ], 'autodarts dashboard');
 });
 
+test('the autodarts last-game date is the house day, not the UTC day', () => {
+  // 2026-08-02T05:34Z is still the evening of Aug 1 in Denver. The bridge runs
+  // UTC in Docker, so reading the instant without a zone printed tomorrow.
+  const frames = gaming.autodartsDashboardFrames({
+    type: 'autodarts.dashboard',
+    totals: { matches: 42, legs: 57, lastPlayedAt: '2026-08-02T05:34:19.727444Z' },
+  }, { timeZone: 'America/Denver' });
+
+  assert.match(formatLayout(frames[0].rows), /LAST GAME AUG 1\b/);
+});
+
+test('a two-digit last-game day is not truncated by the badge footer', () => {
+  const frames = gaming.autodartsDashboardFrames({
+    type: 'autodarts.dashboard',
+    totals: { matches: 42, legs: 57, lastPlayedAt: '2026-08-24T02:26:02.323Z' },
+  }, { timeZone: 'America/Denver' });
+
+  assert.match(formatLayout(frames[0].rows), /LAST GAME AUG 23\b/);
+});
+
+test('a bare YYYY-MM-DD last-game date does not slip a day west of UTC', () => {
+  const frames = gaming.autodartsDashboardFrames({
+    type: 'autodarts.dashboard',
+    totals: { matches: 42, legs: 57, lastPlayedAt: '2026-08-22' },
+  }, { timeZone: 'America/Denver' });
+
+  assert.match(formatLayout(frames[0].rows), /LAST GAME AUG 22\b/);
+});
+
 test('roll credits picks the highest induction and the system label, not the id', () => {
   const frames = gaming.rollCreditsFrames({
     type: 'credits.show',

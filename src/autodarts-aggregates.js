@@ -12,11 +12,32 @@ function playerKey(name) {
   return String(name || '').trim().toLowerCase();
 }
 
+function completedLegs(match) {
+  const roster = Array.isArray(match?.players) ? match.players : [];
+  return roster.reduce((total, row) => total + (Number(row.legsWon) || 0), 0);
+}
+
+/**
+ * Darts were thrown and a leg was decided.
+ *
+ * Ending a race early still played out as a game, so an aborted match with legs
+ * on the board counts. A lobby that was opened and deleted without finishing a
+ * leg does not — that is setup, and counting it would move "last game" to a night
+ * nobody played.
+ */
+function wasPlayed(match) {
+  if (!match) return false;
+  return !match.aborted || completedLegs(match) > 0;
+}
+
 function emptyPlayer(displayName) {
   return {
     displayName: displayName || 'Unknown',
     matches: 0,
     wins: 0,
+    // Matches that ended without a winner — abandoned before a result. They are
+    // games played, but they must not hand every player a loss.
+    noResult: 0,
     winPct: 0,
     legsWon: 0,
     legsPlayed: 0,
@@ -51,13 +72,16 @@ function recomputeFromMatches(matches = []) {
   const pairCounts = new Map();
   const monthCounts = new Map();
   const variantCounts = new Map();
+  let countedMatches = 0;
   let totalLegs = 0;
   let bestMatchAverage = null;
   let highestCheckout = null;
   let total180s = 0;
 
   for (const match of matches) {
-    if (match?.aborted) continue;
+    if (!wasPlayed(match)) continue;
+    countedMatches += 1;
+    const decided = Boolean(String(match.winner || '').trim());
     const finishedAt = match.finishedAt || match.startedAt || null;
     if (finishedAt) {
       const key = String(finishedAt).slice(0, 7);
@@ -80,7 +104,9 @@ function recomputeFromMatches(matches = []) {
         const other = roster.find((item) => playerKey(item.name) !== key);
         current.legsPlayed = (Number(row.legsWon) || 0) + (Number(other?.legsWon) || 0);
       }
-      if (String(match.winner || '').trim().toLowerCase() === key
+      if (!decided) {
+        current.noResult += 1;
+      } else if (String(match.winner || '').trim().toLowerCase() === key
         || String(match.winner || '') === row.name) {
         current.wins += 1;
       }
@@ -147,7 +173,8 @@ function recomputeFromMatches(matches = []) {
           if (winnerKey === names[j]) entry.bWins += 1;
           if (!entry.lastPlayedAt || (finishedAt && finishedAt > entry.lastPlayedAt)) {
             entry.lastPlayedAt = finishedAt;
-            entry.lastWinner = match.winner || null;
+            // An abandoned game must not blank out who last beat whom.
+            if (decided) entry.lastWinner = match.winner;
           }
           pairCounts.set(pairKey, entry);
         }
@@ -157,7 +184,12 @@ function recomputeFromMatches(matches = []) {
 
   const list = [...players.values()].map((player) => {
     const x01Average = lifetimeAverage(player);
-    const winPct = player.matches ? Number(((player.wins / player.matches) * 100).toFixed(1)) : 0;
+    // An abandoned game counts as played but decided nothing, so it stays out of
+    // the win rate rather than scoring as a loss for everyone at the board.
+    const decidedMatches = Math.max(0, player.matches - player.noResult);
+    const winPct = decidedMatches
+      ? Number(((player.wins / decidedMatches) * 100).toFixed(1))
+      : 0;
     const checkoutPct = player.checkoutAttempts
       ? Number(((player.checkoutHits / player.checkoutAttempts) * 100).toFixed(2))
       : 0;
@@ -165,7 +197,7 @@ function recomputeFromMatches(matches = []) {
       name: player.displayName,
       matches: player.matches,
       wins: player.wins,
-      losses: Math.max(0, player.matches - player.wins),
+      losses: Math.max(0, decidedMatches - player.wins),
       winPct,
       legsWon: player.legsWon,
       legsPlayed: player.legsPlayed,
@@ -222,7 +254,9 @@ function recomputeFromMatches(matches = []) {
   return {
     players: list,
     totals: {
-      matches: matches.length,
+      // Every other figure here skips matches that were never played, so the
+      // headline cannot use the raw archive length or it overstates the total.
+      matches: countedMatches,
       legs: totalLegs,
       thisMonth: monthCounts.get(`${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`) || 0,
       lastPlayedAt: list.reduce((latest, row) => (
@@ -294,4 +328,6 @@ module.exports = {
   isX01Family,
   playerKey,
   lifetimeAverage,
+  completedLegs,
+  wasPlayed,
 };

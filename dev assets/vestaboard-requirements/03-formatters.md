@@ -383,6 +383,12 @@ bb                  bb
 - Start and end: alert, green badge frames; winner name flanked by yellow
   chips. Dashboard: snapshot; lead with totals, records (one decimal),
   the rivalry line, footer last-game date. Names truncate at 13.
+- The footer date is `lastPlayedAt`, and a match counts as played once a leg
+  was decided — a race called early still happened, while a lobby opened and
+  deleted without finishing a leg is setup and moves nothing. Read the day in
+  the house zone (`ctx.timeZone`): the bridge stamps UTC, so an evening match
+  otherwise prints tomorrow. A bare `YYYY-MM-DD` is already a calendar day and
+  must not be zone-converted.
 
 ```
 gg AUTODARTS        gg        gg AUTODARTS        gg

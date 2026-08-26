@@ -279,7 +279,11 @@ function recordValue(record) {
   return { value: toNumber(record), player: '' };
 }
 
-function autodartsDashboardFrames(payload = {}) {
+function isBareYmd(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+function autodartsDashboardFrames(payload = {}, ctx = {}) {
   const totals = payload.totals;
   if (!totals) {
     return [];
@@ -309,7 +313,9 @@ function autodartsDashboardFrames(payload = {}) {
   }
 
   const recordParts = [];
-  if (checkout?.value !== null) {
+  // `checkout?.value !== null` is true for a missing record too — optional
+  // chaining yields undefined, which then blew up on the deref below.
+  if (checkout && checkout.value !== null) {
     recordParts.push(`HIGH OUT ${formatWhole(checkout.value)}`);
   }
   if (oneEighties !== null) {
@@ -327,12 +333,18 @@ function autodartsDashboardFrames(payload = {}) {
     content.push(`RIVALRY ${fitName(rivalry.b)} ${aWins}-${bWins}`);
   }
 
-  const last = parseYmd(totals.lastPlayedAt);
+  const lastAt = totals.lastPlayedAt;
+  const last = parseYmd(lastAt);
+  // That value is a UTC instant, so the day has to be read in the house zone
+  // or a late-evening match prints tomorrow's date on the wall. A bare
+  // `YYYY-MM-DD` is already a calendar day — `parseYmd` pins it to local
+  // midnight, and converting that into a zone would shift it back a day.
+  const zone = isBareYmd(lastAt) ? {} : { timeZone: ctx.timeZone };
   const rows = badgeFrame({
     color: 'green',
     title: 'AUTODARTS',
     rows: padRows(content),
-    footerLeft: last ? `LAST GAME ${shortDate(last)}` : '',
+    footerLeft: last ? `LAST GAME ${shortDate(last, zone)}` : '',
   });
   return [snapshotFrame(rows, 'Autodarts', 'autodarts.dashboard')];
 }

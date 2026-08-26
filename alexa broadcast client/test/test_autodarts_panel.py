@@ -2,6 +2,7 @@
 
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
@@ -387,9 +388,18 @@ class LayoutTests(unittest.TestCase):
 class LabelFormatTests(unittest.TestCase):
     def test_last_played_expands_relative(self):
         self.assertEqual(format_last_played_label({"lastPlayedLabel": "22d"}), "22 days ago")
+
+    def test_last_played_date_uses_this_displays_zone(self):
+        # The bridge stamps UTC. 05:34Z is still the previous evening anywhere
+        # west of Greenwich, so rendering the raw UTC day showed tomorrow.
+        expected = (
+            datetime(2026, 8, 2, 5, 34, 19, tzinfo=timezone.utc)
+            .astimezone()
+            .strftime("%b %d")
+        )
         self.assertEqual(
-            format_last_played_label({"lastPlayedAt": "2026-08-01T00:00:00Z"}),
-            "Aug 01",
+            format_last_played_label({"lastPlayedAt": "2026-08-02T05:34:19.727444Z"}),
+            expected,
         )
 
     def test_final_scoreline_lists_all_players(self):

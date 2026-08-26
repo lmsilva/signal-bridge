@@ -4,6 +4,8 @@ const {
   recomputeFromMatches,
   isX01Family,
   playerKey,
+  completedLegs,
+  wasPlayed,
 } = require('../src/autodarts-aggregates');
 
 test('weighted X01 average prefers pointsScored path', () => {
@@ -78,6 +80,42 @@ test('wins across variants; skill columns X01-only; crown tie-breaks', () => {
   const guest = data.players.find((row) => row.name.toLowerCase() === 'guest');
   assert.equal(guest.isGuest, true);
   assert.equal(guest.wins, 1);
+});
+
+test('a match is played once a leg is decided, whoever ended the race', () => {
+  assert.equal(wasPlayed({ players: [{ legsWon: 0 }] }), true);
+  assert.equal(wasPlayed({ aborted: true, players: [{ legsWon: 1 }] }), true);
+  assert.equal(wasPlayed({ aborted: true, players: [{ legsWon: 0 }] }), false);
+  assert.equal(wasPlayed({ aborted: true, players: [] }), false);
+  assert.equal(completedLegs({ players: [{ legsWon: 2 }, { legsWon: 1 }] }), 3);
+});
+
+test('the headline total agrees with the legs, months and last-played date', () => {
+  const data = recomputeFromMatches([
+    {
+      matchId: 'played',
+      variant: 'X01',
+      finishedAt: '2026-08-02T05:34:19.000Z',
+      winner: 'A',
+      players: [{ name: 'A', legsWon: 2 }, { name: 'B', legsWon: 1 }],
+    },
+    {
+      // Opened and deleted without a leg — setup, not a game.
+      matchId: 'deleted',
+      aborted: true,
+      abortReason: 'delete',
+      variant: 'X01',
+      finishedAt: '2026-08-23T23:36:49.000Z',
+      winner: null,
+      players: [{ name: 'A', legsWon: 0 }],
+    },
+  ]);
+  // The board reads "N MATCHES" straight off this, so it has to agree with every
+  // other figure rather than counting the raw archive.
+  assert.equal(data.totals.matches, 1);
+  assert.equal(data.totals.legs, 3);
+  assert.equal(data.totals.lastPlayedAt, '2026-08-02T05:34:19.000Z');
+  assert.equal(data.months.find((row) => row.key === '2026-08')?.count, 1);
 });
 
 test('rivalry pairing and month buckets across year boundary', () => {

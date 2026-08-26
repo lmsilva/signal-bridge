@@ -184,6 +184,68 @@ test('last match skips aborted and empty shells', () => {
   assert.equal(payload.match.players[0].name, 'trashpanda');
 });
 
+test('a lobby deleted without a completed leg is not a game that was played', () => {
+  const { recomputeFromMatches } = require('../src/autodarts-aggregates');
+  const totals = recomputeFromMatches([
+    {
+      matchId: 'finished',
+      variant: 'X01',
+      finishedAt: '2026-08-02T05:34:19.727444Z',
+      winner: 'trashpanda',
+      players: [{ name: 'trashpanda', legsWon: 2 }, { name: 'war d', legsWon: 0 }],
+    },
+    {
+      matchId: 'deleted',
+      aborted: true,
+      abortReason: 'delete',
+      source: 'live-abort',
+      variant: 'X01',
+      finishedAt: '2026-08-24T02:26:02.323Z',
+      players: [{ name: 'trashpanda', legsWon: 0 }, { name: 'war d', legsWon: 0 }],
+    },
+  ]).totals;
+
+  assert.equal(totals.matches, 1);
+  assert.equal(totals.legs, 2);
+  assert.equal(totals.lastPlayedAt, '2026-08-02T05:34:19.727444Z');
+});
+
+test('a race ended early still counts as a game once a leg was decided', () => {
+  const { recomputeFromMatches } = require('../src/autodarts-aggregates');
+  const data = recomputeFromMatches([
+    {
+      matchId: 'finished',
+      variant: 'X01',
+      finishedAt: '2026-08-02T05:34:19.727444Z',
+      winner: 'trashpanda',
+      players: [{ name: 'trashpanda', legsWon: 2 }, { name: 'war d', legsWon: 0 }],
+    },
+    {
+      // Two legs in, called it a night before the race was done.
+      matchId: 'called-early',
+      aborted: true,
+      abortReason: 'delete',
+      source: 'live-abort',
+      variant: 'X01',
+      finishedAt: '2026-08-24T02:26:02.323Z',
+      players: [{ name: 'trashpanda', legsWon: 1 }, { name: 'war d', legsWon: 1 }],
+    },
+  ]);
+
+  assert.equal(data.totals.matches, 2);
+  assert.equal(data.totals.legs, 4);
+  assert.equal(data.totals.lastPlayedAt, '2026-08-24T02:26:02.323Z');
+
+  // Nobody won it, so it must not score as a loss for either of them.
+  const ward = data.players.find((row) => row.name === 'war d');
+  assert.equal(ward.matches, 2);
+  assert.equal(ward.wins, 0);
+  assert.equal(ward.losses, 1);
+  const trashpanda = data.players.find((row) => row.name === 'trashpanda');
+  assert.equal(trashpanda.wins, 1);
+  assert.equal(trashpanda.winPct, 100);
+});
+
 test('isSuccessfulFinishedMatch rejects aborted zero-leg shells', () => {
   const { isSuccessfulFinishedMatch, isEmptyMatchResult } = require('../src/autodarts-payload');
   assert.equal(isSuccessfulFinishedMatch({
