@@ -707,6 +707,30 @@ test('keep-alive ignores a disabled device that the agent dropped', async () => 
   service.stop();
 });
 
+test('keep-alive re-binds a listed device whose bind has died', async () => {
+  // Worst case: the sidecar task is alive, so the device is reported and looks
+  // healthy, but its bind is dead and get_now_playing() raises. Matching only
+  // `not-connected` left this device silent until a container restart.
+  const lounge = fakeLounge();
+  lounge.pollNowPlaying = async () => ({
+    ok: true,
+    devices: [{ deviceId: 'tv-1', ok: false, error: 'Session closed' }],
+  });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  await service._keepAlivePoll();
+
+  assert.equal(service._reconnectState.has('tv-1'), true);
+  service.stop();
+});
+
 test('keep-alive hangs up a lounge session the store no longer knows about', async () => {
   // A deleted or re-registered TV used to leave its sidecar task running, still
   // re-binding the same screen, so the live device never received an event.

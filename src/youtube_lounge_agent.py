@@ -166,8 +166,13 @@ class BridgeListener(EventListener):  # type: ignore[misc]
 
     async def now_playing_changed(self, event: Any) -> None:
         video_id = getattr(event, "video_id", None)
+        state = state_name(getattr(event, "state", None))
         if not video_id:
+            # Silence here is indistinguishable from a TV that never spoke, and
+            # that ambiguity has cost two debugging sessions.
+            log("info", f"now-playing for {self.device_id} had no video id (state={state})")
             return
+        log("info", f"now-playing {video_id} on {self.device_id} state={state}")
         emit(
             {
                 "event": "now-playing",
@@ -175,17 +180,20 @@ class BridgeListener(EventListener):  # type: ignore[misc]
                 "videoId": video_id,
                 "durationSeconds": float(getattr(event, "duration", 0) or 0),
                 "position": float(getattr(event, "current_time", 0) or 0),
-                "state": state_name(getattr(event, "state", None)),
+                "state": state,
             }
         )
 
     async def playback_state_changed(self, event: Any) -> None:
+        state = state_name(getattr(event, "state", None))
+        position = float(getattr(event, "current_time", 0) or 0)
+        log("info", f"state {state} on {self.device_id} at {position:.0f}s")
         emit(
             {
                 "event": "state",
                 "deviceId": self.device_id,
-                "state": state_name(getattr(event, "state", None)),
-                "position": float(getattr(event, "current_time", 0) or 0),
+                "state": state,
+                "position": position,
                 "durationSeconds": float(getattr(event, "duration", 0) or 0),
             }
         )
