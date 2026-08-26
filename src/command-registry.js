@@ -52,6 +52,7 @@ const BOARD_COMMAND_IDS = new Set([
   'alexa.air-quality',
   'alexa.now-playing',
   'alexa.alarms',
+  'alexa.notifications',
   'steam.now-playing',
   'steam.last-played',
   'psn.now-playing',
@@ -221,6 +222,19 @@ const COMMANDS = [
     pushable: true,
     schedulable: true,
     supportsContentCheck: false,
+    variableDuration: false,
+    defaultDurationSeconds: 45,
+  },
+  {
+    id: 'alexa.notifications',
+    title: 'Show Notifications',
+    subtitle: 'Last captured notification',
+    group: 'Alexa',
+    route: '/api/push/notifications',
+    icon: 'notification',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
     variableDuration: false,
     defaultDurationSeconds: 45,
   },
@@ -570,6 +584,7 @@ function createCommandRegistry(deps = {}) {
     getWikiCommonKnowledgeStatus = null,
     getOverheadStatus = null,
     getPhotoCount = null,
+    getNotificationsCacheStatus = null,
     log = null,
   } = deps;
 
@@ -650,6 +665,7 @@ function createCommandRegistry(deps = {}) {
       return Boolean(status.hasContent);
     },
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
+    'alexa.notifications': () => Boolean(call(getNotificationsCacheStatus)?.hasContent),
   };
 
   /** id → (params) => seconds. Only needed for variableDuration commands. */

@@ -32,6 +32,7 @@ const COMMAND_TO_TYPE = {
   'alexa.shopping-list': 'shopping-list.snapshot',
   'alexa.timers': 'timer.snapshot',
   'alexa.alarms': 'alarm.snapshot',
+  'alexa.notifications': 'alexa-notifications.query',
   'alexa.now-playing': 'music.playing',
   'alexa.air-quality': 'air-quality.query',
   'signal.guest-snaps': 'guest.photobooth',

@@ -63,6 +63,7 @@ const { createTeslaSessionKeepAlive } = require('./tesla-session-keepalive');
 const { createBackgroundCacheRefresh } = require('./background-cache-refresh');
 const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { loadAirQualityCache, saveAirQualityCache } = require('./air-quality-cache');
+const { saveNotificationsCache } = require('./notifications-cache');
 const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
 const {
   hasNotificationContent,
@@ -395,12 +396,12 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       return delivery;
     }
     const out = attachTarget(payload, delivery.target);
-    sendUdpPayload(out, {
+    const sent = sendUdpPayload(out, {
       ...(delivery.sendOptions || {}),
       ...(extraSendOptions || {}),
       targetId: targetId || (delivery.isAll ? 'all' : delivery.entry?.id) || 'all',
     });
-    return delivery;
+    return { ...delivery, vestaboard: sent?.vestaboard };
   }
 
   function recordBroadcast(record) {
@@ -1632,6 +1633,9 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
 
     if (!emitVoicePayload(payload)) {
       return;
+    }
+    if (payload?.type === 'alexa-notifications.query' && payload?.notifications?.items?.length) {
+      saveNotificationsCache(config, payload, log);
     }
     voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
     lastCaptureAt = Date.now();

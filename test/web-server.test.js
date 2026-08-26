@@ -1283,7 +1283,7 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   const pushable = COMMANDS.filter((command) => command.pushable).map((c) => c.id);
   for (const id of [
     'signal.guest-snaps', 'alexa.air-quality', 'alexa.now-playing', 'alexa.alarms',
-    'alexa.weather', 'alexa.shopping-list', 'alexa.timers', 'signal.slideshow',
+    'alexa.notifications', 'alexa.weather', 'alexa.shopping-list', 'alexa.timers', 'signal.slideshow',
     'tesla.dashboard', 'tesla.battery',
   ]) {
     assert.ok(pushable.includes(id), `${id} should be a pushable command`);

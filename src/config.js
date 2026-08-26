@@ -119,6 +119,10 @@ function loadConfig() {
     ROOT,
     config.weatherCacheFile || 'data/weather-cache.json',
   );
+  config.notificationsCachePath = path.resolve(
+    ROOT,
+    config.notificationsCacheFile || 'data/notifications-cache.json',
+  );
   config.airQualityCachePath = path.resolve(
     ROOT,
     config.airQualityCacheFile || 'data/air-quality-cache.json',

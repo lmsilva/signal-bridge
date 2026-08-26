@@ -68,6 +68,11 @@ const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache, parseThumbRouteTail } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
 const { createCommandRegistry } = require('./command-registry');
+const {
+  loadNotificationsCache,
+  buildReplayPayload,
+  hasCachedNotification,
+} = require('./notifications-cache');
 const { createDisplayScheduler } = require('./display-scheduler');
 const { normaliseTarget: normaliseSchedulerTarget } = require('./scheduler-rules');
 const {
@@ -436,6 +441,9 @@ function createWebServer({
       || overheadService()?.statusSnapshot?.()
       || null,
     getPhotoCount: () => qrImageCache.list().length,
+    getNotificationsCacheStatus: () => ({
+      hasContent: hasCachedNotification(loadNotificationsCache(config)),
+    }),
   });
   let server = null;
   let redirectServer = null;
@@ -1595,6 +1603,7 @@ function createWebServer({
           await handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res); break;
         case 'alexa.timers': handleTimersPush(body, res); break;
         case 'alexa.alarms': handleAlarmsPush(body, res); break;
+        case 'alexa.notifications': handleNotificationsPush(body, res); break;
         case 'alexa.air-quality':
           await handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res); break;
         case 'alexa.now-playing':
@@ -2198,6 +2207,55 @@ function createWebServer({
     requestAlarmPoll(device);
     log.info('Web push accepted (alarms)', { device });
     sendJson(res, 202, { ok: true, kind: 'alarms' });
+  }
+
+  function handleNotificationsPush(body, res) {
+    const cached = loadNotificationsCache(config);
+    const payload = buildReplayPayload(cached, {
+      device: deviceFrom(body),
+      trigger: body?.triggeredBy === 'scheduler' ? 'notifications-scheduler' : 'notifications-push',
+      timestamp: Date.now(),
+    });
+    if (!payload) {
+      sendJson(res, 404, {
+        ok: false,
+        error: 'No notification has been captured yet',
+      });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const delivery = displayRegistry.resolveDelivery(targetId);
+      if (delivery.error && !delivery.isAll) {
+        sendJson(res, 404, { ok: false, error: delivery.error });
+        return;
+      }
+    }
+    const deliveryResult = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, {
+        source: body?.triggeredBy === 'scheduler' ? 'scheduler' : 'web-api',
+      })
+      : null;
+    if (deliveryResult?.error && !deliveryResult?.isAll) {
+      sendJson(res, 404, { ok: false, error: deliveryResult.error });
+      return;
+    }
+    log.info('Web push accepted (notifications)', {
+      device: payload.device,
+      targetId,
+      items: payload.notifications?.items?.length ?? 0,
+    });
+    const responseBody = {
+      ok: true,
+      kind: 'alexa-notifications',
+      targetId,
+      vestaboard: deliveryResult?.vestaboard,
+    };
+    if (body?.triggeredBy === 'scheduler') {
+      sendJson(res, 202, responseBody);
+      return;
+    }
+    sendJson(res, 200, responseBody);
   }
 
   async function handleGuestPhotoboothPush(body, res) {
@@ -4736,6 +4794,9 @@ function createWebServer({
             return;
           case '/api/push/alarms':
             handleAlarmsPush(body, res);
+            return;
+          case '/api/push/notifications':
+            handleNotificationsPush(body, res);
             return;
           case '/api/push/air-quality':
             handleVoiceQueryPush('air-quality', 'show indoor air quality', 'air-quality-query', body, res);
