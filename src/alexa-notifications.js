@@ -8,6 +8,12 @@ const NOTIFICATION_INTRO_RE =
 const ORDINAL_SPLIT_RE =
   /\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|next|finally)\s*,?\s*/i;
 
+const AMAZON_SHOPPING_SOURCE_RE = /\b(?:notification(?:s)? from )?amazon shopping\b/i;
+const NOTIFICATION_DISMISSAL_RE =
+  /\bthat(?:'s| is) all(?: your)? notifications?\b|\b(?:alright|ok(?:ay)?),?\s*no problem\b[^.]*\bnotifications?\b/i;
+const DELIVERY_CONTENT_RE =
+  /\b(?:package|order|delivery|delivered|deliver(?:y|ies)|shipped|shipping|out for delivery|arriving|on its way|left (?:at|on) (?:your )?(?:porch|doorstep|garage|front door))\b/i;
+
 function normalizeText(value) {
   return String(value || '')
     .replace(/[\u2018\u2019\u2032`´]/g, "'")
@@ -138,10 +144,121 @@ function buildNotificationsReading(spokenResponse) {
   };
 }
 
+function isAmazonShoppingSource(text) {
+  return AMAZON_SHOPPING_SOURCE_RE.test(normalizeText(text));
+}
+
+function isNotificationDismissal(text) {
+  const spoken = normalizeText(text);
+  if (!spoken) {
+    return false;
+  }
+  if (NOTIFICATION_DISMISSAL_RE.test(spoken)) {
+    return true;
+  }
+  if (isEmptyNotificationPhrase(spoken) && /\bnotifications?\b/i.test(spoken)) {
+    return /\b(?:all|that(?:'s| is) all|no problem)\b/i.test(spoken);
+  }
+  return false;
+}
+
+function isDeliveryNotificationText(text) {
+  return DELIVERY_CONTENT_RE.test(normalizeText(text));
+}
+
+function isAmazonShoppingIntroOnly(text) {
+  const spoken = normalizeText(text);
+  if (!spoken) {
+    return false;
+  }
+  return isAmazonShoppingSource(spoken) && !isDeliveryNotificationText(spoken);
+}
+
+function matchesPassiveAmazonDeliveryNotification(summary, response) {
+  const sum = normalizeText(summary);
+  const resp = normalizeText(response);
+  if (sum && matchesNotificationsQuery(sum, resp)) {
+    return false;
+  }
+  if (!resp) {
+    return false;
+  }
+  if (isNotificationDismissal(resp)) {
+    return false;
+  }
+  if (sum) {
+    return false;
+  }
+  return isAmazonShoppingSource(resp) || isDeliveryNotificationText(resp);
+}
+
+function stripAmazonShoppingIntro(spoken) {
+  return normalizeText(spoken)
+    .replace(/^you(?:'ve| have) got (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+) new notification(?:s)? from amazon shopping[.:\s-]*/i, '')
+    .replace(/^you have (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+) new notification(?:s)? from amazon shopping[.:\s-]*/i, '')
+    .replace(/let me pull that up for you[.:\s-]*/i, '')
+    .trim();
+}
+
+function parseDeliveryNotificationsFromSpeech(response) {
+  const spoken = normalizeText(response);
+  const meta = { category: 'delivery', source: 'amazon-shopping' };
+  if (!spoken || isNotificationDismissal(spoken)) {
+    return { items: [], empty: true, summary: null, body: spoken || null, ...meta };
+  }
+  if (isAmazonShoppingIntroOnly(spoken)) {
+    return { items: [], empty: false, summary: null, body: spoken, ...meta };
+  }
+
+  const parsed = parseNotificationsFromSpeech(spoken);
+  let items = parsed.items.filter((item) => isDeliveryNotificationText(item));
+  if (!items.length) {
+    const body = stripAmazonShoppingIntro(spoken);
+    if (body && isDeliveryNotificationText(body)) {
+      items = [cleanNotificationText(body)];
+    } else if (isDeliveryNotificationText(spoken)) {
+      items = [cleanNotificationText(body || spoken)];
+    }
+  }
+
+  const count = items.length;
+  return {
+    items,
+    empty: count === 0,
+    summary: count ? `${count} delivery update${count === 1 ? '' : 's'}` : null,
+    body: spoken,
+    ...meta,
+  };
+}
+
+function hasDeliveryNotificationContent(response) {
+  return parseDeliveryNotificationsFromSpeech(response).items.length > 0;
+}
+
+function buildDeliveryNotificationsReading(spokenResponse) {
+  const parsed = parseDeliveryNotificationsFromSpeech(spokenResponse);
+  return {
+    items: parsed.items,
+    empty: parsed.empty,
+    summary: parsed.summary,
+    body: parsed.body,
+    category: parsed.category,
+    source: parsed.source,
+  };
+}
+
 module.exports = {
   SHOW_NOTIFICATIONS_RE,
   matchesNotificationsQuery,
   parseNotificationsFromSpeech,
   buildNotificationsReading,
   hasNotificationContent,
+  isAmazonShoppingSource,
+  isNotificationDismissal,
+  isDeliveryNotificationText,
+  isAmazonShoppingIntroOnly,
+  matchesPassiveAmazonDeliveryNotification,
+  parseDeliveryNotificationsFromSpeech,
+  hasDeliveryNotificationContent,
+  buildDeliveryNotificationsReading,
 };

@@ -772,13 +772,16 @@ function notificationFrames(payload = {}) {
     return [];
   }
 
+  const isDelivery = notifications?.category === 'delivery'
+    || notifications?.source === 'amazon-shopping';
+  const title = isDelivery ? 'AMAZON DELIVERY' : 'NOTIFICATIONS';
   const content = [`${items.length} NEW`, ...wrap(items[0], BODY_WIDTH)];
   const rows = badgeFrame({
     color: 'yellow',
-    title: 'NOTIFICATIONS',
+    title,
     rows: padRows(content),
   });
-  return [snapshotFrame(rows, 'Notifications', 'alexa-notifications.query')];
+  return [snapshotFrame(rows, isDelivery ? 'Amazon delivery' : 'Notifications', 'alexa-notifications.query')];
 }
 
 // ---------------------------------------------------------------------------

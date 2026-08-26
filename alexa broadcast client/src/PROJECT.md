@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-25 (Autodarts last-game tile reads the local day)
+**Last updated:** 2026-08-26 (Amazon delivery notification banner on passive Shopping alerts)
 
 ---
 
@@ -113,7 +113,7 @@ All payloads include `version: 2` and `type`. Legacy broadcasts with only `messa
 | `tesla-battery.query` | Owns chrome — VEHICLE/model + UPDATED header; Model Y hero shifted down into spare height, compact ticked gauge (72p / 56l), %/range above bar, charging chip + optional detail rows |
 | `tesla-dashboard.query` | Mission-control dashboard — live OSM map (dark-tinted tiles, pin + heading, speed/gear chip only on map), car render with security pills **under** the vehicle, battery bar, climate/TPMS/odo/software 2×2 grid, media strip |
 | `vivint-alarm.query` | Lock icon + armed/disarmed status (Vivint stay/away) |
-| `alexa-notifications.query` | Amber notification banner + parsed notification cards |
+| `alexa-notifications.query` | Amber notification banner + parsed notification cards; `notifications.category: delivery` → **Amazon delivery** banner |
 | `request.processing` | Animated spinner + staged "working on it" messages while bridge fetches slow external data (Tesla); timeout failure state after `request.timeoutSeconds` |
 | `web.open` | **Command (no overlay):** pre-flight `web.url`; success → spawn `webview-host` (persistent frameless browser, stays until `web.close`); failure → "Cannot display content at this time" broadcast with `web.errorDisplaySeconds` timeout |
 | `web.close` | **Command:** kill the WebView2 host |
@@ -141,6 +141,7 @@ python test/send_test.py --type tesla-battery-limited --seconds 30
 python test/send_test.py --type tesla-battery-stale --seconds 30
 python test/send_test.py --type vivint-alarm --seconds 30
 python test/send_test.py --type notifications --seconds 45
+python test/send_test.py --type notifications-delivery --seconds 45
 python test/send_test.py --type weather --seconds 45
 python test/send_test.py --type indoor --seconds 45
 python test/send_test.py --type indoor-humidity --seconds 45
@@ -269,6 +270,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-26: **Amazon delivery banner** — `alexa-notifications.query` with `notifications.category: delivery` shows **Amazon delivery** in the amber banner (passive Shopping TTS from the bridge). Smoke: `send_test.py --type notifications-delivery`. Tests unchanged unless touching panel layout.
 - 2026-08-25: **Autodarts last-game tile showed the UTC day** — `format_last_played_label` parsed the bridge's UTC stamp into an aware datetime and then `strftime`'d it straight, so a match thrown at 23:34 Denver read as the next day; it now `.astimezone()`s into this display's own zone first. `totals.lastPlayedAt` stays the source: the bridge decides what counts as a played match (a race ended early does, an opened-then-deleted lobby does not). Tests: `test_autodarts_panel.py`. Ship: portable client rebuild required (not run).
 - 2026-08-25: **Broadcast message viewport stopped burying the dismiss rail** — the painted band clamps to `max(48, 64u)` but `page_chrome` reserved a bare `64 * u`, so on any screen whose short edge is under 810px the content zone ran 1–5px past the band top. Broadcast is the only page whose content is a child `tk.Canvas` widget, and a widget always stacks above canvas items, so it covered the 3px rail across everything except the left/right margins while YouTube (canvas items, footer raised over them) looked correct. `footer_band_h` is now the single clamped source of truth and `dismiss_footer.footer_height` delegates to it. Tests: `test_dismiss_footer.py` (band/reserved-gap parity and content-clears-rail across 12 screen sizes). Ship: portable client rebuild required (not run).
 - 2026-08-24: **Autodarts + Roll Credits cards lost the square corners** — the "glass" fill was 16 horizontal rectangles inset to fake a round-rect, and the outline was an 8-point spline with control points on the box corners, so every card showed banding and a light square at each corner. Card bodies are now one circular-corner polygon (no PhotoImage: Tk drops the alpha and the rectangular bitmap becomes the same square ears). `rounded_points` follows the quarter-circles; `paint_round_rect` no longer uses `smooth=True`. The page wash can still use a full-rect PIL gradient. Tests: `test_design_system.py`, `test_dashboard_render_smoke.py`. Ship: portable client rebuild required (not run).

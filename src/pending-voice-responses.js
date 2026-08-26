@@ -1,5 +1,9 @@
 const { hasAlarmStatusInSpeech } = require('./vivint-alarm');
-const { hasNotificationContent } = require('./alexa-notifications');
+const {
+  hasNotificationContent,
+  hasDeliveryNotificationContent,
+  isNotificationDismissal,
+} = require('./alexa-notifications');
 const { extractRouteLocations, spokenHasRouteAnswer } = require('./route-query');
 
 const DEFAULT_TTL_MS = 90000;
@@ -34,6 +38,15 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
         return;
       }
       pending.set(pendingKey(event.device, 'vivint-alarm'), { event, at: now });
+      prune(now);
+      return;
+    }
+
+    if (event.kind === 'alexa-notifications' && event.trigger === 'amazon-delivery-passive') {
+      if (hasDeliveryNotificationContent(event.spokenResponse)) {
+        return;
+      }
+      pending.set(pendingKey(event.device, 'amazon-delivery-passive'), { event, at: now });
       prune(now);
       return;
     }
@@ -104,6 +117,25 @@ function createPendingVoiceResponses({ ttlMs = DEFAULT_TTL_MS } = {}) {
           spokenResponse: response,
           timestamp: activity?.creationTimestamp || now,
           trigger: 'vivint-alarm-response',
+        };
+      }
+    }
+
+    const deliveryPending = pending.get(pendingKey(device, 'amazon-delivery-passive'));
+    if (deliveryPending && now - deliveryPending.at <= ttlMs) {
+      if (isNotificationDismissal(response)) {
+        pending.delete(pendingKey(device, 'amazon-delivery-passive'));
+        return null;
+      }
+      if (hasDeliveryNotificationContent(response)) {
+        pending.delete(pendingKey(device, 'amazon-delivery-passive'));
+        return {
+          ...deliveryPending.event,
+          activityId: helpers.getActivityId(activity),
+          sourceActivityId: deliveryPending.event.activityId || null,
+          spokenResponse: response,
+          timestamp: activity?.creationTimestamp || now,
+          trigger: 'amazon-delivery-response',
         };
       }
     }

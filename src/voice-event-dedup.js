@@ -1,5 +1,8 @@
 const { parseAlarmStatusFromSpeech } = require('./vivint-alarm');
-const { parseNotificationsFromSpeech } = require('./alexa-notifications');
+const {
+  parseNotificationsFromSpeech,
+  parseDeliveryNotificationsFromSpeech,
+} = require('./alexa-notifications');
 const { parseShoppingListFromSpeech } = require('./shopping-list');
 const { parseSmartHomeCommand } = require('./smart-home-command');
 
@@ -91,6 +94,13 @@ function contentSignature(event) {
   }
 
   if (event?.kind === 'alexa-notifications') {
+    if (
+      event.trigger === 'amazon-delivery-passive'
+      || event.trigger === 'amazon-delivery-response'
+    ) {
+      const parsed = parseDeliveryNotificationsFromSpeech(event?.spokenResponse);
+      return normalizePart(parsed?.items?.[0] || '');
+    }
     const parsed = parseNotificationsFromSpeech(event?.spokenResponse);
     return String(parsed?.items?.length ?? '') + '|' + String(parsed?.empty ?? '');
   }

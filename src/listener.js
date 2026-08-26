@@ -64,7 +64,14 @@ const { createBackgroundCacheRefresh } = require('./background-cache-refresh');
 const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { loadAirQualityCache, saveAirQualityCache } = require('./air-quality-cache');
 const { buildVivintAlarmReading, hasAlarmStatusInSpeech } = require('./vivint-alarm');
-const { buildNotificationsReading, hasNotificationContent } = require('./alexa-notifications');
+const {
+  hasNotificationContent,
+  hasDeliveryNotificationContent,
+  isNotificationDismissal,
+  isAmazonShoppingIntroOnly,
+  buildNotificationsReading,
+  buildDeliveryNotificationsReading,
+} = require('./alexa-notifications');
 const {
   fetchNowPlaying,
   fetchNowPlayingAfterSkip,
@@ -238,6 +245,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     teslaDashboardQueries: config.voiceEvents?.teslaDashboardQueries !== false,
     vivintAlarmQueries: config.voiceEvents?.vivintAlarmQueries !== false,
     notificationQueries: config.voiceEvents?.notificationQueries !== false,
+    amazonDeliveryNotifications: config.voiceEvents?.amazonDeliveryNotifications !== false,
     routeQueries: config.voiceEvents?.routeQueries !== false,
     guestPhotoboothQueries: config.voiceEvents?.guestPhotoboothQueries !== false,
     photoSlideshowQueries: config.voiceEvents?.photoSlideshowQueries !== false,
@@ -419,6 +427,10 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
   function scheduleResponseFollowup(reason) {
     setTimeout(() => pollRecentHistory(`${reason}-followup-2s`), 2000);
     setTimeout(() => pollRecentHistory(`${reason}-followup-5s`), 5000);
+    if (reason === 'amazon-delivery-passive') {
+      setTimeout(() => pollRecentHistory(`${reason}-followup-15s`), 15000);
+      setTimeout(() => pollRecentHistory(`${reason}-followup-30s`), 30000);
+    }
   }
 
   function scheduleMusicQueryRetry(event, attempt = 1) {
@@ -687,7 +699,15 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       return;
     }
 
-    if (event.kind === 'alexa-notifications' && !voiceSettings.notificationQueries) {
+    if (event.kind === 'alexa-notifications' && event.trigger === 'amazon-delivery-passive') {
+      if (!voiceSettings.amazonDeliveryNotifications) {
+        return;
+      }
+    } else if (event.kind === 'alexa-notifications' && event.trigger === 'amazon-delivery-response') {
+      if (!voiceSettings.amazonDeliveryNotifications) {
+        return;
+      }
+    } else if (event.kind === 'alexa-notifications' && !voiceSettings.notificationQueries) {
       return;
     }
 
@@ -975,18 +995,42 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       }
       payload = buildVivintAlarmPayload(event, config, { alarm });
     } else if (event.kind === 'alexa-notifications') {
-      const notifications = buildNotificationsReading(event.spokenResponse);
-      if (!hasNotificationContent(event.spokenResponse)) {
-        log.info('Notifications query without readable content yet', {
-          query: event.query,
-          spoken: String(event.spokenResponse || '').slice(0, 160) || null,
-        });
-        pendingVoiceResponses.remember(event);
-        scheduleResponseFollowup('alexa-notifications');
+      const isPassiveDelivery = event.trigger === 'amazon-delivery-passive'
+        || event.trigger === 'amazon-delivery-response';
+      if (isPassiveDelivery) {
+        if (isNotificationDismissal(event.spokenResponse)) {
+          pendingVoiceResponses.forget(event.device, 'amazon-delivery-passive');
+          return;
+        }
+        if (
+          isAmazonShoppingIntroOnly(event.spokenResponse)
+          || !hasDeliveryNotificationContent(event.spokenResponse)
+        ) {
+          log.info('Amazon delivery notification waiting for detail TTS', {
+            device: event.device,
+            spoken: String(event.spokenResponse || '').slice(0, 160) || null,
+          });
+          pendingVoiceResponses.remember(event);
+          scheduleResponseFollowup('amazon-delivery-passive');
+          return;
+        }
+        pendingVoiceResponses.forget(event.device, 'amazon-delivery-passive');
+        const notifications = buildDeliveryNotificationsReading(event.spokenResponse);
+        payload = buildNotificationsPayload(event, config, { notifications });
       } else {
-        pendingVoiceResponses.forget(event.device, 'alexa-notifications');
+        const notifications = buildNotificationsReading(event.spokenResponse);
+        if (!hasNotificationContent(event.spokenResponse)) {
+          log.info('Notifications query without readable content yet', {
+            query: event.query,
+            spoken: String(event.spokenResponse || '').slice(0, 160) || null,
+          });
+          pendingVoiceResponses.remember(event);
+          scheduleResponseFollowup('alexa-notifications');
+        } else {
+          pendingVoiceResponses.forget(event.device, 'alexa-notifications');
+        }
+        payload = buildNotificationsPayload(event, config, { notifications });
       }
-      payload = buildNotificationsPayload(event, config, { notifications });
     } else if (event.kind === 'reminder-fired') {
       payload = buildReminderFiredPayload({
         reminder: {

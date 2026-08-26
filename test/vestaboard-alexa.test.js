@@ -820,6 +820,28 @@ test('no notifications means no frame', () => {
   assert.deepEqual(alexa.notificationFrames({ type: 'alexa-notifications.query' }), []);
 });
 
+test('delivery notifications use AMAZON DELIVERY title', () => {
+  const frames = alexa.notificationFrames({
+    type: 'alexa-notifications.query',
+    notifications: {
+      items: ['Your package was delivered today'],
+      empty: false,
+      summary: '1 delivery update',
+      category: 'delivery',
+      source: 'amazon-shopping',
+    },
+  });
+
+  assertLayout(frames[0].rows, [
+    'yy AMAZON DELIVERY  yy',
+    ' 1 NEW',
+    ' YOUR PACKAGE WAS',
+    ' DELIVERED TODAY',
+    '',
+    'yy                  yy',
+  ], 'amazon-delivery');
+});
+
 // ---------------------------------------------------------------------------
 // A13. Vivint
 // ---------------------------------------------------------------------------

@@ -455,3 +455,29 @@ test('voice query parser uses routine index for empty-summary Sent to Display', 
   assert.equal(event?.kind, 'tesla-battery');
   assert.match(String(event?.trigger || ''), /sent-to-display|routine-index/);
 });
+
+test('voice query parser detects passive Amazon delivery TTS without ASR', () => {
+  const parser = createVoiceQueryParser();
+  const intro = "You've got one new notification from Amazon Shopping. Let me pull that up for you.";
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Master Bathroom Echo',
+    description: { summary: '' },
+    alexaResponse: intro,
+    data: { recordKey: 'amazon-delivery-intro' },
+  });
+  assert.equal(event?.kind, 'alexa-notifications');
+  assert.equal(event?.trigger, 'amazon-delivery-passive');
+});
+
+test('voice query parser ignores Amazon delivery dismissal TTS', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse({
+    creationTimestamp: Date.now(),
+    name: 'Master Bathroom Echo',
+    description: { summary: '' },
+    alexaResponse: "Alright, no problem. That's all your notifications.",
+    data: { recordKey: 'amazon-delivery-dismiss' },
+  });
+  assert.equal(event, null);
+});
