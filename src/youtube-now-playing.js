@@ -368,9 +368,22 @@ function createYoutubeNowPlaying({
     // A dead agent session reports not-connected per device — re-bind those.
     const rows = Array.isArray(result?.devices) ? result.devices : null;
     if (rows) {
+      const reported = new Set();
       for (const row of rows) {
+        if (row?.deviceId) {
+          reported.add(String(row.deviceId));
+        }
         if (row?.ok === false && (row.error === 'not-connected' || !row.error)) {
           scheduleReconnect(row.deviceId, row.error || 'not-connected');
+        }
+      }
+      // The agent drops a device from its session table as soon as that task
+      // dies, so a dead link is *absent* here rather than reported unhealthy.
+      // Without this an empty list read as "everything is fine" and the TV sat
+      // linked and silent forever — the exact failure this poll exists to catch.
+      for (const device of store.listDevices()) {
+        if (device.enabled && !reported.has(String(device.id))) {
+          scheduleReconnect(device.id, 'not-connected');
         }
       }
     } else if (result?.ok === false && result.error === 'not-connected') {

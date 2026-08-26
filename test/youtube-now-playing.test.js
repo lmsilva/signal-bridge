@@ -648,6 +648,65 @@ test('keep-alive not-connected schedules a reconnect', async () => {
   service.stop();
 });
 
+test('keep-alive re-binds a device the agent no longer has a session for', async () => {
+  // The sidecar pops a dead session, so the TV vanishes from poll-all rather
+  // than reporting not-connected. An empty list must not read as healthy.
+  const lounge = fakeLounge();
+  lounge.pollNowPlaying = async () => ({ ok: true, devices: [] });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  await service._keepAlivePoll();
+
+  assert.equal(service._reconnectState.has('tv-1'), true);
+  service.stop();
+});
+
+test('keep-alive leaves a device the agent reports as healthy alone', async () => {
+  const lounge = fakeLounge();
+  lounge.pollNowPlaying = async () => ({
+    ok: true,
+    devices: [{ deviceId: 'tv-1', ok: true }],
+  });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  await service._keepAlivePoll();
+
+  assert.equal(service._reconnectState.has('tv-1'), false);
+  service.stop();
+});
+
+test('keep-alive ignores a disabled device that the agent dropped', async () => {
+  const lounge = fakeLounge();
+  lounge.pollNowPlaying = async () => ({ ok: true, devices: [] });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Spare TV',
+    screenId: 'screen-1',
+    enabled: false,
+    status: 'linked',
+  });
+  service.start();
+  await service._keepAlivePoll();
+
+  assert.equal(service._reconnectState.has('tv-1'), false);
+  service.stop();
+});
+
 // ---------------------------------------------------------- device linking
 
 test('linking stores the device with its token encrypted at rest', async () => {
