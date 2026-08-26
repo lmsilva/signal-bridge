@@ -82,6 +82,39 @@ test('resolveDelivery for all fans out to every registered display host', () => 
   }
 });
 
+test('untargeted UDP options unicast to announced displays, not boards', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'disp-reg-'));
+  const registry = createDisplayRegistry({ ROOT: root }, { warn() {}, info() {} }, {
+    staticEntries: () => [{
+      id: 'vb-sim',
+      name: 'Vestaboard simulator',
+      kind: 'vestaboard',
+      enabled: true,
+    }],
+  });
+  try {
+    registry.upsertFromAnnounce({
+      type: 'display.announce',
+      display: { id: 'disp-1', name: 'Poster', port: 47832 },
+    }, { address: '192.168.200.50', port: 50000 });
+
+    assert.deepEqual(registry.registeredUdpHosts(), ['192.168.200.50']);
+
+    const filled = registry.withRegisteredUdpHosts({ source: 'youtube-lounge' });
+    assert.deepEqual(filled.hosts, ['192.168.200.50']);
+    assert.equal(filled.source, 'youtube-lounge');
+
+    const unicast = registry.withRegisteredUdpHosts({ host: '10.0.0.9' });
+    assert.equal(unicast.host, '10.0.0.9');
+    assert.equal(unicast.hosts, undefined);
+
+    const already = registry.withRegisteredUdpHosts({ hosts: ['10.0.0.8'] });
+    assert.deepEqual(already.hosts, ['10.0.0.8']);
+  } finally {
+    registry.stop();
+  }
+});
+
 test('display registry persists across reload', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'disp-reg-'));
   const first = createDisplayRegistry({ ROOT: root }, { warn() {} });

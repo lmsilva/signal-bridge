@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-24 (Vestaboard simulator uses the recorded flip clip)
+**Last updated:** 2026-08-25 (YouTube lounge unicasts to the poster PC)
 
 ---
 
@@ -59,7 +59,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/vendor/alexa-cookie-proxy.js` | Patched login proxy (font fixes, static assets, UI CSS injection) |
 | `src/port-utils.js` | Pre-check port 3456 before auth proxy bind |
 | `src/auth-status.js` | Writes `data/auth-status.json` when session expires |
-| `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set |
+| `src/broadcast-udp.js` | UDP send (broadcast / unicast) on `:47832`; listen for `display.announce` on `:47833` (`udpBroadcast.discoveryPort`); seals/opens via `lan-crypto` when `LAN_UDP_SECRET` is set. Untargeted `sendUdpPayload` (YouTube/Steam/PSN lounge, Alexa broadcasts) now unicasts to every announced full-display host via `displayRegistry.withRegisteredUdpHosts` — broadcast-only often never reached the poster PC while Vestaboard still flipped over HTTP |
 | `src/lan-crypto.js` | Shared-secret **AES-256-GCM** for bridge↔display UDP (`LAN_UDP_SECRET` / `udpBroadcast.sharedSecret`); protocol v3 envelope `{v,alg,n,c}`; SHA-256 key derive; stamps `sentAt` at seal; ±120s freshness on `sentAt` (not Alexa activity `timestamp`) |
 | `src/steam-*.js` | Steam Now Playing: config/session/OpenID auth (callback requires one-time `state` from admin start), Web API + store appdetails, presence allowlist, poller with interrupt-suppress, UDP builders |
 | `src/psn-*.js` | PSN Now Playing (unofficial `psn-api`): NPSSO → tokens in `data/psn-session.json`, `getBasicPresence` poller, played-games/trophy enrich, fail-soft Chihiro Store Plan B (`psn-store.js` — description + real screenshots + stars), Admin NPSSO paste + manual preview, UDP `psn.now-playing` |
@@ -93,7 +93,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/unmatched-activity-log.js` | Cap-append `data/unmatched-activities.jsonl` for unmatched history rows (debug app Runs) |
 | `tools/steam-presence-reporter/` | **Optional** fallback only — normally presence is piggybacked on the theater PC’s `display.announce` (`hostname` + `steamAppId`) |
 | `src/command-registry.js` | **Single source of truth for pushable pages.** `COMMANDS[]` descriptors (`id`, `title`, `group`, `route`, `icon`, `body`, `pushable`, `schedulable`, `supportsContentCheck`, `variableDuration`, `defaultDurationSeconds`, `params`, `kinds`); `BOARD_COMMAND_IDS` marks what a Vestaboard can show (photos and library tours stay `full` only). `createCommandRegistry(deps)` binds live state for `hasContent(id)` / `estimateDuration(id, params)`. Served at `GET /api/commands`; the admin Push grid filters tiles by the selected display's kind. `assertValid()` rejects duplicate ids, duration contradictions, and unknown kinds |
-| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host. Announced entries read as `kind: 'full'`; the optional `staticEntries` provider merges in **Vestaboards** (`kind: 'vestaboard'`), which are configured rather than discovered — never persisted here, never pruned. `resolveDelivery` class targets: `all` (UDP + boards), `full` (UDP only, `target.class: 'full'`), `vestaboard` (HTTP only). A board id returns `kind: 'vestaboard'` and empty UDP `sendOptions` (not an error — the listener routes that target over HTTP) |
+| `src/display-registry.js` | Known displays from announces; persist `data/displays-registry.json`; prune after ~12 min without re-announce; **discover sweep** drops silent displays after Refresh (~2.5s); resolve target → unicast host. Announced entries read as `kind: 'full'`; the optional `staticEntries` provider merges in **Vestaboards** (`kind: 'vestaboard'`), which are configured rather than discovered — never persisted here, never pruned. `resolveDelivery` class targets: `all` (UDP + boards), `full` (UDP only, `target.class: 'full'`), `vestaboard` (HTTP only). A board id returns `kind: 'vestaboard'` and empty UDP `sendOptions` (not an error — the listener routes that target over HTTP). `withRegisteredUdpHosts` fills unicast IPs for untargeted lounge/broadcast sends so Vestaboard HTTP is not the only path that lands |
 | `src/message-details.js` | Parse sender/destination/message for broadcast payloads |
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, reminder, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/reminder/music/route/guest-photobooth/trivia/library-tour/platform-now-playing voice queries from history |
@@ -445,7 +445,7 @@ Default overlay port **47832**; discovery listen **47833**. Use `targets: ["<win
 ## Testing
 
 ```bash
-npm test                    # bridge only (1462 tests)
+npm test                    # bridge only (1463 tests)
 run_all_tests.bat           # repo root — bridge + Windows client (1330 + 631)
 ```
 
@@ -572,6 +572,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-25: **YouTube (and other lounge auto-pushes) reach the poster PC** — Vestaboard flipped because it is local HTTP, but `sendUdpPayload` with no host only broadcast to `255.255.255.255`, which often never hits the Movie Poster box. Untargeted sends now unicast to every announced full-display IP the same way scheduler/Push already do. Tests: `test/display-registry.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-24: **Simulator flip uses the recorded Vestaboard sample** — `vestaboard-sample.wav` is converted to mono PCM `src/web/admin/vb-flip.wav` (~5.6s). A full drum walk is staggered to that length so the flaps and the rattle end together. Cache-bust `?v=signal89`. Tests: `test/vestaboard-sim-api.test.js`.
 - 2026-08-24: **Vestaboard household timezone + Roll Credits actually flips** — Steam last-played `10:09PM` was the UTC hour of a 4:09pm Utah session. Board clocks (Steam/PSN launched-at, Tesla stamp, Alexa time/alarms/weather part-of-day, block digits) now format instants in `voiceEvents.localTimeZone` / `alarmSync.localTimeZone` (`America/Denver`). Quiet hours use the same zone, so 8pm MDT is no longer treated as 2am UTC quiet. Roll Credits tour UDP now carries compact `games[]` (`title` / `system` / `beatenAt`) so the board does not depend on the overlay playlist; totals still prefer `stats` so a scheduled subset cannot print "2 GAMES BEATEN". Tests: `test/vestaboard-alexa.test.js`, `test/vestaboard-gaming.test.js`, `test/vestaboard-queue.test.js`, `test/vestaboard-frames.test.js`, `test/roll-credits-payload.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-24: **Roll Credits trim clocks, range preview, and resolution redo** — start/end on the clip sheet are `01m03s` (still stored as seconds). The `<video>` seeks to start and loops only until end. YouTube rows can **Re-download** at 360/480/720/1080p (`POST .../media/:id/resolution`); the sheet waits for the job and reloads the player so you see the new file. The wall preview keeps the saved trim. Cache-bust `?v=signal87`. Tests: `test/roll-credits-trim.test.js`, `test/roll-credits-jobs.test.js`, `test/web-server.test.js`.

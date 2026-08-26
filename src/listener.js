@@ -360,7 +360,10 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       holdSeconds: options.holdSeconds,
       source: options.source || 'event',
     });
-    const sent = udpBroadcaster.send(payload, options);
+    // YouTube/Steam/PSN lounge auto-push (and Alexa broadcasts) used to send
+    // only 255.255.255.255. Vestaboard still flipped over HTTP; the poster PC
+    // often never saw the packet. Unicast to every announced full display.
+    const sent = udpBroadcaster.send(payload, displayRegistry.withRegisteredUdpHosts(options));
     if (sent && typeof sent.then === 'function') {
       sent.vestaboard = vestaboard;
       return sent;
