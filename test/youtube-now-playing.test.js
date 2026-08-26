@@ -701,6 +701,24 @@ test('a revoked link surfaces as needs-relink rather than silence', async () => 
   assert.deepEqual(service.statusSnapshot().needsRelink, ['Theater']);
 });
 
+test('re-linking clears the old failure reason instead of pinning it forever', async () => {
+  const lounge = fakeLounge();
+  lounge.connectDevice = async () => ({ ok: false, error: 'needs-relink' });
+  const { service, store } = makeService({ lounge });
+
+  await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });
+  const [failed] = store.publicDevices();
+  assert.equal(failed.status, 'needs-relink');
+  assert.equal(failed.statusDetail, 'needs-relink');
+
+  lounge.connectDevice = async () => ({ ok: true });
+  store.markDeviceStatus(failed.id, 'linked', null);
+
+  const [healed] = store.publicDevices();
+  assert.equal(healed.status, 'linked');
+  assert.equal(healed.statusDetail, null, 'a healthy device must not report a stale failure');
+});
+
 test('a refreshed token records when it expires so it is not refreshed every pass', async () => {
   const { service, lounge, store } = makeService();
   await service.linkDevice({ label: 'Theater', pairingCode: '123456789012' });

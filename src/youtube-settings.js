@@ -66,7 +66,11 @@ function sanitiseDevice(raw = {}, existing = null) {
     enabled: raw.enabled !== undefined ? raw.enabled !== false : (existing?.enabled !== false),
     lastSeenAt: raw.lastSeenAt ?? existing?.lastSeenAt ?? null,
     status: DEVICE_STATUSES.has(raw.status) ? raw.status : (existing?.status || 'linked'),
-    statusDetail: raw.statusDetail ?? existing?.statusDetail ?? null,
+    // `??` would keep a stale failure reason forever: clearing the detail means
+    // passing null, which is exactly what `??` falls through on.
+    statusDetail: raw.statusDetail !== undefined
+      ? raw.statusDetail
+      : (existing?.statusDetail ?? null),
     linkedAt: existing?.linkedAt || raw.linkedAt || new Date().toISOString(),
   };
 }
