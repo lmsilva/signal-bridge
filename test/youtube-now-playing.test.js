@@ -707,7 +707,97 @@ test('keep-alive ignores a disabled device that the agent dropped', async () => 
   service.stop();
 });
 
+test('keep-alive hangs up a lounge session the store no longer knows about', async () => {
+  // A deleted or re-registered TV used to leave its sidecar task running, still
+  // re-binding the same screen, so the live device never received an event.
+  const hungUp = [];
+  const lounge = fakeLounge();
+  lounge.disconnectDevice = async (deviceId) => {
+    hungUp.push(deviceId);
+    return { ok: true };
+  };
+  lounge.pollNowPlaying = async () => ({
+    ok: true,
+    devices: [{ deviceId: 'tv-new', ok: true }, { deviceId: 'tv-old', ok: true }],
+  });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-new',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+  service.start();
+  await service._keepAlivePoll();
+
+  assert.deepEqual(hungUp, ['tv-old']);
+  assert.equal(service._reconnectState.has('tv-new'), false);
+  service.stop();
+});
+
 // ---------------------------------------------------------- device linking
+
+test('forgetting a device disconnects its agent session before dropping the row', async () => {
+  const hungUp = [];
+  const lounge = fakeLounge();
+  lounge.disconnectDevice = async (deviceId) => {
+    hungUp.push(deviceId);
+    return { ok: true };
+  };
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({ id: 'tv-1', label: 'Movie Theater', screenId: 'screen-1', status: 'linked' });
+
+  assert.equal(await service.forgetDevice('tv-1'), true);
+  assert.deepEqual(hungUp, ['tv-1']);
+  assert.ok(!store.getDevice('tv-1'));
+});
+
+test('pausing a device releases the screen instead of only flipping the flag', async () => {
+  const hungUp = [];
+  const lounge = fakeLounge();
+  lounge.disconnectDevice = async (deviceId) => {
+    hungUp.push(deviceId);
+    return { ok: true };
+  };
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-1',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+
+  await service.setDeviceEnabled('tv-1', false);
+  assert.deepEqual(hungUp, ['tv-1']);
+  assert.equal(store.getDevice('tv-1').enabled, false);
+});
+
+test('re-linking a TV that is already linked replaces the earlier row', async () => {
+  // Two rows for one screen would fight over a single Lounge bind.
+  const hungUp = [];
+  const lounge = fakeLounge();
+  lounge.disconnectDevice = async (deviceId) => {
+    hungUp.push(deviceId);
+    return { ok: true };
+  };
+  lounge.pairWithScreenId = async (id, screenId) => ({ ok: true, screenId, authState: { t: 3 } });
+  const { service, store } = makeService({ lounge });
+  store.saveDevice({
+    id: 'tv-old',
+    label: 'Movie Theater',
+    screenId: 'screen-1',
+    enabled: true,
+    status: 'linked',
+  });
+
+  const result = await service.linkDevice({ label: 'Movie Theater', screenId: 'screen-1' });
+  assert.equal(result.ok, true);
+  assert.ok(!store.getDevice('tv-old'));
+  assert.deepEqual(hungUp, ['tv-old']);
+  assert.equal(store.listDevices().filter((d) => d.screenId === 'screen-1').length, 1);
+});
 
 test('linking stores the device with its token encrypted at rest', async () => {
   const { service, store, config } = makeService();

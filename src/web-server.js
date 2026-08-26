@@ -1165,7 +1165,16 @@ function createWebServer({
       sendJson(res, 503, { ok: false, error: 'YouTube is not available' });
       return undefined;
     }
-    return handler(service);
+    const outcome = handler(service);
+    // Some handlers talk to the sidecar and are async; a rejection here would
+    // otherwise take down the process instead of answering the request.
+    if (outcome && typeof outcome.catch === 'function') {
+      return outcome.catch((error) => {
+        log.warn('YouTube request failed', error?.message || error);
+        sendJson(res, 500, { ok: false, error: error?.message || 'YouTube request failed' });
+      });
+    }
+    return outcome;
   }
 
   function handleYoutubeSettingsGet(res) {
@@ -1208,7 +1217,7 @@ function createWebServer({
   }
 
   function handleYoutubeDeviceUpdate(id, body, res) {
-    withYoutube(res, (service) => {
+    withYoutube(res, async (service) => {
       const device = service.store.getDevice(id);
       if (!device) {
         sendJson(res, 404, { ok: false, error: 'Unknown device' });
@@ -1218,8 +1227,11 @@ function createWebServer({
       service.store.saveDevice({
         ...device,
         label: body?.label != null ? String(body.label) : device.label,
-        enabled: body?.enabled != null ? body.enabled !== false : device.enabled,
       });
+      // Pausing has to release the agent session, not just flip the flag.
+      if (body?.enabled != null) {
+        await service.setDeviceEnabled(id, body.enabled !== false);
+      }
       sendJson(res, 200, {
         ok: true,
         device: service.store.publicDevices().find((entry) => entry.id === String(id)),
@@ -1228,8 +1240,8 @@ function createWebServer({
   }
 
   function handleYoutubeDeviceDelete(id, res) {
-    withYoutube(res, (service) => {
-      const removed = service.store.removeDevice(id);
+    withYoutube(res, async (service) => {
+      const removed = await service.forgetDevice(id);
       sendJson(res, removed ? 200 : 404, {
         ok: removed,
         ...(removed ? {} : { error: 'Unknown device' }),
