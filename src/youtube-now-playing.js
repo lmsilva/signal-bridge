@@ -377,6 +377,7 @@ function createYoutubeNowPlaying({
           scheduleReconnect(row.deviceId, row.error || 'not-connected');
         }
       }
+      const known = new Set(store.listDevices().map((device) => String(device.id)));
       // The agent drops a device from its session table as soon as that task
       // dies, so a dead link is *absent* here rather than reported unhealthy.
       // Without this an empty list read as "everything is fine" and the TV sat
@@ -384,6 +385,16 @@ function createYoutubeNowPlaying({
       for (const device of store.listDevices()) {
         if (device.enabled && !reported.has(String(device.id))) {
           scheduleReconnect(device.id, 'not-connected');
+        }
+      }
+      // The mirror of that: a session the store has never heard of is a ghost
+      // left by a delete or a re-register, and it is still holding the Lounge
+      // bind for a screen a live device now wants. Polling it here would only
+      // help it steal the bind back, so hang it up instead.
+      for (const deviceId of reported) {
+        if (!known.has(deviceId)) {
+          log?.info?.(`YouTube dropping orphaned lounge session ${deviceId}`);
+          await disconnectSession(deviceId);
         }
       }
     } else if (result?.ok === false && result.error === 'not-connected') {
@@ -428,15 +439,27 @@ function createYoutubeNowPlaying({
       };
     }
 
+    const linkedScreenId = result.screenId || screenId;
     const saved = store.saveDevice({
       id: draft.id,
       label: label || result.screenName || 'YouTube device',
-      screenId: result.screenId || screenId,
+      screenId: linkedScreenId,
       screenName: result.screenName,
       screenDeviceName: result.screenDeviceName,
       authState: result.authState ? JSON.stringify(result.authState) : null,
       status: 'linked',
     });
+    // Re-registering a TV that is already linked is the common way out of a
+    // stuck session, and leaving the old row behind would have the two rows
+    // fight over one screen's Lounge bind — the very thing being fixed.
+    if (linkedScreenId) {
+      for (const other of store.listDevices()) {
+        if (other.id !== saved.id && other.screenId === linkedScreenId) {
+          log?.info?.(`YouTube replacing earlier link for ${other.label}`);
+          await forgetDevice(other.id);
+        }
+      }
+    }
     await connectDevice(store.getDevice(saved.id));
     return { ok: true, device: store.publicDevices().find((entry) => entry.id === saved.id) };
   }
@@ -463,6 +486,49 @@ function createYoutubeNowPlaying({
     });
     await connectDevice(store.getDevice(device.id));
     return { ok: true };
+  }
+
+  /**
+   * Drop a device for good — agent session included.
+   *
+   * Removing the store row alone left the sidecar's `_run_device` task running
+   * forever: it keeps re-binding through `_reestablish`, so a re-registered TV
+   * (a new device id for the same screen) fights its own ghost for the Lounge
+   * bind and the events land under an id the store no longer knows. That reads
+   * as "linked, but nothing is ever detected".
+   */
+  async function forgetDevice(id) {
+    const deviceId = String(id);
+    clearReconnect(deviceId);
+    await disconnectSession(deviceId);
+    return store.removeDevice(deviceId);
+  }
+
+  async function disconnectSession(deviceId) {
+    if (typeof lounge.disconnectDevice !== 'function') {
+      return;
+    }
+    try {
+      await lounge.disconnectDevice(String(deviceId));
+    } catch (error) {
+      log?.warn?.(`YouTube device ${deviceId} would not disconnect`, error?.message || error);
+    }
+  }
+
+  /** Pausing a device has to release the screen too, or the ghost keeps the bind. */
+  async function setDeviceEnabled(id, enabled) {
+    const device = store.getDevice(id);
+    if (!device) {
+      return null;
+    }
+    const next = store.saveDevice({ ...device, enabled: enabled !== false });
+    if (enabled === false) {
+      clearReconnect(String(id));
+      await disconnectSession(id);
+    } else if (!device.enabled) {
+      await connectDevice(store.getDevice(id));
+    }
+    return next;
   }
 
   async function discover() {
@@ -754,6 +820,8 @@ function createYoutubeNowPlaying({
     lounge,
     linkDevice,
     relinkDevice,
+    forgetDevice,
+    setDeviceEnabled,
     discover,
     connectDevice,
     refreshTokens,
