@@ -363,10 +363,22 @@ class Agent:
         return result
 
     async def _reestablish(self, device_id: str, api: Any) -> Optional[str]:
-        """Refresh lounge tokens and open a new bind session.
+        """Open a new bind session, refreshing tokens only if that fails.
 
         Returns None on success, or an error code (`needs-relink` / `unreachable`).
+
+        A subscribe ending is normal and says nothing about the token, but this
+        used to rotate auth on every cycle — trading a token the screen honours
+        for one it may not, roughly every five minutes. The result is persisted
+        by `_emit_auth`, so a bad rotation outlives a container restart and the
+        TV stays bound-but-silent. Reconnect first; only refresh if it fails.
         """
+        try:
+            if await api.connect():
+                return None
+        except Exception as error:
+            log("warn", f"Lounge reconnect for {device_id} failed: {error}")
+
         try:
             if not await api.refresh_auth():
                 return "needs-relink"
@@ -380,6 +392,7 @@ class Agent:
         except Exception as error:
             log("warn", f"Lounge reconnect for {device_id} failed: {error}")
             return "unreachable"
+        log("info", f"Lounge re-bound {device_id} after an auth refresh")
         return None
 
     async def _subscribe_forever(self, device_id: str, api: Any) -> Optional[str]:
@@ -481,6 +494,9 @@ class Agent:
 
         if not await api.connect():
             return {"ok": False, "error": "unreachable"}
+        # "Bound" and "receiving playback events" are different things, and only
+        # the first was ever observable. Say so, so a silent screen is legible.
+        log("info", f"Lounge bound {device_id} (screen={screen_name_of(api)})")
         return None
 
     async def disconnect(self, device_id: str) -> Dict[str, Any]:
