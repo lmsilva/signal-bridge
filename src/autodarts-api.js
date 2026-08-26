@@ -75,6 +75,7 @@ function decodeJwtPayload(accessToken) {
 function createAutodartsApi({
   fetchImpl = global.fetch,
   accessTokenProvider = async () => null,
+  rateLimit = null,
   clientId = DEFAULT_CLIENT_ID,
   clientSecret = '',
   timeoutMs = 15_000,
@@ -83,6 +84,11 @@ function createAutodartsApi({
   async function raw(method, url, { body, headers = {}, form = false, auth = true, timeout = timeoutMs } = {}) {
     const parsed = new URL(url, API_BASE);
     assertReadOnlyPath(method, parsed.pathname + parsed.search);
+    if (rateLimit?.waitForSlot) {
+      await rateLimit.waitForSlot();
+    } else {
+      rateLimit?.assertNotPaused?.();
+    }
     const finalHeaders = { ...headers };
     if (auth) {
       const token = await accessTokenProvider();
@@ -126,7 +132,18 @@ function createAutodartsApi({
     } catch {
       json = null;
     }
-    return { ok: response.ok, status: response.status, json, text, headers: response.headers };
+    const result = {
+      ok: response.ok,
+      status: response.status,
+      json,
+      text,
+      headers: response.headers,
+      rateLimited: false,
+    };
+    if (rateLimit?.noteResponse) {
+      result.rateLimited = rateLimit.noteResponse(result);
+    }
+    return result;
   }
 
   async function apiGet(pathname) {

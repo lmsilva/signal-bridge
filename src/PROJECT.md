@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-26 (Show Notifications push + scheduler replays last captured notification)
+**Last updated:** 2026-08-26 (Autodarts API rate limiting + throttled history sync)
 
 ---
 
@@ -153,13 +153,14 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/roll-credits-service.js` | Roll Credits facade joining store, settings, credentials, providers, scraper, media, and jobs; owns API-facing change events, upload/delete/retry/**trim**/**resolution** helpers, and maintenance/status hooks |
 | `src/autodarts-settings.js` | Live/dashboard/last-match/sync defaults in `data/autodarts-settings.json` |
 | `src/autodarts-credentials.js` | Encrypted Autodarts tokens + board choice; `AUTODARTS_EMAIL`/`PASSWORD` env wins with 409 overwrite |
-| `src/autodarts-api.js` | Read-only HTTP client (GET + `auth/v1` login / device / refresh only; Keycloak removed) |
-| `src/autodarts-auth.js` | Device-link preferred + email/password fallback; refresh + re-link flag |
+| `src/autodarts-api.js` | Read-only HTTP client (GET + `auth/v1` login / device / refresh only; Keycloak removed); global min spacing + 429 pause via `autodarts-rate-limit` |
+| `src/autodarts-rate-limit.js` | Shared Autodarts cloud throttle — min interval between calls, `Retry-After` / 429 backoff, pause snapshot for Settings |
+| `src/autodarts-auth.js` | Device-link preferred + email/password fallback; refresh + re-link flag (429 does **not** mark re-link) |
 | `src/autodarts-archive.js` | Month-partitioned `data/autodarts-matches/*.jsonl` with matchId dedupe |
 | `src/autodarts-aggregates.js` | `data/autodarts-players.json` — weighted X01 avg, ranking, rivalry, records |
-| `src/autodarts-history.js` | Cloud Match History sync (`GET /as/v0/matches/filter` + per-match stats); local archive is offline cache |
+| `src/autodarts-history.js` | Cloud Match History sync (`GET /as/v0/matches/filter` + throttled per-match stats); scheduled sync = 3 recent pages after 10m boot delay; manual sync cooldown; local archive is offline cache |
 | `src/autodarts-payload.js` | UDP `autodarts.match` / `.close` / `.dashboard` builders |
-| `src/autodarts-live.js` | WS supervisor via `play.ws.autodarts.com` + `ws` package: board match → auto-push, interrupt-resume, inactivity, FINAL hold, archive; board-state poll backup |
+| `src/autodarts-live.js` | WS supervisor via `play.ws.autodarts.com` + `ws` package: board match → auto-push, interrupt-resume, inactivity, FINAL hold, archive; board-state poll **only when WS is down** (60s) |
 | `src/autodarts-service.js` | Facade for Settings card, Test/board picker, push helpers |
 | `src/web/` | **Signal** UI assets: `index.html`, `app.js`, `styles.css`, `logo.svg` / `favicon.svg` / `logo.png`, vendored `jsqr.min.js` |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
@@ -574,6 +575,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-26: **Autodarts API rate limiting** — new `autodarts-rate-limit.js` spaces all cloud HTTP (500ms min), honours `Retry-After` / 429 backoff, and pauses history sync + board poll + WS reconnect until cooldown clears. History sync no longer hammers on boot (10m defer; scheduled = 3 recent pages; 1.2s between stats; manual 5m cooldown; stop after 2 all-skipped pages). Board REST poll runs only when WS is down (60s). Token refresh on 429 no longer marks `needsRelink`. Settings shows **Cloud paused** and disables Sync while throttled. Tests: `test/autodarts-rate-limit.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-26: **Show Notifications push + scheduler** — `alexa.notifications` command replays the last captured notification payload from `data/notifications-cache.json` to full displays + Vestaboard; cache updates whenever voice/passive delivery emits `alexa-notifications.query` with items. Push tile + schedulable with content check. Tests: `test/notifications-cache.test.js`, `test/command-registry.test.js`.
 - 2026-08-26: **Passive Amazon delivery notifications** — TTS-only *"notification from Amazon Shopping"* history rows (no ASR) now match via `alexa-notifications.js` passive helpers; intro-only TTS waits for detail with accelerated history polls (`amazon-delivery-passive` pending); delivery/shipping content pushes existing `alexa-notifications.query` to displays + Vestaboard (`AMAZON DELIVERY` title). Config: `voiceEvents.amazonDeliveryNotifications` (default on). Explicit *"show my notifications"* unchanged. Tests: `test/alexa-notifications.test.js`, `test/pending-voice-responses.test.js`, `test/voice-query-parser.test.js`, `test/vestaboard-alexa.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-26: **Confirmed: a bound-but-silent screen is fixed by restarting the TV, not by re-pairing** — re-pairing had been tried four times and never held; restarting the Apple TV so its YouTube app rebuilt its DIAL/lounge registration did, and a fresh code pair then detected **two back-to-back videos 30s apart** (15:07:19 and 15:07:49) — precisely the case that failed all day, where stopping one video and starting another produced nothing. So when the ladder reads `available=True`, backchannel attached (`[1,…]`), `getNowPlaying` accepted and array ids advancing, yet no playback event arrives, the fault is the screen's app state and no amount of re-pairing or token work will move it. Diagnose in that order and go straight to a TV restart; `YOUTUBE_LOUNGE_DEBUG=1` plus `./recreate.sh` is what makes the ladder readable.

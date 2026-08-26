@@ -40,6 +40,7 @@ function authErrorDetail(json, text, fallback = 'Request failed') {
 function createAutodartsAuth({
   credentials,
   api,
+  rateLimit = null,
   env = process.env,
   now = () => Date.now(),
   log = console,
@@ -147,6 +148,17 @@ function createAutodartsAuth({
     }
     const result = await api.refreshWithAutodarts(stored.refreshToken, oauth);
     if (!result.ok) {
+      const rateLimited = result.rateLimited
+        || rateLimit?.isRateLimitedStatus?.(result.status, result.json, result.text);
+      if (rateLimited) {
+        rateLimit?.noteResponse?.(result);
+        memoryAccessToken = null;
+        accessExpiresAt = 0;
+        throw new Error(
+          rateLimit?.snapshot?.()?.reason
+          || authErrorDetail(result.json, result.text, 'Too many requests — try again later'),
+        );
+      }
       credentials.markNeedsRelink(
         authErrorDetail(result.json, result.text, 'Refresh failed — re-link Autodarts'),
       );

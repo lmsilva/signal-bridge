@@ -6,8 +6,13 @@
  */
 
 const DEFAULT_PAGE_SIZE = 25;
-const MAX_PAGES = 80;
-const STATS_GAP_MS = 250;
+const MAX_PAGES = 40;
+const SCHEDULED_MAX_PAGES = 3;
+const STATS_GAP_MS = 1200;
+const PAGE_GAP_MS = 600;
+const INITIAL_SYNC_DELAY_MS = 10 * 60 * 1000;
+const MANUAL_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
+const SKIPPED_PAGES_STOP = 2;
 
 function parseDuration(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -131,7 +136,9 @@ function createAutodartsHistory({
   aggregates,
   api,
   settings,
+  rateLimit = null,
   log = console,
+  now = () => Date.now(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 } = {}) {
   let running = false;
@@ -140,11 +147,25 @@ function createAutodartsHistory({
   let lastImported = 0;
   let lastSkipped = 0;
   let timer = null;
+  let lastManualSyncAt = 0;
 
   function status() {
     const cfg = settings.get();
     const enabled = cfg.sync.historyBackfill !== false
       && cfg.sync.historyEndpointConfirmed !== false;
+    const rate = rateLimit?.snapshot?.() || null;
+    let note = enabled
+      ? (lastError && !lastSyncAt
+        ? `Cloud sync failed — using local archive (${lastError})`
+        : null)
+      : (cfg.sync.historyEndpointConfirmed === false
+        ? 'Archive builds from live matches until cloud history is confirmed'
+        : 'History sync disabled in settings');
+    if (rate?.paused && rate.reason) {
+      note = note
+        ? `${note} — cloud paused (${rate.reason})`
+        : `Cloud paused (${rate.reason})`;
+    }
     return {
       enabled,
       running,
@@ -153,15 +174,20 @@ function createAutodartsHistory({
       lastImported,
       lastSkipped,
       archivedCount: archive.count(),
-      note: enabled
-        ? (lastError && !lastSyncAt
-          ? `Cloud sync failed — using local archive (${lastError})`
-          : null)
-        : (cfg.sync.historyEndpointConfirmed === false
-          ? 'Archive builds from live matches until cloud history is confirmed'
-          : 'History sync disabled in settings'),
+      note,
+      rateLimit: rate,
       cloud: 'GET /as/v0/matches/filter',
     };
+  }
+
+  function listErrorMessage(result) {
+    return String(
+      result?.json?.message
+      || result?.json?.error_description
+      || (typeof result?.json?.error === 'string' ? result.json.error : result?.json?.error?.message)
+      || result?.text
+      || `History list failed (HTTP ${result?.status || 0})`,
+    ).trim();
   }
 
   async function importOne(item) {
@@ -172,6 +198,11 @@ function createAutodartsHistory({
     let row = null;
     try {
       const stats = await api.getMatchStats(matchId);
+      if (stats?.rateLimited || rateLimit?.isRateLimitedStatus?.(stats?.status, stats?.json, stats?.text)) {
+        const err = new Error(listErrorMessage(stats));
+        err.code = 'AUTODARTS_RATE_LIMITED';
+        throw err;
+      }
       if (stats?.ok && stats.json) {
         row = archiveFromCloudStats(stats.json, { source: 'backfill' });
       } else if (stats?.status === 404) {
@@ -181,6 +212,7 @@ function createAutodartsHistory({
         row = archiveFromHistoryItem(item);
       }
     } catch (error) {
+      if (error?.code === 'AUTODARTS_RATE_LIMITED') throw error;
       log?.warn?.('Autodarts history stats error', matchId, error?.message || error);
       row = archiveFromHistoryItem(item);
     }
@@ -193,6 +225,8 @@ function createAutodartsHistory({
     limit = null,
     pageSize = DEFAULT_PAGE_SIZE,
     maxPages = MAX_PAGES,
+    mode = 'manual',
+    force = false,
   } = {}) {
     const cfg = settings.get();
     if (cfg.sync.historyBackfill === false || cfg.sync.historyEndpointConfirmed === false) {
@@ -204,25 +238,59 @@ function createAutodartsHistory({
     if (typeof api?.listMatchHistory !== 'function') {
       return { ok: false, error: 'History list API is not available on this client' };
     }
+    if (rateLimit?.isPaused?.()) {
+      const snap = rateLimit.snapshot();
+      return {
+        ok: false,
+        skipped: true,
+        error: snap.reason || 'Autodarts cloud is rate-limited — try again later',
+        note: 'Using local archive until the cooldown expires',
+      };
+    }
+    const manual = mode !== 'scheduled';
+    if (manual && !force) {
+      const sinceManual = now() - lastManualSyncAt;
+      if (lastManualSyncAt > 0 && sinceManual < MANUAL_SYNC_COOLDOWN_MS) {
+        const waitSec = Math.ceil((MANUAL_SYNC_COOLDOWN_MS - sinceManual) / 1000);
+        return {
+          ok: false,
+          skipped: true,
+          error: `Please wait ${waitSec}s before syncing again`,
+          note: 'Manual history sync is throttled to protect the Autodarts API',
+        };
+      }
+    }
 
     running = true;
     lastError = null;
     let imported = 0;
     let skipped = 0;
     let pages = 0;
+    let consecutiveSkippedPages = 0;
+    const effectiveMaxPages = manual ? maxPages : Math.min(maxPages, SCHEDULED_MAX_PAGES);
     try {
       let page = 0;
       let done = false;
-      while (!done && pages < maxPages) {
+      while (!done && pages < effectiveMaxPages) {
         const result = await api.listMatchHistory({
           size: pageSize,
           page,
           sort: '-finished_at',
         });
-        if (!result?.ok || !result.json) {
-          const message = `History list failed (HTTP ${result?.status || 0})`;
+        if (result?.rateLimited || rateLimit?.isRateLimitedStatus?.(result?.status, result?.json, result?.text)) {
+          const message = listErrorMessage(result);
           lastError = message;
-          // Soft-fail: keep whatever local archive we already have.
+          return {
+            ok: false,
+            error: message,
+            imported,
+            skipped,
+            note: 'Local archive left unchanged — cloud sync paused until rate limit clears',
+          };
+        }
+        if (!result?.ok || !result.json) {
+          const message = listErrorMessage(result);
+          lastError = message;
           return {
             ok: false,
             error: message,
@@ -235,31 +303,51 @@ function createAutodartsHistory({
         const items = Array.isArray(body.items) ? body.items : [];
         if (!items.length) break;
 
+        let pageImported = 0;
+        let pageSkipped = 0;
         for (const item of items) {
           if (limit != null && imported >= Number(limit)) {
             done = true;
             break;
           }
           const outcome = await importOne(item);
-          if (outcome.imported) imported += 1;
-          if (outcome.skipped) skipped += 1;
+          if (outcome.imported) {
+            imported += 1;
+            pageImported += 1;
+          }
+          if (outcome.skipped) {
+            skipped += 1;
+            pageSkipped += 1;
+          }
           await sleep(STATS_GAP_MS);
         }
 
         pages += 1;
+        if (pageImported === 0 && pageSkipped === items.length) {
+          consecutiveSkippedPages += 1;
+          if (consecutiveSkippedPages >= SKIPPED_PAGES_STOP) {
+            log?.info?.('Autodarts history sync caught up — stopping early', { pages });
+            break;
+          }
+        } else {
+          consecutiveSkippedPages = 0;
+        }
+
         const totalPages = Number(body.total_pages ?? body.totalPages ?? 0);
         const isLast = body.last === true
           || (totalPages > 0 && page + 1 >= totalPages)
           || items.length < pageSize;
         if (isLast || done) break;
         page += 1;
+        await sleep(PAGE_GAP_MS);
       }
 
-      lastSyncAt = new Date().toISOString();
+      lastSyncAt = new Date(now()).toISOString();
       lastImported = imported;
       lastSkipped = skipped;
+      if (manual) lastManualSyncAt = now();
       aggregates.recompute(archive.listAll());
-      log?.info?.('Autodarts history sync complete', { imported, skipped, pages });
+      log?.info?.('Autodarts history sync complete', { imported, skipped, pages, mode });
       return {
         ok: true,
         imported,
@@ -286,12 +374,11 @@ function createAutodartsHistory({
   function schedule(periodMs = 6 * 60 * 60 * 1000) {
     clearTimeout(timer);
     const tick = () => {
-      sync().catch(() => {});
+      sync({ mode: 'scheduled' }).catch(() => {});
       timer = setTimeout(tick, periodMs);
       if (typeof timer.unref === 'function') timer.unref();
     };
-    // First pass shortly after start so Settings isn't empty on day one.
-    timer = setTimeout(tick, 5_000);
+    timer = setTimeout(tick, INITIAL_SYNC_DELAY_MS);
     if (typeof timer.unref === 'function') timer.unref();
   }
 
@@ -316,4 +403,9 @@ module.exports = {
   archiveFromCloudStats,
   archiveFromHistoryItem,
   parseDuration,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGES,
+  SCHEDULED_MAX_PAGES,
+  STATS_GAP_MS,
+  INITIAL_SYNC_DELAY_MS,
 };
