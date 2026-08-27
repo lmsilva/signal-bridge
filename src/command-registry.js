@@ -405,7 +405,7 @@ const COMMANDS = [
   },
   {
     id: 'huupe.now',
-    title: 'Huupe Live or Last game',
+    title: 'Huupe Live',
     subtitle: 'Live session, or the last one',
     group: 'Huupe',
     route: '/api/push/huupe-now',
