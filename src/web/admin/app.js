@@ -324,6 +324,20 @@
     return list.find((d) => !d.stale) || list[0];
   }
 
+  /** All Displays first; Vestaboard Simulator next when listed; then A–Z. */
+  function sortDisplayPickerEntries(entries) {
+    return [...entries].sort((a, b) => {
+      const aSim = a.simulator ? 0 : 1;
+      const bSim = b.simulator ? 0 : 1;
+      if (aSim !== bSim) return aSim - bSim;
+      return String(a.label || a.name || '').localeCompare(
+        String(b.label || b.name || ''),
+        undefined,
+        { sensitivity: 'base' },
+      );
+    });
+  }
+
   function renderDisplaySelect(displays, { quiet = false } = {}) {
     const next = Array.isArray(displays) ? displays : [];
     const fingerprint = displaysFingerprint(next);
@@ -343,40 +357,28 @@
     knownDisplays = next;
     lastDisplaysFingerprint = fingerprint;
 
-    const previous = select.value || localStorage.getItem(STORAGE_TARGET_KEY) || '';
+    // Keep the in-session choice if it is still valid; otherwise land on All
+    // Displays. Do not restore the last page-load target from localStorage —
+    // All Displays is the intentional default.
+    const previous = select.value || '';
     select.innerHTML = '';
 
-    for (const d of knownDisplays) {
-      const opt = document.createElement('option');
-      opt.value = d.id; // always unique — never target by friendly name
-      opt.textContent = displayOptionLabel(d);
-      select.appendChild(opt);
-    }
     const allOpt = document.createElement('option');
     allOpt.value = ALL_DISPLAYS;
     allOpt.textContent = 'All Displays';
     select.appendChild(allOpt);
 
+    for (const d of sortDisplayPickerEntries(knownDisplays)) {
+      const opt = document.createElement('option');
+      opt.value = d.id; // always unique — never target by friendly name
+      opt.textContent = displayOptionLabel(d);
+      select.appendChild(opt);
+    }
+
     const ids = new Set(knownDisplays.map((d) => d.id));
     const added = knownDisplays.filter((d) => !previousIds.has(d.id));
-    const previousMissing = Boolean(previous)
-      && previous !== ALL_DISPLAYS
-      && !ids.has(previous);
-    // Auto-select a newly announced display when we're on All Displays (or the
-    // previously selected display was pruned). Don't yank selection away from
-    // a still-valid single display if a second client appears.
-    if (
-      added.length
-      && (previous === ALL_DISPLAYS || !previous || previousMissing)
-    ) {
-      const newest = pickNewestDisplay(added);
-      select.value = newest?.id || ALL_DISPLAYS;
-    } else if (previous && previous !== ALL_DISPLAYS && ids.has(previous)) {
+    if (previous && previous !== ALL_DISPLAYS && ids.has(previous)) {
       select.value = previous;
-    } else if (previous === ALL_DISPLAYS) {
-      select.value = ALL_DISPLAYS;
-    } else if (knownDisplays.length) {
-      select.value = knownDisplays[0].id;
     } else {
       select.value = ALL_DISPLAYS;
     }
@@ -549,6 +551,159 @@
   document.querySelectorAll('.tab-panel').forEach((panel) => {
     panel.hidden = !panel.classList.contains('active');
   });
+
+  // ---------------------------------------------------------- Settings panes
+
+  const SETTINGS_VIEW_KEY = 'signal.settingsView';
+  const SETTINGS_SEARCH_KEY = 'signal.settingsSearch';
+  const SETTINGS_VIEW_ORDER = ['accounts', 'youtube', 'games', 'news', 'travel', 'media'];
+  const SETTINGS_VIEWS = new Set(SETTINGS_VIEW_ORDER);
+
+  function settingsStorageGet(key, fallback = '') {
+    try {
+      return localStorage.getItem(key) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function settingsStorageSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Private mode / quota — in-memory behaviour still works for this visit.
+    }
+  }
+
+  function settingsStorageRemove(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+
+  function normalizeSettingsQuery(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  /** Titles, labels, button copy, placeholders — anything a user might type. */
+  function settingsCardHaystack(card) {
+    const bits = [(card.textContent || '')];
+    card.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((el) => {
+      bits.push(el.getAttribute('placeholder') || '');
+    });
+    card.querySelectorAll('option').forEach((el) => {
+      bits.push(el.textContent || '');
+    });
+    return bits.join(' ').toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function settingsCardMatches(card, query) {
+    if (!query) return true;
+    const haystack = settingsCardHaystack(card);
+    return query.split(' ').every((term) => term && haystack.includes(term));
+  }
+
+  function currentSettingsView() {
+    const active = document.querySelector('#settings-view-tabs .segmented-btn.active');
+    const view = active?.dataset?.settingsView;
+    return SETTINGS_VIEWS.has(view) ? view : 'accounts';
+  }
+
+  function applySettingsFilter(preferredView = null) {
+    const searchInput = $('settings-search');
+    const clearBtn = $('settings-search-clear');
+    const empty = $('settings-search-empty');
+    const raw = searchInput?.value || '';
+    const query = normalizeSettingsQuery(raw);
+    if (clearBtn) clearBtn.hidden = !String(raw).trim();
+
+    const counts = Object.fromEntries(SETTINGS_VIEW_ORDER.map((view) => [view, 0]));
+    const cards = [...document.querySelectorAll('#settings-card-grid .card[data-settings-group]')];
+    for (const card of cards) {
+      const group = card.dataset.settingsGroup;
+      const match = settingsCardMatches(card, query);
+      card.dataset.settingsMatch = match ? '1' : '0';
+      if (match && SETTINGS_VIEWS.has(group)) counts[group] += 1;
+    }
+
+    let view = SETTINGS_VIEWS.has(preferredView) ? preferredView : currentSettingsView();
+    if (query && counts[view] === 0) {
+      view = SETTINGS_VIEW_ORDER.find((name) => counts[name] > 0) || view;
+    }
+
+    document.querySelectorAll('#settings-view-tabs .segmented-btn').forEach((btn) => {
+      const name = btn.dataset.settingsView;
+      const count = counts[name] || 0;
+      const on = name === view;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.hidden = Boolean(query) && count === 0;
+      const badge = btn.querySelector('.settings-hit-count');
+      if (badge) {
+        badge.textContent = String(count);
+        badge.hidden = !query;
+      }
+    });
+
+    document.querySelectorAll('#settings-card-grid [data-settings-group]').forEach((el) => {
+      const group = el.dataset.settingsGroup;
+      if (el.classList.contains('card')) {
+        const match = !query || el.dataset.settingsMatch === '1';
+        el.hidden = group !== view || !match;
+        return;
+      }
+      // Section labels only earn a place when their pane still has a visible card.
+      el.hidden = group !== view || (Boolean(query) && counts[group] === 0);
+    });
+
+    const total = SETTINGS_VIEW_ORDER.reduce((sum, name) => sum + counts[name], 0);
+    if (empty) empty.hidden = !(query && total === 0);
+
+    settingsStorageSet(SETTINGS_VIEW_KEY, view);
+    return { view, counts, query, total };
+  }
+
+  function showSettingsView(view) {
+    applySettingsFilter(view);
+  }
+
+  function setSettingsSearch(value, { persist = true } = {}) {
+    const input = $('settings-search');
+    if (input) input.value = value;
+    if (persist) settingsStorageSet(SETTINGS_SEARCH_KEY, String(value || ''));
+    applySettingsFilter();
+  }
+
+  $('settings-view-tabs')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-settings-view]');
+    if (!(btn instanceof HTMLElement)) return;
+    if (!btn.closest('#settings-view-tabs')) return;
+    if (btn.hidden) return;
+    showSettingsView(btn.dataset.settingsView);
+  });
+
+  $('settings-search')?.addEventListener('input', (event) => {
+    const value = event.target?.value || '';
+    settingsStorageSet(SETTINGS_SEARCH_KEY, value);
+    applySettingsFilter();
+  });
+
+  $('settings-search-clear')?.addEventListener('click', () => {
+    setSettingsSearch('');
+    $('settings-search')?.focus();
+  });
+
+  // Restore the last pane + search before the Settings tab is opened, so
+  // non-matching cards are never flashed as a long scrolling page.
+  (() => {
+    const savedView = settingsStorageGet(SETTINGS_VIEW_KEY, 'accounts');
+    const savedSearch = settingsStorageGet(SETTINGS_SEARCH_KEY, '');
+    const input = $('settings-search');
+    if (input) input.value = savedSearch;
+    applySettingsFilter(savedView);
+  })();
 
   // ---------------------------------------------------------- Status poller
 
@@ -2287,20 +2442,109 @@
 
   // ------------------------------------------------------- rules view
 
+  const SCHED_RULE_SEARCH_KEY = 'signal.schedRuleSearch';
+  let schedFocusRuleId = null;
+
+  function normalizeSchedQuery(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function schedRuleSearchQuery() {
+    return normalizeSchedQuery($('sched-rule-search')?.value || '');
+  }
+
+  function schedRuleMatches(rule, query) {
+    if (!query) return true;
+    const haystack = [
+      rule.label,
+      rule.commandTitle,
+      rule.commandGroup,
+      rule.commandId,
+      rule.target,
+    ].join(' ').toLowerCase().replace(/\s+/g, ' ');
+    return query.split(' ').every((term) => term && haystack.includes(term));
+  }
+
+  function schedRuleGroupLabel(rule) {
+    return String(rule.commandGroup || '').trim() || (rule.broken ? 'Broken' : 'Other');
+  }
+
+  function compareSchedRules(a, b) {
+    return Number(b.enabled) - Number(a.enabled)
+      || String(a.label || '').localeCompare(String(b.label || ''), undefined, { sensitivity: 'base' })
+      || String(a.id || '').localeCompare(String(b.id || ''));
+  }
+
+  function focusSchedRule(ruleId) {
+    if (!ruleId) return;
+    const card = document.querySelector(`#sched-rule-list [data-rule-id="${CSS.escape(ruleId)}"]`);
+    if (!(card instanceof HTMLElement)) return;
+    card.classList.add('is-new');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => card.classList.remove('is-new'), 2200);
+  }
+
   function renderSchedRules() {
     const host = $('sched-rule-list');
+    const meta = $('sched-rule-meta');
+    const empty = $('sched-rule-empty');
+    const clearBtn = $('sched-rule-search-clear');
+    const searchInput = $('sched-rule-search');
     if (!host) return;
+
+    const rawSearch = searchInput?.value || '';
+    const query = normalizeSchedQuery(rawSearch);
+    if (clearBtn) clearBtn.hidden = !String(rawSearch).trim();
+
     if (!schedRules.length) {
-      host.innerHTML = '<div class="card"><p class="hint">No rules yet. '
-        + 'Add one below to let the display program itself when nothing else is on.</p></div>';
+      host.innerHTML = '';
+      if (meta) meta.textContent = 'No rules yet';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = 'Pick a command above and click Add rule. New rules land in their group, sorted by name.';
+      }
       return;
     }
-    // Order carries no meaning by design (§9), so sort by something useful:
-    // enabled first, then by how often each rule expects to air.
-    const sorted = [...schedRules].sort((a, b) => (
-      Number(b.enabled) - Number(a.enabled) || b.expectedPerDay - a.expectedPerDay
-    ));
-    host.innerHTML = sorted.map(schedRuleCardHtml).join('');
+
+    const matched = schedRules.filter((rule) => schedRuleMatches(rule, query));
+    if (meta) {
+      meta.textContent = query
+        ? `${matched.length} of ${schedRules.length} rules`
+        : `${schedRules.length} rule${schedRules.length === 1 ? '' : 's'} · grouped by type`;
+    }
+
+    if (!matched.length) {
+      host.innerHTML = '';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = `No rules match “${rawSearch.trim()}”.`;
+      }
+      return;
+    }
+    if (empty) empty.hidden = true;
+
+    const groups = new Map();
+    for (const rule of matched) {
+      const group = schedRuleGroupLabel(rule);
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(rule);
+    }
+
+    const groupNames = [...groups.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    host.innerHTML = groupNames.map((group) => {
+      const rules = groups.get(group).sort(compareSchedRules);
+      return `<section class="sched-rule-group" data-sched-group="${escapeHtml(group)}">`
+        + `<h3 class="sched-rule-group-title">${escapeHtml(group)}`
+        + `<span class="sched-rule-group-count">${rules.length}</span></h3>`
+        + rules.map(schedRuleCardHtml).join('')
+        + `</section>`;
+    }).join('');
+
+    if (schedFocusRuleId) {
+      const id = schedFocusRuleId;
+      schedFocusRuleId = null;
+      requestAnimationFrame(() => focusSchedRule(id));
+    }
   }
 
   function schedCommandById(commandId) {
@@ -3015,15 +3259,49 @@
       const commandId = $('sched-add-command')?.value;
       if (!commandId) return;
       try {
-        await apiFetch(`${SCHED_ROUTE}/rules`, {
+        const result = await apiFetch(`${SCHED_ROUTE}/rules`, {
           method: 'POST',
           body: { commandId, intervalSeconds: 2700, probability: 90 },
         });
+        const newId = result?.rule?.id || null;
+        // Clear search so the new card is always visible in its group.
+        const search = $('sched-rule-search');
+        if (search && search.value) {
+          search.value = '';
+          try { localStorage.removeItem(SCHED_RULE_SEARCH_KEY); } catch { /* ignore */ }
+        }
+        schedFocusRuleId = newId;
         await loadSchedRules();
         await refreshSchedStatus();
+        if (result?.rule?.label) {
+          toast(`Added ${result.rule.label}`, 'good');
+        }
       } catch (error) {
         toast(error.message || 'Could not add rule', 'bad');
       }
+    });
+
+    const searchInput = $('sched-rule-search');
+    if (searchInput) {
+      try {
+        const saved = localStorage.getItem(SCHED_RULE_SEARCH_KEY);
+        if (saved) searchInput.value = saved;
+      } catch { /* ignore */ }
+      searchInput.addEventListener('input', () => {
+        try {
+          const value = searchInput.value;
+          if (String(value).trim()) localStorage.setItem(SCHED_RULE_SEARCH_KEY, value);
+          else localStorage.removeItem(SCHED_RULE_SEARCH_KEY);
+        } catch { /* ignore */ }
+        renderSchedRules();
+      });
+    }
+    $('sched-rule-search-clear')?.addEventListener('click', () => {
+      const input = $('sched-rule-search');
+      if (input) input.value = '';
+      try { localStorage.removeItem(SCHED_RULE_SEARCH_KEY); } catch { /* ignore */ }
+      renderSchedRules();
+      input?.focus();
     });
 
     const SCHED_SIMULATE_STATUS = [
@@ -8083,6 +8361,8 @@
   // -------------------------------------------------------------- Admin session
 
   $('btn-admin-logout')?.addEventListener('click', async () => {
+    settingsStorageRemove(SETTINGS_VIEW_KEY);
+    settingsStorageRemove(SETTINGS_SEARCH_KEY);
     try {
       await apiPost('/api/admin/logout', {});
     } catch {
