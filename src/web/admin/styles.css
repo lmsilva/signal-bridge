@@ -1198,7 +1198,7 @@ textarea.field-input.text-input-area {
 .huupe-observe-hint { margin: 0 0 10px; }
 .huupe-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  grid-template-columns: minmax(240px, 0.9fr) minmax(320px, 1.2fr);
   gap: 10px 12px;
   align-items: start;
 }
@@ -1234,7 +1234,7 @@ textarea.field-input.text-input-area {
 .huupe-footer-actions .btn { min-height: 36px; }
 .huupe-field-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.4fr) minmax(88px, 0.6fr);
   gap: 8px 10px;
 }
 .huupe-field-grid .field-label {
@@ -1243,15 +1243,41 @@ textarea.field-input.text-input-area {
   gap: 4px;
   margin: 0;
 }
-.huupe-panel .trivia-check { margin: 2px 0 0; }
-.huupe-panel .field-label-spaced { margin-top: 6px; }
-.huupe-panel .slider-row { margin: 0; gap: 8px; }
-.huupe-panel .segmented { margin: 0; }
-.huupe-panel .hint { margin: 0; line-height: 1.35; }
-.huupe-mode-grid {
+.huupe-behavior-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2px 10px;
+  gap: 10px 16px;
+}
+.huupe-behavior-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.huupe-panel .trivia-check { margin: 2px 0 0; }
+.huupe-panel .field-label-spaced { margin-top: 2px; }
+.huupe-panel .slider-row { margin: 0; gap: 8px; }
+.huupe-panel .segmented {
+  margin: 0;
+  flex-wrap: wrap;
+}
+.huupe-panel .hint { margin: 0; line-height: 1.35; }
+.huupe-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.huupe-mode-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.huupe-mode-grid .trivia-check {
+  margin: 0;
+  white-space: nowrap;
 }
 .huupe-footer {
   grid-column: 1 / -1;
@@ -1302,12 +1328,12 @@ textarea.field-input.text-input-area {
   white-space: pre-wrap;
   word-break: break-word;
 }
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .huupe-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .huupe-field-grid,
-  .huupe-mode-grid { grid-template-columns: 1fr; }
+  .huupe-behavior-grid { grid-template-columns: 1fr; }
   .huupe-footer-actions { margin-left: 0; width: 100%; }
   .huupe-footer-actions .btn { flex: 1; }
 }
