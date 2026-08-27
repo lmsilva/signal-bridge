@@ -1523,7 +1523,74 @@ textarea.field-input.text-input-area {
 .yt-quota strong { color: var(--text); }
 .yt-quota .is-high { color: var(--warn, #f5c453); }
 
-/* ---------- Display Scheduler ---------- */
+/* ---------- Settings sub-nav ---------- */
+
+.settings-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.settings-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.settings-search .field-input {
+  width: 100%;
+}
+
+.settings-view-tabs {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.settings-view-tabs .segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-hit-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35em;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  background: rgba(15, 23, 42, 0.18);
+  color: inherit;
+}
+
+.settings-view-tabs .segmented-btn.active .settings-hit-count {
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.settings-view-tabs .segmented-btn[hidden] {
+  display: none !important;
+}
+
+.settings-search-empty {
+  margin: 0;
+}
+
+#tab-settings [data-settings-group][hidden] {
+  display: none !important;
+}
 
 .sched-head {
   display: flex;
@@ -1558,10 +1625,94 @@ textarea.field-input.text-input-area {
   color: var(--warn, #f5c453);
 }
 
+.sched-setup-card {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin-bottom: 12px;
+}
+
+.sched-search-label {
+  margin-bottom: 6px;
+}
+
+.sched-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sched-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sched-search .field-input {
+  width: 100%;
+}
+
+.sched-add-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sched-add-command-wrap {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.sched-add-row #btn-sched-add {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#sched-rule-meta {
+  margin: 10px 0 0;
+}
+
+.sched-rule-group {
+  margin: 0 0 14px;
+}
+
+.sched-rule-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sched-rule-group-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+}
+
 .sched-rule {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.sched-rule.is-new {
+  outline: 2px solid var(--accent, #5b8cff);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #5b8cff) 22%, transparent);
+  animation: sched-rule-flash 2.2s ease;
+}
+
+@keyframes sched-rule-flash {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #5b8cff) 45%, transparent); }
+  40% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent, #5b8cff) 18%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .sched-rule-head {
@@ -2354,7 +2505,7 @@ textarea.field-input.text-input-area {
   /* Cards with more than a status line and a button take the full width and
      column up internally, rather than sitting half-width and metres tall. */
   #tab-settings .section-label,
-  #tab-settings > .card-grid > .hint,
+  #tab-settings .card-grid > .hint,
   #tab-settings .slideshow-settings-card,
   #tab-settings .youtube-settings-card,
   #tab-settings .trivia-settings-card,
@@ -2363,7 +2514,9 @@ textarea.field-input.text-input-area {
   #tab-settings .upside-news-settings-card,
   #tab-settings .wiki-ck-settings-card,
   #tab-settings .overhead-settings-card,
-  #tab-settings .flightplan-settings-card {
+  #tab-settings .flightplan-settings-card,
+  #tab-settings .credits-settings-card,
+  #tab-settings .vb-settings-card {
     grid-column: 1 / -1;
   }
 

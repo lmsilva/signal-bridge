@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal97">
+  <link rel="stylesheet" href="styles.css?v=signal101">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -47,7 +47,7 @@
       <label class="display-bar-label" for="display-select">Display</label>
       <div class="display-bar-row">
         <select id="display-select" class="display-select" aria-label="Target display">
-          <option value="">Looking for displays…</option>
+          <option value="*">All Displays</option>
         </select>
         <button type="button" class="btn btn-outline btn-icon" id="btn-display-unlock" title="Unlock remote control with on-screen PIN" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></svg>
@@ -56,7 +56,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
         </button>
       </div>
-      <p class="display-bar-hint" id="display-bar-hint">Select a display for push and remote control. New displays appear automatically.</p>
+      <p class="display-bar-hint" id="display-bar-hint">All Displays — push goes everywhere. Pick one display to unlock remote control.</p>
     </div>
   </div>
 
@@ -292,13 +292,27 @@
             <p class="hint" id="sched-nextup-hint">Automatically shows pages when the display is idle. It is the lowest-priority source — it never interrupts a live page, a manual push, or a page still counting down.</p>
           </div>
 
-          <div id="sched-rule-list"></div>
-
-          <div class="card sched-add-card">
-            <label class="field-label" for="sched-add-command">Add a rule</label>
-            <select class="field-input" id="sched-add-command"></select>
-            <button class="btn btn-accent btn-block" id="btn-sched-add" style="margin-top:10px">Add rule</button>
+          <div class="card sched-setup-card" id="sched-setup-card">
+            <label class="field-label sched-search-label" for="sched-rule-search">Find a rule</label>
+            <div class="sched-search-row">
+              <div class="sched-search">
+                <input class="field-input" type="search" id="sched-rule-search"
+                  placeholder="Search by name or group…" autocomplete="off" spellcheck="false">
+              </div>
+              <button type="button" class="btn btn-outline btn-sm" id="sched-rule-search-clear" hidden>Clear</button>
+            </div>
+            <div class="sched-add-row">
+              <div class="sched-add-command-wrap">
+                <label class="field-label" for="sched-add-command">Add a rule</label>
+                <select class="field-input" id="sched-add-command"></select>
+              </div>
+              <button class="btn btn-accent" id="btn-sched-add">Add rule</button>
+            </div>
+            <p class="hint" id="sched-rule-meta"></p>
           </div>
+
+          <div id="sched-rule-list"></div>
+          <p class="hint settings-search-empty" id="sched-rule-empty" hidden></p>
         </div>
 
         <!-- ------------------------- Simulation view -------------------------- -->
@@ -589,10 +603,55 @@
 
     <!-- ========================== SETTINGS TAB ========================== -->
     <section class="tab-panel" id="tab-settings">
-      <div class="card-grid">
-        <div class="section-label">Authentication</div>
+      <div class="settings-head">
+        <div class="settings-search-row">
+          <label class="settings-search" for="settings-search">
+            <input
+              id="settings-search"
+              class="field-input"
+              type="search"
+              placeholder="Search settings…"
+              autocomplete="off"
+              spellcheck="false"
+              enterkeyhint="search"
+              aria-label="Search settings"
+            >
+          </label>
+          <button type="button" class="btn btn-outline btn-sm" id="settings-search-clear" hidden>Clear</button>
+        </div>
+        <div class="segmented settings-view-tabs" id="settings-view-tabs" role="tablist" aria-label="Settings sections">
+          <button type="button" class="segmented-btn active" data-settings-view="accounts" role="tab" aria-selected="true">
+            <span class="settings-view-label">Accounts</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-settings-view="youtube" role="tab" aria-selected="false">
+            <span class="settings-view-label">YouTube</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-settings-view="games" role="tab" aria-selected="false">
+            <span class="settings-view-label">Games</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-settings-view="news" role="tab" aria-selected="false">
+            <span class="settings-view-label">News</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-settings-view="travel" role="tab" aria-selected="false">
+            <span class="settings-view-label">Travel</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-settings-view="media" role="tab" aria-selected="false">
+            <span class="settings-view-label">Media</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+        </div>
+        <p class="hint settings-search-empty" id="settings-search-empty" hidden>No settings match that search.</p>
+      </div>
 
-        <div class="card">
+      <div class="card-grid" id="settings-card-grid">
+        <div class="section-label" data-settings-group="accounts">Sign-in</div>
+
+        <div class="card" data-settings-group="accounts">
           <div class="auth-head">
             <div class="auth-name">Amazon Alexa</div>
             <span class="status-pill" id="alexa-status-pill">…</span>
@@ -605,7 +664,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" data-settings-group="accounts">
           <div class="auth-head">
             <div class="auth-name">Tesla</div>
             <span class="status-pill" id="tesla-status-pill">…</span>
@@ -618,7 +677,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" data-settings-group="accounts">
           <div class="auth-head">
             <div class="auth-name">Steam</div>
             <span class="status-pill" id="steam-status-pill">…</span>
@@ -653,7 +712,7 @@
           <p class="hint" id="steam-api-key-hint">API key comes from <code>STEAM_API_KEY</code> in <code>.env</code> only. Overlay shows when this Steam account is in-game on any PC (no software needed on the gaming machine).</p>
         </div>
 
-        <div class="card">
+        <div class="card" data-settings-group="accounts">
           <div class="auth-head">
             <div class="auth-name">PlayStation</div>
             <span class="status-pill" id="psn-status-pill">…</span>
@@ -691,8 +750,8 @@
           </button>
         </div>
 
-        <div class="section-label">YouTube</div>
-        <div class="card youtube-settings-card" id="youtube-settings-card">
+        <div class="section-label" data-settings-group="youtube">YouTube</div>
+        <div class="card youtube-settings-card" id="youtube-settings-card" data-settings-group="youtube">
           <div class="auth-head">
             <div class="auth-name">Now Playing</div>
             <span class="status-pill" id="youtube-status-pill">…</span>
@@ -767,8 +826,8 @@
           </div>
         </div>
 
-        <div class="section-label">The Upside News</div>
-        <div class="card upside-news-settings-card" id="upside-news-settings-card">
+        <div class="section-label" data-settings-group="news">The Upside News</div>
+        <div class="card upside-news-settings-card" id="upside-news-settings-card" data-settings-group="news">
           <div class="auth-head">
             <div class="auth-name">Positive headlines for the wall</div>
             <span class="status-pill" id="upside-news-status-pill">…</span>
@@ -840,8 +899,8 @@
           </div>
         </div>
 
-        <div class="section-label">Wikipedia Common Knowledge</div>
-        <div class="card wiki-ck-settings-card" id="wiki-ck-settings-card">
+        <div class="section-label" data-settings-group="news">Wikipedia Common Knowledge</div>
+        <div class="card wiki-ck-settings-card" id="wiki-ck-settings-card" data-settings-group="news">
           <div class="auth-head">
             <div class="auth-name">Wikipedia most-read on the wall</div>
             <span class="status-pill" id="wiki-ck-status-pill">…</span>
@@ -916,8 +975,8 @@
           </div>
         </div>
 
-        <div class="section-label">Overhead</div>
-        <div class="card overhead-settings-card" id="overhead-settings-card">
+        <div class="section-label" data-settings-group="travel">Overhead</div>
+        <div class="card overhead-settings-card" id="overhead-settings-card" data-settings-group="travel">
           <div class="auth-head">
             <div class="auth-name">Flight radar</div>
             <span class="status-pill" id="overhead-status-pill">…</span>
@@ -1014,8 +1073,8 @@
           </div>
         </div>
 
-        <div class="section-label">Flight Plan</div>
-        <div class="card flightplan-settings-card" id="flightplan-settings-card">
+        <div class="section-label" data-settings-group="travel">Flight Plan</div>
+        <div class="card flightplan-settings-card" id="flightplan-settings-card" data-settings-group="travel">
           <div class="auth-head">
             <div class="auth-name">Flight Plan</div>
             <span class="status-pill" id="flightplan-status-pill">…</span>
@@ -1048,8 +1107,8 @@
           </div>
         </div>
 
-        <div class="section-label">Autodarts</div>
-        <div class="card autodarts-settings-card" id="autodarts-settings-card">
+        <div class="section-label" data-settings-group="games">Autodarts</div>
+        <div class="card autodarts-settings-card" id="autodarts-settings-card" data-settings-group="games">
           <div class="auth-head">
             <div class="auth-name">Autodarts</div>
             <span class="status-pill" id="autodarts-status-pill">…</span>
@@ -1174,8 +1233,8 @@
           </div>
         </div>
 
-        <div class="section-label">Huupe</div>
-        <div class="card huupe-settings-card" id="huupe-settings-card">
+        <div class="section-label" data-settings-group="games">Huupe</div>
+        <div class="card huupe-settings-card" id="huupe-settings-card" data-settings-group="games">
           <div class="auth-head">
             <div class="auth-name">Huupe Mini</div>
             <span class="status-pill" id="huupe-status-pill">…</span>
@@ -1276,8 +1335,8 @@
           </div>
         </div>
 
-        <div class="section-label">Trivia</div>
-        <div class="card trivia-settings-card" id="trivia-settings-card">
+        <div class="section-label" data-settings-group="games">Trivia</div>
+        <div class="card trivia-settings-card" id="trivia-settings-card" data-settings-group="games">
           <div class="auth-head">
             <div class="auth-name">Question pool</div>
             <span class="status-pill" id="trivia-status-pill">…</span>
@@ -1335,8 +1394,8 @@
           <p class="hint" id="trivia-starved-hint" hidden></p>
         </div>
 
-        <div class="section-label">Slideshow</div>
-        <div class="card slideshow-settings-card">
+        <div class="section-label" data-settings-group="media">Slideshow</div>
+        <div class="card slideshow-settings-card" data-settings-group="media">
           <div class="slideshow-settings-row">
             <div class="slideshow-settings-col">
               <label class="field-label">Playback order</label>
@@ -1369,8 +1428,8 @@
           </div>
         </div>
 
-        <div class="section-label">Roll Credits</div>
-        <div class="card credits-settings-card" id="credits-settings-card">
+        <div class="section-label" data-settings-group="media">Roll Credits</div>
+        <div class="card credits-settings-card" id="credits-settings-card" data-settings-group="media">
           <div class="auth-head">
             <div class="auth-name">Roll Credits</div>
             <span class="status-pill" id="credits-credentials-pill">…</span>
@@ -1433,8 +1492,8 @@
           </div>
         </div>
 
-        <div class="card vb-settings-card">
-          <div class="section-label">Vestaboards</div>
+        <div class="card vb-settings-card" data-settings-group="media">
+          <div class="section-label" data-settings-group="media">Vestaboards</div>
           <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network.</p>
 
           <div class="vb-board-list" id="vb-board-list">
@@ -1905,6 +1964,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal97"></script>
+  <script src="app.js?v=signal101"></script>
 </body>
 </html>

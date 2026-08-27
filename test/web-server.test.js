@@ -238,9 +238,11 @@ test('control page hides Remote and Control tabs unless a single display is sele
   assert.match(js, /tab-btn-remote/);
   assert.match(js, /remoteBtn\.hidden\s*=\s*!single/);
   assert.match(js, /controlBtn\.hidden\s*=\s*!single/);
-  // New announces while on All Displays jump the picker to that display.
-  assert.match(js, /previous === ALL_DISPLAYS/);
-  assert.match(js, /pickNewestDisplay/);
+  // All Displays is first and the default; new announces do not steal the picker.
+  assert.match(js, /sortDisplayPickerEntries/);
+  assert.match(js, /All Displays is the intentional default/);
+  assert.match(js, /select\.value = ALL_DISPLAYS/);
+  assert.doesNotMatch(js, /previous === ALL_DISPLAYS \|\| !previous/);
 });
 
 test('control page JS keeps /api routes root-absolute under /admin/', () => {
@@ -1076,6 +1078,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   // which is what "the settings page is disorganised" was about.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
 
   for (const card of [
     'youtube-settings-card',
@@ -1095,6 +1098,25 @@ test('the wide Settings cards span the grid and column up inside', () => {
   // with the Guardian column.
   assert.match(html, /upside-news-period-band/);
   assert.match(css, /\.upside-news-key-row/);
+
+  // Settings is too long to scroll as one page — a sub-nav groups the cards,
+  // and a search box filters panels across those panes with hit counts.
+  assert.match(html, /id="settings-view-tabs"/);
+  assert.match(html, /id="settings-search"/);
+  assert.match(html, /id="settings-search-clear"/);
+  for (const view of ['accounts', 'youtube', 'games', 'news', 'travel', 'media']) {
+    assert.match(html, new RegExp(`data-settings-view="${view}"`));
+    assert.match(html, new RegExp(`data-settings-group="${view}"`));
+  }
+  assert.match(js, /function showSettingsView/);
+  assert.match(js, /function applySettingsFilter/);
+  assert.match(js, /SETTINGS_VIEW_KEY/);
+  assert.match(js, /SETTINGS_SEARCH_KEY/);
+  assert.match(js, /settings-hit-count/);
+  assert.match(js, /settingsStorageRemove\(SETTINGS_SEARCH_KEY\)/);
+  assert.match(css, /\.settings-view-tabs\b/);
+  assert.match(css, /\.settings-hit-count\b/);
+  assert.match(css, /\.settings-search-row\b/);
 });
 
 test('the refill button answers immediately instead of holding the request open', async () => {
@@ -1185,6 +1207,7 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   assert.match(html, /id="tab-scheduler"/);
   for (const id of [
     'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'btn-sched-add',
+    'sched-setup-card', 'sched-rule-search', 'sched-rule-search-clear', 'sched-rule-meta', 'sched-rule-empty',
     'sched-view-schedule', 'sched-view-activity', 'sched-view-simulation', 'sched-view-settings',
     'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
     'sched-simulation', 'sched-simulation-working', 'sched-simulation-status', 'sched-simulation-results',
@@ -1198,6 +1221,11 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   assert.match(html, /data-sched-view="settings"/);
   // Rules are runtime data; the markup must not enumerate them.
   assert.doesNotMatch(html, /data-rule-id="/, 'rules must be rendered from the API');
+  assert.match(js, /sched-rule-group/);
+  assert.match(js, /focusSchedRule/);
+  assert.match(js, /signal\.schedRuleSearch/);
+  assert.match(css, /\.sched-setup-card/);
+  assert.match(css, /\.sched-rule\.is-new/);
 
   for (const route of [
     '/api/display-scheduler/settings', '/api/display-scheduler/rules',
