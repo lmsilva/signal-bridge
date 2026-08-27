@@ -99,6 +99,11 @@ function liveView(overrides = {}) {
     lastShot: {
       player: 'trashpanda', made: true, zone: 'layup', points: 0.1, at: '2026-08-27T03:29:58.000Z',
     },
+    recentShots: [
+      { made: false, zone: 'three', player: 'Player 2' },
+      { made: true, zone: 'two', player: 'trashpanda' },
+      { made: true, zone: 'layup', player: 'trashpanda' },
+    ],
     winner: null,
     sensorErrors: 0,
     ...overrides,
@@ -187,6 +192,13 @@ test('a layup keeps its tenth of a point all the way to the panel', () => {
   assert.equal(payload.session.stats.shotLine, '12/30');
   assert.equal(payload.session.lastShot.pointsLabel, '0.1');
   assert.equal(payload.session.lastShot.zoneLabel, 'Layup');
+  // The ticker is oldest-first so the newest dot lands under the shooter's eye
+  // at the right-hand end of the strip.
+  assert.deepEqual(payload.session.recentShots, [
+    { made: false, zone: 'three', short: '3PT' },
+    { made: true, zone: 'two', short: '2PT' },
+    { made: true, zone: 'layup', short: 'LAY' },
+  ]);
   assert.deepEqual(payload.session.headline, { primary: 'trashpanda', secondary: '15.1 PTS' });
 });
 
@@ -195,21 +207,47 @@ test('the zone strip always shows all four zones in the same order', () => {
   // still leave the other three columns standing rather than reflow the card.
   const empty = zoneRows(undefined);
   assert.deepEqual(empty.map((row) => row.zone), ['layup', 'one', 'two', 'three']);
-  assert.deepEqual(empty.map((row) => row.label), ['Layup', '1 PT', '2 PT', '3 PT']);
   assert.deepEqual(empty.map((row) => row.short), ['LAY', '1PT', '2PT', '3PT']);
   assert.equal(empty.every((row) => row.made === 0 && row.attempts === 0 && row.pct === 0), true);
 
   const partial = zoneRows({ three: zone(6, 23) });
   assert.equal(partial.length, ZONES.length);
   assert.deepEqual(partial[3], {
-    zone: 'three', label: '3 PT', short: '3PT', made: 6, attempts: 23, pct: 26,
+    zone: 'three',
+    label: 'Deep Range',
+    note: 'Top of the key',
+    short: '3PT',
+    points: 3,
+    pointsLabel: '3 PT',
+    made: 6,
+    attempts: 23,
+    pct: 26,
+    scored: 18,
   });
   assert.equal(partial[0].attempts, 0);
 
   const payload = buildSessionPayload({ stats: {} }, { now: clock });
   assert.deepEqual(payload.session.zones.map((row) => row.zone), [...ZONES]);
-  assert.equal(zoneLabel('two'), '2 PT');
+  assert.equal(zoneLabel('two'), 'Mid Range');
   assert.equal(zoneLabel('halfCourt'), '');
+});
+
+test('zone names say where the shot came from and what it was worth', () => {
+  // "1 PT" beside a name read as *Player 1* on the wall, and the tenth a layup
+  // is worth had no label at all — which is where scores like 17.1 come from.
+  const rows = zoneRows({ layup: zone(3, 3), one: zone(0, 0), two: zone(1, 1), three: zone(3, 5) });
+  assert.deepEqual(rows.map((row) => row.label), [
+    'Layup', 'Short Range', 'Mid Range', 'Deep Range',
+  ]);
+  assert.deepEqual(rows.map((row) => row.note), [
+    'At the rim', 'Low post', 'High post', 'Top of the key',
+  ]);
+  assert.deepEqual(rows.map((row) => row.pointsLabel), ['0.1 PT', '1 PT', '2 PT', '3 PT']);
+  assert.deepEqual(rows.map((row) => row.points), [0.1, 1, 2, 3]);
+
+  // Points contributed, not shots taken: three layups are 0.3, not 3.
+  assert.deepEqual(rows.map((row) => row.scored), [0.3, 0, 2, 9]);
+  assert.equal(rows.reduce((total, row) => total + row.scored, 0), 11.3);
 });
 
 test('a solo session leads with its own score and a called game leads with the winner', () => {
@@ -333,7 +371,16 @@ test('the dashboard reports the career table it was handed', () => {
   assert.deepEqual(payload.byMonth, [{ key: '2026-08', label: 'Aug', count: 2 }]);
   assert.deepEqual(payload.zones.map((row) => row.zone), [...ZONES]);
   assert.deepEqual(payload.zones[3], {
-    zone: 'three', label: '3 PT', short: '3PT', made: 12, attempts: 38, pct: 32,
+    zone: 'three',
+    label: 'Deep Range',
+    note: 'Top of the key',
+    short: '3PT',
+    points: 3,
+    pointsLabel: '3 PT',
+    made: 12,
+    attempts: 38,
+    pct: 32,
+    scored: 36,
   });
   assert.equal(payload.recent[0].modeLabel, 'Family Mode');
   assert.equal(payload.recent[0].pointsLabel, '26.1');

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-27 (Display picker defaults to All Displays)
+**Last updated:** 2026-08-27 (Huupe zone names + shot ticker)
 
 ---
 
@@ -168,7 +168,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/huupe-archive.js` | Month-partitioned `data/huupe-games/*.jsonl` (UTC months) with sessionId dedupe |
 | `src/huupe-aggregates.js` | `data/huupe-players.json` — career totals, leaderboard, zones, records. Free play has no names, so it feeds house totals only |
 | `src/huupe-live.js` | Session state machine. The hoop never says a game started, so a session is inferred from sustained shooting and ends on Family Mode's final screen, standings, inactivity, or the device going dark |
-| `src/huupe-payload.js` | UDP `huupe.session` / `.close` / `.dashboard` builders |
+| `src/huupe-payload.js` | UDP `huupe.session` / `.close` / `.dashboard` builders; owns the zone vocabulary (`ZONE_LABELS` / `ZONE_NOTES` / `ZONE_VALUE_LABELS` / `ZONE_SHORT`) |
 | `src/huupe-service.js` | Facade for the Settings card, Discover/Test, and the three push helpers |
 | `src/web/` | **Signal** UI assets: `index.html`, `app.js`, `styles.css`, `logo.svg` / `favicon.svg` / `logo.png`, vendored `jsqr.min.js` |
 | `src/events-log.js` | Append-only JSONL log for voice/timer UDP events |
@@ -207,7 +207,9 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 
 The abort path is the one that matters on the wall: a live card with no end event would sit on the display and block every scheduled page behind it, so it clears immediately rather than holding a final score.
 
-**Two scoring shapes.** Family Mode reports every shot twice — once from the hardware tracker, once from Unity — and only Unity knows whose shot it was, so entering Family Mode discards the raw totals and switches to the Unity stream. Free play has no names at all, so it shows a running score **for that session** (a layup is 0.1, matching Family Mode); career totals live in the dashboard.
+**Two scoring shapes.** Family Mode reports every shot twice — once from the hardware tracker, once from Unity — and only Unity knows whose shot it was, so entering Family Mode discards the raw totals and switches to the Unity stream (and clears `recentShots`, or the ticker would show every basket twice). Free play has no names at all, so it shows a running score **for that session** (a layup is 0.1, matching Family Mode); career totals live in the dashboard.
+
+**Zones.** The hoop reports `layup` / `one_point_shot` / `two_point_shot` / `three_point_shot` (HAL) or `layup` / `lowPost` / `highPost` / `topOfTheKey` (Unity). Each row from `zoneRows()` carries all three strings a viewer needs — `label` (**Layup**, **Short Range**, **Mid Range**, **Deep Range**), `note` (the hoop's own term: *At the rim*, *Low post*, *High post*, *Top of the key*) and `pointsLabel` (**0.1 PT** … **3 PT**) — plus `scored`, the points that zone actually contributed. The bare `1 PT / 2 PT / 3 PT` labels this replaced read as *Player 1* on the wall. `short` (`LAY` / `1PT` / `2PT` / `3PT`) is unchanged: the Vestaboard has 22 columns.
 
 **Privacy.** The launcher logs profile email, a password hash and salt, location and a Stripe customer id in plaintext, and the City Royale deep link carries a bearer JWT. `huupe-parser.js` scrubs these before a line can reach the session machine, the admin troubleshooting panel, or a log file.
 
@@ -610,6 +612,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-27: **Huupe zone names say where the shot came from** — `1 PT / 2 PT / 3 PT` on the dashboard read as *Player 1 / 2 / 3*, and nothing explained the tenth a layup pays. Every row from `zoneRows()` now carries `label` (**Layup / Short Range / Mid Range / Deep Range**), `note` (the hoop's own term — *Low post*, *Top of the key*), `pointsLabel` (**0.1 PT** … **3 PT**), `points` and `scored` (the points that zone actually contributed, so three layups read as 0.3 rather than 3). `lastShot.zoneLabel` follows the new names; the Vestaboard's 22-column `short` codes are untouched. Also new: the live session keeps the tail of its shot log (`recentShots`, capped at 18, oldest first, `{made, zone, short}`) so the display can paint a make/miss ticker — cleared when Unity takes over in Family Mode, because that stream replays the same shots with names attached. Tests: `huupe-payload` (zone vocabulary, `scored` totals, ticker pass-through), `huupe-live` (ticker tail, cap, Family Mode reset).
 - 2026-08-27: **Display picker defaults to All Displays** — the sticky Display select opens on **All Displays** (first option) instead of restoring the last single target. When the Vestaboard Simulator is enabled it is listed next, then other clients and boards A–Z. New announces no longer steal the picker away from All Displays. Cache-bust `?v=signal101`.
 - 2026-08-27: **Scheduler Schedule find/add layout** — Add rule and a Find box sit in a sticky card above the list (no more scrolling to the bottom to create). Rules are grouped by command type and sorted by name within each group; search filters by label/group/command. After Add, the new card is scrolled into view and briefly highlighted. Cache-bust `?v=signal100`.
 - 2026-08-27: **Settings search** — a search box above the Settings panes filters configuration cards by title/labels/buttons/placeholders. Tab labels show a hit-count badge and hide when they have no matches; within a pane only matching cards stay visible. The query is remembered in `localStorage` until Clear or Log out. Cache-bust `?v=signal99`.
