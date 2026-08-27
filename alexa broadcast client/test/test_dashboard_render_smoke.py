@@ -301,11 +301,16 @@ def sample_flightplan(*, legs=2, live=False):
 
 
 def huupe_zones(scale=1):
+    rows = [
+        ("layup", "Layup", "At the rim", "0.1 PT", 6, 7, 85),
+        ("one", "Short Range", "Low post", "1 PT", 4, 11, 36),
+        ("two", "Mid Range", "High post", "2 PT", 3, 9, 33),
+        ("three", "Deep Range", "Top of the key", "3 PT", 2, 12, 17),
+    ]
     return [
-        {"zone": "layup", "label": "Layup", "made": 6 * scale, "attempts": 7 * scale, "pct": 85},
-        {"zone": "one", "label": "Close", "made": 4 * scale, "attempts": 11 * scale, "pct": 36},
-        {"zone": "two", "label": "Mid", "made": 3 * scale, "attempts": 9 * scale, "pct": 33},
-        {"zone": "three", "label": "Three", "made": 2 * scale, "attempts": 12 * scale, "pct": 17},
+        {"zone": zone, "label": label, "note": note, "pointsLabel": points,
+         "made": made * scale, "attempts": attempts * scale, "pct": pct}
+        for zone, label, note, points, made, attempts, pct in rows
     ]
 
 
@@ -344,8 +349,14 @@ def sample_huupe_session(*, finished=False, players=0):
             "zones": huupe_zones(),
             "lastShot": {
                 "player": names[0] if names else None, "made": True,
-                "zone": "three", "zoneLabel": "Three", "points": 3, "pointsLabel": "3",
+                "zone": "three", "zoneLabel": "Deep Range", "points": 3, "pointsLabel": "3",
             },
+            "recentShots": [
+                {"made": index % 3 != 0, "zone": zone, "short": short}
+                for index, (zone, short) in enumerate(
+                    [("three", "3PT"), ("layup", "LAY"), ("two", "2PT"), ("one", "1PT")] * 5
+                )
+            ],
             "winner": names[0] if (finished and names) else None,
             "sensorErrors": 0,
         },
@@ -383,7 +394,14 @@ def sample_huupe_dashboard():
             "bestFgPct": {"player": "lundisupcorp", "value": 64},
         },
         "device": {"name": "Huupe Mini", "online": True},
-        "recent": [],
+        "recent": [
+            {"sessionId": f"s-{index}", "mode": "family" if index % 2 else "justhuupe",
+             "modeLabel": "Family Mode" if index % 2 else "Free Play",
+             "winner": "trashpanda" if index % 2 else None,
+             "points": 26.1, "pointsLabel": "26.1", "made": 12, "attempts": 30,
+             "whenLabel": "Yesterday"}
+            for index in range(6)
+        ],
     }
 
 
@@ -507,21 +525,29 @@ class DashboardRenderTests(unittest.TestCase):
                     self.assert_text_inside_cards(
                         canvas,
                         layout_huupe_session(
-                            *screen, timed=finished, finished=finished,
+                            *screen, timed=finished, finished=finished, players=players,
                         ),
                         screen=screen,
                         label=f"huupe session ({players}p{' final' if finished else ''})",
                     )
 
     def test_huupe_dashboard_keeps_every_string_inside_its_card(self):
-        for screen in SCREENS:
-            panel, canvas = make_panel(HuupePanel, screen)
-            panel._render_dashboard(sample_huupe_dashboard())
-            self.assertGreater(len(canvas.texts()), 20, f"nothing painted for {screen}")
-            self.assert_text_inside_cards(
-                canvas, layout_huupe_dashboard(*screen, timed=True),
-                screen=screen, label="huupe dashboard",
-            )
+        # A hoop nobody has played in Family Mode has an empty leaderboard and
+        # no recent list, which reflows the page — cover both shapes.
+        for recent in (True, False):
+            for screen in SCREENS:
+                panel, canvas = make_panel(HuupePanel, screen)
+                payload = sample_huupe_dashboard()
+                if not recent:
+                    payload["recent"] = []
+                    payload["leaderboard"] = []
+                    payload["moreCount"] = 0
+                panel._render_dashboard(payload)
+                self.assertGreater(len(canvas.texts()), 18, f"nothing painted for {screen}")
+                self.assert_text_inside_cards(
+                    canvas, layout_huupe_dashboard(*screen, timed=True, recent=recent),
+                    screen=screen, label=f"huupe dashboard (recent={recent})",
+                )
 
     def test_roll_credits_dashboard_keeps_every_string_inside_its_card(self):
         for screen in SCREENS:

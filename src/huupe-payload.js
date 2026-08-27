@@ -6,6 +6,12 @@
  */
 
 const { ZONES } = require('./huupe-aggregates');
+const { ZONE_POINTS } = require('./huupe-parser');
+
+/** Layup tenths make every derived total a float; keep them to one place. */
+function round1(value) {
+  return Math.round((Number(value) || 0) * 10) / 10;
+}
 
 const MODE_LABELS = {
   family: 'Family Mode',
@@ -17,18 +23,42 @@ const MODE_LABELS = {
   unknown: 'Session',
 };
 
+/**
+ * Zone names, in the language a person watching the wall would use.
+ *
+ * The hoop reports `one_point_shot` / `lowPost` and friends; "1 PT" on its own
+ * read as *Player 1* on the dashboard, which is the opposite of informative.
+ * Each zone therefore carries three strings: what to call it, where the hoop's
+ * own UI says it is, and what a make from there is worth.
+ */
 const ZONE_LABELS = {
   layup: 'Layup',
-  one: '1 PT',
-  two: '2 PT',
-  three: '3 PT',
+  one: 'Short Range',
+  two: 'Mid Range',
+  three: 'Deep Range',
 };
 
+const ZONE_NOTES = {
+  layup: 'At the rim',
+  one: 'Low post',
+  two: 'High post',
+  three: 'Top of the key',
+};
+
+/** Board rows are 22 columns wide, so the Vestaboard keeps the terse codes. */
 const ZONE_SHORT = {
   layup: 'LAY',
   one: '1PT',
   two: '2PT',
   three: '3PT',
+};
+
+/** A made layup is worth 0.1 — that tenth is where scores like 17.1 come from. */
+const ZONE_VALUE_LABELS = {
+  layup: '0.1 PT',
+  one: '1 PT',
+  two: '2 PT',
+  three: '3 PT',
 };
 
 function modeLabel(mode) {
@@ -70,13 +100,20 @@ function relativeDay(iso, nowMs = Date.now()) {
 function zoneRows(byZone) {
   return ZONES.map((zone) => {
     const row = byZone?.[zone] || {};
+    const made = Number(row.made) || 0;
     return {
       zone,
       label: ZONE_LABELS[zone],
+      note: ZONE_NOTES[zone],
       short: ZONE_SHORT[zone],
-      made: Number(row.made) || 0,
+      points: ZONE_POINTS[zone],
+      pointsLabel: ZONE_VALUE_LABELS[zone],
+      made,
       attempts: Number(row.attempts) || 0,
       pct: Number(row.pct) || 0,
+      // What this zone actually contributed, so the panel can show where a
+      // score came from rather than only how often it was hit.
+      scored: round1(made * (ZONE_POINTS[zone] || 0)),
     };
   });
 }
@@ -143,6 +180,11 @@ function buildSessionPayload(session = {}, {
           pointsLabel: formatPoints(session.lastShot.points),
         }
         : null,
+      recentShots: (session.recentShots || []).map((shot) => ({
+        made: Boolean(shot.made),
+        zone: shot.zone || null,
+        short: ZONE_SHORT[shot.zone] || '',
+      })),
       winner: session.winner || null,
       sensorErrors: Number(session.sensorErrors) || 0,
     },
@@ -168,6 +210,9 @@ function viewFromArchivedSession(row = {}) {
     players: (row.players || []).map((player) => ({ ...player, streak: 0 })),
     stats: { streak: 0, ...(row.stats || {}) },
     lastShot: null,
+    // The archive keeps totals, never the shot log, so a replayed game has a
+    // scoreboard but no ticker.
+    recentShots: [],
     winner: row.winner || null,
     uniqueScoreId: row.uniqueScoreId || null,
     combination: row.combination || null,
@@ -283,5 +328,7 @@ module.exports = {
   relativeDay,
   MODE_LABELS,
   ZONE_LABELS,
+  ZONE_NOTES,
   ZONE_SHORT,
+  ZONE_VALUE_LABELS,
 };

@@ -33,6 +33,9 @@ const STREAM_LOSS_GRACE_MS = 30_000;
 /** Standings arrive per player; the final screen normally follows immediately. */
 const STANDINGS_SETTLE_MS = 4_000;
 
+/** How many shots the ticker on the session page can show at wall size. */
+const RECENT_SHOT_LIMIT = 18;
+
 /**
  * How long a session stays off the wall after another page interrupted it,
  * when nothing can tell us how long that page wanted the display for.
@@ -175,6 +178,9 @@ function createHuupeLive({
       players: new Map(),
       playerOrder: [],
       lastShot: null,
+      // Oldest first. Only make/miss and zone, so the panel can paint a shot
+      // ticker without the bridge having to keep the whole shot log in memory.
+      recentShots: [],
       standingsAt: null,
       uniqueScoreId: null,
       combination: null,
@@ -199,6 +205,19 @@ function createHuupeLive({
     return session.players.get(key);
   }
 
+  /** Keep the tail of the shot log the ticker draws, and nothing more. */
+  function rememberShot(shot) {
+    if (!session || !shot) return;
+    session.recentShots.push({
+      made: Boolean(shot.made),
+      zone: shot.zone || null,
+      player: shot.player || null,
+    });
+    if (session.recentShots.length > RECENT_SHOT_LIMIT) {
+      session.recentShots.splice(0, session.recentShots.length - RECENT_SHOT_LIMIT);
+    }
+  }
+
   /**
    * Family Mode reports the same shots twice: once through the hardware tracker
    * and again through Unity, which is the only one that knows whose shot it was.
@@ -210,6 +229,9 @@ function createHuupeLive({
     session.familyMode = true;
     session.mode = 'family';
     session.stats = emptyStats();
+    // Unity is about to replay the same shots with names attached, so the
+    // ticker has to forget the hardware copies or every shot shows up twice.
+    session.recentShots = [];
   }
 
   function sessionView() {
@@ -246,6 +268,7 @@ function createHuupeLive({
       players,
       stats: statsView(session.stats),
       lastShot: session.lastShot,
+      recentShots: session.recentShots.map((shot) => ({ ...shot })),
       winner: players.find((row) => row.isWinner)?.name || null,
       uniqueScoreId: session.uniqueScoreId,
       combination: session.combination,
@@ -462,6 +485,7 @@ function createHuupeLive({
       range: event.range ?? null,
       at: event.at || null,
     };
+    rememberShot(session.lastShot);
 
     if (!session.opened) {
       session.pendingShots.push(session.lastShot);
@@ -494,6 +518,7 @@ function createHuupeLive({
       points: event.made ? event.points : 0,
       at: event.at || null,
     };
+    rememberShot(session.lastShot);
     if (!session.opened) openSession();
     else pushLive();
   }

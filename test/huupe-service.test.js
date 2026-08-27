@@ -526,7 +526,7 @@ test('shots read off the log stream reach the wall as a live session payload', a
     assert.equal(live[0].body.session.stats.attempts, 2);
     assert.equal(live[0].body.session.stats.shotLine, '2/2');
     assert.equal(live[0].body.session.stats.points, 6);
-    assert.equal(live[0].body.session.lastShot.zoneLabel, '3 PT');
+    assert.equal(live[0].body.session.lastShot.zoneLabel, 'Deep Range');
 
     const status = service.statusSnapshot();
     assert.equal(status.hasLiveSession, true);

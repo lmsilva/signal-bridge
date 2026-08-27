@@ -167,6 +167,39 @@ test('a run of makes is tracked and a miss resets it', () => {
   assert.equal(stats.bestStreak, 3);
 });
 
+test('the shot ticker keeps the tail of the session, newest last', () => {
+  const kit = harness();
+  openFreePlay(kit);
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent(shot({ made: false, zone: 'three', points: 3 }));
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent(shot({ zone: 'layup', points: 0.1 }));
+  const ticker = kit.latest().session.recentShots;
+  assert.deepEqual(ticker.at(-1), { made: true, zone: 'layup', short: 'LAY' });
+  assert.deepEqual(ticker.at(-2), { made: false, zone: 'three', short: '3PT' });
+  assert.equal(ticker.length, 4);
+
+  // A long session cannot grow the payload without bound.
+  for (let index = 0; index < 40; index += 1) {
+    kit.advance(MIN_PUSH_INTERVAL_MS);
+    kit.live.handleEvent(shot());
+  }
+  assert.equal(kit.latest().session.recentShots.length, 18);
+});
+
+test('Unity taking over clears the ticker it is about to replay', () => {
+  // The same shots arrive twice in Family Mode; a ticker that kept both would
+  // show every basket as two dots.
+  const kit = harness();
+  openFreePlay(kit);
+  assert.equal(kit.latest().session.recentShots.length, 2);
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent(shotMade('Jo'));
+  assert.deepEqual(kit.latest().session.recentShots, [
+    { made: true, zone: 'two', short: '2PT' },
+  ]);
+});
+
 test('a burst of shots is coalesced into one push rather than a flood', () => {
   const kit = harness();
   openFreePlay(kit);
