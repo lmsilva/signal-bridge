@@ -422,11 +422,188 @@ function rollCreditsFrames(payload = {}, ctx = {}) {
   return [snapshotFrame(rows, 'Roll Credits', 'credits.show')];
 }
 
+/** A Huupe score keeps its tenth only when a layup put one there. */
+function scoreText(value) {
+  const number = toNumber(value);
+  if (number === null) {
+    return '';
+  }
+  return Number.isInteger(number) ? String(number) : number.toFixed(1);
+}
+
+function shootingRow(stats) {
+  const made = toNumber(stats?.made);
+  const attempts = toNumber(stats?.attempts);
+  if (made === null || attempts === null || attempts <= 0) {
+    return '';
+  }
+  return `FG ${formatWhole(made)}/${formatWhole(attempts)} - ${formatWhole(stats.fgPct)}%`;
+}
+
+/**
+ * Board-width mode names.
+ *
+ * The header shares 22 columns with the colour chips and the HUUPE badge, and
+ * anything too long is clipped from the left — so "Family Mode" cost us the
+ * "E" in HUUPE. These are the same names, short enough to keep the brand.
+ */
+const HUUPE_BOARD_MODES = {
+  family: 'FAMILY',
+  justhuupe: 'FREE PLAY',
+  dailyprize: 'DAILY',
+  fitness: 'FITNESS',
+  live: 'LIVE',
+};
+
+/** "HUUPE" plus a two-space gap leaves exactly this much of the header. */
+const HUUPE_MODE_WIDTH = 9;
+
+function huupeModeText(session = {}) {
+  const known = HUUPE_BOARD_MODES[session.mode];
+  if (known) return known;
+  const label = fold(session.modeLabel || '');
+  if (label.length <= HUUPE_MODE_WIDTH) return label;
+  const firstWord = label.split(' ')[0];
+  return truncate(firstWord, HUUPE_MODE_WIDTH);
+}
+
+function huupeSessionFrames(payload = {}) {
+  const session = payload.session;
+  if (!session) {
+    return [];
+  }
+
+  const stats = session.stats || {};
+  const attempts = toNumber(stats.attempts) || 0;
+  // A board flip costs 6 seconds of flapping — two stray shots is not a game.
+  if (attempts < 2) {
+    return [];
+  }
+
+  const finished = session.status === 'finished';
+  const players = (session.players || []).filter((player) => player?.name);
+  const mode = huupeModeText(session);
+
+  if (!finished) {
+    const rows = players.length
+      ? players.slice(0, 3).map((player) => lr(fitName(player.name), scoreText(player.score)))
+      : [
+        `${scoreText(stats.points)} POINTS`,
+        shootingRow(stats),
+        toNumber(stats.streak) > 1 ? `ON A ${formatWhole(stats.streak)} RUN` : '',
+      ].filter(Boolean);
+
+    return [alertFrame(
+      badgeFrame({
+        color: 'orange',
+        title: 'HUUPE',
+        titleRight: mode,
+        rows: padRows(rows),
+        footerLeft: 'SHOOTING NOW',
+      }),
+      'Huupe live',
+      'huupe.session',
+    )];
+  }
+
+  const winner = players.find((player) => player.isWinner) || players[0];
+  const runnerUp = players.find((player) => player !== winner);
+
+  const rows = [];
+  if (winner) {
+    rows.push(winnerRow(winner.name));
+    rows.push(runnerUp
+      ? `OVER ${fitName(runnerUp.name)} ${scoreText(winner.score)}-${scoreText(runnerUp.score)}`
+      : `${scoreText(winner.score)} POINTS`);
+    rows.push(shootingRow(winner));
+  } else {
+    rows.push(`${scoreText(stats.points)} POINTS`);
+    rows.push(shootingRow(stats));
+    rows.push(toNumber(stats.bestStreak) > 1 ? `BEST RUN ${formatWhole(stats.bestStreak)}` : '');
+  }
+  const threes = toNumber(winner?.threes ?? stats.threes);
+  rows.push(threes ? `${formatWhole(threes)} FROM DEEP` : '');
+
+  return [alertFrame(
+    badgeFrame({
+      color: 'orange',
+      title: 'HUUPE',
+      titleRight: mode,
+      rows: padRows(rows.filter((row) => row !== '')),
+      footerLeft: 'GAME OVER',
+      footerRight: fold(session.durationLabel || ''),
+    }),
+    'Huupe final',
+    'huupe.session',
+  )];
+}
+
+function huupeDashboardFrames(payload = {}, ctx = {}) {
+  const totals = payload.totals;
+  if (!totals) {
+    return [];
+  }
+  const sessions = toNumber(totals.sessions);
+  const shots = toNumber(totals.shots);
+  if (!sessions) {
+    return [];
+  }
+
+  const content = [];
+  // "SESSIONS" plus a four-digit shot count runs off the end of the board, and
+  // not every session is a game, so "PLAYS" is both shorter and more accurate.
+  content.push(twoSpace(
+    `${formatCount(sessions)} PLAYS`,
+    shots ? `${formatCount(shots)} SHOTS` : '',
+  ));
+
+  const leader = (payload.leaderboard || [])[0];
+  if (leader?.name) {
+    content.push(lr(fitName(leader.name), `${formatWhole(leader.wins)} WINS`));
+  }
+
+  const fgPct = toNumber(totals.fgPct);
+  const streak = payload.records?.bestStreak;
+  const statParts = [];
+  if (fgPct !== null) {
+    statParts.push(`FG ${formatWhole(fgPct)}%`);
+  }
+  if (toNumber(streak?.value)) {
+    statParts.push(`RUN ${formatWhole(streak.value)}`);
+  }
+  if (statParts.length === 2) {
+    content.push(twoSpace(statParts[0], statParts[1]));
+  } else if (statParts[0]) {
+    content.push(statParts[0]);
+  }
+
+  const best = payload.records?.bestSessionScore;
+  if (toNumber(best?.value)) {
+    content.push(`BEST GAME ${scoreText(best.value)}`);
+  }
+
+  const lastAt = totals.lastPlayedAt;
+  const last = parseYmd(lastAt);
+  const zone = isBareYmd(lastAt) ? {} : { timeZone: ctx.timeZone };
+  return [snapshotFrame(
+    badgeFrame({
+      color: 'orange',
+      title: 'HUUPE',
+      rows: padRows(content.filter(Boolean)),
+      footerLeft: last ? `LAST GAME ${shortDate(last, zone)}` : '',
+    }),
+    'Huupe',
+    'huupe.dashboard',
+  )];
+}
+
 const FORMATTERS = {
   'steam.now-playing': steamFrames,
   'psn.now-playing': psnFrames,
   'autodarts.match': autodartsMatchFrames,
   'autodarts.dashboard': autodartsDashboardFrames,
+  'huupe.session': huupeSessionFrames,
+  'huupe.dashboard': huupeDashboardFrames,
   'credits.show': rollCreditsFrames,
   'roll-credits.tour': rollCreditsFrames,
 };
@@ -446,7 +623,10 @@ module.exports = {
   psnFrames,
   autodartsMatchFrames,
   autodartsDashboardFrames,
+  huupeSessionFrames,
+  huupeDashboardFrames,
   rollCreditsFrames,
+  scoreText,
   parseSettingsLine,
   systemLabel,
   PLAYER_NAME_WIDTH,

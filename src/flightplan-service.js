@@ -17,8 +17,8 @@ const { createFlightplanLive } = require('./flightplan-live');
 const { createFlightplanImages } = require('./flightplan-images');
 const { createFlightplanPayload } = require('./flightplan-payload');
 const { createFlightplanPoller } = require('./flightplan-poller');
-const { searchAirports, findAirport } = require('./flightplan-airports');
-const { mapLeg } = require('./flightplan-api');
+const { searchAirports, findAirport, resolveAirportCode } = require('./flightplan-airports');
+const { mapLeg, splitAirlineNumber } = require('./flightplan-api');
 
 function createFlightplanService({
   config = {},
@@ -72,17 +72,48 @@ function createFlightplanService({
   }
 
   async function saveApiKey(apiKey) {
-    saveFlightplanApiKey(credentialsPath, apiKey);
+    const key = String(apiKey || '').trim();
+    if (!key) throw new Error('RapidAPI key is empty');
+    const previous = apiKeyRef.current;
+    apiKeyRef.current = key;
+    const verified = await api.verifyApiKey({ manual: true });
+    if (!verified.ok) {
+      apiKeyRef.current = previous;
+      refreshApiKey();
+      return {
+        ok: false,
+        error: verified.error,
+        code: verified.code,
+        subscribeUrl: verified.subscribeUrl,
+        credentials: credentialsStatus(credentialsPath, { env: config.env || process.env }),
+      };
+    }
+    saveFlightplanApiKey(credentialsPath, key);
     refreshApiKey();
-    return { ok: true, credentials: credentialsStatus(credentialsPath) };
+    return { ok: true, credentials: credentialsStatus(credentialsPath, { env: config.env || process.env }) };
+  }
+
+  async function verifyApiKey(overrideKey) {
+    refreshApiKey();
+    const key = String(overrideKey || '').trim();
+    if (key) {
+      const previous = apiKeyRef.current;
+      apiKeyRef.current = key;
+      const result = await api.verifyApiKey({ manual: true });
+      apiKeyRef.current = previous;
+      refreshApiKey();
+      return result;
+    }
+    return api.verifyApiKey({ manual: true });
   }
 
   async function importFlightLeg(tripId, leg, { date } = {}) {
     const mapped = leg.raw ? leg : mapLeg(leg);
+    const split = splitAirlineNumber(mapped.airline || leg.airline, mapped.number || leg.number);
     return store.createFlight({
       tripId,
-      airline: mapped.airline || leg.airline,
-      number: mapped.number || leg.number,
+      airline: split.airline,
+      number: split.number,
       date,
       origin: mapped.origin,
       destination: mapped.destination,
@@ -94,13 +125,32 @@ function createFlightplanService({
     });
   }
 
-  async function pushNext({ send } = {}) {
-    const body = await payload.buildFlight({ mode: 'next' });
+  async function pushNext({ send, tripId } = {}) {
+    let body = null;
+    if (tripId) {
+      const flights = store.flightsForTrip(tripId)
+        .filter((row) => row.state !== 'landed')
+        .sort((a, b) => String(a.scheduled?.departure || a.date || '').localeCompare(
+          String(b.scheduled?.departure || b.date || ''),
+        ));
+      const flight = flights[0] || null;
+      if (!flight) return { ok: false, error: 'No upcoming flight in this trip' };
+      body = await payload.buildFlight({ mode: 'next', flightId: flight.id });
+    } else {
+      body = await payload.buildFlight({ mode: 'next' });
+    }
     if (!body) return { ok: false, error: 'No upcoming flight' };
     const emit = typeof send === 'function' ? send : sendUdpPayload;
     if (!emit) return { ok: false, error: 'UDP sender unavailable' };
-    emit(body, { source: 'manual' });
-    return { ok: true, type: body.type, mode: 'next' };
+    const delivery = emit(body, { source: 'manual', commandId: 'flightplan.next' });
+    return {
+      ok: true,
+      type: body.type,
+      mode: 'next',
+      tripId: body.trip?.id || tripId || null,
+      flightId: body.flight?.id || null,
+      vestaboard: delivery?.vestaboard || null,
+    };
   }
 
   async function pushBoard({ tripId, send } = {}) {
@@ -110,8 +160,14 @@ function createFlightplanService({
     if (!body) return { ok: false, error: 'No flights for board' };
     const emit = typeof send === 'function' ? send : sendUdpPayload;
     if (!emit) return { ok: false, error: 'UDP sender unavailable' };
-    emit(body, { source: 'manual' });
-    return { ok: true, type: body.type, mode: 'board' };
+    const delivery = emit(body, { source: 'manual', commandId: 'flightplan.board' });
+    return {
+      ok: true,
+      type: body.type,
+      mode: 'board',
+      tripId: id,
+      vestaboard: delivery?.vestaboard || null,
+    };
   }
 
   function start() {
@@ -133,11 +189,14 @@ function createFlightplanService({
     poller,
     statusSnapshot,
     saveApiKey,
+    verifyApiKey,
+    refreshApiKey,
     importFlightLeg,
     pushNext,
     pushBoard,
     searchAirports: (q) => searchAirports(q, { config }),
     findAirport: (code) => findAirport(code, config),
+    resolveAirportCode: (q) => resolveAirportCode(q, { config }),
     start,
     close,
     credentialsPath,

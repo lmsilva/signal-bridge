@@ -23,6 +23,12 @@ from src.autodarts_panel import (
     should_show_turn_strip,
 )
 from src.design_system import PX_PER_POINT, page_chrome, text_line_h
+from src.flightplan_panel import FlightPlanPanel, layout_flightplan
+from src.huupe_panel import (
+    HuupePanel,
+    layout_huupe_dashboard,
+    layout_huupe_session,
+)
 from src.roll_credits_panel import RollCreditsPanel, choose_showcase_shots, layout_boxes
 
 SCREENS = ((1080, 1920), (1200, 1920), (900, 1600), (1920, 1080))
@@ -231,6 +237,156 @@ def sample_tour():
     }
 
 
+def sample_flightplan(*, legs=2, live=False):
+    def leg(number, origin, destination, depart, arrive, state, board, token):
+        return {
+            "id": f"f-{number}",
+            "airline": "DL",
+            "number": number,
+            "date": depart[:10],
+            "origin": origin,
+            "destination": destination,
+            "scheduled": {"departure": depart, "arrival": arrive},
+            "state": state,
+            "status": {"displayLine": "ON TIME · GATE B14", "boardCode": board,
+                       "colorToken": token},
+            "durationMinutes": 620,
+            "departsInMinutes": 4200,
+        }
+
+    sea = {"iata": "SEA", "city": "Seattle", "lat": 47.45, "lon": -122.31}
+    hnd = {"iata": "HND", "city": "Tokyo", "lat": 35.55, "lon": 139.78}
+    icn = {"iata": "ICN", "city": "Seoul", "lat": 37.46, "lon": 126.44}
+    flights = [
+        leg("167", sea, hnd, "2027-06-24T13:45:00-07:00", "2027-06-25T16:00:00+09:00",
+            "active" if live else "upcoming", "ON", "good"),
+        leg("173", hnd, icn, "2027-07-08T17:55:00+09:00", "2027-07-08T20:35:00+09:00",
+            "upcoming", "+25", "warn"),
+        leg("9", icn, sea, "2027-07-10T11:20:00+09:00", "2027-07-10T06:05:00-07:00",
+            "upcoming", "ON", "good"),
+    ][:legs]
+    return {
+        "type": "flightplan.flight",
+        "mode": "board" if legs > 1 else "next",
+        "displaySeconds": 120,
+        "asOf": "2026-08-26T18:00:00Z",
+        "trip": {"id": "t1", "name": "Japan 2027", "kind": "ours",
+                 "title": "in flight" if live else "upcoming flight"},
+        "flight": {
+            **flights[0],
+            "latest": {
+                "departure": {"gate": "B14", "terminal": "S",
+                              "revisedTime": {"local": "2027-06-24T14:10:00-07:00"}},
+                "arrival": {"baggageBelt": "7"},
+            },
+            "registration": "N801DZ",
+        },
+        "flights": flights,
+        "status": {"displayLine": "ON TIME · GATE B14", "boardCode": "ON",
+                   "colorToken": "good"},
+        "progress": {
+            "phase": "airborne" if live else "upcoming",
+            "fraction": 0.42 if live else 0.0,
+            "durationMinutes": 620,
+            "departsInMinutes": -30 if live else 4200,
+            "remainingMinutes": 360 if live else 0,
+        },
+        "stage": {
+            "mode": "live" if live else "preflight",
+            "note": "in the air · position live" if live else "not departed",
+            "position": {"lat": 52.1, "lon": -170.4, "heading": 285} if live else None,
+            "route": {"origin": sea, "destination": hnd},
+        },
+    }
+
+
+def huupe_zones(scale=1):
+    return [
+        {"zone": "layup", "label": "Layup", "made": 6 * scale, "attempts": 7 * scale, "pct": 85},
+        {"zone": "one", "label": "Close", "made": 4 * scale, "attempts": 11 * scale, "pct": 36},
+        {"zone": "two", "label": "Mid", "made": 3 * scale, "attempts": 9 * scale, "pct": 33},
+        {"zone": "three", "label": "Three", "made": 2 * scale, "attempts": 12 * scale, "pct": 17},
+    ]
+
+
+def sample_huupe_session(*, finished=False, players=0):
+    names = ["trashpanda", "war d", "lundisupcorp", "Bot Level 2"][:players]
+    return {
+        "type": "huupe.session",
+        "displaySeconds": 60 if finished else 0,
+        "persistent": not finished,
+        "session": {
+            "sessionId": "s-1",
+            "mode": "family" if players else "justhuupe",
+            "modeLabel": "Family Mode" if players else "Free Play",
+            "status": "finished" if finished else "live",
+            "revision": 12,
+            "durationSec": 742,
+            "durationLabel": "12:22",
+            "headline": {
+                "primary": names[0] if (finished and names) else "17.1",
+                "secondary": "wins by 4.2" if finished else "15/39 · 38%",
+            },
+            "players": [
+                {
+                    "rank": index + 1, "name": name, "score": 17.1 - index * 4.2,
+                    "scoreLabel": f"{17.1 - index * 4.2:.1f}", "made": 9, "attempts": 21,
+                    "fgPct": 43, "bestStreak": 4, "threes": 2,
+                    "isWinner": finished and index == 0,
+                    "zones": huupe_zones(),
+                }
+                for index, name in enumerate(names)
+            ],
+            "stats": {
+                "points": 17.1, "pointsLabel": "17.1", "made": 15, "attempts": 39,
+                "shotLine": "15/39", "fgPct": 38, "streak": 3, "bestStreak": 6,
+            },
+            "zones": huupe_zones(),
+            "lastShot": {
+                "player": names[0] if names else None, "made": True,
+                "zone": "three", "zoneLabel": "Three", "points": 3, "pointsLabel": "3",
+            },
+            "winner": names[0] if (finished and names) else None,
+            "sensorErrors": 0,
+        },
+    }
+
+
+def sample_huupe_dashboard():
+    return {
+        "type": "huupe.dashboard",
+        "displaySeconds": 120,
+        "totals": {
+            "sessions": 48, "games": 31, "freePlaySessions": 17, "shots": 3371,
+            "makes": 1482, "fgPct": 44, "points": 902.4, "pointsLabel": "902.4",
+            "playLabel": "14h 07m", "lastPlayedLabel": "Yesterday",
+        },
+        "leaderboard": [
+            {
+                "rank": index + 1, "crown": index == 0, "name": name,
+                "games": 15 - index, "wins": 11 - index, "winPct": 73,
+                "points": 210.5, "pointsLabel": "210.5", "bestScore": 21.1,
+                "made": 140, "attempts": 320, "fgPct": 64 - index,
+                "threes": 12, "bestStreak": 9, "lastPlayedLabel": "Yesterday",
+            }
+            for index, name in enumerate(
+                ["trashpanda", "war d", "lundisupcorp", "Bot Level 2", "kylie",
+                 "emsss", "tommy", "guest", "ana", "ben", "cleo", "dax"]
+            )
+        ],
+        "moreCount": 5,
+        "zones": huupe_zones(scale=40),
+        "records": {
+            "bestSessionScore": {"value": 34.2, "mode": "family",
+                                 "modeLabel": "Family Mode", "valueLabel": "34.2"},
+            "bestStreak": {"value": 11, "player": "trashpanda"},
+            "bestFgPct": {"player": "lundisupcorp", "value": 64},
+        },
+        "device": {"name": "Huupe Mini", "online": True},
+        "recent": [],
+    }
+
+
 class DashboardRenderTests(unittest.TestCase):
     def assert_text_inside_cards(self, canvas, boxes, *, screen, label):
         chrome = page_chrome(*screen, timed=True)
@@ -273,6 +429,24 @@ class DashboardRenderTests(unittest.TestCase):
                 canvas, layout_dashboard(*screen, timed=True),
                 screen=screen, label="autodarts",
             )
+
+    def test_flightplan_keeps_every_string_inside_its_card(self):
+        """The wall showed the flight number painted over its own route line."""
+        for live in (False, True):
+            for legs in (1, 3):
+                for screen in SCREENS:
+                    panel, canvas = make_panel(FlightPlanPanel, screen)
+                    payload = sample_flightplan(legs=legs, live=live)
+                    panel._render(payload)
+                    self.assertGreater(
+                        len(canvas.texts()), 12, f"nothing painted for {screen}",
+                    )
+                    self.assert_text_inside_cards(
+                        canvas,
+                        layout_flightplan(*screen, timed=True, legs=legs),
+                        screen=screen,
+                        label=f"flightplan legs={legs} live={live}",
+                    )
 
     def test_autodarts_match_keeps_every_string_inside_its_card(self):
         """Score cards size their headline from the card, so a wall-sized number
@@ -319,6 +493,35 @@ class DashboardRenderTests(unittest.TestCase):
                         canvas, cards, screen=screen,
                         label=f"autodarts match ({players}p{' final' if finished else ''})",
                     )
+
+    def test_huupe_session_keeps_every_string_inside_its_card(self):
+        """Family Mode paints a scoreboard and free play paints stat tiles, so
+        both shapes have to clear the shooting card underneath them."""
+        for finished in (False, True):
+            for players in (0, 2, 4):
+                for screen in SCREENS:
+                    panel, canvas = make_panel(HuupePanel, screen)
+                    payload = sample_huupe_session(finished=finished, players=players)
+                    panel._render_session(payload)
+                    self.assertGreater(len(canvas.texts()), 8, f"nothing painted for {screen}")
+                    self.assert_text_inside_cards(
+                        canvas,
+                        layout_huupe_session(
+                            *screen, timed=finished, finished=finished,
+                        ),
+                        screen=screen,
+                        label=f"huupe session ({players}p{' final' if finished else ''})",
+                    )
+
+    def test_huupe_dashboard_keeps_every_string_inside_its_card(self):
+        for screen in SCREENS:
+            panel, canvas = make_panel(HuupePanel, screen)
+            panel._render_dashboard(sample_huupe_dashboard())
+            self.assertGreater(len(canvas.texts()), 20, f"nothing painted for {screen}")
+            self.assert_text_inside_cards(
+                canvas, layout_huupe_dashboard(*screen, timed=True),
+                screen=screen, label="huupe dashboard",
+            )
 
     def test_roll_credits_dashboard_keeps_every_string_inside_its_card(self):
         for screen in SCREENS:

@@ -4,6 +4,45 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // ------------------------------------------- Modal / sheet dismiss (Escape + backdrop)
+  const sheetDismissRegistry = new Map();
+
+  function registerSheetDismiss(id, handler) {
+    sheetDismissRegistry.set(id, handler);
+  }
+
+  function topVisibleSheet() {
+    const sheets = [...document.querySelectorAll('.sheet-backdrop')].filter((el) => !el.hidden);
+    return sheets.length ? sheets[sheets.length - 1] : null;
+  }
+
+  function dismissSheet(sheetEl) {
+    if (!sheetEl) return;
+    const handler = sheetDismissRegistry.get(sheetEl.id);
+    if (handler) {
+      handler(sheetEl);
+      return;
+    }
+    sheetEl.hidden = true;
+  }
+
+  function initSheetDismiss() {
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      const top = topVisibleSheet();
+      if (!top) return;
+      event.preventDefault();
+      dismissSheet(top);
+    }, true);
+
+    document.querySelectorAll('.sheet-backdrop').forEach((sheet) => {
+      sheet.addEventListener('click', (event) => {
+        if (event.target !== sheet) return;
+        dismissSheet(sheet);
+      });
+    });
+  }
+
   // ------------------------------------------------------------ API helpers
 
   const ALL_DISPLAYS = '*';
@@ -482,6 +521,7 @@
     } else if (tabId === 'settings') {
       initCreditsUi();
       loadCreditsSettings();
+      loadFlightplanSettings();
     } else if (tabId === 'board') {
       vbUnlockAudio();
       if (vbSoundOn && !vbHeardSample && !vbReducedMotion()) {
@@ -490,7 +530,7 @@
       }
       loadVestaboardSim().then(() => startVestaboardSimEvents());
     } else if (tabId === 'flightplan') {
-      loadFlightplanAdmin();
+      loadFlightplanTrips({ force: false });
     }
   }
 
@@ -765,6 +805,7 @@
     psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
     credits: '<path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4M12 13v4M8 20h8M9 17h6"/>',
     autodarts: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>',
+    huupe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
   };
 
   function pushIconSvg(icon) {
@@ -1204,10 +1245,12 @@
     $('qr-sheet').hidden = true;
   });
 
-  $('qr-sheet').addEventListener('click', (e) => {
-    if (e.target === $('qr-sheet')) {
-      $('qr-sheet').hidden = true;
-    }
+  registerSheetDismiss('qr-sheet', () => {
+    $('qr-sheet').hidden = true;
+  });
+
+  registerSheetDismiss('qr-scanner-sheet', () => {
+    stopQrScanner();
   });
 
   $('qr-sheet-push').addEventListener('click', () => {
@@ -1808,6 +1851,7 @@
       closeLightbox();
     }
   });
+  registerSheetDismiss('photo-lightbox', () => closeLightbox());
   document.addEventListener('keydown', (e) => {
     if ($('photo-lightbox')?.hidden) {
       return;
@@ -1818,9 +1862,6 @@
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       stepLightbox(1);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      closeLightbox();
     }
   });
 
@@ -1919,11 +1960,7 @@
   });
 
   $('photo-delete-cancel')?.addEventListener('click', closeDeleteConfirm);
-  $('photo-delete-sheet')?.addEventListener('click', (e) => {
-    if (e.target === $('photo-delete-sheet')) {
-      closeDeleteConfirm();
-    }
-  });
+  registerSheetDismiss('photo-delete-sheet', () => closeDeleteConfirm());
   $('photo-delete-confirm')?.addEventListener('click', async () => {
     const tokens = pendingDeleteTokens;
     closeDeleteConfirm();
@@ -4584,6 +4621,282 @@
     loadAutodartsSettings();
   }
 
+  // ---------------------------------------- Settings → Huupe
+
+  const HUUPE_MODES = ['family', 'justhuupe', 'dailyprize', 'fitness', 'live'];
+
+  let huupeSaveTimer = null;
+  let huupePollTimer = null;
+
+  function setHuupeSlider(sliderId, labelId, value, suffix) {
+    const slider = $(sliderId);
+    const label = $(labelId);
+    if (!slider) return;
+    slider.value = String(value);
+    if (label) label.textContent = `${value}${suffix || ''}`;
+  }
+
+  function readHuupeForm() {
+    const inactivityBtn = document.querySelector('#huupe-inactivity-tabs .segmented-btn.active');
+    return {
+      device: {
+        host: ($('huupe-host')?.value || '').trim(),
+        port: Number($('huupe-port')?.value || 5555),
+        autoDiscover: Boolean($('huupe-auto-discover')?.checked),
+      },
+      live: {
+        autoPush: Boolean($('huupe-auto-push')?.checked),
+        inactivityMinutes: Number(inactivityBtn?.dataset.minutes || 5),
+        finalHoldSeconds: Number($('huupe-final-hold')?.value || 60),
+        minShotsToOpen: Number($('huupe-min-shots')?.value || 2),
+      },
+      modes: HUUPE_MODES.reduce((out, mode) => {
+        out[mode] = Boolean($(`huupe-mode-${mode}`)?.checked);
+        return out;
+      }, {}),
+      dashboard: {
+        leaderboardSize: Number($('huupe-leaderboard-size')?.value || 10),
+        displaySeconds: Number($('huupe-dashboard-seconds')?.value || 120),
+      },
+      lastGame: {
+        displaySeconds: Number($('huupe-last-game-seconds')?.value || 90),
+      },
+    };
+  }
+
+  async function saveHuupeSettings() {
+    try {
+      const result = await apiPost('/api/huupe/settings', readHuupeForm());
+      if (result.settings) renderHuupeSettings(result.settings);
+    } catch (error) {
+      toast(error.message || 'Could not save Huupe settings', 'bad');
+    }
+  }
+
+  function queueHuupeSave() {
+    clearTimeout(huupeSaveTimer);
+    huupeSaveTimer = setTimeout(saveHuupeSettings, 400);
+  }
+
+  function renderHuupeSettings(settings) {
+    if (!settings) return;
+    const device = settings.device || {};
+    const live = settings.live || {};
+    const modes = settings.modes || {};
+    const dashboard = settings.dashboard || {};
+    const lastGame = settings.lastGame || {};
+
+    // Never clobber an address the user is halfway through typing.
+    const host = $('huupe-host');
+    if (host && document.activeElement !== host) host.value = device.host || '';
+    if ($('huupe-port')) $('huupe-port').value = String(device.port || 5555);
+    if ($('huupe-auto-discover')) $('huupe-auto-discover').checked = device.autoDiscover !== false;
+
+    if ($('huupe-auto-push')) $('huupe-auto-push').checked = live.autoPush !== false;
+    document.querySelectorAll('#huupe-inactivity-tabs .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', Number(btn.dataset.minutes) === Number(live.inactivityMinutes || 5));
+    });
+    setHuupeSlider('huupe-final-hold', 'huupe-final-hold-value', live.finalHoldSeconds || 60, 's');
+    setHuupeSlider('huupe-min-shots', 'huupe-min-shots-value', live.minShotsToOpen || 2, '');
+
+    for (const mode of HUUPE_MODES) {
+      const box = $(`huupe-mode-${mode}`);
+      if (box) box.checked = modes[mode] !== false;
+    }
+
+    setHuupeSlider('huupe-leaderboard-size', 'huupe-leaderboard-size-value', dashboard.leaderboardSize || 10, '');
+    setHuupeSlider('huupe-dashboard-seconds', 'huupe-dashboard-seconds-value', dashboard.displaySeconds || 120, 's');
+    setHuupeSlider('huupe-last-game-seconds', 'huupe-last-game-seconds-value', lastGame.displaySeconds || 90, 's');
+  }
+
+  function huupeStatusWords(status) {
+    const collector = status.collector || {};
+    const session = status.live?.session;
+    if (session) {
+      return { pill: 'Playing', tone: 'good', detail: `${session.modeLabel || 'Session'} in progress — ${session.stats?.made || 0}/${session.stats?.attempts || 0} shots` };
+    }
+    if (collector.state === 'streaming') {
+      return { pill: 'Connected', tone: 'good', detail: `Listening to ${collector.serial || 'the hoop'} — idle` };
+    }
+    if (collector.state === 'unconfigured') {
+      return { pill: 'Not set up', tone: '', detail: 'Turn on wireless ADB on the hoop, then tap Discover.' };
+    }
+    if (collector.state === 'connecting') {
+      return { pill: 'Connecting', tone: '', detail: 'Dialling the hoop…' };
+    }
+    // A hoop that is switched off is the normal overnight state, not a fault.
+    return {
+      pill: 'Offline',
+      tone: '',
+      detail: collector.lastError
+        ? `Hoop not answering — ${collector.lastError}`
+        : 'Hoop is off or asleep. It will reconnect on its own.',
+    };
+  }
+
+  function renderHuupeStatus(status) {
+    const words = huupeStatusWords(status);
+    const pill = $('huupe-status-pill');
+    if (pill) {
+      pill.textContent = words.pill;
+      pill.className = `status-pill${words.tone ? ` ${words.tone}` : ''}`;
+    }
+    const detail = $('huupe-status-detail');
+    if (detail) detail.textContent = words.detail;
+
+    const deviceHint = $('huupe-device-hint');
+    if (deviceHint) {
+      const info = status.collector?.device;
+      if (info) {
+        const adbNote = info.persistentAdbPort
+          ? 'wireless ADB survives reboots'
+          : 'wireless ADB will not survive a reboot — set persist.adb.tcp.port';
+        deviceHint.textContent = `${info.model} · Android ${info.androidRelease} · ${adbNote}`;
+      } else {
+        deviceHint.textContent = status.collector?.state === 'unconfigured'
+          ? 'Device: not found yet'
+          : 'Device: —';
+      }
+    }
+
+    const archiveHint = $('huupe-archive-hint');
+    if (archiveHint) {
+      const count = status.archive?.count || 0;
+      const last = status.live?.lastSession;
+      archiveHint.textContent = count
+        ? `${count} session${count === 1 ? '' : 's'} archived · ${status.players || 0} player${status.players === 1 ? '' : 's'}`
+          + (last?.endedAt ? ` · last ${new Date(last.endedAt).toLocaleDateString()}` : '')
+        : 'No sessions recorded yet — play a game and it will appear here';
+    }
+
+    renderHuupeSettings(status.settings);
+  }
+
+  async function loadHuupeSettings() {
+    const card = $('huupe-settings-card');
+    if (!card) return;
+    try {
+      renderHuupeStatus(await apiGet('/api/huupe/status'));
+    } catch {
+      card.hidden = true;
+    }
+  }
+
+  async function loadHuupeLog() {
+    const view = $('huupe-log');
+    if (!view) return;
+    try {
+      const result = await apiGet('/api/huupe/log');
+      const lines = result.lines || [];
+      view.textContent = lines.length
+        ? lines.map((line) => `${line.at || ''} ${line.tag}: ${line.message}`).join('\n')
+        : 'Nothing unrecognised — the parser understood every line it saw.';
+      view.scrollTop = view.scrollHeight;
+    } catch (error) {
+      view.textContent = error.message || 'Could not load the log';
+    }
+  }
+
+  function setHuupeBusy(button, busy, busyLabel) {
+    if (!button) return;
+    if (busy) {
+      button.dataset.label = button.textContent;
+      button.disabled = true;
+      button.textContent = busyLabel || 'Working…';
+    } else {
+      button.disabled = false;
+      if (button.dataset.label) button.textContent = button.dataset.label;
+    }
+  }
+
+  const huupeCard = $('huupe-settings-card');
+  if (huupeCard) {
+    huupeCard.addEventListener('change', (event) => {
+      if (event.target.matches('input, select')) queueHuupeSave();
+    });
+    huupeCard.addEventListener('input', (event) => {
+      if (event.target.matches('input[type="range"]')) {
+        const map = {
+          'huupe-final-hold': ['huupe-final-hold-value', 's'],
+          'huupe-min-shots': ['huupe-min-shots-value', ''],
+          'huupe-leaderboard-size': ['huupe-leaderboard-size-value', ''],
+          'huupe-dashboard-seconds': ['huupe-dashboard-seconds-value', 's'],
+          'huupe-last-game-seconds': ['huupe-last-game-seconds-value', 's'],
+        };
+        const entry = map[event.target.id];
+        if (entry) setHuupeSlider(event.target.id, entry[0], event.target.value, entry[1]);
+        queueHuupeSave();
+      }
+    });
+    $('huupe-inactivity-tabs')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('.segmented-btn');
+      if (!btn) return;
+      document.querySelectorAll('#huupe-inactivity-tabs .segmented-btn')
+        .forEach((node) => node.classList.toggle('active', node === btn));
+      queueHuupeSave();
+    });
+    $('btn-huupe-discover')?.addEventListener('click', async () => {
+      const button = $('btn-huupe-discover');
+      setHuupeBusy(button, true, 'Scanning…');
+      toast('Scanning the network for your hoop…', '');
+      try {
+        const result = await apiPost('/api/huupe/discover', {});
+        if (result.ok) {
+          toast(`Found the hoop at ${result.host}`, 'good');
+        } else {
+          toast(result.error || 'No hoop found — check wireless ADB is on', 'warn');
+        }
+        await loadHuupeSettings();
+      } catch (error) {
+        toast(error.message || 'Discovery failed', 'bad');
+      } finally {
+        setHuupeBusy(button, false);
+      }
+    });
+    $('btn-huupe-reconnect')?.addEventListener('click', async () => {
+      try {
+        await apiPost('/api/huupe/reconnect', {});
+        toast('Reconnecting to the hoop…', '');
+        setTimeout(loadHuupeSettings, 1500);
+      } catch (error) {
+        toast(error.message || 'Could not reconnect', 'bad');
+      }
+    });
+    $('btn-huupe-test')?.addEventListener('click', async () => {
+      const button = $('btn-huupe-test');
+      setHuupeBusy(button, true, 'Testing…');
+      try {
+        const result = await apiPost('/api/huupe/test', {});
+        $('huupe-test-result').textContent = result.message || (result.ok ? 'ok' : 'failed');
+        toast(result.message || (result.ok ? 'Huupe ok' : 'Test failed'), result.ok ? 'good' : 'bad');
+      } catch (error) {
+        toast(error.message || 'Test failed', 'bad');
+      } finally {
+        setHuupeBusy(button, false);
+      }
+    });
+    $('btn-huupe-rebuild')?.addEventListener('click', async () => {
+      const button = $('btn-huupe-rebuild');
+      setHuupeBusy(button, true, 'Rebuilding…');
+      try {
+        const result = await apiPost('/api/huupe/rebuild', {});
+        toast(`Rebuilt from ${result.sessions || 0} session${result.sessions === 1 ? '' : 's'}`, 'good');
+        await loadHuupeSettings();
+      } catch (error) {
+        toast(error.message || 'Rebuild failed', 'bad');
+      } finally {
+        setHuupeBusy(button, false);
+      }
+    });
+    huupeCard.querySelector('.huupe-advanced')?.addEventListener('toggle', (event) => {
+      if (event.target.open) loadHuupeLog();
+    });
+
+    loadHuupeSettings();
+    // The hoop goes on and off all day; the card is only honest if it keeps up.
+    huupePollTimer = setInterval(loadHuupeSettings, 5000);
+  }
+
   // ------------------------------------------- Settings → Trivia
 
   const TRIVIA_PROVIDER_LABELS = {
@@ -5060,6 +5373,10 @@
     ensureControlUnlocked();
   });
   $('pin-sheet-cancel')?.addEventListener('click', () => {
+    $('pin-sheet').hidden = true;
+    clearPinSheetError();
+  });
+  registerSheetDismiss('pin-sheet', () => {
     $('pin-sheet').hidden = true;
     clearPinSheetError();
   });
@@ -7585,23 +7902,14 @@
       button.addEventListener('click', () => closeCreditsSheetById(button.dataset.closeCreditsSheet));
     });
     // Clicking the dimmed area outside a card dismisses it, matching the photo
-    // lightbox. The unsaved prompt stays put so the choice is deliberate.
-    CREDITS_SHEET_IDS.filter((id) => id !== 'credits-unsaved-sheet').forEach((id) => {
-      $(id)?.addEventListener('click', (event) => {
-        if (event.target === $(id)) closeCreditsSheetById(id);
-      });
-    });
-    document.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape') return;
-      const top = creditsTopSheetId();
-      if (!top) return;
-      event.preventDefault();
-      if (top === 'credits-unsaved-sheet') {
-        $('credits-unsaved-sheet').hidden = true;
-        return;
-      }
-      closeCreditsSheetById(top);
-    });
+    // lightbox. On the unsaved prompt that means cancel: the prompt closes and
+    // the edit sheet stays open behind it, so nobody loses work by missing.
+    registerSheetDismiss('credits-add-sheet', (el) => { el.hidden = true; });
+    registerSheetDismiss('credits-edit-sheet', () => requestCreditsEditClose());
+    registerSheetDismiss('credits-preview-sheet', () => closeCreditsPreview());
+    registerSheetDismiss('credits-delete-sheet', (el) => { el.hidden = true; });
+    registerSheetDismiss('credits-rescrape-sheet', (el) => { el.hidden = true; });
+    registerSheetDismiss('credits-unsaved-sheet', (el) => { el.hidden = true; });
     $('btn-credits-unsaved-cancel')?.addEventListener('click', () => {
       $('credits-unsaved-sheet').hidden = true;
     });
@@ -8671,13 +8979,54 @@
 
   document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
     loadOverheadSettings();
+    loadFlightplanSettings();
   });
 
   // ---------------------------------------------------------- Flight Plan
 
+  function summarizeFlightplanPush(label, result = {}) {
+    const boards = result?.vestaboard?.boards || [];
+    const accepted = boards.filter((row) => Number(row.accepted) > 0).length;
+    const skipped = boards.filter((row) => row.skipped).length;
+    if (boards.length && accepted > 0) {
+      result.vestaboardAccepted = true;
+      return `${label} sent — Vestaboard updated (${accepted})`;
+    }
+    if (boards.length && accepted === 0) {
+      result.vestaboardAccepted = false;
+      const reason = boards.map((row) => row.reason).filter(Boolean)[0] || 'skipped';
+      return `${label} sent to displays — Vestaboard skipped (${reason})`;
+    }
+    result.vestaboardAccepted = null;
+    if (skipped) return `${label} sent — Vestaboard skipped`;
+    return `${label} sent to selected display(s)`;
+  }
+
   let flightplanTripId = null;
   let flightplanHomeAirport = 'SLC';
   let flightplanSearchLegs = [];
+  const flightplanLoadedTrips = new Set();
+  const flightplanPopulateInflight = new Map();
+
+  function formatFlightplanAirlineNumber(airline, number) {
+    const code = String(airline || '').trim().toUpperCase();
+    let num = String(number || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (code && num.startsWith(code)) num = num.slice(code.length);
+    return `${code} ${num}`.trim();
+  }
+
+  function formatFlightplanTripDates(trip) {
+    if (trip.startDate && trip.endDate && trip.endDate !== trip.startDate) {
+      return `${trip.startDate} – ${trip.endDate}`;
+    }
+    return trip.startDate || trip.endDate || '';
+  }
+
+  function bindFlightplanEndDateDefault(startEl, endEl) {
+    endEl?.addEventListener('focus', () => {
+      if (!endEl.value && startEl?.value) endEl.value = startEl.value;
+    });
+  }
 
   function renderFlightplanLedger(status) {
     const line = $('flightplan-ledger-line');
@@ -8703,99 +9052,301 @@
     if ($('flightplan-log-only')) $('flightplan-log-only').checked = settings.pollerLogOnly !== false;
     const pill = $('flightplan-status-pill');
     if (pill) {
-      const cred = status?.credentials?.hasKey ? 'API key set' : 'No API key';
-      pillState(pill, settings.enabled ? 'good' : '', settings.enabled ? 'Enabled' : 'Disabled');
-      pill.title = cred;
+      const cred = status?.credentials || {};
+      let credLine = 'No API key';
+      if (cred.keyUnreadable) credLine = 'Saved key unreadable — re-enter';
+      else if (cred.hasApiKey) {
+        credLine = `Key …${cred.apiKeyHint || '????'} (${cred.apiKeySource || 'saved'})`;
+      }
+      pillState(pill, settings.enabled && cred.hasApiKey ? 'good' : '', settings.enabled ? 'Enabled' : 'Disabled');
+      pill.title = credLine;
+    }
+    const apiHint = $('flightplan-api-hint');
+    if (apiHint) {
+      const cred = status?.credentials || {};
+      let hint = '';
+      if (cred.keyUnreadable) {
+        hint = 'Could not read the saved RapidAPI key (encryption key may have changed). Paste your AeroDataBox key again and save.';
+      } else if (cred.envBlocksOverwrite) {
+        hint = 'FLIGHTPLAN_RAPIDAPI_KEY in the environment overrides any key saved here.';
+      } else if (cred.genericRapidApiKeyIgnored) {
+        hint = 'RAPIDAPI_KEY is set in the environment but ignored — Flight Plan needs FLIGHTPLAN_RAPIDAPI_KEY or a key saved below from your AeroDataBox subscription.';
+      } else if (!cred.hasApiKey) {
+        hint = 'No AeroDataBox key is active — flight search will fail until you save one below.';
+      }
+      if (hint) {
+        apiHint.hidden = false;
+        apiHint.textContent = hint;
+        apiHint.classList.add('hint-warn');
+      } else {
+        apiHint.hidden = true;
+        apiHint.textContent = '';
+        apiHint.classList.remove('hint-warn');
+      }
     }
     renderFlightplanLedger(status);
   }
 
-  async function loadFlightplanAdmin() {
+  async function loadFlightplanSettings() {
     try {
       const status = await apiGet('/api/flightplan/status');
       renderFlightplanSettings(status);
-      await loadFlightplanTrips();
     } catch (error) {
-      toast(error.message || 'Could not load Flight Plan', 'bad');
+      toast(error.message || 'Could not load Flight Plan settings', 'bad');
     }
   }
 
-  async function loadFlightplanTrips() {
-    const filterBtn = document.querySelector('#flightplan-filter-tabs .segmented-btn.active');
-    const filter = filterBtn?.dataset.filter || 'upcoming';
-    const result = await apiGet(`/api/flightplan/trips?filter=${encodeURIComponent(filter)}&sort=date&dir=asc`);
-    const list = $('flightplan-trip-list');
-    if (!list) return;
-    list.innerHTML = '';
-    for (const trip of result.trips || []) {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'btn btn-outline btn-block flightplan-trip-row';
-      row.dataset.tripId = trip.id;
-      row.innerHTML = `<strong>${escapeHtml(trip.name)}</strong> · ${trip.flightCount || 0} flights · ${escapeHtml(trip.phase || '')}`;
-      row.addEventListener('click', () => openFlightplanTrip(trip.id));
-      list.appendChild(row);
+  function buildFlightplanTripCardShell(trip) {
+    const card = document.createElement('details');
+    card.className = 'flightplan-trip-card';
+    card.dataset.tripId = trip.id;
+    card.dataset.phase = trip.phase || '';
+    const dates = formatFlightplanTripDates(trip);
+    const metaParts = [`${trip.flightCount || 0} flights`, trip.phase || '', dates].filter(Boolean);
+    card.innerHTML = `<summary>
+        <div class="flightplan-trip-summary-main">
+          <strong>${escapeHtml(trip.name)}</strong>
+          <span class="flightplan-trip-summary-meta">${escapeHtml(metaParts.join(' · '))}</span>
+        </div>
+      </summary>
+      <div class="flightplan-trip-body"><p class="hint">Loading…</p></div>`;
+    card.addEventListener('toggle', () => {
+      if (card.dataset.suppressToggle === '1') return;
+      if (card.open) {
+        populateFlightplanTripCard(card, trip.id).catch((error) => {
+          toast(error.message || 'Could not load trip', 'bad');
+        });
+      }
+    });
+    return card;
+  }
+
+  async function populateFlightplanTripCard(card, tripId, { force = false } = {}) {
+    const body = card.querySelector('.flightplan-trip-body');
+    if (!body) return;
+    if (!force && flightplanLoadedTrips.has(tripId) && body.querySelector('[data-field="name"]')) return;
+    if (flightplanPopulateInflight.has(tripId)) {
+      await flightplanPopulateInflight.get(tripId);
+      return;
     }
-    if (!(result.trips || []).length) {
-      list.innerHTML = '<p class="hint">No trips in this filter.</p>';
+    const work = (async () => {
+      const data = await apiGet(`/api/flightplan/trips/${encodeURIComponent(tripId)}`);
+      const trip = data.trip;
+      flightplanLoadedTrips.add(tripId);
+      body.innerHTML = `
+      <label class="field-label">Name
+        <input class="field-input" data-field="name" name="flightplan-trip-title" autocomplete="off" data-lpignore="true" data-1p-ignore="true" value="${escapeHtml(trip.name || '')}">
+      </label>
+      <div class="autodarts-field-grid">
+        <label class="field-label">Start date
+          <input class="field-input" data-field="startDate" type="date" value="${escapeHtml(trip.startDate || '')}">
+        </label>
+        <label class="field-label">End date
+          <input class="field-input" data-field="endDate" type="date" value="${escapeHtml(trip.endDate || '')}">
+        </label>
+      </div>
+      <label class="field-label">Notes
+        <textarea class="field-input" data-field="notes" rows="3">${escapeHtml(trip.notes || '')}</textarea>
+      </label>
+      <div class="flightplan-flights-head">
+        <span class="field-label">Flights</span>
+        <button type="button" class="btn btn-outline btn-sm" data-action="add-flight">Add flight</button>
+      </div>
+      <div class="flightplan-flight-list" data-flight-list></div>
+      <div class="autodarts-footer-actions">
+        <button type="button" class="btn btn-outline" data-action="push-next" title="Show this trip next upcoming flight on the selected display(s) and Vestaboard">Push next flight</button>
+        <button type="button" class="btn btn-accent" data-action="push-board" title="Show this trip departure board on the selected display(s) and Vestaboard">Push trip board</button>
+        <button type="button" class="btn btn-outline" data-action="delete-trip">Delete trip</button>
+      </div>`;
+      const startInput = body.querySelector('[data-field="startDate"]');
+      const endInput = body.querySelector('[data-field="endDate"]');
+      bindFlightplanEndDateDefault(startInput, endInput);
+      body.querySelectorAll('[data-field]').forEach((field) => {
+        field.addEventListener('change', () => {
+          saveFlightplanTripCard(card, tripId).catch(() => {});
+        });
+      });
+      body.querySelector('[data-action="add-flight"]')?.addEventListener('click', () => {
+        showFlightplanFlightSheet(tripId);
+      });
+      body.querySelector('[data-action="push-next"]')?.addEventListener('click', async () => {
+        try {
+          const result = await apiPost('/api/push/flightplan-next', withTarget({ tripId }));
+          toast(summarizeFlightplanPush('Next flight', result), result?.vestaboardAccepted === false ? 'bad' : 'good');
+        } catch (error) {
+          toast(error.message || 'Could not push next flight', 'bad');
+        }
+      });
+      body.querySelector('[data-action="push-board"]')?.addEventListener('click', async () => {
+        try {
+          const result = await apiPost('/api/push/flightplan-board', withTarget({ tripId }));
+          toast(summarizeFlightplanPush('Trip board', result), result?.vestaboardAccepted === false ? 'bad' : 'good');
+        } catch (error) {
+          toast(error.message || 'Could not push trip board', 'bad');
+        }
+      });
+      body.querySelector('[data-action="delete-trip"]')?.addEventListener('click', async () => {
+        const count = (data.flights || []).length;
+        if (!confirm(`Delete "${trip.name}" and ${count} flight(s)?`)) return;
+        await fetch(`/api/flightplan/trips/${tripId}`, { method: 'DELETE', credentials: 'same-origin' });
+        flightplanLoadedTrips.delete(tripId);
+        if (flightplanTripId === tripId) flightplanTripId = null;
+        loadFlightplanTrips({ force: true });
+        toast('Trip deleted', 'good');
+      });
+      renderFlightplanFlights(body.querySelector('[data-flight-list]'), tripId, data.flights || []);
+      refreshFlightplanTripSummary(card);
+    })();
+    flightplanPopulateInflight.set(tripId, work);
+    try {
+      await work;
+    } finally {
+      flightplanPopulateInflight.delete(tripId);
     }
   }
 
-  async function openFlightplanTrip(tripId) {
-    flightplanTripId = tripId;
-    const data = await apiGet(`/api/flightplan/trips/${encodeURIComponent(tripId)}`);
-    const trip = data.trip;
-    $('flightplan-editor-card').hidden = false;
-    $('flightplan-editor-title').textContent = trip.name;
-    $('flightplan-trip-name').value = trip.name || '';
-    $('flightplan-trip-kind').value = trip.kind || 'ours';
-    $('flightplan-trip-traveller').value = trip.traveller || '';
-    $('flightplan-trip-start').value = trip.startDate || '';
-    $('flightplan-trip-end').value = trip.endDate || '';
-    $('flightplan-trip-notes').value = trip.notes || '';
-    renderFlightplanFlights(data.flights || []);
+  function refreshFlightplanTripSummary(card) {
+    const body = card.querySelector('.flightplan-trip-body');
+    const strong = card.querySelector('.flightplan-trip-summary-main strong');
+    const meta = card.querySelector('.flightplan-trip-summary-meta');
+    if (!body || !strong || !meta) return;
+    const name = body.querySelector('[data-field="name"]')?.value || 'Trip';
+    const startDate = body.querySelector('[data-field="startDate"]')?.value || '';
+    const endDate = body.querySelector('[data-field="endDate"]')?.value || '';
+    const flightCount = body.querySelectorAll('.flightplan-flight-row').length;
+    strong.textContent = name;
+    const dates = formatFlightplanTripDates({ startDate, endDate });
+    const metaParts = [`${flightCount} flights`, card.dataset.phase || '', dates].filter(Boolean);
+    meta.textContent = metaParts.join(' · ');
   }
 
-  function renderFlightplanFlights(flights) {
-    const list = $('flightplan-flight-list');
-    if (!list) return;
-    list.innerHTML = '';
+  async function saveFlightplanTripCard(card, tripId) {
+    const body = card.querySelector('.flightplan-trip-body');
+    if (!body) return;
+    await fetch(`/api/flightplan/trips/${tripId}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: body.querySelector('[data-field="name"]')?.value,
+        startDate: body.querySelector('[data-field="startDate"]')?.value,
+        endDate: body.querySelector('[data-field="endDate"]')?.value,
+        notes: body.querySelector('[data-field="notes"]')?.value,
+      }),
+    });
+    refreshFlightplanTripSummary(card);
+  }
+
+  async function loadFlightplanTrips({ force = false } = {}) {
+    try {
+      const status = await apiGet('/api/flightplan/status');
+      flightplanHomeAirport = status?.settings?.homeAirport || 'SLC';
+    } catch {
+      /* home-airport shortcut still works with last known value */
+    }
+    try {
+      const filterBtn = document.querySelector('#flightplan-filter-tabs .segmented-btn.active');
+      const filter = filterBtn?.dataset.filter || 'upcoming';
+      const result = await apiGet(`/api/flightplan/trips?filter=${encodeURIComponent(filter)}&sort=date&dir=asc`);
+      const list = $('flightplan-trip-list');
+      if (!list) return;
+      const trips = result.trips || [];
+      const existing = new Map(
+        [...list.querySelectorAll('.flightplan-trip-card')].map((el) => [el.dataset.tripId, el]),
+      );
+      const nextIds = new Set(trips.map((trip) => trip.id));
+
+      // Soft update: keep open trip editors mounted so they do not flash/reload.
+      if (!force && existing.size) {
+        for (const [id, card] of existing) {
+          if (!nextIds.has(id)) {
+            flightplanLoadedTrips.delete(id);
+            card.remove();
+          }
+        }
+        for (const trip of trips) {
+          let card = existing.get(trip.id);
+          if (!card) {
+            card = buildFlightplanTripCardShell(trip);
+            list.appendChild(card);
+            continue;
+          }
+          card.dataset.phase = trip.phase || '';
+          if (!card.open || !card.querySelector('[data-field="name"]')) {
+            const strong = card.querySelector('.flightplan-trip-summary-main strong');
+            const meta = card.querySelector('.flightplan-trip-summary-meta');
+            if (strong) strong.textContent = trip.name || 'Trip';
+            if (meta) {
+              const dates = formatFlightplanTripDates(trip);
+              const metaParts = [`${trip.flightCount || 0} flights`, trip.phase || '', dates].filter(Boolean);
+              meta.textContent = metaParts.join(' · ');
+            }
+          } else {
+            refreshFlightplanTripSummary(card);
+          }
+        }
+        if (!trips.length && !list.querySelector('.flightplan-trip-card')) {
+          list.innerHTML = '<p class="hint">No trips in this filter.</p>';
+        }
+        return;
+      }
+
+      const openIds = new Set(
+        [...list.querySelectorAll('.flightplan-trip-card[open]')].map((el) => el.dataset.tripId),
+      );
+      list.innerHTML = '';
+      for (const trip of trips) {
+        const card = buildFlightplanTripCardShell(trip);
+        list.appendChild(card);
+        if (openIds.has(trip.id)) {
+          card.dataset.suppressToggle = '1';
+          card.open = true;
+          delete card.dataset.suppressToggle;
+          flightplanLoadedTrips.delete(trip.id);
+          await populateFlightplanTripCard(card, trip.id, { force: true });
+        }
+      }
+      if (!trips.length) {
+        list.innerHTML = '<p class="hint">No trips in this filter.</p>';
+      }
+    } catch (error) {
+      toast(error.message || 'Could not load trips', 'bad');
+    }
+  }
+
+  function renderFlightplanFlights(listEl, tripId, flights) {
+    if (!listEl) return;
+    listEl.innerHTML = '';
     for (const flight of flights) {
       const row = document.createElement('div');
       row.className = 'flightplan-flight-row';
       const route = `${flight.origin?.iata || '—'} → ${flight.destination?.iata || '—'}`;
-      row.innerHTML = `<div><strong>${escapeHtml(flight.airline)} ${escapeHtml(flight.number)}</strong> · ${escapeHtml(route)} · ${escapeHtml(flight.state || '')}</div>
+      const label = formatFlightplanAirlineNumber(flight.airline, flight.number);
+      row.innerHTML = `<div><strong>${escapeHtml(label)}</strong> · ${escapeHtml(route)} · ${escapeHtml(flight.state || '')}</div>
         <button type="button" class="btn btn-outline btn-sm" data-refresh="${flight.id}">Refresh</button>
         <button type="button" class="btn btn-outline btn-sm" data-delete="${flight.id}">Remove</button>`;
       row.querySelector('[data-refresh]')?.addEventListener('click', async () => {
         await apiPost(`/api/flightplan/flights/${flight.id}/refresh`, {});
         toast('Flight refreshed', 'good');
-        openFlightplanTrip(flightplanTripId);
+        const card = document.querySelector(`.flightplan-trip-card[data-trip-id="${tripId}"]`);
+        flightplanLoadedTrips.delete(tripId);
+        if (card) {
+          await populateFlightplanTripCard(card, tripId);
+          refreshFlightplanTripSummary(card);
+        }
       });
       row.querySelector('[data-delete]')?.addEventListener('click', async () => {
         if (!confirm(`Remove flight ${flight.airline} ${flight.number}?`)) return;
         await fetch(`/api/flightplan/flights/${flight.id}`, { method: 'DELETE', credentials: 'same-origin' });
-        openFlightplanTrip(flightplanTripId);
+        const card = document.querySelector(`.flightplan-trip-card[data-trip-id="${tripId}"]`);
+        flightplanLoadedTrips.delete(tripId);
+        if (card) {
+          await populateFlightplanTripCard(card, tripId);
+          refreshFlightplanTripSummary(card);
+        }
       });
-      list.appendChild(row);
+      listEl.appendChild(row);
     }
-  }
-
-  async function saveFlightplanTripFields() {
-    if (!flightplanTripId) return;
-    await fetch(`/api/flightplan/trips/${flightplanTripId}`, {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: $('flightplan-trip-name')?.value,
-        kind: $('flightplan-trip-kind')?.value,
-        traveller: $('flightplan-trip-traveller')?.value,
-        startDate: $('flightplan-trip-start')?.value,
-        endDate: $('flightplan-trip-end')?.value,
-        notes: $('flightplan-trip-notes')?.value,
-      }),
-    });
   }
 
   function bindFlightplanAirportTypeahead(input, suggestEl) {
@@ -8805,7 +9356,7 @@
       clearTimeout(timer);
       timer = setTimeout(async () => {
         const q = input.value.trim();
-        if (q.length < 1) {
+        if (q.length < 2) {
           suggestEl.hidden = true;
           return;
         }
@@ -8815,9 +9366,11 @@
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'typeahead-item';
-          btn.textContent = `${row.iata || row.icao} — ${row.name}`;
+          const code = row.iata || row.icao || '—';
+          const city = row.city ? ` · ${row.city}` : '';
+          btn.textContent = `${code} — ${row.name}${city}`;
           btn.addEventListener('click', () => {
-            input.value = row.iata || row.icao || '';
+            input.value = code;
             suggestEl.hidden = true;
           });
           suggestEl.appendChild(btn);
@@ -8825,12 +9378,104 @@
         suggestEl.hidden = !(result.airports || []).length;
       }, 200);
     });
+    input.addEventListener('blur', () => {
+      setTimeout(() => { suggestEl.hidden = true; }, 150);
+    });
   }
 
-  function showFlightplanFlightSheet() {
+  let flightplanUnsavedTarget = null;
+
+  function flightplanTripSheetDirty() {
+    return Boolean(
+      $('flightplan-new-name')?.value?.trim()
+      || $('flightplan-new-start')?.value
+      || $('flightplan-new-end')?.value
+      || $('flightplan-new-notes')?.value?.trim(),
+    );
+  }
+
+  function flightplanFlightSheetDirty() {
+    const list = $('flightplan-leg-list');
+    const hasLegButtons = list?.querySelector('button');
+    const hasMessage = list?.querySelector('.hint')?.textContent?.trim();
+    return Boolean(
+      hasLegButtons
+      || hasMessage
+      || $('flightplan-search-airline')?.value?.trim()
+      || $('flightplan-search-number')?.value?.trim(),
+    );
+  }
+
+  function hideFlightplanUnsavedSheet() {
+    if ($('flightplan-unsaved-sheet')) $('flightplan-unsaved-sheet').hidden = true;
+    flightplanUnsavedTarget = null;
+  }
+
+  function showFlightplanUnsavedSheet(target) {
+    flightplanUnsavedTarget = target;
+    const saveBtn = $('btn-flightplan-unsaved-save');
+    if (target === 'trip') {
+      $('flightplan-unsaved-title').textContent = 'Create this trip?';
+      $('flightplan-unsaved-text').textContent = 'You entered trip details that have not been saved yet.';
+      if (saveBtn) {
+        saveBtn.hidden = false;
+        saveBtn.textContent = 'Create trip';
+      }
+    } else {
+      $('flightplan-unsaved-title').textContent = 'Discard search?';
+      $('flightplan-unsaved-text').textContent = 'Your flight search will be lost.';
+      if (saveBtn) saveBtn.hidden = true;
+    }
+    if ($('flightplan-unsaved-sheet')) $('flightplan-unsaved-sheet').hidden = false;
+  }
+
+  function requestCloseFlightplanTripSheet() {
+    if (!flightplanTripSheetDirty()) {
+      hideFlightplanTripSheet();
+      return;
+    }
+    showFlightplanUnsavedSheet('trip');
+  }
+
+  function requestCloseFlightplanFlightSheet() {
+    if (!flightplanFlightSheetDirty()) {
+      hideFlightplanFlightSheet();
+      return;
+    }
+    showFlightplanUnsavedSheet('flight');
+  }
+
+  function setFlightplanTestResult(message, ok = null) {
+    const resultEl = $('flightplan-test-result');
+    if (!resultEl) return;
+    resultEl.textContent = message || '';
+    resultEl.classList.toggle('hint-ok', ok === true);
+    resultEl.classList.toggle('hint-warn', ok === false);
+  }
+
+  function showFlightplanTripSheet() {
+    $('flightplan-new-name').value = '';
+    $('flightplan-new-start').value = '';
+    $('flightplan-new-end').value = '';
+    $('flightplan-new-notes').value = '';
+    $('flightplan-trip-sheet').hidden = false;
+    $('flightplan-new-name')?.focus();
+  }
+
+  function hideFlightplanTripSheet() {
+    $('flightplan-trip-sheet').hidden = true;
+  }
+
+  function showFlightplanFlightSheet(tripId) {
+    flightplanTripId = tripId;
     flightplanSearchLegs = [];
     $('flightplan-leg-list').innerHTML = '';
-    $('flightplan-search-date').value = $('flightplan-trip-start')?.value || new Date().toISOString().slice(0, 10);
+    if ($('flightplan-search-airline')) $('flightplan-search-airline').value = '';
+    if ($('flightplan-search-number')) $('flightplan-search-number').value = '';
+    const card = document.querySelector(`.flightplan-trip-card[data-trip-id="${tripId}"]`);
+    const startDate = card?.querySelector('[data-field="startDate"]')?.value;
+    $('flightplan-search-date').value = startDate || new Date().toISOString().slice(0, 10);
+    if ($('flightplan-search-airport')) $('flightplan-search-airport').value = '';
     $('flightplan-flight-sheet').hidden = false;
   }
 
@@ -8838,11 +9483,15 @@
     $('flightplan-flight-sheet').hidden = true;
   }
 
-  function renderFlightplanLegs(legs) {
+  function renderFlightplanLegs(legs, meta = {}) {
     flightplanSearchLegs = legs || [];
     const list = $('flightplan-leg-list');
     list.innerHTML = '';
-    legs.forEach((leg, index) => {
+    if (meta.allLegCount > 0 && !legs.length && meta.airport) {
+      list.innerHTML = `<p class="hint">Found ${meta.allLegCount} leg(s) for that flight, but none use ${escapeHtml(meta.airport)}. Try another airport or clear the field.</p>`;
+      return;
+    }
+    legs.forEach((leg) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn btn-outline btn-block';
@@ -8860,13 +9509,55 @@
         }
         hideFlightplanFlightSheet();
         toast('Flight added', 'good');
-        openFlightplanTrip(flightplanTripId);
-        loadFlightplanTrips();
+        const card = document.querySelector(`.flightplan-trip-card[data-trip-id="${flightplanTripId}"]`);
+        flightplanLoadedTrips.delete(flightplanTripId);
+        if (card) {
+          await populateFlightplanTripCard(card, flightplanTripId);
+          refreshFlightplanTripSummary(card);
+        }
       });
       list.appendChild(btn);
     });
-    if (!legs.length) list.innerHTML = '<p class="hint">No legs found — try another date or number.</p>';
+    if (!legs.length) {
+      list.innerHTML = '<p class="hint">No matching legs — check the date, airport, or flight number.</p>';
+    }
   }
+
+  async function createFlightplanTrip() {
+    const name = $('flightplan-new-name')?.value?.trim();
+    if (!name) {
+      toast('Trip name is required', 'bad');
+      return false;
+    }
+    try {
+      const created = await apiPost('/api/flightplan/trips', {
+        name,
+        startDate: $('flightplan-new-start')?.value || undefined,
+        endDate: $('flightplan-new-end')?.value || undefined,
+        notes: $('flightplan-new-notes')?.value || undefined,
+      });
+      if (!created.ok) {
+        toast(created.error || 'Could not create trip', 'bad');
+        return false;
+      }
+      hideFlightplanUnsavedSheet();
+      hideFlightplanTripSheet();
+      await loadFlightplanTrips();
+      const card = document.querySelector(`.flightplan-trip-card[data-trip-id="${created.trip.id}"]`);
+      if (card) {
+        card.open = true;
+        await populateFlightplanTripCard(card, created.trip.id);
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      toast('Trip created', 'good');
+      return true;
+    } catch (error) {
+      toast(error.message || 'Could not create trip', 'bad');
+      return false;
+    }
+  }
+
+  bindFlightplanEndDateDefault($('flightplan-new-start'), $('flightplan-new-end'));
 
   $('btn-flightplan-settings-save')?.addEventListener('click', async () => {
     try {
@@ -8880,10 +9571,30 @@
       if (key) body.rapidApiKey = key;
       await apiPost('/api/flightplan/settings', body);
       if ($('flightplan-api-key')) $('flightplan-api-key').value = '';
+      setFlightplanTestResult('');
       toast('Flight Plan settings saved', 'good');
-      loadFlightplanAdmin();
+      loadFlightplanSettings();
     } catch (error) {
       toast(error.message || 'Could not save settings', 'bad');
+    }
+  });
+
+  $('btn-flightplan-test-key')?.addEventListener('click', async () => {
+    setFlightplanTestResult('Testing AeroDataBox connection…');
+    try {
+      const key = $('flightplan-api-key')?.value?.trim();
+      await apiPost('/api/flightplan/verify-key', key ? { rapidApiKey: key } : {});
+      setFlightplanTestResult('Connected — AeroDataBox accepted this API key.', true);
+      toast('AeroDataBox API key is valid', 'good');
+      if (key) {
+        await apiPost('/api/flightplan/settings', { rapidApiKey: key });
+        if ($('flightplan-api-key')) $('flightplan-api-key').value = '';
+      }
+      loadFlightplanSettings();
+    } catch (error) {
+      const msg = error.message || 'API key test failed';
+      setFlightplanTestResult(msg, false);
+      toast(msg, 'bad');
     }
   });
 
@@ -8893,28 +9604,28 @@
     }
   });
 
-  $('btn-flightplan-trip-new')?.addEventListener('click', async () => {
-    const name = prompt('Trip name');
-    if (!name?.trim()) return;
-    const created = await apiPost('/api/flightplan/trips', { name: name.trim(), kind: 'ours' });
-    if (!created.ok) {
-      toast(created.error || 'Could not create trip', 'bad');
-      return;
-    }
-    await loadFlightplanTrips();
-    openFlightplanTrip(created.trip.id);
+  $('btn-flightplan-trip-new')?.addEventListener('click', () => {
+    showFlightplanTripSheet();
   });
 
-  $('btn-flightplan-trip-delete')?.addEventListener('click', async () => {
-    if (!flightplanTripId) return;
-    const data = await apiGet(`/api/flightplan/trips/${flightplanTripId}`);
-    const count = (data.flights || []).length;
-    if (!confirm(`Delete "${data.trip?.name}" and ${count} flight(s)?`)) return;
-    await fetch(`/api/flightplan/trips/${flightplanTripId}`, { method: 'DELETE', credentials: 'same-origin' });
-    flightplanTripId = null;
-    $('flightplan-editor-card').hidden = true;
-    loadFlightplanTrips();
-    toast('Trip deleted', 'good');
+  $('btn-flightplan-trip-cancel')?.addEventListener('click', requestCloseFlightplanTripSheet);
+
+  $('btn-flightplan-trip-create')?.addEventListener('click', () => {
+    createFlightplanTrip();
+  });
+
+  registerSheetDismiss('flightplan-unsaved-sheet', () => hideFlightplanUnsavedSheet());
+  registerSheetDismiss('flightplan-trip-sheet', () => requestCloseFlightplanTripSheet());
+  registerSheetDismiss('flightplan-flight-sheet', () => requestCloseFlightplanFlightSheet());
+
+  $('btn-flightplan-unsaved-cancel')?.addEventListener('click', hideFlightplanUnsavedSheet);
+  $('btn-flightplan-unsaved-discard')?.addEventListener('click', () => {
+    hideFlightplanUnsavedSheet();
+    if (flightplanUnsavedTarget === 'trip') hideFlightplanTripSheet();
+    else hideFlightplanFlightSheet();
+  });
+  $('btn-flightplan-unsaved-save')?.addEventListener('click', () => {
+    if (flightplanUnsavedTarget === 'trip') createFlightplanTrip();
   });
 
   $('flightplan-filter-tabs')?.addEventListener('click', (event) => {
@@ -8922,51 +9633,35 @@
     if (!btn) return;
     document.querySelectorAll('#flightplan-filter-tabs .segmented-btn').forEach((el) => el.classList.remove('active'));
     btn.classList.add('active');
-    loadFlightplanTrips();
+    loadFlightplanTrips({ force: true });
   });
 
-  $('btn-flightplan-flight-add')?.addEventListener('click', () => {
-    if (!flightplanTripId) return;
-    showFlightplanFlightSheet();
-  });
-
-  $('btn-flightplan-flight-cancel')?.addEventListener('click', hideFlightplanFlightSheet);
+  $('btn-flightplan-flight-cancel')?.addEventListener('click', requestCloseFlightplanFlightSheet);
   $('btn-flightplan-search-run')?.addEventListener('click', async () => {
     try {
       const result = await apiPost('/api/flightplan/search', {
         airline: $('flightplan-search-airline')?.value,
         number: $('flightplan-search-number')?.value,
         date: $('flightplan-search-date')?.value,
+        airport: $('flightplan-search-airport')?.value,
       });
-      renderFlightplanLegs(result.legs || []);
+      renderFlightplanLegs(result.legs || [], result);
     } catch (error) {
       toast(error.message || 'Search failed', 'bad');
     }
   });
 
-  $('btn-flightplan-search-home')?.addEventListener('click', () => {
-    if ($('flightplan-search-date')) {
-      $('flightplan-search-date').value = new Date().toISOString().slice(0, 10);
+  $('btn-flightplan-search-airport-home')?.addEventListener('click', () => {
+    if ($('flightplan-search-airport')) {
+      $('flightplan-search-airport').value = flightplanHomeAirport || 'SLC';
+      $('flightplan-search-airport').focus();
     }
-    toast(`Home airport: ${flightplanHomeAirport}`, 'good');
-  });
-
-  $('btn-flightplan-push-next')?.addEventListener('click', async () => {
-    await apiPost('/api/push/flightplan-next', {});
-    toast('Pushed next flight', 'good');
-  });
-
-  $('btn-flightplan-push-board')?.addEventListener('click', async () => {
-    await apiPost('/api/push/flightplan-board', { tripId: flightplanTripId });
-    toast('Pushed trip board', 'good');
-  });
-
-  ['flightplan-trip-name', 'flightplan-trip-kind', 'flightplan-trip-traveller',
-    'flightplan-trip-start', 'flightplan-trip-end', 'flightplan-trip-notes'].forEach((id) => {
-    $(id)?.addEventListener('change', () => saveFlightplanTripFields().catch(() => {}));
   });
 
   bindFlightplanAirportTypeahead($('flightplan-home-airport'), $('flightplan-home-suggest'));
+  bindFlightplanAirportTypeahead($('flightplan-search-airport'), $('flightplan-search-airport-suggest'));
+
+  initSheetDismiss();
 
   loadPushGrid();
   refreshDisplays({ quiet: true });

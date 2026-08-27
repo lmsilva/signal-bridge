@@ -289,6 +289,96 @@ test('a confirmed session sends a card, and stopping closes it', async () => {
   assert.equal(store.history()[0].watchedSeconds, 900);
 });
 
+// A card whose thumbnail failed to download carries no image URL at all, so
+// the display cannot retry for itself. The bridge keeps chasing the file and
+// pushes the card again once it lands — otherwise the hero stays empty for the
+// length of the video even though the artwork was there all along.
+
+const IMAGELESS = { ...VIDEO, thumbnailFile: null, thumbnailCandidateUrls: ['https://i.ytimg.com/vi/abc/maxres.jpg'] };
+
+function backfillService({ landsOnAttempt = 1, delays = [1, 1, 1] } = {}) {
+  let attempts = 0;
+  const api = fakeApi({ resolveVideo: async () => ({ ...IMAGELESS }) });
+  api.cacheFirstImage = async () => {
+    attempts += 1;
+    return { file: attempts >= landsOnAttempt ? 'c'.repeat(40) + '.jpg' : null, entry: null };
+  };
+  const built = makeService({ api, options: { imageBackfillDelays: delays } });
+  return { ...built, attempts: () => attempts };
+}
+
+const settle = (ms = 25) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('a thumbnail that arrives late refreshes the card that went out without it', async () => {
+  const { service, sent, lounge } = backfillService({ landsOnAttempt: 2 });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await settle();
+
+  assert.equal(sent[0].youtube.thumbnailUrl, null, 'the first card genuinely has no art');
+  await settle();
+
+  assert.equal(sent.length, 2, 'the card is pushed again once the image lands');
+  assert.equal(sent[1].trigger, 'youtube-thumbnail-backfill');
+  assert.match(sent[1].youtube.thumbnailUrl, /\/youtube-images\/c{40}\.jpg$/);
+  assert.equal(sent[1].youtube.videoId, 'abc');
+  assert.equal(
+    sent[1].youtube.startedAt,
+    sent[0].youtube.startedAt,
+    'the refreshed card must not restart the elapsed clock',
+  );
+  service.stop();
+});
+
+test('the card is left alone when the retry keeps failing', async () => {
+  const { service, sent, lounge, attempts } = backfillService({ landsOnAttempt: 99 });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await settle(60);
+
+  assert.equal(sent.length, 1, 'a no-op re-push would restart the card animation for nothing');
+  assert.equal(attempts(), 3, 'it gives up after the schedule is exhausted');
+  service.stop();
+});
+
+test('a card that already has its artwork never schedules a retry', async () => {
+  const api = fakeApi();
+  let called = false;
+  api.cacheFirstImage = async () => {
+    called = true;
+    return { file: null, entry: null };
+  };
+  const { service, sent, lounge } = makeService({ api, options: { imageBackfillDelays: [1] } });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await settle();
+
+  assert.equal(called, false);
+  assert.equal(sent.length, 1);
+  service.stop();
+});
+
+test('stopping the video calls off the hunt for its thumbnail', async () => {
+  const { service, sent, lounge } = backfillService({ landsOnAttempt: 1, delays: [15] });
+  service.start();
+
+  lounge.emit('started', { deviceId: 'tv-1', videoId: 'abc', startedAt: '2026-08-02T20:00:00Z' });
+  await settle(1);
+  lounge.emit('stopped', {
+    deviceId: 'tv-1', videoId: 'abc', watchedSeconds: 4,
+    startedAt: '2026-08-02T20:00:00Z', endedAt: '2026-08-02T20:00:04Z',
+  });
+  const afterClose = sent.length;
+  await settle(60);
+
+  assert.equal(sent.length, afterClose, 'nothing may re-open a card the viewer already closed');
+  assert.equal(sent.at(-1).type, 'youtube.now-playing.close');
+  service.stop();
+});
+
 test('an empty history is rebuilt from the metadata cache on start', () => {
   const { service, store } = makeService({
     api: fakeApi({

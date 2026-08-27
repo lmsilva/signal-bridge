@@ -111,7 +111,9 @@ const {
 const { createRollCreditsService } = require('./roll-credits-service');
 const { createRollCreditsPayload } = require('./roll-credits-payload');
 const { createAutodartsService } = require('./autodarts-service');
+const { createHuupeService } = require('./huupe-service');
 const { createFlightplanService } = require('./flightplan-service');
+const { filterLegsByAirport } = require('./flightplan-api');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -328,6 +330,8 @@ function createWebServer({
   youtubeNowPlaying = null,
   autodarts = null,
   getAutodartsStatus = null,
+  huupe = null,
+  getHuupeStatus = null,
   trivia = null,
   getTriviaStatus = null,
   upsideNews = null,
@@ -413,6 +417,15 @@ function createWebServer({
       sendUdpPayload,
       displayBusy,
     }));
+
+  const huupeInstance = typeof huupe === 'function'
+    ? huupe()
+    : (huupe || createHuupeService({
+      config,
+      log,
+      sendUdpPayload,
+      displayBusy,
+    }));
   const flightplanInstance = typeof flightplan === 'function'
     ? flightplan()
     : (flightplan || createFlightplanService({
@@ -443,6 +456,7 @@ function createWebServer({
     }),
     getYoutubeStatus: () => getYoutubeStatus?.() || youtubeService()?.statusSnapshot?.() || null,
     getAutodartsStatus: () => getAutodartsStatus?.() || autodartsInstance.statusSnapshot?.() || null,
+    getHuupeStatus: () => getHuupeStatus?.() || huupeInstance.statusSnapshot?.() || null,
     getTriviaStatus: () => getTriviaStatus?.() || triviaService()?.statusSnapshot?.() || null,
     getUpsideNewsStatus: () => getUpsideNewsStatus?.() || upsideNewsService()?.statusSnapshot?.() || null,
     getWikiCommonKnowledgeStatus: () => getWikiCommonKnowledgeStatus?.()
@@ -1188,7 +1202,7 @@ function createWebServer({
     sendJson(res, 200, { ok: true, settings: service.settings.get() });
   }
 
-  function handleFlightplanSettingsPut(body, res) {
+  async function handleFlightplanSettingsPut(body, res) {
     const service = flightplanService();
     if (!service) {
       sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
@@ -1196,7 +1210,11 @@ function createWebServer({
     }
     if (body?.rapidApiKey) {
       try {
-        service.saveApiKey(body.rapidApiKey);
+        const saved = await service.saveApiKey(body.rapidApiKey);
+        if (!saved.ok) {
+          sendJson(res, 402, saved);
+          return;
+        }
       } catch (error) {
         sendJson(res, 400, { ok: false, error: error?.message || String(error) });
         return;
@@ -1204,6 +1222,9 @@ function createWebServer({
     }
     const patch = { ...body };
     delete patch.rapidApiKey;
+    if (patch.homeAirport != null) {
+      patch.homeAirport = service.resolveAirportCode(patch.homeAirport);
+    }
     const result = service.settings.update(patch);
     sendJson(res, 200, result);
   }
@@ -1226,9 +1247,14 @@ function createWebServer({
     }
     const targetId = targetIdFrom(body);
     const result = await service.pushNext({
-      send: (payload) => deliverTargetedPayload(payload, targetId),
+      tripId: body?.tripId || null,
+      send: (payload, options = {}) => deliverTargetedPayload(payload, targetId, {
+        source: 'manual',
+        commandId: 'flightplan.next',
+        ...options,
+      }),
     });
-    sendJson(res, result.ok ? 202 : 400, result);
+    sendJson(res, result.ok ? 202 : 400, { ...result, targetId });
   }
 
   async function handleFlightplanPushBoard(body, res) {
@@ -1240,9 +1266,13 @@ function createWebServer({
     const targetId = targetIdFrom(body);
     const result = await service.pushBoard({
       tripId: body?.tripId,
-      send: (payload) => deliverTargetedPayload(payload, targetId),
+      send: (payload, options = {}) => deliverTargetedPayload(payload, targetId, {
+        source: 'manual',
+        commandId: 'flightplan.board',
+        ...options,
+      }),
     });
-    sendJson(res, result.ok ? 202 : 400, result);
+    sendJson(res, result.ok ? 202 : 400, { ...result, targetId });
   }
 
   async function handleFlightplanApi(method, pathname, body, res, query) {
@@ -1311,7 +1341,7 @@ function createWebServer({
 
       if (method === 'POST') {
         if (tail === 'settings') {
-          handleFlightplanSettingsPut(body, res);
+          await handleFlightplanSettingsPut(body, res);
           return;
         }
         if (tail === 'trips') {
@@ -1319,13 +1349,32 @@ function createWebServer({
           return;
         }
         if (tail === 'search') {
+          service.refreshApiKey();
           const result = await service.api.searchByNumber({
             airline: body?.airline,
             number: body?.number,
             date: body?.date,
             manual: true,
           });
-          sendJson(res, 200, result);
+          if (!result.ok) {
+            sendJson(res, 402, result);
+            return;
+          }
+          const airport = body?.airport ? service.resolveAirportCode(body.airport) : '';
+          const allLegs = result.legs || [];
+          const legs = airport ? filterLegsByAirport(allLegs, airport) : allLegs;
+          sendJson(res, 200, {
+            ...result,
+            legs,
+            airport: airport || null,
+            allLegCount: allLegs.length,
+            airportFiltered: Boolean(airport && allLegs.length && legs.length !== allLegs.length),
+          });
+          return;
+        }
+        if (tail === 'verify-key') {
+          const result = await service.verifyApiKey(body?.rapidApiKey);
+          sendJson(res, result.ok ? 200 : 402, result);
           return;
         }
         const importMatch = /^trips\/([^/]+)\/flights\/import$/.exec(tail);
@@ -1906,6 +1955,12 @@ function createWebServer({
           handleAutodartsLastMatchPush({ ...body, mode: 'last-match' }, res); break;
         case 'autodarts.dashboard':
           handleAutodartsDashboardPush(body, res); break;
+        case 'huupe.now':
+          handleHuupeNowPush({ ...body, mode: body?.mode || 'auto' }, res); break;
+        case 'huupe.last-game':
+          handleHuupeLastGamePush({ ...body, mode: 'last-game' }, res); break;
+        case 'huupe.dashboard':
+          handleHuupeDashboardPush(body, res); break;
         case 'youtube.now-playing':
           await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
         case 'youtube.last-played':
@@ -3827,6 +3882,121 @@ function createWebServer({
     }
   }
 
+  function huupeSend(body) {
+    const targetId = targetIdFrom(body);
+    return {
+      targetId,
+      send: (payload, sendOptions = {}) => {
+        if (typeof deliverTargetedPayload === 'function') {
+          return deliverTargetedPayload(payload, targetId, sendOptions);
+        }
+        return sendUdpPayload(payload, sendOptions);
+      },
+    };
+  }
+
+  function handleHuupeNowPush(body, res) {
+    try {
+      const { targetId, send } = huupeSend(body);
+      const scheduled = body?.triggeredBy === 'scheduler';
+      // A scheduled "last game" must never shove a live session off the wall.
+      const mode = scheduled
+        ? (body?.mode === 'last-game' ? 'last-game' : 'auto')
+        : (body?.mode || 'auto');
+      const result = mode === 'last-game'
+        ? huupeInstance.pushLastGame({ send })
+        : huupeInstance.pushNow({ send, mode });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleHuupeLastGamePush(body, res) {
+    try {
+      const { targetId, send } = huupeSend(body);
+      const result = huupeInstance.pushLastGame({ send });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleHuupeDashboardPush(body, res) {
+    try {
+      const { targetId, send } = huupeSend(body);
+      const result = huupeInstance.pushDashboard({ send });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, { ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleHuupeApi(method, pathname, body, res) {
+    const tail = pathname.slice('/api/huupe/'.length);
+    try {
+      if (method === 'GET') {
+        if (tail === 'status') {
+          sendJson(res, 200, { ok: true, ...huupeInstance.statusSnapshot() });
+          return;
+        }
+        if (tail === 'settings') {
+          sendJson(res, 200, { ok: true, settings: huupeInstance.settings.get() });
+          return;
+        }
+        if (tail === 'log') {
+          // Redacted by the parser before it ever reaches this buffer.
+          sendJson(res, 200, { ok: true, lines: huupeInstance.logTail() });
+          return;
+        }
+        if (tail === 'games') {
+          sendJson(res, 200, { ok: true, games: huupeInstance.archive.latest(20) });
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+      if (method === 'POST') {
+        if (tail === 'settings') {
+          sendJson(res, 200, huupeInstance.updateSettings(body));
+          return;
+        }
+        if (tail === 'discover') {
+          const result = await huupeInstance.discover();
+          sendJson(res, result.ok ? 200 : 404, result);
+          return;
+        }
+        if (tail === 'reconnect') {
+          sendJson(res, 200, huupeInstance.reconnect());
+          return;
+        }
+        if (tail === 'test') {
+          sendJson(res, 200, await huupeInstance.testConnection());
+          return;
+        }
+        if (tail === 'rebuild') {
+          sendJson(res, 200, huupeInstance.rebuildAggregates());
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+      }
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
   async function handleAutodartsApi(method, pathname, body, res) {
     const tail = pathname.slice('/api/autodarts/'.length);
     try {
@@ -4836,6 +5006,11 @@ function createWebServer({
           await handleAutodartsApi('GET', pathname, null, res);
           return;
         }
+        if (pathname.startsWith('/api/huupe/')) {
+          if (!requireAdminSession(req, res)) return;
+          await handleHuupeApi('GET', pathname, null, res);
+          return;
+        }
         if (pathname === '/api/photos') {
           if (!requireAdminSession(req, res)) return;
           handlePhotosList(res);
@@ -5094,6 +5269,10 @@ function createWebServer({
           await handleAutodartsApi('POST', pathname, body, res);
           return;
         }
+        if (pathname.startsWith('/api/huupe/')) {
+          await handleHuupeApi('POST', pathname, body, res);
+          return;
+        }
         if (pathname.startsWith('/api/flightplan/')) {
           if (!requireAdminSession(req, res)) return;
           await handleFlightplanApi('POST', pathname, body, res, reqUrl.searchParams);
@@ -5199,6 +5378,15 @@ function createWebServer({
             return;
           case '/api/push/autodarts-dashboard':
             handleAutodartsDashboardPush(body, res);
+            return;
+          case '/api/push/huupe-now':
+            handleHuupeNowPush(body, res);
+            return;
+          case '/api/push/huupe-last-game':
+            handleHuupeLastGamePush(body, res);
+            return;
+          case '/api/push/huupe-dashboard':
+            handleHuupeDashboardPush(body, res);
             return;
           case '/api/push/url':
             await handleUrlPush(body, res);
@@ -5342,6 +5530,9 @@ function createWebServer({
     if (!autodarts) {
       autodartsInstance.start?.();
     }
+    if (!huupe) {
+      huupeInstance.start?.();
+    }
     if (!flightplan) {
       flightplanInstance.start?.();
     }
@@ -5438,6 +5629,9 @@ function createWebServer({
     if (!autodarts) {
       autodartsInstance.close?.();
     }
+    if (!huupe) {
+      huupeInstance.close?.();
+    }
     closeTeslaCallbackServer({ force: true });
     for (const target of [server, redirectServer]) {
       if (!target) {
@@ -5463,6 +5657,7 @@ function createWebServer({
     airCommand,
     getRollCredits: () => rollCreditsInstance,
     getAutodarts: () => autodartsInstance,
+    getHuupe: () => huupeInstance,
   };
 }
 

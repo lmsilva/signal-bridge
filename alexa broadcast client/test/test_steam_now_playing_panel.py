@@ -714,6 +714,108 @@ class SteamArtworkCacheTests(unittest.TestCase):
             self.assertIsNotNone(image)
             self.assertTrue((tmp / "out.jpg").exists())
 
+    def test_network_failure_keeps_the_copy_already_on_disk(self):
+        # Every cache hit kicks off a force_network refresh. Deleting the file
+        # when that refresh failed threw away good art over a passing blip.
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            cache_file = tmp / "out.jpg"
+            cache_file.write_bytes(self.TINY_PNG_BYTES)
+            with mock.patch("src.steam_now_playing_panel.steam_image_cache_dir", return_value=tmp), \
+                    mock.patch("src.steam_now_playing_panel.steam_image_cache_path", side_effect=lambda u: cache_file), \
+                    mock.patch(
+                        "src.steam_now_playing_panel.urllib.request.urlopen",
+                        side_effect=OSError("connection reset"),
+                    ):
+                image = SteamNowPlayingPanel._fetch_photo(
+                    "https://example.com/a.jpg", 100, 80, force_network=True,
+                )
+            self.assertIsNone(image)
+            self.assertTrue(cache_file.exists(), "a network blip must not evict the cache")
+
+    def test_bytes_that_are_not_an_image_drop_the_cache_entry(self):
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            cache_file = tmp / "out.jpg"
+            cache_file.write_bytes(b"<html>404</html>")
+            with mock.patch("src.steam_now_playing_panel.steam_image_cache_dir", return_value=tmp), \
+                    mock.patch("src.steam_now_playing_panel.steam_image_cache_path", side_effect=lambda u: cache_file), \
+                    mock.patch("src.steam_now_playing_panel.urllib.request.urlopen") as urlopen:
+                response = mock.MagicMock()
+                response.read.return_value = b"<html>404</html>"
+                response.__enter__.return_value = response
+                urlopen.return_value = response
+                image = SteamNowPlayingPanel._fetch_photo(
+                    "https://example.com/a.jpg", 100, 80, force_network=True,
+                )
+            self.assertIsNone(image)
+            self.assertFalse(cache_file.exists(), "junk must not be served from disk forever")
+
+
+class ArtworkRetryTests(unittest.TestCase):
+    """A card outlives a failed download, so the fetch has to outlive it too."""
+
+    def _panel(self):
+        panel = SteamNowPlayingPanel.__new__(SteamNowPlayingPanel)
+        panel.IMAGE_RETRY_DELAYS = (0, 0, 0)
+        panel._fetch_token = 7
+        panel.visible = True
+        panel.root = mock.MagicMock()
+        panel.root.after = lambda _delay, fn: fn()
+        panel._apply_image = mock.MagicMock()
+        panel._load_cached_photo = mock.MagicMock(return_value=None)
+        return panel
+
+    def test_a_failed_download_is_retried_until_it_works(self):
+        panel = self._panel()
+        attempts = []
+
+        def flaky(url, *args, **kwargs):
+            attempts.append(url)
+            return "IMAGE" if len(attempts) == 3 else None
+
+        panel._fetch_photo = mock.MagicMock(side_effect=flaky)
+        panel._fetch_first_image(7, ["https://bridge/thumb.jpg"], 640, 360, "hero")
+
+        self.assertEqual(len(attempts), 3)
+        panel._apply_image.assert_called_once_with(7, "IMAGE", "hero")
+
+    def test_retrying_stops_once_the_card_is_gone(self):
+        panel = self._panel()
+        attempts = []
+
+        def always_fails(url, *args, **kwargs):
+            attempts.append(url)
+            # hide() bumps the token; nothing should keep fetching for a card
+            # that is no longer on screen.
+            panel._fetch_token = 8
+            return None
+
+        panel._fetch_photo = mock.MagicMock(side_effect=always_fails)
+        panel._fetch_first_image(7, ["https://bridge/thumb.jpg"], 640, 360, "hero")
+
+        self.assertEqual(len(attempts), 1)
+        panel._apply_image.assert_not_called()
+
+    def test_it_gives_up_after_the_schedule_rather_than_spinning(self):
+        panel = self._panel()
+        panel._fetch_photo = mock.MagicMock(return_value=None)
+
+        panel._fetch_first_image(7, ["https://bridge/a.jpg", "https://bridge/b.jpg"], 640, 360, "hero")
+
+        # Two candidates across four passes (first try plus three retries).
+        self.assertEqual(panel._fetch_photo.call_count, 8)
+        panel._apply_image.assert_not_called()
+
+    def test_an_empty_candidate_list_never_touches_the_network(self):
+        panel = self._panel()
+        panel._fetch_photo = mock.MagicMock(return_value=None)
+
+        panel._fetch_first_image(7, [None, ""], 640, 360, "hero")
+
+        panel._fetch_photo.assert_not_called()
+        panel._apply_image.assert_not_called()
+
 
 class SteamFooterAndChromeTests(unittest.TestCase):
     def _make_panel(self):

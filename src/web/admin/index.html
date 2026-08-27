@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal89">
+  <link rel="stylesheet" href="styles.css?v=signal95">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -80,8 +80,8 @@
              behaviour as the Settings test buttons. -->
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad" id="push-row-quick"
-             data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts"
-             data-skeleton-count="21" aria-busy="true"></div>
+             data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts,Huupe"
+             data-skeleton-count="25" aria-busy="true"></div>
         <script>
           (function () {
             document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
@@ -558,33 +558,11 @@
     <!-- ========================== FLIGHT PLAN TAB ========================== -->
     <section class="tab-panel" id="tab-flightplan">
       <div class="card-grid">
-        <div class="section-label">Flight Plan</div>
-        <p class="hint" id="flightplan-ledger-line">Loading quota…</p>
-
-        <div class="card" id="flightplan-settings-card">
-          <div class="auth-head">
-            <div class="auth-name">Settings</div>
-            <span class="status-pill" id="flightplan-status-pill">…</span>
-          </div>
-          <label class="trivia-check"><input type="checkbox" id="flightplan-enabled"><span>Enable Flight Plan</span></label>
-          <label class="field-label" for="flightplan-api-key">RapidAPI key
-            <input class="field-input" id="flightplan-api-key" type="password" autocomplete="off" placeholder="Leave blank to keep current">
-          </label>
-          <div class="field-label">Home airport
-            <div class="flightplan-airport-row">
-              <input class="field-input" id="flightplan-home-airport" autocomplete="off" maxlength="4" placeholder="SLC">
-              <button type="button" class="btn btn-outline" id="btn-flightplan-home-fill">Home</button>
-            </div>
-            <div class="typeahead-list" id="flightplan-home-suggest" hidden></div>
-          </div>
-          <label class="trivia-check"><input type="checkbox" id="flightplan-auto-push" checked><span>Auto-push material changes</span></label>
-          <label class="trivia-check"><input type="checkbox" id="flightplan-log-only" checked><span>Log changes only (no auto-push)</span></label>
-          <button type="button" class="btn btn-accent btn-block" id="btn-flightplan-settings-save">Save settings</button>
-        </div>
+        <div class="section-label">Trips</div>
 
         <div class="card">
           <div class="auth-head">
-            <div class="auth-name">Trips</div>
+            <div class="auth-name">Your trips</div>
             <button type="button" class="btn btn-accent" id="btn-flightplan-trip-new">New trip</button>
           </div>
           <div class="segmented" id="flightplan-filter-tabs">
@@ -594,45 +572,6 @@
             <button type="button" class="segmented-btn" data-filter="all">All</button>
           </div>
           <div class="flightplan-trip-list" id="flightplan-trip-list"></div>
-        </div>
-
-        <div class="card" id="flightplan-editor-card" hidden>
-          <div class="auth-head">
-            <div class="auth-name" id="flightplan-editor-title">Trip</div>
-            <button type="button" class="btn btn-outline" id="btn-flightplan-trip-delete">Delete trip</button>
-          </div>
-          <label class="field-label" for="flightplan-trip-name">Name
-            <input class="field-input" id="flightplan-trip-name">
-          </label>
-          <label class="field-label" for="flightplan-trip-kind">Kind
-            <select class="field-input" id="flightplan-trip-kind">
-              <option value="ours">Ours</option>
-              <option value="visitor">Visitor</option>
-            </select>
-          </label>
-          <label class="field-label" for="flightplan-trip-traveller">Traveller
-            <input class="field-input" id="flightplan-trip-traveller">
-          </label>
-          <div class="autodarts-field-grid">
-            <label class="field-label" for="flightplan-trip-start">Start date
-              <input class="field-input" id="flightplan-trip-start" type="date">
-            </label>
-            <label class="field-label" for="flightplan-trip-end">End date
-              <input class="field-input" id="flightplan-trip-end" type="date">
-            </label>
-          </div>
-          <label class="field-label" for="flightplan-trip-notes">Notes
-            <textarea class="field-input" id="flightplan-trip-notes" rows="3"></textarea>
-          </label>
-          <div class="flightplan-flights-head">
-            <span class="field-label">Flights</span>
-            <button type="button" class="btn btn-outline" id="btn-flightplan-flight-add">Add flight</button>
-          </div>
-          <div id="flightplan-flight-list"></div>
-          <div class="autodarts-footer-actions">
-            <button type="button" class="btn btn-outline" id="btn-flightplan-push-next">Push next</button>
-            <button type="button" class="btn btn-accent" id="btn-flightplan-push-board">Push board</button>
-          </div>
         </div>
       </div>
     </section>
@@ -1064,6 +1003,40 @@
           </div>
         </div>
 
+        <div class="section-label">Flight Plan</div>
+        <div class="card flightplan-settings-card" id="flightplan-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Flight Plan</div>
+            <span class="status-pill" id="flightplan-status-pill">…</span>
+          </div>
+          <p class="hint" id="flightplan-ledger-line">Loading quota…</p>
+          <p class="hint">Use a RapidAPI key from your <a href="https://rapidapi.com/aedbx-aedbx/api/aerodatabox" target="_blank" rel="noopener">AeroDataBox subscription</a> (free tier is fine). A generic <code>RAPIDAPI_KEY</code> for another API will not work.</p>
+          <p class="hint" id="flightplan-api-hint" hidden></p>
+          <label class="trivia-check"><input type="checkbox" id="flightplan-enabled"><span>Enable Flight Plan</span></label>
+          <label class="field-label" for="flightplan-api-key">RapidAPI key
+            <div class="flightplan-airport-row">
+              <!-- autocomplete=new-password + non-username name: stop browsers offering to save trip names as logins -->
+              <input class="field-input" id="flightplan-api-key" name="flightplan-rapidapi-key" type="password"
+                autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                placeholder="Leave blank to keep current">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-flightplan-test-key">Test</button>
+            </div>
+          </label>
+          <p class="hint" id="flightplan-test-result"></p>
+          <div class="field-label">Home airport
+            <div class="flightplan-airport-row">
+              <input class="field-input" id="flightplan-home-airport" autocomplete="off" placeholder="City or code, e.g. Denver or DEN">
+              <button type="button" class="btn btn-outline" id="btn-flightplan-home-fill">Home</button>
+            </div>
+            <div class="typeahead-list" id="flightplan-home-suggest" hidden></div>
+          </div>
+          <label class="trivia-check"><input type="checkbox" id="flightplan-auto-push" checked><span>Auto-push material changes</span></label>
+          <label class="trivia-check flightplan-settings-check"><input type="checkbox" id="flightplan-log-only" checked><span>Log changes only (no auto-push)</span></label>
+          <div class="flightplan-settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-flightplan-settings-save">Save settings</button>
+          </div>
+        </div>
+
         <div class="section-label">Autodarts</div>
         <div class="card autodarts-settings-card" id="autodarts-settings-card">
           <div class="auth-head">
@@ -1186,6 +1159,106 @@
               <div class="autodarts-oauth-actions">
                 <button type="button" class="btn btn-accent" id="btn-autodarts-oauth-save">Save override</button>
               </div>
+            </details>
+          </div>
+        </div>
+
+        <div class="section-label">Huupe</div>
+        <div class="card huupe-settings-card" id="huupe-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Huupe Mini</div>
+            <span class="status-pill" id="huupe-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="huupe-status-detail">Loading…</p>
+          <p class="hint huupe-observe-hint">Read-only. The bridge tails the hoop’s log over wireless ADB — nothing is installed on the device.</p>
+
+          <div class="huupe-layout">
+            <section class="huupe-panel" aria-label="Device">
+              <div class="huupe-panel-head">
+                <span class="field-label">Device</span>
+                <div class="huupe-inline-actions">
+                  <button type="button" class="btn btn-outline" id="btn-huupe-discover">Discover</button>
+                  <button type="button" class="btn btn-outline" id="btn-huupe-reconnect">Reconnect</button>
+                </div>
+              </div>
+              <div class="huupe-field-grid">
+                <label class="field-label" for="huupe-host">Address
+                  <input class="field-input" id="huupe-host" spellcheck="false" autocomplete="off" placeholder="192.168.1.50">
+                </label>
+                <label class="field-label" for="huupe-port">ADB port
+                  <input class="field-input" id="huupe-port" type="number" min="1" max="65535" value="5555">
+                </label>
+              </div>
+              <label class="trivia-check"><input type="checkbox" id="huupe-auto-discover" checked><span>Re-scan the network if the hoop moves</span></label>
+              <p class="hint" id="huupe-device-hint">Device: —</p>
+            </section>
+
+            <section class="huupe-panel" aria-label="Live session">
+              <span class="field-label">Live session</span>
+              <label class="trivia-check"><input type="checkbox" id="huupe-auto-push" checked><span>Auto-push when someone starts shooting</span></label>
+              <label class="field-label field-label-spaced">Close after no shots for</label>
+              <div class="segmented" id="huupe-inactivity-tabs">
+                <button type="button" class="segmented-btn" data-minutes="2">2m</button>
+                <button type="button" class="segmented-btn active" data-minutes="5">5m</button>
+                <button type="button" class="segmented-btn" data-minutes="10">10m</button>
+                <button type="button" class="segmented-btn" data-minutes="15">15m</button>
+                <button type="button" class="segmented-btn" data-minutes="30">30m</button>
+              </div>
+              <label class="field-label field-label-spaced" for="huupe-final-hold">Final card hold</label>
+              <div class="slider-row">
+                <input type="range" id="huupe-final-hold" min="15" max="180" step="5" value="60" aria-label="Final card hold seconds">
+                <span class="slider-value" id="huupe-final-hold-value">60s</span>
+              </div>
+              <label class="field-label field-label-spaced" for="huupe-min-shots">Shots before it takes the screen</label>
+              <div class="slider-row">
+                <input type="range" id="huupe-min-shots" min="1" max="10" step="1" value="2" aria-label="Shots before opening the display">
+                <span class="slider-value" id="huupe-min-shots-value">2</span>
+              </div>
+            </section>
+
+            <section class="huupe-panel" aria-label="Modes">
+              <span class="field-label">Show these modes</span>
+              <div class="huupe-mode-grid">
+                <label class="trivia-check"><input type="checkbox" id="huupe-mode-family" checked><span>Family Mode</span></label>
+                <label class="trivia-check"><input type="checkbox" id="huupe-mode-justhuupe" checked><span>Free Play</span></label>
+                <label class="trivia-check"><input type="checkbox" id="huupe-mode-dailyprize" checked><span>Daily Prize</span></label>
+                <label class="trivia-check"><input type="checkbox" id="huupe-mode-fitness" checked><span>Fitness</span></label>
+                <label class="trivia-check"><input type="checkbox" id="huupe-mode-live" checked><span>Huupe Live</span></label>
+              </div>
+            </section>
+
+            <section class="huupe-panel" aria-label="On screen">
+              <span class="field-label">On screen</span>
+              <label class="field-label" for="huupe-leaderboard-size">Leaderboard size</label>
+              <div class="slider-row">
+                <input type="range" id="huupe-leaderboard-size" min="3" max="16" step="1" value="10" aria-label="Leaderboard size">
+                <span class="slider-value" id="huupe-leaderboard-size-value">10</span>
+              </div>
+              <label class="field-label field-label-spaced" for="huupe-dashboard-seconds">Dashboard</label>
+              <div class="slider-row">
+                <input type="range" id="huupe-dashboard-seconds" min="30" max="300" step="5" value="120" aria-label="Dashboard display seconds">
+                <span class="slider-value" id="huupe-dashboard-seconds-value">120s</span>
+              </div>
+              <label class="field-label field-label-spaced" for="huupe-last-game-seconds">Last game</label>
+              <div class="slider-row">
+                <input type="range" id="huupe-last-game-seconds" min="30" max="300" step="5" value="90" aria-label="Last game display seconds">
+                <span class="slider-value" id="huupe-last-game-seconds-value">90s</span>
+              </div>
+            </section>
+
+            <section class="huupe-panel huupe-footer" aria-label="Archive and test">
+              <p class="hint" id="huupe-archive-hint">Archive: —</p>
+              <div class="huupe-footer-actions">
+                <button type="button" class="btn btn-outline" id="btn-huupe-rebuild">Rebuild stats</button>
+                <button type="button" class="btn btn-accent" id="btn-huupe-test">Test</button>
+              </div>
+              <p class="hint" id="huupe-test-result"></p>
+            </section>
+
+            <details class="huupe-advanced">
+              <summary>Troubleshooting — live log</summary>
+              <p class="hint">Lines the parser did not recognise, newest last. Scrubbed of anything that looked like a credential before it reached this page.</p>
+              <pre class="huupe-log" id="huupe-log">Open to load…</pre>
             </details>
           </div>
         </div>
@@ -1738,22 +1811,69 @@
     </div>
   </div>
 
+  <!-- Flight Plan — unsaved prompt -->
+  <div class="sheet-backdrop" id="flightplan-unsaved-sheet" hidden>
+    <div class="sheet sheet-confirm">
+      <div class="sheet-title" id="flightplan-unsaved-title">Save changes?</div>
+      <p class="sheet-subtext" id="flightplan-unsaved-text"></p>
+      <div class="sheet-actions sheet-actions-stack">
+        <button type="button" class="btn btn-accent btn-block" id="btn-flightplan-unsaved-save">Save</button>
+        <button type="button" class="btn btn-danger btn-block" id="btn-flightplan-unsaved-discard">Discard</button>
+        <button type="button" class="btn btn-outline btn-block" id="btn-flightplan-unsaved-cancel">Keep editing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flight Plan — new trip -->
+  <div class="sheet-backdrop" id="flightplan-trip-sheet" hidden>
+    <div class="sheet" autocomplete="off">
+      <div class="sheet-title">New trip</div>
+      <label class="field-label" for="flightplan-new-name">Name
+        <input class="field-input" id="flightplan-new-name" name="flightplan-trip-name" autocomplete="off" data-lpignore="true" data-1p-ignore="true">
+      </label>
+      <div class="autodarts-field-grid">
+        <label class="field-label" for="flightplan-new-start">Start date
+          <input class="field-input" id="flightplan-new-start" type="date" autocomplete="off">
+        </label>
+        <label class="field-label" for="flightplan-new-end">End date
+          <input class="field-input" id="flightplan-new-end" type="date" autocomplete="off">
+        </label>
+      </div>
+      <label class="field-label" for="flightplan-new-notes">Notes
+        <textarea class="field-input" id="flightplan-new-notes" rows="3" autocomplete="off"></textarea>
+      </label>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-outline" id="btn-flightplan-trip-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="btn-flightplan-trip-create">Create trip</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Flight Plan — add flight / leg picker -->
   <div class="sheet-backdrop" id="flightplan-flight-sheet" hidden>
-    <div class="sheet">
+    <div class="sheet" autocomplete="off">
       <div class="sheet-title">Add flight</div>
       <div class="autodarts-field-grid">
         <label class="field-label" for="flightplan-search-airline">Airline
-          <input class="field-input" id="flightplan-search-airline" maxlength="3" placeholder="DL">
+          <input class="field-input" id="flightplan-search-airline" name="flightplan-airline" maxlength="3" placeholder="DL" autocomplete="off" data-lpignore="true" data-1p-ignore="true">
         </label>
         <label class="field-label" for="flightplan-search-number">Number
-          <input class="field-input" id="flightplan-search-number" placeholder="167">
+          <input class="field-input" id="flightplan-search-number" name="flightplan-number" placeholder="167" autocomplete="off" data-lpignore="true" data-1p-ignore="true">
         </label>
       </div>
       <label class="field-label" for="flightplan-search-date">Date
-        <input class="field-input" id="flightplan-search-date" type="date">
+        <input class="field-input" id="flightplan-search-date" type="date" autocomplete="off">
       </label>
-      <button type="button" class="btn btn-outline btn-block" id="btn-flightplan-search-home">Use home airport date shortcut</button>
+      <label class="field-label">Airport
+        <div class="flightplan-airport-row">
+          <input class="field-input" id="flightplan-search-airport" name="flightplan-airport" autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="City or code — or tap home">
+          <button type="button" class="btn btn-outline btn-icon flightplan-home-icon-btn" id="btn-flightplan-search-airport-home" title="Use home airport">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>
+          </button>
+        </div>
+        <div class="typeahead-list" id="flightplan-search-airport-suggest" hidden></div>
+      </label>
+      <p class="hint flightplan-search-airport-hint">Departure or arrival airport — narrows results when the flight number has several legs.</p>
       <div id="flightplan-leg-list" class="flightplan-leg-list"></div>
       <div class="sheet-actions">
         <button type="button" class="btn btn-outline" id="btn-flightplan-flight-cancel">Cancel</button>
@@ -1772,6 +1892,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal89"></script>
+  <script src="app.js?v=signal95"></script>
 </body>
 </html>

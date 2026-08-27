@@ -7,7 +7,10 @@ WORKDIR /app
 # client for YouTube's undocumented Lounge API, so detection runs in Python.
 # ffmpeg: Roll Credits poster frames and animated video previews (ffprobe comes
 # with it), and it also lets yt-dlp merge separate video+audio streams.
-RUN apk add --no-cache tini certbot python3 py3-pip ffmpeg
+# android-tools: `adb`, for the read-only logcat tail of the Huupe hoop. The
+# bridge dials the hoop over wireless ADB (host networking); nothing is ever
+# installed or written on the device.
+RUN apk add --no-cache tini certbot python3 py3-pip ffmpeg android-tools
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev

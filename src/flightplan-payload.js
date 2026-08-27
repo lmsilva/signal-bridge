@@ -2,8 +2,95 @@
  * Flight Plan UDP payload builder — type flightplan.flight
  */
 
-const { resolveFlightStatus } = require('./flightplan-status');
+const { resolveFlightStatus, parseIsoMs } = require('./flightplan-status');
 const { findAirport } = require('./flightplan-airports');
+
+const MINUTE_MS = 60_000;
+
+function bestDepartureMs(flight = {}) {
+  const dep = flight.latest?.departure || {};
+  return parseIsoMs(
+    dep.actualTime?.local || dep.revisedTime?.local || dep.estimatedTime?.local,
+  ) ?? parseIsoMs(flight.scheduled?.departure || dep.scheduledTime?.local);
+}
+
+function bestArrivalMs(flight = {}) {
+  const arr = flight.latest?.arrival || {};
+  return parseIsoMs(
+    arr.actualTime?.local || arr.revisedTime?.local || arr.estimatedTime?.local,
+  ) ?? parseIsoMs(flight.scheduled?.arrival || arr.scheduledTime?.local);
+}
+
+/**
+ * Where the flight sits between wheels-up and wheels-down.
+ *
+ * The panel draws a journey rail from this, so an upcoming flight must report a
+ * real countdown rather than a bare zero — that is the only number worth
+ * showing before the aircraft exists on ADS-B.
+ */
+function flightProgress(flight = {}, nowMs = Date.now()) {
+  const departure = bestDepartureMs(flight);
+  const arrival = bestArrivalMs(flight);
+  const durationMinutes = departure != null && arrival != null && arrival > departure
+    ? Math.round((arrival - departure) / MINUTE_MS)
+    : null;
+  const departsInMinutes = departure != null
+    ? Math.round((departure - nowMs) / MINUTE_MS)
+    : null;
+  const arrivesInMinutes = arrival != null
+    ? Math.round((arrival - nowMs) / MINUTE_MS)
+    : null;
+
+  let phase = 'upcoming';
+  if (flight.state === 'landed') phase = 'landed';
+  else if (flight.state === 'active') phase = 'airborne';
+  else if (departsInMinutes != null && departsInMinutes <= 0) phase = 'airborne';
+  else if (departsInMinutes != null && departsInMinutes <= 90) phase = 'boarding-soon';
+
+  let fraction = 0;
+  if (phase === 'landed') {
+    fraction = 1;
+  } else if (departure != null && arrival != null && arrival > departure) {
+    fraction = Math.max(0, Math.min(1, (nowMs - departure) / (arrival - departure)));
+  }
+
+  return {
+    phase,
+    fraction,
+    durationMinutes,
+    departsInMinutes,
+    arrivesInMinutes,
+    elapsedMinutes: departure != null && nowMs > departure
+      ? Math.round((nowMs - departure) / MINUTE_MS)
+      : 0,
+    remainingMinutes: arrival != null && arrival > nowMs
+      ? Math.round((arrival - nowMs) / MINUTE_MS)
+      : 0,
+  };
+}
+
+function legSummary(row, ctx = {}) {
+  const status = resolveFlightStatus(row, ctx);
+  const progress = flightProgress(row, ctx.nowMs || Date.now());
+  return {
+    id: row.id,
+    airline: row.airline,
+    number: row.number,
+    date: row.date,
+    origin: row.origin,
+    destination: row.destination,
+    scheduled: row.scheduled,
+    state: row.state,
+    status: {
+      code: status.code,
+      displayLine: status.displayLine,
+      boardCode: status.boardCode,
+      colorToken: status.colorToken,
+    },
+    durationMinutes: progress.durationMinutes,
+    departsInMinutes: progress.departsInMinutes,
+  };
+}
 
 function titleForTripKind(kind, state) {
   if (kind === 'visitor') {
@@ -60,12 +147,20 @@ function createFlightplanPayload({
       materialDelayMinutes: cfg.materialDelayMinutes,
       asOf,
     });
-    const route = live?.routeEndpoints?.(flight, config) || {};
     const origin = findAirport(flight.origin?.iata || flight.origin?.icao, config) || flight.origin;
     const destination = findAirport(flight.destination?.iata || flight.destination?.icao, config)
       || flight.destination;
+    // The panel draws the great-circle from these two points, so a route without
+    // coordinates is a blank map. Prefer the catalog hit over the live guess.
+    const liveRoute = live?.routeEndpoints?.(flight, config) || {};
+    const route = {
+      origin: Number.isFinite(Number(origin?.lat)) ? origin : liveRoute.origin,
+      destination: Number.isFinite(Number(destination?.lat)) ? destination : liveRoute.destination,
+    };
+    // The board is the whole itinerary; landed legs stay so a trip mid-journey
+    // still reads as a trip rather than a single orphan flight.
     const tripFlights = mode === 'board'
-      ? store.flightsForTrip(trip.id).filter((row) => row.state !== 'landed')
+      ? store.flightsForTrip(trip.id)
       : [flight];
 
     const image = Array.isArray(trip.images) && trip.images.length
@@ -99,17 +194,13 @@ function createFlightplanPayload({
         registration: flight.registration,
         callsign: flight.callsign,
       },
-      flights: tripFlights.map((row) => ({
-        id: row.id,
-        airline: row.airline,
-        number: row.number,
-        date: row.date,
-        origin: row.origin,
-        destination: row.destination,
-        scheduled: row.scheduled,
-        state: row.state,
+      flights: tripFlights.map((row) => legSummary(row, {
+        materialDelayMinutes: cfg.materialDelayMinutes,
+        asOf,
+        nowMs: now(),
       })),
       status,
+      progress: flightProgress(flight, now()),
       stage: {
         ...stage,
         position,
@@ -134,4 +225,6 @@ function createFlightplanPayload({
 module.exports = {
   createFlightplanPayload,
   titleForTripKind,
+  flightProgress,
+  legSummary,
 };

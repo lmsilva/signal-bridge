@@ -1265,11 +1265,14 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   // supplies the rows the renderer fills.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
-  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts"/);
+  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts,Huupe"/);
   assert.match(html, /data-skeleton-count/);
   assert.match(html, /push-card-skeleton/);
   const teslaCount = COMMANDS.filter((c) => c.pushable && c.group === 'Tesla').length;
-  const quickGroups = ['Signal', 'Alexa', 'Games', 'Trivia', 'News', 'Knowledge', 'Sky', 'Steam', 'PSN', 'YouTube'];
+  // Every group the row actually renders, so the skeleton count cannot drift
+  // short of the real grid and leave the page shuffling as tiles land.
+  const quickGroups = ['Signal', 'Alexa', 'Games', 'Trivia', 'News', 'Knowledge', 'Sky',
+    'Steam', 'PSN', 'YouTube', 'Autodarts', 'Huupe'];
   const quickCount = COMMANDS.filter((c) => c.pushable && quickGroups.includes(c.group)).length;
   assert.match(html, new RegExp(`id="push-row-tesla"[\\s\\S]*?data-skeleton-count="${teslaCount}"`));
   assert.match(html, new RegExp(`id="push-row-quick"[\\s\\S]*?data-skeleton-count="${quickCount}"`));
@@ -2246,8 +2249,20 @@ test('Roll Credits edit sheet closes on Escape or an outside click, prompting wh
   assert.match(js, /function closeCreditsSheetById\(/);
   assert.match(js, /function creditsTopSheetId\(/);
   assert.match(js, /event\.key !== 'Escape'/);
-  // Backdrop clicks are wired for every credits sheet except the prompt itself.
-  assert.match(js, /CREDITS_SHEET_IDS\.filter\(\(id\) => id !== 'credits-unsaved-sheet'\)/);
+  // Every credits sheet dismisses on a backdrop click, the unsaved prompt
+  // included — clicking away from it cancels, the same as the Cancel button.
+  for (const id of [
+    'credits-add-sheet',
+    'credits-edit-sheet',
+    'credits-preview-sheet',
+    'credits-delete-sheet',
+    'credits-rescrape-sheet',
+    'credits-unsaved-sheet',
+  ]) {
+    assert.match(js, new RegExp(`registerSheetDismiss\\('${id}'`), `${id} has no backdrop dismiss`);
+  }
+  // Backing out of the prompt must not also drop the edits behind it.
+  assert.match(js, /registerSheetDismiss\('credits-unsaved-sheet', \(el\) => \{ el\.hidden = true; \}\)/);
 });
 
 test('Roll Credits toolbar controls share one height and the sort label sits inline', () => {

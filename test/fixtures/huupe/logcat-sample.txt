@@ -1,0 +1,45 @@
+08-27 01:19:58.630  1168  1441 I newrelic: Harvester: Sending [0] session attributes.
+08-27 01:20:00.332   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:20:00.333   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=30.070847,30.033710,30.012264] [Tof=60.441586,60.417098,60.416171]
+08-27 01:20:10.330   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:20:10.330   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=29.889912,29.980778,30.004963] [Tof=60.428072,60.409037,60.420607]
+08-27 01:20:20.324   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:20:20.324   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=30.138577,30.044965,30.016653] [Tof=60.638156,60.417376,60.417255]
+08-27 01:20:30.323   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:20:30.323   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=30.275001,30.006734,30.009317] [Tof=60.418337,60.414113,60.416087]
+08-27 01:20:40.328   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:20:40.328   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=29.652746,29.971310,30.002470] [Tof=60.445605,60.417364,60.416671]
+08-27 01:20:49.930   287   287 I binder:287_2: type=1400 audit(0.0:697): avc: denied { read } for name="/" dev="tmpfs" ino=1 scontext=u:r:hal_audio_default:s0 tcontext=u:object_r:device:s0 tclass=dir permissive=1
+08-27 01:20:49.930   287   287 I binder:287_2: type=1400 audit(0.0:698): avc: denied { open } for path="/dev" dev="tmpfs" ino=1 scontext=u:r:hal_audio_default:s0 tcontext=u:object_r:device:s0 tclass=dir permissive=1
+08-27 01:20:50.349   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:20:50.350   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=30.157331,29.988568,30.005761] [Tof=60.396381,60.407805,60.414270]
+08-27 01:20:50.344   327   327 I logwrapper: type=1400 audit(0.0:699): avc: denied { sendto } for path="/dev/socket/logdw" scontext=u:object_r:system_file:s0 tcontext=u:r:logd:s0 tclass=unix_dgram_socket permissive=1
+08-27 01:20:54.707   330   330 I huupe.hardware.: type=1400 audit(0.0:700): avc: denied { search } for name="/" dev="fuse" ino=175 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:20:54.707   330   330 I huupe.hardware.: type=1400 audit(0.0:701): avc: denied { getattr } for path="/storage/emulated/0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:20:54.710   330   330 I huupe.hardware.: type=1400 audit(0.0:702): avc: denied { read } for name="0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:20:54.710   330   330 I huupe.hardware.: type=1400 audit(0.0:703): avc: denied { open } for path="/storage/emulated/0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:20:58.915  1168  1441 I newrelic: Harvester: Sending [0] session attributes.
+08-27 01:21:00.317   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:21:00.317   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=29.895459,29.982503,30.005897] [Tof=60.384711,60.421716,60.416044]
+08-27 01:21:06.887   190   190 I binder:190_2: type=1400 audit(0.0:704): avc: denied { read } for name="wakeup9" dev="sysfs" ino=27476 scontext=u:r:system_suspend:s0 tcontext=u:object_r:sysfs:s0 tclass=dir permissive=1
+08-27 01:21:06.887   190   190 I binder:190_2: type=1400 audit(0.0:705): avc: denied { open } for path="/sys/devices/platform/fe5b0000.i2c/i2c-2/2-0055/power_supply/sh366002-battery/wakeup9" dev="sysfs" ino=27476 scontext=u:r:system_suspend:s0 tcontext=u:object_r:sysfs:s0 tclass=dir permissive=1
+08-27 01:21:06.887   190   190 I binder:190_2: type=1400 audit(0.0:706): avc: denied { read } for name="event_count" dev="sysfs" ino=27483 scontext=u:r:system_suspend:s0 tcontext=u:object_r:sysfs:s0 tclass=file permissive=1
+08-27 01:21:06.887   190   190 I binder:190_2: type=1400 audit(0.0:707): avc: denied { open } for path="/sys/devices/platform/fe5b0000.i2c/i2c-2/2-0055/power_supply/sh366002-battery/wakeup9/event_count" dev="sysfs" ino=27483 scontext=u:r:system_suspend:s0 tcontext=u:object_r:sysfs:s0 tclass=file permissive=1
+08-27 01:21:06.887   190   190 I binder:190_2: type=1400 audit(0.0:708): avc: denied { getattr } for path="/sys/devices/platform/fe5b0000.i2c/i2c-2/2-0055/power_supply/sh366002-battery/wakeup9/event_count" dev="sysfs" ino=27483 scontext=u:r:system_suspend:s0 tcontext=u:object_r:sysfs:s0 tclass=file permissive=1
+08-27 01:21:10.343   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:21:10.343   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=30.146603,30.022049,30.015850] [Tof=60.587272,60.424097,60.415899]
+08-27 01:21:14.717   330   330 I huupe.hardware.: type=1400 audit(0.0:715): avc: denied { search } for name="/" dev="dm-0" ino=2 scontext=u:object_r:system_file:s0 tcontext=u:object_r:rootfs:s0 tclass=dir permissive=1
+08-27 01:21:14.717   330   330 I huupe.hardware.: type=1400 audit(0.0:716): avc: denied { read } for name="sdcard" dev="dm-0" ino=48 scontext=u:object_r:system_file:s0 tcontext=u:object_r:rootfs:s0 tclass=lnk_file permissive=1
+08-27 01:21:14.717   330   330 I huupe.hardware.: type=1400 audit(0.0:717): avc: denied { dac_read_search } for capability=2 scontext=u:object_r:system_file:s0 tcontext=u:object_r:system_file:s0 tclass=capability permissive=1
+08-27 01:21:14.717   330   330 I huupe.hardware.: type=1400 audit(0.0:718): avc: denied { search } for name="0" dev="tmpfs" ino=12 scontext=u:object_r:system_file:s0 tcontext=u:object_r:mnt_user_file:s0 tclass=dir permissive=1
+08-27 01:21:14.717   330   330 I huupe.hardware.: type=1400 audit(0.0:719): avc: denied { read } for name="primary" dev="tmpfs" ino=39 scontext=u:object_r:system_file:s0 tcontext=u:object_r:mnt_user_file:s0 tclass=lnk_file permissive=1
+08-27 01:21:20.343   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:21:20.343   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=29.824314,29.993874,30.006755] [Tof=60.394862,60.410838,60.416047]
+08-27 01:21:20.337   327   327 I logwrapper: type=1400 audit(0.0:722): avc: denied { write } for path="socket:[23264]" dev="sockfs" ino=23264 scontext=u:object_r:system_file:s0 tcontext=u:object_r:system_file:s0 tclass=unix_dgram_socket permissive=1
+08-27 01:21:20.337   327   327 I logwrapper: type=1400 audit(0.0:723): avc: denied { sendto } for path="/dev/socket/logdw" scontext=u:object_r:system_file:s0 tcontext=u:r:logd:s0 tclass=unix_dgram_socket permissive=1
+08-27 01:21:30.341   327   327 I huupe.hardware.shottracker-tof-service: Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:21:30.342   327   327 I huupe.hardware.shottracker-tof-service: FPS [Radar=30.076575,30.064097,30.016371] [Tof=60.418276,60.423251,60.415573]
+08-27 01:21:34.720   330   330 I huupe.hardware.: type=1400 audit(0.0:724): avc: denied { search } for name="/" dev="fuse" ino=175 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:21:34.720   330   330 I huupe.hardware.: type=1400 audit(0.0:725): avc: denied { getattr } for path="/storage/emulated/0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:21:34.724   330   330 I huupe.hardware.: type=1400 audit(0.0:726): avc: denied { read } for name="0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:21:34.724   330   330 I huupe.hardware.: type=1400 audit(0.0:727): avc: denied { open } for path="/storage/emulated/0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1

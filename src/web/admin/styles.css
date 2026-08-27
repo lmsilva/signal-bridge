@@ -1084,6 +1084,57 @@ textarea.field-input.text-input-area {
   gap: 8px;
   margin-top: 12px;
 }
+.flightplan-search-airport-hint {
+  margin: 6px 0 0;
+}
+.flightplan-leg-list {
+  margin-top: 16px;
+  min-height: 0;
+}
+.flightplan-leg-list:not(:empty) {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.flightplan-leg-list > .hint {
+  margin: 0;
+}
+.flightplan-trip-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
+}
+.flightplan-trip-card > summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.flightplan-trip-card > summary::-webkit-details-marker { display: none; }
+.flightplan-trip-card[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.flightplan-trip-summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.flightplan-trip-summary-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.flightplan-trip-body {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .flightplan-trip-row { text-align: left; }
 .flightplan-flight-row {
   display: flex;
@@ -1105,6 +1156,29 @@ textarea.field-input.text-input-area {
   align-items: center;
 }
 .flightplan-airport-row .field-input { flex: 1; }
+.flightplan-airport-row .flightplan-home-icon-btn {
+  width: 42px;
+  height: 42px;
+}
+.flightplan-airport-row .flightplan-home-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.flightplan-settings-card .flightplan-settings-check { margin-bottom: 4px; }
+.flightplan-settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.flightplan-settings-footer #btn-flightplan-settings-save { margin-left: auto; }
+.flightplan-settings-footer #flightplan-test-result { margin: 0; flex: 1 1 180px; }
+.flightplan-settings-footer #flightplan-test-result:empty { display: none; }
+#flightplan-test-result.hint-ok { color: var(--good); }
+#flightplan-test-result.hint-warn { color: var(--warn, #fbbf24); }
 .typeahead-list {
   display: flex;
   flex-direction: column;
@@ -1120,6 +1194,124 @@ textarea.field-input.text-input-area {
   color: var(--text);
 }
 .hint-warn { color: #F5C453; }
+.huupe-settings-card { width: 100%; }
+.huupe-observe-hint { margin: 0 0 10px; }
+.huupe-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 10px 12px;
+  align-items: start;
+}
+.huupe-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  min-width: 0;
+}
+.huupe-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.huupe-panel-head .field-label { margin: 0; }
+.huupe-inline-actions,
+.huupe-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.huupe-inline-actions .btn {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.82rem;
+}
+.huupe-footer-actions .btn { min-height: 36px; }
+.huupe-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+.huupe-field-grid .field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.huupe-panel .trivia-check { margin: 2px 0 0; }
+.huupe-panel .field-label-spaced { margin-top: 6px; }
+.huupe-panel .slider-row { margin: 0; gap: 8px; }
+.huupe-panel .segmented { margin: 0; }
+.huupe-panel .hint { margin: 0; line-height: 1.35; }
+.huupe-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+}
+.huupe-footer {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+}
+.huupe-footer .hint { flex: 1 1 200px; }
+.huupe-footer-actions { margin-left: auto; }
+.huupe-footer #huupe-test-result:empty { display: none; }
+.huupe-advanced {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px 10px;
+  background: var(--bg);
+}
+.huupe-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 0;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+.huupe-advanced > summary::-webkit-details-marker { display: none; }
+.huupe-advanced > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 120ms ease;
+}
+.huupe-advanced[open] > summary::before { transform: rotate(90deg); }
+.huupe-advanced[open] > summary { color: var(--text); }
+.huupe-log {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-deep, #0b1020);
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+@media (max-width: 900px) {
+  .huupe-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .huupe-field-grid,
+  .huupe-mode-grid { grid-template-columns: 1fr; }
+  .huupe-footer-actions { margin-left: 0; width: 100%; }
+  .huupe-footer-actions .btn { flex: 1; }
+}
+
 #autodarts-device-mode {
   display: flex;
   flex-direction: column;
@@ -2136,9 +2328,11 @@ textarea.field-input.text-input-area {
   #tab-settings .youtube-settings-card,
   #tab-settings .trivia-settings-card,
   #tab-settings .autodarts-settings-card,
+  #tab-settings .huupe-settings-card,
   #tab-settings .upside-news-settings-card,
   #tab-settings .wiki-ck-settings-card,
-  #tab-settings .overhead-settings-card {
+  #tab-settings .overhead-settings-card,
+  #tab-settings .flightplan-settings-card {
     grid-column: 1 / -1;
   }
 

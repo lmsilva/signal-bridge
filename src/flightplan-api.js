@@ -29,6 +29,54 @@ const ENDPOINTS = Object.freeze({
 });
 
 const MIN_INTERVAL_MS = 1000;
+const AERODATABOX_SUBSCRIBE_URL = 'https://rapidapi.com/aedbx-aedbx/api/aerodatabox';
+
+function formatApiFailure(message = '', status = 0) {
+  const text = String(message || '').trim();
+  if (/not subscribed|subscription/i.test(text)) {
+    return {
+      ok: false,
+      error: 'Subscribe to AeroDataBox on RapidAPI (free tier works), then save that key under Settings → Flight Plan.',
+      code: 'not_subscribed',
+      subscribeUrl: AERODATABOX_SUBSCRIBE_URL,
+    };
+  }
+  if (/rapidapi key is not configured/i.test(text)) {
+    return {
+      ok: false,
+      error: 'Add your AeroDataBox RapidAPI key under Settings → Flight Plan.',
+      code: 'no_api_key',
+      subscribeUrl: AERODATABOX_SUBSCRIBE_URL,
+    };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      ok: false,
+      error: text || 'AeroDataBox rejected the API key — check Settings → Flight Plan.',
+      code: 'auth_failed',
+      subscribeUrl: AERODATABOX_SUBSCRIBE_URL,
+    };
+  }
+  return { ok: false, error: text || `AeroDataBox HTTP ${status || 'error'}`, code: 'api_error' };
+}
+
+function probeVerifyDate(nowMs = Date.now()) {
+  const d = new Date(nowMs);
+  d.setUTCDate(d.getUTCDate() - 14);
+  return d.toISOString().slice(0, 10);
+}
+
+function isVerifyKeyAcceptedFailure(message = '', status = 0) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  if (/not subscribed|subscription/i.test(text)) return false;
+  if (/rapidapi key is not configured/i.test(text)) return false;
+  if (status === 401 || status === 403) return false;
+  if (/unauthorized|forbidden|invalid api key|x-rapidapi-key/i.test(text)) return false;
+  if (/quota|too many requests|429/i.test(text)) return true;
+  if (/must not be earlier than|no flights|not found|earlier than \d+ day/i.test(text)) return true;
+  return status >= 400 && status < 500;
+}
 
 function normaliseFlightNumber(airline, number) {
   const code = String(airline || '').trim().toUpperCase();
@@ -50,13 +98,34 @@ function pickCallsign(json) {
     || null;
 }
 
+function splitAirlineNumber(airline, number) {
+  let code = String(airline || '').trim().toUpperCase();
+  let num = String(number || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (code && num.startsWith(code)) {
+    num = num.slice(code.length);
+  }
+  if (!code) {
+    const match = /^([A-Z]{2,3})(\d+[A-Z]?)$/.exec(num);
+    if (match) {
+      code = match[1];
+      num = match[2];
+    }
+  }
+  num = num.replace(/^0+(\d)/, '$1');
+  return { airline: code, number: num };
+}
+
 function mapLeg(item = {}) {
   const dep = item.departure || {};
   const arr = item.arrival || {};
+  const split = splitAirlineNumber(
+    item.airline?.iata || item.airline?.icao || item.airline?.name || '',
+    item.number || item.flightNumber || '',
+  );
   return {
     id: item.id || item.flightId || null,
-    airline: item.airline?.iata || item.airline?.icao || item.airline?.name || '',
-    number: item.number || item.flightNumber || '',
+    airline: split.airline,
+    number: split.number,
     origin: {
       iata: dep.airport?.iata || dep.airport?.code?.iata,
       icao: dep.airport?.icao || dep.airport?.code?.icao,
@@ -76,6 +145,23 @@ function mapLeg(item = {}) {
     callsign: pickCallsign(item),
     raw: item,
   };
+}
+
+function legUsesAirport(leg, airportCode) {
+  const code = String(airportCode || '').trim().toUpperCase();
+  if (!code || !leg) return false;
+  for (const point of [leg.origin, leg.destination]) {
+    const iata = String(point?.iata || '').trim().toUpperCase();
+    const icao = String(point?.icao || '').trim().toUpperCase();
+    if (iata === code || icao === code) return true;
+  }
+  return false;
+}
+
+function filterLegsByAirport(legs, airportCode) {
+  const code = String(airportCode || '').trim().toUpperCase();
+  if (!code) return Array.isArray(legs) ? legs : [];
+  return (legs || []).filter((leg) => legUsesAirport(leg, code));
 }
 
 function createFlightplanApi({
@@ -133,7 +219,8 @@ function createFlightplanApi({
       throw new Error(json?.message || 'AeroDataBox quota exceeded');
     }
     if (!response.ok) {
-      throw new Error(json?.message || json?.error || `AeroDataBox HTTP ${response.status}`);
+      const failure = formatApiFailure(json?.message || json?.error || text, response.status);
+      throw new Error(failure.error);
     }
 
     const filedFlightPlan = Boolean(json?.filedFlightPlan || json?.hasFiledFlightPlan);
@@ -157,20 +244,25 @@ function createFlightplanApi({
     if (cached && (now() - cached.at) < cacheHours * 3_600_000) {
       return { ok: true, legs: cached.legs, cached: true };
     }
-    const flightNumber = normaliseFlightNumber(airline, number);
-    const result = await rawGet(ENDPOINTS.flightStatus.path({ number: flightNumber, date }), {
-      query: {
-        dateLocalRole: 'Both',
-        withFlightPlan: 'false',
-        withLocation: 'false',
-        withAircraftImage: 'false',
-      },
-      manual,
-    });
-    const rows = Array.isArray(result.json) ? result.json : (result.json ? [result.json] : []);
-    const legs = rows.map(mapLeg);
-    searchCache.set(key, { at: now(), legs });
-    return { ok: true, legs, cached: false, filedFlightPlan: result.filedFlightPlan };
+    try {
+      const flightNumber = normaliseFlightNumber(airline, number);
+      const result = await rawGet(ENDPOINTS.flightStatus.path({ number: flightNumber, date }), {
+        query: {
+          dateLocalRole: 'Both',
+          withFlightPlan: 'false',
+          withLocation: 'false',
+          withAircraftImage: 'false',
+        },
+        manual,
+      });
+      const rows = Array.isArray(result.json) ? result.json : (result.json ? [result.json] : []);
+      const legs = rows.map(mapLeg);
+      searchCache.set(key, { at: now(), legs });
+      return { ok: true, legs, cached: false, filedFlightPlan: result.filedFlightPlan };
+    } catch (error) {
+      log?.warn?.('Flight Plan search failed', error?.message || error);
+      return formatApiFailure(error?.message || String(error));
+    }
   }
 
   async function fetchFlightStatus({ airline, number, date, manual = false } = {}) {
@@ -185,6 +277,38 @@ function createFlightplanApi({
     };
   }
 
+  async function verifyApiKey({ manual = true } = {}) {
+    const apiKey = await apiKeyProvider();
+    if (!apiKey) {
+      return formatApiFailure('Flight Plan RapidAPI key is not configured');
+    }
+    const probeDate = probeVerifyDate(now());
+    const result = await searchByNumber({
+      airline: 'AA',
+      number: '1',
+      date: probeDate,
+      manual,
+      cacheHours: 0,
+    });
+    if (result.ok) {
+      return {
+        ok: true,
+        message: 'AeroDataBox accepted the API key.',
+        probeDate,
+        legsFound: (result.legs || []).length,
+      };
+    }
+    if (isVerifyKeyAcceptedFailure(result.error, result.status)) {
+      return {
+        ok: true,
+        message: 'AeroDataBox accepted the API key.',
+        probeDate,
+        legsFound: 0,
+      };
+    }
+    return result;
+  }
+
   return {
     RAPIDAPI_HOST,
     RAPIDAPI_BASE,
@@ -193,6 +317,7 @@ function createFlightplanApi({
     mapLeg,
     searchByNumber,
     fetchFlightStatus,
+    verifyApiKey,
     _clearSearchCacheForTest() { searchCache.clear(); },
   };
 }
@@ -203,5 +328,12 @@ module.exports = {
   RAPIDAPI_BASE,
   ENDPOINTS,
   normaliseFlightNumber,
+  splitAirlineNumber,
   mapLeg,
+  legUsesAirport,
+  filterLegsByAirport,
+  formatApiFailure,
+  probeVerifyDate,
+  isVerifyKeyAcceptedFailure,
+  AERODATABOX_SUBSCRIBE_URL,
 };

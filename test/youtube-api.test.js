@@ -105,7 +105,10 @@ function makeFetch({ videos = {}, channels = {}, dislikes = {} } = {}) {
   return impl;
 }
 
-function makeApi(fetchImpl, { clock = { t: Date.parse('2026-08-02T18:00:00Z') } } = {}) {
+function makeApi(fetchImpl, {
+  clock = { t: Date.parse('2026-08-02T18:00:00Z') },
+  imageRetryDelays,
+} = {}) {
   const dir = tempDir();
   const api = createYoutubeApi({
     config: {
@@ -117,6 +120,9 @@ function makeApi(fetchImpl, { clock = { t: Date.parse('2026-08-02T18:00:00Z') } 
     },
     now: () => clock.t,
     fetchImpl,
+    ...(imageRetryDelays ? { imageRetryDelays } : {}),
+    // Never wait out a real backoff; the schedule is asserted separately.
+    sleepImpl: async () => {},
   });
   return { api, clock, dir };
 }
@@ -455,6 +461,118 @@ test('images are downloaded once and served from a local filename', async () => 
 
   await api.resolveVideo('abc', { includeDislikes: false });
   assert.equal(fetchImpl.images().length, downloads, 'a cached image must not re-download');
+});
+
+// A thumbnail that failed to download used to stay missing for the whole
+// video: the payload can only carry a URL once the file exists locally, so the
+// display had nothing to retry and the hero stayed empty until the next play.
+
+test('a thumbnail download that fails once is retried rather than abandoned', async () => {
+  const fetchImpl = makeFetch({
+    videos: { abc: videoItem('abc') },
+    channels: { 'UC-veritasium': channelItem('UC-veritasium') },
+  });
+  const base = fetchImpl;
+  let failures = 1;
+  const flaky = async (url, options) => {
+    if (String(url).includes('maxres.jpg') && failures > 0) {
+      failures -= 1;
+      base.calls.push(String(url));
+      throw new Error('ETIMEDOUT');
+    }
+    return base(url, options);
+  };
+  Object.assign(flaky, { calls: base.calls, api: base.api, images: base.images });
+  const { api, dir } = makeApi(flaky);
+
+  const video = await api.resolveVideo('abc', { includeDislikes: false });
+
+  assert.ok(video.thumbnailFile, 'the retry must recover the artwork');
+  assert.ok(fs.existsSync(path.join(dir, 'thumbs', video.thumbnailFile)));
+});
+
+test('a size that 404s falls back down the ladder instead of losing the art', async () => {
+  const fetchImpl = makeFetch({
+    videos: { abc: videoItem('abc') },
+    channels: { 'UC-veritasium': channelItem('UC-veritasium') },
+  });
+  const base = fetchImpl;
+  const withDeadMaxres = async (url, options) => {
+    if (String(url).includes('maxres.jpg')) {
+      base.calls.push(String(url));
+      return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    return base(url, options);
+  };
+  Object.assign(withDeadMaxres, { calls: base.calls, api: base.api, images: base.images });
+  const { api } = makeApi(withDeadMaxres);
+
+  const video = await api.resolveVideo('abc', { includeDislikes: false });
+
+  assert.ok(video.thumbnailFile, 'the next size down must be used');
+  // The reported dimensions have to describe the image we actually got.
+  assert.equal(video.thumbnailWidth, 480);
+  assert.equal(video.thumbnailHeight, 360);
+  // A 404 is settled fact, so it must cost exactly one call, not three.
+  assert.equal(base.calls.filter((url) => url.includes('maxres.jpg')).length, 1);
+});
+
+test('a truncated download is never left behind as a cached image', async () => {
+  const fetchImpl = makeFetch({
+    videos: { abc: videoItem('abc') },
+    channels: { 'UC-veritasium': channelItem('UC-veritasium') },
+  });
+  const base = fetchImpl;
+  const empty = async (url, options) => {
+    if (String(url).includes('ytimg')) {
+      base.calls.push(String(url));
+      return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    return base(url, options);
+  };
+  Object.assign(empty, { calls: base.calls, api: base.api, images: base.images });
+  const { api, dir } = makeApi(empty, { imageRetryDelays: [] });
+
+  const video = await api.resolveVideo('abc', { includeDislikes: false });
+
+  assert.equal(video.thumbnailFile, null);
+  // Only the avatar. An empty file here would satisfy the cache check forever.
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'thumbs')), [video.avatarFile]);
+});
+
+test('a card built without artwork still knows where to find it later', async () => {
+  const fetchImpl = makeFetch({
+    videos: { abc: videoItem('abc') },
+    channels: { 'UC-veritasium': channelItem('UC-veritasium') },
+  });
+  const base = fetchImpl;
+  let offline = true;
+  const flaky = async (url, options) => {
+    if (String(url).includes('ytimg') && offline) {
+      base.calls.push(String(url));
+      throw new Error('ENETUNREACH');
+    }
+    return base(url, options);
+  };
+  Object.assign(flaky, { calls: base.calls, api: base.api, images: base.images });
+  const { api } = makeApi(flaky, { imageRetryDelays: [] });
+
+  const video = await api.resolveVideo('abc', { includeDislikes: false });
+  assert.equal(video.thumbnailFile, null);
+  assert.deepEqual(video.thumbnailCandidateUrls, [
+    'https://i.ytimg.com/vi/abc/maxres.jpg',
+    'https://i.ytimg.com/vi/abc/hq.jpg',
+  ]);
+
+  // The network comes back; the same URLs fill the card in without new quota.
+  offline = false;
+  const apiCallsBefore = base.api().length;
+  const { file } = await api.cacheFirstImage(
+    video.thumbnailCandidateUrls.map((url) => ({ url })),
+  );
+
+  assert.ok(file);
+  assert.equal(base.api().length, apiCallsBefore, 'a backfill must not cost a Data API call');
 });
 
 test('the prune drops stale thumbnails but keeps channel avatars', async () => {

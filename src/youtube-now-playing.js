@@ -26,6 +26,13 @@ const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const KEEP_ALIVE_POLL_MS = 45 * 1000;
 /** Backoff when a device task dies and Node has to re-connect it. */
 const RECONNECT_BACKOFF_MS = [2000, 5000, 15000, 30000, 60000];
+/**
+ * A thumbnail that failed to download while the card was being built used to
+ * stay missing for the whole video — the payload carries no URL when there is
+ * no cached file, so the display had nothing to even retry. These are the
+ * background attempts that fill it in, after which the card is pushed once more.
+ */
+const IMAGE_BACKFILL_DELAYS_MS = [5000, 20000, 60000, 180000];
 
 function createYoutubeNowPlaying({
   config,
@@ -35,6 +42,7 @@ function createYoutubeNowPlaying({
   lounge: injectedLounge = null,
   api: injectedApi = null,
   store: injectedStore = null,
+  imageBackfillDelays = IMAGE_BACKFILL_DELAYS_MS,
 } = {}) {
   const youtubeConfig = config?.youtube || {};
   const secretBox = createSecretBox({
@@ -59,6 +67,8 @@ function createYoutubeNowPlaying({
   // videoId → resolved metadata for the currently airing card, so a progress
   // tick or a manual push does not re-resolve what we just fetched.
   let airing = null;
+  /** Chases artwork for a card that had to go out without it. */
+  let imageBackfill = null;
   /** @type {Map<string, { timer: NodeJS.Timeout|null, attempt: number }>} */
   const reconnectState = new Map();
 
@@ -91,6 +101,92 @@ function createYoutubeNowPlaying({
   }
 
   // ------------------------------------------------------ session handling
+
+  function cancelImageBackfill() {
+    if (imageBackfill?.timer) {
+      clearTimeout(imageBackfill.timer);
+    }
+    imageBackfill = null;
+  }
+
+  /** Live scrubber position, so a re-push does not rewind the progress bar. */
+  function livePositionSeconds(deviceId, fallback = 0) {
+    try {
+      const device = lounge._devices?.()?.get?.(deviceId);
+      const position = Math.max(Number(device?.position) || 0, Number(device?.maxPosition) || 0);
+      return position > 0 ? Math.round(position) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  /**
+   * Keep chasing the artwork for a card that is already on the wall.
+   *
+   * The payload can only carry a thumbnail URL once the file exists locally, so
+   * a download that failed while the card was being built left the hero empty
+   * with nothing for the display to retry — for the entire video. When a later
+   * attempt lands we push the card once more, which is the same "redraw only
+   * when the retry actually filled a band" rule the PSN poller follows.
+   */
+  function scheduleImageBackfill({ videoId, deviceId, startedAt, settings }) {
+    cancelImageBackfill();
+    const candidateUrls = airing?.video?.thumbnailCandidateUrls || [];
+    if (!candidateUrls.length || !imageBackfillDelays.length) {
+      return;
+    }
+    const state = { attempt: 0, timer: null };
+    imageBackfill = state;
+
+    const stale = () => imageBackfill !== state || airing?.videoId !== videoId;
+
+    const run = async () => {
+      state.timer = null;
+      if (stale()) {
+        return;
+      }
+      let file = null;
+      try {
+        ({ file } = await api.cacheFirstImage(candidateUrls.map((url) => ({ url }))));
+      } catch (error) {
+        log?.warn?.('Could not backfill a YouTube thumbnail', error?.message || error);
+      }
+      if (stale()) {
+        return;
+      }
+      if (file) {
+        imageBackfill = null;
+        airing.video.thumbnailFile = file;
+        const payload = buildYoutubeNowPlayingPayload(airing.video, config, {
+          trigger: 'youtube-thumbnail-backfill',
+          mode: 'playing',
+          deviceLabel: deviceLabelFor(deviceId),
+          imageBaseUrl: imageBaseUrl(),
+          settings,
+          session: {
+            startedAt,
+            positionSeconds: livePositionSeconds(deviceId),
+          },
+        });
+        if (payload) {
+          sendUdpPayload(payload);
+          log?.info?.(`Thumbnail arrived late for ${videoId} — refreshed the card`);
+        }
+        return;
+      }
+      state.attempt += 1;
+      if (state.attempt >= imageBackfillDelays.length) {
+        imageBackfill = null;
+        log?.warn?.(`Gave up fetching the thumbnail for ${videoId}`);
+        return;
+      }
+      state.timer = setTimeout(run, imageBackfillDelays[state.attempt]);
+      state.timer.unref?.();
+    };
+
+    state.timer = setTimeout(run, imageBackfillDelays[0]);
+    state.timer.unref?.();
+  }
 
   async function onStarted(event) {
     const settings = store.getSettings();
@@ -148,6 +244,14 @@ function createYoutubeNowPlaying({
     if (payload) {
       sendUdpPayload(payload);
     }
+    if (!video.thumbnailFile) {
+      scheduleImageBackfill({
+        videoId: event.videoId,
+        deviceId: event.deviceId,
+        startedAt: event.startedAt,
+        settings,
+      });
+    }
   }
 
   function onStopped(event) {
@@ -163,6 +267,7 @@ function createYoutubeNowPlaying({
     }
     if (airing?.videoId === event.videoId) {
       airing = null;
+      cancelImageBackfill();
       sendUdpPayload(buildYoutubeNowPlayingClosePayload({ trigger: 'youtube-lounge-stop' }, config));
     }
   }
@@ -807,6 +912,7 @@ function createYoutubeNowPlaying({
   function stop() {
     started = false;
     clearAllReconnects();
+    cancelImageBackfill();
     clearInterval(refreshTimer);
     clearInterval(pruneTimer);
     clearInterval(keepAliveTimer);

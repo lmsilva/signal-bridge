@@ -38,6 +38,8 @@ DISPLAY_TYPES = (
     "roll-credits.tour",
     "autodarts.dashboard",
     "autodarts.match",
+    "huupe.dashboard",
+    "huupe.session",
 )
 
 # Control-page commands — accepted by the UDP listener but never rendered as
@@ -56,6 +58,7 @@ COMMAND_TYPES = (
     "overhead.update",
     "overhead.close",
     "autodarts.match.close",
+    "huupe.session.close",
 )
 
 # Bridge discovery / heartbeats — never shown as overlays.
@@ -149,6 +152,8 @@ def title_for_display_type(display_type: str) -> tuple[str, str]:
         "roll-credits.tour": ("Signal", "Roll Credits"),
         "autodarts.dashboard": ("Signal", "autodarts"),
         "autodarts.match": ("Signal", "autodarts"),
+        "huupe.dashboard": ("Signal", "huupe"),
+        "huupe.session": ("Signal", "huupe"),
     }
     return titles.get(display_type, ("Alexa", "Display"))
 

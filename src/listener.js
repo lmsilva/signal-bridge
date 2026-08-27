@@ -110,6 +110,7 @@ const { createSteamLibraryTour } = require('./steam-library-tour');
 const { createPsnLibraryTour } = require('./psn-library-tour');
 const { createYoutubeNowPlaying } = require('./youtube-now-playing');
 const { createAutodartsService } = require('./autodarts-service');
+const { createHuupeService } = require('./huupe-service');
 const { createTriviaService } = require('./trivia-service');
 const { createUpsideNewsService } = require('./upside-news-service');
 const { createWikiCommonKnowledgeService } = require('./wiki-common-knowledge-service');
@@ -135,6 +136,8 @@ function shouldSuppressSteamForPayload(payload) {
     || type === 'youtube.now-playing.close'
     || type === 'autodarts.match'
     || type === 'autodarts.match.close'
+    || type === 'huupe.session'
+    || type === 'huupe.session.close'
   ) {
     return false;
   }
@@ -195,6 +198,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
   let psnLibraryTour = null;
   let youtubeNowPlaying = null;
   let autodarts = null;
+  let huupe = null;
   let flightplan = null;
   let trivia = null;
   let upsideNews = null;
@@ -363,6 +367,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       steamNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
       psnNowPlaying?.suppressActiveSession(payload?.type || 'other-display');
       autodarts?.suppressActiveSession(payload?.type || 'other-display');
+      huupe?.suppressActiveSession(payload?.type || 'other-display');
     }
     // Every page the bridge sends marks the display busy, whatever put it
     // there. The scheduler is the lowest-priority source in the system and must
@@ -2263,6 +2268,14 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         });
         autodarts.start();
 
+        huupe = createHuupeService({
+          config,
+          log,
+          sendUdpPayload,
+          displayBusy,
+        });
+        huupe.start();
+
         // The pool has to be stocking before the first push, so start it with
         // the pollers rather than lazily on first use.
         trivia = createTriviaService({ config, log, sendUdpPayload });
@@ -2318,6 +2331,8 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     getYoutubeStatus: () => youtubeNowPlaying?.statusSnapshot?.() || null,
     autodarts: () => autodarts,
     getAutodartsStatus: () => autodarts?.statusSnapshot?.() || null,
+    huupe: () => huupe,
+    getHuupeStatus: () => huupe?.statusSnapshot?.() || null,
     trivia: () => trivia,
     getTriviaStatus: () => trivia?.statusSnapshot?.() || null,
     upsideNews: () => upsideNews,

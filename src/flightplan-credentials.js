@@ -47,7 +47,7 @@ function saveFlightplanApiKey(credentialsPath, apiKey, { secretBox = null } = {}
 }
 
 function resolveFlightplanApiKey({ env = process.env, credentialsPath } = {}) {
-  const envKey = String(env.FLIGHTPLAN_RAPIDAPI_KEY || env.RAPIDAPI_KEY || '').trim();
+  const envKey = String(env.FLIGHTPLAN_RAPIDAPI_KEY || '').trim();
   if (envKey) return { apiKey: envKey, apiKeySource: 'env' };
   const sessionKey = credentialsPath ? loadFlightplanApiKey(credentialsPath) : '';
   if (sessionKey) return { apiKey: sessionKey, apiKeySource: 'session' };
@@ -56,10 +56,18 @@ function resolveFlightplanApiKey({ env = process.env, credentialsPath } = {}) {
 
 function credentialsStatus(credentialsPath, { env = process.env } = {}) {
   const resolved = resolveFlightplanApiKey({ env, credentialsPath });
+  const genericEnvKey = String(env.RAPIDAPI_KEY || '').trim();
+  const raw = readCredentialsFile(credentialsPath);
+  const stored = raw?.rapidApiKey;
+  const keyUnreadable = Boolean(stored && !resolved.apiKey && !String(env.FLIGHTPLAN_RAPIDAPI_KEY || '').trim());
+  const hint = resolved.apiKey ? resolved.apiKey.slice(-4) : '';
   return {
     hasApiKey: Boolean(resolved.apiKey),
+    apiKeyHint: hint,
+    keyUnreadable,
     apiKeySource: resolved.apiKeySource,
-    envBlocksOverwrite: Boolean(String(env.FLIGHTPLAN_RAPIDAPI_KEY || env.RAPIDAPI_KEY || '').trim()),
+    envBlocksOverwrite: Boolean(String(env.FLIGHTPLAN_RAPIDAPI_KEY || '').trim()),
+    genericRapidApiKeyIgnored: Boolean(genericEnvKey && !resolved.apiKey),
   };
 }
 

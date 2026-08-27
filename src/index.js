@@ -107,6 +107,8 @@ async function main() {
       youtubeNowPlaying: listener.youtubeNowPlaying,
       autodarts: listener.autodarts,
       getAutodartsStatus: listener.getAutodartsStatus,
+      huupe: listener.huupe,
+      getHuupeStatus: listener.getHuupeStatus,
       trivia: listener.trivia,
       getTriviaStatus: listener.getTriviaStatus,
       upsideNews: listener.upsideNews,
