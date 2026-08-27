@@ -30,6 +30,18 @@ const THUMBNAIL_PRUNE_DAYS = 90;
 /** `maxres` genuinely does not exist for many videos, so the ladder is required. */
 const THUMBNAIL_LADDER = ['maxres', 'standard', 'high', 'medium', 'default'];
 
+/**
+ * In-line retries for a thumbnail download. Short on purpose: the card is
+ * waiting on this, and a longer outage is covered by the caller's background
+ * retry rather than by holding the push.
+ */
+const IMAGE_RETRY_DELAYS = [400, 1200];
+
+/** A missing size is published fact; rate limits, timeouts and 5xx are weather. */
+function imageFailureIsPermanent(status) {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 function emptyCache() {
   return {
     videos: {},
@@ -60,12 +72,31 @@ function pickThumbnail(thumbnails = {}) {
   return null;
 }
 
+/**
+ * Every published size, best first. `maxres` is occasionally listed but 404s on
+ * the CDN, and one dead size must not cost the card its artwork.
+ */
+function thumbnailCandidates(thumbnails = {}) {
+  const out = [];
+  for (const key of THUMBNAIL_LADDER) {
+    const entry = thumbnails?.[key];
+    if (entry?.url && !out.some((candidate) => candidate.url === entry.url)) {
+      out.push({ key, ...entry });
+    }
+  }
+  return out;
+}
+
 function createYoutubeApi({
   config,
   log = null,
   now = () => Date.now(),
   fetchImpl = null,
+  imageRetryDelays = IMAGE_RETRY_DELAYS,
+  sleepImpl = null,
 } = {}) {
+  const sleep = sleepImpl
+    || ((ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); }));
   const youtubeConfig = config?.youtube || {};
   const cachePath = youtubeConfig.cachePath;
   const thumbnailDir = youtubeConfig.thumbnailCachePath;
@@ -345,7 +376,7 @@ function createYoutubeApi({
    * Download once and serve locally. Hotlinking `i.ytimg.com` from the render
    * path breaks offline, adds latency to every paint, and hammers Google (§6.5).
    */
-  async function cacheImage(url) {
+  async function cacheImage(url, { retryDelays = imageRetryDelays } = {}) {
     if (!url) {
       return null;
     }
@@ -359,19 +390,58 @@ function createYoutubeApi({
       }
       return path.basename(file);
     }
-    try {
-      const response = await doFetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!response.ok) {
+    let lastError = null;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const response = await doFetch(url, { signal: AbortSignal.timeout(8000) });
+        if (response.ok) {
+          const body = Buffer.from(await response.arrayBuffer());
+          if (!body.length) {
+            throw new Error('empty body');
+          }
+          fs.mkdirSync(thumbnailDir, { recursive: true });
+          // Write-then-rename: a half-written file would satisfy the existsSync
+          // above forever, so every later resolve would serve a broken image.
+          const staging = `${file}.part-${process.pid}-${attempt}`;
+          fs.writeFileSync(staging, body);
+          try {
+            fs.renameSync(staging, file);
+          } catch (renameError) {
+            // A concurrent prefetch getting there first is a win, not a failure.
+            fs.rmSync(staging, { force: true });
+            if (!fs.existsSync(file)) {
+              throw renameError;
+            }
+          }
+          return path.basename(file);
+        }
+        if (imageFailureIsPermanent(response.status)) {
+          log?.warn?.(`Could not cache a YouTube image — HTTP ${response.status}`, url);
+          return null;
+        }
+        lastError = `HTTP ${response.status}`;
+      } catch (error) {
+        lastError = error?.message || String(error);
+      }
+      if (attempt >= retryDelays.length) {
+        log?.warn?.('Could not cache a YouTube image', lastError);
         return null;
       }
-      const body = Buffer.from(await response.arrayBuffer());
-      fs.mkdirSync(thumbnailDir, { recursive: true });
-      fs.writeFileSync(file, body);
-      return path.basename(file);
-    } catch (error) {
-      log?.warn?.('Could not cache a YouTube image', error?.message || error);
-      return null;
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(retryDelays[attempt]);
     }
+  }
+
+  /** First candidate that actually downloads, so a dead `maxres` costs nothing. */
+  async function cacheFirstImage(candidates = []) {
+    for (const candidate of candidates) {
+      // eslint-disable-next-line no-await-in-loop
+      const file = await cacheImage(candidate.url);
+      if (file) {
+        return { file, entry: candidate };
+      }
+    }
+    return { file: null, entry: candidates[0] || null };
   }
 
   /** Nightly: drop thumbnails untouched for 90 days. Avatars are kept. */
@@ -447,11 +517,14 @@ function createYoutubeApi({
       dislikeCount = await fetchDislikes(videoId);
     }
 
-    const thumbnail = core ? pickThumbnail(core.thumbnails) : null;
-    const [thumbnailFile, avatarFile] = await Promise.all([
-      thumbnail ? cacheImage(thumbnail.url) : null,
+    const candidates = core ? thumbnailCandidates(core.thumbnails) : [];
+    const [picked, avatarFile] = await Promise.all([
+      cacheFirstImage(candidates),
       channel?.avatarUrl ? cacheImage(channel.avatarUrl) : null,
     ]);
+    // Report the size we actually got, not the one we hoped for.
+    const thumbnail = picked.entry;
+    const thumbnailFile = picked.file;
 
     return {
       videoId,
@@ -477,7 +550,11 @@ function createYoutubeApi({
       thumbnailFile,
       thumbnailWidth: thumbnail?.width || null,
       thumbnailHeight: thumbnail?.height || null,
+      // Kept so a caller can retry the download later without another quota
+      // call: a card that went out imageless can still fill itself in.
+      thumbnailCandidateUrls: candidates.map((candidate) => candidate.url),
       avatarFile,
+      avatarSourceUrl: channel?.avatarUrl || null,
     };
   }
 
@@ -551,6 +628,7 @@ function createYoutubeApi({
     cachedVideo,
     clear,
     flush,
+    cacheFirstImage,
     thumbnailFileFor,
     _cache: () => cache,
   };
@@ -564,6 +642,9 @@ module.exports = {
   NEGATIVE_TTL_MS,
   MAX_IDS_PER_REQUEST,
   THUMBNAIL_LADDER,
+  IMAGE_RETRY_DELAYS,
   pickThumbnail,
+  thumbnailCandidates,
+  imageFailureIsPermanent,
   createYoutubeApi,
 };

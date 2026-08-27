@@ -6,6 +6,7 @@ import hashlib
 import io
 import ssl
 import threading
+import time
 import tkinter as tk
 import urllib.request
 from datetime import datetime, timezone
@@ -140,6 +141,10 @@ class SteamNowPlayingPanel(BasePanel):
     SOURCE_CHIP = "STEAM"
     PAYLOAD_KEY = "steam"
     DEFAULT_TITLE = "Steam Game"
+    # Seconds between image download attempts while a card is on screen. Long
+    # cards (a feature-length video) outlive a router blip, so the last gap is
+    # generous rather than giving up inside the first minute.
+    IMAGE_RETRY_DELAYS = (3, 10, 30, 90)
     # Spec §3.2: 32px crisp inset so corner ticks never touch the poster.
     HERO_FG_PAD = 32
     HERO_BLUR_RADIUS = 8
@@ -1072,26 +1077,42 @@ class SteamNowPlayingPanel(BasePanel):
             ).start()
 
     def _fetch_first_image(self, token, urls, max_w, max_h, target):
-        image = None
-        for url in urls:
-            # Hero: keep near-full source so we can blur-fill the frame + contain the poster.
-            cover = False
-            raw = target == "hero"
-            cached = self._load_cached_photo(url, max_w, max_h, cover=cover, raw=raw)
-            if cached is not None:
-                self.root.after(0, lambda img=cached: self._apply_image(token, img, target))
-                threading.Thread(
-                    target=self._refresh_cached_photo,
-                    args=(token, url, max_w, max_h, target),
-                    daemon=True,
-                ).start()
-                return
-            image = self._fetch_photo(
-                url, max_w, max_h, force_network=True, cover=cover, raw=raw,
-            )
-            if image is not None:
-                break
-        self.root.after(0, lambda: self._apply_image(token, image, target))
+        """Fetch the first candidate that works, and keep trying if none do.
+
+        A single failed download used to leave the frame empty for as long as
+        the card was up — which for a feature-length video is the whole thing,
+        even though the image was there the moment anyone looked again.
+        """
+        # Hero: keep near-full source so we can blur-fill the frame + contain the poster.
+        cover = False
+        raw = target == "hero"
+        candidates = [url for url in urls if url]
+        if not candidates:
+            return
+
+        for attempt in range(len(self.IMAGE_RETRY_DELAYS) + 1):
+            if attempt:
+                time.sleep(self.IMAGE_RETRY_DELAYS[attempt - 1])
+                # hide() bumps the token, so this is also how we stop retrying
+                # for a card nobody is looking at any more.
+                if token != self._fetch_token:
+                    return
+            for url in candidates:
+                cached = self._load_cached_photo(url, max_w, max_h, cover=cover, raw=raw)
+                if cached is not None:
+                    self.root.after(0, lambda img=cached: self._apply_image(token, img, target))
+                    threading.Thread(
+                        target=self._refresh_cached_photo,
+                        args=(token, url, max_w, max_h, target),
+                        daemon=True,
+                    ).start()
+                    return
+                image = self._fetch_photo(
+                    url, max_w, max_h, force_network=True, cover=cover, raw=raw,
+                )
+                if image is not None:
+                    self.root.after(0, lambda img=image: self._apply_image(token, img, target))
+                    return
 
     def _refresh_cached_photo(self, token, url, max_w, max_h, target):
         raw = target == "hero"
@@ -1211,13 +1232,30 @@ class SteamNowPlayingPanel(BasePanel):
                     _unverified_ssl = True
                 else:
                     raise
+        except Exception:
+            # The network failed, which says nothing about the copy already on
+            # disk. Deleting it here meant one blip during the background
+            # refresh threw away good art and forced the next card to re-fetch.
+            return None
+
+        try:
             image = Image.open(io.BytesIO(data)).convert("RGB")
+        except Exception:
+            # These bytes are not an image. Drop any cached copy, or a bad
+            # download would keep being served from disk forever.
             try:
-                cache_dir = steam_image_cache_dir()
-                cache_dir.mkdir(parents=True, exist_ok=True)
-                steam_image_cache_path(url).write_bytes(data)
+                steam_image_cache_path(url).unlink(missing_ok=True)
             except OSError:
                 pass
+            return None
+
+        try:
+            cache_dir = steam_image_cache_dir()
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            steam_image_cache_path(url).write_bytes(data)
+        except OSError:
+            pass
+        try:
             if raw:
                 max_edge = max(max_w, max_h) * 2
                 if max(image.size) > max_edge > 0:
@@ -1226,8 +1264,4 @@ class SteamNowPlayingPanel(BasePanel):
                 return image
             return fit_image_cover(image, max_w, max_h) if cover else fit_image_contain(image, max_w, max_h)
         except Exception:
-            try:
-                steam_image_cache_path(url).unlink(missing_ok=True)
-            except OSError:
-                pass
             return None

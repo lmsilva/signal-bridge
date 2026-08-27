@@ -43,6 +43,7 @@ from src.overhead_panel import OverheadPanel
 from src.game_library_tour_panel import GameLibraryTourPanel
 from src.roll_credits_panel import RollCreditsPanel
 from src.autodarts_panel import AutodartsPanel
+from src.huupe_panel import HuupePanel
 from src.flightplan_panel import FlightPlanPanel
 from src.weather_fetch import enrich_weather_payload
 
@@ -168,6 +169,8 @@ class OverlayWindow:
             "roll-credits.tour": RollCreditsPanel(self.root, self.shell, self.config),
             "autodarts.dashboard": AutodartsPanel(self.root, self.shell, self.config),
             "autodarts.match": AutodartsPanel(self.root, self.shell, self.config),
+            "huupe.dashboard": HuupePanel(self.root, self.shell, self.config),
+            "huupe.session": HuupePanel(self.root, self.shell, self.config),
         }
         # Dashboard + match share one panel class; keep two instances so a
         # dashboard→match handoff always tears down cleanly.
@@ -504,6 +507,20 @@ class OverlayWindow:
             return False
         return True
 
+    def _try_huupe_session_inplace(self, payload: dict) -> bool:
+        """Apply a live shot without tearing the board down (stale/identical safe)."""
+        if self._active_panel_key != "huupe.session" or not self._active_panel:
+            return False
+        apply = getattr(self._active_panel, "apply_session_payload", None)
+        if not callable(apply):
+            return False
+        try:
+            result = apply(payload)
+        except Exception as error:
+            print(f"Huupe session update failed: {error}", file=sys.stderr)
+            return False
+        return result in ("ignored", "updated")
+
     def _try_autodarts_match_inplace(self, payload: dict) -> bool:
         """Apply live match revision without tearing down the board (stale/identical safe)."""
         if self._active_panel_key != "autodarts.match" or not self._active_panel:
@@ -533,6 +550,19 @@ class OverlayWindow:
             except Exception as error:
                 print(f"Weather enrich failed: {error}", file=sys.stderr)
 
+        # The final card carries a countdown, so it has to take the full path
+        # and re-arm the dismiss timer; only live revisions patch in place.
+        if (
+            display_type == "huupe.session"
+            and payload.get("persistent") is not False
+            and self._try_huupe_session_inplace(payload)
+        ):
+            if self._suppress_dismiss_footer():
+                self.dismiss_footer.hide()
+            else:
+                self.dismiss_footer.raise_()
+            return
+
         if display_type == "autodarts.match" and self._try_autodarts_match_inplace(payload):
             if self._suppress_dismiss_footer():
                 self.dismiss_footer.hide()
@@ -559,6 +589,8 @@ class OverlayWindow:
             "roll-credits.tour",
             "autodarts.dashboard",
             "autodarts.match",
+            "huupe.dashboard",
+            "huupe.session",
             "photo.slideshow",
             "weather.query",
             "timer.snapshot",
@@ -644,6 +676,8 @@ class OverlayWindow:
         if self._active_panel_key == "youtube.now-playing" and self._display_seconds <= 0:
             return True
         if self._active_panel_key == "autodarts.match" and self._display_seconds <= 0:
+            return True
+        if self._active_panel_key == "huupe.session" and self._display_seconds <= 0:
             return True
         return False
 

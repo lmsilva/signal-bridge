@@ -61,6 +61,9 @@ const BOARD_COMMAND_IDS = new Set([
   'autodarts.now',
   'autodarts.last-match',
   'autodarts.dashboard',
+  'huupe.now',
+  'huupe.last-game',
+  'huupe.dashboard',
   'trivia.show',
   'goodnews.show',
   'wiki.show',
@@ -401,6 +404,47 @@ const COMMANDS = [
     defaultDurationSeconds: 120,
   },
   {
+    id: 'huupe.now',
+    title: 'Huupe',
+    subtitle: 'Live session, or the last one',
+    group: 'Huupe',
+    route: '/api/push/huupe-now',
+    icon: 'huupe',
+    body: {},
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 90,
+  },
+  {
+    id: 'huupe.last-game',
+    title: 'Huupe — last game',
+    subtitle: 'The most recent finished session',
+    group: 'Huupe',
+    route: '/api/push/huupe-last-game',
+    icon: 'huupe',
+    body: { mode: 'last-game' },
+    pushable: false,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 90,
+  },
+  {
+    id: 'huupe.dashboard',
+    title: 'Huupe Dashboard',
+    subtitle: 'Leaderboard, records & shooting',
+    group: 'Huupe',
+    route: '/api/push/huupe-dashboard',
+    icon: 'huupe',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 120,
+  },
+  {
     id: 'trivia.show',
     title: 'Trivia',
     subtitle: 'A short round of questions',
@@ -499,7 +543,7 @@ const COMMANDS = [
   {
     id: 'flightplan.next',
     title: 'Next Flight',
-    subtitle: 'Upcoming trip flight card',
+    subtitle: 'Next upcoming trip flight card',
     group: 'Sky',
     route: '/api/push/flightplan-next',
     icon: 'sky',
@@ -512,7 +556,7 @@ const COMMANDS = [
   {
     id: 'flightplan.board',
     title: 'Trip Board',
-    subtitle: 'Departure board for the next trip',
+    subtitle: 'Departure board for a trip (Vestaboard-friendly)',
     group: 'Sky',
     route: '/api/push/flightplan-board',
     icon: 'sky',
@@ -607,6 +651,7 @@ function createCommandRegistry(deps = {}) {
     getRollCreditsStatus = null,
     getYoutubeStatus = null,
     getAutodartsStatus = null,
+    getHuupeStatus = null,
     getTriviaStatus = null,
     getUpsideNewsStatus = null,
     getWikiCommonKnowledgeStatus = null,
@@ -656,6 +701,12 @@ function createCommandRegistry(deps = {}) {
     },
     'autodarts.last-match': () => Boolean(call(getAutodartsStatus)?.hasArchive),
     'autodarts.dashboard': () => Boolean(call(getAutodartsStatus)?.hasArchive),
+    'huupe.now': () => {
+      const status = call(getHuupeStatus);
+      return Boolean(status?.hasLiveSession || status?.hasArchive);
+    },
+    'huupe.last-game': () => Boolean(call(getHuupeStatus)?.hasArchive),
+    'huupe.dashboard': () => Boolean(call(getHuupeStatus)?.hasArchive),
     'trivia.show': (params) => {
       const status = call(getTriviaStatus);
       if (!status) {
@@ -820,6 +871,14 @@ function createCommandRegistry(deps = {}) {
     },
     'autodarts.dashboard': () => {
       const status = call(getAutodartsStatus) || {};
+      return Number(status.settings?.dashboard?.displaySeconds) || 120;
+    },
+    'huupe.last-game': () => {
+      const status = call(getHuupeStatus) || {};
+      return Number(status.settings?.lastGame?.displaySeconds) || 90;
+    },
+    'huupe.dashboard': () => {
+      const status = call(getHuupeStatus) || {};
       return Number(status.settings?.dashboard?.displaySeconds) || 120;
     },
   };

@@ -107,12 +107,17 @@ function createFlightplanStore(config = {}, log = console) {
     return clone(data.flights.find((row) => row.id === id) || null);
   }
 
-  function flightsForTrip(tripId) {
-    load();
+  /** Live rows in trip order — no reload, so callers mid-write keep their edits. */
+  function tripFlightRows(tripId) {
     const trip = data.trips.find((row) => row.id === tripId);
     const order = Array.isArray(trip?.flights) ? trip.flights : [];
     const byId = new Map(data.flights.map((row) => [row.id, row]));
-    return order.map((id) => byId.get(id)).filter(Boolean).map(clone);
+    return order.map((id) => byId.get(id)).filter(Boolean);
+  }
+
+  function flightsForTrip(tripId) {
+    load();
+    return tripFlightRows(tripId).map(clone);
   }
 
   function tripPhase(trip, nowMs = Date.now()) {
@@ -195,7 +200,9 @@ function createFlightplanStore(config = {}, log = console) {
   function maybeArchiveTrip(tripId) {
     const trip = data.trips.find((row) => row.id === tripId);
     if (!trip) return;
-    const flights = flightsForTrip(tripId);
+    // Must not reload: `updateFlight` calls this between patching and persisting,
+    // and a reload would drop the patch on the floor.
+    const flights = tripFlightRows(tripId);
     if (flights.length && flights.every((row) => row.state === 'landed')) {
       trip.archived = true;
       trip.updatedAt = new Date().toISOString();
@@ -290,7 +297,11 @@ function createFlightplanStore(config = {}, log = console) {
     const trip = data.trips.find((row) => row.id === tripId);
     if (!trip) return { ok: false, error: 'Trip not found' };
     const airline = String(payload.airline || '').trim().toUpperCase();
-    const number = String(payload.number || '').trim();
+    let number = String(payload.number || '').trim();
+    if (airline && number.toUpperCase().startsWith(airline)) {
+      number = number.slice(airline.length).trim();
+    }
+    number = number.replace(/\s+/g, '');
     const date = validDateOnly(payload.date) ? payload.date : '';
     if (!airline || !number || !date) {
       return { ok: false, error: 'Airline, flight number, and date are required' };

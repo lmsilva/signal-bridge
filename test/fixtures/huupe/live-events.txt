@@ -1,0 +1,115 @@
+=== MONITOR LIVE Wed Aug 26 19:28:34 MDT 2026 ===
+08-27 01:28:36.937 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 792.092896, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:28:37.814 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 792.973328, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.812669 }
+08-27 01:28:37.815 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 792.973328, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.812669 }
+08-27 01:28:37.816 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 792.973328, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.812669 }
+08-27 01:28:42.897 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 798.054749, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 6.306256 }
+08-27 01:28:42.898 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 798.054749, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 6.306256 }
+08-27 01:28:42.899 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 798.054749, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 6.306256 }
+08-27 01:28:48.095 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 803.249512, "events": ["make_detected"], "shot_zone": "one_point_shot", "shot_range": 1.548905 }
+08-27 01:28:48.097 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 803.249512, "events": ["make_detected"], "shot_zone": "one_point_shot", "shot_range": 1.548905 }
+08-27 01:28:48.098 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 803.249512, "events": ["make_detected"], "shot_zone": "one_point_shot", "shot_range": 1.548905 }
+08-27 01:28:52.046 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 807.205566, "events": ["miss_detected"], "shot_zone": "layup", "shot_range": 0.010000 }
+08-27 01:28:52.047 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 807.205566, "events": ["miss_detected"], "shot_zone": "layup", "shot_range": 0.010000 }
+08-27 01:28:52.048 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 807.205566, "events": ["miss_detected"], "shot_zone": "layup", "shot_range": 0.010000 }
+08-27 01:28:55.528 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 810.693604, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.157403 }
+08-27 01:28:55.529 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 810.693604, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.157403 }
+08-27 01:28:55.530 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 810.693604, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.157403 }
+08-27 01:28:57.542 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 812.700500, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 3.374400 }
+08-27 01:28:57.549 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 812.700500, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 3.374400 }
+08-27 01:28:57.549 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 812.700500, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 3.374400 }
+08-27 01:29:01.724 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 816.888489, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.927581 }
+08-27 01:29:01.725 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 816.888489, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.927581 }
+08-27 01:29:01.725 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 816.888489, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.927581 }
+08-27 01:29:06.124 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 821.286072, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.659541 }
+08-27 01:29:06.126 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 821.286072, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.659541 }
+08-27 01:29:06.126 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 821.286072, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.659541 }
+08-27 01:29:07.820 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 822.983643, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:29:08.876 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 824.034607, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.544630 }
+08-27 01:29:08.876 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 824.034607, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.544630 }
+08-27 01:29:08.877 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 824.034607, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.544630 }
+08-27 01:29:11.755 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 826.918640, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.365850 }
+08-27 01:29:11.755 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 826.918640, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.365850 }
+08-27 01:29:11.756 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 826.918640, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.365850 }
+08-27 01:29:14.319 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 829.483826, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 6.582847 }
+08-27 01:29:14.320 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 829.483826, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 6.582847 }
+08-27 01:29:14.322 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 829.483826, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 6.582847 }
+08-27 01:29:18.584 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 833.748779, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.489312 }
+08-27 01:29:18.585 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 833.748779, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.489312 }
+08-27 01:29:18.585 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 833.748779, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.489312 }
+08-27 01:29:20.293 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 835.451355, "events": ["make_detected"], "shot_zone": "two_point_shot", "shot_range": 1.714859 }
+08-27 01:29:20.294 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 835.451355, "events": ["make_detected"], "shot_zone": "two_point_shot", "shot_range": 1.714859 }
+08-27 01:29:20.294 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 835.451355, "events": ["make_detected"], "shot_zone": "two_point_shot", "shot_range": 1.714859 }
+08-27 01:29:24.747 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 839.911804, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.421168 }
+08-27 01:29:24.748 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 839.911804, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.421168 }
+08-27 01:29:24.748 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 839.911804, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.421168 }
+08-27 01:29:28.201 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 843.360229, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.919030 }
+08-27 01:29:28.202 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 843.360229, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.919030 }
+08-27 01:29:28.204 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 843.360229, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.919030 }
+08-27 01:29:31.926 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 847.083618, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.212722 }
+08-27 01:29:31.927 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 847.083618, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.212722 }
+08-27 01:29:31.928 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 847.083618, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.212722 }
+08-27 01:29:42.807 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 857.971436, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:29:42.915 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 858.076355, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 4.757351 }
+08-27 01:29:42.917 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 858.076355, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 4.757351 }
+08-27 01:29:42.917 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 858.076355, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 4.757351 }
+08-27 01:29:47.841 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 863.005676, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.438269 }
+08-27 01:29:47.842 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 863.005676, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.438269 }
+08-27 01:29:47.846 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 863.005676, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.438269 }
+08-27 01:29:51.525 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 866.684143, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.144578 }
+08-27 01:29:51.526 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 866.684143, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.144578 }
+08-27 01:29:51.526 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 866.684143, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.144578 }
+08-27 01:29:56.956 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 872.115051, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.867988 }
+08-27 01:29:56.956 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 872.115051, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.867988 }
+08-27 01:29:56.957 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 872.115051, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.867988 }
+08-27 01:29:59.807 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 874.969482, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.433994 }
+08-27 01:29:59.811 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 874.969482, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.433994 }
+08-27 01:29:59.818 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 874.969482, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.433994 }
+08-27 01:30:03.410 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 878.570007, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.587122 }
+08-27 01:30:03.412 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 878.570007, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.587122 }
+08-27 01:30:03.412 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 878.570007, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.587122 }
+08-27 01:30:07.317 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 882.477539, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 6.859437 }
+08-27 01:30:07.319 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 882.477539, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 6.859437 }
+08-27 01:30:07.319 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 882.477539, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 6.859437 }
+08-27 01:30:19.894 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 895.058899, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:30:22.474 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 897.633850, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.757351 }
+08-27 01:30:22.476 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 897.633850, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.757351 }
+08-27 01:30:22.477 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 897.633850, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 4.757351 }
+08-27 01:30:23.997 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 899.159973, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.927581 }
+08-27 01:30:23.998 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 899.159973, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.927581 }
+08-27 01:30:23.999 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 899.159973, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.927581 }
+08-27 01:30:26.865 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 902.028503, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.157403 }
+08-27 01:30:26.865 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 902.028503, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.157403 }
+08-27 01:30:26.865 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 902.028503, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 2.157403 }
+08-27 01:30:29.894 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 905.057495, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 0.940407 }
+08-27 01:30:29.894 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 905.057495, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 0.940407 }
+08-27 01:30:29.895 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 905.057495, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 0.940407 }
+08-27 01:30:32.891 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 908.057007, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.493587 }
+08-27 01:30:32.893 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 908.057007, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.493587 }
+08-27 01:30:32.893 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 908.057007, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.493587 }
+08-27 01:30:35.831 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 910.991211, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.493587 }
+08-27 01:30:35.832 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 910.991211, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.493587 }
+08-27 01:30:35.833 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 910.991211, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.493587 }
+08-27 01:30:39.240 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 914.399780, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.821220 }
+08-27 01:30:39.244 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 914.399780, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.821220 }
+08-27 01:30:39.249 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 914.399780, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 2.821220 }
+08-27 01:30:44.106 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 919.265808, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.880813 }
+08-27 01:30:44.109 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 919.265808, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.880813 }
+08-27 01:30:44.110 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 919.265808, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.880813 }
+08-27 01:30:46.870 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 922.030273, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.714859 }
+08-27 01:30:46.872 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 922.030273, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.714859 }
+08-27 01:30:46.874 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 922.030273, "events": ["miss_detected"], "shot_zone": "two_point_shot", "shot_range": 1.714859 }
+08-27 01:30:49.954 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 925.117371, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:30:50.463 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 925.622070, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.706309 }
+08-27 01:30:50.463 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 925.622070, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.706309 }
+08-27 01:30:50.464 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 925.622070, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.706309 }
+08-27 01:30:54.104 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 929.263306, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.595673 }
+08-27 01:30:54.106 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 929.263306, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.595673 }
+08-27 01:30:54.118 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 929.263306, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 3.595673 }
+08-27 01:30:56.592 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 931.752563, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.753076 }
+08-27 01:30:56.594 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 931.752563, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.753076 }
+08-27 01:30:56.594 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 931.752563, "events": ["miss_detected"], "shot_zone": "three_point_shot", "shot_range": 5.753076 }
+08-27 01:31:04.133 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 939.292114, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.476486 }
+08-27 01:31:04.135 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 939.292114, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.476486 }
+08-27 01:31:04.137 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 939.292114, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.476486 }
+08-27 01:31:22.011 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 957.176025, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }

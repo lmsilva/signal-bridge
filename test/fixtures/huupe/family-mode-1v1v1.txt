@@ -1,0 +1,100 @@
+﻿2026-08-27 03:14:53.509  2364  2392 D ShotTracker: startProcessing: started.
+2026-08-27 03:14:55.251  2364  2392 I Unity   : trashpanda scored 1
+2026-08-27 03:14:55.868  2364  2392 I Unity   : Did trashpanda Score From lowPost SHOT MADE = True
+2026-08-27 03:14:59.418  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:15:01.472  2364  2392 I Unity   : trashpanda scored 3
+2026-08-27 03:15:01.619  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:15:07.185  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:15:08.578  2364  2392 I Unity   : trashpanda scored 3
+2026-08-27 03:15:08.626  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:15:11.877  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:15:14.460  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:15:17.283  2364  2392 I Unity   : Did trashpanda Score From highPost SHOT MADE = False
+2026-08-27 03:15:19.578  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:15:21.889  2364  2392 I Unity   : trashpanda scored 1
+2026-08-27 03:15:21.946  2364  2392 I Unity   : Did trashpanda Score From lowPost SHOT MADE = True
+2026-08-27 03:15:24.962  2364  2392 I Unity   : trashpanda scored 2
+2026-08-27 03:15:24.992  2364  2392 I Unity   : Did trashpanda Score From highPost SHOT MADE = True
+2026-08-27 03:15:29.384  2364  2392 I Unity   : Did trashpanda Score From lowPost SHOT MADE = False
+2026-08-27 03:15:32.622  2364  2392 I Unity   : Did trashpanda Score From lowPost SHOT MADE = False
+2026-08-27 03:15:34.040  2364  2392 I Unity   : trashpanda scored 3
+2026-08-27 03:15:34.085  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:15:38.504  2364  2392 I Unity   : trashpanda scored 0.1
+2026-08-27 03:15:38.561  2364  2392 I Unity   : Did trashpanda Score From layup SHOT MADE = True
+2026-08-27 03:15:43.722  2364  2392 I Unity   : Did trashpanda Score From layup SHOT MADE = False
+2026-08-27 03:15:46.124  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:15:47.833  2364  2392 I Unity   : trashpanda scored 1
+2026-08-27 03:15:47.912  2364  2392 I Unity   : Did trashpanda Score From lowPost SHOT MADE = True
+2026-08-27 03:15:51.816  2364  2392 I Unity   : trashpanda scored 3
+2026-08-27 03:15:51.826  2364  2392 I Unity   : Did trashpanda Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:15:57.207  2364  2392 D ShotTracker: startProcessing: paused.
+2026-08-27 03:15:58.876  2364  2392 D ShotTracker: startProcessing: started.
+2026-08-27 03:15:58.992  2364  2392 D ShotTracker: startProcessing: paused.
+2026-08-27 03:16:03.323  2364  2392 D ShotTracker: startProcessing: started.
+2026-08-27 03:16:05.631  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:06.285  2364  2392 I Unity   : Player 1 scored 3
+2026-08-27 03:16:06.323  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:16:08.753  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:11.856  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:14.015  2364  2392 I Unity   : Player 1 scored 3
+2026-08-27 03:16:14.025  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:16:16.899  2364  2392 I Unity   : Player 1 scored 0.1
+2026-08-27 03:16:16.906  2364  2392 I Unity   : Did Player 1 Score From layup SHOT MADE = True
+2026-08-27 03:16:18.362  2364  2392 I Unity   : Did Player 1 Score From layup SHOT MADE = False
+2026-08-27 03:16:21.411  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:24.654  2364  2392 I Unity   : Did Player 1 Score From highPost SHOT MADE = False
+2026-08-27 03:16:31.861  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:34.481  2364  2392 I Unity   : Player 1 scored 1
+2026-08-27 03:16:34.504  2364  2392 I Unity   : Did Player 1 Score From lowPost SHOT MADE = True
+2026-08-27 03:16:39.020  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:41.782  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:44.897  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:47.686  2364  2392 I Unity   : Did Player 1 Score From lowPost SHOT MADE = False
+2026-08-27 03:16:50.698  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:52.672  2364  2392 I Unity   : Did Player 1 Score From lowPost SHOT MADE = False
+2026-08-27 03:16:57.739  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:16:58.734  2364  2392 I Unity   : Player 1 scored 3
+2026-08-27 03:16:58.747  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:17:03.419  2364  2392 I Unity   : Did Player 1 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:17:05.877  2364  2392 I Unity   : Did Player 1 Score From lowPost SHOT MADE = False
+2026-08-27 03:17:07.391  2364  2392 D ShotTracker: startProcessing: paused.
+2026-08-27 03:17:10.492  2364  2392 D ShotTracker: startProcessing: started.
+2026-08-27 03:17:10.608  2364  2392 I Unity   : Did Player 2 Score From layup SHOT MADE = False
+2026-08-27 03:17:10.612  2364  2392 D ShotTracker: startProcessing: paused.
+2026-08-27 03:17:14.939  2364  2392 D ShotTracker: startProcessing: started.
+2026-08-27 03:17:16.471  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:17:18.213  2364  2392 I Unity   : Player 2 scored 2
+2026-08-27 03:17:18.228  2364  2392 I Unity   : Did Player 2 Score From highPost SHOT MADE = True
+2026-08-27 03:17:22.994  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:17:25.012  2364  2392 I Unity   : Player 2 scored 3
+2026-08-27 03:17:25.020  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:17:29.444  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:17:32.364  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:17:35.242  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:17:44.652  2364  2392 I Unity   : Did Player 2 Score From lowPost SHOT MADE = False
+2026-08-27 03:17:46.114  2364  2392 I Unity   : Player 2 scored 3
+2026-08-27 03:17:46.135  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:17:51.235  2364  2392 I Unity   : Player 2 scored 3
+2026-08-27 03:17:51.250  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:17:54.158  2364  2392 I Unity   : Player 2 scored 3
+2026-08-27 03:17:54.168  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:18:00.289  2364  2392 I Unity   : Did Player 2 Score From lowPost SHOT MADE = False
+2026-08-27 03:18:02.550  2364  2392 I Unity   : Did Player 2 Score From highPost SHOT MADE = False
+2026-08-27 03:18:05.425  2364  2392 I Unity   : Player 2 scored 3
+2026-08-27 03:18:05.434  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = True
+2026-08-27 03:18:09.780  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:18:12.654  2364  2392 I Unity   : Did Player 2 Score From topOfTheKey SHOT MADE = False
+2026-08-27 03:18:14.075  2364  2392 I Unity   : Player 2 scored 0.1
+2026-08-27 03:18:14.097  2364  2392 I Unity   : Did Player 2 Score From layup SHOT MADE = True
+2026-08-27 03:18:14.948  2364  2392 I Unity   : Did Player 2 Score From layup SHOT MADE = False
+2026-08-27 03:18:15.404  2364  2392 I Unity   : Player 2 scored 0.1
+2026-08-27 03:18:15.414  2364  2392 I Unity   : Did Player 2 Score From layup SHOT MADE = True
+2026-08-27 03:18:16.645  2364  2392 I Unity   : Player 2 scored 0.1
+2026-08-27 03:18:16.661  2364  2392 I Unity   : Did Player 2 Score From layup SHOT MADE = True
+2026-08-27 03:18:19.335  2364  2392 D ShotTracker: startProcessing: paused.
+2026-08-27 03:18:19.385  2364  2392 I Unity   : Player 2 has scored 17.3 points and got 0 Position
+2026-08-27 03:18:19.387  2364  2392 I Unity   : trashpanda has scored 17.1 points and got 1 Position
+2026-08-27 03:18:19.390  2364  2392 I Unity   : Player 1 has scored 10.1 points and got 2 Position
+2026-08-27 03:18:19.407  2364  2392 I Unity   : MRScreen_GameStatistics:Show()
+2026-08-27 03:18:19.669  2364  2392 I Unity   : MRScreen_GameStatistics:Show()
+2026-08-27 03:18:19.904  2364  2392 I Unity   : <color="green">{"status":"success","message":"successfully updated stats for user without posting score","data":{"uniqueScoreId":"8/27/2026 3:18:19 AMtrashpanda8a759fca-069f-4ea0-b99c-caa54cd090c5","combination":{"gameStateType":"Offline","gameConfiguration":"1v1v1","gameTimeType":"1 minute","gameModeType":"Classic"},"stats":{"score":17.1,"hasWon":false,"hasWonBattleRoyale":false,"isRunnerUpBattleRoyale":false,"hasDrawn":false,"longestStreak":2,"noOfStreaks":2,"halfPointersMade":1,"halfPointersMissed":1,"halfPointerLongestStreak":0,"halfPointersTotalDistance":0,"halfPointerStreaks":0,"onePointersMade":3,"onePointersMissed":2,"onePointerLongestStreak":0,"onePointersTotalDistance":0,"onePointerStreaks":0,"twoPointersMade":1,"twoPointersMissed":1,"twoPointerLongestStreak":0,"twoPointersTotalDistance":0,"twoPointerStreaks":0,"threePointersMade":4,"threePointersMissed":6,"threePointerLongestStreak":0,"threePointersTotalDistance":0,"threePointerStreaks":0,"timeSpent":0},"_id":"noId","profileId":"000000000000000

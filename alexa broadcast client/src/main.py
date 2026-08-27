@@ -68,6 +68,8 @@ class BroadcastClientApp:
             "roll-credits.tour",
             "autodarts.dashboard",
             "autodarts.match",
+            "huupe.dashboard",
+            "huupe.session",
         }
     )
 
@@ -223,6 +225,9 @@ class BroadcastClientApp:
         elif command_type == "autodarts.match.close":
             if self.overlay and self.overlay.active_display_type == "autodarts.match":
                 self.overlay.dismiss_immediately()
+        elif command_type == "huupe.session.close":
+            if self.overlay and self.overlay.active_display_type == "huupe.session":
+                self.overlay.dismiss_immediately()
         elif command_type == "system.command":
             self._run_system_command((payload.get("system") or {}).get("action"))
 
@@ -345,7 +350,11 @@ class BroadcastClientApp:
             return
 
         self.display_active = True
-        self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
+        try:
+            self.overlay.show(payload, seconds, on_closed=self._on_display_closed)
+        except Exception:
+            self.display_active = False
+            raise
 
     def _on_local_timer_fired(self, timer: dict, base_payload: dict):
         fired_payload = self._build_fired_timer_payload(base_payload, timer)

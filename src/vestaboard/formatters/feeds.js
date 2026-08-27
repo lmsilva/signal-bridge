@@ -28,7 +28,6 @@ const {
   chipCode,
   pageCounter,
   badgeFrame,
-  dwellFor,
 } = require('../frames');
 
 const {
@@ -38,6 +37,7 @@ const {
 } = require('../../flightplan-status');
 
 const { snapshotFrame, paginate, padRows } = require('./common');
+const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
 // Spec text says 22; the drawing wraps at the 20-column body so a 22-letter
@@ -430,40 +430,70 @@ function triviaFrames(payload = {}, ctx = {}) {
   return frames;
 }
 
+function flightPlanBoardLine(flight, { visitor = false, ctx = {} } = {}) {
+  const status = resolveFlightStatus(flight, ctx);
+  const airport = visitor
+    ? (flight.origin?.iata || flight.origin?.icao || '---')
+    : (flight.destination?.iata || flight.destination?.icao || '---');
+  // Scheduled departure (not arrival) — same column a real departures board uses.
+  const time = formatBoardTime(flight.scheduled?.departure);
+  const number = formatBoardFlightNumber(flight.airline, flight.number);
+  const code = String(status.boardCode || '--').slice(0, 4).padStart(4, ' ');
+  return `${time} ${number} ${String(airport || '---').slice(0, 3).padEnd(3, ' ')} ${code}`;
+}
+
+function flightPlanBoardLegend(visitor = false) {
+  // 20-char column headers aligned with flightPlanBoardLine.
+  const place = visitor ? 'FRM' : 'TO ';
+  return `DEP  FLIGHT ${place} STAT`;
+}
+
+function flightPlanBadgeRight(flights = [], payload = {}, ctx = {}) {
+  if (payload.mode === 'auto') return 'UPDATE';
+  const next = flights.find((row) => row.state === 'active') || flights[0];
+  if (!next) return 'BOARD';
+  if (next.state === 'active') return 'NOW';
+  const when = next.scheduled?.departure || next.date;
+  if (!when) return 'BOARD';
+  const zone = ctx.timeZone || houseTimeZone(ctx.config);
+  const days = daysBetween(ctx.now || new Date(), when, zone);
+  if (days === 0) return 'TODAY';
+  if (days < 0) return 'NOW';
+  return `D-${Math.min(999, days)}`;
+}
+
+function flightPlanAsOfLabel(payload = {}, ctx = {}) {
+  const zone = ctx.timeZone || houseTimeZone(ctx.config);
+  const parts = dateParts(payload.asOf || new Date(), zone);
+  if (!parts) return '';
+  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+}
+
 function flightPlanBoardFrames(payload = {}, ctx = {}) {
   const trip = payload.trip || {};
-  const flights = Array.isArray(payload.flights) ? payload.flights : [];
+  const flights = Array.isArray(payload.flights) ? [...payload.flights] : [];
   if (!flights.length && payload.flight) flights.push(payload.flight);
   if (!flights.length) return [];
 
   const visitor = trip.kind === 'visitor';
-  const rows = flights.slice(0, 4).map((flight) => {
-    const status = resolveFlightStatus(flight, ctx);
-    const airport = visitor
-      ? (flight.origin?.iata || flight.origin?.icao || '---')
-      : (flight.destination?.iata || flight.destination?.icao || '---');
-    const time = formatBoardTime(flight.scheduled?.departure);
-    const number = formatBoardFlightNumber(flight.airline, flight.number);
-    const code = String(status.boardCode || '--').slice(0, 4).padStart(4, ' ');
-    return `${time}  ${number}  ${String(airport || '---').slice(0, 3).padEnd(3, ' ')}  ${code}`;
-  });
+  // Legend takes one body row so the HHMM / airport / status columns are readable.
+  const lines = [
+    flightPlanBoardLegend(visitor),
+    ...flights.slice(0, 3).map((flight) => flightPlanBoardLine(flight, { visitor, ctx })),
+  ];
 
-  const asOf = payload.asOf ? new Date(payload.asOf) : new Date();
-  const asOfText = `${String(asOf.getHours()).padStart(2, '0')}:${String(asOf.getMinutes()).padStart(2, '0')}`;
-  const badgeRight = payload.mode === 'auto' ? 'UPDATE' : 'BOARD';
-  const frames = [{
-    ...snapshotFrame(badgeFrame({
-      color: payload.alert ? 'red' : 'blue',
-      title: truncate(fold(trip.name || 'FLIGHT PLAN'), BADGE_TEXT_WIDTH),
-      titleRight: badgeRight,
-      rows,
-      footerLeft: 'SIGNAL BRIDGE',
-      footerRight: asOfText,
-    }), 'Flight Plan', 'flightplan.flight'),
-    dwellSeconds: dwellFor(rows.join(' ').length + 40),
+  const layout = badgeFrame({
+    color: payload.alert ? 'red' : 'blue',
+    title: truncate(fold(trip.name || 'FLIGHT PLAN'), BADGE_TEXT_WIDTH),
+    titleRight: flightPlanBadgeRight(flights, payload, ctx),
+    rows: padRows(lines),
+    footerLeft: 'AS OF',
+    footerRight: flightPlanAsOfLabel(payload, ctx),
+  });
+  return [{
+    ...snapshotFrame(layout, 'Flight Plan', 'flightplan.flight'),
     quietHoursExempt: false,
   }];
-  return frames;
 }
 
 const FORMATTERS = {

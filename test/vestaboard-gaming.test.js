@@ -336,6 +336,151 @@ test('a scheduled tour subset still prints the library total from stats', () => 
   ], 'roll credits scheduled subset');
 });
 
+function huupeSession(overrides = {}) {
+  return {
+    type: 'huupe.session',
+    session: {
+      status: 'live',
+      mode: 'family',
+      modeLabel: 'Family Mode',
+      stats: {
+        made: 9, attempts: 21, fgPct: 43, points: 17.1, streak: 3, bestStreak: 5, threes: 2,
+      },
+      players: [
+        {
+          name: 'trashpanda', score: 17.1, made: 6, attempts: 12, fgPct: 50, threes: 2,
+        },
+        {
+          name: 'War D', score: 12.9, made: 4, attempts: 11, fgPct: 36, threes: 1,
+        },
+      ],
+      ...overrides,
+    },
+  };
+}
+
+test('a live Family Mode game is a scoreboard, closest race first', () => {
+  const frames = gaming.huupeSessionFrames(huupeSession());
+
+  assert.equal(frames[0].priority, 'alert');
+  assertLayout(frames[0].rows, [
+    'oo HUUPE     FAMILY oo',
+    ' TRASHPANDA      17.1',
+    ' WAR D           12.9',
+    '',
+    '',
+    'oo SHOOTING NOW     oo',
+  ], 'huupe live family');
+});
+
+test('the mode never eats into the HUUPE badge', () => {
+  // "Family Mode" is 11 characters and used to clip the header down to "HUUP".
+  const rows = gaming.huupeSessionFrames(huupeSession())[0].rows;
+  assert.match(formatLayout(rows).split('\n')[0], /^oo HUUPE/);
+});
+
+test('an unknown mode name is shortened rather than allowed to clip the badge', () => {
+  const rows = gaming.huupeSessionFrames(
+    huupeSession({ mode: 'somethingnew', modeLabel: 'Tournament Bracket' }),
+  )[0].rows;
+  assert.match(formatLayout(rows).split('\n')[0], /^oo HUUPE {2,}TOURNAMEN oo$/);
+});
+
+test('free play has no names, so the board shows the session score', () => {
+  const frames = gaming.huupeSessionFrames(huupeSession({
+    mode: 'justhuupe',
+    modeLabel: 'Free Play',
+    players: [],
+    stats: {
+      made: 9, attempts: 21, fgPct: 43, points: 17, streak: 4, bestStreak: 5, threes: 2,
+    },
+  }));
+
+  assertLayout(frames[0].rows, [
+    'oo HUUPE  FREE PLAY oo',
+    ' 17 POINTS',
+    ' FG 9/21 - 43%',
+    ' ON A 4 RUN',
+    '',
+    'oo SHOOTING NOW     oo',
+  ], 'huupe live free play');
+});
+
+test('a finished game flanks the winner and names who they beat', () => {
+  const frames = gaming.huupeSessionFrames(huupeSession({
+    status: 'finished',
+    durationLabel: '12:22',
+    players: [
+      {
+        name: 'trashpanda', score: 17.1, made: 6, attempts: 12, fgPct: 50, threes: 2, isWinner: true,
+      },
+      {
+        name: 'War D', score: 12.9, made: 4, attempts: 11, fgPct: 36, threes: 1,
+      },
+    ],
+  }));
+
+  assertLayout(frames[0].rows, [
+    'oo HUUPE     FAMILY oo',
+    ' y TRASHPANDA WINS y',
+    ' OVER WAR D 17.1-12.9',
+    ' FG 6/12 - 50%',
+    ' 2 FROM DEEP',
+    'oo GAME OVER  12:22 oo',
+  ], 'huupe final');
+});
+
+test('a layup keeps its tenth on the board', () => {
+  // Family Mode pays 0.1 for a layup, so 17.1 must not flip up as 17.
+  const rows = gaming.huupeSessionFrames(huupeSession())[0].rows;
+  assert.match(formatLayout(rows), /17\.1/);
+});
+
+test('a whole score drops the decimal point rather than flipping a pointless 0', () => {
+  const rows = gaming.huupeSessionFrames(huupeSession({
+    players: [{ name: 'trashpanda', score: 12, made: 6, attempts: 12, fgPct: 50 }],
+  }))[0].rows;
+  assert.match(formatLayout(rows).split('\n')[1], / 12$/);
+});
+
+test('two stray shots are not worth flipping the board for', () => {
+  // A board flip is six seconds of flapping; a ball knocked off the rim by
+  // someone walking past should not buy that.
+  assert.deepEqual(
+    gaming.huupeSessionFrames(huupeSession({ stats: { made: 1, attempts: 1 }, players: [] })),
+    [],
+  );
+});
+
+test('the huupe dashboard fits a four-digit shot count', () => {
+  // "SESSIONS" plus 3371 ran off the end of the board and printed "SHO".
+  const frames = gaming.huupeDashboardFrames({
+    type: 'huupe.dashboard',
+    totals: {
+      sessions: 48, shots: 3371, fgPct: 44, lastPlayedAt: '2026-08-25',
+    },
+    leaderboard: [{ name: 'trashpanda', wins: 11 }],
+    records: { bestStreak: { value: 11 }, bestSessionScore: { value: 34.2 } },
+  }, { timeZone: 'America/Denver' });
+
+  assert.equal(frames[0].priority, 'snapshot');
+  assertLayout(frames[0].rows, [
+    'oo HUUPE            oo',
+    ' 48 PLAYS  3371 SHOTS',
+    ' TRASHPANDA   11 WINS',
+    ' FG 44%  RUN 11',
+    ' BEST GAME 34.2',
+    'oo LAST GAME AUG 25 oo',
+  ], 'huupe dashboard');
+});
+
+test('a hoop nobody has played is not worth a board flip', () => {
+  assert.deepEqual(
+    gaming.huupeDashboardFrames({ type: 'huupe.dashboard', totals: { sessions: 0 } }),
+    [],
+  );
+});
+
 test('player names truncate at 13 with no ellipsis', () => {
   const frames = gaming.autodartsMatchFrames({
     type: 'autodarts.match',

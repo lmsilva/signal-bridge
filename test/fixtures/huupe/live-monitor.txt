@@ -1,0 +1,40 @@
+=== MONITORING STARTED Wed Aug 26 19:25:32 MDT 2026 ===
+08-27 01:25:34.837 I/huupe.hardware.(  330): type=1400 audit(0.0:825): avc: denied { search } for name="/" dev="fuse" ino=175 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:25:34.837 I/huupe.hardware.(  330): type=1400 audit(0.0:826): avc: denied { getattr } for path="/storage/emulated/0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:25:34.837 I/huupe.hardware.(  330): type=1400 audit(0.0:827): avc: denied { read } for name="0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:25:34.837 I/huupe.hardware.(  330): type=1400 audit(0.0:828): avc: denied { open } for path="/storage/emulated/0" dev="fuse" ino=1088 scontext=u:object_r:system_file:s0 tcontext=u:object_r:fuse:s0 tclass=dir permissive=1
+08-27 01:25:38.116 I/huupe.hardware.shottracker-tof-service(  327): 212.383, signal interference detected! (avg -106.938), 245 clusters
+08-27 01:25:38.121 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 613.283569, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:25:40.327 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:25:40.327 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=29.868301,30.008997,30.006182] [Tof=60.447675,60.451735,60.442202]
+08-27 01:25:40.783 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 615.948792, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.161679 }
+08-27 01:25:40.785 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 615.948792, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.161679 }
+08-27 01:25:40.785 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 615.948792, "events": ["miss_detected"], "shot_zone": "one_point_shot", "shot_range": 1.161679 }
+08-27 01:25:44.840 I/huupe.hardware.(  330): type=1400 audit(0.0:830): avc: denied { dac_read_search } for capability=2 scontext=u:object_r:system_file:s0 tcontext=u:object_r:system_file:s0 tclass=capability permissive=1
+08-27 01:25:47.347 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 622.501160, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 3.153128 }
+08-27 01:25:47.349 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 622.501160, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 3.153128 }
+08-27 01:25:47.349 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 622.501160, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 3.153128 }
+08-27 01:25:50.323 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:25:50.323 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=30.041066,30.003636,30.007843] [Tof=60.456446,60.453017,60.446305]
+08-27 01:25:54.844 I/huupe.hardware.(  330): type=1400 audit(0.0:831): avc: denied { search } for name="/" dev="dm-0" ino=2 scontext=u:object_r:system_file:s0 tcontext=u:object_r:rootfs:s0 tclass=dir permissive=1
+08-27 01:25:54.844 I/huupe.hardware.(  330): type=1400 audit(0.0:832): avc: denied { read } for name="sdcard" dev="dm-0" ino=48 scontext=u:object_r:system_file:s0 tcontext=u:object_r:rootfs:s0 tclass=lnk_file permissive=1
+08-27 01:25:58.492 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 633.651184, "events": ["make_detected"], "shot_zone": "layup", "shot_range": 0.010000 }
+08-27 01:25:58.493 I/ShotTracker( 2736): Get EVENT: {"stream_ts": 633.651184, "events": ["make_detected"], "shot_zone": "layup", "shot_range": 0.010000 }
+08-27 01:25:58.499 I/huupe.hardware.shottracker-tof-service(  327): TOF: {"stream_ts": 633.651184, "events": ["make_detected"], "shot_zone": "layup", "shot_range": 0.010000 }
+08-27 01:25:59.812 E/ShotTrackerErrorEvent( 2736): CV message tofMissedFrame Tof bottom - Missed frame detected.
+08-27 01:25:59.812 E/ShotTrackerErrorEvent( 2736): CV message tofMissedFrame Tof bottom - Missed frame detected.
+08-27 01:26:00.322 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:26:00.322 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=29.908346,30.001980,30.006304] [Tof=60.441160,60.432513,60.448137]
+08-27 01:26:10.318 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:26:10.318 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=29.939656,30.008378,30.009282] [Tof=60.413470,60.420156,60.441098]
+08-27 01:26:20.314 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:26:20.315 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=29.907298,30.011699,30.008609] [Tof=60.421500,60.416735,60.427583]
+08-27 01:26:30.343 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:26:30.343 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=30.050997,30.001692,30.009936] [Tof=60.399178,60.419503,60.419115]
+08-27 01:26:35.262 I/huupe.hardware.shottracker-tof-service(  327): 269.556, signal interference detected! (avg -106.991), 232 clusters
+08-27 01:26:35.265 I/huupe.hardware.shottracker-tof-service(  327): RDM: {"stream_ts": 670.430115, "events": ["signal_interference_detected"], "shot_zone": "", "shot_range": -1.000000 }
+08-27 01:26:40.342 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:26:40.342 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=29.884245,30.007157,30.006777] [Tof=60.425091,60.420023,60.419272]
+08-27 01:26:50.336 I/huupe.hardware.shottracker-tof-service(  327): Queues [Usb=2,Rdm=0,Tof=0,Shottracker=0]
+08-27 01:26:50.336 I/huupe.hardware.shottracker-tof-service(  327): FPS [Radar=30.033427,30.025744,30.009912] [Tof=60.421074,60.422066,60.419650]
+=== MONITOR RESTART Wed Aug 26 19:26:59 MDT 2026 ===

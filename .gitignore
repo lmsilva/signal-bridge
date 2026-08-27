@@ -27,6 +27,23 @@ alexa broadcast client/map-errors.log
 *.pyc
 *.pyo
 
+# Huupe device recon. Never commit: the launcher writes the account email, its
+# password hash/salt and a signed JWT straight to logcat, so the raw captures
+# and the pulled app databases carry real credentials. It is also ~148 MB of
+# third-party APKs. The spec beside it is tracked; everything under research
+# stays local. Scrubbed excerpts live in test/fixtures/huupe/.
+dev assets/huupe_signal_bridge/research/
+
+# Scratch capture files from debugging sessions.
+*-test-log*.txt
+*-debug*.txt
+yt-diag.txt
+yt-log.txt
+git-diff-capture.txt
+sig-commit-msg.txt
+bridge-client-test-run.txt
+client-test-log.txt
+
 # OS / editor
 .DS_Store
 Thumbs.db

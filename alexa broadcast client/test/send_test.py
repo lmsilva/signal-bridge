@@ -1172,6 +1172,124 @@ def build_payload(args) -> dict:
             "reason": "test",
         }
 
+    if args.type in ("huupe-live", "huupe-final", "huupe-solo"):
+        finished = args.type == "huupe-final"
+        solo = args.type == "huupe-solo"
+
+        def _zones(made, attempts):
+            spread = [("layup", "Layup", 0.30), ("one", "Close", 0.32),
+                      ("two", "Mid", 0.24), ("three", "Three", 0.14)]
+            rows = []
+            for zone, label, share in spread:
+                zone_attempts = max(1, round(attempts * share))
+                zone_made = max(0, round(made * share))
+                rows.append({
+                    "zone": zone, "label": label,
+                    "made": zone_made, "attempts": zone_attempts,
+                    "pct": round(100 * zone_made / zone_attempts),
+                })
+            return rows
+
+        players = [] if solo else [
+            {"rank": 1, "name": "trashpanda", "score": 17.1, "scoreLabel": "17.1",
+             "made": 9, "attempts": 21, "fgPct": 43, "threes": 2, "bestStreak": 4,
+             "isWinner": finished, "zones": _zones(9, 21)},
+            {"rank": 2, "name": "War D", "score": 12.9, "scoreLabel": "12.9",
+             "made": 7, "attempts": 19, "fgPct": 37, "threes": 1, "bestStreak": 3,
+             "isWinner": False, "zones": _zones(7, 19)},
+            {"rank": 3, "name": "lundisupcorp", "score": 8.2, "scoreLabel": "8.2",
+             "made": 4, "attempts": 16, "fgPct": 25, "threes": 0, "bestStreak": 2,
+             "isWinner": False, "zones": _zones(4, 16)},
+        ]
+        headline = (
+            {"primary": "trashpanda", "secondary": "wins by 4.2"} if finished
+            else {"primary": "17.1", "secondary": "20/56 · 36%"}
+        )
+        if solo:
+            headline = {"primary": "17.1", "secondary": "20/56 · 36%"}
+        return {
+            "version": 2,
+            "type": "huupe.session",
+            "timestamp": _iso_now(),
+            "displaySeconds": (args.seconds or 60) if finished else 0,
+            "persistent": not finished,
+            "session": {
+                "sessionId": "smoke-huupe-1",
+                "mode": "justhuupe" if solo else "family",
+                "modeLabel": "Free Play" if solo else "Family Mode",
+                "status": "finished" if finished else "live",
+                "revision": 12,
+                "durationSec": 742,
+                "durationLabel": "12:22",
+                "headline": headline,
+                "players": players,
+                "stats": {
+                    "points": 17.1, "pointsLabel": "17.1", "made": 20, "attempts": 56,
+                    "shotLine": "20/56", "fgPct": 36, "streak": 3, "bestStreak": 6,
+                    "threes": 3,
+                },
+                "zones": _zones(20, 56),
+                "lastShot": {
+                    "player": None if solo else "trashpanda", "made": True,
+                    "zone": "three", "zoneLabel": "Three", "points": 3, "pointsLabel": "3",
+                },
+                "winner": "trashpanda" if (finished and not solo) else None,
+                "sensorErrors": 0,
+            },
+        }
+
+    if args.type == "huupe-session-close":
+        return {
+            "version": 2,
+            "type": "huupe.session.close",
+            "timestamp": _iso_now(),
+            "sessionId": "smoke-huupe-1",
+            "reason": "test",
+        }
+
+    if args.type == "huupe-dashboard":
+        names = ["trashpanda", "War D", "lundisupcorp", "kylie", "emsss",
+                 "tommy", "guest", "ana", "ben", "cleo"]
+        return {
+            "version": 2,
+            "type": "huupe.dashboard",
+            "timestamp": _iso_now(),
+            "displaySeconds": args.seconds or 120,
+            "persistent": False,
+            "totals": {
+                "sessions": 48, "games": 31, "freePlaySessions": 17,
+                "shots": 3371, "makes": 1482, "fgPct": 44,
+                "points": 902.4, "pointsLabel": "902.4",
+                "playSeconds": 50820, "playLabel": "14h 07m",
+                "lastPlayedAt": _iso_now(), "lastPlayedLabel": "Today",
+            },
+            "leaderboard": [
+                {"rank": index + 1, "crown": index == 0, "name": name,
+                 "games": 15 - index, "wins": 11 - index, "winPct": 73 - index * 4,
+                 "points": 210.5 - index * 12, "pointsLabel": f"{210.5 - index * 12:.1f}",
+                 "bestScore": 21.1 - index, "bestScoreLabel": f"{21.1 - index:.1f}",
+                 "made": 140 - index * 8, "attempts": 320 - index * 12,
+                 "fgPct": 64 - index * 3, "threes": 12 - index, "bestStreak": 9 - index,
+                 "lastPlayedLabel": "Today"}
+                for index, name in enumerate(names)
+            ],
+            "moreCount": 5,
+            "zones": [
+                {"zone": "layup", "label": "Layup", "made": 620, "attempts": 780, "pct": 79},
+                {"zone": "one", "label": "Close", "made": 410, "attempts": 940, "pct": 44},
+                {"zone": "two", "label": "Mid", "made": 300, "attempts": 900, "pct": 33},
+                {"zone": "three", "label": "Three", "made": 152, "attempts": 751, "pct": 20},
+            ],
+            "records": {
+                "bestSessionScore": {"value": 34.2, "valueLabel": "34.2",
+                                     "mode": "family", "modeLabel": "Family Mode"},
+                "bestStreak": {"value": 11, "player": "trashpanda"},
+                "bestFgPct": {"player": "lundisupcorp", "value": 64},
+            },
+            "device": {"name": "Huupe Mini", "online": True},
+            "recent": [],
+        }
+
     if args.type == "steam-now-playing":
         started = datetime.now(timezone.utc) - timedelta(minutes=74)
         return {
@@ -1717,11 +1835,40 @@ def build_payload(args) -> dict:
             "themeAccent": "#FF9900",
         }
 
-    if args.type == "flightplan":
+    if args.type in ("flightplan", "flightplan-board", "flightplan-live"):
+        board = args.type == "flightplan-board"
+        live = args.type == "flightplan-live"
+        slc = {"iata": "SLC", "city": "Salt Lake City", "lat": 40.788, "lon": -111.977}
+        nrt = {"iata": "NRT", "city": "Tokyo", "lat": 35.764, "lon": 140.386}
+        icn = {"iata": "ICN", "city": "Seoul", "lat": 37.463, "lon": 126.44}
+
+        def leg(number, origin, destination, depart, arrive, state, code, token):
+            return {
+                "id": f"flt_{number}",
+                "airline": "DL",
+                "number": number,
+                "date": depart[:10],
+                "origin": origin,
+                "destination": destination,
+                "scheduled": {"departure": depart, "arrival": arrive},
+                "state": state,
+                "status": {"displayLine": "ON TIME · GATE B14", "boardCode": code,
+                           "colorToken": token},
+                "durationMinutes": 735,
+            }
+
+        legs = [
+            leg("167", slc, nrt, "2026-09-10T10:15:00-06:00", "2026-09-11T14:30:00+09:00",
+                "active" if live else "upcoming", "ON", "good"),
+            leg("173", nrt, icn, "2026-09-18T17:55:00+09:00", "2026-09-18T20:35:00+09:00",
+                "upcoming", "+25", "warn"),
+            leg("9", icn, slc, "2026-09-24T11:20:00+09:00", "2026-09-24T06:05:00-06:00",
+                "upcoming", "ON", "good"),
+        ]
         return {
             "version": 2,
             "type": "flightplan.flight",
-            "mode": "next",
+            "mode": "board" if board else "next",
             "device": args.sender,
             "timestamp": _iso_now(),
             "displaySeconds": max(args.seconds, 120),
@@ -1733,32 +1880,35 @@ def build_payload(args) -> dict:
                 "name": "Japan 2026",
                 "kind": "ours",
                 "traveller": None,
-                "title": "upcoming flight",
+                "title": "in flight" if live else "upcoming flight",
             },
             "flight": {
-                "id": "flt_test",
-                "airline": "DL",
-                "number": "167",
-                "date": "2026-09-10",
-                "origin": {"iata": "SLC", "lat": 40.788, "lon": -111.977},
-                "destination": {"iata": "NRT", "lat": 35.764, "lon": 140.386},
-                "scheduled": {"departure": "2026-09-10T10:15:00", "arrival": "2026-09-14T16:30:00"},
-                "state": "upcoming",
+                **legs[0],
+                "latest": {
+                    "departure": {"terminal": "A", "gate": "B14"},
+                    "arrival": {"baggageBelt": "7"},
+                },
+                "registration": "N801DZ",
             },
-            "flights": [],
+            "flights": legs if board else [legs[0]],
             "status": {
                 "displayLine": "ON TIME · GATE B14",
                 "colorToken": "good",
                 "boardCode": "ON",
             },
+            "progress": {
+                "phase": "airborne" if live else "upcoming",
+                "fraction": 0.46 if live else 0.0,
+                "durationMinutes": 735,
+                "departsInMinutes": -320 if live else 20160,
+                "remainingMinutes": 415 if live else 0,
+            },
             "stage": {
-                "mode": "preflight",
-                "note": "not departed",
-                "position": None,
-                "route": {
-                    "origin": {"iata": "SLC", "lat": 40.788, "lon": -111.977},
-                    "destination": {"iata": "NRT", "lat": 35.764, "lon": 140.386},
-                },
+                "mode": "live" if live else "preflight",
+                "note": "in the air · position live" if live else "not departed",
+                "position": ({"lat": 52.4, "lon": -168.9, "heading": 292}
+                             if live else None),
+                "route": {"origin": slc, "destination": nrt},
                 "imageUrl": None,
             },
         }
@@ -1820,7 +1970,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "notifications-delivery", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "roll-credits", "autodarts-dashboard", "autodarts-match", "autodarts-final", "autodarts-match-close", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "flightplan", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "notifications-delivery", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "roll-credits", "autodarts-dashboard", "autodarts-match", "autodarts-final", "autodarts-match-close", "huupe-live", "huupe-solo", "huupe-final", "huupe-session-close", "huupe-dashboard", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "flightplan", "flightplan-board", "flightplan-live", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
         default="broadcast",
         help="Payload type to send",
     )

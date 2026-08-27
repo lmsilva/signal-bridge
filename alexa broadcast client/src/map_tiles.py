@@ -184,22 +184,25 @@ def fetch_map_tiles(lat: float, lon: float, zoom: int, w: int, h: int):
         (10, 17, 30),
     )
     max_tile = (1 << zoom) - 1
+    span = max_tile + 1
+    # Longitude wraps: a trans-Pacific great circle runs past ±180, and clamping
+    # those columns away left half the map as empty navy. Y never wraps.
     coords = [
         (tx, ty)
         for tx in range(tile_x0, tile_x1 + 1)
         for ty in range(tile_y0, tile_y1 + 1)
-        if 0 <= tx <= max_tile and 0 <= ty <= max_tile
+        if 0 <= ty <= max_tile
     ]
     fetched = 0
     last_error = None
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(fetch_map_tile, zoom, tx, ty): (tx, ty) for tx, ty in coords}
+        futures = {pool.submit(fetch_map_tile, zoom, tx % span, ty): (tx, ty) for tx, ty in coords}
         for future, (tx, ty) in futures.items():
             try:
                 tile = future.result()
             except Exception as error:
                 last_error = error
-                log_map_error(f"map tile {zoom}/{tx}/{ty} failed: {error!r}")
+                log_map_error(f"map tile {zoom}/{tx % span}/{ty} failed: {error!r}")
                 continue
             stitched.paste(tile, ((tx - tile_x0) * TILE_SIZE, (ty - tile_y0) * TILE_SIZE))
             fetched += 1

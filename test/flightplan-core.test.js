@@ -6,7 +6,7 @@ const path = require('path');
 const { createFlightplanSettings, DEFAULTS } = require('../src/flightplan-settings');
 const { createFlightplanStore } = require('../src/flightplan-store');
 const { createFlightplanLedger } = require('../src/flightplan-ledger');
-const { createFlightplanApi } = require('../src/flightplan-api');
+const { createFlightplanApi, formatApiFailure } = require('../src/flightplan-api');
 const {
   resolveFlightStatus,
   isMaterialDelay,
@@ -47,6 +47,32 @@ test('flightplan store trip and flight CRUD', () => {
   const deleted = store.deleteTrip(trip.trip.id);
   assert.equal(deleted.ok, true);
   assert.equal(store.getFlight(flight.flight.id), null);
+});
+
+test('updateFlight persists a state change to disk', () => {
+  // `maybeArchiveTrip` used to reload the store mid-write, so every patch was
+  // written back as the pre-patch snapshot — flights never went active.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fp-update-'));
+  const storePath = path.join(root, 'store.json');
+  const store = createFlightplanStore({ flightplanStorePath: storePath });
+  const trip = store.createTrip({ name: 'Japan Trip 2026', kind: 'ours' });
+  const flight = store.createFlight({
+    tripId: trip.trip.id,
+    airline: 'DL',
+    number: '167',
+    date: '2026-09-10',
+    scheduled: { departure: '2026-09-10T10:15:00' },
+  });
+  const updated = store.updateFlight(flight.flight.id, {
+    state: 'active',
+    registration: 'N801DZ',
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(store.getFlight(flight.flight.id).state, 'active');
+  assert.equal(store.getFlight(flight.flight.id).registration, 'N801DZ');
+
+  const reopened = createFlightplanStore({ flightplanStorePath: storePath });
+  assert.equal(reopened.getFlight(flight.flight.id).state, 'active');
 });
 
 test('resolveNextFlight picks earliest upcoming flight', () => {
@@ -90,6 +116,63 @@ test('ledger transitions ok low out', () => {
   ledger.recordCall({ endpoint: 'flightStatus', units: 10, manual: true });
   ledger.recordCall({ endpoint: 'flightStatus', units: 10, manual: true });
   assert.equal(ledger.state(), 'out');
+});
+
+test('verifyApiKey succeeds when AeroDataBox rejects stale probe date but key is valid', async () => {
+  const { createFlightplanApi } = require('../src/flightplan-api');
+  const api = createFlightplanApi({
+    apiKeyProvider: async () => 'test-key',
+    ledger: { canSpend: () => true, recordCall: () => {}, state: () => 'ok' },
+    fetchImpl: async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({
+        message: "Specified date-time '15.06.2020 00:00' must not be earlier than 365 day(s) ago.",
+      }),
+    }),
+    now: () => Date.parse('2026-08-26T12:00:00Z'),
+  });
+  const result = await api.verifyApiKey({ manual: true });
+  assert.equal(result.ok, true);
+  assert.match(result.message, /accepted/i);
+});
+
+test('isVerifyKeyAcceptedFailure treats stale probe date as key accepted', () => {
+  const { isVerifyKeyAcceptedFailure } = require('../src/flightplan-api');
+  const msg = "Specified date-time '15.06.2020 00:00' must not be earlier than 365 day(s) ago.";
+  assert.equal(isVerifyKeyAcceptedFailure(msg, 400), true);
+  assert.equal(isVerifyKeyAcceptedFailure('You are not subscribed to this API.', 403), false);
+});
+
+test('probeVerifyDate stays within AeroDataBox rolling window', () => {
+  const { probeVerifyDate } = require('../src/flightplan-api');
+  // Measure the offset against the same instant we fed in — reading the real
+  // clock here would make the test start failing a day after it was written.
+  const now = Date.parse('2026-08-26T12:00:00Z');
+  const date = probeVerifyDate(now);
+  assert.match(date, /^2026-/);
+  const daysAgo = (now - Date.parse(`${date}T12:00:00Z`)) / 86400000;
+  assert.ok(daysAgo >= 13 && daysAgo <= 15);
+});
+
+test('filterLegsByAirport keeps legs that use the airport as origin or destination', () => {
+  const { filterLegsByAirport } = require('../src/flightplan-api');
+  const legs = [
+    { origin: { iata: 'SLC' }, destination: { iata: 'ATL' } },
+    { origin: { iata: 'ATL' }, destination: { iata: 'NRT' } },
+  ];
+  const slc = filterLegsByAirport(legs, 'SLC');
+  assert.equal(slc.length, 1);
+  assert.equal(slc[0].destination.iata, 'ATL');
+  const atl = filterLegsByAirport(legs, 'ATL');
+  assert.equal(atl.length, 2);
+});
+
+test('formatApiFailure maps RapidAPI not-subscribed message', () => {
+  const result = formatApiFailure('You are not subscribed to this API.', 403);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'not_subscribed');
+  assert.match(result.error, /AeroDataBox/i);
 });
 
 test('flightplan api records ledger units and caches search', async () => {
@@ -136,6 +219,41 @@ test('material delay threshold respected in status vocabulary', () => {
   assert.match(status.displayLine, /DELAYED 20 MIN/);
 });
 
+test('flightPlanBoardFrames builds a valid Vestaboard layout for a trip board', () => {
+  const { flightPlanBoardFrames } = require('../src/vestaboard/formatters/feeds');
+  const { assertValidLayout, decodeCodes } = require('../src/vestaboard/encoder');
+  const frames = flightPlanBoardFrames({
+    type: 'flightplan.flight',
+    mode: 'board',
+    asOf: '2026-08-26T18:00:00Z',
+    trip: { name: 'Japan 2027', kind: 'ours' },
+    flights: [{
+      airline: 'DL',
+      number: 'DL167',
+      origin: { iata: 'SEA' },
+      destination: { iata: 'HND' },
+      scheduled: { departure: '2027-06-24T13:45:00-07:00' },
+      state: 'upcoming',
+    }],
+  }, { timeZone: 'America/Denver', now: new Date('2026-08-26T18:00:00Z') });
+  assert.equal(frames.length, 1);
+  assertValidLayout(frames[0].rows, 'flight plan board');
+  assert.ok(frames[0].dwellSeconds >= 15);
+  const text = frames[0].rows.map((row) => decodeCodes(row)).join('\n');
+  assert.match(text, /DEP\s+FLIGHT/);
+  assert.match(text, /1345/);
+  assert.match(text, /HND/);
+  assert.match(text, /AS OF/);
+  assert.match(text, /12:00/); // 18:00Z → noon MDT
+  assert.match(text, /D-\d+/);
+});
+
 test('board flight number is zero-padded', () => {
   assert.equal(formatBoardFlightNumber('DL', '167'), 'DL0167');
+});
+
+test('formatBoardTime keeps airport-local wall clock from ISO offset', () => {
+  const { formatBoardTime } = require('../src/flightplan-status');
+  assert.equal(formatBoardTime('2027-06-24T13:45:00-07:00'), '1345');
+  assert.equal(formatBoardTime('2027-06-24T19:00:00'), '1900');
 });
