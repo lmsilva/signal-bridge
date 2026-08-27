@@ -81,7 +81,7 @@
         <div class="section-label">Quick Push</div>
         <div class="card-row card-row-quad" id="push-row-quick"
              data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts"
-             data-skeleton-count="19" aria-busy="true"></div>
+             data-skeleton-count="21" aria-busy="true"></div>
         <script>
           (function () {
             document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
@@ -551,6 +551,88 @@
         <div class="card credits-error" id="credits-error" hidden>
           <strong>Roll Credits could not load.</strong>
           <span id="credits-error-copy">Try refreshing.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================== FLIGHT PLAN TAB ========================== -->
+    <section class="tab-panel" id="tab-flightplan">
+      <div class="card-grid">
+        <div class="section-label">Flight Plan</div>
+        <p class="hint" id="flightplan-ledger-line">Loading quota…</p>
+
+        <div class="card" id="flightplan-settings-card">
+          <div class="auth-head">
+            <div class="auth-name">Settings</div>
+            <span class="status-pill" id="flightplan-status-pill">…</span>
+          </div>
+          <label class="trivia-check"><input type="checkbox" id="flightplan-enabled"><span>Enable Flight Plan</span></label>
+          <label class="field-label" for="flightplan-api-key">RapidAPI key
+            <input class="field-input" id="flightplan-api-key" type="password" autocomplete="off" placeholder="Leave blank to keep current">
+          </label>
+          <div class="field-label">Home airport
+            <div class="flightplan-airport-row">
+              <input class="field-input" id="flightplan-home-airport" autocomplete="off" maxlength="4" placeholder="SLC">
+              <button type="button" class="btn btn-outline" id="btn-flightplan-home-fill">Home</button>
+            </div>
+            <div class="typeahead-list" id="flightplan-home-suggest" hidden></div>
+          </div>
+          <label class="trivia-check"><input type="checkbox" id="flightplan-auto-push" checked><span>Auto-push material changes</span></label>
+          <label class="trivia-check"><input type="checkbox" id="flightplan-log-only" checked><span>Log changes only (no auto-push)</span></label>
+          <button type="button" class="btn btn-accent btn-block" id="btn-flightplan-settings-save">Save settings</button>
+        </div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name">Trips</div>
+            <button type="button" class="btn btn-accent" id="btn-flightplan-trip-new">New trip</button>
+          </div>
+          <div class="segmented" id="flightplan-filter-tabs">
+            <button type="button" class="segmented-btn active" data-filter="upcoming">Upcoming</button>
+            <button type="button" class="segmented-btn" data-filter="active">Active</button>
+            <button type="button" class="segmented-btn" data-filter="past">Past</button>
+            <button type="button" class="segmented-btn" data-filter="all">All</button>
+          </div>
+          <div class="flightplan-trip-list" id="flightplan-trip-list"></div>
+        </div>
+
+        <div class="card" id="flightplan-editor-card" hidden>
+          <div class="auth-head">
+            <div class="auth-name" id="flightplan-editor-title">Trip</div>
+            <button type="button" class="btn btn-outline" id="btn-flightplan-trip-delete">Delete trip</button>
+          </div>
+          <label class="field-label" for="flightplan-trip-name">Name
+            <input class="field-input" id="flightplan-trip-name">
+          </label>
+          <label class="field-label" for="flightplan-trip-kind">Kind
+            <select class="field-input" id="flightplan-trip-kind">
+              <option value="ours">Ours</option>
+              <option value="visitor">Visitor</option>
+            </select>
+          </label>
+          <label class="field-label" for="flightplan-trip-traveller">Traveller
+            <input class="field-input" id="flightplan-trip-traveller">
+          </label>
+          <div class="autodarts-field-grid">
+            <label class="field-label" for="flightplan-trip-start">Start date
+              <input class="field-input" id="flightplan-trip-start" type="date">
+            </label>
+            <label class="field-label" for="flightplan-trip-end">End date
+              <input class="field-input" id="flightplan-trip-end" type="date">
+            </label>
+          </div>
+          <label class="field-label" for="flightplan-trip-notes">Notes
+            <textarea class="field-input" id="flightplan-trip-notes" rows="3"></textarea>
+          </label>
+          <div class="flightplan-flights-head">
+            <span class="field-label">Flights</span>
+            <button type="button" class="btn btn-outline" id="btn-flightplan-flight-add">Add flight</button>
+          </div>
+          <div id="flightplan-flight-list"></div>
+          <div class="autodarts-footer-actions">
+            <button type="button" class="btn btn-outline" id="btn-flightplan-push-next">Push next</button>
+            <button type="button" class="btn btn-accent" id="btn-flightplan-push-board">Push board</button>
+          </div>
         </div>
       </div>
     </section>
@@ -1389,6 +1471,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
       <span class="tab-label"><span class="tab-label-full">Vestaboard Simulator</span><span class="tab-label-short">Board</span></span>
     </button>
+    <button class="tab-btn" data-tab="flightplan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l20-5-5 5 5 5-20-5 5-5-5-5Z"/><path d="M12 12v9"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Flight Plan</span><span class="tab-label-short">Flights</span></span>
+    </button>
     <button class="tab-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
       <span>Settings</span>
@@ -1648,6 +1734,30 @@
       <div class="sheet-actions">
         <button class="btn btn-outline" id="pin-sheet-cancel">Cancel</button>
         <button class="btn btn-accent" id="pin-sheet-verify">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flight Plan — add flight / leg picker -->
+  <div class="sheet-backdrop" id="flightplan-flight-sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-title">Add flight</div>
+      <div class="autodarts-field-grid">
+        <label class="field-label" for="flightplan-search-airline">Airline
+          <input class="field-input" id="flightplan-search-airline" maxlength="3" placeholder="DL">
+        </label>
+        <label class="field-label" for="flightplan-search-number">Number
+          <input class="field-input" id="flightplan-search-number" placeholder="167">
+        </label>
+      </div>
+      <label class="field-label" for="flightplan-search-date">Date
+        <input class="field-input" id="flightplan-search-date" type="date">
+      </label>
+      <button type="button" class="btn btn-outline btn-block" id="btn-flightplan-search-home">Use home airport date shortcut</button>
+      <div id="flightplan-leg-list" class="flightplan-leg-list"></div>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-outline" id="btn-flightplan-flight-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="btn-flightplan-search-run">Search</button>
       </div>
     </div>
   </div>

@@ -65,6 +65,8 @@ const BOARD_COMMAND_IDS = new Set([
   'goodnews.show',
   'wiki.show',
   'overhead.show',
+  'flightplan.next',
+  'flightplan.board',
   'youtube.now-playing',
   'youtube.last-played',
 ]);
@@ -495,6 +497,32 @@ const COMMANDS = [
     defaultDurationSeconds: null,
   },
   {
+    id: 'flightplan.next',
+    title: 'Next Flight',
+    subtitle: 'Upcoming trip flight card',
+    group: 'Sky',
+    route: '/api/push/flightplan-next',
+    icon: 'sky',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 120,
+  },
+  {
+    id: 'flightplan.board',
+    title: 'Trip Board',
+    subtitle: 'Departure board for the next trip',
+    group: 'Sky',
+    route: '/api/push/flightplan-board',
+    icon: 'sky',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 120,
+  },
+  {
     id: 'youtube.now-playing',
     title: 'YouTube',
     subtitle: 'Now playing, or last played',
@@ -583,6 +611,7 @@ function createCommandRegistry(deps = {}) {
     getUpsideNewsStatus = null,
     getWikiCommonKnowledgeStatus = null,
     getOverheadStatus = null,
+    getFlightplanStatus = null,
     getPhotoCount = null,
     getNotificationsCacheStatus = null,
     log = null,
@@ -664,6 +693,8 @@ function createCommandRegistry(deps = {}) {
       }
       return Boolean(status.hasContent);
     },
+    'flightplan.next': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
+    'flightplan.board': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
     'alexa.notifications': () => Boolean(call(getNotificationsCacheStatus)?.hasContent),
   };

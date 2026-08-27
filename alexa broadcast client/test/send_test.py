@@ -1717,6 +1717,52 @@ def build_payload(args) -> dict:
             "themeAccent": "#FF9900",
         }
 
+    if args.type == "flightplan":
+        return {
+            "version": 2,
+            "type": "flightplan.flight",
+            "mode": "next",
+            "device": args.sender,
+            "timestamp": _iso_now(),
+            "displaySeconds": max(args.seconds, 120),
+            "asOf": _iso_now(),
+            "quotaState": "ok",
+            "waitingForQuota": False,
+            "trip": {
+                "id": "trip_test",
+                "name": "Japan 2026",
+                "kind": "ours",
+                "traveller": None,
+                "title": "upcoming flight",
+            },
+            "flight": {
+                "id": "flt_test",
+                "airline": "DL",
+                "number": "167",
+                "date": "2026-09-10",
+                "origin": {"iata": "SLC", "lat": 40.788, "lon": -111.977},
+                "destination": {"iata": "NRT", "lat": 35.764, "lon": 140.386},
+                "scheduled": {"departure": "2026-09-10T10:15:00", "arrival": "2026-09-14T16:30:00"},
+                "state": "upcoming",
+            },
+            "flights": [],
+            "status": {
+                "displayLine": "ON TIME · GATE B14",
+                "colorToken": "good",
+                "boardCode": "ON",
+            },
+            "stage": {
+                "mode": "preflight",
+                "note": "not departed",
+                "position": None,
+                "route": {
+                    "origin": {"iata": "SLC", "lat": 40.788, "lon": -111.977},
+                    "destination": {"iata": "NRT", "lat": 35.764, "lon": 140.386},
+                },
+                "imageUrl": None,
+            },
+        }
+
     if args.type in ("route-planner", "route-planner-flight"):
         is_flight = args.type == "route-planner-flight"
         origin = {"name": "Home, US", "latitude": 40.0, "longitude": -111.0}
@@ -1774,7 +1820,7 @@ def main():
     parser.add_argument("--port", type=int, default=47832, help="UDP port")
     parser.add_argument(
         "--type",
-        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "notifications-delivery", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "roll-credits", "autodarts-dashboard", "autodarts-match", "autodarts-final", "autodarts-match-close", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
+        choices=["broadcast", "time", "weather", "weather-spoken", "indoor", "indoor-humidity", "air-quality", "air-quality-poor", "timers", "timers-nine", "timers-dense", "timer-fired", "reminder-fired", "alarms", "alarm-set", "shopping-list", "shopping-list-many", "tesla-battery", "tesla-battery-limited", "tesla-battery-stale", "tesla-battery-refreshing", "tesla-dashboard", "tesla-dashboard-stale", "tesla-dashboard-refreshing", "vivint-alarm", "notifications", "notifications-delivery", "processing", "processing-timeout", "web-open", "web-open-bad", "web-close", "system-reboot", "system-poweroff", "display-discover", "display-auth", "input-click", "input-key", "qr-url", "qr-wifi", "guest-photobooth", "input-text", "photo-slideshow", "roll-credits", "autodarts-dashboard", "autodarts-match", "autodarts-final", "autodarts-match-close", "steam-now-playing", "steam-now-playing-close", "psn-now-playing", "psn-now-playing-close", "youtube-now-playing", "youtube-last-played", "youtube-live", "youtube-minimal", "youtube-now-playing-close", "music", "route-planner", "route-planner-flight", "flightplan", "trivia", "trivia-boolean", "trivia-single", "upside-news", "wiki-common-knowledge", "overhead", "overhead-update"],
         default="broadcast",
         help="Payload type to send",
     )

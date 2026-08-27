@@ -95,6 +95,10 @@ def effective_display_seconds(payload: dict, config: dict) -> int:
         # (or routePlanner.displaySeconds) and we must not clamp it.
         return max(requested, 1)
 
+    if payload.get("type") == "flightplan.flight":
+        # Live map fetch can take a moment; honor bridge displaySeconds.
+        return max(requested, 1)
+
     if payload.get("type") == "steam.now-playing":
         # Auto sessions are persistent; manual preview / last-played use displaySeconds.
         if payload.get("persistent") is True:

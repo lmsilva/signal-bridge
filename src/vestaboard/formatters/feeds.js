@@ -28,7 +28,14 @@ const {
   chipCode,
   pageCounter,
   badgeFrame,
+  dwellFor,
 } = require('../frames');
+
+const {
+  formatBoardFlightNumber,
+  formatBoardTime,
+  resolveFlightStatus,
+} = require('../../flightplan-status');
 
 const { snapshotFrame, paginate, padRows } = require('./common');
 
@@ -423,12 +430,49 @@ function triviaFrames(payload = {}, ctx = {}) {
   return frames;
 }
 
+function flightPlanBoardFrames(payload = {}, ctx = {}) {
+  const trip = payload.trip || {};
+  const flights = Array.isArray(payload.flights) ? payload.flights : [];
+  if (!flights.length && payload.flight) flights.push(payload.flight);
+  if (!flights.length) return [];
+
+  const visitor = trip.kind === 'visitor';
+  const rows = flights.slice(0, 4).map((flight) => {
+    const status = resolveFlightStatus(flight, ctx);
+    const airport = visitor
+      ? (flight.origin?.iata || flight.origin?.icao || '---')
+      : (flight.destination?.iata || flight.destination?.icao || '---');
+    const time = formatBoardTime(flight.scheduled?.departure);
+    const number = formatBoardFlightNumber(flight.airline, flight.number);
+    const code = String(status.boardCode || '--').slice(0, 4).padStart(4, ' ');
+    return `${time}  ${number}  ${String(airport || '---').slice(0, 3).padEnd(3, ' ')}  ${code}`;
+  });
+
+  const asOf = payload.asOf ? new Date(payload.asOf) : new Date();
+  const asOfText = `${String(asOf.getHours()).padStart(2, '0')}:${String(asOf.getMinutes()).padStart(2, '0')}`;
+  const badgeRight = payload.mode === 'auto' ? 'UPDATE' : 'BOARD';
+  const frames = [{
+    ...snapshotFrame(badgeFrame({
+      color: payload.alert ? 'red' : 'blue',
+      title: truncate(fold(trip.name || 'FLIGHT PLAN'), BADGE_TEXT_WIDTH),
+      titleRight: badgeRight,
+      rows,
+      footerLeft: 'SIGNAL BRIDGE',
+      footerRight: asOfText,
+    }), 'Flight Plan', 'flightplan.flight'),
+    dwellSeconds: dwellFor(rows.join(' ').length + 40),
+    quietHoursExempt: false,
+  }];
+  return frames;
+}
+
 const FORMATTERS = {
   'youtube.now-playing': youtubeFrames,
   'upside-news.round': upsideFrames,
   'wiki-common-knowledge.round': wikiFrames,
   'overhead.round': overheadFrames,
   'trivia.round': triviaFrames,
+  'flightplan.flight': flightPlanBoardFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -444,6 +488,7 @@ module.exports = {
   wikiFrames,
   overheadFrames,
   triviaFrames,
+  flightPlanBoardFrames,
   triviaGate,
   youtubeStatsLine,
 };

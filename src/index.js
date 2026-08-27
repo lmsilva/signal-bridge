@@ -115,6 +115,8 @@ async function main() {
       getWikiCommonKnowledgeStatus: listener.getWikiCommonKnowledgeStatus,
       overhead: listener.overhead,
       getOverheadStatus: listener.getOverheadStatus,
+      flightplan: listener.flightplan,
+      getFlightplanStatus: listener.getFlightplanStatus,
       displayBusy: listener.displayBusy,
       libraryTourSettings: listener.libraryTourSettings(),
       steamLibraryTour: listener.steamLibraryTour,

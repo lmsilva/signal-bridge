@@ -1077,6 +1077,49 @@ textarea.field-input.text-input-area {
   margin: 4px 0 8px;
   font-variant-numeric: tabular-nums;
 }
+.flightplan-trip-list,
+.flightplan-leg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.flightplan-trip-row { text-align: left; }
+.flightplan-flight-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.flightplan-flights-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0 8px;
+}
+.flightplan-airport-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.flightplan-airport-row .field-input { flex: 1; }
+.typeahead-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.typeahead-item {
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+}
+.hint-warn { color: #F5C453; }
 #autodarts-device-mode {
   display: flex;
   flex-direction: column;

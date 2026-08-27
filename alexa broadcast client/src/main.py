@@ -56,6 +56,7 @@ class BroadcastClientApp:
             "guest.photobooth",
             "photo.slideshow",
             "route-planner.query",
+            "flightplan.flight",
             "steam.now-playing",
             "psn.now-playing",
             "youtube.now-playing",

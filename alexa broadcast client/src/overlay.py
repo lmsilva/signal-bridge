@@ -43,6 +43,7 @@ from src.overhead_panel import OverheadPanel
 from src.game_library_tour_panel import GameLibraryTourPanel
 from src.roll_credits_panel import RollCreditsPanel
 from src.autodarts_panel import AutodartsPanel
+from src.flightplan_panel import FlightPlanPanel
 from src.weather_fetch import enrich_weather_payload
 
 
@@ -155,6 +156,7 @@ class OverlayWindow:
             "guest.photobooth": GuestPhotoboothPanel(self.root, self.shell, self.config),
             "photo.slideshow": PhotoSlideshowPanel(self.root, self.shell, self.config),
             "route-planner.query": RoutePlannerPanel(self.root, self.shell, self.config),
+            "flightplan.flight": FlightPlanPanel(self.root, self.shell, self.config),
             "steam.now-playing": SteamNowPlayingPanel(self.root, self.shell, self.config),
             "psn.now-playing": PsnNowPlayingPanel(self.root, self.shell, self.config),
             "youtube.now-playing": YoutubeNowPlayingPanel(self.root, self.shell, self.config),
@@ -544,6 +546,7 @@ class OverlayWindow:
             "tesla-dashboard.query",
             "tesla-battery.query",
             "route-planner.query",
+            "flightplan.flight",
             "guest.photobooth",
             "steam.now-playing",
             "psn.now-playing",
