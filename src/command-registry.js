@@ -405,7 +405,7 @@ const COMMANDS = [
   },
   {
     id: 'huupe.now',
-    title: 'Huupe',
+    title: 'Huupe Live or Last game',
     subtitle: 'Live session, or the last one',
     group: 'Huupe',
     route: '/api/push/huupe-now',
@@ -426,7 +426,7 @@ const COMMANDS = [
     icon: 'huupe',
     body: { mode: 'last-game' },
     pushable: false,
-    schedulable: true,
+    schedulable: false,
     supportsContentCheck: true,
     variableDuration: false,
     defaultDurationSeconds: 90,

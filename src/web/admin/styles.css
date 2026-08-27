@@ -1507,6 +1507,11 @@ textarea.field-input.text-input-area {
   flex-wrap: wrap;
 }
 
+.sched-view-tabs {
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+}
+
 .sched-toggle {
   display: inline-flex;
   align-items: center;
