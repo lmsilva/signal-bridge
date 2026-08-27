@@ -50,6 +50,8 @@ const COMMAND_TO_TYPE = {
   'overhead.show': 'overhead.round',
   'youtube.now-playing': 'youtube.now-playing',
   'youtube.last-played': 'youtube.now-playing',
+  'flightplan.next': 'flightplan.flight',
+  'flightplan.board': 'flightplan.flight',
 };
 
 function typeOf(payload, commandId) {

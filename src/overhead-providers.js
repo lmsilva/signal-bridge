@@ -16,16 +16,22 @@ const PUBLIC_ADSB_SOURCES = [
     id: 'adsb-lol',
     hostLabel: 'adsb.lol',
     buildUrl: (lat, lon, radius) => `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${radius}`,
+    buildRegUrl: (reg) => `https://api.adsb.lol/v2/reg/${encodeURIComponent(reg)}`,
+    buildCallsignUrl: (callsign) => `https://api.adsb.lol/v2/callsign/${encodeURIComponent(callsign)}`,
   },
   {
     id: 'adsb-fi',
     hostLabel: 'adsb.fi',
     buildUrl: (lat, lon, radius) => `https://opendata.adsb.fi/api/v2/lat/${lat}/lon/${lon}/dist/${radius}`,
+    buildRegUrl: (reg) => `https://opendata.adsb.fi/api/v2/reg/${encodeURIComponent(reg)}`,
+    buildCallsignUrl: (callsign) => `https://opendata.adsb.fi/api/v2/callsign/${encodeURIComponent(callsign)}`,
   },
   {
     id: 'airplanes-live',
     hostLabel: 'airplanes.live',
     buildUrl: (lat, lon, radius) => `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}`,
+    buildRegUrl: (reg) => `https://api.airplanes.live/v2/reg/${encodeURIComponent(reg)}`,
+    buildCallsignUrl: (callsign) => `https://api.airplanes.live/v2/callsign/${encodeURIComponent(callsign)}`,
   },
 ];
 
@@ -72,6 +78,58 @@ function createAirplanesLiveProvider({ fetchImpl = fetch, log = console, now = (
       throw await httpErrorFor(source, response);
     }
     return aircraftFromBody(await response.json());
+  }
+
+  async function fetchFromUrl(source, url) {
+    const response = await fetchImpl(url, { headers: { ...ADSB_FETCH_HEADERS } });
+    if (!response.ok) {
+      throw await httpErrorFor(source, response);
+    }
+    return aircraftFromBody(await response.json());
+  }
+
+  async function throttle() {
+    const elapsed = now() - lastFetchAt;
+    if (elapsed < AIRPLANES_LIVE_MIN_INTERVAL_MS) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, AIRPLANES_LIVE_MIN_INTERVAL_MS - elapsed);
+      });
+    }
+    lastFetchAt = now();
+  }
+
+  async function fetchWithFallback(buildUrlForSource) {
+    await throttle();
+    const errors = [];
+    for (const source of sourcesInOrder()) {
+      const url = buildUrlForSource(source);
+      if (!url) continue;
+      try {
+        const aircraft = await fetchFromUrl(source, url);
+        preferredSourceId = source.id;
+        return aircraft;
+      } catch (error) {
+        const message = error?.message || String(error);
+        errors.push(message);
+        const status = Number(error?.status);
+        const retryable = !Number.isFinite(status) || isRetryableStatus(status);
+        log?.warn?.('ADS-B lookup source failed', { source: source.id, error: message });
+        if (!retryable) throw error;
+      }
+    }
+    throw new Error(errors[0] || 'Public ADS-B lookup failed');
+  }
+
+  async function fetchByRegistration(registration) {
+    const reg = String(registration || '').trim().toUpperCase();
+    if (!reg) throw new Error('Registration is required');
+    return fetchWithFallback((source) => source.buildRegUrl?.(reg));
+  }
+
+  async function fetchByCallsign(callsign) {
+    const cs = String(callsign || '').trim().toUpperCase();
+    if (!cs) throw new Error('Callsign is required');
+    return fetchWithFallback((source) => source.buildCallsignUrl?.(cs));
   }
 
   async function fetchPoint(lat, lon, radiusNm) {
@@ -122,6 +180,8 @@ function createAirplanesLiveProvider({ fetchImpl = fetch, log = console, now = (
     id: 'airplanes-live',
     minIntervalMs: AIRPLANES_LIVE_MIN_INTERVAL_MS,
     fetchPoint,
+    fetchByRegistration,
+    fetchByCallsign,
     testConnection,
   };
 }

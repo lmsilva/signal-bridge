@@ -93,6 +93,7 @@ const {
 
 /** Cached YouTube thumbnails and channel avatars, served from `data/`. */
 const YOUTUBE_IMAGE_ROUTE_PREFIX = '/youtube-images/';
+const FLIGHTPLAN_ARTWORK_ROUTE_PREFIX = '/flightplan-artwork/';
 const {
   createSlideshowSettings,
   VALID_ORDERS,
@@ -110,6 +111,7 @@ const {
 const { createRollCreditsService } = require('./roll-credits-service');
 const { createRollCreditsPayload } = require('./roll-credits-payload');
 const { createAutodartsService } = require('./autodarts-service');
+const { createFlightplanService } = require('./flightplan-service');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -334,6 +336,8 @@ function createWebServer({
   getWikiCommonKnowledgeStatus = null,
   overhead = null,
   getOverheadStatus = null,
+  flightplan = null,
+  getFlightplanStatus = null,
   rollCredits = null,
   displayBusy = null,
   libraryTourSettings: libraryTourSettingsInjected = null,
@@ -409,6 +413,13 @@ function createWebServer({
       sendUdpPayload,
       displayBusy,
     }));
+  const flightplanInstance = typeof flightplan === 'function'
+    ? flightplan()
+    : (flightplan || createFlightplanService({
+      config,
+      log,
+      sendUdpPayload,
+    }));
   const commandRegistry = createCommandRegistry({
     log,
     getSteamStatus,
@@ -439,6 +450,9 @@ function createWebServer({
       || null,
     getOverheadStatus: () => getOverheadStatus?.()
       || overheadService()?.statusSnapshot?.()
+      || null,
+    getFlightplanStatus: () => getFlightplanStatus?.()
+      || flightplanService()?.statusSnapshot?.()
       || null,
     getPhotoCount: () => qrImageCache.list().length,
     getNotificationsCacheStatus: () => ({
@@ -793,6 +807,10 @@ function createWebServer({
 
   function overheadService() {
     return typeof overhead === 'function' ? overhead() : overhead;
+  }
+
+  function flightplanService() {
+    return typeof flightplan === 'function' ? flightplan() : flightplan;
   }
 
   function upsideNewsOverridesFrom(body = {}) {
@@ -1150,6 +1168,264 @@ function createWebServer({
     }
     const result = service.closeSession(String(body?.reason || 'manual'));
     sendJson(res, 200, result);
+  }
+
+  function handleFlightplanStatus(res) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleFlightplanSettingsGet(res) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, settings: service.settings.get() });
+  }
+
+  function handleFlightplanSettingsPut(body, res) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    if (body?.rapidApiKey) {
+      try {
+        service.saveApiKey(body.rapidApiKey);
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+        return;
+      }
+    }
+    const patch = { ...body };
+    delete patch.rapidApiKey;
+    const result = service.settings.update(patch);
+    sendJson(res, 200, result);
+  }
+
+  function handleFlightplanAirports(query, res) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    const q = String(query.get('q') || '').trim();
+    sendJson(res, 200, { ok: true, airports: service.searchAirports(q) });
+  }
+
+  async function handleFlightplanPushNext(body, res) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    const result = await service.pushNext({
+      send: (payload) => deliverTargetedPayload(payload, targetId),
+    });
+    sendJson(res, result.ok ? 202 : 400, result);
+  }
+
+  async function handleFlightplanPushBoard(body, res) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    const targetId = targetIdFrom(body);
+    const result = await service.pushBoard({
+      tripId: body?.tripId,
+      send: (payload) => deliverTargetedPayload(payload, targetId),
+    });
+    sendJson(res, result.ok ? 202 : 400, result);
+  }
+
+  async function handleFlightplanApi(method, pathname, body, res, query) {
+    const service = flightplanService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Flight Plan is not available' });
+      return;
+    }
+    const tail = pathname.slice('/api/flightplan/'.length);
+    try {
+      if (method === 'GET') {
+        if (tail === 'status') {
+          handleFlightplanStatus(res);
+          return;
+        }
+        if (tail === 'settings') {
+          handleFlightplanSettingsGet(res);
+          return;
+        }
+        if (tail === 'airports') {
+          handleFlightplanAirports(query, res);
+          return;
+        }
+        if (tail === 'trips') {
+          sendJson(res, 200, {
+            ok: true,
+            trips: service.store.listTrips({
+              filter: query.get('filter') || 'all',
+              sort: query.get('sort') || 'date',
+              dir: query.get('dir') || 'desc',
+            }),
+          });
+          return;
+        }
+        if (tail === 'images/curated') {
+          sendJson(res, 200, { ok: true, curated: service.images.curatedCandidates() });
+          return;
+        }
+        const tripMatch = /^trips\/([^/]+)$/.exec(tail);
+        if (tripMatch) {
+          const trip = service.store.getTrip(tripMatch[1]);
+          if (!trip) {
+            sendJson(res, 404, { ok: false, error: 'Trip not found' });
+            return;
+          }
+          sendJson(res, 200, {
+            ok: true,
+            trip,
+            flights: service.store.flightsForTrip(trip.id),
+          });
+          return;
+        }
+        const flightMatch = /^flights\/([^/]+)$/.exec(tail);
+        if (flightMatch) {
+          const flight = service.store.getFlight(flightMatch[1]);
+          if (!flight) {
+            sendJson(res, 404, { ok: false, error: 'Flight not found' });
+            return;
+          }
+          sendJson(res, 200, { ok: true, flight });
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+
+      if (method === 'POST') {
+        if (tail === 'settings') {
+          handleFlightplanSettingsPut(body, res);
+          return;
+        }
+        if (tail === 'trips') {
+          sendJson(res, 200, service.store.createTrip(body));
+          return;
+        }
+        if (tail === 'search') {
+          const result = await service.api.searchByNumber({
+            airline: body?.airline,
+            number: body?.number,
+            date: body?.date,
+            manual: true,
+          });
+          sendJson(res, 200, result);
+          return;
+        }
+        const importMatch = /^trips\/([^/]+)\/flights\/import$/.exec(tail);
+        if (importMatch) {
+          const leg = body?.leg || body;
+          const created = await service.importFlightLeg(importMatch[1], leg, { date: body?.date });
+          sendJson(res, created.ok ? 200 : 400, created);
+          return;
+        }
+        const refreshMatch = /^flights\/([^/]+)\/refresh$/.exec(tail);
+        if (refreshMatch) {
+          const result = await service.poller.refreshFlight(refreshMatch[1], { manual: true });
+          sendJson(res, result.ok ? 200 : 400, result);
+          return;
+        }
+        const candMatch = /^trips\/([^/]+)\/images\/candidates$/.exec(tail);
+        if (candMatch) {
+          const trip = service.store.getTrip(candMatch[1]);
+          if (!trip) {
+            sendJson(res, 404, { ok: false, error: 'Trip not found' });
+            return;
+          }
+          const cfg = service.settings.get();
+          const limit = cfg.imageCandidateCount || 4;
+          const contactEmail = config.contactEmail || process.env.CONTACT_EMAIL || '';
+          let candidates = [];
+          if (body?.query) {
+            candidates = await service.images.locationCandidates(body.query, { limit, contactEmail });
+          } else if (body?.title || trip.name) {
+            candidates = await service.images.titleCandidates(body?.title || trip.name, { limit, contactEmail });
+          }
+          sendJson(res, 200, { ok: true, candidates });
+          return;
+        }
+        const cacheMatch = /^trips\/([^/]+)\/images\/cache$/.exec(tail);
+        if (cacheMatch) {
+          const trip = service.store.getTrip(cacheMatch[1]);
+          if (!trip) {
+            sendJson(res, 404, { ok: false, error: 'Trip not found' });
+            return;
+          }
+          const cached = await service.images.cacheRemoteImage(body?.url, {
+            caption: body?.caption,
+            source: body?.source || 'remote',
+          });
+          if (!cached) {
+            sendJson(res, 400, { ok: false, error: 'Image URL required' });
+            return;
+          }
+          const images = [...(trip.images || []), cached];
+          service.store.updateTrip(trip.id, { images });
+          sendJson(res, 200, { ok: true, image: cached, trip: service.store.getTrip(trip.id) });
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+
+      if (method === 'PUT') {
+        const tripMatch = /^trips\/([^/]+)$/.exec(tail);
+        if (tripMatch) {
+          sendJson(res, 200, service.store.updateTrip(tripMatch[1], body));
+          return;
+        }
+        const flightMatch = /^flights\/([^/]+)$/.exec(tail);
+        if (flightMatch) {
+          sendJson(res, 200, service.store.updateFlight(flightMatch[1], body));
+          return;
+        }
+        const reorderMatch = /^trips\/([^/]+)\/flights\/reorder$/.exec(tail);
+        if (reorderMatch) {
+          sendJson(res, 200, service.store.reorderTripFlights(reorderMatch[1], body?.flightIds || []));
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+
+      if (method === 'DELETE') {
+        const tripMatch = /^trips\/([^/]+)$/.exec(tail);
+        if (tripMatch) {
+          const trip = service.store.getTrip(tripMatch[1]);
+          if (trip?.images?.length) {
+            service.images.deleteTripImages(trip.images.map((row) => row.id || path.basename(String(row.url || ''))));
+          }
+          sendJson(res, 200, service.store.deleteTrip(tripMatch[1]));
+          return;
+        }
+        const flightMatch = /^flights\/([^/]+)$/.exec(tail);
+        if (flightMatch) {
+          sendJson(res, 200, service.store.deleteFlight(flightMatch[1]));
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+      sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
   }
 
   // ------------------------------------------------------------- YouTube
@@ -1638,6 +1914,8 @@ function createWebServer({
         case 'goodnews.show': handleUpsideNewsPush(body, res); break;
         case 'wiki.show': handleWikiPush(body, res); break;
         case 'overhead.show': await handleOverheadPush(body, res); break;
+        case 'flightplan.next': await handleFlightplanPushNext(body, res); break;
+        case 'flightplan.board': await handleFlightplanPushBoard(body, res); break;
         default:
           throw new Error(`Command "${commandId}" has no scheduler dispatch`);
       }
@@ -4254,6 +4532,41 @@ function createWebServer({
     fs.createReadStream(filePath).pipe(res);
   }
 
+  function handleFlightplanArtworkServe(pathname, res) {
+    const name = path.basename(decodeURIComponent(pathname));
+    if (!/^[a-zA-Z0-9._-]+\.(webp|png|jpe?g)$/i.test(name)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const root = config.ROOT || path.resolve(__dirname, '..');
+    const directories = [
+      path.resolve(root, 'data', 'flightplan-images'),
+      path.join(__dirname, 'web', 'flightplan-artwork'),
+    ];
+    let filePath = null;
+    for (const dir of directories) {
+      const candidate = path.join(dir, name);
+      if (fs.existsSync(candidate)) {
+        filePath = candidate;
+        break;
+      }
+    }
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'image/jpeg',
+      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=86400',
+      ETag: `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`,
+    });
+    fs.createReadStream(filePath).pipe(res);
+  }
+
   function handleUpsideNewsArtworkServe(pathname, res) {
     const name = path.basename(decodeURIComponent(pathname));
     if (!/^[a-z0-9_-]+\.(webp|png|jpe?g)$/i.test(name)) {
@@ -4399,6 +4712,10 @@ function createWebServer({
           handleWikiArtworkServe(pathname, res);
           return;
         }
+        if (pathname.startsWith(FLIGHTPLAN_ARTWORK_ROUTE_PREFIX)) {
+          handleFlightplanArtworkServe(pathname, res);
+          return;
+        }
         if (pathname.startsWith(YOUTUBE_IMAGE_ROUTE_PREFIX)) {
           handleYoutubeImageServe(pathname, res);
           return;
@@ -4483,6 +4800,11 @@ function createWebServer({
         if (pathname === '/api/overhead/settings') {
           if (!requireAdminSession(req, res)) return;
           handleOverheadSettingsGet(res);
+          return;
+        }
+        if (pathname.startsWith('/api/flightplan/')) {
+          if (!requireAdminSession(req, res)) return;
+          await handleFlightplanApi('GET', pathname, null, res, reqUrl.searchParams);
           return;
         }
         if (pathname.startsWith('/api/youtube/')) {
@@ -4652,7 +4974,8 @@ function createWebServer({
         const isScheduler = pathname.startsWith('/api/display-scheduler/');
         const isYoutube = pathname.startsWith('/api/youtube/');
         const isRollCredits = pathname.startsWith('/api/roll-credits/');
-        if (!isScheduler && !isYoutube && !isRollCredits) {
+        const isFlightplan = pathname.startsWith('/api/flightplan/');
+        if (!isScheduler && !isYoutube && !isRollCredits && !isFlightplan) {
           res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Method not allowed');
           return;
@@ -4666,6 +4989,10 @@ function createWebServer({
           : {};
         if (isRollCredits) {
           await handleRollCreditsWrite(req, pathname, body, res);
+          return;
+        }
+        if (isFlightplan) {
+          await handleFlightplanApi(req.method, pathname, body, res, reqUrl.searchParams);
           return;
         }
         if (isScheduler) {
@@ -4767,8 +5094,13 @@ function createWebServer({
           await handleAutodartsApi('POST', pathname, body, res);
           return;
         }
+        if (pathname.startsWith('/api/flightplan/')) {
+          if (!requireAdminSession(req, res)) return;
+          await handleFlightplanApi('POST', pathname, body, res, reqUrl.searchParams);
+          return;
+        }
 
-        // A human pressed a button. Manual is the highest precedence tier (§6),
+        // A human pressed a button.
         // so hold the scheduler off for a full global gap rather than yanking
         // the page away. `airCommand` calls the handlers directly and so never
         // reaches here, which is what keeps scheduled airings out of this.
@@ -4979,6 +5311,12 @@ function createWebServer({
           case '/api/overhead/provider/test':
             await handleOverheadProviderTest(body, res);
             return;
+          case '/api/push/flightplan-next':
+            await handleFlightplanPushNext(body, res);
+            return;
+          case '/api/push/flightplan-board':
+            await handleFlightplanPushBoard(body, res);
+            return;
           default:
             sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
             return;
@@ -5003,6 +5341,9 @@ function createWebServer({
     // only start a locally created fallback (tests / standalone web).
     if (!autodarts) {
       autodartsInstance.start?.();
+    }
+    if (!flightplan) {
+      flightplanInstance.start?.();
     }
     if (!settings.enabled) {
       log.info('Control web server disabled via config');

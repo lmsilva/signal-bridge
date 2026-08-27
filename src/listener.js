@@ -114,6 +114,7 @@ const { createTriviaService } = require('./trivia-service');
 const { createUpsideNewsService } = require('./upside-news-service');
 const { createWikiCommonKnowledgeService } = require('./wiki-common-knowledge-service');
 const { createOverheadService } = require('./overhead-service');
+const { createFlightplanService } = require('./flightplan-service');
 const { createDisplayBusy } = require('./display-busy');
 
 const VOLUME_POLL_DELAY_MS = 2000;
@@ -194,6 +195,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
   let psnLibraryTour = null;
   let youtubeNowPlaying = null;
   let autodarts = null;
+  let flightplan = null;
   let trivia = null;
   let upsideNews = null;
   let wikiCommonKnowledge = null;
@@ -2275,6 +2277,9 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         overhead = createOverheadService({ config, log, sendUdpPayload, fetchImpl: fetch });
         overhead.prefetchCount?.().catch(() => {});
 
+        flightplan = createFlightplanService({ config, log, sendUdpPayload });
+        flightplan.start();
+
         resolve(alexa);
       });
     });
@@ -2321,6 +2326,8 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     getWikiCommonKnowledgeStatus: () => wikiCommonKnowledge?.statusSnapshot?.() || null,
     overhead: () => overhead,
     getOverheadStatus: () => overhead?.statusSnapshot?.() || null,
+    flightplan: () => flightplan,
+    getFlightplanStatus: () => flightplan?.statusSnapshot?.() || null,
     // The Display Scheduler's §6 precedence check. Fed by every sendUdpPayload,
     // so it covers manual pushes, live events and scheduled airings alike.
     displayBusy,

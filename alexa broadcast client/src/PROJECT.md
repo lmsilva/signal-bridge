@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-26 (Amazon delivery notification banner on passive Shopping alerts)
+**Last updated:** 2026-08-26 (Flight Plan display panel)
 
 ---
 
@@ -270,6 +270,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-08-26: **Flight Plan panel** — new `flightplan_panel.py` renders `flightplan.flight` (six-band layout, status colours from payload, live map via `map_tiles`, trip image letterbox, always-visible `as of` footer). Registered in `overlay.py` / `payload_utils.py` / `main.py`; `effective_display_seconds` bypasses `maxDisplaySeconds`. Smoke: `send_test.py --type flightplan`. Tests: `test/test_flightplan_panel.py`. Ship: portable client rebuild required (not run).
 - 2026-08-26: **Amazon delivery banner** — `alexa-notifications.query` with `notifications.category: delivery` shows **Amazon delivery** in the amber banner (passive Shopping TTS from the bridge). Smoke: `send_test.py --type notifications-delivery`. Tests unchanged unless touching panel layout.
 - 2026-08-25: **Autodarts last-game tile showed the UTC day** — `format_last_played_label` parsed the bridge's UTC stamp into an aware datetime and then `strftime`'d it straight, so a match thrown at 23:34 Denver read as the next day; it now `.astimezone()`s into this display's own zone first. `totals.lastPlayedAt` stays the source: the bridge decides what counts as a played match (a race ended early does, an opened-then-deleted lobby does not). Tests: `test_autodarts_panel.py`. Ship: portable client rebuild required (not run).
 - 2026-08-25: **Broadcast message viewport stopped burying the dismiss rail** — the painted band clamps to `max(48, 64u)` but `page_chrome` reserved a bare `64 * u`, so on any screen whose short edge is under 810px the content zone ran 1–5px past the band top. Broadcast is the only page whose content is a child `tk.Canvas` widget, and a widget always stacks above canvas items, so it covered the 3px rail across everything except the left/right margins while YouTube (canvas items, footer raised over them) looked correct. `footer_band_h` is now the single clamped source of truth and `dismiss_footer.footer_height` delegates to it. Tests: `test_dismiss_footer.py` (band/reserved-gap parity and content-clears-rail across 12 screen sizes). Ship: portable client rebuild required (not run).

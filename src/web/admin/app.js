@@ -489,6 +489,8 @@
         vbPlayCascade();
       }
       loadVestaboardSim().then(() => startVestaboardSimEvents());
+    } else if (tabId === 'flightplan') {
+      loadFlightplanAdmin();
     }
   }
 
@@ -8666,6 +8668,305 @@
   document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
     loadVestaboards();
   });
+
+  document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
+    loadOverheadSettings();
+  });
+
+  // ---------------------------------------------------------- Flight Plan
+
+  let flightplanTripId = null;
+  let flightplanHomeAirport = 'SLC';
+  let flightplanSearchLegs = [];
+
+  function renderFlightplanLedger(status) {
+    const line = $('flightplan-ledger-line');
+    if (!line) return;
+    const ledger = status?.ledger || {};
+    const used = Number(ledger.cycleUsed) || 0;
+    const cap = Number(ledger.hardCap) || 600;
+    const days = ledger.daysUntilReset != null ? ledger.daysUntilReset : '—';
+    line.textContent = `${used} of ${cap} units used — resets in ${days} days`;
+    if (ledger.state === 'low' || ledger.state === 'out') {
+      line.classList.add('hint-warn');
+    } else {
+      line.classList.remove('hint-warn');
+    }
+  }
+
+  function renderFlightplanSettings(status) {
+    const settings = status?.settings || {};
+    flightplanHomeAirport = settings.homeAirport || 'SLC';
+    if ($('flightplan-enabled')) $('flightplan-enabled').checked = settings.enabled === true;
+    if ($('flightplan-home-airport')) $('flightplan-home-airport').value = flightplanHomeAirport;
+    if ($('flightplan-auto-push')) $('flightplan-auto-push').checked = settings.autoPushEnabled !== false;
+    if ($('flightplan-log-only')) $('flightplan-log-only').checked = settings.pollerLogOnly !== false;
+    const pill = $('flightplan-status-pill');
+    if (pill) {
+      const cred = status?.credentials?.hasKey ? 'API key set' : 'No API key';
+      pillState(pill, settings.enabled ? 'good' : '', settings.enabled ? 'Enabled' : 'Disabled');
+      pill.title = cred;
+    }
+    renderFlightplanLedger(status);
+  }
+
+  async function loadFlightplanAdmin() {
+    try {
+      const status = await apiGet('/api/flightplan/status');
+      renderFlightplanSettings(status);
+      await loadFlightplanTrips();
+    } catch (error) {
+      toast(error.message || 'Could not load Flight Plan', 'bad');
+    }
+  }
+
+  async function loadFlightplanTrips() {
+    const filterBtn = document.querySelector('#flightplan-filter-tabs .segmented-btn.active');
+    const filter = filterBtn?.dataset.filter || 'upcoming';
+    const result = await apiGet(`/api/flightplan/trips?filter=${encodeURIComponent(filter)}&sort=date&dir=asc`);
+    const list = $('flightplan-trip-list');
+    if (!list) return;
+    list.innerHTML = '';
+    for (const trip of result.trips || []) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'btn btn-outline btn-block flightplan-trip-row';
+      row.dataset.tripId = trip.id;
+      row.innerHTML = `<strong>${escapeHtml(trip.name)}</strong> · ${trip.flightCount || 0} flights · ${escapeHtml(trip.phase || '')}`;
+      row.addEventListener('click', () => openFlightplanTrip(trip.id));
+      list.appendChild(row);
+    }
+    if (!(result.trips || []).length) {
+      list.innerHTML = '<p class="hint">No trips in this filter.</p>';
+    }
+  }
+
+  async function openFlightplanTrip(tripId) {
+    flightplanTripId = tripId;
+    const data = await apiGet(`/api/flightplan/trips/${encodeURIComponent(tripId)}`);
+    const trip = data.trip;
+    $('flightplan-editor-card').hidden = false;
+    $('flightplan-editor-title').textContent = trip.name;
+    $('flightplan-trip-name').value = trip.name || '';
+    $('flightplan-trip-kind').value = trip.kind || 'ours';
+    $('flightplan-trip-traveller').value = trip.traveller || '';
+    $('flightplan-trip-start').value = trip.startDate || '';
+    $('flightplan-trip-end').value = trip.endDate || '';
+    $('flightplan-trip-notes').value = trip.notes || '';
+    renderFlightplanFlights(data.flights || []);
+  }
+
+  function renderFlightplanFlights(flights) {
+    const list = $('flightplan-flight-list');
+    if (!list) return;
+    list.innerHTML = '';
+    for (const flight of flights) {
+      const row = document.createElement('div');
+      row.className = 'flightplan-flight-row';
+      const route = `${flight.origin?.iata || '—'} → ${flight.destination?.iata || '—'}`;
+      row.innerHTML = `<div><strong>${escapeHtml(flight.airline)} ${escapeHtml(flight.number)}</strong> · ${escapeHtml(route)} · ${escapeHtml(flight.state || '')}</div>
+        <button type="button" class="btn btn-outline btn-sm" data-refresh="${flight.id}">Refresh</button>
+        <button type="button" class="btn btn-outline btn-sm" data-delete="${flight.id}">Remove</button>`;
+      row.querySelector('[data-refresh]')?.addEventListener('click', async () => {
+        await apiPost(`/api/flightplan/flights/${flight.id}/refresh`, {});
+        toast('Flight refreshed', 'good');
+        openFlightplanTrip(flightplanTripId);
+      });
+      row.querySelector('[data-delete]')?.addEventListener('click', async () => {
+        if (!confirm(`Remove flight ${flight.airline} ${flight.number}?`)) return;
+        await fetch(`/api/flightplan/flights/${flight.id}`, { method: 'DELETE', credentials: 'same-origin' });
+        openFlightplanTrip(flightplanTripId);
+      });
+      list.appendChild(row);
+    }
+  }
+
+  async function saveFlightplanTripFields() {
+    if (!flightplanTripId) return;
+    await fetch(`/api/flightplan/trips/${flightplanTripId}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: $('flightplan-trip-name')?.value,
+        kind: $('flightplan-trip-kind')?.value,
+        traveller: $('flightplan-trip-traveller')?.value,
+        startDate: $('flightplan-trip-start')?.value,
+        endDate: $('flightplan-trip-end')?.value,
+        notes: $('flightplan-trip-notes')?.value,
+      }),
+    });
+  }
+
+  function bindFlightplanAirportTypeahead(input, suggestEl) {
+    if (!input || !suggestEl) return;
+    let timer = null;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const q = input.value.trim();
+        if (q.length < 1) {
+          suggestEl.hidden = true;
+          return;
+        }
+        const result = await apiGet(`/api/flightplan/airports?q=${encodeURIComponent(q)}`);
+        suggestEl.innerHTML = '';
+        for (const row of result.airports || []) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'typeahead-item';
+          btn.textContent = `${row.iata || row.icao} — ${row.name}`;
+          btn.addEventListener('click', () => {
+            input.value = row.iata || row.icao || '';
+            suggestEl.hidden = true;
+          });
+          suggestEl.appendChild(btn);
+        }
+        suggestEl.hidden = !(result.airports || []).length;
+      }, 200);
+    });
+  }
+
+  function showFlightplanFlightSheet() {
+    flightplanSearchLegs = [];
+    $('flightplan-leg-list').innerHTML = '';
+    $('flightplan-search-date').value = $('flightplan-trip-start')?.value || new Date().toISOString().slice(0, 10);
+    $('flightplan-flight-sheet').hidden = false;
+  }
+
+  function hideFlightplanFlightSheet() {
+    $('flightplan-flight-sheet').hidden = true;
+  }
+
+  function renderFlightplanLegs(legs) {
+    flightplanSearchLegs = legs || [];
+    const list = $('flightplan-leg-list');
+    list.innerHTML = '';
+    legs.forEach((leg, index) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-outline btn-block';
+      const o = leg.origin?.iata || leg.origin?.icao || '—';
+      const d = leg.destination?.iata || leg.destination?.icao || '—';
+      btn.textContent = `${leg.airline || ''} ${leg.number || ''} · ${o} → ${d}`;
+      btn.addEventListener('click', async () => {
+        const created = await apiPost(`/api/flightplan/trips/${flightplanTripId}/flights/import`, {
+          leg,
+          date: $('flightplan-search-date')?.value,
+        });
+        if (!created.ok) {
+          toast(created.error || 'Could not import flight', 'bad');
+          return;
+        }
+        hideFlightplanFlightSheet();
+        toast('Flight added', 'good');
+        openFlightplanTrip(flightplanTripId);
+        loadFlightplanTrips();
+      });
+      list.appendChild(btn);
+    });
+    if (!legs.length) list.innerHTML = '<p class="hint">No legs found — try another date or number.</p>';
+  }
+
+  $('btn-flightplan-settings-save')?.addEventListener('click', async () => {
+    try {
+      const body = {
+        enabled: Boolean($('flightplan-enabled')?.checked),
+        homeAirport: $('flightplan-home-airport')?.value,
+        autoPushEnabled: Boolean($('flightplan-auto-push')?.checked),
+        pollerLogOnly: Boolean($('flightplan-log-only')?.checked),
+      };
+      const key = $('flightplan-api-key')?.value?.trim();
+      if (key) body.rapidApiKey = key;
+      await apiPost('/api/flightplan/settings', body);
+      if ($('flightplan-api-key')) $('flightplan-api-key').value = '';
+      toast('Flight Plan settings saved', 'good');
+      loadFlightplanAdmin();
+    } catch (error) {
+      toast(error.message || 'Could not save settings', 'bad');
+    }
+  });
+
+  $('btn-flightplan-home-fill')?.addEventListener('click', () => {
+    if ($('flightplan-home-airport')) {
+      $('flightplan-home-airport').value = flightplanHomeAirport;
+    }
+  });
+
+  $('btn-flightplan-trip-new')?.addEventListener('click', async () => {
+    const name = prompt('Trip name');
+    if (!name?.trim()) return;
+    const created = await apiPost('/api/flightplan/trips', { name: name.trim(), kind: 'ours' });
+    if (!created.ok) {
+      toast(created.error || 'Could not create trip', 'bad');
+      return;
+    }
+    await loadFlightplanTrips();
+    openFlightplanTrip(created.trip.id);
+  });
+
+  $('btn-flightplan-trip-delete')?.addEventListener('click', async () => {
+    if (!flightplanTripId) return;
+    const data = await apiGet(`/api/flightplan/trips/${flightplanTripId}`);
+    const count = (data.flights || []).length;
+    if (!confirm(`Delete "${data.trip?.name}" and ${count} flight(s)?`)) return;
+    await fetch(`/api/flightplan/trips/${flightplanTripId}`, { method: 'DELETE', credentials: 'same-origin' });
+    flightplanTripId = null;
+    $('flightplan-editor-card').hidden = true;
+    loadFlightplanTrips();
+    toast('Trip deleted', 'good');
+  });
+
+  $('flightplan-filter-tabs')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('.segmented-btn');
+    if (!btn) return;
+    document.querySelectorAll('#flightplan-filter-tabs .segmented-btn').forEach((el) => el.classList.remove('active'));
+    btn.classList.add('active');
+    loadFlightplanTrips();
+  });
+
+  $('btn-flightplan-flight-add')?.addEventListener('click', () => {
+    if (!flightplanTripId) return;
+    showFlightplanFlightSheet();
+  });
+
+  $('btn-flightplan-flight-cancel')?.addEventListener('click', hideFlightplanFlightSheet);
+  $('btn-flightplan-search-run')?.addEventListener('click', async () => {
+    try {
+      const result = await apiPost('/api/flightplan/search', {
+        airline: $('flightplan-search-airline')?.value,
+        number: $('flightplan-search-number')?.value,
+        date: $('flightplan-search-date')?.value,
+      });
+      renderFlightplanLegs(result.legs || []);
+    } catch (error) {
+      toast(error.message || 'Search failed', 'bad');
+    }
+  });
+
+  $('btn-flightplan-search-home')?.addEventListener('click', () => {
+    if ($('flightplan-search-date')) {
+      $('flightplan-search-date').value = new Date().toISOString().slice(0, 10);
+    }
+    toast(`Home airport: ${flightplanHomeAirport}`, 'good');
+  });
+
+  $('btn-flightplan-push-next')?.addEventListener('click', async () => {
+    await apiPost('/api/push/flightplan-next', {});
+    toast('Pushed next flight', 'good');
+  });
+
+  $('btn-flightplan-push-board')?.addEventListener('click', async () => {
+    await apiPost('/api/push/flightplan-board', { tripId: flightplanTripId });
+    toast('Pushed trip board', 'good');
+  });
+
+  ['flightplan-trip-name', 'flightplan-trip-kind', 'flightplan-trip-traveller',
+    'flightplan-trip-start', 'flightplan-trip-end', 'flightplan-trip-notes'].forEach((id) => {
+    $(id)?.addEventListener('change', () => saveFlightplanTripFields().catch(() => {}));
+  });
+
+  bindFlightplanAirportTypeahead($('flightplan-home-airport'), $('flightplan-home-suggest'));
 
   loadPushGrid();
   refreshDisplays({ quiet: true });

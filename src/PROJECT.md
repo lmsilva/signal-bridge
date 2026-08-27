@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-26 (Autodarts API rate limiting + throttled history sync)
+**Last updated:** 2026-08-26 (Flight Plan — trips, AeroDataBox, ADS-B, admin tab, display panel)
 
 ---
 
@@ -575,6 +575,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-26: **Flight Plan v1** — new `flightplan-*` modules: trips/flights store, AeroDataBox RapidAPI client with unit ledger (OK/Low/Out), budget-aware poll ladder + material-change detection, free ADS-B live position (`overhead-providers` reg/callsign), UDP `flightplan.flight`, Vestaboard `flightPlanBoardFrames`, commands `flightplan.next` / `flightplan.board`, admin **Flight Plan** tab (CRUD, search/leg picker, SLC default + IATA typeahead, settings/API key), `/flightplan-artwork/` cache route. Auto-push respects `pollerLogOnly` (default on). Tests: `test/flightplan-core.test.js`, `test/flightplan-acceptance.test.js`. Deploy: `./recreate.sh` + client zip.
 - 2026-08-26: **Autodarts API rate limiting** — new `autodarts-rate-limit.js` spaces all cloud HTTP (500ms min), honours `Retry-After` / 429 backoff, and pauses history sync + board poll + WS reconnect until cooldown clears. History sync no longer hammers on boot (10m defer; scheduled = 3 recent pages; 1.2s between stats; manual 5m cooldown; stop after 2 all-skipped pages). Board REST poll runs only when WS is down (60s). Token refresh on 429 no longer marks `needsRelink`. Settings shows **Cloud paused** and disables Sync while throttled. Tests: `test/autodarts-rate-limit.test.js`. Deploy: `./recreate.sh`.
 - 2026-08-26: **Show Notifications push + scheduler** — `alexa.notifications` command replays the last captured notification payload from `data/notifications-cache.json` to full displays + Vestaboard; cache updates whenever voice/passive delivery emits `alexa-notifications.query` with items. Push tile + schedulable with content check. Tests: `test/notifications-cache.test.js`, `test/command-registry.test.js`.
 - 2026-08-26: **Passive Amazon delivery notifications** — TTS-only *"notification from Amazon Shopping"* history rows (no ASR) now match via `alexa-notifications.js` passive helpers; intro-only TTS waits for detail with accelerated history polls (`amazon-delivery-passive` pending); delivery/shipping content pushes existing `alexa-notifications.query` to displays + Vestaboard (`AMAZON DELIVERY` title). Config: `voiceEvents.amazonDeliveryNotifications` (default on). Explicit *"show my notifications"* unchanged. Tests: `test/alexa-notifications.test.js`, `test/pending-voice-responses.test.js`, `test/voice-query-parser.test.js`, `test/vestaboard-alexa.test.js`. Deploy: `./recreate.sh`.
