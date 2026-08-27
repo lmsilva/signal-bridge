@@ -302,15 +302,16 @@ def sample_flightplan(*, legs=2, live=False):
 
 def huupe_zones(scale=1):
     rows = [
-        ("layup", "Layup", "At the rim", "0.1 PT", 6, 7, 85),
-        ("one", "Short Range", "Low post", "1 PT", 4, 11, 36),
-        ("two", "Mid Range", "High post", "2 PT", 3, 9, 33),
-        ("three", "Deep Range", "Top of the key", "3 PT", 2, 12, 17),
+        ("layup", "Layup", "At the rim", "0.1 PT", 6, 7, 85, 0.6),
+        ("one", "Short Range", "Low post", "1 PT", 4, 11, 36, 4.0),
+        ("two", "Mid Range", "High post", "2 PT", 3, 9, 33, 6.0),
+        ("three", "Deep Range", "Top of the key", "3 PT", 2, 12, 17, 6.0),
     ]
     return [
         {"zone": zone, "label": label, "note": note, "pointsLabel": points,
-         "made": made * scale, "attempts": attempts * scale, "pct": pct}
-        for zone, label, note, points, made, attempts, pct in rows
+         "made": made * scale, "attempts": attempts * scale, "pct": pct,
+         "scored": scored * scale, "points": {"layup": 0.1, "one": 1, "two": 2, "three": 3}[zone]}
+        for zone, label, note, points, made, attempts, pct, scored in rows
     ]
 
 

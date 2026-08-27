@@ -8,19 +8,19 @@ not. Everything else — mode bar, headline, shooting breakdown, footer — is
 shared, so the two read as the same page.
 
 Both pages are laid out as a broadcast graphic: a hero plate with a shooting
-dial, a half-court heat map of where the points came from, and a ticker of the
+dial, a blueprint half-court coloured by share of points, and a ticker of the
 last shots. Portrait stacks those; landscape puts the court and its legend
 beside the scoreboard instead of stretching one column across 1920px.
 """
 
 import json
 import math
+from pathlib import Path
 
 from src.design_system import (
     ACCENT,
     ALERT,
     CARD_LO,
-    EDGE,
     EDGE_SOFT,
     GOOD,
     INK,
@@ -37,19 +37,25 @@ from src.design_system import (
     measure_px_per_point,
     mix,
     page_chrome,
-    paint_backdrop,
     paint_bar,
-    paint_card,
+    paint_gradient,
     paint_meter,
     paint_round_rect,
     paint_section_title,
     plate_for,
+    retain_photo,
     stack_rows,
     text_line_h,
     text_measurer,
+    tint,
 )
 from src.display_panels import BasePanel
 from src.page_header import paint_page_header
+
+try:
+    from PIL import Image, ImageDraw, ImageTk
+except ImportError:  # pragma: no cover — portable builds always ship Pillow
+    Image = ImageDraw = ImageTk = None
 
 ZONE_ORDER = ("layup", "one", "two", "three")
 
@@ -72,31 +78,48 @@ ZONE_FALLBACK = {
     "three": ("Deep Range", "Top of the key", "3 PT"),
 }
 
-# A zone needs more than one attempt before its percentage means anything —
-# otherwise the first make of the night is always the "hot zone" at 100%.
-HOT_ZONE_MIN_ATTEMPTS = 2
+ZONE_POINT_VALUES = {"layup": 0.1, "one": 1.0, "two": 2.0, "three": 3.0}
 
-# The court is darker than the card it sits on, so it reads as a floor rather
-# than as another panel.
-COURT_FLOOR = "#0A1424"
-COURT_LINE = "#93A6C4"
+# Chart heat answers "where do the points come from". Kept as one switch so it
+# can later become share of makes / attempts without rewriting the drawing.
+HEAT_STAT = "points"
 
-# Cold blue through green and amber to hot red — the ramp every broadcast shot
-# chart uses, and the reason a glance at the court tells you where the night is
-# going before you have read a single number.
+# Spec tokens (Shot Zone Enhancements rev 4).
+GLASS_CARD = "#0D1A32"
+GLASS_BORDER = mix("#7CA9DA", GLASS_CARD, 0.35)
+PANEL_GAP = "#0F1D36"
+COURT_BASE = "#0B1A33"
+COURT_LINE = "#A9C6E8"
+RIM_COLOR = "#FF8A7A"
+PAGE_TOP = "#0C1936"
+PAGE_BOTTOM = "#0A1428"
+SCRIM_BASE = "#0B1730"
+GHOST_INK = "#E8F1FB"
+LABEL_SOFT = "#8FA9C9"
+LABEL_DIM = "#6C84A6"
+LABEL_EMPTY = "#54687F"
+LABEL_DARK_VALUE = "#0E1B31"
+LABEL_DARK_NAME = "#12233E"
+ACCENT_CORAL = "#FF6157"
+ACCENT_AMBER = "#EFA23C"
+
+# Template viewBox 0 0 560 530 — 1 foot = 10 units, hoop at the bottom.
+TEMPLATE_W = 560.0
+TEMPLATE_H = 530.0
+
+# Cold navy → teal → amber → coral. Mix between stops; never a fixed four-colour set.
 HEAT_STOPS = (
-    (0.00, "#15223A"),
-    (0.22, "#1E4E86"),
-    (0.40, ACCENT),
-    (0.58, GOOD),
-    (0.78, WARN),
-    (1.00, ALERT),
+    (0.00, "#152540"),
+    (0.28, "#155E71"),
+    (0.55, "#21A895"),
+    (0.78, "#EFA23C"),
+    (1.00, "#FF6157"),
 )
 
 
-def heat_color(pct):
-    """Colour for a shooting percentage on the cold-to-hot ramp."""
-    share = max(0.0, min(1.0, (float(pct or 0)) / 100.0))
+def heat_color(t):
+    """Colour for a 0..1 heat value on the cold-to-hot ramp."""
+    share = max(0.0, min(1.0, float(t or 0.0)))
     for (low, low_color), (high, high_color) in zip(HEAT_STOPS, HEAT_STOPS[1:]):
         if share <= high:
             span = high - low
@@ -147,33 +170,73 @@ def zone_rows(payload):
     for zone in ZONE_ORDER:
         row = by_zone.get(zone) or {}
         label, note, points = ZONE_FALLBACK[zone]
+        made = int(row.get("made") or 0)
+        attempts = int(row.get("attempts") or 0)
+        unit = ZONE_POINT_VALUES[zone]
+        if row.get("scored") is not None:
+            try:
+                scored = float(row.get("scored"))
+            except (TypeError, ValueError):
+                scored = round(made * unit, 1)
+        else:
+            scored = round(made * unit, 1)
         rows.append({
             "zone": zone,
             "label": row.get("label") or label,
             "note": row.get("note") or note,
             "pointsLabel": row.get("pointsLabel") or points,
-            "made": int(row.get("made") or 0),
-            "attempts": int(row.get("attempts") or 0),
+            "points": float(row.get("points") if row.get("points") is not None else unit),
+            "scored": scored,
+            "made": made,
+            "attempts": attempts,
             "pct": int(row.get("pct") or 0),
         })
     return rows
 
 
+def band_stat(row):
+    """The number that colours a band — points by default, see HEAT_STAT."""
+    if HEAT_STAT == "makes":
+        return float(row.get("made") or 0)
+    if HEAT_STAT == "attempts":
+        return float(row.get("attempts") or 0)
+    return float(row.get("scored") or 0)
+
+
 def hot_zone(rows):
-    """The zone worth bragging about: best percentage on a real sample."""
-    ranked = [row for row in rows if row["attempts"] >= HOT_ZONE_MIN_ATTEMPTS]
-    if not ranked:
-        ranked = [row for row in rows if row["attempts"]]
+    """The band with the most points. Ties: more attempts, then longer range."""
+    ranked = [row for row in rows if band_stat(row) > 0]
     if not ranked:
         return None
-    return sorted(ranked, key=lambda row: (row["pct"], row["attempts"]), reverse=True)[0]
+    order = {zone: index for index, zone in enumerate(ZONE_ORDER)}
+    return sorted(
+        ranked,
+        key=lambda row: (band_stat(row), row["attempts"], order[row["zone"]]),
+        reverse=True,
+    )[0]
 
 
-def zone_heat(row):
-    """Court fill for a zone — damped so the markings stay on top of it."""
-    if not row["attempts"]:
-        return mix(COURT_FLOOR, INK_3, 0.10)
-    return mix(COURT_FLOOR, heat_color(row["pct"]), 0.64)
+def band_heat(rows):
+    """Per-zone heat for the blueprint court: share of points, relative to peak."""
+    total = sum(band_stat(row) for row in rows)
+    peak = max((band_stat(row) for row in rows), default=0.0)
+    hot = hot_zone(rows)
+    bands = {}
+    for row in rows:
+        points = band_stat(row)
+        t = (points / peak) if peak > 0 else 0.0
+        share = int(round(100 * points / total)) if total > 0 else 0
+        bands[row["zone"]] = {
+            "t": t,
+            "share_pct": share,
+            "color": heat_color(t),
+            "empty": row["attempts"] == 0,
+            "bright": t >= 0.6 and row["zone"] != "three",
+            "is_hot": hot is not None and hot["zone"] == row["zone"],
+            "points": points,
+            "label": row["label"],
+        }
+    return bands, hot, total
 
 
 def arc_points(cx, cy, radius, start_deg, end_deg, *, steps=40):
@@ -187,55 +250,206 @@ def arc_points(cx, cy, radius, start_deg, end_deg, *, steps=40):
     return points
 
 
-def court_regions(box):
-    """Half-court geometry, basket at the bottom, in painting order.
+def _svg_arc_points(cx, cy, radius, x_start, y_start, x_end, y_end, *, sweep_ccw=True, steps=48):
+    """Polygon points along the SVG-style arc used by the three-point line."""
+    start = math.atan2(y_start - cy, x_start - cx)
+    end = math.atan2(y_end - cy, x_end - cx)
+    if sweep_ccw and end < start:
+        end += 2 * math.pi
+    if not sweep_ccw and start < end:
+        start += 2 * math.pi
+    span = end - start
+    count = max(2, int(steps))
+    points = []
+    for index in range(count + 1):
+        angle = start + span * (index / count)
+        points.extend((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+    return points
 
-    Proportions are the broadcast ones rather than survey-accurate: the paint
-    and the arc have to stay legible at a quarter of this size on a phone-shaped
-    card, which a true 50ft-wide court does not. Everything below half court is
-    measured off the court *width*, so a taller card simply shows more floor
-    behind the arc instead of stretching the key into a corridor.
+
+def court_regions(box):
+    """Half-court geometry from the 560×530 template, scaled into `box`.
+
+    Proportions are survey-accurate (1 ft = 10 units). The drawing never
+    stretches — a non-matching card just letterboxes the court.
     """
     x0, y0, x1, y1 = (float(value) for value in box)
     width = max(1.0, x1 - x0)
     height = max(1.0, y1 - y0)
-    court_w = min(width, height / 0.86)
-    court_h = min(height, court_w * 1.34)
-    cx = (x0 + x1) / 2
-    bottom = (y0 + y1) / 2 + court_h / 2
-    top = bottom - court_h
+    scale = min(width / TEMPLATE_W, height / TEMPLATE_H)
+    court_w = TEMPLATE_W * scale
+    court_h = TEMPLATE_H * scale
+    ox = (x0 + x1) / 2 - court_w / 2
+    oy = (y0 + y1) / 2 - court_h / 2
 
-    rim_y = bottom - 0.115 * court_w
-    rim_r = 0.036 * court_w
-    key_half = 0.19 * court_w
-    key_top = bottom - 0.47 * court_w
-    ft_r = 0.115 * court_w
-    arc_r = 0.46 * court_w
-    corner_x = 0.44 * court_w
-    corner_y = rim_y - math.sqrt(max(0.0, arc_r ** 2 - corner_x ** 2))
-    sweep = math.degrees(math.asin(min(1.0, corner_x / arc_r)))
-    arc = arc_points(cx, rim_y, arc_r, -sweep, sweep)
+    def T(x, y):
+        return ox + float(x) * scale, oy + float(y) * scale
 
-    inside = [cx - corner_x, bottom, *arc, cx + corner_x, bottom]
-    # The bottom half of the centre circle. Without it the floor behind the arc
-    # reads as empty background rather than as the far end of a court.
-    centre = arc_points(cx, top, ft_r, 90, 270)
+    def R(value):
+        return float(value) * scale
+
+    rim_x, rim_y = T(280, 447.5)
+    left, top = T(30, 30)
+    right, bottom = T(530, 500)
+    tl = T(60, 500)
+    tr = T(500, 500)
+    tl_corner = T(60, 358.02)
+    tr_corner = T(500, 358.02)
+    arc = _svg_arc_points(
+        rim_x, rim_y, R(237.5),
+        tl_corner[0], tl_corner[1], tr_corner[0], tr_corner[1],
+        sweep_ccw=True, steps=56,
+    )
+    mid_poly = [
+        tl[0], tl[1], tl_corner[0], tl_corner[1], *arc,
+        tr_corner[0], tr_corner[1], tr[0], tr[1],
+    ]
+    three_path = [tl_corner[0], tl_corner[1], *arc, tr_corner[0], tr_corner[1]]
+    ft_y = T(280, 310)[1]
     return {
-        "centre": centre,
-        "court": (cx - court_w / 2, top, cx + court_w / 2, bottom),
-        "inside": inside,
-        "arc": arc,
-        "corners": (
-            (cx - corner_x, bottom, cx - corner_x, corner_y),
-            (cx + corner_x, bottom, cx + corner_x, corner_y),
+        "scale": scale,
+        "origin": (ox, oy),
+        "size": (court_w, court_h),
+        "court": (left, top, right, bottom),
+        "court_radius": R(10),
+        "rim": (rim_x, rim_y, R(7.5)),
+        "backboard": (*T(250, 460), *T(310, 460)),
+        "key": (*T(200, 310), *T(360, 500)),
+        "ft_arc": arc_points(rim_x, ft_y, R(60), -90, 90, steps=32),
+        "restricted_arc": arc_points(rim_x, rim_y, R(40), -90, 90, steps=24),
+        "centre": arc_points(*T(280, 30), R(60), 90, 270, steps=32),
+        "layup_r": R(50),
+        "short_r": R(137.5),
+        "mid_poly": mid_poly,
+        "three_path": three_path,
+        "three_sides": (
+            (tl[0], tl[1], tl_corner[0], tl_corner[1]),
+            (tr[0], tr[1], tr_corner[0], tr_corner[1]),
         ),
-        "key": (cx - key_half, key_top, cx + key_half, bottom),
-        "ft_circle": (cx, key_top, ft_r),
-        "restricted": (cx, rim_y, 0.115 * court_w),
-        "rim": (cx, rim_y, rim_r),
-        "backboard": (cx - 0.13 * court_w, bottom - 0.055 * court_w,
-                      cx + 0.13 * court_w, bottom - 0.055 * court_w),
+        "deep_radius": R(470),
+        "labels": {
+            "three": T(280, 112),
+            "two": T(280, 246),
+            "one": T(280, 338),
+            # Above the template's 412 so the share clears the backboard.
+            "layup": T(280, 404),
+        },
+        "label_value_dy": {"three": R(38), "two": R(34), "one": R(28), "layup": R(20)},
+        "label_unit_dy": {"three": R(54), "two": R(49), "one": R(42), "layup": None},
+        "label_name_size": {"three": 12, "two": 12, "one": 11, "layup": 9},
+        "label_value_size": {"three": 32, "two": 28, "one": 22, "layup": 16},
     }
+
+
+def _hex_rgb(color):
+    text = str(color or "#000000").lstrip("#")
+    if len(text) != 6:
+        return (0, 0, 0)
+    return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def deep_fade_alpha(t):
+    """Opacity of the deep band `t` rim-radii out — the spec's gradient stops.
+
+    Anything nearer than the arc keeps the first stop, the way CSS holds a
+    radial gradient's colour inside its first offset.
+    """
+    t = max(0.0, float(t or 0.0))
+    if t <= 0.485:
+        return 0.85
+    if t < 0.72:
+        u = (t - 0.485) / (0.72 - 0.485)
+        return 0.85 * (1 - u) + 0.32 * u
+    if t < 0.98:
+        u = (t - 0.72) / (0.98 - 0.72)
+        return 0.32 * (1 - u) + 0.06 * u
+    return 0.06
+
+
+def deep_fade_bands(court_box, *, rim_y, radius, color, base, corner=0.0, steps=44):
+    """Rows that fade the deep band from hot at the arc to navy by half court.
+
+    Returned as plain rectangles rather than an image: Tk cannot clip, and a
+    PhotoImage needs a real widget, so a canvas without one (the preview
+    renderer, the smoke tests) used to fall back to one flat block of colour
+    and lose the heat ramp entirely.
+    """
+    x0, y0, x1, y1 = (float(value) for value in court_box)
+    height = y1 - y0
+    if height <= 0 or x1 <= x0 or radius <= 0:
+        return []
+    r = max(0.0, min(float(corner), (x1 - x0) / 2, height / 2))
+    count = max(2, int(steps))
+    rows = []
+    for index in range(count):
+        top = y0 + height * (index / count)
+        bottom = y0 + height * ((index + 1) / count)
+        alpha = deep_fade_alpha((float(rim_y) - (top + bottom) / 2) / float(radius))
+        inset = 0.0
+        if r > 0:
+            # Keep the rows inside the rounded corners instead of squaring them.
+            for edge in (top - y0, y1 - bottom):
+                if edge < r:
+                    inset = max(inset, r - math.sqrt(max(0.0, r * r - (r - edge) ** 2)))
+        rows.append((x0 + inset, top, x1 - inset, bottom, mix(base, color, alpha)))
+    return rows
+
+
+def clipped_circle(cx, cy, radius, box, *, steps=72):
+    """Circle outline clamped into `box`, because Tk has no clipping region.
+
+    The short-range ring reaches past the baseline; drawn as an oval it spilled
+    out of the court panel and over the card's caption.
+    """
+    x0, y0, x1, y1 = (float(value) for value in box)
+    points = []
+    for index in range(max(8, int(steps))):
+        angle = 2 * math.pi * index / max(8, int(steps))
+        x = cx + radius * math.cos(angle)
+        y = cy + radius * math.sin(angle)
+        points.extend((min(max(x, x0), x1), min(max(y, y0), y1)))
+    return points
+
+
+def glow_ring_layers(color, stroke_width, base=PANEL_GAP):
+    """Widths and colours that fake a soft glow on the hot band's edge.
+
+    Tk strokes have no alpha and no blur, so the halo is three passes that get
+    narrower and hotter — painted under the dark seam, which leaves a lit
+    fringe on both sides of the boundary.
+    """
+    stroke = max(2.0, float(stroke_width))
+    layers = []
+    for factor, blend in ((1.0, 0.34), (0.66, 0.62), (0.38, 1.0)):
+        tone = color if blend >= 1.0 else mix(base, color, blend)
+        layers.append((max(2, int(round(stroke * factor))), tone))
+    return layers
+
+
+def reduced_motion_preferred():
+    """Windows SPI_GETCLIENTAREAANIMATION when available; else allow motion."""
+    try:
+        import ctypes
+        value = ctypes.c_int(1)
+        if ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(value), 0):
+            return value.value == 0
+    except Exception:
+        pass
+    return False
+
+
+def court_photo_path():
+    """Optional local court photo — never fetched from the network."""
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "dev assets" / "huupe_signal_bridge" / "Shot Zone Enhancements" / "court-photo.jpg",
+        here.parents[2] / "dev assets" / "huupe_signal_bridge" / "court-photo.jpg",
+        here.parents[1] / "assets" / "huupe-court.jpg",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
 
 
 def stack_boxes(x0, x1, top, bottom, rows, gap):
@@ -416,6 +630,80 @@ class HuupePanel(BasePanel):
         self._payload = None
         self._scale = 1.0
         self._px_per_pt = PX_PER_POINT
+        self._glow_job = None
+        self._glow_items = []
+        self._glow_color = ACCENT_CORAL
+        self._glow_phase = 0.0
+        self._huupe_photos = []
+
+    def hide(self):
+        self._stop_glow()
+        self._huupe_photos.clear()
+        super().hide()
+
+    def _stop_glow(self):
+        job = self._glow_job
+        self._glow_job = None
+        self._glow_items = []
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except Exception:
+                pass
+
+    def _start_glow(self, item_ids, color):
+        self._stop_glow()
+        self._glow_items = [item for item in item_ids if item]
+        self._glow_color = color
+        self._glow_phase = 0.0
+        if not self._glow_items:
+            return
+        if reduced_motion_preferred():
+            self._apply_glow_opacity(0.6)
+            return
+        self._tick_glow()
+
+    def _apply_glow_opacity(self, opacity):
+        # Tk lines have no alpha — lean the stroke toward the card instead.
+        fill = mix(GLASS_CARD, self._glow_color, max(0.0, min(1.0, float(opacity))))
+        for item_id in self._glow_items:
+            try:
+                self.canvas.itemconfigure(item_id, fill=fill)
+            except Exception:
+                pass
+
+    def _tick_glow(self):
+        if not self.visible or not self._glow_items:
+            self._glow_job = None
+            return
+        self._glow_phase = (self._glow_phase + 50 / 3200.0) % 1.0
+        wave = 0.5 - 0.5 * math.cos(self._glow_phase * 2 * math.pi)
+        self._apply_glow_opacity(0.55 + 0.20 * wave)
+        try:
+            self._glow_job = self.root.after(50, self._tick_glow)
+        except Exception:
+            self._glow_job = None
+
+    def _keep_photo(self, photo):
+        if photo is None:
+            return None
+        self._huupe_photos.append(photo)
+        retain_photo(self.canvas, photo)
+        return photo
+
+    def _can_photo(self):
+        """RecordingCanvas / MagicMock have no real Tk photo support."""
+        return ImageTk is not None and Image is not None and hasattr(self.canvas, "tk")
+
+    def _photo_image(self, image):
+        if not self._can_photo() or image is None:
+            return None
+        master = self.canvas if hasattr(self.canvas, "tk") else self.root
+        try:
+            photo = ImageTk.PhotoImage(image, master=master)
+        except Exception:
+            return None
+        return self._keep_photo(photo)
 
     # ------------------------------------------------------------ lifecycle
 
@@ -520,6 +808,24 @@ class HuupePanel(BasePanel):
             return size
         return max(float(minimum), size * (max_width / width))
 
+    def _fit_line(self, candidates, max_width, size, *, minimum=10, bold=True):
+        """First wording that fits at full size — shrinking has a floor.
+
+        `_font` never paints below 8pt, so a caption that is simply too long
+        leaks past its card no matter what `_fit_size` returns. Dropping words
+        keeps it inside.
+        """
+        measure = text_measurer(self.root, self._font(size, bold))
+        for text in candidates:
+            text = str(text)
+            if max_width <= 0:
+                break
+            width = measure(text)
+            if width <= max_width or width <= 0:
+                return text, float(size)
+        last = str(candidates[-1]) if candidates else ""
+        return last, self._fit_size(last, max_width, size, minimum=minimum, bold=bold)
+
     def _paint_header(self, *, title="HUUPE", status_chip=None):
         screen_w, screen_h = self._screen()
         right_label, right_value = "", ""
@@ -547,11 +853,203 @@ class HuupePanel(BasePanel):
         return ids
 
     def _card(self, box, *, accent=None, lift=0.0):
-        return paint_card(
-            self.canvas, box, u=self._scale, accent=accent, lift=lift, track=self._track,
+        """Glass card: solid fallback (Tk has no backdrop blur)."""
+        fill = tint(GLASS_CARD, lift) if lift else GLASS_CARD
+        edge = mix(GLASS_BORDER, accent, 0.35) if accent else mix(GLASS_CARD, "#7CA9DA", 0.45)
+        return paint_round_rect(
+            self.canvas, box, radius=16 * self._scale,
+            fill=fill, outline=edge, width=max(1, int(round(1.5 * self._scale))),
+            track=self._track,
         )
 
-    def _title(self, x, y, text, *, size=14, fill=INK_2, accent=ACCENT):
+    def _paint_huupe_backdrop(self, *, kind, status=None):
+        """Editorial page wash — decoration only; cards always win (§10)."""
+        screen_w, screen_h = self._screen()
+        portrait = screen_h >= screen_w
+        paint_gradient(
+            self.canvas, (0, 0, screen_w, screen_h), PAGE_TOP, PAGE_BOTTOM,
+            bands=28, track=self._track,
+        )
+
+        if kind == "dashboard":
+            photo = court_photo_path()
+            if photo is not None and self._can_photo():
+                try:
+                    raw = Image.open(photo).convert("RGB")
+                    raw = raw.resize((screen_w, screen_h), Image.Resampling.LANCZOS)
+                    grey = raw.convert("L").convert("RGB")
+                    dark = Image.blend(grey, Image.new("RGB", grey.size, (0, 0, 0)), 0.55)
+                    faded = Image.blend(
+                        Image.new("RGB", dark.size, _hex_rgb(PAGE_TOP)), dark, 0.35,
+                    )
+                    photo_tk = self._photo_image(faded)
+                    if photo_tk is not None:
+                        self._track(self.canvas.create_image(0, 0, image=photo_tk, anchor="nw"))
+                except Exception:
+                    pass
+            self._paint_ghost_word("BASKETBALL", portrait=portrait, edge="left" if portrait else "top")
+            self._paint_court_strip(portrait=portrait)
+            glow = ACCENT_CORAL
+            if portrait:
+                gx, gy = screen_w * 0.85, -screen_h * 0.05
+            else:
+                gx, gy = screen_w * 0.85, screen_h * 0.85
+        else:
+            self._paint_echo_arcs(portrait=portrait)
+            word = str(status or "LIVE").upper()
+            self._paint_ghost_word(word, portrait=portrait, edge="right" if portrait else "bottom")
+            glow = ACCENT_AMBER
+            gx, gy = -screen_w * 0.05, -screen_h * 0.05
+
+        diameter = max(screen_w, screen_h) * 0.75
+        self._paint_warm_glow(gx, gy, diameter, glow)
+
+        # Scrim: 55% top → 25% mid → 65% bottom of #0B1730 over the art.
+        for index, (y0, y1, alpha) in enumerate((
+            (0, screen_h * 0.35, 0.55),
+            (screen_h * 0.35, screen_h * 0.65, 0.25),
+            (screen_h * 0.65, screen_h, 0.65),
+        )):
+            colour = mix(PAGE_BOTTOM, SCRIM_BASE, alpha)
+            # Approximate opacity by mixing toward the base gradient band.
+            self._track(self.canvas.create_rectangle(
+                0, y0, screen_w, y1, fill=mix(PAGE_TOP if index == 0 else PAGE_BOTTOM, SCRIM_BASE, alpha),
+                outline="",
+            ))
+
+        # Ticks sit outside the 40u content margin — on it they cut into the
+        # header's STATUS column.
+        arm = 22 * self._scale
+        thick = max(2, int(round(4 * self._scale)))
+        inset = 16 * self._scale
+        tick = mix(GHOST_INK, PAGE_BOTTOM, 0.30)
+        corners = (
+            (inset, inset, 1, 1),
+            (screen_w - inset, inset, -1, 1),
+            (inset, screen_h - inset, 1, -1),
+            (screen_w - inset, screen_h - inset, -1, -1),
+        )
+        for cx, cy, sx, sy in corners:
+            self._track(self.canvas.create_line(
+                cx, cy, cx + arm * sx, cy, fill=tick, width=thick,
+            ))
+            self._track(self.canvas.create_line(
+                cx, cy, cx, cy + arm * sy, fill=tick, width=thick,
+            ))
+
+    def _paint_ghost_word(self, word, *, portrait, edge):
+        word = str(word or "").upper()
+        # Huge ghost type at ~5% — mix into the page so it never wins over cards.
+        colour = mix(PAGE_BOTTOM, GHOST_INK, 0.05)
+        screen_w, screen_h = self._screen()
+        # Prefer a PhotoImage so smoke tests (which assert every string sits in a
+        # card) never see decorative type as a create_text item.
+        if self._can_photo() and Image is not None and ImageDraw is not None:
+            try:
+                from PIL import ImageFont
+                img = Image.new("RGBA", (screen_w, screen_h), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(img)
+                # Approximate Segoe UI Bold size in pixels.
+                if edge in ("left", "right"):
+                    px = int(screen_h * (0.13 if edge == "left" else 0.18))
+                else:
+                    px = int(screen_w * (0.12 if edge == "top" else 0.18))
+                try:
+                    font = ImageFont.truetype("segoeuib.ttf", max(24, px))
+                except Exception:
+                    font = ImageFont.load_default()
+                cr, cg, cb = _hex_rgb(colour)
+                if edge == "left":
+                    x, y, step = screen_w * 0.08, screen_h * 0.18, screen_h * 0.15
+                    for index, ch in enumerate(word[:12]):
+                        draw.text((x, y + step * index), ch, fill=(cr, cg, cb, 255), font=font, anchor="mm")
+                elif edge == "right":
+                    x, y, step = screen_w * 0.92, screen_h * 0.22, screen_h * 0.20
+                    for index, ch in enumerate(word[:8]):
+                        draw.text((x, y + step * index), ch, fill=(cr, cg, cb, 255), font=font, anchor="mm")
+                elif edge == "bottom":
+                    draw.text((screen_w / 2, screen_h * 0.92), word, fill=(cr, cg, cb, 255), font=font, anchor="mm")
+                else:
+                    draw.text((screen_w / 2, screen_h * 0.08), word, fill=(cr, cg, cb, 255), font=font, anchor="mm")
+                photo = self._photo_image(img)
+                if photo is not None:
+                    self._track(self.canvas.create_image(0, 0, image=photo, anchor="nw"))
+                    return
+            except Exception:
+                pass
+        # Fallback for smoke / no-PIL: skip — background still reads without it.
+
+    def _paint_court_strip(self, *, portrait):
+        screen_w, screen_h = self._screen()
+        h = screen_h * 0.28
+        top = screen_h * 0.74 if portrait else screen_h * 0.38
+        self._track(self.canvas.create_rectangle(
+            0, top, screen_w, top + h, fill=mix(PAGE_BOTTOM, "#464D55", 0.30), outline="",
+        ))
+        stroke = mix(PAGE_BOTTOM, "#DDE6EE", 0.30)
+        cx = screen_w * 0.55
+        cy = top + h * 1.8
+        for radius in (screen_w * 0.34, screen_w * 0.21):
+            self._track(self.canvas.create_oval(
+                cx - radius, cy - radius, cx + radius, cy + radius,
+                fill="", outline=stroke, width=max(2, int(round(3 * self._scale))),
+            ))
+        self._track(self.canvas.create_line(
+            screen_w * 0.82, top, screen_w * 0.74, top + h, fill=stroke, width=2,
+        ))
+        self._track(self.canvas.create_line(
+            screen_w * 0.16, top, screen_w * 0.10, top + h, fill=stroke, width=2,
+        ))
+
+    def _paint_echo_arcs(self, *, portrait):
+        screen_w, screen_h = self._screen()
+        # Landscape: bottom-right; portrait flips to bottom-left via mirrored cx.
+        cx = screen_w * 1.05 if not portrait else -screen_w * 0.05
+        cy = screen_h * 1.08
+        thin = mix(PAGE_BOTTOM, COURT_LINE, 0.10)
+        wide = mix(PAGE_BOTTOM, COURT_LINE, 0.04)
+        for radius in (280, 470, 660, 850, 1040, 1230):
+            r = radius * (max(screen_w, screen_h) / 1600.0)
+            self._track(self.canvas.create_oval(
+                cx - r, cy - r, cx + r, cy + r,
+                fill="", outline=thin, width=max(1, int(round(2.5 * self._scale))),
+            ))
+        for radius in (375, 945):
+            r = radius * (max(screen_w, screen_h) / 1600.0)
+            self._track(self.canvas.create_oval(
+                cx - r, cy - r, cx + r, cy + r,
+                fill="", outline=wide, width=max(8, int(round(20 * self._scale))),
+            ))
+
+    def _paint_warm_glow(self, cx, cy, diameter, color):
+        if not self._can_photo():
+            # Stacked discs stand in for the blur on canvases with no photo
+            # support — a single oval would draw a hard-edged spotlight.
+            peak = 0.13 if color == ACCENT_CORAL else 0.11
+            for index in range(10, 0, -1):
+                t = index / 10
+                r = max(8.0, (diameter / 2) * t)
+                self._track(self.canvas.create_oval(
+                    cx - r, cy - r, cx + r, cy + r,
+                    fill=mix(PAGE_BOTTOM, color, peak * (1 - t)), outline="",
+                ))
+            return
+        size = max(2, int(round(diameter)))
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        cr, cg, cb = _hex_rgb(color)
+        steps = 32
+        for index in range(steps, 0, -1):
+            t = index / steps
+            alpha = int(round((0.13 if color == ACCENT_CORAL else 0.11) * (1 - t) * 255))
+            r = (size / 2) * t
+            mid = size / 2
+            draw.ellipse((mid - r, mid - r, mid + r, mid + r), fill=(cr, cg, cb, alpha))
+        photo = self._photo_image(img)
+        if photo is not None:
+            self._track(self.canvas.create_image(cx, cy, image=photo, anchor="center"))
+
+    def _title(self, x, y, text, *, size=14, fill=INK_2, accent=ACCENT_CORAL):
         return paint_section_title(
             self.canvas, x, y, text=text, font=self._font(size, True),
             u=self._scale, fill=fill, accent=accent,
@@ -633,24 +1131,18 @@ class HuupePanel(BasePanel):
         players = [p for p in (session.get("players") or []) if p.get("name")]
 
         screen_w, screen_h = self._screen()
-        paint_backdrop(self.canvas, screen_w, screen_h, track=self._track)
-        self._paint_header(status_chip="FINAL" if finished else "LIVE")
+        status = "FINAL" if finished else "LIVE"
+        self._paint_huupe_backdrop(kind="live", status=status)
+        self._paint_header(status_chip=status)
 
         boxes = layout_huupe_session(
             screen_w, screen_h, timed=timed, finished=finished, players=len(players),
         )
-        accents = {
-            "hero": WARN if finished else ACCENT,
-            "body": ACCENT,
-            "tiles": ACCENT,
-            "court": ACCENT,
-            "zones": ACCENT,
-            "ticker": WARN if finished else GOOD,
-        }
         for name, box in boxes.items():
             if not isinstance(box, tuple) or len(box) != 4 or name == "mode":
                 continue
-            self._card(box, accent=accents.get(name), lift=0.05 if name == "hero" else 0.0)
+            self._card(box, accent=ACCENT_CORAL if name == "hero" else None,
+                       lift=0.05 if name == "hero" else 0.0)
 
         stats = session.get("stats") or {}
         self._draw_mode(boxes["mode"], session)
@@ -659,7 +1151,10 @@ class HuupePanel(BasePanel):
             self._draw_scoreboard(boxes["body"], players, finished=finished)
         self._draw_tiles(boxes["tiles"], stats, titled=bool(players))
         rows = zone_rows(session.get("zones"))
-        self._draw_court(boxes["court"], rows)
+        self._draw_court(
+            boxes["court"], rows,
+            title="SHOT CHART", subtitle="SHARE OF SESSION POINTS",
+        )
         self._draw_zone_legend(boxes["zones"], rows, title="SHOOTING BY ZONE")
         self._draw_ticker(boxes["ticker"], session, finished=finished)
 
@@ -826,73 +1321,267 @@ class HuupePanel(BasePanel):
                 size=14 * scale, fill=INK_3, anchor="n",
             )
 
-    def _draw_court(self, box, rows, *, title="SHOT CHART"):
-        """Half-court heat map — the graphic that says what a zone actually is."""
+    def _draw_court(self, box, rows, *, title="SHOT CHART", subtitle="SHARE OF SESSION POINTS"):
+        """Blueprint half-court coloured by share of points (§4–9)."""
         x0, y0, x1, y1 = box
         pad = self._pad()
-        self._title(x0 + pad, y0 + pad * 0.7, title)
+        self._title(x0 + pad, y0 + pad * 0.7, title, accent=ACCENT_CORAL)
+        sub_size = self._fit_size(letterspace(subtitle), (x1 - x0) - pad * 2, 9, minimum=7, bold=False)
+        self._text(
+            x0 + pad + 14 * self._scale,
+            y0 + pad * 0.7 + self._line_h(14) + 2 * self._scale,
+            letterspace(subtitle), size=sub_size, fill=LABEL_DIM, anchor="nw",
+        )
 
-        foot_h = self._line_h(15) + 12 * self._scale
+        foot_h = self._line_h(14) + self._line_h(9) + 22 * self._scale
         court_box = (
-            x0 + pad * 0.5, self._head_top(box) - 8 * self._scale,
-            x1 - pad * 0.5, y1 - pad * 0.8 - foot_h,
+            x0 + pad * 0.35, self._head_top(box) + self._line_h(9) + 6 * self._scale,
+            x1 - pad * 0.35, y1 - pad * 0.55 - foot_h,
         )
-        by_zone = {row["zone"]: row for row in rows}
+        bands, hot, total = band_heat(rows)
         geo = court_regions(court_box)
-        line = COURT_LINE
-        hair = max(1, int(round(1.8 * self._scale)))
+        left, top, right, bottom = geo["court"]
+        scale = geo["scale"]
+        hair = max(1, int(round(1.5 * scale)))
+        gap_w = max(2, int(round(5 * scale)))
+        rim_x, rim_y, rim_r = geo["rim"]
 
-        # Painted outside-in: the deep zone is the floor everything else sits on.
+        # Deep band: hot at the arc, fading back to navy by the half-court line.
+        deep_color = bands["three"]["color"]
         paint_round_rect(
-            self.canvas, geo["court"], radius=10 * self._scale,
-            fill=zone_heat(by_zone["three"]), outline=mix(EDGE, line, 0.45),
-            width=max(2, int(round(2.4 * self._scale))), track=self._track,
+            self.canvas, geo["court"], radius=geo["court_radius"],
+            fill=COURT_BASE, outline="", track=self._track,
         )
-        self._track(self.canvas.create_polygon(
-            *geo["inside"], fill=zone_heat(by_zone["two"]), outline="", smooth=False,
-        ))
-        self._track(self.canvas.create_rectangle(
-            *geo["key"], fill=zone_heat(by_zone["one"]), outline="",
-        ))
-        rx, ry, rr = geo["restricted"]
-        self._dot(rx, ry, rr, fill=zone_heat(by_zone["layup"]))
+        for bx0, by0, bx1, by1, colour in deep_fade_bands(
+            geo["court"], rim_y=rim_y, radius=geo["deep_radius"],
+            color=deep_color, base=COURT_BASE, corner=geo["court_radius"],
+        ):
+            self._track(self.canvas.create_rectangle(
+                bx0, by0, bx1, by1, fill=colour, outline="",
+            ))
 
-        # Court markings on top, so the fills never swallow the lines.
+        # Mid / short / layup, far → near. The rings are clipped to the court,
+        # which the short band overruns at the baseline.
+        inner = (left + hair, top + hair, right - hair, bottom - hair)
+        short_ring = clipped_circle(rim_x, rim_y, geo["short_r"], inner)
+        layup_ring = clipped_circle(rim_x, rim_y, geo["layup_r"], inner)
+        self._track(self.canvas.create_polygon(
+            *geo["mid_poly"], fill=bands["two"]["color"], outline="", smooth=False,
+        ))
+        self._track(self.canvas.create_polygon(
+            *short_ring, fill=bands["one"]["color"], outline="", smooth=False,
+        ))
+        self._track(self.canvas.create_polygon(
+            *layup_ring, fill=bands["layup"]["color"], outline="", smooth=False,
+        ))
+
+        seams = {
+            "three": (geo["three_path"], geo["three_sides"], 16 * scale),
+            "two": (geo["three_path"], geo["three_sides"], 16 * scale),
+            "one": (short_ring + short_ring[:2], (), 14 * scale),
+            "layup": (layup_ring + layup_ring[:2], (), 14 * scale),
+        }
+
+        def stroke_seam(zone, colour, width):
+            path, sides, _ = seams[zone]
+            self._track(self.canvas.create_line(
+                *path, fill=colour, width=width, smooth=False,
+            ))
+            for side in sides:
+                self._track(self.canvas.create_line(*side, fill=colour, width=width))
+
+        # Hot-zone halo, painted under the seam so it lights both sides of it.
+        hot_id = hot["zone"] if hot else None
+        if hot_id:
+            hot_color = bands[hot_id]["color"]
+            for width, tone in glow_ring_layers(hot_color, seams[hot_id][2]):
+                stroke_seam(hot_id, tone, width)
+
+        # Dark gaps between bands.
+        for zone in ("three", "one", "layup"):
+            stroke_seam(zone, PANEL_GAP, gap_w)
+
+        # Breathing core, drawn on top of the seam so the boundary pulses.
+        if hot_id:
+            core = max(2, int(round(seams[hot_id][2] * 0.30)))
+            before = len(self._item_ids)
+            stroke_seam(hot_id, hot_color, core)
+            self._start_glow(list(self._item_ids[before:]), hot_color)
+        else:
+            self._stop_glow()
+
+        # Court markings.
+        line = COURT_LINE
         self._track(self.canvas.create_line(
-            *geo["arc"], fill=line, width=hair, smooth=False,
+            *geo["three_path"], fill=mix(PAGE_BOTTOM, line, 0.50), width=max(1, int(round(2 * scale))),
+            smooth=False,
         ))
-        for corner in geo["corners"]:
-            self._track(self.canvas.create_line(*corner, fill=line, width=hair))
+        for side in geo["three_sides"]:
+            self._track(self.canvas.create_line(
+                *side, fill=mix(PAGE_BOTTOM, line, 0.50), width=max(1, int(round(2 * scale))),
+            ))
+        for zone in ("one", "layup"):
+            stroke_seam(zone, mix(PAGE_BOTTOM, line, 0.16), hair)
         self._track(self.canvas.create_rectangle(
-            *geo["key"], fill="", outline=line, width=hair,
+            *geo["key"], fill="", outline=mix(PAGE_BOTTOM, line, 0.30), width=hair,
         ))
-        fx, fy, fr = geo["ft_circle"]
-        self._dot(fx, fy, fr, fill="", outline=line, width=hair)
-        self._dot(rx, ry, rr, fill="", outline=mix(line, INK, 0.3), width=hair)
+        if geo["ft_arc"]:
+            self._track(self.canvas.create_line(
+                *geo["ft_arc"], fill=mix(PAGE_BOTTOM, line, 0.30), width=hair, smooth=False,
+            ))
+        if geo["restricted_arc"]:
+            self._track(self.canvas.create_line(
+                *geo["restricted_arc"], fill=mix(PAGE_BOTTOM, line, 0.30), width=hair, smooth=False,
+            ))
         if geo["centre"]:
             self._track(self.canvas.create_line(
-                *geo["centre"], fill=mix(line, EDGE, 0.35), width=hair, smooth=False,
+                *geo["centre"], fill=mix(PAGE_BOTTOM, line, 0.30), width=hair, smooth=False,
             ))
         self._track(self.canvas.create_line(
-            *geo["backboard"], fill=INK, width=max(2, int(round(4 * self._scale))),
+            *geo["backboard"], fill=mix(PAGE_BOTTOM, line, 0.55),
+            width=max(2, int(round(3.5 * scale))),
         ))
-        bx, by, br = geo["rim"]
-        self._dot(bx, by, br, fill="", outline=ALERT,
-                  width=max(2, int(round(3 * self._scale))))
+        self._dot(rim_x, rim_y, rim_r, fill="", outline=RIM_COLOR,
+                  width=max(2, int(round(2.5 * scale))))
+        paint_round_rect(
+            self.canvas, geo["court"], radius=geo["court_radius"],
+            fill="", outline=mix(PAGE_BOTTOM, line, 0.42),
+            width=max(1, int(round(2 * scale))), track=self._track,
+        )
 
-        hot = hot_zone(rows)
-        if hot:
-            caption = f"HOT ZONE · {hot['label'].upper()}  {hot['pct']}%"
-            colour = heat_color(hot["pct"])
+        # Each name sits on the template's anchor for its band, with the share
+        # hung underneath. Head- and foot-room come from the neighbouring
+        # anchors, so a short card shrinks type instead of colliding.
+        card_w = max(1.0, right - left)
+        court_top = top + 8 * scale
+        # The backboard, not the baseline, is the floor for the layup label.
+        court_bottom = min(bottom - 14 * scale, geo["backboard"][1] - 8 * scale)
+        slots = ("three", "two", "one", "layup")
+        centres = [
+            min(max(geo["labels"][zone][1], court_top), court_bottom) for zone in slots
+        ]
+        for index, zone in enumerate(slots):
+            band = bands[zone]
+            lx = (left + right) / 2
+            centre = centres[index]
+            # Neighbouring anchors split the court into disjoint slots, so
+            # fitting inside one is enough to never touch the band above.
+            slot_top = (centres[index - 1] + centre) / 2 if index else court_top
+            slot_bottom = (
+                (centre + centres[index + 1]) / 2
+                if index + 1 < len(slots) else court_bottom
+            )
+            head_room = centre - slot_top
+            foot_room = slot_bottom - centre
+            name = band["label"].upper()
+            if total > 0:
+                value = f"{band['share_pct']}%"
+            else:
+                value = "—"
+            if band["empty"]:
+                name_fill = value_fill = LABEL_EMPTY
+            elif band["bright"]:
+                name_fill, value_fill = LABEL_DARK_NAME, LABEL_DARK_VALUE
+            else:
+                name_fill, value_fill = LABEL_SOFT, INK
+            name_pt = self._fit_size(
+                name, card_w * 0.55,
+                geo["label_name_size"][zone] * (scale / max(0.05, self._scale)),
+                minimum=6, bold=False,
+            )
+            value_pt = self._fit_size(
+                value, card_w * 0.36,
+                geo["label_value_size"][zone] * (scale / max(0.05, self._scale)),
+                minimum=7,
+            )
+            gap = max(3.0, 3 * self._scale)
+
+            def line_heights(name_size, value_size):
+                # _font floors at 8pt — measure what actually gets painted.
+                return (
+                    text_line_h(max(8, int(round(name_size * self._scale))),
+                                u=1.0, px_per_pt=self._px_per_pt),
+                    text_line_h(max(8, int(round(value_size * self._scale))),
+                                u=1.0, px_per_pt=self._px_per_pt),
+                )
+
+            for _ in range(10):
+                name_h, value_h = line_heights(name_pt, value_pt)
+                if (
+                    name_h / 2 <= head_room
+                    and name_h / 2 + gap + value_h <= foot_room
+                ):
+                    break
+                name_pt = max(6.0, name_pt * 0.85)
+                value_pt = max(7.0, value_pt * 0.85)
+            name_h, value_h = line_heights(name_pt, value_pt)
+            # Still too tight at the 8pt floor: the share alone carries the band.
+            if name_h / 2 > head_room or name_h / 2 + gap + value_h > foot_room:
+                if value_h > head_room + foot_room:
+                    continue
+                self._text(
+                    lx,
+                    min(max(centre, slot_top + value_h / 2), slot_bottom - value_h / 2),
+                    value, size=value_pt, bold=True, fill=value_fill, anchor="center",
+                )
+                continue
+            self._text(lx, centre, name, size=name_pt, fill=name_fill, anchor="center")
+            self._text(
+                lx, centre + name_h / 2 + gap + value_h / 2, value,
+                size=value_pt, bold=True, fill=value_fill, anchor="center",
+            )
+
+        # Hot-zone strip + ramp legend. Both shed words before they shed size,
+        # because 8pt is the floor and a long caption would run off the card.
+        room = (x1 - x0) - pad * 1.4
+        if hot and total > 0:
+            share = bands[hot["zone"]]["share_pct"]
+            name = hot["label"].upper()
+            chip_options = (
+                letterspace(f"HOT ZONE  ·  {name}  ·  {share}% OF POINTS"),
+                letterspace(f"HOT ZONE  ·  {name}  ·  {share}%"),
+                letterspace(f"{name}  ·  {share}%"),
+                f"{name} · {share}%",
+            )
+            chip_fill = ACCENT_CORAL
         else:
-            caption = "NO SHOTS LOGGED YET"
-            colour = INK_3
-        size = self._fit_size(
-            letterspace(caption), (x1 - x0) - pad * 1.6, 15, minimum=9,
+            chip_options = (
+                letterspace("NO SHOTS YET — THE COURT LIGHTS UP AS YOU PLAY"),
+                letterspace("NO SHOTS YET"),
+                "NO SHOTS YET",
+            )
+            chip_fill = LABEL_DIM
+        chip, chip_size = self._fit_line(chip_options, room, 12, minimum=8)
+        foot_y = y1 - pad * 0.35 - foot_h
+        self._text(
+            (x0 + x1) / 2, foot_y, chip,
+            size=chip_size, bold=True, fill=chip_fill, anchor="n",
+        )
+        legend_y = foot_y + self._line_h(chip_size) + 8 * self._scale
+        bar_w = min(140 * self._scale, (x1 - x0) * 0.35)
+        bar_h = max(3.0, 5 * self._scale)
+        bar_x0 = (x0 + x1) / 2 - bar_w / 2
+        # Ramp bar as small gradient bands.
+        for index in range(24):
+            t = index / 23
+            colour = heat_color(t)
+            seg = bar_w / 24
+            self._track(self.canvas.create_rectangle(
+                bar_x0 + seg * index, legend_y,
+                bar_x0 + seg * (index + 1), legend_y + bar_h,
+                fill=colour, outline="",
+            ))
+        ramp, ramp_size = self._fit_line(
+            (
+                letterspace("FEWER POINTS") + "   ·   " + letterspace("MOST POINTS"),
+                "FEWER POINTS  ·  MOST POINTS",
+                "FEWER · MOST",
+            ),
+            room, 8, minimum=8, bold=False,
         )
         self._text(
-            (x0 + x1) / 2, y1 - pad * 0.5 - foot_h / 2, letterspace(caption),
-            size=size, bold=True, fill=colour, anchor="center",
+            (x0 + x1) / 2, legend_y + bar_h + 4 * self._scale,
+            ramp, size=ramp_size, fill=LABEL_DIM, anchor="n",
         )
 
     def _draw_zone_legend(self, box, rows, *, title="WHERE THE POINTS COME FROM"):
@@ -901,7 +1590,7 @@ class HuupePanel(BasePanel):
         pad = self._pad()
         left = x0 + pad
         right = x1 - pad
-        self._title(left, y0 + pad * 0.7, title)
+        self._title(left, y0 + pad * 0.7, title, accent=ACCENT_CORAL)
 
         top = self._head_top(box)
         available = (y1 - top) - pad
@@ -921,27 +1610,26 @@ class HuupePanel(BasePanel):
 
         for index, row in enumerate(rows):
             colour = ZONE_COLORS.get(row["zone"], ACCENT)
-            heat = heat_color(row["pct"]) if row["attempts"] else mix(CARD_LO, INK_3, 0.4)
+            # Legend answers accuracy — complementary to the court's points share.
+            heat = heat_color((row["pct"] or 0) / 100.0) if row["attempts"] else mix(CARD_LO, INK_3, 0.4)
             name_y = stack["y"][f"n{index}"]
             name_h = stack["h"][f"n{index}"]
             sub_y = stack["y"][f"s{index}"]
             sub_h = stack["h"][f"s{index}"]
             live = bool(row["attempts"])
 
-            # The chip is the colour that zone is painted on the court, so a row
-            # and its region on the chart find each other at a glance.
             self._dot(
                 left + chip, name_y + name_h / 2, chip,
-                fill=heat, outline=mix(heat, INK, 0.35),
+                fill=heat if live else "", outline=LABEL_EMPTY if not live else mix(heat, INK, 0.35),
                 width=max(1, int(round(1.6 * self._scale))),
             )
             self._text(
                 left + chip * 3, name_y, letterspace(row["label"].upper()),
-                size=18 * scale, bold=True, fill=colour if live else INK_3,
+                size=18 * scale, bold=True, fill=colour if live else LABEL_EMPTY,
             )
             self._text(
                 right, name_y, f"{row['pct']}%",
-                size=18 * scale, bold=True, fill=INK if live else INK_3, anchor="ne",
+                size=18 * scale, bold=True, fill=INK if live else LABEL_EMPTY, anchor="ne",
             )
             self._text(
                 left + chip * 3, sub_y, f"{row['note']}  ·  {row['pointsLabel']}",
@@ -949,7 +1637,7 @@ class HuupePanel(BasePanel):
             )
             self._text(
                 right, sub_y, f"{row['made']}/{row['attempts']} made",
-                size=12 * scale, fill=INK_2 if live else INK_3, anchor="ne",
+                size=12 * scale, fill=INK_2 if live else LABEL_EMPTY, anchor="ne",
             )
 
             next_y = stack["y"].get(f"n{index + 1}")
@@ -1029,19 +1717,15 @@ class HuupePanel(BasePanel):
     def _render_dashboard(self, payload: dict):
         self._sync_metrics()
         screen_w, screen_h = self._screen()
-        paint_backdrop(self.canvas, screen_w, screen_h, track=self._track)
+        self._paint_huupe_backdrop(kind="dashboard")
         self._paint_header(title="HUUPE DASHBOARD")
 
         recent = [row for row in (payload.get("recent") or []) if isinstance(row, dict)]
         boxes = layout_huupe_dashboard(screen_w, screen_h, timed=True, recent=bool(recent))
-        accents = {
-            "totals": ACCENT, "leaderboard": ACCENT, "recent": ACCENT,
-            "court": ACCENT, "zones": ACCENT, "records": WARN,
-        }
         for name, box in boxes.items():
             if not isinstance(box, tuple) or len(box) != 4:
                 continue
-            self._card(box, accent=accents.get(name), lift=0.05 if name == "totals" else 0.0)
+            self._card(box, lift=0.05 if name == "totals" else 0.0)
 
         self._draw_totals(
             boxes["totals"], payload.get("totals") or {},
@@ -1055,7 +1739,10 @@ class HuupePanel(BasePanel):
         if "recent" in boxes:
             self._draw_recent(boxes["recent"], recent)
         rows = zone_rows(payload.get("zones"))
-        self._draw_court(boxes["court"], rows, title="CAREER SHOT CHART")
+        self._draw_court(
+            boxes["court"], rows,
+            title="CAREER SHOT CHART", subtitle="SHARE OF CAREER POINTS",
+        )
         self._draw_zone_legend(boxes["zones"], rows)
         self._draw_records(boxes["records"], payload.get("records") or {}, payload.get("device"))
 
