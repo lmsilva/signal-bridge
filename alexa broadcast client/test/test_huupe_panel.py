@@ -17,9 +17,13 @@ if str(CLIENT_ROOT) not in sys.path:
 
 from src.huupe_panel import (
     HuupePanel,
+    band_heat,
     clip,
     court_regions,
+    deep_fade_alpha,
+    deep_fade_bands,
     format_score,
+    glow_ring_layers,
     heat_color,
     hot_zone,
     layout_huupe_dashboard,
@@ -98,6 +102,11 @@ class ZoneRowTests(unittest.TestCase):
         close = next(row for row in rows if row["zone"] == "one")
         self.assertEqual((close["label"], close["made"], close["attempts"], close["pct"]),
                          ("Close", 4, 11, 36))
+        self.assertEqual(close["scored"], 4.0)
+
+    def test_scored_from_the_bridge_is_kept(self):
+        rows = zone_rows([{"zone": "layup", "made": 3, "attempts": 3, "scored": 0.3}])
+        self.assertEqual(rows[0]["scored"], 0.3)
 
     def test_a_zone_says_where_it_is_and_what_a_make_is_worth(self):
         """An older bridge sends counts only; the panel still has to name them."""
@@ -229,68 +238,156 @@ class CourtTests(unittest.TestCase):
             self.assertGreaterEqual(top, box[1] - 0.5)
             self.assertLessEqual(bottom, box[3] + 0.5)
 
+    def test_the_aspect_ratio_matches_the_template(self):
+        geo = court_regions((0, 0, 560, 530))
+        left, top, right, bottom = geo["court"]
+        # Court rect inside the template is 500×470.
+        self.assertAlmostEqual((right - left) / (bottom - top), 500 / 470, places=3)
+
     def test_the_markings_stay_on_the_floor(self):
         geo = court_regions((0, 0, 400, 420))
-        _left, top, _right, bottom = geo["court"]
+        left, top, right, bottom = geo["court"]
         key = geo["key"]
         self.assertGreater(key[1], top)
-        self.assertAlmostEqual(key[3], bottom)
+        self.assertAlmostEqual(key[3], bottom, delta=1.0)
         rim_x, rim_y, _rim_r = geo["rim"]
         self.assertLess(rim_y, bottom)
         self.assertGreater(rim_y, key[1])
+        self.assertAlmostEqual(rim_x, (left + right) / 2, delta=1.0)
 
-    def test_a_taller_card_adds_floor_rather_than_stretching_the_paint(self):
+    def test_a_taller_card_letterboxes_rather_than_stretching(self):
+        """The template aspect is fixed — extra height is empty, not stretched paint."""
         short = court_regions((0, 0, 400, 360))
         tall = court_regions((0, 0, 400, 520))
-        short_key = short["key"][3] - short["key"][1]
-        tall_key = tall["key"][3] - tall["key"][1]
-        self.assertAlmostEqual(short_key, tall_key, delta=1.0)
-        self.assertGreater(
-            tall["court"][3] - tall["court"][1], short["court"][3] - short["court"][1])
+        short_aspect = (short["court"][2] - short["court"][0]) / (short["court"][3] - short["court"][1])
+        tall_aspect = (tall["court"][2] - tall["court"][0]) / (tall["court"][3] - tall["court"][1])
+        self.assertAlmostEqual(short_aspect, tall_aspect, places=4)
+        # Width-limited once the card is tall enough.
+        self.assertGreater(tall["scale"], short["scale"])
+
+    def test_band_radii_follow_the_template(self):
+        geo = court_regions((0, 0, 560, 530))
+        self.assertAlmostEqual(geo["layup_r"] / geo["scale"], 50, places=3)
+        self.assertAlmostEqual(geo["short_r"] / geo["scale"], 137.5, places=3)
 
     def test_the_centre_circle_hangs_off_the_far_baseline(self):
-        for box in ((0, 0, 400, 340), (0, 0, 400, 540)):
-            geo = court_regions(box)
-            top = geo["court"][1]
-            lowest = max(geo["centre"][index] for index in range(1, len(geo["centre"]), 2))
-            arc_apex = min(geo["arc"][index] for index in range(1, len(geo["arc"]), 2))
-            self.assertGreater(lowest, top)
-            self.assertLess(lowest, arc_apex, "the centre circle runs into the arc")
+        geo = court_regions((0, 0, 400, 400))
+        top = geo["court"][1]
+        lowest = max(geo["centre"][index] for index in range(1, len(geo["centre"]), 2))
+        self.assertGreater(lowest, top)
 
 
 class HeatTests(unittest.TestCase):
     def test_cold_and_hot_ends_are_different_colours(self):
-        self.assertNotEqual(heat_color(0), heat_color(100))
+        self.assertNotEqual(heat_color(0), heat_color(1))
 
-    def test_the_ramp_warms_up_as_the_percentage_climbs(self):
+    def test_the_ramp_warms_up_as_heat_climbs(self):
         """Red channel is the cheap proxy for 'hotter' on a blue-to-red ramp."""
-        reds = [int(heat_color(pct)[1:3], 16) for pct in (0, 25, 50, 75, 100)]
+        reds = [int(heat_color(t)[1:3], 16) for t in (0.0, 0.25, 0.5, 0.75, 1.0)]
         self.assertEqual(reds, sorted(reds))
 
-    def test_out_of_range_percentages_are_clamped(self):
-        self.assertEqual(heat_color(-40), heat_color(0))
-        self.assertEqual(heat_color(140), heat_color(100))
+    def test_out_of_range_values_are_clamped(self):
+        self.assertEqual(heat_color(-0.4), heat_color(0))
+        self.assertEqual(heat_color(1.4), heat_color(1))
+
+    def test_the_demo_session_puts_eighty_percent_on_deep(self):
+        rows = zone_rows([
+            {"zone": "layup", "made": 3, "attempts": 3, "scored": 0.3},
+            {"zone": "one", "made": 0, "attempts": 0, "scored": 0},
+            {"zone": "two", "made": 1, "attempts": 1, "scored": 2},
+            {"zone": "three", "made": 3, "attempts": 5, "scored": 9},
+        ])
+        bands, hot, total = band_heat(rows)
+        self.assertAlmostEqual(total, 11.3, places=1)
+        self.assertEqual(hot["zone"], "three")
+        self.assertEqual(bands["three"]["share_pct"], 80)
+        self.assertTrue(bands["one"]["empty"])
+        self.assertFalse(bands["three"]["bright"])  # deep always keeps light text
+        self.assertGreaterEqual(bands["three"]["t"], 0.99)
+
+
+class DeepFadeTests(unittest.TestCase):
+    """The deep band has to fade on any canvas — see `deep_fade_bands`."""
+
+    def bands(self, **kwargs):
+        options = {
+            "rim_y": 380.0, "radius": 400.0,
+            "color": "#FF6157", "base": "#0B1A33", "corner": 8.0,
+        }
+        options.update(kwargs)
+        return deep_fade_bands((0.0, 0.0, 200.0, 400.0), **options)
+
+    def test_anything_nearer_than_the_arc_stays_at_full_strength(self):
+        self.assertEqual(deep_fade_alpha(0.0), deep_fade_alpha(0.485))
+
+    def test_the_ramp_only_ever_thins_out(self):
+        alphas = [deep_fade_alpha(t / 20) for t in range(21)]
+        self.assertEqual(alphas, sorted(alphas, reverse=True))
+
+    def test_rows_tile_the_court_without_gaps(self):
+        rows = self.bands()
+        self.assertGreater(len(rows), 8)
+        self.assertAlmostEqual(rows[0][1], 0.0)
+        self.assertAlmostEqual(rows[-1][3], 400.0)
+        for above, below in zip(rows, rows[1:]):
+            self.assertAlmostEqual(above[3], below[1])
+
+    def test_the_far_end_is_colder_than_the_rim_end(self):
+        rows = self.bands()
+        top_red = int(rows[0][4][1:3], 16)
+        rim_red = int(rows[-1][4][1:3], 16)
+        self.assertLess(top_red, rim_red)
+
+    def test_rounded_corners_pull_the_end_rows_in(self):
+        rows = self.bands()
+        self.assertGreater(rows[0][0], 0.0)
+        self.assertLess(rows[0][2], 200.0)
+        middle = rows[len(rows) // 2]
+        self.assertAlmostEqual(middle[0], 0.0)
+
+    def test_a_court_with_no_height_paints_nothing(self):
+        self.assertEqual(
+            deep_fade_bands(
+                (0, 0, 200, 0), rim_y=0, radius=400, color="#FF6157", base="#0B1A33",
+            ),
+            [],
+        )
+
+
+class GlowRingTests(unittest.TestCase):
+    def test_the_halo_narrows_as_it_heats_up(self):
+        layers = glow_ring_layers("#FF6157", 16, base="#0F1D36")
+        widths = [width for width, _ in layers]
+        self.assertEqual(widths, sorted(widths, reverse=True))
+        self.assertEqual(layers[-1][1], "#FF6157")
+
+    def test_a_hairline_band_still_gets_a_drawable_stroke(self):
+        for width, _ in glow_ring_layers("#FF6157", 0.2):
+            self.assertGreaterEqual(width, 2)
 
 
 class HotZoneTests(unittest.TestCase):
-    def rows(self, **pcts):
-        return [
-            {"zone": zone, "made": made, "attempts": attempts,
-             "pct": round(100 * made / attempts) if attempts else 0}
-            for zone, (made, attempts) in pcts.items()
-        ]
+    def rows(self, **scores):
+        # scores: zone -> (made, attempts, scored)
+        out = []
+        for zone in ("layup", "one", "two", "three"):
+            made, attempts, scored = scores.get(zone, (0, 0, 0))
+            out.append({
+                "zone": zone, "made": made, "attempts": attempts, "scored": scored,
+                "pct": round(100 * made / attempts) if attempts else 0,
+                "label": zone,
+            })
+        return out
 
-    def test_the_best_percentage_wins(self):
-        rows = self.rows(layup=(2, 8), one=(6, 10), three=(1, 9))
-        self.assertEqual(hot_zone(rows)["zone"], "one")
-
-    def test_a_single_lucky_shot_is_not_a_hot_zone(self):
-        rows = self.rows(three=(1, 1), one=(5, 10))
-        self.assertEqual(hot_zone(rows)["zone"], "one")
-
-    def test_one_attempt_is_better_than_nothing_at_all(self):
-        rows = self.rows(three=(1, 1), one=(0, 0))
+    def test_the_band_with_the_most_points_wins(self):
+        rows = self.rows(layup=(6, 7, 0.6), one=(4, 11, 4), three=(2, 12, 6))
         self.assertEqual(hot_zone(rows)["zone"], "three")
+
+    def test_ties_break_to_more_attempts_then_longer_range(self):
+        rows = self.rows(one=(2, 4, 2), two=(1, 1, 2))
+        self.assertEqual(hot_zone(rows)["zone"], "one")
+        rows = self.rows(one=(1, 1, 2), two=(1, 1, 2))
+        self.assertEqual(hot_zone(rows)["zone"], "two")
 
     def test_a_hoop_nobody_has_shot_at_has_no_hot_zone(self):
         self.assertIsNone(hot_zone(zone_rows([])))

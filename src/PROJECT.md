@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-27 (Huupe Live rename)
+**Last updated:** 2026-08-27 (Huupe blueprint shot chart)
 
 ---
 
@@ -612,6 +612,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-27: **Huupe display paints share of points** — the client blueprint chart colours each band by `scored` / total points (`HEAT_STAT`), not FG%. Bridge payload already carried `scored` on every zone row; no schema change. Display-side rewrite lives in the client `PROJECT.md`.
 - 2026-08-27: **Huupe Live rename** — Quick Push and the scheduler picker now show **Huupe Live** (was "Huupe Live or Last game"); the subtitle stays "Live session, or the last one" so the fallback is still clear.
 - 2026-08-27: **Huupe zone names say where the shot came from** — `1 PT / 2 PT / 3 PT` on the dashboard read as *Player 1 / 2 / 3*, and nothing explained the tenth a layup pays. Every row from `zoneRows()` now carries `label` (**Layup / Short Range / Mid Range / Deep Range**), `note` (the hoop's own term — *Low post*, *Top of the key*), `pointsLabel` (**0.1 PT** … **3 PT**), `points` and `scored` (the points that zone actually contributed, so three layups read as 0.3 rather than 3). `lastShot.zoneLabel` follows the new names; the Vestaboard's 22-column `short` codes are untouched. Also new: the live session keeps the tail of its shot log (`recentShots`, capped at 18, oldest first, `{made, zone, short}`) so the display can paint a make/miss ticker — cleared when Unity takes over in Family Mode, because that stream replays the same shots with names attached. Tests: `huupe-payload` (zone vocabulary, `scored` totals, ticker pass-through), `huupe-live` (ticker tail, cap, Family Mode reset).
 - 2026-08-27: **Display picker defaults to All Displays** — the sticky Display select opens on **All Displays** (first option) instead of restoring the last single target. When the Vestaboard Simulator is enabled it is listed next, then other clients and boards A–Z. New announces no longer steal the picker away from All Displays. Cache-bust `?v=signal101`.
