@@ -2650,7 +2650,7 @@
       svg.setAttribute('viewBox', '0 0 10 10');
       if (empty) {
         empty.hidden = false;
-        empty.textContent = 'No rules yet — add one on the Rules tab and activity will appear here.';
+        empty.textContent = 'No rules yet — add one on the Schedule tab and activity will appear here.';
       }
       return;
     }
@@ -2722,7 +2722,7 @@
       empty.hidden = events.length > 0;
       empty.textContent = events.length
         ? ''
-        : 'No activity in this window yet. Tap a rule on the Rules tab to see when it is next due.';
+        : 'No activity in this window yet. Tap a rule on the Schedule tab to see when it is next due.';
     }
   }
 
@@ -2925,7 +2925,7 @@
         queueSchedRuleSave(card.dataset.ruleId, card);
         return;
       }
-      if (target.closest('#sched-view-rules') || target.id === 'sched-active') {
+      if (target.closest('#sched-view-settings') || target.id === 'sched-active') {
         if (target.id === 'sched-show-skips') return;
         await saveSchedSettings();
         return;
@@ -2967,8 +2967,10 @@
         document.querySelectorAll('#sched-view-tabs .segmented-btn').forEach((btn) => {
           btn.classList.toggle('active', btn === viewBtn);
         });
-        $('sched-view-rules').hidden = view !== 'rules';
+        $('sched-view-schedule').hidden = view !== 'schedule';
         $('sched-view-activity').hidden = view !== 'activity';
+        $('sched-view-simulation').hidden = view !== 'simulation';
+        $('sched-view-settings').hidden = view !== 'settings';
         if (view === 'activity') await loadSchedActivity();
         return;
       }

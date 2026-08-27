@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal95">
+  <link rel="stylesheet" href="styles.css?v=signal96">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -273,9 +273,11 @@
     <section class="tab-panel" id="tab-scheduler">
       <div class="card-grid">
         <div class="sched-head">
-          <div class="segmented" id="sched-view-tabs">
-            <button type="button" class="segmented-btn active" data-sched-view="rules">Rules</button>
+          <div class="segmented sched-view-tabs" id="sched-view-tabs">
+            <button type="button" class="segmented-btn active" data-sched-view="schedule">Schedule</button>
             <button type="button" class="segmented-btn" data-sched-view="activity">Activity</button>
+            <button type="button" class="segmented-btn" data-sched-view="simulation">Simulated Schedule</button>
+            <button type="button" class="segmented-btn" data-sched-view="settings">Settings</button>
           </div>
           <label class="sched-toggle" title="When on, rules air automatically while the display is idle">
             <input type="checkbox" id="sched-active">
@@ -283,8 +285,8 @@
           </label>
         </div>
 
-        <!-- ---------------------------- Rules view ---------------------------- -->
-        <div id="sched-view-rules">
+        <!-- --------------------------- Schedule view -------------------------- -->
+        <div id="sched-view-schedule">
           <div class="card sched-nextup-card" id="sched-nextup-card">
             <div class="sched-nextup" id="sched-nextup">Loading…</div>
             <p class="hint" id="sched-nextup-hint">Automatically shows pages when the display is idle. It is the lowest-priority source — it never interrupts a live page, a manual push, or a page still counting down.</p>
@@ -297,8 +299,28 @@
             <select class="field-input" id="sched-add-command"></select>
             <button class="btn btn-accent btn-block" id="btn-sched-add" style="margin-top:10px">Add rule</button>
           </div>
+        </div>
 
-          <div class="section-label">Global settings</div>
+        <!-- ------------------------- Simulation view -------------------------- -->
+        <div id="sched-view-simulation" hidden>
+          <div class="card">
+            <p class="hint">Forecast what the enabled rules would air over the next day. Nothing is sent to the display — each run rolls the dice the same way the real scheduler does.</p>
+            <button class="btn btn-outline btn-block" id="btn-sched-simulate" style="margin-top:12px">Simulate next 24 hours</button>
+            <div id="sched-simulation" hidden>
+              <div id="sched-simulation-working" class="sched-sim-working" hidden aria-live="polite">
+                <span class="sched-sim-spinner" aria-hidden="true"></span>
+                <div>
+                  <div class="sched-sim-working-title" id="sched-simulation-status">Building a 24-hour forecast…</div>
+                  <p class="hint" id="sched-simulation-detail">Walking every scheduler tick. Nothing is sent to the display.</p>
+                </div>
+              </div>
+              <div id="sched-simulation-results"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- --------------------------- Settings view -------------------------- -->
+        <div id="sched-view-settings" hidden>
           <div class="card">
             <div class="trivia-settings-row">
               <div class="trivia-settings-col">
@@ -334,17 +356,6 @@
                   <span class="slider-value" id="sched-retention-value">30d</span>
                 </div>
               </div>
-            </div>
-            <button class="btn btn-outline btn-block" id="btn-sched-simulate" style="margin-top:12px">Simulate next 24 hours</button>
-            <div id="sched-simulation" hidden>
-              <div id="sched-simulation-working" class="sched-sim-working" hidden aria-live="polite">
-                <span class="sched-sim-spinner" aria-hidden="true"></span>
-                <div>
-                  <div class="sched-sim-working-title" id="sched-simulation-status">Building a 24-hour forecast…</div>
-                  <p class="hint" id="sched-simulation-detail">Walking every scheduler tick. Nothing is sent to the display.</p>
-                </div>
-              </div>
-              <div id="sched-simulation-results"></div>
             </div>
           </div>
         </div>
@@ -1892,6 +1903,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal95"></script>
+  <script src="app.js?v=signal96"></script>
 </body>
 </html>

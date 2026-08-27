@@ -1176,7 +1176,7 @@ test('admin Settings has a YouTube card for linking, keys and cache', () => {
   assert.match(css, /\.yt-dot\.is-needs-relink/);
 });
 
-test('admin has a Scheduler tab with a rules view and an activity view', () => {
+test('admin has a Scheduler tab with schedule, activity, simulation and settings views', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
@@ -1185,6 +1185,7 @@ test('admin has a Scheduler tab with a rules view and an activity view', () => {
   assert.match(html, /id="tab-scheduler"/);
   for (const id of [
     'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'btn-sched-add',
+    'sched-view-schedule', 'sched-view-activity', 'sched-view-simulation', 'sched-view-settings',
     'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
     'sched-simulation', 'sched-simulation-working', 'sched-simulation-status', 'sched-simulation-results',
     'sched-stats', 'sched-timeline', 'sched-show-skips', 'sched-inspector',
@@ -1192,6 +1193,9 @@ test('admin has a Scheduler tab with a rules view and an activity view', () => {
   ]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
+  assert.match(html, /data-sched-view="schedule"/);
+  assert.match(html, /data-sched-view="simulation"/);
+  assert.match(html, /data-sched-view="settings"/);
   // Rules are runtime data; the markup must not enumerate them.
   assert.doesNotMatch(html, /data-rule-id="/, 'rules must be rendered from the API');
 
