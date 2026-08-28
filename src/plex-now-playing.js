@@ -457,10 +457,11 @@ function createPlexNowPlaying({
     };
   }
 
-  async function testConnection() {
+  async function testConnection(options = {}) {
     const settings = settingsStore.get();
     const token = tokenOf();
-    if (!settings.serverUrl) {
+    const serverUrl = String(options.serverUrl || settings.serverUrl || '').trim();
+    if (!serverUrl) {
       return { ok: false, error: 'Set the Plex server URL first' };
     }
     if (!token) {
@@ -468,7 +469,7 @@ function createPlexNowPlaying({
     }
     try {
       const sessions = await fetchImpl({
-        serverUrl: settings.serverUrl,
+        serverUrl,
         token,
       });
       lastPollPlayers = (sessions || []).map((entry) => ({

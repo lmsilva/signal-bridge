@@ -249,15 +249,21 @@ test('plex.now-playing has content when a session or last-played exists', () => 
   let status = null;
   const registry = createCommandRegistry({ getPlexStatus: () => status });
   assert.equal(registry.hasContent('plex.now-playing'), false);
-  assert.equal(registry.hasContent('plex.last-played'), false);
 
   status = { hasContent: true, lastPlayed: { title: 'Interstellar' } };
   assert.equal(registry.hasContent('plex.now-playing'), true);
-  assert.equal(registry.hasContent('plex.last-played'), true);
 
   status = { hasContent: true, lastPlayed: null };
   assert.equal(registry.hasContent('plex.now-playing'), true);
-  assert.equal(registry.hasContent('plex.last-played'), false);
+});
+
+test('Feature Presentation is a single auto command, not a last-played twin', () => {
+  assert.equal(COMMANDS.some((command) => command.id === 'plex.last-played'), false);
+  const plex = COMMANDS.find((command) => command.id === 'plex.now-playing');
+  assert.ok(plex.pushable);
+  assert.ok(plex.schedulable);
+  assert.equal(plex.body?.mode, undefined);
+  assert.equal(plex.subtitle, 'Now playing, or last played');
 });
 
 test('an unwired feature reports no content rather than throwing', () => {

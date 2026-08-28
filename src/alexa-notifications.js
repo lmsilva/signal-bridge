@@ -3,7 +3,15 @@ const SHOW_NOTIFICATIONS_RE =
 const NO_NOTIFICATIONS_RE =
   /\b(?:no|zero)\s+(?:new\s+)?notifications?\b|\b(?:don't|do not)\s+have\s+any\s+(?:new\s+)?notifications?\b|\bnotifications?\s+(?:are\s+)?(?:clear|empty)\b|\byou have no\b(?:\s+\w+){0,6}\s+notifications?\b|\bthere(?:'s| is| are)\s+no\b(?:\s+\w+){0,6}\s+notifications?\b|\ball caught up\b/i;
 const NOTIFICATION_INTRO_RE =
-  /\b(?:you have|there(?:'s| is| are))\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+notifications?\b/i;
+  /\b(?:you have|there(?:'s| is| are))\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:new\s+)?notifications?\b/i;
+
+const NOTIFICATION_INTRO_PREFIX_RE =
+  /^(?:you have|there(?:'s| is| are))\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:new\s+)?notifications?(?:\s+from\s+[^.:]+)?[.:\s-]*/i;
+
+const COUNT_WORDS = Object.freeze({
+  one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+});
 
 const ORDINAL_SPLIT_RE =
   /\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|next|finally)\s*,?\s*/i;
@@ -50,32 +58,70 @@ function emptyNotificationsResult(spoken) {
   };
 }
 
+function parseAnnouncedCount(spoken) {
+  const match = NOTIFICATION_INTRO_PREFIX_RE.exec(normalizeText(spoken));
+  if (!match) {
+    return null;
+  }
+  const raw = String(match[1] || '').toLowerCase();
+  if (COUNT_WORDS[raw] != null) {
+    return COUNT_WORDS[raw];
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function stripNotificationIntro(spoken) {
+  return normalizeText(spoken)
+    .replace(NOTIFICATION_INTRO_PREFIX_RE, '')
+    .replace(/^(?:here(?:'s| is| are)|okay|sure)[^.]*notifications?[.:\s-]*/i, '')
+    .trim();
+}
+
+function splitSentences(text) {
+  const placeholders = [];
+  const safe = String(text || '').replace(/\b(?:[A-Z]\.){1,4}(?=\s|$)/g, (match) => {
+    placeholders.push(match);
+    return `\u0000${placeholders.length - 1}\u0000`;
+  });
+  return safe
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.replace(/\u0000(\d+)\u0000/g, (_, index) => placeholders[Number(index)]))
+    .map(cleanNotificationText)
+    .filter(Boolean);
+}
+
 function splitNotificationItems(spoken) {
   if (isEmptyNotificationPhrase(spoken)) {
     return [];
   }
 
-  let body = spoken
-    .replace(/^(?:you have|there(?:'s| is| are))\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+notifications?[.:\s-]*/i, '')
-    .replace(/^(?:here(?:'s| is| are)|okay|sure)[^.]*notifications?[.:\s-]*/i, '')
-    .trim();
-
+  const count = parseAnnouncedCount(spoken);
+  let body = stripNotificationIntro(spoken);
   if (!body) {
-    return [];
+    body = normalizeText(spoken);
+  }
+
+  if (count === 1) {
+    const cleaned = cleanNotificationText(body);
+    return cleaned && !isEmptyNotificationPhrase(cleaned) ? [cleaned] : [];
   }
 
   const ordinalParts = body.split(ORDINAL_SPLIT_RE).map(cleanNotificationText).filter(Boolean);
-  if (ordinalParts.length > 1) {
+  if (ordinalParts.length > 1 && (count == null || ordinalParts.length === count)) {
     return ordinalParts;
   }
 
   const numberedParts = body.split(/\b\d+\.\s+/).map(cleanNotificationText).filter(Boolean);
-  if (numberedParts.length > 1) {
+  if (numberedParts.length > 1 && (count == null || numberedParts.length === count)) {
     return numberedParts;
   }
 
-  const sentences = body.split(/(?<=[.!?])\s+/).map(cleanNotificationText).filter(Boolean);
-  if (sentences.length > 1) {
+  const sentences = splitSentences(body);
+  if (count != null && sentences.length === count) {
+    return sentences;
+  }
+  if (count == null && sentences.length > 1) {
     return sentences;
   }
 

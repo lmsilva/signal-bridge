@@ -1801,19 +1801,30 @@ function createWebServer({
       const credPath = config.plexCredentialsPath
         || defaultCredentialsPath(config.ROOT);
       savePlexToken(credPath, token);
-      sendJson(res, 200, { ok: true, source: 'session' });
+      const serverUrl = String(body?.serverUrl || '').trim();
+      const service = plexService();
+      if (serverUrl && service?.applySettings) {
+        service.applySettings({ serverUrl });
+      }
+      sendJson(res, 200, {
+        ok: true,
+        source: 'session',
+        ...(service?.statusSnapshot?.() || {}),
+      });
     } catch (error) {
       sendJson(res, 400, { ok: false, error: error?.message || String(error) });
     }
   }
 
-  async function handlePlexTest(_body, res) {
+  async function handlePlexTest(body, res) {
     const service = plexService();
     if (!service?.testConnection) {
       sendJson(res, 503, { ok: false, error: 'Feature Presentation is not available' });
       return;
     }
-    const result = await service.testConnection();
+    const result = await service.testConnection({
+      serverUrl: String(body?.serverUrl || '').trim() || undefined,
+    });
     sendJson(res, result.ok ? 200 : 400, result);
   }
 
@@ -2102,8 +2113,6 @@ function createWebServer({
           await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
         case 'plex.now-playing':
           await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res); break;
-        case 'plex.last-played':
-          await handlePlexNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
         case 'goodnews.show': handleUpsideNewsPush(body, res); break;
         case 'wiki.show': handleWikiPush(body, res); break;
@@ -5311,6 +5320,12 @@ function createWebServer({
       // Scheduler rules and YouTube devices are the bridge's only REST-shaped
       // collections, so PUT/DELETE are routed here rather than folded into POST.
       if (req.method === 'PUT' || req.method === 'DELETE') {
+        if (pathname === '/api/plex/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          handlePlexSettingsPut(body, res);
+          return;
+        }
         const isScheduler = pathname.startsWith('/api/display-scheduler/');
         const isYoutube = pathname.startsWith('/api/youtube/');
         const isRollCredits = pathname.startsWith('/api/roll-credits/');

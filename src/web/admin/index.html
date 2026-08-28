@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal111">
+  <link rel="stylesheet" href="styles.css?v=signal115">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -135,7 +135,7 @@
         <div class="push-block" data-push-group="media">
           <div class="section-label">Now playing</div>
           <div class="card-row card-row-quad" id="push-row-media" data-push-category="media"
-               data-skeleton-count="3" aria-busy="true"></div>
+               data-skeleton-count="4" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="news">
@@ -1482,18 +1482,37 @@
 
           <div class="settings-columns settings-columns-3">
             <div class="settings-col">
-              <label class="trivia-check"><input type="checkbox" id="plex-enabled"><span>Watch Plex for the theater Apple TV</span></label>
+              <label class="trivia-check"><input type="checkbox" id="plex-enabled"><span>Monitor Plex</span></label>
               <label class="field-label field-label-spaced" for="plex-server-url">Plex server URL</label>
               <input type="text" id="plex-server-url" class="field-input" placeholder="http://192.168.50.10:32400" spellcheck="false" autocomplete="off">
               <p class="hint">LAN address, including the port. No trailing slash.</p>
 
-              <label class="field-label field-label-spaced" for="plex-token">Plex token</label>
+              <div class="plex-token-label-row">
+                <label class="field-label field-label-spaced" for="plex-token">Plex token</label>
+                <button type="button" class="plex-help-btn" id="btn-plex-token-help"
+                        aria-expanded="false" aria-controls="plex-token-help"
+                        title="How to find the X-Plex-Token">?</button>
+              </div>
               <input type="password" id="plex-token" class="field-input" placeholder="Paste X-Plex-Token" autocomplete="new-password" spellcheck="false">
+              <div class="plex-token-help hint" id="plex-token-help" hidden>
+                <p>Finding a temporary token is pretty simple:</p>
+                <ol>
+                  <li>Sign in to your Plex account in Plex Web App</li>
+                  <li>Browse to a library item and view the XML for it</li>
+                  <li>Look in the URL and find the token as the <code>X-Plex-Token</code> value</li>
+                </ol>
+                <p>
+                  <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
+                     target="_blank" rel="noopener">Plex support: finding an X-Plex-Token</a>
+                </p>
+              </div>
               <div class="upside-news-key-actions" style="margin-top:8px">
                 <button type="button" class="btn btn-outline" id="btn-plex-save-token">Save token</button>
                 <button type="button" class="btn btn-outline" id="btn-plex-test">Test connection</button>
               </div>
               <p class="hint" id="plex-token-hint">Write-only. Stored encrypted. PLEX_TOKEN in .env wins if set.</p>
+              <p class="hint">Watching starts only when you save. Typing the server URL does not connect.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-plex-settings-save" style="margin-top:10px">Save settings</button>
             </div>
             <div class="settings-col">
               <label class="field-label">Theater players</label>
@@ -1520,7 +1539,7 @@
                 <label class="trivia-check"><input type="checkbox" id="plex-critic-score" checked><span>Show critic score</span></label>
               </div>
               <label class="field-label field-label-spaced">Preview</label>
-              <p class="hint">Queue the auto frame (now playing, or last played) on a chosen Vestaboard.</p>
+              <p class="hint plex-preview-hint">Queue the auto frame (now playing, or last played) on a chosen Vestaboard.</p>
               <button type="button" class="btn btn-outline" id="btn-plex-preview">Preview on board</button>
             </div>
           </div>
@@ -2099,6 +2118,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal111"></script>
+  <script src="app.js?v=signal115"></script>
 </body>
 </html>
