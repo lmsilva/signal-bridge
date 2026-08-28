@@ -27,6 +27,23 @@ const PROBE_TIMEOUT_MS = 6000;
 /** Backoff between dial attempts. The tail is long because the hoop is usually off. */
 const BACKOFF_MS = [3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 120_000];
 
+/**
+ * How often a live stream is asked to prove the hoop is still on the end of it.
+ *
+ * Silence cannot be the signal. With the tag allowlist in place the hoop logs
+ * nothing at all while nobody is shooting, so a quiet stream and a dead one
+ * look identical from here — liveness has to be asked for.
+ */
+const HEARTBEAT_MS = 30_000;
+
+/** One missed beat is a busy device; two in a row is a stream that has died. */
+const HEARTBEAT_STRIKES = 2;
+
+const HEARTBEAT_TIMEOUT_MS = 5_000;
+
+/** Echoed back, so a truncated or empty reply cannot pass for a pulse. */
+const HEARTBEAT_TOKEN = 'huupe-alive';
+
 /** Sweeping a /24 one address at a time would take minutes. */
 const DISCOVERY_BATCH = 24;
 
@@ -79,6 +96,8 @@ function createHuupeCollector({
 
   let child = null;
   let retryTimer = null;
+  let heartbeatTimer = null;
+  let missedBeats = 0;
   let attempt = 0;
   let running = false;
   let discovering = false;
@@ -87,6 +106,7 @@ function createHuupeCollector({
   let lastError = null;
   let lastConnectedAt = null;
   let lastLineAt = null;
+  let lastBeatAt = null;
   let deviceInfo = null;
   let reportedOutage = false;
 
@@ -214,7 +234,77 @@ function createHuupeCollector({
     }
   }
 
+  function stopHeartbeat() {
+    if (heartbeatTimer) clearTimerImpl(heartbeatTimer);
+    heartbeatTimer = null;
+    missedBeats = 0;
+  }
+
+  function scheduleHeartbeat() {
+    if (heartbeatTimer || !running || !child) return;
+    heartbeatTimer = setTimerImpl(() => {
+      heartbeatTimer = null;
+      heartbeat().catch((error) => {
+        log?.warn?.(`Huupe heartbeat failed — ${error?.message || error}`);
+      });
+    }, HEARTBEAT_MS);
+    heartbeatTimer?.unref?.();
+  }
+
+  /**
+   * Tear down a stream that is still open but no longer carrying anything.
+   *
+   * A hoop that sleeps drops the ADB connection without closing it: logcat
+   * keeps running, `child` stays set, and `dial()` returns early forever, so
+   * the bridge reports Online while every shot of the next game goes unseen.
+   * Nothing else in the collector can catch that, because a hoop nobody is
+   * playing on is silent by design.
+   */
+  function loseStream(reason) {
+    const lost = serial;
+    stopStream();
+    setState('disconnected', { reason });
+    // A half-open entry answers the next `connect` with "already connected"
+    // while every shell command on it fails, which would send the recovery
+    // into a pointless LAN sweep.
+    if (lost) adb(['disconnect', lost], { timeout: CONNECT_TIMEOUT_MS });
+    // The hoop is most likely just asleep, so come back on the short end of
+    // the backoff rather than wherever the last outage left it.
+    attempt = 0;
+    reportedOutage = false;
+    scheduleRetry();
+  }
+
+  async function heartbeat() {
+    const target = serial;
+    const proc = child;
+    if (!running || !proc || !target) return;
+
+    const probe = await adb(['-s', target, 'shell', 'echo', HEARTBEAT_TOKEN], {
+      timeout: HEARTBEAT_TIMEOUT_MS,
+    });
+    // The stream can be replaced or torn down while the probe is in flight.
+    if (!running || child !== proc) return;
+
+    if (probe.ok && probe.stdout.includes(HEARTBEAT_TOKEN)) {
+      missedBeats = 0;
+      lastBeatAt = now();
+      scheduleHeartbeat();
+      return;
+    }
+
+    missedBeats += 1;
+    if (missedBeats < HEARTBEAT_STRIKES) {
+      scheduleHeartbeat();
+      return;
+    }
+    const detail = (probe.stderr || probe.stdout || 'no answer').trim();
+    log?.info?.(`Huupe stream went quiet — ${target} stopped answering (${detail}). Reconnecting.`);
+    loseStream(`the hoop stopped answering — ${detail}`);
+  }
+
   function stopStream() {
+    stopHeartbeat();
     if (!child) return;
     const doomed = child;
     child = null;
@@ -234,7 +324,14 @@ function createHuupeCollector({
       log?.warn?.(`Huupe parse failed — ${error?.message || error}`);
       return;
     }
-    if (event) onEvent?.(event);
+    if (!event) return;
+    // The state machine downstream owns the display; a throw in there must not
+    // take the log pump — and with it every later game — down with it.
+    try {
+      onEvent?.(event);
+    } catch (error) {
+      log?.warn?.(`Huupe event handling failed — ${error?.message || error}`);
+    }
   }
 
   function startStream(target) {
@@ -248,7 +345,9 @@ function createHuupeCollector({
     lastConnectedAt = now();
     attempt = 0;
     reportedOutage = false;
+    lastBeatAt = now();
     setState('streaming');
+    scheduleHeartbeat();
     log?.info?.(`Huupe collector streaming from ${target}`);
 
     let buffer = '';
@@ -269,6 +368,7 @@ function createHuupeCollector({
     const onDone = (reason) => {
       if (child !== proc) return;
       child = null;
+      stopHeartbeat();
       setState('disconnected', { reason });
       scheduleRetry();
     };
@@ -406,6 +506,11 @@ function createHuupeCollector({
         lastConnectedAt: lastConnectedAt ? new Date(lastConnectedAt).toISOString() : null,
         lastLineAt: lastLineAt ? new Date(lastLineAt).toISOString() : null,
         secondsSinceLine: lastLineAt ? Math.round((nowMs - lastLineAt) / 1000) : null,
+        // A hoop nobody is playing on logs nothing, so "last line" says little
+        // about reachability. This is when the hoop last answered.
+        lastBeatAt: lastBeatAt ? new Date(lastBeatAt).toISOString() : null,
+        secondsSinceBeat: lastBeatAt ? Math.round((nowMs - lastBeatAt) / 1000) : null,
+        missedBeats,
         retryInSeconds: retryTimer ? Math.round(backoffFor(Math.max(0, attempt - 1)) / 1000) : null,
         discovering,
         device: deviceInfo,
@@ -424,5 +529,8 @@ module.exports = {
   backoffFor,
   DEFAULT_PORT,
   BACKOFF_MS,
+  HEARTBEAT_MS,
+  HEARTBEAT_STRIKES,
+  HEARTBEAT_TOKEN,
   HUUPE_PACKAGE_HINTS,
 };

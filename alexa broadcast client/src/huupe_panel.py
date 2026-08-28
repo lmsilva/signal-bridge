@@ -53,9 +53,9 @@ from src.display_panels import BasePanel
 from src.page_header import paint_page_header
 
 try:
-    from PIL import Image, ImageDraw, ImageTk
+    from PIL import Image, ImageDraw, ImageFilter, ImageTk
 except ImportError:  # pragma: no cover — portable builds always ship Pillow
-    Image = ImageDraw = ImageTk = None
+    Image = ImageDraw = ImageFilter = ImageTk = None
 
 ZONE_ORDER = ("layup", "one", "two", "three")
 
@@ -87,6 +87,10 @@ HEAT_STAT = "points"
 # Spec tokens (Shot Zone Enhancements rev 4).
 GLASS_CARD = "#0D1A32"
 GLASS_BORDER = mix("#7CA9DA", GLASS_CARD, 0.35)
+# How opaque a card sits over the page art, and how strong the ghost type is
+# under it. Cards any denser than this and the editorial background is wasted.
+GLASS_ALPHA = 0.80
+GHOST_ALPHA = 0.13
 PANEL_GAP = "#0F1D36"
 COURT_BASE = "#0B1A33"
 COURT_LINE = "#A9C6E8"
@@ -395,6 +399,54 @@ def deep_fade_bands(court_box, *, rim_y, radius, color, base, corner=0.0, steps=
     return rows
 
 
+def deep_fade_image(width, height, *, rim_xy, radius, color, base, corner=0.0, steps=180):
+    """Smooth radial fade for the deep band — the version the wall gets.
+
+    `deep_fade_bands` is the same ramp as stacked rectangles; on a 1080-wide
+    court those rows are thick enough to read as stripes, so wherever the
+    canvas can take a PhotoImage the gradient is drawn here instead.
+    """
+    if Image is None or ImageDraw is None:
+        return None
+    w, h = int(round(width)), int(round(height))
+    if w < 2 or h < 2 or radius <= 0:
+        return None
+    img = Image.new("RGB", (w, h), base)
+    draw = ImageDraw.Draw(img)
+    rx, ry = rim_xy
+    count = max(8, int(steps))
+    # Far to near: each ring paints over the fainter one outside it.
+    for index in range(count, 0, -1):
+        r = float(radius) * (index / count)
+        colour = mix(base, color, deep_fade_alpha(r / float(radius)))
+        draw.ellipse((rx - r, ry - r, rx + r, ry + r), fill=colour)
+    r = max(0.0, min(float(corner), w / 2, h / 2))
+    if r > 0.6:
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, w - 1, h - 1), radius=int(round(r)), fill=255,
+        )
+        out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        out.paste(img, (0, 0), mask=mask)
+        return out
+    return img.convert("RGBA")
+
+
+def glow_stroke_image(width, height, points, color, stroke_width, *, blur=9):
+    """Soft halo along the hot band's edge — one showpiece effect (§8)."""
+    if Image is None or ImageDraw is None or ImageFilter is None:
+        return None
+    w, h = int(round(width)), int(round(height))
+    if w < 2 or h < 2 or len(points) < 4:
+        return None
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    red, green, blue = _hex_rgb(color)
+    xy = [(points[i], points[i + 1]) for i in range(0, len(points) - 1, 2)]
+    draw.line(xy, fill=(red, green, blue, 190), width=max(2, int(round(stroke_width))), joint="curve")
+    return img.filter(ImageFilter.GaussianBlur(radius=max(1.0, float(blur))))
+
+
 def clipped_circle(cx, cy, radius, box, *, steps=72):
     """Circle outline clamped into `box`, because Tk has no clipping region.
 
@@ -635,6 +687,7 @@ class HuupePanel(BasePanel):
         self._glow_color = ACCENT_CORAL
         self._glow_phase = 0.0
         self._huupe_photos = []
+        self._glass_painted = False
 
     def hide(self):
         self._stop_glow()
@@ -693,11 +746,20 @@ class HuupePanel(BasePanel):
 
     def _can_photo(self):
         """RecordingCanvas / MagicMock have no real Tk photo support."""
-        return ImageTk is not None and Image is not None and hasattr(self.canvas, "tk")
+        if Image is None:
+            return False
+        if hasattr(self.canvas, "pil_photo"):
+            return True
+        return ImageTk is not None and hasattr(self.canvas, "tk")
 
     def _photo_image(self, image):
-        if not self._can_photo() or image is None:
+        if image is None or not self._can_photo():
             return None
+        # The preview renderer paints into Pillow, so it takes the image
+        # directly — otherwise a preview silently shows the fallback art
+        # instead of what the wall will actually paint.
+        if hasattr(self.canvas, "pil_photo"):
+            return self._keep_photo(self.canvas.pil_photo(image))
         master = self.canvas if hasattr(self.canvas, "tk") else self.root
         try:
             photo = ImageTk.PhotoImage(image, master=master)
@@ -853,41 +915,132 @@ class HuupePanel(BasePanel):
         return ids
 
     def _card(self, box, *, accent=None, lift=0.0):
-        """Glass card: solid fallback (Tk has no backdrop blur)."""
-        fill = tint(GLASS_CARD, lift) if lift else GLASS_CARD
+        """Card frame. The fill comes from the page image when there is one.
+
+        Tk has no backdrop blur and no alpha, so real glass only happens when
+        the whole page — wash, art, ghost type, card tints — is composited in
+        Pillow first (`_page_image`). Without that, cards are solid.
+        """
         edge = mix(GLASS_BORDER, accent, 0.35) if accent else mix(GLASS_CARD, "#7CA9DA", 0.45)
+        if self._glass_painted:
+            fill = ""
+        else:
+            fill = tint(GLASS_CARD, lift) if lift else GLASS_CARD
         return paint_round_rect(
             self.canvas, box, radius=16 * self._scale,
             fill=fill, outline=edge, width=max(1, int(round(1.5 * self._scale))),
             track=self._track,
         )
 
-    def _paint_huupe_backdrop(self, *, kind, status=None):
+    def _page_art(self, kind, *, status, portrait):
+        """Where the page's art lives: texture, glow origin and ghost word."""
+        screen_w, screen_h = self._screen()
+        if kind == "dashboard":
+            return {
+                "glow": ACCENT_CORAL,
+                "glow_xy": (
+                    (screen_w * 0.85, -screen_h * 0.05) if portrait
+                    else (screen_w * 0.85, screen_h * 0.85)
+                ),
+                "ghost": ("BASKETBALL", "left" if portrait else "top"),
+            }
+        return {
+            "glow": ACCENT_AMBER,
+            "glow_xy": (-screen_w * 0.05, -screen_h * 0.05),
+            "ghost": (str(status or "LIVE").upper(), "right" if portrait else "bottom"),
+        }
+
+    def _page_image(self, *, kind, status, cards):
+        """The whole page as one Pillow image — the only way to get alpha."""
+        if Image is None or ImageDraw is None:
+            return None
+        screen_w, screen_h = self._screen()
+        if screen_w < 16 or screen_h < 16:
+            return None
+        portrait = screen_h >= screen_w
+        art = self._page_art(kind, status=status, portrait=portrait)
+
+        column = Image.new("RGB", (1, 128))
+        pixels = column.load()
+        for index in range(128):
+            pixels[0, index] = _hex_rgb(mix(PAGE_TOP, PAGE_BOTTOM, index / 127))
+        page = column.resize((screen_w, screen_h), Image.Resampling.BILINEAR)
+
+        def overlay(paint):
+            layer = Image.new("RGBA", (screen_w, screen_h), (0, 0, 0, 0))
+            paint(ImageDraw.Draw(layer))
+            page.paste(layer, (0, 0), layer)
+
+        if kind == "dashboard":
+            photo = court_photo_path()
+            if photo is not None:
+                try:
+                    raw = Image.open(photo).convert("L").convert("RGB")
+                    raw = raw.resize((screen_w, screen_h), Image.Resampling.LANCZOS)
+                    dark = Image.blend(raw, Image.new("RGB", raw.size, (0, 0, 0)), 0.55)
+                    page = Image.blend(page, dark, 0.35)
+                except Exception:
+                    pass
+            overlay(lambda draw: self._art_court_strip(draw, portrait=portrait))
+        else:
+            overlay(lambda draw: self._art_echo_arcs(draw, portrait=portrait))
+        overlay(lambda draw: self._art_warm_glow(draw, art["glow_xy"], art["glow"]))
+
+        # Scrim as a smooth ramp: the spec's three blocks left visible seams.
+        ramp = Image.new("L", (1, 128))
+        ramp_px = ramp.load()
+        for index in range(128):
+            t = index / 127
+            if t < 0.5:
+                alpha = 0.42 + (0.18 - 0.42) * (t / 0.5)
+            else:
+                alpha = 0.18 + (0.50 - 0.18) * ((t - 0.5) / 0.5)
+            ramp_px[0, index] = int(round(alpha * 255))
+        page.paste(
+            Image.new("RGB", (screen_w, screen_h), SCRIM_BASE),
+            (0, 0),
+            ramp.resize((screen_w, screen_h), Image.Resampling.BILINEAR),
+        )
+
+        # Ghost type goes over the scrim — under it, 10% ink disappeared.
+        overlay(lambda draw: self._art_ghost_word(draw, *art["ghost"]))
+
+        radius = max(1, int(round(16 * self._scale)))
+        for box, lift in cards:
+            bx0, by0, bx1, by1 = (int(round(value)) for value in box)
+            width, height = bx1 - bx0, by1 - by0
+            if width < 8 or height < 8:
+                continue
+            mask = Image.new("L", (width, height), 0)
+            ImageDraw.Draw(mask).rounded_rectangle(
+                (0, 0, width - 1, height - 1), radius=radius,
+                fill=int(round(GLASS_ALPHA * 255)),
+            )
+            tile = Image.new(
+                "RGB", (width, height), tint(GLASS_CARD, lift) if lift else GLASS_CARD,
+            )
+            page.paste(tile, (bx0, by0), mask)
+        return page
+
+    def _paint_huupe_backdrop(self, *, kind, status=None, cards=()):
         """Editorial page wash — decoration only; cards always win (§10)."""
         screen_w, screen_h = self._screen()
         portrait = screen_h >= screen_w
+        page = self._photo_image(
+            self._page_image(kind=kind, status=status, cards=cards)
+        )
+        if page is not None:
+            self._track(self.canvas.create_image(0, 0, image=page, anchor="nw"))
+            self._glass_painted = True
+            self._paint_corner_ticks()
+            return
+        self._glass_painted = False
         paint_gradient(
             self.canvas, (0, 0, screen_w, screen_h), PAGE_TOP, PAGE_BOTTOM,
             bands=28, track=self._track,
         )
 
         if kind == "dashboard":
-            photo = court_photo_path()
-            if photo is not None and self._can_photo():
-                try:
-                    raw = Image.open(photo).convert("RGB")
-                    raw = raw.resize((screen_w, screen_h), Image.Resampling.LANCZOS)
-                    grey = raw.convert("L").convert("RGB")
-                    dark = Image.blend(grey, Image.new("RGB", grey.size, (0, 0, 0)), 0.55)
-                    faded = Image.blend(
-                        Image.new("RGB", dark.size, _hex_rgb(PAGE_TOP)), dark, 0.35,
-                    )
-                    photo_tk = self._photo_image(faded)
-                    if photo_tk is not None:
-                        self._track(self.canvas.create_image(0, 0, image=photo_tk, anchor="nw"))
-                except Exception:
-                    pass
-            self._paint_ghost_word("BASKETBALL", portrait=portrait, edge="left" if portrait else "top")
             self._paint_court_strip(portrait=portrait)
             glow = ACCENT_CORAL
             if portrait:
@@ -896,29 +1049,27 @@ class HuupePanel(BasePanel):
                 gx, gy = screen_w * 0.85, screen_h * 0.85
         else:
             self._paint_echo_arcs(portrait=portrait)
-            word = str(status or "LIVE").upper()
-            self._paint_ghost_word(word, portrait=portrait, edge="right" if portrait else "bottom")
             glow = ACCENT_AMBER
             gx, gy = -screen_w * 0.05, -screen_h * 0.05
 
         diameter = max(screen_w, screen_h) * 0.75
         self._paint_warm_glow(gx, gy, diameter, glow)
-
-        # Scrim: 55% top → 25% mid → 65% bottom of #0B1730 over the art.
         for index, (y0, y1, alpha) in enumerate((
-            (0, screen_h * 0.35, 0.55),
-            (screen_h * 0.35, screen_h * 0.65, 0.25),
-            (screen_h * 0.65, screen_h, 0.65),
+            (0, screen_h * 0.35, 0.42),
+            (screen_h * 0.35, screen_h * 0.65, 0.18),
+            (screen_h * 0.65, screen_h, 0.50),
         )):
-            colour = mix(PAGE_BOTTOM, SCRIM_BASE, alpha)
             # Approximate opacity by mixing toward the base gradient band.
             self._track(self.canvas.create_rectangle(
                 0, y0, screen_w, y1, fill=mix(PAGE_TOP if index == 0 else PAGE_BOTTOM, SCRIM_BASE, alpha),
                 outline="",
             ))
+        self._paint_corner_ticks()
 
-        # Ticks sit outside the 40u content margin — on it they cut into the
-        # header's STATUS column.
+    def _paint_corner_ticks(self):
+        """Crop marks. Inset stays outside the 40u content margin — on it they
+        cut into the header's STATUS column."""
+        screen_w, screen_h = self._screen()
         arm = 22 * self._scale
         thick = max(2, int(round(4 * self._scale)))
         inset = 16 * self._scale
@@ -937,47 +1088,106 @@ class HuupePanel(BasePanel):
                 cx, cy, cx, cy + arm * sy, fill=tick, width=thick,
             ))
 
-    def _paint_ghost_word(self, word, *, portrait, edge):
-        word = str(word or "").upper()
-        # Huge ghost type at ~5% — mix into the page so it never wins over cards.
-        colour = mix(PAGE_BOTTOM, GHOST_INK, 0.05)
-        screen_w, screen_h = self._screen()
-        # Prefer a PhotoImage so smoke tests (which assert every string sits in a
-        # card) never see decorative type as a create_text item.
-        if self._can_photo() and Image is not None and ImageDraw is not None:
+    @staticmethod
+    def _ghost_face(size):
+        from PIL import ImageFont
+        for name in ("segoeuib.ttf", "arialbd.ttf"):
             try:
-                from PIL import ImageFont
-                img = Image.new("RGBA", (screen_w, screen_h), (0, 0, 0, 0))
-                draw = ImageDraw.Draw(img)
-                # Approximate Segoe UI Bold size in pixels.
-                if edge in ("left", "right"):
-                    px = int(screen_h * (0.13 if edge == "left" else 0.18))
-                else:
-                    px = int(screen_w * (0.12 if edge == "top" else 0.18))
-                try:
-                    font = ImageFont.truetype("segoeuib.ttf", max(24, px))
-                except Exception:
-                    font = ImageFont.load_default()
-                cr, cg, cb = _hex_rgb(colour)
-                if edge == "left":
-                    x, y, step = screen_w * 0.08, screen_h * 0.18, screen_h * 0.15
-                    for index, ch in enumerate(word[:12]):
-                        draw.text((x, y + step * index), ch, fill=(cr, cg, cb, 255), font=font, anchor="mm")
-                elif edge == "right":
-                    x, y, step = screen_w * 0.92, screen_h * 0.22, screen_h * 0.20
-                    for index, ch in enumerate(word[:8]):
-                        draw.text((x, y + step * index), ch, fill=(cr, cg, cb, 255), font=font, anchor="mm")
-                elif edge == "bottom":
-                    draw.text((screen_w / 2, screen_h * 0.92), word, fill=(cr, cg, cb, 255), font=font, anchor="mm")
-                else:
-                    draw.text((screen_w / 2, screen_h * 0.08), word, fill=(cr, cg, cb, 255), font=font, anchor="mm")
-                photo = self._photo_image(img)
-                if photo is not None:
-                    self._track(self.canvas.create_image(0, 0, image=photo, anchor="nw"))
-                    return
+                return ImageFont.truetype(name, max(24, int(size)))
             except Exception:
-                pass
-        # Fallback for smoke / no-PIL: skip — background still reads without it.
+                continue
+        return ImageFont.load_default()
+
+    def _art_ghost_word(self, draw, word, edge):
+        """Huge editorial type set into the page (§10.2).
+
+        Drawn into the page image rather than as `create_text`, so the smoke
+        tests that assert every painted string sits inside a card never see
+        decoration — and so it sits *under* the glass cards.
+        """
+        word = str(word or "").upper()
+        if not word:
+            return
+        screen_w, screen_h = self._screen()
+        ink = (*_hex_rgb(GHOST_INK), int(round(GHOST_ALPHA * 255)))
+        try:
+            if edge in ("left", "right"):
+                # One letter per line down the page, spread to fill it instead
+                # of running off the bottom after six of them.
+                letters = list(word[:11])
+                span = screen_h * 0.80
+                step = span / max(1, len(letters) - 1)
+                font = self._ghost_face(min(step * 0.86, screen_w * 0.26))
+                x = screen_w * (0.20 if edge == "left" else 0.80)
+                y0 = (screen_h - span) / 2
+                for index, letter in enumerate(letters):
+                    draw.text((x, y0 + step * index), letter, fill=ink, font=font, anchor="mm")
+            else:
+                font = self._ghost_face(screen_w * (0.11 if edge == "top" else 0.14))
+                y = screen_h * (0.14 if edge == "top" else 0.86)
+                draw.text((screen_w / 2, y), word, fill=ink, font=font, anchor="mm")
+        except Exception:
+            pass
+
+    def _art_court_strip(self, draw, *, portrait):
+        screen_w, screen_h = self._screen()
+        height = screen_h * 0.28
+        top = screen_h * (0.72 if portrait else 0.36)
+        # Feathered rather than a flat block: a hard edge read as a seam
+        # running across the page.
+        red, green, blue = _hex_rgb("#5A6470")
+        rows = max(2, int(round(height)))
+        for index in range(rows):
+            t = index / (rows - 1)
+            edge = min(1.0, min(t, 1 - t) * 5)
+            draw.line(
+                (0, top + index, screen_w, top + index),
+                fill=(red, green, blue, int(round(66 * edge))),
+            )
+        stroke = (*_hex_rgb("#DDE6EE"), 64)
+        cx, cy = screen_w * 0.55, top + height * 1.8
+        for radius in (screen_w * 0.34, screen_w * 0.21):
+            draw.ellipse(
+                (cx - radius, cy - radius, cx + radius, cy + radius),
+                outline=stroke, width=max(2, int(round(3 * self._scale))),
+            )
+        draw.line((screen_w * 0.82, top, screen_w * 0.74, top + height), fill=stroke, width=2)
+        draw.line((screen_w * 0.16, top, screen_w * 0.10, top + height), fill=stroke, width=2)
+
+    def _art_echo_arcs(self, draw, *, portrait):
+        screen_w, screen_h = self._screen()
+        cx = screen_w * (-0.05 if portrait else 1.05)
+        cy = screen_h * 1.08
+        unit = max(screen_w, screen_h) / 1600.0
+        thin = (*_hex_rgb(COURT_LINE), 26)
+        wide = (*_hex_rgb(COURT_LINE), 11)
+        for radius in (280, 470, 660, 850, 1040, 1230):
+            r = radius * unit
+            draw.ellipse(
+                (cx - r, cy - r, cx + r, cy + r),
+                outline=thin, width=max(1, int(round(2.5 * self._scale))),
+            )
+        for radius in (375, 945):
+            r = radius * unit
+            draw.ellipse(
+                (cx - r, cy - r, cx + r, cy + r),
+                outline=wide, width=max(8, int(round(20 * self._scale))),
+            )
+
+    def _art_warm_glow(self, draw, centre, colour):
+        screen_w, screen_h = self._screen()
+        diameter = max(screen_w, screen_h) * 0.75
+        peak = 0.13 if colour == ACCENT_CORAL else 0.11
+        red, green, blue = _hex_rgb(colour)
+        cx, cy = centre
+        steps = 44
+        for index in range(steps, 0, -1):
+            t = index / steps
+            r = (diameter / 2) * t
+            draw.ellipse(
+                (cx - r, cy - r, cx + r, cy + r),
+                fill=(red, green, blue, int(round(peak * (1 - t) * 255))),
+            )
 
     def _paint_court_strip(self, *, portrait):
         screen_w, screen_h = self._screen()
@@ -1132,12 +1342,17 @@ class HuupePanel(BasePanel):
 
         screen_w, screen_h = self._screen()
         status = "FINAL" if finished else "LIVE"
-        self._paint_huupe_backdrop(kind="live", status=status)
-        self._paint_header(status_chip=status)
-
         boxes = layout_huupe_session(
             screen_w, screen_h, timed=timed, finished=finished, players=len(players),
         )
+        cards = [
+            (box, 0.05 if name == "hero" else 0.0)
+            for name, box in boxes.items()
+            if isinstance(box, tuple) and len(box) == 4 and name != "mode"
+        ]
+        # The page image carries the card fills, so it needs the boxes first.
+        self._paint_huupe_backdrop(kind="live", status=status, cards=cards)
+        self._paint_header(status_chip=status)
         for name, box in boxes.items():
             if not isinstance(box, tuple) or len(box) != 4 or name == "mode":
                 continue
@@ -1347,18 +1562,29 @@ class HuupePanel(BasePanel):
         rim_x, rim_y, rim_r = geo["rim"]
 
         # Deep band: hot at the arc, fading back to navy by the half-court line.
+        # A PhotoImage is smooth; the stacked-rectangle ramp is the fallback for
+        # canvases that cannot hold one.
         deep_color = bands["three"]["color"]
         paint_round_rect(
             self.canvas, geo["court"], radius=geo["court_radius"],
             fill=COURT_BASE, outline="", track=self._track,
         )
-        for bx0, by0, bx1, by1, colour in deep_fade_bands(
-            geo["court"], rim_y=rim_y, radius=geo["deep_radius"],
-            color=deep_color, base=COURT_BASE, corner=geo["court_radius"],
-        ):
-            self._track(self.canvas.create_rectangle(
-                bx0, by0, bx1, by1, fill=colour, outline="",
-            ))
+        court_w, court_h = right - left, bottom - top
+        fade = self._photo_image(deep_fade_image(
+            court_w, court_h, rim_xy=(rim_x - left, rim_y - top),
+            radius=geo["deep_radius"], color=deep_color, base=COURT_BASE,
+            corner=geo["court_radius"],
+        ))
+        if fade is not None:
+            self._track(self.canvas.create_image(left, top, image=fade, anchor="nw"))
+        else:
+            for bx0, by0, bx1, by1, colour in deep_fade_bands(
+                geo["court"], rim_y=rim_y, radius=geo["deep_radius"],
+                color=deep_color, base=COURT_BASE, corner=geo["court_radius"],
+            ):
+                self._track(self.canvas.create_rectangle(
+                    bx0, by0, bx1, by1, fill=colour, outline="",
+                ))
 
         # Mid / short / layup, far → near. The rings are clipped to the court,
         # which the short band overruns at the baseline.
@@ -1394,8 +1620,33 @@ class HuupePanel(BasePanel):
         hot_id = hot["zone"] if hot else None
         if hot_id:
             hot_color = bands[hot_id]["color"]
-            for width, tone in glow_ring_layers(hot_color, seams[hot_id][2]):
-                stroke_seam(hot_id, tone, width)
+            path, sides, hot_stroke = seams[hot_id]
+            halo = self._photo_image(glow_stroke_image(
+                court_w, court_h,
+                [
+                    value - (left if index % 2 == 0 else top)
+                    for index, value in enumerate(path)
+                ],
+                hot_color, hot_stroke * 0.55, blur=max(3.0, 7 * scale),
+            ))
+            if halo is not None:
+                self._track(self.canvas.create_image(left, top, image=halo, anchor="nw"))
+                for side in sides:
+                    edge = self._photo_image(glow_stroke_image(
+                        court_w, court_h,
+                        [
+                            value - (left if index % 2 == 0 else top)
+                            for index, value in enumerate(side)
+                        ],
+                        hot_color, hot_stroke * 0.55, blur=max(3.0, 7 * scale),
+                    ))
+                    if edge is not None:
+                        self._track(self.canvas.create_image(
+                            left, top, image=edge, anchor="nw",
+                        ))
+            else:
+                for width, tone in glow_ring_layers(hot_color, hot_stroke):
+                    stroke_seam(hot_id, tone, width)
 
         # Dark gaps between bands.
         for zone in ("three", "one", "layup"):
@@ -1584,15 +1835,30 @@ class HuupePanel(BasePanel):
             ramp, size=ramp_size, fill=LABEL_DIM, anchor="n",
         )
 
-    def _draw_zone_legend(self, box, rows, *, title="WHERE THE POINTS COME FROM"):
-        """Names the zone, says what it is worth, and shows how it is shooting."""
+    def _draw_zone_legend(
+        self, box, rows, *, title="SHOOTING BY ZONE", subtitle="% MADE  ·  POINTS SCORED",
+    ):
+        """Names the zone, says what it is worth, and shows how it is shooting.
+
+        The big number here is **accuracy**, not the court's share of points —
+        titled "where the points come from" it read as the same statistic, and
+        100% off two attempts looked like it contradicted a 10% slice.
+        """
         x0, y0, x1, y1 = box
         pad = self._pad()
         left = x0 + pad
         right = x1 - pad
         self._title(left, y0 + pad * 0.7, title, accent=ACCENT_CORAL)
+        sub_size = self._fit_size(
+            letterspace(subtitle), (x1 - x0) - pad * 2, 9, minimum=7, bold=False,
+        )
+        self._text(
+            left + 14 * self._scale,
+            y0 + pad * 0.7 + self._line_h(14) + 2 * self._scale,
+            letterspace(subtitle), size=sub_size, fill=LABEL_DIM, anchor="nw",
+        )
 
-        top = self._head_top(box)
+        top = self._head_top(box) + self._line_h(9) + 4 * self._scale
         available = (y1 - top) - pad
         pair_h = self._line_h(18) + 4 * self._scale + self._line_h(12)
         gap = self._even_gap(available, pair_h, len(rows), minimum=16, maximum=100)
@@ -1635,8 +1901,11 @@ class HuupePanel(BasePanel):
                 left + chip * 3, sub_y, f"{row['note']}  ·  {row['pointsLabel']}",
                 size=12 * scale, fill=INK_3,
             )
+            # Points scored is the bridge between this card and the chart's
+            # share: 2 makes from short range is 2 of the session's points.
             self._text(
-                right, sub_y, f"{row['made']}/{row['attempts']} made",
+                right, sub_y,
+                f"{row['made']}/{row['attempts']} made  ·  {format_score(row['scored'])} PTS",
                 size=12 * scale, fill=INK_2 if live else LABEL_EMPTY, anchor="ne",
             )
 
@@ -1717,11 +1986,16 @@ class HuupePanel(BasePanel):
     def _render_dashboard(self, payload: dict):
         self._sync_metrics()
         screen_w, screen_h = self._screen()
-        self._paint_huupe_backdrop(kind="dashboard")
-        self._paint_header(title="HUUPE DASHBOARD")
-
         recent = [row for row in (payload.get("recent") or []) if isinstance(row, dict)]
         boxes = layout_huupe_dashboard(screen_w, screen_h, timed=True, recent=bool(recent))
+        cards = [
+            (box, 0.05 if name == "totals" else 0.0)
+            for name, box in boxes.items()
+            if isinstance(box, tuple) and len(box) == 4
+        ]
+        # The page image carries the card fills, so it needs the boxes first.
+        self._paint_huupe_backdrop(kind="dashboard", cards=cards)
+        self._paint_header(title="HUUPE DASHBOARD")
         for name, box in boxes.items():
             if not isinstance(box, tuple) or len(box) != 4:
                 continue

@@ -3,7 +3,14 @@ const assert = require('node:assert/strict');
 const os = require('os');
 const { EventEmitter } = require('node:events');
 
-const { createHuupeCollector, backoffFor, BACKOFF_MS } = require('../src/huupe-adb');
+const {
+  createHuupeCollector,
+  backoffFor,
+  BACKOFF_MS,
+  HEARTBEAT_MS,
+  HEARTBEAT_STRIKES,
+  HEARTBEAT_TOKEN,
+} = require('../src/huupe-adb');
 
 const CLOCK = Date.UTC(2026, 7, 27, 9, 0, 0);
 
@@ -79,6 +86,7 @@ function createAdbFake(hosts = {}) {
       const device = hosts[String(args[1] || '').split(':')[0]];
       const rest = args.slice(2);
       if (!device) return fail('device offline');
+      if (rest[0] === 'shell' && rest[1] === 'echo') return reply(rest.slice(2).join(' '));
       if (rest[0] === 'shell' && rest[1] === 'getprop') return reply(getpropText(device));
       if (rest[0] === 'shell' && rest[1] === 'pm') {
         return reply(device.packages.map((name) => `package:${name}`).join('\n'));
@@ -119,21 +127,38 @@ function createSpawnFake() {
   };
 }
 
+/**
+ * Two kinds of timer share this fake: reconnect backoffs and the stream
+ * heartbeat. They are told apart by delay, so a test can talk about retries
+ * without counting beats.
+ */
 function createTimerFake() {
   const scheduled = [];
+  const isBeat = (timer) => timer.delay === HEARTBEAT_MS;
+  const run = (timer) => {
+    timer.fired = true;
+    timer.fn();
+  };
   return {
     scheduled,
-    delays: () => scheduled.map((timer) => timer.delay),
+    retries: () => scheduled.filter((timer) => !isBeat(timer)),
+    retryDelays: () => scheduled.filter((timer) => !isBeat(timer)).map((timer) => timer.delay),
+    beats: () => scheduled.filter(isBeat),
     set(fn, delay) {
-      const timer = { fn, delay, cleared: false };
+      const timer = { fn, delay, cleared: false, fired: false };
       scheduled.push(timer);
       return timer;
     },
     clear(timer) {
       if (timer) timer.cleared = true;
     },
-    fire(index) {
-      scheduled[index].fn();
+    fireRetry(index) {
+      run(this.retries()[index]);
+    },
+    /** The heartbeat re-arms itself, so a test always wants the newest one. */
+    fireBeat() {
+      const pending = this.beats().filter((timer) => !timer.cleared && !timer.fired);
+      run(pending[pending.length - 1]);
     },
   };
 }
@@ -199,7 +224,7 @@ test('a cold start with no hoop configured waits instead of sweeping the LAN', a
 
   assert.deepEqual(adb.calls, []);
   assert.equal(spawner.spawns.length, 0);
-  assert.deepEqual(timers.delays(), []);
+  assert.deepEqual(timers.scheduled, []);
 
   const status = collector.statusSnapshot();
   assert.equal(status.state, 'unconfigured');
@@ -315,16 +340,16 @@ test('a dropped logcat stream reconnects with a growing backoff', async () => {
   spawner.last().child.emit('close', 1);
   assert.equal(collector.statusSnapshot().state, 'disconnected');
   assert.match(collector.statusSnapshot().lastError, /logcat exited \(1\)/);
-  assert.deepEqual(timers.delays(), [3000]);
+  assert.deepEqual(timers.retryDelays(), [3000]);
 
   // The hoop is now off, so every retry from here fails on the dial.
   delete adb.hosts['192.168.50.7'];
-  timers.fire(0);
+  timers.fireRetry(0);
   await settle();
-  timers.fire(1);
+  timers.fireRetry(1);
   await settle();
 
-  assert.deepEqual(timers.delays(), [3000, 5000, 10000]);
+  assert.deepEqual(timers.retryDelays(), [3000, 5000, 10000]);
   assert.equal(collector.statusSnapshot().retryInSeconds, 10);
   assert.equal(spawner.spawns.length, 1);
   // The tail is capped, so a hoop that is off all night retries hourly, not forever faster.
@@ -374,7 +399,7 @@ test('with auto-discovery off an unreachable hoop fails without touching other a
     assert.deepEqual(settings.updates, []);
     assert.equal(spawner.spawns.length, 0);
     assert.equal(collector.statusSnapshot().state, 'disconnected');
-    assert.deepEqual(timers.delays(), [3000]);
+    assert.deepEqual(timers.retryDelays(), [3000]);
 
     collector.close();
   });
@@ -438,7 +463,7 @@ test('closing the collector kills the logcat child and parks the state at idle',
   // A kill that arrives after the close must not restart the dial loop.
   child.emit('close', 143);
   await settle();
-  assert.deepEqual(timers.delays(), []);
+  assert.deepEqual(timers.retryDelays(), []);
   assert.equal(spawner.spawns.length, 1);
 });
 
@@ -464,8 +489,135 @@ test('closing the collector cancels a reconnect that was already pending', async
   assert.equal(collector.statusSnapshot().retryInSeconds, null);
 
   // Even if the cancelled timer somehow fired, a closed collector stays closed.
-  timers.fire(0);
+  timers.fireRetry(0);
   await settle();
   assert.equal(timers.scheduled.length, 1);
   assert.equal(spawner.spawns.length, 0);
+});
+
+test('a stream the hoop stopped answering is torn down and dialled again', async () => {
+  // The failure this exists for: a hoop that sleeps drops the ADB connection
+  // without closing it. logcat keeps running and the collector keeps saying
+  // Online, so the next game is never seen. Silence alone cannot be the tell —
+  // a hoop nobody is shooting on logs nothing — so the stream is asked.
+  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const spawner = createSpawnFake();
+  const timers = createTimerFake();
+  const streamStates = [];
+  const collector = buildCollector({
+    settings: fakeSettings({ host: '192.168.50.7', autoDiscover: false }),
+    adb,
+    spawner,
+    timers,
+    streamStates,
+  });
+
+  collector.start();
+  await settle();
+  const { child } = spawner.last();
+  assert.equal(collector.statusSnapshot().state, 'streaming');
+  assert.equal(timers.beats().length, 1);
+
+  // A hoop that answers keeps the stream, and never stops being asked.
+  timers.fireBeat();
+  await settle();
+  assert.ok(adb.calls.some((call) => call.args.join(' ').includes(`shell echo ${HEARTBEAT_TOKEN}`)));
+  assert.equal(collector.statusSnapshot().state, 'streaming');
+  assert.equal(collector.statusSnapshot().missedBeats, 0);
+  assert.equal(timers.beats().length, 2);
+
+  // Now the hoop goes to sleep. logcat never notices — the child is still up.
+  delete adb.hosts['192.168.50.7'];
+
+  // One missed beat is a busy device, not a dead stream.
+  timers.fireBeat();
+  await settle();
+  assert.equal(collector.statusSnapshot().state, 'streaming');
+  assert.equal(collector.statusSnapshot().missedBeats, 1);
+  assert.equal(child.killed, false);
+
+  for (let beat = 1; beat < HEARTBEAT_STRIKES; beat += 1) {
+    timers.fireBeat();
+    await settle();
+  }
+
+  assert.equal(child.killed, true);
+  const status = collector.statusSnapshot();
+  assert.equal(status.state, 'disconnected');
+  assert.equal(status.connected, false);
+  assert.match(status.lastError, /stopped answering/);
+  assert.equal(streamStates.at(-1).connected, false);
+  // The half-open entry is dropped so the next connect is a real one.
+  assert.deepEqual(adb.disconnectTargets(), ['192.168.50.7:5555']);
+  // A sleeping hoop is the common case, so recovery starts at the short end.
+  assert.deepEqual(timers.retryDelays(), [3000]);
+
+  // And when it wakes, the retry puts the stream back.
+  adb.hosts['192.168.50.7'] = HUUPE;
+  timers.fireRetry(0);
+  await settle();
+  assert.equal(collector.statusSnapshot().state, 'streaming');
+  assert.equal(spawner.spawns.length, 2);
+
+  collector.close();
+});
+
+test('the heartbeat stops with the stream and never outlives a close', async () => {
+  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const spawner = createSpawnFake();
+  const timers = createTimerFake();
+  const collector = buildCollector({
+    settings: fakeSettings({ host: '192.168.50.7', autoDiscover: false }),
+    adb,
+    spawner,
+    timers,
+  });
+
+  collector.start();
+  await settle();
+  const beat = timers.beats().at(-1);
+  assert.equal(beat.cleared, false);
+
+  collector.close();
+  assert.equal(beat.cleared, true);
+
+  // A beat that somehow fires after the close must not probe or re-dial.
+  const callsAtClose = adb.calls.length;
+  beat.fn();
+  await settle();
+  assert.equal(adb.calls.length, callsAtClose);
+  assert.deepEqual(timers.retryDelays(), []);
+});
+
+test('a throw from the event handler does not take the log pump down', async () => {
+  // The state machine downstream owns the display. If it throws, the shot that
+  // caused it is lost — but every later shot, and every later game, must not be.
+  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const spawner = createSpawnFake();
+  const timers = createTimerFake();
+  const seen = [];
+  const collector = createHuupeCollector({
+    settings: fakeSettings({ host: '192.168.50.7' }),
+    log: silentLog(),
+    onEvent: (event) => {
+      seen.push(event.zone);
+      if (event.zone === 'layup') throw new Error('panel exploded');
+    },
+    execFileImpl: adb.impl,
+    spawnImpl: spawner.impl,
+    now: () => CLOCK,
+    setTimerImpl: timers.set.bind(timers),
+    clearTimerImpl: timers.clear.bind(timers),
+  });
+
+  collector.start();
+  await settle();
+  const { stdout } = spawner.last().child;
+
+  stdout.emit('data', `${shotLine(201.5)}\n${shotLine(202.5, 'layup')}\n${shotLine(203.5)}\n`);
+
+  assert.deepEqual(seen, ['three', 'layup', 'three']);
+  assert.equal(collector.statusSnapshot().state, 'streaming');
+
+  collector.close();
 });

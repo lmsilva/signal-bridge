@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal101">
+  <link rel="stylesheet" href="styles.css?v=signal104">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -64,24 +64,97 @@
 
     <!-- ============================ PUSH TAB ============================ -->
     <section class="tab-panel active" id="tab-push">
-      <div class="card-grid">
+      <div class="push-head">
+        <div class="push-search-row">
+          <label class="push-search" for="push-search">
+            <input
+              id="push-search"
+              class="field-input"
+              type="search"
+              placeholder="Search pushes…"
+              autocomplete="off"
+              spellcheck="false"
+              enterkeyhint="search"
+              aria-label="Search pushes"
+            >
+          </label>
+          <button type="button" class="btn btn-outline btn-sm" id="push-search-clear" hidden>Clear</button>
+        </div>
+        <div class="segmented push-view-tabs" id="push-view-tabs" role="tablist" aria-label="Push sections">
+          <button type="button" class="segmented-btn active" data-push-view="home" role="tab" aria-selected="true">
+            <span class="push-view-label">Home</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-push-view="games" role="tab" aria-selected="false">
+            <span class="push-view-label">Games</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-push-view="media" role="tab" aria-selected="false">
+            <span class="push-view-label">Media</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-push-view="news" role="tab" aria-selected="false">
+            <span class="push-view-label">News</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-push-view="travel" role="tab" aria-selected="false">
+            <span class="push-view-label">Travel</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-push-view="share" role="tab" aria-selected="false">
+            <span class="push-view-label">Share</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
+        </div>
+        <p class="hint push-search-empty" id="push-search-empty" hidden>Nothing to push matches that search.</p>
+      </div>
+
+      <div class="card-grid" id="push-card-grid">
 
         <!-- Tiles are rendered from GET /api/commands (src/command-registry.js)
              so the Push grid, the scheduler rule editor and the push routes
-             can never drift apart. See app.js → renderPushGrid().
-             data-skeleton-count reserves the same grid height on first paint
-             so Web Browser / QR Code do not jump down when the API returns. -->
-        <div class="section-label">Tesla</div>
-        <div class="card-row" id="push-row-tesla" data-push-row="Tesla"
-             data-skeleton-count="2" aria-busy="true"></div>
+             can never drift apart. Each row claims one push category and the
+             registry decides which tiles land in it — see app.js →
+             renderPushGrid(). data-skeleton-count reserves the same grid height
+             on first paint so the page does not shuffle as tiles arrive. -->
+        <div class="push-block" data-push-group="home">
+          <div class="section-label">Around the house</div>
+          <div class="card-row card-row-quad" id="push-row-home" data-push-category="home"
+               data-skeleton-count="6" aria-busy="true"></div>
+        </div>
 
-        <!-- Steam / PSN / YouTube sit next to Trivia as one auto-mode tile each
-             (live session if there is one, otherwise last played) — the same
-             behaviour as the Settings test buttons. -->
-        <div class="section-label">Quick Push</div>
-        <div class="card-row card-row-quad" id="push-row-quick"
-             data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts,Huupe"
-             data-skeleton-count="25" aria-busy="true"></div>
+        <!-- Steam / PSN / YouTube / Autodarts / Huupe are one auto-mode tile
+             each (live session if there is one, otherwise last played) — the
+             same behaviour as the Settings test buttons. -->
+        <div class="push-block" data-push-group="games">
+          <div class="section-label">Game night</div>
+          <div class="card-row card-row-quad" id="push-row-games" data-push-category="games"
+               data-skeleton-count="10" aria-busy="true"></div>
+        </div>
+
+        <div class="push-block" data-push-group="media">
+          <div class="section-label">Now playing</div>
+          <div class="card-row card-row-quad" id="push-row-media" data-push-category="media"
+               data-skeleton-count="3" aria-busy="true"></div>
+        </div>
+
+        <div class="push-block" data-push-group="news">
+          <div class="section-label">Headlines</div>
+          <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
+               data-skeleton-count="2" aria-busy="true"></div>
+        </div>
+
+        <div class="push-block" data-push-group="travel">
+          <div class="section-label">Car &amp; sky</div>
+          <div class="card-row card-row-quad" id="push-row-travel" data-push-category="travel"
+               data-skeleton-count="5" aria-busy="true"></div>
+        </div>
+
+        <div class="push-block" data-push-group="share">
+          <div class="section-label">Share to the display</div>
+          <div class="card-row card-row-quad" id="push-row-share" data-push-category="share"
+               data-skeleton-count="1" aria-busy="true"></div>
+        </div>
         <script>
           (function () {
             document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
@@ -95,8 +168,10 @@
           })();
         </script>
 
-        <div class="push-columns">
-          <div class="push-column">
+        <!-- Web Browser and QR Code are hand-built rather than registry tiles,
+             so each column is its own searchable item under Share. -->
+        <div class="push-columns" data-push-group="share">
+          <div class="push-column" data-push-item="web-browser">
             <div class="section-label">Web Browser</div>
 
             <div class="card" id="browser-active-card" hidden>
@@ -128,7 +203,7 @@
             </div>
           </div>
 
-          <div class="push-column">
+          <div class="push-column" data-push-item="qr-code">
             <div class="section-label">QR Code</div>
             <div class="card">
               <label class="field-label">Generate a QR code on the display</label>
@@ -1578,10 +1653,13 @@
         </div>
 
         <div class="card">
-          <div class="section-label">Recent API calls</div>
-          <div class="vb-list" id="vb-calls">
-            <p class="hint">No calls yet.</p>
-          </div>
+          <details class="vb-advanced" id="vb-calls-details">
+            <summary>Recent API calls <span class="vb-calls-count" id="vb-calls-count"></span></summary>
+            <p class="hint">The last 20 requests this board answered, newest first — what was asked for, from where, and why it was accepted or refused. The board key never appears here.</p>
+            <div class="vb-list" id="vb-calls">
+              <p class="hint">No calls yet.</p>
+            </div>
+          </details>
         </div>
       </div>
     </section>
@@ -1964,6 +2042,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal101"></script>
+  <script src="app.js?v=signal104"></script>
 </body>
 </html>

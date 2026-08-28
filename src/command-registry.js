@@ -22,6 +22,8 @@ const { estimateDuration: estimateOverheadDuration } = require('./overhead-setti
  * @property {string} title         Shown on the push tile and in the scheduler.
  * @property {string} [subtitle]    Secondary line on the push tile.
  * @property {string} group         Groups tiles and the scheduler command picker.
+ * @property {string} [pushCategory] Which Push sub-tab the tile files under;
+ *   defaults to the group's category (see {@link pushCategoryOf}).
  * @property {string} route         POST endpoint that fires it.
  * @property {string} [icon]        Key into the admin icon map; falls back to `group`.
  * @property {boolean} pushable     Render a one-tap tile in the admin Push tab.
@@ -94,6 +96,61 @@ function supportsKind(commandOrId, kind) {
     return true;
   }
   return kindsOf(command).includes(kind);
+}
+
+/**
+ * Sub-tabs of the admin Push page, in the order they are shown.
+ *
+ * The grid outgrew a single scrolling column, so tiles are filed under a
+ * category the way Settings files its cards. `group` is about which service a
+ * command talks to; a category is about what the user is trying to put on the
+ * wall, which is why Alexa's Now Playing sits under Media next to YouTube
+ * rather than with the shopping list.
+ */
+const PUSH_CATEGORIES = Object.freeze([
+  { id: 'home', label: 'Home', heading: 'Around the house' },
+  { id: 'games', label: 'Games', heading: 'Game night' },
+  { id: 'media', label: 'Media', heading: 'Now playing' },
+  { id: 'news', label: 'News', heading: 'Headlines' },
+  { id: 'travel', label: 'Travel', heading: 'Car & sky' },
+  { id: 'share', label: 'Share', heading: 'Share to the display' },
+]);
+
+const PUSH_CATEGORY_IDS = new Set(PUSH_CATEGORIES.map((entry) => entry.id));
+
+/** Most groups land whole; the exceptions are listed by id below. */
+const PUSH_CATEGORY_BY_GROUP = Object.freeze({
+  Alexa: 'home',
+  Autodarts: 'games',
+  Games: 'games',
+  Huupe: 'games',
+  Knowledge: 'news',
+  News: 'news',
+  PSN: 'games',
+  Signal: 'share',
+  Sky: 'travel',
+  Steam: 'games',
+  Tesla: 'travel',
+  Trivia: 'games',
+  YouTube: 'media',
+});
+
+const PUSH_CATEGORY_BY_ID = Object.freeze({
+  'alexa.now-playing': 'media',
+  'signal.slideshow': 'media',
+});
+
+function pushCategoryOf(commandOrId) {
+  const command = typeof commandOrId === 'string'
+    ? COMMANDS.find((entry) => entry.id === commandOrId)
+    : commandOrId;
+  if (!command) {
+    return null;
+  }
+  return command.pushCategory
+    || PUSH_CATEGORY_BY_ID[command.id]
+    || PUSH_CATEGORY_BY_GROUP[command.group]
+    || null;
 }
 
 /** @type {CommandDescriptor[]} */
@@ -625,6 +682,15 @@ function assertValid(commands = COMMANDS) {
     if (!kinds.length) {
       throw new Error(`Command "${command.id}" needs at least one display kind`);
     }
+    const category = pushCategoryOf(command);
+    if (category && !PUSH_CATEGORY_IDS.has(category)) {
+      throw new Error(`Command "${command.id}" has unknown pushCategory "${category}"`);
+    }
+    // A pushable tile with no category would render into no pane at all, so
+    // a new group has to declare where it belongs before it can ship.
+    if (command.pushable && !category) {
+      throw new Error(`Command "${command.id}" is pushable but has no push category`);
+    }
     for (const kind of kinds) {
       if (!DISPLAY_KINDS.includes(kind)) {
         throw new Error(`Command "${command.id}" has unknown kind "${kind}"`);
@@ -933,6 +999,7 @@ function createCommandRegistry(deps = {}) {
         title: command.title,
         subtitle: command.subtitle || '',
         group: command.group,
+        pushCategory: pushCategoryOf(command),
         route: command.route,
         icon: command.icon || command.group.toLowerCase(),
         body: command.body || null,
@@ -961,8 +1028,10 @@ module.exports = {
   COMMANDS,
   DISPLAY_KINDS,
   BOARD_COMMAND_IDS,
+  PUSH_CATEGORIES,
   kindsOf,
   supportsKind,
+  pushCategoryOf,
   assertValid,
   createCommandRegistry,
 };

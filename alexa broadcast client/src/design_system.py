@@ -152,7 +152,19 @@ def release_photos(canvas) -> None:
 
 
 def _canvas_can_photo(canvas) -> bool:
-    return ImageTk is not None and Image is not None and hasattr(canvas, "tk")
+    if Image is None:
+        return False
+    # `pil_photo` is the preview renderer's hook: it paints into Pillow, so it
+    # can take the image itself and show the same art the wall gets.
+    if hasattr(canvas, "pil_photo"):
+        return True
+    return ImageTk is not None and hasattr(canvas, "tk")
+
+
+def _photo_for(canvas, image):
+    if hasattr(canvas, "pil_photo"):
+        return canvas.pil_photo(image)
+    return ImageTk.PhotoImage(image, master=canvas)
 
 
 def _gradient_image(width: int, height: int, top_color: str, bottom_color: str, radius: float):
@@ -221,7 +233,7 @@ def paint_gradient(
                 bottom_color,
                 0,
             )
-            photo = ImageTk.PhotoImage(image, master=canvas)
+            photo = _photo_for(canvas, image)
             retain_photo(canvas, photo)
             item = canvas.create_image(x0, y0, image=photo, anchor="nw")
             if track:

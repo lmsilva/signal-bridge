@@ -166,6 +166,29 @@ function createQueue({
   }
 
   /**
+   * Fold consecutive identical pages into one, keeping their combined dwell.
+   *
+   * A formatter that repeats a frame to express a longer hold — guest snaps
+   * emits one copy per 30 seconds — queues pages that can never post: the
+   * head-of-queue dedupe drops anything already on the board, and the board
+   * holds its last layout anyway. All the copies bought was a place in the
+   * line ahead of frames that did have something to show.
+   */
+  function foldRepeats(list) {
+    const folded = [];
+    for (const frame of list) {
+      const last = folded[folded.length - 1];
+      if (last && sameLayout(last.rows, frame.rows)) {
+        last.dwellSeconds = (Number(last.dwellSeconds) || DEFAULT_DWELL_SECONDS)
+          + (Number(frame.dwellSeconds) || DEFAULT_DWELL_SECONDS);
+        continue;
+      }
+      folded.push({ ...frame });
+    }
+    return folded;
+  }
+
+  /**
    * Take frames for the board.
    *
    * Snapshots queue in order and turn pages at their own dwell. An alert goes
@@ -173,9 +196,16 @@ function createQueue({
    * does not resume mid-list, the scheduler will bring it back around.
    */
   function submit(frames, options = {}) {
-    const list = (Array.isArray(frames) ? frames : [frames]).filter(Boolean);
-    if (!list.length) {
+    const offered = (Array.isArray(frames) ? frames : [frames]).filter(Boolean);
+    if (!offered.length) {
       return { accepted: 0, dropped: 0, reason: 'empty' };
+    }
+    const list = foldRepeats(offered);
+    if (list.length < offered.length) {
+      log?.debug?.(
+        `Vestaboard ${config.id} folded ${offered.length - list.length} repeat page(s) `
+        + `of ${list[0].label || ''}`.trimEnd(),
+      );
     }
 
     const priority = options.priority === 'alert' ? 'alert' : 'snapshot';

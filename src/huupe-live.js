@@ -348,6 +348,9 @@ function createHuupeLive({
   function openSession() {
     if (!session || session.opened) return;
     session.opened = true;
+    // Cancel the previous game's pending close, or it lands mid-way through
+    // this one and takes the live card down with it.
+    closeDisplayAt = null;
     counters.opened += 1;
     log?.info?.(`Huupe session ${session.sessionId} open (${session.mode})`);
     pushLive({ force: true });
@@ -377,6 +380,26 @@ function createHuupeLive({
     return session && session.stats.attempts >= 2;
   }
 
+  /**
+   * Swap the live card for the final one and let the display count itself
+   * down, rather than pulling the page while the score is still on it.
+   *
+   * Returns false when there is nobody to show it to — a suppressed session,
+   * auto-push off — so the caller can close the display instead.
+   */
+  function holdFinalCard(view, nowMs) {
+    if (suppressedBy || !liveSettings().autoPush) return false;
+    const holdSeconds = Number(liveSettings().finalHoldSeconds) || 60;
+    session.revision += 1;
+    counters.pushed += 1;
+    send(payload.buildSessionPayload({ ...view, revision: session.revision }, {
+      persistent: false,
+      displaySeconds: holdSeconds,
+    }));
+    closeDisplayAt = nowMs + holdSeconds * 1000;
+    return true;
+  }
+
   function finishSession({ reason = 'ended' } = {}) {
     if (!session || phase !== LIVE) return null;
     const nowMs = now();
@@ -389,16 +412,7 @@ function createHuupeLive({
     const keep = hasContent();
     if (keep) settle(view, { aborted: false, reason });
 
-    if (session.opened && !suppressedBy && liveSettings().autoPush && keep) {
-      const holdSeconds = Number(liveSettings().finalHoldSeconds) || 60;
-      session.revision += 1;
-      counters.pushed += 1;
-      send(payload.buildSessionPayload({ ...view, revision: session.revision }, {
-        persistent: false,
-        displaySeconds: holdSeconds,
-      }));
-      closeDisplayAt = nowMs + holdSeconds * 1000;
-    } else if (session.opened) {
+    if (session.opened && !(keep && holdFinalCard(view, nowMs))) {
       closeDisplay(reason);
       closeDisplayAt = null;
     }
@@ -412,10 +426,16 @@ function createHuupeLive({
 
   /**
    * Teardown for a session that will never report an end of its own — the hoop
-   * went dark, or nobody came back. The display is cleared straight away rather
-   * than held, because a stale live card blocks every scheduled page behind it.
+   * went dark, or nobody came back.
+   *
+   * A game that got far enough to have a score still earns the same final card
+   * a clean end gets: the hoop dropping off ADB says nothing about whether
+   * anyone is still standing in front of the wall reading the result. Only a
+   * session with nothing in it, or a bridge on its way down, clears the display
+   * on the spot — and even the final card releases the wall to the scheduler
+   * when its hold elapses, so nothing is left stranded up there.
    */
-  function abortSession({ reason = 'lost' } = {}) {
+  function abortSession({ reason = 'lost', immediate = false } = {}) {
     if (!session) return null;
     const nowMs = now();
     session.endedAt = new Date(nowMs).toISOString();
@@ -423,12 +443,18 @@ function createHuupeLive({
     const view = sessionView();
     view.status = 'finished';
     counters.aborted += 1;
-    if (hasContent()) settle(view, { aborted: true, reason });
-    if (session.opened) closeDisplay(reason);
+    const keep = hasContent();
+    if (keep) settle(view, { aborted: true, reason });
+
+    let held = false;
+    if (session.opened) {
+      held = !immediate && keep && holdFinalCard(view, nowMs);
+      if (!held) closeDisplay(reason);
+    }
     log?.warn?.(`Huupe session ${session.sessionId} aborted (${reason})`);
     session = null;
     phase = IDLE;
-    closeDisplayAt = null;
+    if (!held) closeDisplayAt = null;
     lastPushFingerprint = null;
     return view;
   }
@@ -681,7 +707,8 @@ function createHuupeLive({
     close() {
       if (timer) clearTimer(timer);
       timer = null;
-      if (phase === LIVE) abortSession({ reason: 'shutdown' });
+      // Nothing is left running to close the card later, so it goes now.
+      if (phase === LIVE) abortSession({ reason: 'shutdown', immediate: true });
     },
     handleEvent,
     handleStreamState,

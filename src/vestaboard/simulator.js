@@ -186,14 +186,66 @@ function createVestaboardSimulator({
     };
   }
 
-  function recordCall(method, result) {
-    const entry = { at: new Date(now()).toISOString(), method, result };
+  /**
+   * Who asked. Only the caller and its user agent — never the request headers
+   * wholesale, because that is where the key rides.
+   */
+  function callerOf(req) {
+    const headers = req?.headers || {};
+    const forwarded = String(headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const from = forwarded || req?.socket?.remoteAddress || '';
+    return {
+      from: from.replace(/^::ffff:/, ''),
+      agent: String(headers['user-agent'] || '').slice(0, 80),
+    };
+  }
+
+  /**
+   * One line of the page's call log.
+   *
+   * `method` and `result` are the original two fields and keep their exact
+   * wording; everything else is here so an admin watching the page can tell
+   * *why* a send was refused without going to the container logs.
+   */
+  function recordCall(req, { endpoint, verb, result, detail = '' }) {
+    const name = endpoint === ENABLEMENT_PATH ? 'enablement' : 'message';
+    const entry = {
+      at: new Date(now()).toISOString(),
+      method: `${verb} ${name}`,
+      result,
+      verb,
+      endpoint,
+      status: Number(String(result).slice(0, 3)) || null,
+      detail,
+      ...callerOf(req),
+    };
     calls.push(entry);
     while (calls.length > MAX_CALL_LOG) {
       calls.shift();
     }
     emit('call', entry);
     return entry;
+  }
+
+  function gridSize(rows) {
+    return `${rows?.length || 0}x${rows?.[0]?.length || 0}`;
+  }
+
+  function changedCells(next, previous) {
+    let changed = 0;
+    for (let row = 0; row < next.length; row += 1) {
+      for (let col = 0; col < (next[row] || []).length; col += 1) {
+        if (next[row][col] !== previous?.[row]?.[col]) changed += 1;
+      }
+    }
+    return changed;
+  }
+
+  function agoLabel(stamp) {
+    if (!stamp) return 'never';
+    const seconds = Math.max(0, Math.round((now() - stamp) / 1000));
+    if (seconds < 60) return `${seconds}s ago`;
+    return `${Math.round(seconds / 60)}m ago`;
   }
 
   function sendJson(res, status, body) {
@@ -209,20 +261,29 @@ function createVestaboardSimulator({
   function handleEnablement(req, res, body) {
     const offered = req.headers[ENABLEMENT_HEADER];
     if (!offered || offered !== state.enablementToken) {
-      recordCall('POST enablement', '401 auth bad');
+      recordCall(req, {
+        endpoint: ENABLEMENT_PATH, verb: 'POST', result: '401 auth bad',
+        detail: offered
+          ? 'enablement token did not match this board'
+          : `no ${ENABLEMENT_HEADER} header`,
+      });
       sendJson(res, 401, { message: 'Unauthorized' });
       return;
     }
 
     // Enabling twice returns the same key, matching a board that has already
     // been enabled rather than silently rotating the caller's credential.
+    const had = Boolean(state.apiKey);
     if (!state.apiKey) {
       state.apiKey = secureToken(17);
       persist();
       emit('state', snapshot());
     }
 
-    recordCall('POST enablement', '200 enabled');
+    recordCall(req, {
+      endpoint: ENABLEMENT_PATH, verb: 'POST', result: '200 enabled',
+      detail: had ? 'already enabled — returned the existing key' : 'issued a new local API key',
+    });
     sendJson(res, 200, { message: 'Local API enabled', apiKey: state.apiKey });
   }
 
@@ -231,34 +292,51 @@ function createVestaboardSimulator({
     return Boolean(state.apiKey) && offered === state.apiKey;
   }
 
+  /** Why the key was refused — the three cases look identical from outside. */
+  function authFailure(req) {
+    if (!req.headers[KEY_HEADER]) return `no ${KEY_HEADER} header`;
+    if (!state.apiKey) return 'the local API is not enabled on this board yet';
+    return 'the key did not match this board';
+  }
+
   function handleRead(req, res) {
     if (!authorised(req)) {
-      recordCall('GET message', '401 auth bad');
+      recordCall(req, {
+        endpoint: MESSAGE_PATH, verb: 'GET', result: '401 auth bad',
+        detail: authFailure(req),
+      });
       sendJson(res, 401, { message: 'Unauthorized' });
       return;
     }
-    recordCall('GET message', '200 read');
+    recordCall(req, {
+      endpoint: MESSAGE_PATH, verb: 'GET', result: '200 read',
+      detail: `returned the ${gridSize(state.current)} grid · last flip ${agoLabel(state.lastAcceptedAt)}`,
+    });
     // The Local API answers with the bare grid, unlike the cloud API which
     // wraps it in a currentMessage object with an id.
     sendJson(res, 200, state.current);
   }
 
   function handleWrite(req, res, body) {
+    const write = (result, detail) => recordCall(req, {
+      endpoint: MESSAGE_PATH, verb: 'POST', result, detail,
+    });
+
     if (!authorised(req)) {
-      recordCall('POST message', '401 auth bad');
+      write('401 auth bad', authFailure(req));
       sendJson(res, 401, { message: 'Unauthorized' });
       return;
     }
 
     if (!state.online) {
-      recordCall('POST message', '503 offline');
+      write('503 offline', 'the board is switched off on this page');
       sendJson(res, 503, { message: 'board offline' });
       return;
     }
 
     const posted = readPostedMessage(body);
     if (posted.error) {
-      recordCall('POST message', '400 bad layout');
+      write('400 bad layout', posted.error);
       sendJson(res, 400, { message: posted.error });
       return;
     }
@@ -266,7 +344,7 @@ function createVestaboardSimulator({
     // Flagship is 6x22. The Note is 3x15, which this simulator does not model.
     const check = validate(posted.characters);
     if (!check.ok) {
-      recordCall('POST message', '400 bad layout');
+      write('400 bad layout', `${check.errors[0]} (sent ${gridSize(posted.characters)})`);
       sendJson(res, 400, { message: check.errors[0] });
       return;
     }
@@ -274,24 +352,32 @@ function createVestaboardSimulator({
     // A board shows what it shows; re-posting it changes nothing and must not
     // restart the rate window, or a repeating page would lock the board out.
     if (sameLayout(posted.characters, state.current)) {
-      recordCall('POST message', '200 duplicate');
+      write('200 duplicate', 'identical to the frame already on the board — not re-flipped');
       sendJson(res, 200, { status: 'ok' });
       return;
     }
 
     const waiting = cooldownMs();
     if (waiting > 0) {
-      recordCall('POST message', '503 rate');
+      write(
+        '503 rate',
+        `flaps still moving — ${Math.ceil(waiting / 1000)}s left of the ${rateWindowSeconds}s window`,
+      );
       sendJson(res, 503, { message: 'rate limited' });
       return;
     }
 
+    const changed = changedCells(posted.characters, state.current);
     state.current = posted.characters.map((row) => [...row]);
     state.lastAcceptedAt = now();
     state.lastStrategy = posted.strategy;
     persist();
 
-    recordCall('POST message', '200 flipped');
+    write('200 flipped', [
+      `${changed} of ${ROWS * COLS} cells changed`,
+      `strategy ${posted.strategy || 'default'}`,
+      posted.stepIntervalMs ? `step ${posted.stepIntervalMs}ms` : '',
+    ].filter(Boolean).join(' · '));
     emit('flip', {
       layout: snapshot().current,
       strategy: posted.strategy,
@@ -354,13 +440,19 @@ function createVestaboardSimulator({
     try {
       body = await readBody(req);
     } catch {
-      recordCall(`POST ${pathname}`, '400 bad layout');
+      recordCall(req, {
+        endpoint: pathname, verb: 'POST', result: '400 bad layout',
+        detail: `body over the ${Math.round(MAX_BODY_BYTES / 1024)}KB limit`,
+      });
       sendJson(res, 400, { message: 'body too large' });
       return true;
     }
 
     if (body === Symbol.for('unparsable')) {
-      recordCall('POST message', '400 bad layout');
+      recordCall(req, {
+        endpoint: pathname, verb: 'POST', result: '400 bad layout',
+        detail: 'body is not valid JSON',
+      });
       sendJson(res, 400, { message: 'body is not valid JSON' });
       return true;
     }

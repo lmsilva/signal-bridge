@@ -11,7 +11,7 @@ const {
   resolveStaticPath,
   computeWebBasePath,
 } = require('../src/web-server');
-const { COMMANDS } = require('../src/command-registry');
+const { COMMANDS, PUSH_CATEGORIES, pushCategoryOf } = require('../src/command-registry');
 
 // Plain non-pooled requests: global fetch keeps pooled keep-alive sockets per
 // origin, and Windows can hand a later test server the same ephemeral port a
@@ -303,7 +303,7 @@ test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload'
 
 test('Web Browser and QR Code sections share a .push-columns wrapper for wide-screen side-by-side layout', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
-  const wrapperMatch = html.match(/<div class="push-columns">([\s\S]*?)<\/section>/);
+  const wrapperMatch = html.match(/<div class="push-columns"[^>]*>([\s\S]*?)<\/section>/);
   assert.ok(wrapperMatch, 'expected a .push-columns wrapper inside the Push tab');
   const wrapper = wrapperMatch[1];
   const webBrowserIndex = wrapper.indexOf('Web Browser');
@@ -1113,7 +1113,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /SETTINGS_VIEW_KEY/);
   assert.match(js, /SETTINGS_SEARCH_KEY/);
   assert.match(js, /settings-hit-count/);
-  assert.match(js, /settingsStorageRemove\(SETTINGS_SEARCH_KEY\)/);
+  assert.match(js, /uiStorageRemove\(SETTINGS_SEARCH_KEY\)/);
   assert.match(css, /\.settings-view-tabs\b/);
   assert.match(css, /\.settings-hit-count\b/);
   assert.match(css, /\.settings-search-row\b/);
@@ -1296,18 +1296,20 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   // Tiles come from the command registry now, not static markup — the HTML only
   // supplies the rows the renderer fills.
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
-  assert.match(html, /id="push-row-tesla" data-push-row="Tesla"/);
-  assert.match(html, /id="push-row-quick"[\s\S]*?data-push-row="Signal,Alexa,Games,Trivia,News,Knowledge,Sky,Steam,PSN,YouTube,Autodarts,Huupe"/);
+  assert.match(html, /id="push-row-home" data-push-category="home"/);
+  assert.match(html, /id="push-row-games" data-push-category="games"/);
   assert.match(html, /data-skeleton-count/);
   assert.match(html, /push-card-skeleton/);
-  const teslaCount = COMMANDS.filter((c) => c.pushable && c.group === 'Tesla').length;
-  // Every group the row actually renders, so the skeleton count cannot drift
-  // short of the real grid and leave the page shuffling as tiles land.
-  const quickGroups = ['Signal', 'Alexa', 'Games', 'Trivia', 'News', 'Knowledge', 'Sky',
-    'Steam', 'PSN', 'YouTube', 'Autodarts', 'Huupe'];
-  const quickCount = COMMANDS.filter((c) => c.pushable && quickGroups.includes(c.group)).length;
-  assert.match(html, new RegExp(`id="push-row-tesla"[\\s\\S]*?data-skeleton-count="${teslaCount}"`));
-  assert.match(html, new RegExp(`id="push-row-quick"[\\s\\S]*?data-skeleton-count="${quickCount}"`));
+  // Skeletons reserve exactly the height the pane will need, so nothing
+  // shuffles as the tiles land.
+  for (const category of ['home', 'games', 'media', 'news', 'travel', 'share']) {
+    const count = COMMANDS.filter(
+      (c) => c.pushable && pushCategoryOf(c) === category,
+    ).length;
+    assert.match(html, new RegExp(
+      `id="push-row-${category}"[\\s\\S]*?data-skeleton-count="${count}"`,
+    ), `the ${category} pane reserves room for ${count} tiles`);
+  }
   assert.doesNotMatch(html, /id="push-row-playing"/);
   assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
 
@@ -1325,18 +1327,56 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   }
 });
 
+test('the Push page files its tiles behind searchable category tabs', () => {
+  // The grid passed thirty tiles, so it is organised the way Settings is: one
+  // pane per category, a search that counts hits per tab, and tabs that step
+  // aside when nothing in them matches.
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  assert.match(html, /id="push-view-tabs"/);
+  assert.match(html, /id="push-search"/);
+  assert.match(html, /id="push-search-clear"/);
+  assert.match(html, /id="push-search-empty"/);
+  for (const view of PUSH_CATEGORIES.map((entry) => entry.id)) {
+    assert.match(html, new RegExp(`data-push-view="${view}"`));
+    assert.match(html, new RegExp(`data-push-group="${view}"`));
+  }
+  // Web Browser and QR Code are hand-built, so they are searchable in their
+  // own right rather than riding along invisibly under Share.
+  assert.match(html, /data-push-item="web-browser"/);
+  assert.match(html, /data-push-item="qr-code"/);
+
+  assert.match(js, /function applyPushFilter/);
+  assert.match(js, /function showPushView/);
+  assert.match(js, /PUSH_VIEW_KEY/);
+  assert.match(js, /push-hit-count/);
+  // Tiles answer to their service and command id as well as their printed copy.
+  assert.match(js, /data-search-terms=/);
+  // The renderer hands visibility to the filter instead of hiding rows itself.
+  assert.doesNotMatch(js, /row\.hidden = mine\.length === 0/);
+
+  assert.match(css, /\.push-view-tabs\b/);
+  assert.match(css, /\.push-hit-count\b/);
+  assert.match(css, /\.push-search-row\b/);
+  assert.match(css, /#tab-push \[data-push-group\]\[hidden\]/);
+});
+
 test('Steam, PSN and YouTube share one auto-mode push tile each next to Trivia', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
-  const rows = [...html.matchAll(/data-push-row="([^"]+)"/g)]
-    .flatMap((match) => match[1].split(',').map((g) => g.trim()));
+  const rows = [...html.matchAll(/data-push-category="([^"]+)"/g)].map((match) => match[1].trim());
 
-  // A group listed in two rows would render its tiles twice.
-  assert.equal(new Set(rows).size, rows.length, 'each group belongs to exactly one row');
+  // A category rendered by two rows would show its tiles twice.
+  assert.equal(new Set(rows).size, rows.length, 'each category belongs to exactly one row');
 
   for (const id of ['steam.now-playing', 'psn.now-playing', 'youtube.now-playing']) {
     const command = COMMANDS.find((entry) => entry.id === id);
     assert.ok(command.pushable, `${id} needs a push tile`);
-    assert.ok(rows.includes(command.group), `${command.group} has no row to render into`);
+    assert.ok(
+      rows.includes(pushCategoryOf(command)),
+      `${command.id} has no row to render into`,
+    );
     // Empty body → the push handler's `auto` path (live session, else last played).
     assert.equal(command.body?.mode, undefined);
   }

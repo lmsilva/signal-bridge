@@ -22,6 +22,7 @@ from src.huupe_panel import (
     court_regions,
     deep_fade_alpha,
     deep_fade_bands,
+    deep_fade_image,
     format_score,
     glow_ring_layers,
     heat_color,
@@ -352,6 +353,80 @@ class DeepFadeTests(unittest.TestCase):
             ),
             [],
         )
+
+
+class DeepFadeImageTests(unittest.TestCase):
+    """The wall gets the smooth version — bands are only the fallback."""
+
+    def image(self, **kwargs):
+        options = {
+            "rim_xy": (100.0, 380.0), "radius": 400.0,
+            "color": "#FF6157", "base": "#0B1A33",
+        }
+        options.update(kwargs)
+        return deep_fade_image(200, 400, **options)
+
+    def test_it_is_hottest_at_the_rim_and_cold_at_the_far_baseline(self):
+        img = self.image()
+        self.assertIsNotNone(img)
+        near = img.getpixel((100, 370))[0]
+        far = img.getpixel((100, 5))[0]
+        self.assertGreater(near, far)
+
+    def test_the_ramp_never_warms_back_up_going_away_from_the_rim(self):
+        img = self.image()
+        reds = [img.getpixel((100, y))[0] for y in range(370, 0, -20)]
+        self.assertEqual(reds, sorted(reds, reverse=True))
+
+    def test_a_corner_radius_leaves_the_corner_transparent(self):
+        img = self.image(corner=24.0)
+        self.assertEqual(img.mode, "RGBA")
+        self.assertEqual(img.getpixel((0, 0))[3], 0)
+        self.assertEqual(img.getpixel((100, 200))[3], 255)
+
+    def test_a_court_with_no_room_paints_nothing(self):
+        self.assertIsNone(self.image(radius=0))
+
+
+class GlassPageTests(unittest.TestCase):
+    """Cards are only translucent when the page was composited in Pillow."""
+
+    def page(self, screen=(1080, 1920), kind="dashboard"):
+        panel = make_panel(screen)
+        panel._sync_metrics()
+        boxes = layout_huupe_dashboard(*screen, recent=True)
+        cards_ = [(box, 0.0) for box in cards(boxes).values()]
+        return panel, panel._page_image(kind=kind, status=None, cards=cards_), cards_
+
+    def test_the_page_carries_the_card_fills(self):
+        _, page, cards_ = self.page()
+        self.assertEqual(page.size, (1080, 1920))
+        (x0, y0, x1, y1), _ = cards_[0]
+        inside = page.getpixel((int((x0 + x1) / 2), int((y0 + y1) / 2)))
+        outside = page.getpixel((int(x0) - 12, int((y0 + y1) / 2)))
+        self.assertNotEqual(inside, outside)
+
+    def test_a_card_skips_its_own_fill_once_the_page_has_one(self):
+        panel = make_panel()
+        panel._sync_metrics()
+        panel._glass_painted = True
+        panel._card((10, 10, 200, 100))
+        fills = {
+            call.kwargs.get("fill")
+            for call in panel.canvas.create_polygon.call_args_list
+        }
+        self.assertEqual(fills, {""})
+
+    def test_a_card_stays_solid_without_a_page_image(self):
+        panel = make_panel()
+        panel._sync_metrics()
+        panel._glass_painted = False
+        panel._card((10, 10, 200, 100))
+        fills = {
+            call.kwargs.get("fill")
+            for call in panel.canvas.create_polygon.call_args_list
+        }
+        self.assertNotIn("", fills)
 
 
 class GlowRingTests(unittest.TestCase):

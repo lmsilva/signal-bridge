@@ -370,6 +370,66 @@ test('the call log records outcomes without ever recording the key', async () =>
   }
 });
 
+test('each call names the endpoint and says why it landed the way it did', async () => {
+  // The admin page is the only place this traffic is visible, so an entry has
+  // to answer "what was posted where, and why was it refused" on its own.
+  const harness = await startSim({ rateWindowSeconds: 0 });
+  try {
+    const key = await enable(harness);
+    const headers = { [KEY_HEADER]: key };
+
+    await post(harness.base, '/local-api/message', sampleFrame('ONE'), headers);
+    await post(harness.base, '/local-api/message', sampleFrame('ONE'), headers);
+    await get(harness.base, '/local-api/message', headers);
+    await post(harness.base, '/local-api/message', sampleFrame('TWO'), {});
+
+    const [enabled, flipped, duplicate, read, refused] = harness.sim.calls();
+
+    assert.equal(enabled.endpoint, '/local-api/enablement');
+    assert.equal(enabled.verb, 'POST');
+    assert.equal(enabled.status, 200);
+    assert.match(enabled.detail, /issued a new local API key/);
+
+    assert.equal(flipped.endpoint, '/local-api/message');
+    assert.match(flipped.detail, /of 132 cells changed/);
+
+    assert.match(duplicate.detail, /identical to the frame already on the board/);
+
+    assert.equal(read.verb, 'GET');
+    assert.match(read.detail, /returned the 6x22 grid/);
+
+    assert.equal(refused.status, 401);
+    assert.match(refused.detail, /no x-vestaboard-local-api-key header/);
+
+    // Kept so an older page and the outcome assertions above still read the
+    // same two fields they always did.
+    assert.equal(flipped.method, 'POST message');
+    assert.ok(!JSON.stringify(harness.sim.calls()).includes(key));
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('a refused write says which limit stopped it', async () => {
+  const harness = await startSim({ rateWindowSeconds: 15 });
+  try {
+    const key = await enable(harness);
+    const headers = { [KEY_HEADER]: key };
+    await post(harness.base, '/local-api/message', sampleFrame('ONE'), headers);
+    await post(harness.base, '/local-api/message', sampleFrame('TWO'), headers);
+
+    const rate = harness.sim.calls().at(-1);
+    assert.equal(rate.result, '503 rate');
+    assert.match(rate.detail, /flaps still moving — \d+s left of the 15s window/);
+
+    harness.sim.setOnline(false);
+    await post(harness.base, '/local-api/message', sampleFrame('TRE'), headers);
+    assert.match(harness.sim.calls().at(-1).detail, /switched off on this page/);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('neither the key nor the enablement token is ever logged or published', async () => {
   const harness = await startSim({ rateWindowSeconds: 0 });
   try {
