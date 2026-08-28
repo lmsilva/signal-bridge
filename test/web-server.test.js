@@ -1063,7 +1063,9 @@ test('Vestaboard simulator call log stacks time and detail, centers verb and res
   assert.match(js, /vb-row-call-target/);
   assert.match(css, /\.vb-row\.vb-row-call\s*\{[\s\S]*?align-items:\s*center/);
   assert.match(css, /\.vb-row-call-meta\s*\{[\s\S]*?flex-direction:\s*column/);
-  assert.match(css, /\.vb-row-call-target\s*\{[\s\S]*?display:\s*flex/);
+  assert.match(css, /\.vb-row-call-target\s*\{[\s\S]*?display:\s*contents/);
+  assert.match(css, /\.vb-row-call \.vb-row-verb\s*\{[\s\S]*?grid-column:\s*2/);
+  assert.match(css, /\.vb-row\.vb-row-call\s*\{[\s\S]*?2\.75rem\s+minmax\(0,\s*1fr\)\s+auto/);
 });
 
 test('admin Settings has a trivia card driven by the trivia API', () => {

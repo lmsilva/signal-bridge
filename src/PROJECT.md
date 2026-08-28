@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-27 (Vestaboard call log layout)
+**Last updated:** 2026-08-27 (Vestaboard call log column alignment)
 
 ---
 
@@ -614,6 +614,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-27: **Vestaboard call log POST column drifted with detail width** — the meta band used `auto` width, so a longer detail sentence widened column one and shoved **POST** sideways on the next row. Rows are now a four-column grid (fixed-width meta · verb · endpoint · result) with `display: contents` on the target wrapper so **POST** always lands in column two. Cache-bust `?v=signal109`. Tests: `web-server.test.js`.
 - 2026-08-27: **Vestaboard call log rows read cleaner** — timestamp and the detail sentence stack on the left; **POST** + endpoint and **200 flipped** sit in the middle and right columns, vertically centered against the two-line block. Cache-bust `?v=signal108`. Tests: `web-server.test.js`.
 - 2026-08-27: **Vestaboard simulator call log columns drifted** — each row used `justify-content: space-between`, so a longer endpoint shoved **POST** left or right relative to the row above. API call rows now use a four-column grid (time · verb · endpoint · result) with the detail line spanning full width. Cache-bust `?v=signal107`.
 - 2026-08-27: **Vestaboard weather spacing** — the NOW and HIGH/LOW rows sit one row lower with a blank band under **WEATHER** and another above tomorrow's footer, matching the physical board's breathing room. The hourly notable line (wind/rain callout) no longer fits those four body rows and is dropped from the weather frame — `notableHourly()` remains for tests/other use. Tests: `vestaboard-alexa.test.js`.

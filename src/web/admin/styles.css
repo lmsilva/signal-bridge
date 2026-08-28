@@ -3743,11 +3743,11 @@ textarea.field-input.text-input-area {
 .vb-advanced[open] > summary::before { content: '▾ '; }
 .vb-advanced[open] > summary { color: var(--text); }
 .vb-calls-count { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
-/* Time + detail stack left; verb/endpoint and result sit centered on the row. */
+/* Time + detail share a fixed-width band; verb, endpoint, and result align row to row. */
 .vb-row.vb-row-call {
   display: grid;
-  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) auto;
-  column-gap: 18px;
+  grid-template-columns: clamp(11rem, 42%, 26rem) 2.75rem minmax(0, 1fr) auto;
+  column-gap: 14px;
   align-items: center;
   padding: 9px 12px;
 }
@@ -3756,15 +3756,28 @@ textarea.field-input.text-input-area {
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  grid-column: 1;
 }
 .vb-row-call-target {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
+  display: contents;
 }
-.vb-row-call .vb-row-main { min-width: 0; }
-.vb-row-call .vb-row-result { white-space: nowrap; }
+.vb-row-call .vb-row-verb {
+  grid-column: 2;
+  align-self: center;
+}
+.vb-row-call .vb-row-main {
+  grid-column: 3;
+  min-width: 0;
+  align-self: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vb-row-call .vb-row-result {
+  grid-column: 4;
+  align-self: center;
+  white-space: nowrap;
+}
 .vb-row-verb {
   flex: none;
   font-weight: 700;
@@ -3777,6 +3790,10 @@ textarea.field-input.text-input-area {
   font-size: 0.78rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .vb-row-result.ok { color: var(--good); }
 .vb-row-result.warn { color: var(--warn); }
