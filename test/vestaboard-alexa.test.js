@@ -563,7 +563,7 @@ test('one item is singular, and an empty list only speaks when asked', () => {
 // A8. Weather
 // ---------------------------------------------------------------------------
 
-test('weather leads with now, then the day, then the one thing worth knowing', () => {
+test('weather leaves a blank row under the title and above the footer', () => {
   const frames = alexa.weatherFrames({
     version: 2,
     type: 'weather.query',
@@ -592,9 +592,9 @@ test('weather leads with now, then the day, then the one thing worth knowing', (
 
   assertLayout(frames[0].rows, [
     'bb WEATHER          bb',
+    '',
     ` NOW 93${DEG} SUNNY`,
     ` HIGH 96${DEG} LOW 66${DEG}`,
-    ' WINDY PM - 28 MPH',
     '',
     `bb TUE 93${DEG} RAIN 6%  bb`,
   ], 'weather');
