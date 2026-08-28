@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal104">
+  <link rel="stylesheet" href="styles.css?v=signal106">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -150,27 +150,10 @@
                data-skeleton-count="5" aria-busy="true"></div>
         </div>
 
-        <div class="push-block" data-push-group="share">
-          <div class="section-label">Share to the display</div>
-          <div class="card-row card-row-quad" id="push-row-share" data-push-category="share"
-               data-skeleton-count="1" aria-busy="true"></div>
-        </div>
-        <script>
-          (function () {
-            document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
-              var n = parseInt(row.getAttribute('data-skeleton-count'), 10) || 0;
-              var html = '';
-              for (var i = 0; i < n; i++) {
-                html += '<div class="push-card push-card-skeleton" aria-hidden="true"></div>';
-              }
-              row.innerHTML = html;
-            });
-          })();
-        </script>
-
-        <!-- Web Browser and QR Code are hand-built rather than registry tiles,
-             so each column is its own searchable item under Share. -->
-        <div class="push-columns" data-push-group="share">
+        <!-- Web Browser and QR Code lead the Share pane; registry tiles
+             (Guest Snaps, …) follow under their own heading. -->
+        <div class="push-share-pane" data-push-group="share">
+          <div class="push-columns">
           <div class="push-column" data-push-item="web-browser">
             <div class="section-label">Web Browser</div>
 
@@ -256,7 +239,27 @@
               <button class="btn btn-accent btn-block" id="btn-qr-generate">Generate &amp; Send</button>
             </div>
           </div>
+          </div>
+
+          <div class="push-share-tiles">
+            <div class="section-label">Share to the display</div>
+            <div class="card-row card-row-share" id="push-row-share" data-push-category="share"
+                 data-skeleton-count="1" aria-busy="true"></div>
+          </div>
         </div>
+
+        <script>
+          (function () {
+            document.querySelectorAll('[data-skeleton-count]').forEach(function (row) {
+              var n = parseInt(row.getAttribute('data-skeleton-count'), 10) || 0;
+              var html = '';
+              for (var i = 0; i < n; i++) {
+                html += '<div class="push-card push-card-skeleton" aria-hidden="true"></div>';
+              }
+              row.innerHTML = html;
+            });
+          })();
+        </script>
 
       </div>
     </section>
@@ -2042,6 +2045,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal104"></script>
+  <script src="app.js?v=signal106"></script>
 </body>
 </html>

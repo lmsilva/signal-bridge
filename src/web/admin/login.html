@@ -105,6 +105,11 @@
             }
             throw new Error(data.error || 'Login failed');
           }
+          try {
+            localStorage.removeItem('signal.pushView');
+          } catch {
+            // Private mode — admin still opens on Home.
+          }
           location.href = next.startsWith('/admin') ? next : '/admin/';
         } catch (error) {
           errorEl.textContent = error.message || 'Login failed';
