@@ -105,6 +105,8 @@ async function main() {
       psnNowPlaying: listener.psnNowPlaying,
       getYoutubeStatus: listener.getYoutubeStatus,
       youtubeNowPlaying: listener.youtubeNowPlaying,
+      getPlexStatus: listener.getPlexStatus,
+      plexNowPlaying: listener.plexNowPlaying,
       autodarts: listener.autodarts,
       getAutodartsStatus: listener.getAutodartsStatus,
       huupe: listener.huupe,

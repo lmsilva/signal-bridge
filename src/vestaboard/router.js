@@ -11,6 +11,7 @@ const tesla = require('./formatters/tesla');
 const gaming = require('./formatters/gaming');
 const feeds = require('./formatters/feeds');
 const signal = require('./formatters/signal');
+const cinema = require('./formatters/cinema');
 
 const FORMATTERS = {
   ...alexa.FORMATTERS,
@@ -18,6 +19,7 @@ const FORMATTERS = {
   ...gaming.FORMATTERS,
   ...feeds.FORMATTERS,
   ...signal.FORMATTERS,
+  ...cinema.FORMATTERS,
 };
 
 /**
@@ -53,6 +55,8 @@ const COMMAND_TO_TYPE = {
   'overhead.show': 'overhead.round',
   'youtube.now-playing': 'youtube.now-playing',
   'youtube.last-played': 'youtube.now-playing',
+  'plex.now-playing': 'plex.now-playing',
+  'plex.last-played': 'plex.now-playing',
   'flightplan.next': 'flightplan.flight',
   'flightplan.board': 'flightplan.flight',
 };
@@ -129,6 +133,7 @@ function routeEvent({
   commandId = null,
   explicit = true,
   scheduler = false,
+  quietHoursExempt = null,
   ctx = {},
   now = () => Date.now(),
   submit,
@@ -182,8 +187,11 @@ function routeEvent({
       priority,
       scheduler,
       // Someone asking (voice / admin Push) is worth the noise even at 2am.
-      // The scheduler is not — that is what quiet hours are for.
-      quietHoursExempt: Boolean(explicit),
+      // The scheduler is not — that is what quiet hours are for. A caller can
+      // override that (Feature Presentation live events) without flipping explicit.
+      quietHoursExempt: quietHoursExempt != null
+        ? Boolean(quietHoursExempt)
+        : Boolean(explicit),
       coalesceKey: coalesceKeyFor(payload, type),
     });
     results.push({

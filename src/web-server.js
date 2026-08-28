@@ -69,6 +69,10 @@ const { createQrImageCache, parseThumbRouteTail } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
 const { createCommandRegistry } = require('./command-registry');
 const {
+  savePlexToken,
+  defaultCredentialsPath,
+} = require('./plex-credentials');
+const {
   loadNotificationsCache,
   buildReplayPayload,
   hasCachedNotification,
@@ -328,6 +332,8 @@ function createWebServer({
   psnNowPlaying = null,
   getYoutubeStatus = null,
   youtubeNowPlaying = null,
+  getPlexStatus = null,
+  plexNowPlaying = null,
   autodarts = null,
   getAutodartsStatus = null,
   huupe = null,
@@ -467,6 +473,9 @@ function createWebServer({
       || null,
     getFlightplanStatus: () => getFlightplanStatus?.()
       || flightplanService()?.statusSnapshot?.()
+      || null,
+    getPlexStatus: () => getPlexStatus?.()
+      || plexService()?.statusSnapshot?.()
       || null,
     getPhotoCount: () => qrImageCache.list().length,
     getNotificationsCacheStatus: () => ({
@@ -1721,6 +1730,132 @@ function createWebServer({
     }
   }
 
+  // ------------------------------------------------------------- Plex / Feature Presentation
+
+  function plexService() {
+    return typeof plexNowPlaying === 'function' ? plexNowPlaying() : plexNowPlaying;
+  }
+
+  function plexTargetId(body) {
+    const targetId = targetIdFrom(body);
+    const raw = String(targetId || '').trim().toLowerCase();
+    if (raw === 'vestaboard') {
+      return 'vestaboard';
+    }
+    if (typeof displayRegistry?.get === 'function') {
+      const entry = displayRegistry.get(targetId);
+      if (entry && (entry.static || entry.kind === 'vestaboard')) {
+        return targetId;
+      }
+    }
+    return 'vestaboard';
+  }
+
+  function handlePlexStatus(res) {
+    const service = plexService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Feature Presentation is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handlePlexSettingsGet(res) {
+    const service = plexService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Feature Presentation is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, settings: service.settings.get() });
+  }
+
+  function handlePlexSettingsPut(body, res) {
+    const service = plexService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Feature Presentation is not available' });
+      return;
+    }
+    try {
+      const settings = service.applySettings(body || {});
+      sendJson(res, 200, { ok: true, settings, ...service.statusSnapshot() });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handlePlexTokenSave(body, res) {
+    const token = String(body?.token || '').trim();
+    if (!token) {
+      sendJson(res, 400, { ok: false, error: 'Plex token is empty' });
+      return;
+    }
+    if (String(process.env.PLEX_TOKEN || '').trim()) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'PLEX_TOKEN is set in the environment and cannot be replaced here',
+        source: 'env',
+      });
+      return;
+    }
+    try {
+      const credPath = config.plexCredentialsPath
+        || defaultCredentialsPath(config.ROOT);
+      savePlexToken(credPath, token);
+      sendJson(res, 200, { ok: true, source: 'session' });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handlePlexTest(_body, res) {
+    const service = plexService();
+    if (!service?.testConnection) {
+      sendJson(res, 503, { ok: false, error: 'Feature Presentation is not available' });
+      return;
+    }
+    const result = await service.testConnection();
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  async function handlePlexNowPlayingPush(body, res) {
+    const service = plexService();
+    if (!service?.pushManualPreview) {
+      sendJson(res, 503, { ok: false, error: 'Feature Presentation is not available' });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    try {
+      const result = await service.pushManualPreview({
+        requestedMode: previewModeFrom(body),
+        explicit: body?.triggeredBy !== 'scheduler',
+        send: (payload, options) => {
+          const extra = { ...(options || {}) };
+          if (body?.triggeredBy === 'scheduler') {
+            extra.source = 'scheduler';
+            extra.explicit = false;
+            extra.quietHoursExempt = false;
+          }
+          if (typeof deliverTargetedPayload === 'function') {
+            return deliverTargetedPayload(payload, targetId, extra);
+          }
+          return sendUdpPayload(payload, { ...extra, targetId });
+        },
+      });
+      if (!result?.ok) {
+        sendJson(res, 400, { ok: false, error: result?.error || 'Feature Presentation preview failed' });
+        return;
+      }
+      log.info('Feature Presentation preview', { mode: result.mode, title: result.title, targetId });
+      sendJson(res, 200, { ok: true, ...result, targetId });
+    } catch (error) {
+      sendJson(res, 500, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handlePlexPreview(body, res) {
+    await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res);
+  }
+
   /**
    * Serve a cached thumbnail or avatar. Unauthenticated like the other image
    * routes so the display client can fetch without a session, and read-only
@@ -1965,6 +2100,10 @@ function createWebServer({
           await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
         case 'youtube.last-played':
           await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+        case 'plex.now-playing':
+          await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res); break;
+        case 'plex.last-played':
+          await handlePlexNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
         case 'goodnews.show': handleUpsideNewsPush(body, res); break;
         case 'wiki.show': handleWikiPush(body, res); break;
@@ -4572,6 +4711,22 @@ function createWebServer({
           quotaUsedToday: live.cache?.quotaUsedToday ?? 0,
         };
       })(),
+      plex: (() => {
+        const live = (typeof getPlexStatus === 'function' ? getPlexStatus() : null)
+          || plexService()?.statusSnapshot?.()
+          || null;
+        if (!live) {
+          return { enabled: false, health: 'idle', hasContent: false };
+        }
+        return {
+          enabled: live.enabled,
+          health: live.health,
+          healthReason: live.healthReason || '',
+          playing: Boolean(live.playing),
+          hasContent: Boolean(live.hasContent),
+          title: live.session?.title || live.lastPlayed?.title || null,
+        };
+      })(),
       displays: {
         count: displayRegistry?.list?.()?.length || 0,
         online: (displayRegistry?.list?.() || []).filter((d) => !d.stale).length,
@@ -4970,6 +5125,16 @@ function createWebServer({
         if (pathname === '/api/overhead/settings') {
           if (!requireAdminSession(req, res)) return;
           handleOverheadSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/plex/status') {
+          if (!requireAdminSession(req, res)) return;
+          handlePlexStatus(res);
+          return;
+        }
+        if (pathname === '/api/plex/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handlePlexSettingsGet(res);
           return;
         }
         if (pathname.startsWith('/api/flightplan/')) {
@@ -5447,6 +5612,21 @@ function createWebServer({
             return;
           case '/api/push/youtube-now-playing':
             await handleYoutubeNowPlayingPush(body, res);
+            return;
+          case '/api/push/plex-now-playing':
+            await handlePlexNowPlayingPush(body, res);
+            return;
+          case '/api/plex/settings':
+            handlePlexSettingsPut(body, res);
+            return;
+          case '/api/plex/token':
+            handlePlexTokenSave(body, res);
+            return;
+          case '/api/plex/test':
+            await handlePlexTest(body, res);
+            return;
+          case '/api/plex/preview':
+            await handlePlexPreview(body, res);
             return;
           case '/api/push/trivia':
             handleTriviaPush(body, res);

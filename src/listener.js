@@ -109,6 +109,7 @@ const { createLibraryTourSessions } = require('./library-tour-sessions');
 const { createSteamLibraryTour } = require('./steam-library-tour');
 const { createPsnLibraryTour } = require('./psn-library-tour');
 const { createYoutubeNowPlaying } = require('./youtube-now-playing');
+const { createPlexNowPlaying } = require('./plex-now-playing');
 const { createAutodartsService } = require('./autodarts-service');
 const { createHuupeService } = require('./huupe-service');
 const { createTriviaService } = require('./trivia-service');
@@ -197,6 +198,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
   let steamLibraryTour = null;
   let psnLibraryTour = null;
   let youtubeNowPlaying = null;
+  let plexNowPlaying = null;
   let autodarts = null;
   let huupe = null;
   let flightplan = null;
@@ -262,6 +264,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     steamNowPlayingQueries: config.voiceEvents?.steamNowPlayingQueries !== false,
     psnNowPlayingQueries: config.voiceEvents?.psnNowPlayingQueries !== false,
     youtubeNowPlayingQueries: config.voiceEvents?.youtubeNowPlayingQueries !== false,
+    plexNowPlayingQueries: config.voiceEvents?.plexNowPlayingQueries !== false,
     autodartsQueries: config.voiceEvents?.autodartsQueries !== false,
   };
   // Photo list reloads from disk on each list(); slideshow prefs reload on
@@ -352,6 +355,7 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         || options.source === 'scheduler'
         || payload?.triggeredBy === 'scheduler'
       ),
+      quietHoursExempt: options.quietHoursExempt,
       ctx: options.ctx,
     });
   }
@@ -752,6 +756,10 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     }
 
     if (event.kind === 'youtube-now-playing' && !voiceSettings.youtubeNowPlayingQueries) {
+      return;
+    }
+
+    if (event.kind === 'plex-now-playing' && !voiceSettings.plexNowPlayingQueries) {
       return;
     }
 
@@ -1532,6 +1540,43 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         });
       }
       return;
+    } else if (event.kind === 'plex-now-playing') {
+      if (!plexNowPlaying?.pushManualPreview) {
+        log.warn('Feature Presentation voice query skipped — service not ready', { query: event.query });
+        return;
+      }
+      try {
+        const result = await plexNowPlaying.pushManualPreview({
+          device: event.device || 'Signal',
+          requestedMode: 'auto',
+          send: (payload, options) => sendUdpPayload(payload, {
+            ...(options || {}),
+            targetId: 'vestaboard',
+          }),
+        });
+        if (!result?.ok) {
+          log.warn('Feature Presentation voice push failed', { query: event.query, error: result?.error });
+          return;
+        }
+        voiceEventsLog.append({
+          type: 'plex.now-playing',
+          device: event.device,
+          query: event.query,
+          mode: result.mode,
+        });
+        lastCaptureAt = Date.now();
+        log.info(`Voice event sent (plex-now-playing) for ${event.device}`, {
+          query: event.query,
+          mode: result.mode,
+          title: result.title,
+        });
+      } catch (error) {
+        log.warn('Feature Presentation voice push errored', {
+          query: event.query,
+          error: error?.message || String(error),
+        });
+      }
+      return;
     } else if (event.kind === 'autodarts-now' || event.kind === 'autodarts-dashboard') {
       if (!autodarts) {
         log.warn('Autodarts voice query skipped — service not ready', { query: event.query });
@@ -2260,6 +2305,13 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
         });
         youtubeNowPlaying.start();
 
+        plexNowPlaying = createPlexNowPlaying({
+          config,
+          log,
+          sendUdpPayload,
+        });
+        plexNowPlaying.start();
+
         autodarts = createAutodartsService({
           config,
           log,
@@ -2329,6 +2381,8 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
     getPsnLibraryCount: () => psnLibraryTour?.libraryCount?.() || 0,
     youtubeNowPlaying: () => youtubeNowPlaying,
     getYoutubeStatus: () => youtubeNowPlaying?.statusSnapshot?.() || null,
+    plexNowPlaying: () => plexNowPlaying,
+    getPlexStatus: () => plexNowPlaying?.statusSnapshot?.() || null,
     autodarts: () => autodarts,
     getAutodartsStatus: () => autodarts?.statusSnapshot?.() || null,
     huupe: () => huupe,

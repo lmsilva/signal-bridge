@@ -257,6 +257,21 @@ test('an explicit push is exempt from quiet hours; a rotation is not', () => {
   assert.equal(options.quietHoursExempt, false);
 });
 
+test('a quietHoursExempt override wins over explicit', () => {
+  let options = null;
+  routeEvent({
+    payload: WEATHER,
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    explicit: false,
+    quietHoursExempt: true,
+    submit: (_boardId, _frames, submitted) => {
+      options = submitted;
+      return { ok: true, accepted: 1 };
+    },
+  });
+  assert.equal(options.quietHoursExempt, true);
+});
+
 test('targeting full never offers frames to a board', () => {
   const log = silentLog();
   const results = routeEvent({

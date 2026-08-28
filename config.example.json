@@ -150,5 +150,19 @@
     "presenceStaleSeconds": 90,
     "sessionFile": "data/steam-session.json",
     "authStatusFile": "data/steam-auth-status.json"
+  },
+  "plex": {
+    "enabled": false,
+    "serverUrl": "http://192.168.50.10:32400",
+    "monitoredPlayers": ["192.168.50.71"],
+    "mediaTypes": ["movie"],
+    "pollIntervalMs": 15000,
+    "stopGraceMs": 30000,
+    "repushEndDriftMinutes": 5,
+    "pushOnStop": true,
+    "quietHoursExempt": true,
+    "showCriticScore": true,
+    "stateFile": "data/plex-now-playing.json",
+    "localTimeZone": "America/Denver"
   }
 }

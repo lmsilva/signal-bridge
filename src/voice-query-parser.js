@@ -24,6 +24,7 @@ const {
   matchesYoutubeNowPlayingQuery,
   matchesAutodartsDashboardQuery,
   matchesAutodartsNowQuery,
+  matchesPlexNowPlayingQuery,
 } = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const {
@@ -282,6 +283,19 @@ function createVoiceQueryParser({ routineIndex = null } = {}) {
         query: summary || matchSummary,
         spokenResponse: response || null,
         trigger: 'youtube-now-playing-query',
+      };
+    }
+
+    if (matchesPlexNowPlayingQuery(matchSummary, response)) {
+      return {
+        kind: 'plex-now-playing',
+        activityId,
+        device,
+        deviceSerial,
+        timestamp,
+        query: summary || matchSummary,
+        spokenResponse: response || null,
+        trigger: 'plex-now-playing-query',
       };
     }
 

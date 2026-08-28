@@ -1,9 +1,11 @@
-// The two frame shapes every board screen is built from.
+// The frame shapes every board screen is built from.
 //
 // Info frames (badgeFrame) carry state: a titled header, up to four content
 // rows, and a footer for timestamps or a page counter. Alert frames
 // (borderFrame) carry moments: a solid colour border around a few lines of
-// text, which reads across a room.
+// text, which reads across a room. Cinema frames (cinemaFrame) are the red
+// theater curtain for Feature Presentation — a wider, centered cousin of the
+// alert border, with a darkened second state when the show is over.
 //
 // Pure functions. Every builder returns a validated 6x22 code layout.
 
@@ -37,6 +39,13 @@ const BODY_TO = COLS - 2;
 // padding, leaving 18 usable characters.
 const BORDER_TEXT_FROM = 2;
 const BORDER_TEXT_WIDTH = 18;
+
+// Cinema frames keep the side chips and use the twenty columns between them.
+// Odd leftover blanks go on the right so a short title sits a column left of
+// true centre — that is how the Feature Presentation fixtures are drawn.
+const CINEMA_TEXT_FROM = 1;
+const CINEMA_TEXT_WIDTH = 20;
+const CINEMA_COLOR = 'red';
 
 const MAX_BODY_ROWS = 4;
 
@@ -247,6 +256,130 @@ function borderFrame({
 }
 
 /**
+ * Encode one cinema content row into at most 20 codes.
+ *
+ * A string is folded and encoded. An object with `parts` mixes text and chips
+ * (the rating row needs a white separator). A short code array is used as-is.
+ */
+function cinemaContentCodes(entry) {
+  if (entry === null || entry === undefined || entry === '') {
+    return [];
+  }
+
+  if (Array.isArray(entry)) {
+    if (entry.length && entry.every((item) => typeof item === 'number')) {
+      return entry.slice();
+    }
+    return encodeCinemaParts(entry);
+  }
+
+  if (typeof entry === 'string') {
+    return encodeText(entry);
+  }
+
+  if (typeof entry === 'object') {
+    if (Array.isArray(entry.parts)) {
+      return encodeCinemaParts(entry.parts);
+    }
+    if (entry.center !== undefined) {
+      return encodeText(entry.center);
+    }
+    if (entry.text !== undefined) {
+      return encodeText(entry.text);
+    }
+  }
+
+  throw new Error(`unsupported cinema row ${JSON.stringify(entry)}`);
+}
+
+function encodeCinemaParts(parts) {
+  const codes = [];
+  for (const part of parts || []) {
+    if (part === null || part === undefined || part === '') {
+      continue;
+    }
+    if (typeof part === 'number') {
+      codes.push(part);
+      continue;
+    }
+    if (typeof part === 'string') {
+      // fold() trims, so a spacer next to a chip has to be a blank code.
+      if (/^\s+$/.test(part)) {
+        for (let i = 0; i < part.length; i += 1) {
+          codes.push(BLANK);
+        }
+        continue;
+      }
+      codes.push(...encodeText(part));
+      continue;
+    }
+    if (typeof part === 'object') {
+      if (part.chip !== undefined) {
+        codes.push(chipCode(part.chip));
+        continue;
+      }
+      if (typeof part.code === 'number') {
+        codes.push(part.code);
+        continue;
+      }
+    }
+    throw new Error(`unsupported cinema part ${JSON.stringify(part)}`);
+  }
+  return codes;
+}
+
+/**
+ * Centre codes in the cinema span. An odd remainder puts the extra blank on
+ * the right, which is the opposite of `centered()` and matches the fixtures.
+ */
+function cinemaPlace(row, codes, { from = CINEMA_TEXT_FROM, width = CINEMA_TEXT_WIDTH } = {}) {
+  if (codes.length > width) {
+    throw new Error(`cinema row overflows: ${codes.length} of ${width} columns`);
+  }
+  const start = from + Math.floor((width - codes.length) / 2);
+  return placeCodes(row, codes, start);
+}
+
+/**
+ * The theater curtain: a red frame around up to four centered content rows.
+ *
+ * `border: 'full'` is NOW PLAYING — solid red top and bottom. `border: 'sides'`
+ * is LAST PLAYED / empty — only the side rails stay red, so the board reads
+ * as house lights down from across the room.
+ */
+function cinemaFrame({ border = 'full', rows = [] } = {}) {
+  if (border !== 'full' && border !== 'sides') {
+    throw new Error(`cinema frame border must be "full" or "sides", got ${JSON.stringify(border)}`);
+  }
+  if (rows.length > MAX_BODY_ROWS) {
+    throw new Error(`cinema frame takes at most ${MAX_BODY_ROWS} rows, got ${rows.length}`);
+  }
+
+  const chip = chipCode(CINEMA_COLOR);
+  const fullEdge = border === 'full';
+  const layout = [];
+
+  const railRow = () => {
+    const row = blankRow(COLS);
+    row[0] = chip;
+    row[COLS - 1] = chip;
+    return row;
+  };
+
+  layout.push(fullEdge ? new Array(COLS).fill(chip) : railRow());
+
+  for (let i = 0; i < MAX_BODY_ROWS; i += 1) {
+    const row = railRow();
+    cinemaPlace(row, cinemaContentCodes(rows[i]));
+    layout.push(row);
+  }
+
+  layout.push(fullEdge ? new Array(COLS).fill(chip) : railRow());
+
+  return assertValidLayout(layout, 'cinema frame');
+}
+
+/**
  * A battery-style bar: parens around 18 slots, filled left to right.
  *
  * Returns codes rather than a whole row so a caller can place it where the
@@ -369,6 +502,8 @@ module.exports = {
   BODY_TO,
   BORDER_TEXT_FROM,
   BORDER_TEXT_WIDTH,
+  CINEMA_TEXT_FROM,
+  CINEMA_TEXT_WIDTH,
   MAX_BODY_ROWS,
   ALERT_DWELL_SECONDS,
   DWELL_CAP_SECONDS,
@@ -381,6 +516,9 @@ module.exports = {
   bodyRow,
   badgeFrame,
   borderFrame,
+  cinemaFrame,
+  cinemaContentCodes,
+  cinemaPlace,
   gauge,
   blockTime,
   dwellFor,
