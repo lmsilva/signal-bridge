@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal110">
+  <link rel="stylesheet" href="styles.css?v=signal111">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1475,16 +1475,15 @@
         <div class="section-label" data-settings-group="media">Feature Presentation</div>
         <div class="card plex-settings-card" id="plex-settings-card" data-settings-group="media">
           <div class="auth-head">
-            <div class="auth-name">Movie theater Now Playing on the Vestaboard</div>
+            <div class="auth-name">Plex Configuration</div>
             <span class="status-pill" id="plex-status-pill">…</span>
           </div>
           <p class="auth-detail" id="plex-status-detail">Loading…</p>
 
-          <label class="trivia-check"><input type="checkbox" id="plex-enabled"><span>Watch Plex for the theater Apple TV</span></label>
-
-          <div class="settings-columns settings-columns-2" style="margin-top:12px">
+          <div class="settings-columns settings-columns-3">
             <div class="settings-col">
-              <label class="field-label" for="plex-server-url">Plex server URL</label>
+              <label class="trivia-check"><input type="checkbox" id="plex-enabled"><span>Watch Plex for the theater Apple TV</span></label>
+              <label class="field-label field-label-spaced" for="plex-server-url">Plex server URL</label>
               <input type="text" id="plex-server-url" class="field-input" placeholder="http://192.168.50.10:32400" spellcheck="false" autocomplete="off">
               <p class="hint">LAN address, including the port. No trailing slash.</p>
 
@@ -1507,9 +1506,6 @@
               <p class="hint" id="plex-live-players-hint">Start a movie, then Test connection to pick the Apple TV from the live list.</p>
               <ul class="plex-player-list" id="plex-live-players"></ul>
             </div>
-          </div>
-
-          <div class="settings-columns settings-columns-3" style="margin-top:14px">
             <div class="settings-col">
               <label class="field-label" for="plex-poll-ms">Poll every (seconds)</label>
               <input type="number" id="plex-poll-ms" class="field-input" min="5" max="120" step="1" value="15">
@@ -1517,17 +1513,13 @@
               <input type="number" id="plex-stop-grace" class="field-input" min="0" max="300" step="5" value="30">
               <label class="field-label field-label-spaced" for="plex-end-drift">Re-flip if end time drifts (minutes)</label>
               <input type="number" id="plex-end-drift" class="field-input" min="1" max="60" step="1" value="5">
-            </div>
-            <div class="settings-col">
-              <label class="field-label">Board behavior</label>
+              <label class="field-label field-label-spaced">Board behavior</label>
               <div class="upside-news-display-list">
                 <label class="trivia-check"><input type="checkbox" id="plex-push-on-stop" checked><span>Push LAST PLAYED when the movie stops</span></label>
                 <label class="trivia-check"><input type="checkbox" id="plex-quiet-hours" checked><span>Allow live movies during quiet hours</span></label>
                 <label class="trivia-check"><input type="checkbox" id="plex-critic-score" checked><span>Show critic score</span></label>
               </div>
-            </div>
-            <div class="settings-col">
-              <label class="field-label">Preview</label>
+              <label class="field-label field-label-spaced">Preview</label>
               <p class="hint">Queue the auto frame (now playing, or last played) on a chosen Vestaboard.</p>
               <button type="button" class="btn btn-outline" id="btn-plex-preview">Preview on board</button>
             </div>
@@ -2107,6 +2099,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal110"></script>
+  <script src="app.js?v=signal111"></script>
 </body>
 </html>

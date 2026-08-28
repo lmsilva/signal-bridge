@@ -2613,6 +2613,7 @@ textarea.field-input.text-input-area {
   #tab-settings .overhead-settings-card,
   #tab-settings .flightplan-settings-card,
   #tab-settings .credits-settings-card,
+  #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card {
     grid-column: 1 / -1;
   }
