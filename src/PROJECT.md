@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-28 (Feature Presentation — Plex cinema frames on Vestaboard)
+**Last updated:** 2026-08-28 (Feature Presentation settings card spans the Media pane)
 
 ---
 
@@ -620,6 +620,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-28: **Plex Configuration uses the full Media pane** — the Feature Presentation card sat in a half-width grid cell next to empty space while YouTube/Slideshow spanned both columns. It now takes `grid-column: 1 / -1` and lays out URL/token, theater players, and poll/behavior/preview as one three-column row. Title is **Plex Configuration**. Cache-bust `?v=signal111`. Tests: `web-server.test.js`.
 - 2026-08-28: **Feature Presentation** — Vestaboard-only cinema frames for the theater Plex player. Polls `/status/sessions` every 15s, filters `movie` + monitored player IPs, and posts NOW PLAYING / LAST PLAYED snapshots (`cinemaFrame` red curtain, 20-col right-biased center). Never UDP, never a full-display formatter, never marks a display busy — the poster app still owns “what is playing” on the wall. Token is `PLEX_TOKEN` or encrypted `data/plex-credentials.json`. Live play/stop (and explicit Push) honour `plex.quietHoursExempt` (default on); scheduler ticks always respect 22:00–07:00. Commands `plex.now-playing` / `plex.last-played` are the first `kinds: ['vestaboard']` entries. Spec + mockups in `dev assets/plex-vestaboard/`. Tests: `vestaboard-cinema`, `plex-now-playing`, `command-registry` (vestaboard-only kinds), `vestaboard-router` (`quietHoursExempt` override). Cache-bust `?v=signal110`.
 - 2026-08-27: **Vestaboard call log POST column drifted with detail width** — the meta band used `auto` width, so a longer detail sentence widened column one and shoved **POST** sideways on the next row. Rows are now a four-column grid (fixed-width meta · verb · endpoint · result) with `display: contents` on the target wrapper so **POST** always lands in column two. Cache-bust `?v=signal109`. Tests: `web-server.test.js`.
 - 2026-08-27: **Vestaboard call log rows read cleaner** — timestamp and the detail sentence stack on the left; **POST** + endpoint and **200 flipped** sit in the middle and right columns, vertically centered against the two-line block. Cache-bust `?v=signal108`. Tests: `web-server.test.js`.

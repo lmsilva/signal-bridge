@@ -1103,6 +1103,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'youtube-settings-card',
     'trivia-settings-card',
     'upside-news-settings-card',
+    'plex-settings-card',
   ]) {
     assert.match(
       css,
@@ -1110,6 +1111,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
       `${card} must span both columns`,
     );
   }
+  assert.match(html, />Plex Configuration</);
   // Their contents run as columns, so the extra width is actually used.
   assert.match(html, /class="settings-columns settings-columns-3"/);
   assert.match(css, /\.settings-columns-3 \{ grid-template-columns: repeat\(3, 1fr\); \}/);
