@@ -3743,7 +3743,16 @@ textarea.field-input.text-input-area {
 .vb-advanced[open] > summary::before { content: '▾ '; }
 .vb-advanced[open] > summary { color: var(--text); }
 .vb-calls-count { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
-.vb-row { flex-wrap: wrap; }
+/* Fixed columns so POST and the endpoint line up row to row. */
+.vb-row.vb-row-call {
+  display: grid;
+  grid-template-columns: 4.75rem 2.75rem minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: baseline;
+}
+.vb-row-call .vb-row-main { min-width: 0; }
+.vb-row-call .vb-row-result { justify-self: end; }
 .vb-row-verb {
   flex: none;
   font-weight: 700;
@@ -3752,7 +3761,7 @@ textarea.field-input.text-input-area {
   color: var(--text-dim);
 }
 .vb-row-detail {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   color: var(--text-dim);
   font-size: 0.78rem;
   overflow-wrap: anywhere;

@@ -1056,6 +1056,14 @@ test('admin control PIN sheet expects a 6-digit code', () => {
   assert.match(js, /\.slice\(0,\s*CONTROL_PIN_DIGITS\)/);
 });
 
+test('Vestaboard simulator call log lines up time, verb, endpoint, and result', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+  assert.match(js, /vb-row-call/);
+  assert.match(css, /\.vb-row\.vb-row-call\s*\{[\s\S]*?grid-template-columns:\s*4\.75rem\s+2\.75rem\s+minmax\(0,\s*1fr\)\s+auto/);
+  assert.match(css, /\.vb-row-detail\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/);
+});
+
 test('admin Settings has a trivia card driven by the trivia API', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
