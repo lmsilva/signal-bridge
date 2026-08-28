@@ -420,6 +420,21 @@ function createQueue({
       lastPostAt: state.lastPostAt,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
+    /**
+     * Honour a flip the process did not itself post — a simulator that
+     * persisted `lastAcceptedAt`, or this queue's own last post after a
+     * recreate. Without this the first tick after boot hits the Local API
+     * 15s window and comes back 503.
+     */
+    noteLastPostAt(at) {
+      const ts = typeof at === 'number' ? at : Date.parse(at);
+      if (!Number.isFinite(ts)) {
+        return;
+      }
+      if (state.lastPostAt == null || ts > state.lastPostAt) {
+        state.lastPostAt = ts;
+      }
+    },
     /** Settings changes apply live — no restart, no lost queue. */
     setConfig(next) {
       config = { ...config, ...next };

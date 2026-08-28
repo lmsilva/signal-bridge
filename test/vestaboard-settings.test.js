@@ -343,6 +343,49 @@ test('a second boot re-enables the simulator so a stale stored key cannot wedge 
   }
 });
 
+test('a restart waits out the simulator rate window instead of posting a 503', async () => {
+  let clock = 1_700_000_000_000;
+  const now = () => clock;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vb-rate-'));
+  const config = {
+    ROOT: root,
+    vestaboardSimulator: { port: 0, host: '127.0.0.1', rateWindowSeconds: 15 },
+  };
+  const log = silentLog();
+  const simulator = createVestaboardSimulator({ config, log, now });
+  await simulator.start();
+  const hub = createVestaboardHub({ config, log, simulator, now });
+  await hub.start();
+  try {
+    assert.equal((await hub.testFlip('sim')).ok, true);
+    hub.stop();
+
+    const hub2 = createVestaboardHub({ config, log, simulator, now });
+    await hub2.start();
+    try {
+      const other = Array.from({ length: 6 }, () => new Array(22).fill(0));
+      other[0][0] = 1;
+      hub2.submit('sim', [{ rows: other, dwellSeconds: 15, label: 'NEXT' }], {
+        quietHoursExempt: true,
+      });
+      assert.equal(await hub2.queueFor('sim').tick(), null);
+      assert.equal(
+        simulator.calls().some((entry) => entry.result === '503 rate'),
+        false,
+        'the queue must not probe the Local API while flaps are still moving',
+      );
+      clock += 15_000;
+      assert.equal(await hub2.queueFor('sim').tick(), 'posted');
+    } finally {
+      hub2.stop();
+    }
+  } finally {
+    hub.stop();
+    await simulator.stop();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a test flip at an unknown or disabled board says so plainly', async () => {
   const h = await makeHub();
   try {

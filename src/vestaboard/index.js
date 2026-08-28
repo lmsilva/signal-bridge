@@ -6,6 +6,8 @@
 // or `submit()` and never learns whether the board on the other end is
 // hardware or the simulator.
 
+const fs = require('fs');
+const path = require('path');
 const { resolveGuestPhotoboothSettings } = require('../guest-photobooth');
 const { createVestaboardSettings, SIMULATOR_ID } = require('./settings');
 const { createTransport } = require('./transport');
@@ -24,6 +26,8 @@ function createVestaboardHub({
   now = () => Date.now(),
 } = {}) {
   const settings = injectedSettings || createVestaboardSettings({ config, log });
+  const runtimePath = config.vestaboardRuntimePath
+    || path.join(config.ROOT || path.resolve(__dirname, '..', '..'), 'data', 'vestaboard-runtime.json');
 
   /** id -> { board, transport, queue, unsubscribe } */
   const boards = new Map();
@@ -37,6 +41,63 @@ function createVestaboardHub({
       } catch (error) {
         log?.warn?.('Vestaboard hub listener failed', error?.message || error);
       }
+    }
+  }
+
+  function asTimestamp(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function readRuntime() {
+    try {
+      if (!fs.existsSync(runtimePath)) {
+        return { lastPostAt: {} };
+      }
+      const parsed = JSON.parse(fs.readFileSync(runtimePath, 'utf8')) || {};
+      const lastPostAt = parsed.lastPostAt && typeof parsed.lastPostAt === 'object'
+        ? parsed.lastPostAt
+        : {};
+      return { lastPostAt };
+    } catch (error) {
+      log?.warn?.('Could not read Vestaboard runtime state', error?.message || error);
+      return { lastPostAt: {} };
+    }
+  }
+
+  function writeRuntime(runtime) {
+    try {
+      fs.mkdirSync(path.dirname(runtimePath), { recursive: true });
+      fs.writeFileSync(runtimePath, `${JSON.stringify(runtime, null, 2)}\n`);
+    } catch (error) {
+      log?.warn?.('Could not persist Vestaboard runtime state', error?.message || error);
+    }
+  }
+
+  function persistLastPostAt(boardId, at) {
+    const ts = asTimestamp(at);
+    if (!boardId || ts == null) {
+      return;
+    }
+    const runtime = readRuntime();
+    runtime.lastPostAt[String(boardId)] = ts;
+    writeRuntime(runtime);
+  }
+
+  function seedQueueCooldown(queue, boardId, extraAt = null) {
+    if (!queue?.noteLastPostAt) {
+      return;
+    }
+    const persisted = asTimestamp(readRuntime().lastPostAt?.[String(boardId)]);
+    if (persisted != null) {
+      queue.noteLastPostAt(persisted);
+    }
+    const extra = asTimestamp(extraAt);
+    if (extra != null) {
+      queue.noteLastPostAt(extra);
     }
   }
 
@@ -58,8 +119,12 @@ function createVestaboardHub({
       board, transport, log, now,
       timeZone: houseTimeZone(config),
     });
+    seedQueueCooldown(queue, board.id);
 
     const unsubscribe = queue.onChange((event, detail) => {
+      if (event === 'posted') {
+        persistLastPostAt(board.id, queue.state().lastPostAt);
+      }
       if (event === 'health') {
         // The picker shows board health, so a change has to reach the registry.
         emit('registry', { boardId: board.id });
@@ -287,6 +352,15 @@ function createVestaboardHub({
       await adoptSimulator();
       started = true;
       sync();
+      // Recreate / restart forgets the in-memory queue clock. The simulator
+      // still knows when it last flipped, so honour that before the first tick.
+      if (simulator?.snapshot) {
+        seedQueueCooldown(
+          queueFor(SIMULATOR_ID),
+          SIMULATOR_ID,
+          simulator.snapshot().lastAcceptedAt,
+        );
+      }
     },
     stop() {
       started = false;

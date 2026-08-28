@@ -313,6 +313,21 @@ test('a 503 waits out the window and retries the very same frame', async () => {
   assert.equal(h.transport.posts.at(-1).layout[0][0], 2);
 });
 
+test('a remembered last post holds the next tick inside the rate window', async () => {
+  const h = makeQueue();
+  h.queue.noteLastPostAt(h.at());
+  h.queue.submit([frame('ONE', 1)]);
+  assert.equal(await h.queue.tick(), null);
+  assert.equal(h.transport.posts.length, 0);
+
+  h.advance(14 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+
+  h.advance(SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 1);
+});
+
 test('network failures back off on the published schedule and then go unhealthy', async () => {
   const h = makeQueue();
   h.transport.answerWith({ ok: false, reason: 'network', retryable: true, status: 0 });
