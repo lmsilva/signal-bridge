@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-28 (Vestaboard queue honours the rate window across restarts)
+**Last updated:** 2026-08-28 (Plex ghost playing session after Apple TV off)
 
 ---
 
@@ -66,7 +66,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/plex-api.js` | **Feature Presentation** — `GET {serverUrl}/status/sessions` with `X-Plex-Token` (8s timeout); parses `MediaContainer.Metadata[]` into session rows. No webhooks. Token never logged |
 | `src/plex-credentials.js` | Plex token via `secret-box.js`: `PLEX_TOKEN` env wins, else encrypted `data/plex-credentials.json`. Same 409-if-env pattern as Guardian/YouTube |
 | `src/plex-settings.js` | Live-reload `data/plex-settings.json` (seeded from `config.plex`); `enabled`, `serverUrl`, `monitoredPlayers[]`, `mediaTypes` (default `movie`), poll/stop-grace, `pushOnStop`, `quietHoursExempt`, `showCriticScore`. Never writes `config.json` |
-| `src/plex-now-playing.js` | Theater watcher: poll 15s, filter type + player IP, persist `data/plex-now-playing.json`, fan-out **Vestaboard only** (`targetId: 'vestaboard'`). Pause ≠ stop; poll failures ≠ stop (`missingSince` is last successful presence). Restart with the same `sessionKey` re-posts and keeps `startedAt`. Movie switch emits stop then play without a LAST PLAYED flash. Live events carry `quietHoursExempt` from settings; scheduler pushes force it off |
+| `src/plex-now-playing.js` | Theater watcher: poll 15s, filter type + player IP, persist `data/plex-now-playing.json`, fan-out **Vestaboard only** (`targetId: 'vestaboard'`). Pause ≠ stop; poll failures ≠ stop (`missingSince` is last successful presence). A `playing` session whose `viewOffset` does not move for `stopGraceMs` is treated as a stop (Apple TV power-off leaves a Plex zombie). Restart with the same `sessionKey` re-posts and keeps `startedAt`. Movie switch emits stop then play without a LAST PLAYED flash. Live events carry `quietHoursExempt` from settings; scheduler pushes force it off |
 | `src/activity-fields.js` | Harvest summary/response/allText from all `voiceHistoryRecordItems` types (app routines often skip ASR) |
 | `src/routine-index.js` | Cache `getAutomationRoutines()`; map name/trigger/action phrases → voice kinds; resolve bare “Sent to Display” |
 | `src/display-voice-commands.js` | Matchers for Alexa routines that push display overlays without needing Alexa’s spoken answer: trivia, Steam/PSN library tours, Steam/PSN/YouTube now-or-last-played (`requestedMode: 'auto'`), Feature Presentation (`feature presentation` / `plex now playing` / `what's playing in the theater` — Vestaboard only) |
@@ -620,6 +620,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-28: **Feature Presentation drops a zombie Plex session** — powering off the Apple TV often leaves `/status/sessions` in `playing` with a frozen `viewOffset`, so Settings stayed on **Playing**. After `stopGraceMs` (30s) of no progress while still “playing”, it is a stop (LAST PLAYED if that is on). A pause may sit still; a dead Plex server still is not a stop. Tests: `test/plex-now-playing.test.js`.
 - 2026-08-28: **Vestaboard recreate no longer 503s the first post** — a container restart forgot the in-memory `lastPostAt` while the simulator still had flaps in the 15s window, so the first tick hit Local API rate-limit and waited. The queue now restores `lastPostAt` from `data/vestaboard-runtime.json` and the sim's `lastAcceptedAt`, and waits instead of probing. A 503 remains ordinary back-pressure if it still happens. Tests: `vestaboard-queue`, `vestaboard-settings`.
 - 2026-08-28: **Monitor Plex** — the Feature Presentation enable checkbox is labelled **Monitor Plex** instead of “Watch Plex for the theater Apple TV.” Cache-bust `?v=signal115`.
 - 2026-08-28: **Feature Presentation is one command** — dropped `plex.last-played` from Push and Schedule. The remaining **Feature Presentation** tile (`plex.now-playing`) already auto-picks a live session or stored last-played. Saved `plex.last-played` scheduler rules remap on load. Cache-bust `?v=signal114`. Tests: `command-registry`, `display-scheduler`, `web-server`.
