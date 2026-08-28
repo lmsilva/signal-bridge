@@ -167,6 +167,20 @@ def dashboard_fingerprint(payload):
         return str(payload)
 
 
+def format_point_share(scored, total):
+    """Share of points for chart and legend — small zones must not read as 0%."""
+    points = float(scored or 0)
+    pool = float(total or 0)
+    if pool <= 0 or points <= 0:
+        return "0%"
+    share = 100.0 * points / pool
+    if share < 0.05:
+        return "0%"
+    if share < 0.5:
+        return f"{share:.1f}%"
+    return f"{int(round(share))}%"
+
+
 def zone_rows(payload):
     """Always four rows in a fixed order, so the card never reflows mid-session."""
     by_zone = {row.get("zone"): row for row in (payload or []) if isinstance(row, dict)}
@@ -229,10 +243,11 @@ def band_heat(rows):
     for row in rows:
         points = band_stat(row)
         t = (points / peak) if peak > 0 else 0.0
-        share = int(round(100 * points / total)) if total > 0 else 0
+        share = (100.0 * points / total) if total > 0 else 0.0
         bands[row["zone"]] = {
             "t": t,
-            "share_pct": share,
+            "share_pct": int(round(share)) if share >= 0.5 else share,
+            "share_label": format_point_share(points, total),
             "color": heat_color(t),
             "empty": row["attempts"] == 0,
             "bright": t >= 0.6 and row["zone"] != "three",
@@ -1726,7 +1741,7 @@ class HuupePanel(BasePanel):
             foot_room = slot_bottom - centre
             name = band["label"].upper()
             if total > 0:
-                value = f"{band['share_pct']}%"
+                value = band["share_label"]
             else:
                 value = "—"
             if band["empty"]:
@@ -1786,13 +1801,13 @@ class HuupePanel(BasePanel):
         # because 8pt is the floor and a long caption would run off the card.
         room = (x1 - x0) - pad * 1.4
         if hot and total > 0:
-            share = bands[hot["zone"]]["share_pct"]
+            share = bands[hot["zone"]]["share_label"]
             name = hot["label"].upper()
             chip_options = (
-                letterspace(f"HOT ZONE  ·  {name}  ·  {share}% OF POINTS"),
-                letterspace(f"HOT ZONE  ·  {name}  ·  {share}%"),
-                letterspace(f"{name}  ·  {share}%"),
-                f"{name} · {share}%",
+                letterspace(f"HOT ZONE  ·  {name}  ·  {share} OF POINTS"),
+                letterspace(f"HOT ZONE  ·  {name}  ·  {share}"),
+                letterspace(f"{name}  ·  {share}"),
+                f"{name} · {share}",
             )
             chip_fill = ACCENT_CORAL
         else:
@@ -1836,14 +1851,9 @@ class HuupePanel(BasePanel):
         )
 
     def _draw_zone_legend(
-        self, box, rows, *, title="SHOOTING BY ZONE", subtitle="% MADE  ·  POINTS SCORED",
+        self, box, rows, *, title="SHOOTING BY ZONE", subtitle="% OF POINTS  ·  FG% & MAKES",
     ):
-        """Names the zone, says what it is worth, and shows how it is shooting.
-
-        The big number here is **accuracy**, not the court's share of points —
-        titled "where the points come from" it read as the same statistic, and
-        100% off two attempts looked like it contradicted a 10% slice.
-        """
+        """Names the zone, shows point share (same stat as the court), then FG%."""
         x0, y0, x1, y1 = box
         pad = self._pad()
         left = x0 + pad
@@ -1873,10 +1883,12 @@ class HuupePanel(BasePanel):
         )
         scale = stack["font_scale"]
         chip = max(4.0, 7 * self._scale)
+        total_pts = sum(float(row.get("scored") or 0) for row in rows)
 
         for index, row in enumerate(rows):
             colour = ZONE_COLORS.get(row["zone"], ACCENT)
-            # Legend answers accuracy — complementary to the court's points share.
+            share_label = format_point_share(row["scored"], total_pts)
+            # Dot heat follows FG% — the big number matches the court's point share.
             heat = heat_color((row["pct"] or 0) / 100.0) if row["attempts"] else mix(CARD_LO, INK_3, 0.4)
             name_y = stack["y"][f"n{index}"]
             name_h = stack["h"][f"n{index}"]
@@ -1894,18 +1906,16 @@ class HuupePanel(BasePanel):
                 size=18 * scale, bold=True, fill=colour if live else LABEL_EMPTY,
             )
             self._text(
-                right, name_y, f"{row['pct']}%",
+                right, name_y, share_label,
                 size=18 * scale, bold=True, fill=INK if live else LABEL_EMPTY, anchor="ne",
             )
             self._text(
                 left + chip * 3, sub_y, f"{row['note']}  ·  {row['pointsLabel']}",
                 size=12 * scale, fill=INK_3,
             )
-            # Points scored is the bridge between this card and the chart's
-            # share: 2 makes from short range is 2 of the session's points.
             self._text(
                 right, sub_y,
-                f"{row['made']}/{row['attempts']} made  ·  {format_score(row['scored'])} PTS",
+                f"{row['made']}/{row['attempts']}  ·  {row['pct']}% FG  ·  {format_score(row['scored'])} PTS",
                 size=12 * scale, fill=INK_2 if live else LABEL_EMPTY, anchor="ne",
             )
 
