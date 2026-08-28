@@ -3743,16 +3743,28 @@ textarea.field-input.text-input-area {
 .vb-advanced[open] > summary::before { content: '▾ '; }
 .vb-advanced[open] > summary { color: var(--text); }
 .vb-calls-count { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
-/* Fixed columns so POST and the endpoint line up row to row. */
+/* Time + detail stack left; verb/endpoint and result sit centered on the row. */
 .vb-row.vb-row-call {
   display: grid;
-  grid-template-columns: 4.75rem 2.75rem minmax(0, 1fr) auto;
-  column-gap: 12px;
-  row-gap: 4px;
+  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) auto;
+  column-gap: 18px;
+  align-items: center;
+  padding: 9px 12px;
+}
+.vb-row-call-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.vb-row-call-target {
+  display: flex;
   align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 .vb-row-call .vb-row-main { min-width: 0; }
-.vb-row-call .vb-row-result { justify-self: end; }
+.vb-row-call .vb-row-result { white-space: nowrap; }
 .vb-row-verb {
   flex: none;
   font-weight: 700;
@@ -3761,9 +3773,9 @@ textarea.field-input.text-input-area {
   color: var(--text-dim);
 }
 .vb-row-detail {
-  grid-column: 1 / -1;
   color: var(--text-dim);
   font-size: 0.78rem;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .vb-row-result.ok { color: var(--good); }

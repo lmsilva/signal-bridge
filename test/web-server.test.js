@@ -1056,12 +1056,14 @@ test('admin control PIN sheet expects a 6-digit code', () => {
   assert.match(js, /\.slice\(0,\s*CONTROL_PIN_DIGITS\)/);
 });
 
-test('Vestaboard simulator call log lines up time, verb, endpoint, and result', () => {
+test('Vestaboard simulator call log stacks time and detail, centers verb and result', () => {
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
-  assert.match(js, /vb-row-call/);
-  assert.match(css, /\.vb-row\.vb-row-call\s*\{[\s\S]*?grid-template-columns:\s*4\.75rem\s+2\.75rem\s+minmax\(0,\s*1fr\)\s+auto/);
-  assert.match(css, /\.vb-row-detail\s*\{[\s\S]*?grid-column:\s*1\s*\/\s*-1/);
+  assert.match(js, /vb-row-call-meta/);
+  assert.match(js, /vb-row-call-target/);
+  assert.match(css, /\.vb-row\.vb-row-call\s*\{[\s\S]*?align-items:\s*center/);
+  assert.match(css, /\.vb-row-call-meta\s*\{[\s\S]*?flex-direction:\s*column/);
+  assert.match(css, /\.vb-row-call-target\s*\{[\s\S]*?display:\s*flex/);
 });
 
 test('admin Settings has a trivia card driven by the trivia API', () => {
