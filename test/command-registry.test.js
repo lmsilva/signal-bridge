@@ -155,7 +155,10 @@ test('list() is JSON-serialisable and carries scheduler metadata', () => {
     assert.equal(typeof command.supportsContentCheck, 'boolean');
     assert.ok(Array.isArray(command.params));
     assert.ok(Array.isArray(command.kinds) && command.kinds.length);
-    assert.ok(command.kinds.includes('full'));
+    assert.ok(
+      command.kinds.includes('full') || command.kinds.includes('vestaboard'),
+      `${command.id} needs a display kind`,
+    );
     // The Push page files tiles by this, so it has to survive the wire.
     if (command.pushable) {
       assert.ok(
@@ -169,7 +172,7 @@ test('list() is JSON-serialisable and carries scheduler metadata', () => {
 test('every command declares the display kinds it can air on', () => {
   for (const command of COMMANDS) {
     const kinds = kindsOf(command);
-    assert.ok(kinds.includes('full'), `${command.id} must work on a full display`);
+    assert.ok(kinds.length, `${command.id} needs at least one display kind`);
     if (BOARD_COMMAND_IDS.has(command.id)) {
       assert.ok(kinds.includes('vestaboard'), `${command.id} is board-capable`);
     } else {
@@ -178,12 +181,15 @@ test('every command declares the display kinds it can air on', () => {
         false,
         `${command.id} is full-display only (photos, tours, remote)`,
       );
+      assert.ok(kinds.includes('full'), `${command.id} must work on a full display`);
     }
   }
   assert.equal(supportsKind('signal.slideshow', 'vestaboard'), false);
   assert.equal(supportsKind('signal.slideshow', 'full'), true);
   assert.equal(supportsKind('alexa.weather', 'vestaboard'), true);
   assert.equal(supportsKind('alexa.weather', 'all'), true);
+  assert.equal(supportsKind('plex.now-playing', 'vestaboard'), true);
+  assert.equal(supportsKind('plex.now-playing', 'full'), false);
 });
 
 test('every board-capable command has a Vestaboard formatter', () => {
@@ -237,6 +243,21 @@ test('psn.now-playing has content only while a session is live', () => {
   assert.equal(registry.hasContent('psn.now-playing'), false);
   status = { session: { titleId: 'PPSA01668', suppressed: false } };
   assert.equal(registry.hasContent('psn.now-playing'), true);
+});
+
+test('plex.now-playing has content when a session or last-played exists', () => {
+  let status = null;
+  const registry = createCommandRegistry({ getPlexStatus: () => status });
+  assert.equal(registry.hasContent('plex.now-playing'), false);
+  assert.equal(registry.hasContent('plex.last-played'), false);
+
+  status = { hasContent: true, lastPlayed: { title: 'Interstellar' } };
+  assert.equal(registry.hasContent('plex.now-playing'), true);
+  assert.equal(registry.hasContent('plex.last-played'), true);
+
+  status = { hasContent: true, lastPlayed: null };
+  assert.equal(registry.hasContent('plex.now-playing'), true);
+  assert.equal(registry.hasContent('plex.last-played'), false);
 });
 
 test('an unwired feature reports no content rather than throwing', () => {

@@ -74,6 +74,8 @@ const BOARD_COMMAND_IDS = new Set([
   'flightplan.board',
   'youtube.now-playing',
   'youtube.last-played',
+  'plex.now-playing',
+  'plex.last-played',
 ]);
 
 function kindsOf(command) {
@@ -133,6 +135,7 @@ const PUSH_CATEGORY_BY_GROUP = Object.freeze({
   Tesla: 'travel',
   Trivia: 'games',
   YouTube: 'media',
+  'Feature Presentation': 'media',
 });
 
 const PUSH_CATEGORY_BY_ID = Object.freeze({
@@ -652,6 +655,36 @@ const COMMANDS = [
     variableDuration: false,
     defaultDurationSeconds: 60,
   },
+  {
+    id: 'plex.now-playing',
+    title: 'Feature Presentation',
+    subtitle: 'Now playing, or last played',
+    group: 'Feature Presentation',
+    route: '/api/push/plex-now-playing',
+    icon: 'plex',
+    body: {},
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 90,
+    kinds: ['vestaboard'],
+  },
+  {
+    id: 'plex.last-played',
+    title: 'Feature Presentation — last played',
+    subtitle: 'The last movie watched',
+    group: 'Feature Presentation',
+    route: '/api/push/plex-now-playing',
+    icon: 'plex',
+    body: { mode: 'last-played' },
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 90,
+    kinds: ['vestaboard'],
+  },
 ];
 
 const REQUIRED_KEYS = [
@@ -723,6 +756,7 @@ function createCommandRegistry(deps = {}) {
     getWikiCommonKnowledgeStatus = null,
     getOverheadStatus = null,
     getFlightplanStatus = null,
+    getPlexStatus = null,
     getPhotoCount = null,
     getNotificationsCacheStatus = null,
     log = null,
@@ -812,6 +846,8 @@ function createCommandRegistry(deps = {}) {
     },
     'flightplan.next': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
     'flightplan.board': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
+    'plex.now-playing': () => Boolean(call(getPlexStatus)?.hasContent),
+    'plex.last-played': () => Boolean(call(getPlexStatus)?.lastPlayed),
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
     'alexa.notifications': () => Boolean(call(getNotificationsCacheStatus)?.hasContent),
   };

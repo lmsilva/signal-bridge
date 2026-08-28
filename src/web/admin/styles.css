@@ -1402,6 +1402,24 @@ textarea.field-input.text-input-area {
   gap: 4px;
   margin-top: 4px;
 }
+
+.plex-player-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.plex-player-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.plex-player-list .hint {
+  margin: 0;
+}
 .upside-news-rss-list .trivia-check,
 .upside-news-display-list .trivia-check {
   display: flex;

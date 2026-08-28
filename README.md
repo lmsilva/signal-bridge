@@ -23,6 +23,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 6-digit PIN appears on that screen; enter it on the phone to unlock for ~1 hour |
 | **Roll Credits** | Keep a personal completed-games library, then push or schedule an image-only dashboard and game showcase tour (`credits.show` / `roll-credits.tour`). Manual tours loop; scheduled tours walk once. |
 | **Autodarts** | Sign in to Autodarts from Settings, watch your board’s live match on the wall, and push or schedule a house leaderboard dashboard built from matches the bridge has archived. |
+| **Feature Presentation** | Vestaboard-only cinema frames for the theater Plex player (NOW PLAYING / LAST PLAYED). The poster PC is untouched — this never sends UDP. |
 
 ---
 

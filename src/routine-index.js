@@ -26,6 +26,7 @@ const {
   matchesYoutubeNowPlayingQuery,
   matchesAutodartsDashboardQuery,
   matchesAutodartsNowQuery,
+  matchesPlexNowPlayingQuery,
 } = require('./display-voice-commands');
 const { matchesVivintAlarmQuery } = require('./vivint-alarm');
 const { matchesNotificationsQuery } = require('./alexa-notifications');
@@ -121,6 +122,9 @@ function classifyPhrase(phrase) {
   }
   if (matchesYoutubeNowPlayingQuery(text, '')) {
     return 'youtube-now-playing';
+  }
+  if (matchesPlexNowPlayingQuery(text, '')) {
+    return 'plex-now-playing';
   }
   if (matchesAutodartsDashboardQuery(text, '')) {
     return 'autodarts-dashboard';

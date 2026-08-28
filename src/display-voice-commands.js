@@ -1,6 +1,7 @@
 /**
  * Alexa voice / custom-routine matchers for display-only overlays:
- * trivia, Steam/PSN library tours, and Steam/PSN/YouTube now-or-last-played.
+ * trivia, Steam/PSN library tours, Steam/PSN/YouTube now-or-last-played,
+ * and Feature Presentation (Plex theater, Vestaboard only).
  *
  * These do not need Alexa's spoken answer — the bridge fetches the card itself
  * (same pattern as Tesla / Guest Snaps). Prefer platform-qualified phrases so
@@ -35,6 +36,8 @@ const YOUTUBE_NOW_PLAYING_RE = /\b(?:(?:show|start|run|open|play|launch|display)
 // "show darts", "show autodarts", "darts dashboard"
 const AUTODARTS_DASHBOARD_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(?:the\s+)?)?(?:auto\s*)?darts\s+dashboard\b/i;
 const AUTODARTS_NOW_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(?:the\s+)?)?(?:auto\s*)?darts(?:\s+(?:now|match|live))?\b/i;
+
+const PLEX_NOW_PLAYING_RE = /\b(?:(?:show|start|run|open|play|launch|display)\s+(?:the\s+)?)?(?:feature\s+presentation|movie(?:\s+theater)?\s+now\s+playing|plex\s+(?:now\s+playing|last\s+played)|what(?:'s| is) playing in the (?:movie\s+)?theater)\b/i;
 
 function textMatches(re, summary, response) {
   const text = normalizeText(summary);
@@ -83,6 +86,10 @@ function matchesAutodartsNowQuery(summary, response) {
   return textMatches(AUTODARTS_NOW_RE, summary, response);
 }
 
+function matchesPlexNowPlayingQuery(summary, response) {
+  return textMatches(PLEX_NOW_PLAYING_RE, summary, response);
+}
+
 /** Classify a routine name / utterance into a voice kind, or null. */
 function classifyDisplayVoicePhrase(phrase) {
   const text = normalizeText(phrase);
@@ -113,6 +120,9 @@ function classifyDisplayVoicePhrase(phrase) {
   if (matchesAutodartsNowQuery(text, '')) {
     return 'autodarts-now';
   }
+  if (matchesPlexNowPlayingQuery(text, '')) {
+    return 'plex-now-playing';
+  }
   return null;
 }
 
@@ -126,5 +136,6 @@ module.exports = {
   matchesYoutubeNowPlayingQuery,
   matchesAutodartsDashboardQuery,
   matchesAutodartsNowQuery,
+  matchesPlexNowPlayingQuery,
   classifyDisplayVoicePhrase,
 };

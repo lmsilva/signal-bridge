@@ -18,6 +18,7 @@ const {
   pageCounter,
   badgeFrame,
   borderFrame,
+  cinemaFrame,
   gauge,
   blockTime,
   dwellFor,
@@ -371,6 +372,7 @@ test('every builder produces something the board would accept', () => {
   const frames = [
     badgeFrame({ color: 'blue', title: 'WEATHER', rows: ['NOW 93\u00b0 SUNNY'] }),
     borderFrame({ color: 'red', lines: ['WAKE UP - 6:30AM'] }),
+    cinemaFrame({ border: 'full', rows: ['NOW PLAYING', 'INTERSTELLAR'] }),
     blockTime(new Date(2026, 7, 23, 14, 38), { footer: 'SUNDAY AUG 23' }),
   ];
   for (const frame of frames) {

@@ -7,6 +7,7 @@ const {
   matchesSteamNowPlayingQuery,
   matchesPsnNowPlayingQuery,
   matchesYoutubeNowPlayingQuery,
+  matchesPlexNowPlayingQuery,
   classifyDisplayVoicePhrase,
 } = require('../src/display-voice-commands');
 const { classifyPhrase } = require('../src/routine-index');
@@ -36,6 +37,11 @@ test('platform now-playing matchers accept NP and LP routine names', () => {
   assert.equal(matchesYoutubeNowPlayingQuery('Youtube Now Playing'), true);
   assert.equal(matchesYoutubeNowPlayingQuery('YouTube Last Played'), true);
   assert.equal(matchesYoutubeNowPlayingQuery('you tube now playing'), true);
+  assert.equal(matchesPlexNowPlayingQuery('Feature Presentation'), true);
+  assert.equal(matchesPlexNowPlayingQuery('Plex Now Playing'), true);
+  assert.equal(matchesPlexNowPlayingQuery('Plex Last Played'), true);
+  assert.equal(matchesPlexNowPlayingQuery("what's playing in the theater"), true);
+  assert.equal(matchesPlexNowPlayingQuery("what's playing"), false);
 });
 
 test('classifyDisplayVoicePhrase maps Alexa routine names', () => {
@@ -46,6 +52,8 @@ test('classifyDisplayVoicePhrase maps Alexa routine names', () => {
   assert.equal(classifyDisplayVoicePhrase('Steam Last Played'), 'steam-now-playing');
   assert.equal(classifyDisplayVoicePhrase('PSN Now Playing'), 'psn-now-playing');
   assert.equal(classifyDisplayVoicePhrase('Youtube Last Played'), 'youtube-now-playing');
+  assert.equal(classifyDisplayVoicePhrase('Feature Presentation'), 'plex-now-playing');
+  assert.equal(classifyDisplayVoicePhrase('Movie Now Playing'), 'plex-now-playing');
 });
 
 test('routine-index classifyPhrase includes display overlays before music', () => {
@@ -56,6 +64,7 @@ test('routine-index classifyPhrase includes display overlays before music', () =
   assert.equal(classifyPhrase('Steam Last Played'), 'steam-now-playing');
   assert.equal(classifyPhrase('PSN Last Played'), 'psn-now-playing');
   assert.equal(classifyPhrase('Youtube Now Playing'), 'youtube-now-playing');
+  assert.equal(classifyPhrase('Feature Presentation'), 'plex-now-playing');
   // Bare music now-playing still maps to music.
   assert.equal(classifyPhrase("what's playing"), 'music');
 });
@@ -76,5 +85,6 @@ test('voice-query-parser emits display overlay kinds before music', () => {
   assert.equal(parser.parse(mk('Steam Now Playing'))?.kind, 'steam-now-playing');
   assert.equal(parser.parse(mk('PSN Last Played'))?.kind, 'psn-now-playing');
   assert.equal(parser.parse(mk('Youtube Now Playing'))?.kind, 'youtube-now-playing');
+  assert.equal(parser.parse(mk('Feature Presentation'))?.kind, 'plex-now-playing');
   assert.equal(parser.parse(mk("what's playing"))?.kind, 'music');
 });
