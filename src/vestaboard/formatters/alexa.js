@@ -581,7 +581,9 @@ function weatherFrames(payload = {}, ctx = {}) {
   const rows = badgeFrame({
     color: 'blue',
     title: 'WEATHER',
-    rows: padRows([nowLine, highLow, notableHourly(weather.next24Hours, ctx)].filter(Boolean)),
+    // One blank row under the title and one above the footer — NOW/HIGH sit
+    // in the middle band so the board breathes like the physical layout.
+    rows: padRows(['', nowLine, highLow, '']),
     footerLeft: tomorrowLine(weather.next7Days?.[1]),
   });
   return [snapshotFrame(rows, 'Weather', 'weather.query')];
