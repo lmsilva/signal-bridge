@@ -1561,7 +1561,8 @@ textarea.field-input.text-input-area {
   gap: 6px;
 }
 
-.settings-hit-count {
+.settings-hit-count,
+.push-hit-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1589,6 +1590,63 @@ textarea.field-input.text-input-area {
 }
 
 #tab-settings [data-settings-group][hidden] {
+  display: none !important;
+}
+
+/* ---------- Push sub-nav ---------- */
+
+/* Same head as Settings — search on top, the category tabs under it — so the
+   two long pages are driven the same way. */
+.push-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.push-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.push-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.push-search .field-input { width: 100%; }
+
+.push-view-tabs {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.push-view-tabs .segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.push-view-tabs .segmented-btn.active .push-hit-count {
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.push-view-tabs .segmented-btn[hidden] { display: none !important; }
+
+.push-search-empty { margin: 0; }
+
+/* Heading and its row travel together, so a pane hides as one block. */
+.push-block { display: flex; flex-direction: column; gap: 12px; }
+.push-block .section-label { margin-top: 0; }
+
+/* Flex and grid children ignore the bare [hidden] attribute. */
+#tab-push [data-push-group][hidden],
+#tab-push [data-push-item][hidden],
+#tab-push .push-card[hidden] {
   display: none !important;
 }
 
@@ -3648,6 +3706,36 @@ textarea.field-input.text-input-area {
 .vb-row-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vb-row-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex: none; }
 .vb-row-result { font-variant-numeric: tabular-nums; flex: none; }
+
+/* The call log is for debugging, so it stays folded away until asked for. */
+.vb-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.vb-advanced > summary::-webkit-details-marker { display: none; }
+.vb-advanced > summary::before { content: '▸ '; }
+.vb-advanced[open] > summary::before { content: '▾ '; }
+.vb-advanced[open] > summary { color: var(--text); }
+.vb-calls-count { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); }
+.vb-row { flex-wrap: wrap; }
+.vb-row-verb {
+  flex: none;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.vb-row-detail {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
 .vb-row-result.ok { color: var(--good); }
 .vb-row-result.warn { color: var(--warn); }
 .vb-row-result.bad { color: var(--danger); }

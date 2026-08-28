@@ -6,8 +6,10 @@ const path = require('path');
 const {
   COMMANDS,
   BOARD_COMMAND_IDS,
+  PUSH_CATEGORIES,
   kindsOf,
   supportsKind,
+  pushCategoryOf,
   assertValid,
   createCommandRegistry,
 } = require('../src/command-registry');
@@ -97,15 +99,47 @@ test('every pushable command belongs to a rendered row', () => {
     path.join(__dirname, '../src/web/admin/index.html'), 'utf8',
   );
   const rendered = new Set(
-    [...html.matchAll(/data-push-row="([^"]+)"/g)]
-      .flatMap((match) => match[1].split(',').map((group) => group.trim())),
+    [...html.matchAll(/data-push-category="([^"]+)"/g)].map((match) => match[1].trim()),
   );
   for (const command of COMMANDS.filter((c) => c.pushable)) {
+    const category = pushCategoryOf(command);
     assert.ok(
-      rendered.has(command.group),
-      `${command.id} is pushable but group "${command.group}" has no push row`,
+      rendered.has(category),
+      `${command.id} is pushable but category "${category}" has no push row`,
     );
   }
+  // A category rendered twice would double every tile in it.
+  const rows = [...html.matchAll(/data-push-category="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(rows).size, rows.length, 'each category gets exactly one row');
+});
+
+test('a pushable command cannot ship without a pane to land in', () => {
+  const orphan = {
+    id: 'ghost.show', title: 'Ghost', group: 'Nowhere',
+    route: '/api/push/ghost', pushable: true, schedulable: false,
+    supportsContentCheck: false, variableDuration: false, defaultDurationSeconds: 30,
+  };
+  assert.throws(() => assertValid([orphan]), /no push category/);
+
+  const misfiled = { ...orphan, pushCategory: 'basement' };
+  assert.throws(() => assertValid([misfiled]), /unknown pushCategory/);
+});
+
+test('push categories are declared once and every tile claims a real one', () => {
+  const ids = PUSH_CATEGORIES.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const entry of PUSH_CATEGORIES) {
+    assert.match(entry.id, /^[a-z-]+$/);
+    assert.ok(entry.label, `${entry.id} needs a tab label`);
+  }
+  // Scheduler-only siblings inherit their group's pane, so the scheduler and
+  // the Push page keep telling the same story about where a command lives.
+  assert.equal(pushCategoryOf('steam.last-played'), pushCategoryOf('steam.now-playing'));
+  assert.equal(pushCategoryOf('alexa.now-playing'), 'media');
+  assert.equal(pushCategoryOf('alexa.weather'), 'home');
+  assert.equal(pushCategoryOf('signal.guest-snaps'), 'share');
+  assert.equal(pushCategoryOf('flightplan.board'), 'travel');
+  assert.equal(pushCategoryOf('nope.missing'), null);
 });
 
 test('list() is JSON-serialisable and carries scheduler metadata', () => {
@@ -122,6 +156,13 @@ test('list() is JSON-serialisable and carries scheduler metadata', () => {
     assert.ok(Array.isArray(command.params));
     assert.ok(Array.isArray(command.kinds) && command.kinds.length);
     assert.ok(command.kinds.includes('full'));
+    // The Push page files tiles by this, so it has to survive the wire.
+    if (command.pushable) {
+      assert.ok(
+        PUSH_CATEGORIES.some((entry) => entry.id === command.pushCategory),
+        `${command.id} sent an unusable pushCategory: ${command.pushCategory}`,
+      );
+    }
   }
 });
 

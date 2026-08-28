@@ -15,6 +15,8 @@ const STATS_RETRY_MS = Object.freeze([45_000, 90_000, 180_000, 300_000]);
 const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 60_000;
 const BOARD_POLL_MS = 60_000;
+/** Top up a live match from HTTP if the socket goes quiet mid-turn. */
+const STATE_REFRESH_MS = 20_000;
 
 function resolveWebSocketImpl(explicit) {
   // Tests pass `null` to disable sockets; omit / undefined → auto-detect.
@@ -95,25 +97,52 @@ function winnerNameFrom(state = {}, players = []) {
   return String(raw);
 }
 
-function mapPlayers(state = {}, meta = {}) {
+function playerIndexFrom(state = {}) {
+  const playerRaw = state.player ?? state.currentPlayerIndex ?? state.throwingPlayer ?? 0;
+  return Number.isFinite(Number(playerRaw)) ? Number(playerRaw) : 0;
+}
+
+/**
+ * Autodarts `gameScores` is the remaining as the turn began. Points already
+ * in the hand have to come off here or the wall sits on 501 until the darts
+ * are pulled. A bust (flagged, or more points than are left) stays on that
+ * start-of-turn number — never a negative remaining.
+ */
+function remainingAfterTurn(startScore, turn) {
+  const start = Number(startScore) || 0;
+  if (!turn || turn.busted) return start;
+  const points = Number(turn.points) || 0;
+  if (points <= 0) return start;
+  if (points > start) return start;
+  return start - points;
+}
+
+function mapPlayers(state = {}, meta = {}, turn = null, currentPlayerIndex = 0) {
   const roster = state.players || meta.players || [];
   const gameScores = state.gameScores || meta.gameScores || [];
   const scoreRows = state.scores || meta.scores || [];
   const winnerIndex = Number.isInteger(Number(state.winner)) && Number(state.winner) >= 0
     ? Number(state.winner)
     : null;
+  const listedScores = Array.isArray(gameScores) && gameScores.length > 0;
   return roster.map((row, index) => {
     const name = row.name || row.playerName || row.player?.name || `Player ${index + 1}`;
     const scoreRow = scoreRows[index] || {};
-    const score = row.score ?? row.remaining ?? row.points ?? row.lives
-      ?? gameScores[index]
-      ?? scoreRow.score
-      ?? 0;
+    const prior = (Array.isArray(meta.players) ? meta.players[index] : null) || {};
+    const listed = listedScores ? Number(gameScores[index]) : NaN;
+    let score;
+    if (Number.isFinite(listed)) {
+      score = index === currentPlayerIndex ? remainingAfterTurn(listed, turn) : listed;
+    } else {
+      score = Number(
+        row.score ?? row.remaining ?? row.points ?? row.lives ?? scoreRow.score ?? 0,
+      ) || 0;
+    }
     return {
       name,
-      score: Number(score) || 0,
-      legs: Number(row.legs ?? row.legsWon ?? scoreRow.legs ?? 0) || 0,
-      sets: Number(row.sets ?? row.setsWon ?? scoreRow.sets ?? 0) || 0,
+      score,
+      legs: Number(row.legs ?? row.legsWon ?? scoreRow.legs ?? prior.legs ?? 0) || 0,
+      sets: Number(row.sets ?? row.setsWon ?? scoreRow.sets ?? prior.sets ?? 0) || 0,
       average: row.average != null ? Number(row.average) : (
         scoreRow.average != null ? Number(scoreRow.average) : null
       ),
@@ -134,6 +163,9 @@ function mapTurn(raw = {}) {
     points: Number(raw.points ?? raw.score ?? 0) || 0,
     busted: Boolean(raw.busted || raw.bust),
     darts: darts.slice(0, 3),
+    // Autodarts mints a new id when the darts are pulled. Same id + different
+    // throws is a correction, not a new turn.
+    turnId: raw.id || raw.turnId || null,
   };
 }
 
@@ -174,8 +206,70 @@ function isAbortEvent(event = '') {
 function isMatchFinishEvent(event = '', state = {}) {
   if (isAbortEvent(event)) return false;
   const e = String(event || '').toLowerCase();
-  if (e === 'finish' || e === 'match.finished' || e.includes('gameshot')) return true;
+  // "gameshot" is a won LEG. The match is over when Autodarts sets `winner`.
+  if (e === 'finish' || e === 'match.finished') return true;
   return matchIsFinished(state);
+}
+
+/**
+ * True when this payload is the match object itself (turns, scores, roster),
+ * not a named ping like `{ id, event: 'throw' }` that would rebuild the card
+ * empty and freeze the wall on the last full state.
+ */
+function carriesMatchState(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (Array.isArray(data.turns) && data.turns.length) return true;
+  if (data.turn && typeof data.turn === 'object') return true;
+  if (Array.isArray(data.throws)) return true;
+  if (Array.isArray(data.gameScores) && data.gameScores.length) return true;
+  if (Array.isArray(data.scores) && data.scores.length) return true;
+  if (data.variant && (data.player != null || data.currentPlayerIndex != null)) return true;
+  if (Array.isArray(data.players) && data.players.some((row) => row && (
+    row.score != null || row.remaining != null || row.legs != null || row.legsWon != null
+  ))) return true;
+  return false;
+}
+
+function matchIdFromBoard(data = {}, event = '', topic = '') {
+  if (data.matchId) return data.matchId;
+  if (data.currentMatchId) return data.currentMatchId;
+  if (data.activeMatchId) return data.activeMatchId;
+  if (data.match && data.match.id) return data.match.id;
+  const e = String(event || '').toLowerCase();
+  // `<boardId>.events` names the BOARD in `id`. Seeding from that swapped the
+  // live match for an empty shell, and the shell then rejected every real
+  // state update as belonging to a different match.
+  if (
+    e === 'throw detected'
+    || e.startsWith('takeout')
+    || e.startsWith('calibrat')
+    || e === 'manual reset'
+    || e === 'stopped'
+    || e === 'started'
+  ) {
+    return null;
+  }
+  if (e === 'start' && data.id) return data.id;
+  if (/\.matches$/i.test(String(topic)) && data.id) return data.id;
+  return null;
+}
+
+function scoreboardKey(view) {
+  return stableJson({
+    status: view?.status,
+    currentPlayerIndex: view?.currentPlayerIndex,
+    turn: view?.turn,
+    prevTurn: view?.prevTurn,
+    players: (view?.players || []).map((row) => ({
+      name: row.name,
+      score: row.score,
+      legs: row.legs,
+      sets: row.sets,
+      isWinner: row.isWinner,
+    })),
+    gameShot: view?.gameShot,
+    winner: view?.winner,
+  });
 }
 
 function matchFromState(matchId, state = {}, meta = {}, revision = 0) {
@@ -183,9 +277,9 @@ function matchFromState(matchId, state = {}, meta = {}, revision = 0) {
     ...(meta.settings || {}),
     ...(state.settings || {}),
   };
-  const players = mapPlayers(state, meta);
-  const playerRaw = state.player ?? state.currentPlayerIndex ?? state.throwingPlayer ?? 0;
-  const currentPlayerIndex = Number.isFinite(Number(playerRaw)) ? Number(playerRaw) : 0;
+  const currentPlayerIndex = playerIndexFrom(state);
+  const turn = turnFromState(state);
+  const players = mapPlayers(state, meta, turn, currentPlayerIndex);
   const startedAt = meta.startedAt || meta.createdAt || state.startedAt || state.createdAt || null;
   let durationSec = Number(state.durationSec ?? state.duration ?? meta.durationSec ?? 0) || 0;
   if (!durationSec && startedAt) {
@@ -210,7 +304,7 @@ function matchFromState(matchId, state = {}, meta = {}, revision = 0) {
     startedAt,
     durationSec,
     currentPlayerIndex,
-    turn: turnFromState(state),
+    turn,
     prevTurn: state.prevTurn ? {
       playerIndex: Number(state.prevTurn.playerIndex) || 0,
       points: Number(state.prevTurn.points) || 0,
@@ -239,6 +333,8 @@ function createAutodartsLive({
   now = () => Date.now(),
   WebSocketImpl,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
 } = {}) {
   const SocketImpl = resolveWebSocketImpl(WebSocketImpl);
   let phase = 'idle'; // idle | live | interrupted | final | dormant
@@ -263,10 +359,11 @@ function createAutodartsLive({
   // finished match here so the archive row keeps its roster, winner and variant.
   let finishedSnapshot = null;
   let boardOnline = null;
+  let stateRefreshTimer = null;
 
   function clearTimer(handle) {
     if (!handle) return;
-    clearTimeout(handle);
+    clearTimeoutImpl(handle);
     clearInterval(handle);
   }
 
@@ -325,7 +422,7 @@ function createAutodartsLive({
         status: match.status,
       })
       : buildMatchPayload(match);
-    const json = stableJson(body.match);
+    const json = scoreboardKey(body.match);
     if (!force && json === lastPushedJson) return false;
     lastPushedJson = json;
     sendUdpPayload(body, { source: 'event' });
@@ -347,16 +444,58 @@ function createAutodartsLive({
     clearTimer(inactivityTimer);
     inactivityTimer = null;
     if (!match || match.status !== 'live' || phase === 'dormant') return;
-    inactivityTimer = setTimeout(() => {
+    inactivityTimer = setTimeoutImpl(() => {
       inactivityTimer = null;
       handleInactivity();
     }, inactivityMs());
     if (typeof inactivityTimer.unref === 'function') inactivityTimer.unref();
   }
 
+  function stopStateRefresh() {
+    clearTimer(stateRefreshTimer);
+    stateRefreshTimer = null;
+  }
+
+  function armStateRefresh() {
+    stopStateRefresh();
+    if (!match || match.status !== 'live') return;
+    stateRefreshTimer = setTimeoutImpl(() => {
+      stateRefreshTimer = null;
+      refreshLiveState()
+        .catch((error) => {
+          log?.debug?.('Autodarts state refresh failed', error?.message || error);
+        })
+        .finally(() => {
+          if (match?.status === 'live') armStateRefresh();
+        });
+    }, STATE_REFRESH_MS);
+    stateRefreshTimer?.unref?.();
+  }
+
+  async function refreshLiveState() {
+    if (!match?.matchId || match.status !== 'live') return;
+    if (typeof api?.getMatchState !== 'function') return;
+    const result = await api.getMatchState(match.matchId);
+    if (!result?.ok || !result.json) return;
+    if (!carriesMatchState(result.json)) return;
+    const next = matchFromState(
+      match.matchId,
+      result.json,
+      {
+        ...(match || {}),
+        variant: result.json.variant || match?.variant,
+        settings: result.json.settings || match?.settings,
+        startedAt: result.json.createdAt || result.json.startedAt || match?.startedAt,
+      },
+      (Number(match.revision) || 0) + 1,
+    );
+    applyMatch(next);
+  }
+
   function handleInactivity() {
     if (!match || match.status !== 'live') return;
     log?.info?.('Autodarts match closed for inactivity', { matchId: match.matchId });
+    stopStateRefresh();
     dormantMatchId = match.matchId;
     pushClose('inactivity');
     phase = 'dormant';
@@ -368,7 +507,7 @@ function createAutodartsLive({
   function scheduleRestore() {
     clearTimer(restoreTimer);
     const delay = restoreAfterMs();
-    restoreTimer = setTimeout(() => {
+    restoreTimer = setTimeoutImpl(() => {
       restoreTimer = null;
       maybeResumeAfterInterrupt();
     }, delay);
@@ -436,16 +575,24 @@ function createAutodartsLive({
     if (match?.matchId === next.matchId && Number(next.revision) < Number(match.revision || 0)) {
       return;
     }
-    // Preserve prevTurn when upstream only sends current turn darts.
-    if (match?.matchId === next.matchId && match.prevTurn && !next.prevTurn) {
-      const prevPlayer = match.currentPlayerIndex;
-      if (next.currentPlayerIndex !== prevPlayer && match.turn?.darts?.some(Boolean)) {
+    // Promote the turn that just ended. Autodarts keeps `player` on the same
+    // index in solo play, so the turn id is what says the darts have been pulled.
+    // A correction keeps that id and replaces throws in place — not a new turn.
+    if (match?.matchId === next.matchId) {
+      const turnChanged = Boolean(
+        match.turn?.turnId
+        && next.turn?.turnId
+        && match.turn.turnId !== next.turn.turnId
+      );
+      const playerChanged = next.currentPlayerIndex !== match.currentPlayerIndex;
+      const hadDarts = Boolean(match.turn?.darts?.some(Boolean));
+      if ((turnChanged || playerChanged) && hadDarts) {
         next.prevTurn = {
-          playerIndex: prevPlayer,
+          playerIndex: match.currentPlayerIndex,
           points: match.turn.points,
           darts: match.turn.darts,
         };
-      } else {
+      } else if (!next.prevTurn && match.prevTurn) {
         next.prevTurn = match.prevTurn;
       }
     }
@@ -471,12 +618,14 @@ function createAutodartsLive({
       phase = suppressed ? 'interrupted' : 'live';
     }
     resetInactivity();
+    armStateRefresh();
     pushMatch(forcePush);
   }
 
   function beginFinal() {
     clearTimer(inactivityTimer);
     clearTimer(restoreTimer);
+    stopStateRefresh();
     suppressed = false;
     phase = 'final';
     if (match) {
@@ -486,7 +635,7 @@ function createAutodartsLive({
     }
     pushMatch(true);
     clearTimer(finalTimer);
-    finalTimer = setTimeout(() => {
+    finalTimer = setTimeoutImpl(() => {
       finalTimer = null;
       pushClose('final-hold');
       phase = 'idle';
@@ -504,6 +653,7 @@ function createAutodartsLive({
     clearTimer(inactivityTimer);
     clearTimer(restoreTimer);
     clearTimer(finalTimer);
+    stopStateRefresh();
     finalTimer = null;
     suppressed = false;
     const matchId = match.matchId;
@@ -566,7 +716,7 @@ function createAutodartsLive({
           attempt += 1;
           statsTask = {
             matchId,
-            timer: setTimeout(() => { run().catch(() => {}); }, delay),
+            timer: setTimeoutImpl(() => { run().catch(() => {}); }, delay),
           };
           if (typeof statsTask.timer.unref === 'function') statsTask.timer.unref();
           return;
@@ -762,25 +912,17 @@ function createAutodartsLive({
       if (online != null) boardOnline = Boolean(online);
 
       if (isAbortEvent(event)) {
-        const abortId = extractMatchId(data) || extractMatchId(message) || match?.matchId;
+        const abortId = matchIdFromBoard(data, event, topic)
+          || extractMatchId(data)
+          || match?.matchId;
         if (abortId && match && String(match.matchId) === String(abortId)) {
           beginAbort(event || 'board-delete');
         }
         return;
       }
 
-      if (event === 'start' || event === 'match' || event.includes('match')) {
-        const matchId = extractMatchId(data) || extractMatchId(message);
-        if (matchId && (!match || match.matchId !== String(matchId) || match.status !== 'live')) {
-          seedMatch(String(matchId)).catch((error) => {
-            log?.warn?.('Autodarts seed failed', error?.message || error);
-          });
-        }
-        return;
-      }
-
-      const matchId = extractMatchId(data) || extractMatchId(message);
-      if (matchId && (!match || match.matchId !== String(matchId))) {
+      const matchId = matchIdFromBoard(data, event, topic);
+      if (matchId && (!match || match.matchId !== String(matchId) || match.status !== 'live')) {
         seedMatch(String(matchId)).catch((error) => {
           log?.warn?.('Autodarts seed failed', error?.message || error);
         });
@@ -821,28 +963,20 @@ function createAutodartsLive({
     }
 
     // Live state / throws — Autodarts sends the full match object on *.state.
-    if (data.players || data.gameScores || data.turns || data.turn || data.throws
-      || data.scores || event.includes('throw') || event.includes('state')
-      || event.includes('turn') || event === '' || topic.endsWith('.state')) {
-      const revision = Number(
-        data.revision
-        ?? data.version
-        ?? ((Number(match?.revision) || 0) + 1),
-      );
-      const next = matchFromState(
-        matchId,
-        data,
-        {
-          ...(match || {}),
-          variant: data.variant || match?.variant,
-          settings: data.settings || match?.settings,
-          players: data.players || match?.players,
-          startedAt: data.createdAt || data.startedAt || match?.startedAt,
-        },
-        revision,
-      );
-      applyMatch(next);
-    }
+    // Named pings (`event: 'throw'` with no turns) must not rebuild the card.
+    if (!carriesMatchState(data)) return;
+    const next = matchFromState(
+      matchId,
+      data,
+      {
+        ...(match || {}),
+        variant: data.variant || match?.variant,
+        settings: data.settings || match?.settings,
+        startedAt: data.createdAt || data.startedAt || match?.startedAt,
+      },
+      (Number(match?.revision) || 0) + 1,
+    );
+    applyMatch(next);
   }
 
   async function connect() {
@@ -933,7 +1067,7 @@ function createAutodartsLive({
       const waitMs = Math.max(5_000, (rateLimit.snapshot()?.pausedUntil
         ? Date.parse(rateLimit.snapshot().pausedUntil) - now()
         : RECONNECT_MAX_MS));
-      reconnectTimer = setTimeout(() => {
+      reconnectTimer = setTimeoutImpl(() => {
         reconnectTimer = null;
         scheduleReconnect();
       }, Math.min(RECONNECT_MAX_MS, waitMs));
@@ -945,7 +1079,7 @@ function createAutodartsLive({
       RECONNECT_BASE_MS * (2 ** Math.min(reconnectAttempt, 5)),
     );
     reconnectAttempt += 1;
-    reconnectTimer = setTimeout(() => {
+    reconnectTimer = setTimeoutImpl(() => {
       reconnectTimer = null;
       connect().catch((error) => {
         unavailableReason = error?.message || String(error);
@@ -969,6 +1103,7 @@ function createAutodartsLive({
     clearTimer(restoreTimer);
     clearTimer(finalTimer);
     clearTimer(boardPollTimer);
+    stopStateRefresh();
     boardPollTimer = null;
     if (statsTask?.timer) clearTimer(statsTask.timer);
     statsTask = null;
@@ -1030,4 +1165,7 @@ module.exports = {
   STATS_RETRY_MS,
   WS_URL,
   BOARD_POLL_MS,
+  STATE_REFRESH_MS,
+  remainingAfterTurn,
+  carriesMatchState,
 };

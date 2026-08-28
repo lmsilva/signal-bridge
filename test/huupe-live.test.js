@@ -322,18 +322,52 @@ test('an almost-empty session is dropped rather than archived', () => {
   assert.equal(kit.archived.length, 0, 'one shot is noise, not a game');
 });
 
-test('a hoop switched off mid-game clears the wall instead of holding it', () => {
-  // The hoop cannot report an end it never reaches, so a live card would
-  // otherwise sit on the display and block every scheduled page behind it.
-  const kit = harness();
+test('a hoop switched off mid-game still shows the score before letting go', () => {
+  // The hoop dropping off ADB says nothing about whether anyone is still
+  // standing in front of the wall, so a game with a result on it gets the same
+  // final card a clean end gets — and the hold still frees the display after.
+  const kit = harness({ finalHoldSeconds: 30 });
   openFreePlay(kit);
   kit.live.handleStreamState({ connected: true });
   kit.live.handleStreamState({ connected: false, reason: 'device offline' });
   kit.advance(STREAM_LOSS_GRACE_MS);
   kit.live.tick();
-  assert.equal(kit.closes().length, 1);
+  const card = kit.latest();
+  assert.equal(card.session.status, 'finished');
+  assert.equal(card.persistent, false);
+  assert.equal(card.displaySeconds, 30);
+  assert.equal(kit.closes().length, 0, 'the wall keeps the result for the hold');
   assert.equal(kit.live.currentSession(), null);
   assert.equal(kit.archived[0].aborted, true);
+
+  kit.advance(30_000);
+  kit.live.tick();
+  assert.equal(kit.closes().length, 1, 'and is handed back when the hold ends');
+});
+
+test('a hoop that goes dark with nothing to show clears the wall at once', () => {
+  const kit = harness({ minShotsToOpen: 1 });
+  kit.live.handleEvent(shot());
+  kit.live.handleStreamState({ connected: true });
+  kit.live.handleStreamState({ connected: false, reason: 'device offline' });
+  kit.advance(STREAM_LOSS_GRACE_MS);
+  kit.live.tick();
+  assert.equal(kit.closes().length, 1);
+  assert.equal(kit.archived.length, 0, 'one shot is noise, not a game');
+});
+
+test('a new game cancels the previous final card\'s pending close', () => {
+  // Otherwise the close lands mid-way through the next game and takes the
+  // live card down with it.
+  const kit = harness({ finalHoldSeconds: 60 });
+  openFreePlay(kit);
+  kit.live.handleEvent({ kind: 'final-screen' });
+  kit.advance(10_000);
+  openFreePlay(kit);
+  kit.advance(60_000);
+  kit.live.tick();
+  assert.equal(kit.closes().length, 0);
+  assert.equal(kit.latest().session.status, 'live');
 });
 
 test('a brief ADB reconnect does not tear the game down', () => {

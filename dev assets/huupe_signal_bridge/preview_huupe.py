@@ -135,7 +135,35 @@ class PilCanvas:
         )
         return self._id()
 
-    def create_image(self, *_coords, **_kwargs):
+    def pil_photo(self, image):
+        """Panels build Pillow images and expect a Tk PhotoImage back.
+
+        Handing the image straight back — and pasting it in `create_image` —
+        is what makes a preview show the same art the wall paints, instead of
+        the no-photo fallback the panels keep for headless canvases.
+        """
+        return image
+
+    def create_image(self, *coords, **kwargs):
+        image = kwargs.get("image")
+        if not isinstance(image, Image.Image):
+            return self._id()
+        x, y = float(coords[0]), float(coords[1])
+        anchor = str(kwargs.get("anchor") or "center").lower()
+        width, height = image.size
+        if "w" not in anchor and "e" not in anchor:
+            x -= width / 2
+        elif "e" in anchor:
+            x -= width
+        if "n" not in anchor and "s" not in anchor:
+            y -= height / 2
+        elif "s" in anchor:
+            y -= height
+        box = (int(round(x)), int(round(y)))
+        if image.mode == "RGBA":
+            self.image.paste(image, box, image)
+        else:
+            self.image.paste(image, box)
         return self._id()
 
     def create_window(self, *_coords, **_kwargs):

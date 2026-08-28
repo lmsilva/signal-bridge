@@ -563,7 +563,11 @@ class OverlayWindow:
                 self.dismiss_footer.raise_()
             return
 
-        if display_type == "autodarts.match" and self._try_autodarts_match_inplace(payload):
+        if (
+            display_type == "autodarts.match"
+            and payload.get("persistent") is not False
+            and self._try_autodarts_match_inplace(payload)
+        ):
             if self._suppress_dismiss_footer():
                 self.dismiss_footer.hide()
             else:

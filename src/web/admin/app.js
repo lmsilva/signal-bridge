@@ -552,14 +552,12 @@
     panel.hidden = !panel.classList.contains('active');
   });
 
-  // ---------------------------------------------------------- Settings panes
+  // ------------------------------------------------ Pane search (shared)
 
-  const SETTINGS_VIEW_KEY = 'signal.settingsView';
-  const SETTINGS_SEARCH_KEY = 'signal.settingsSearch';
-  const SETTINGS_VIEW_ORDER = ['accounts', 'youtube', 'games', 'news', 'travel', 'media'];
-  const SETTINGS_VIEWS = new Set(SETTINGS_VIEW_ORDER);
+  // Settings and Push are both long pages behind a sub-nav, and both filter
+  // their panes from one search box, so the plumbing lives here once.
 
-  function settingsStorageGet(key, fallback = '') {
+  function uiStorageGet(key, fallback = '') {
     try {
       return localStorage.getItem(key) ?? fallback;
     } catch {
@@ -567,7 +565,7 @@
     }
   }
 
-  function settingsStorageSet(key, value) {
+  function uiStorageSet(key, value) {
     try {
       localStorage.setItem(key, value);
     } catch {
@@ -575,7 +573,7 @@
     }
   }
 
-  function settingsStorageRemove(key) {
+  function uiStorageRemove(key) {
     try {
       localStorage.removeItem(key);
     } catch {
@@ -583,27 +581,38 @@
     }
   }
 
-  function normalizeSettingsQuery(value) {
+  function normalizeSearchQuery(value) {
     return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
-  /** Titles, labels, button copy, placeholders — anything a user might type. */
-  function settingsCardHaystack(card) {
-    const bits = [(card.textContent || '')];
-    card.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((el) => {
-      bits.push(el.getAttribute('placeholder') || '');
+  /**
+   * Titles, labels, button copy, placeholders — anything a user might type.
+   * `data-search-terms` carries words the element never actually prints, so a
+   * push tile can answer to its command id and service name too.
+   */
+  function searchHaystack(el) {
+    const bits = [(el.textContent || ''), (el.dataset?.searchTerms || '')];
+    el.querySelectorAll('input[placeholder], textarea[placeholder]').forEach((node) => {
+      bits.push(node.getAttribute('placeholder') || '');
     });
-    card.querySelectorAll('option').forEach((el) => {
-      bits.push(el.textContent || '');
+    el.querySelectorAll('option').forEach((node) => {
+      bits.push(node.textContent || '');
     });
     return bits.join(' ').toLowerCase().replace(/\s+/g, ' ');
   }
 
-  function settingsCardMatches(card, query) {
+  function matchesSearch(el, query) {
     if (!query) return true;
-    const haystack = settingsCardHaystack(card);
+    const haystack = searchHaystack(el);
     return query.split(' ').every((term) => term && haystack.includes(term));
   }
+
+  // ---------------------------------------------------------- Settings panes
+
+  const SETTINGS_VIEW_KEY = 'signal.settingsView';
+  const SETTINGS_SEARCH_KEY = 'signal.settingsSearch';
+  const SETTINGS_VIEW_ORDER = ['accounts', 'youtube', 'games', 'news', 'travel', 'media'];
+  const SETTINGS_VIEWS = new Set(SETTINGS_VIEW_ORDER);
 
   function currentSettingsView() {
     const active = document.querySelector('#settings-view-tabs .segmented-btn.active');
@@ -616,14 +625,14 @@
     const clearBtn = $('settings-search-clear');
     const empty = $('settings-search-empty');
     const raw = searchInput?.value || '';
-    const query = normalizeSettingsQuery(raw);
+    const query = normalizeSearchQuery(raw);
     if (clearBtn) clearBtn.hidden = !String(raw).trim();
 
     const counts = Object.fromEntries(SETTINGS_VIEW_ORDER.map((view) => [view, 0]));
     const cards = [...document.querySelectorAll('#settings-card-grid .card[data-settings-group]')];
     for (const card of cards) {
       const group = card.dataset.settingsGroup;
-      const match = settingsCardMatches(card, query);
+      const match = matchesSearch(card, query);
       card.dataset.settingsMatch = match ? '1' : '0';
       if (match && SETTINGS_VIEWS.has(group)) counts[group] += 1;
     }
@@ -661,7 +670,7 @@
     const total = SETTINGS_VIEW_ORDER.reduce((sum, name) => sum + counts[name], 0);
     if (empty) empty.hidden = !(query && total === 0);
 
-    settingsStorageSet(SETTINGS_VIEW_KEY, view);
+    uiStorageSet(SETTINGS_VIEW_KEY, view);
     return { view, counts, query, total };
   }
 
@@ -672,7 +681,7 @@
   function setSettingsSearch(value, { persist = true } = {}) {
     const input = $('settings-search');
     if (input) input.value = value;
-    if (persist) settingsStorageSet(SETTINGS_SEARCH_KEY, String(value || ''));
+    if (persist) uiStorageSet(SETTINGS_SEARCH_KEY, String(value || ''));
     applySettingsFilter();
   }
 
@@ -686,7 +695,7 @@
 
   $('settings-search')?.addEventListener('input', (event) => {
     const value = event.target?.value || '';
-    settingsStorageSet(SETTINGS_SEARCH_KEY, value);
+    uiStorageSet(SETTINGS_SEARCH_KEY, value);
     applySettingsFilter();
   });
 
@@ -698,12 +707,145 @@
   // Restore the last pane + search before the Settings tab is opened, so
   // non-matching cards are never flashed as a long scrolling page.
   (() => {
-    const savedView = settingsStorageGet(SETTINGS_VIEW_KEY, 'accounts');
-    const savedSearch = settingsStorageGet(SETTINGS_SEARCH_KEY, '');
+    const savedView = uiStorageGet(SETTINGS_VIEW_KEY, 'accounts');
+    const savedSearch = uiStorageGet(SETTINGS_SEARCH_KEY, '');
     const input = $('settings-search');
     if (input) input.value = savedSearch;
     applySettingsFilter(savedView);
   })();
+
+  // ------------------------------------------------------------- Push panes
+
+  // The Push grid grew past thirty tiles, so it is filed the way Settings is:
+  // one pane per category, a search that counts hits on every tab, and tabs
+  // that step aside when nothing in them matches. Categories come from the
+  // command registry (`pushCategory`), so a new tile lands in a pane on its own.
+  const PUSH_VIEW_KEY = 'signal.pushView';
+  const PUSH_VIEW_ORDER = ['home', 'games', 'media', 'news', 'travel', 'share'];
+  const PUSH_VIEWS = new Set(PUSH_VIEW_ORDER);
+
+  function currentPushView() {
+    const active = document.querySelector('#push-view-tabs .segmented-btn.active');
+    const view = active?.dataset?.pushView;
+    return PUSH_VIEWS.has(view) ? view : PUSH_VIEW_ORDER[0];
+  }
+
+  function applyPushFilter(preferredView = null) {
+    const grid = $('push-card-grid');
+    if (!grid) return null;
+    const searchInput = $('push-search');
+    const clearBtn = $('push-search-clear');
+    const empty = $('push-search-empty');
+    const raw = searchInput?.value || '';
+    const query = normalizeSearchQuery(raw);
+    if (clearBtn) clearBtn.hidden = !String(raw).trim();
+
+    // Until /api/commands answers, the rows hold skeletons and every count is
+    // zero — hiding tabs on that would blank the page for a beat on load.
+    const loading = Boolean(grid.querySelector('[data-push-category][aria-busy]'));
+
+    const counts = Object.fromEntries(PUSH_VIEW_ORDER.map((view) => [view, 0]));
+
+    grid.querySelectorAll('[data-push-category]').forEach((row) => {
+      const group = row.dataset.pushCategory;
+      let hits = 0;
+      row.querySelectorAll('.push-card[data-command-id]').forEach((tile) => {
+        const match = matchesSearch(tile, query);
+        tile.hidden = !match;
+        if (match) hits += 1;
+      });
+      row.dataset.pushHits = String(hits);
+      if (PUSH_VIEWS.has(group)) counts[group] += hits;
+    });
+
+    grid.querySelectorAll('[data-push-item]').forEach((item) => {
+      const group = item.closest('[data-push-group]')?.dataset?.pushGroup;
+      const match = matchesSearch(item, query);
+      item.dataset.pushMatch = match ? '1' : '0';
+      if (match && PUSH_VIEWS.has(group)) counts[group] += 1;
+    });
+
+    let view = PUSH_VIEWS.has(preferredView) ? preferredView : currentPushView();
+    if (!loading && counts[view] === 0) {
+      view = PUSH_VIEW_ORDER.find((name) => counts[name] > 0) || view;
+    }
+
+    document.querySelectorAll('#push-view-tabs .segmented-btn').forEach((btn) => {
+      const name = btn.dataset.pushView;
+      const count = counts[name] || 0;
+      const on = name === view;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      // An empty pane is worth hiding even without a search: picking a
+      // Vestaboard empties whole categories the board cannot show.
+      btn.hidden = !loading && count === 0;
+      const badge = btn.querySelector('.push-hit-count');
+      if (badge) {
+        badge.textContent = String(count);
+        badge.hidden = !query;
+      }
+    });
+
+    grid.querySelectorAll('[data-push-group]').forEach((block) => {
+      const group = block.dataset.pushGroup;
+      if (group !== view) {
+        block.hidden = true;
+        return;
+      }
+      const row = block.querySelector('[data-push-category]');
+      // A tile block earns its heading only while a tile below it still shows.
+      block.hidden = Boolean(row) && !loading && Number(row.dataset.pushHits || 0) === 0;
+    });
+
+    grid.querySelectorAll('[data-push-item]').forEach((item) => {
+      const group = item.closest('[data-push-group]')?.dataset?.pushGroup;
+      item.hidden = group !== view || item.dataset.pushMatch !== '1';
+    });
+
+    const total = PUSH_VIEW_ORDER.reduce((sum, name) => sum + counts[name], 0);
+    if (empty) {
+      // With every tab hidden the page is otherwise blank, so say which of the
+      // two reasons emptied it — the search, or the display that is selected.
+      const nothing = !loading && total === 0;
+      empty.hidden = !nothing;
+      if (nothing) {
+        empty.textContent = query
+          ? 'Nothing to push matches that search.'
+          : 'Nothing here can be sent to the display you picked.';
+      }
+    }
+
+    uiStorageSet(PUSH_VIEW_KEY, view);
+    return { view, counts, query, total };
+  }
+
+  function showPushView(view) {
+    applyPushFilter(view);
+  }
+
+  $('push-view-tabs')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-push-view]');
+    if (!(btn instanceof HTMLElement)) return;
+    if (!btn.closest('#push-view-tabs')) return;
+    if (btn.hidden) return;
+    showPushView(btn.dataset.pushView);
+  });
+
+  $('push-search')?.addEventListener('input', () => {
+    applyPushFilter();
+  });
+
+  $('push-search-clear')?.addEventListener('click', () => {
+    const input = $('push-search');
+    if (input) input.value = '';
+    applyPushFilter();
+    input?.focus();
+  });
+
+  // The pane is remembered, the search is not: Push is the landing tab, and
+  // reopening the page into a filtered grid reads as half the tiles going
+  // missing. Within a visit the query survives, because tabs never reload.
+  applyPushFilter(uiStorageGet(PUSH_VIEW_KEY, PUSH_VIEW_ORDER[0]));
 
   // ---------------------------------------------------------- Status poller
 
@@ -1004,23 +1146,28 @@
     pushCommands = allPushCommands.filter(
       (command) => command.pushable && commandSupportsSelectedKind(command),
     );
-    document.querySelectorAll('[data-push-row]').forEach((row) => {
-      const groups = String(row.dataset.pushRow || '').split(',').map((g) => g.trim());
-      const mine = pushCommands.filter((command) => groups.includes(command.group));
+    document.querySelectorAll('[data-push-category]').forEach((row) => {
+      const category = String(row.dataset.pushCategory || '').trim();
+      const mine = pushCommands.filter((command) => command.pushCategory === category);
       row.innerHTML = mine.map((command) => {
         const sub = PUSH_SUBTITLE_HTML[command.id] || escapeHtml(command.subtitle);
         const extraClass = command.id === 'signal.slideshow' ? ' push-card-photo' : '';
         const iconClass = command.id === 'signal.slideshow' ? ' push-icon-photo' : '';
+        // The service name and the command id are searchable even though the
+        // tile never prints them, so "flightplan" finds Trip Board.
+        const terms = [command.title, command.subtitle, command.group, command.id].join(' ');
         return `<button type="button" class="push-card${extraClass}"`
-          + ` id="${pushCardElementId(command.id)}" data-command-id="${escapeHtml(command.id)}">`
+          + ` id="${pushCardElementId(command.id)}" data-command-id="${escapeHtml(command.id)}"`
+          + ` data-search-terms="${escapeHtml(terms)}">`
           + `<span class="push-icon${iconClass}">${pushIconSvg(command.icon)}</span>`
           + `<span class="push-card-title">${escapeHtml(command.title)}</span>`
           + `<span class="push-card-sub">${sub}</span>`
           + '</button>';
       }).join('');
-      row.hidden = mine.length === 0;
       row.removeAttribute('aria-busy');
     });
+    // Visibility of rows, headings and tabs belongs to the filter alone.
+    applyPushFilter();
   }
 
   async function loadPushGrid() {
@@ -4996,7 +5143,21 @@
       return { pill: 'Playing', tone: 'good', detail: `${session.modeLabel || 'Session'} in progress — ${session.stats?.made || 0}/${session.stats?.attempts || 0} shots` };
     }
     if (collector.state === 'streaming') {
-      return { pill: 'Connected', tone: 'good', detail: `Listening to ${collector.serial || 'the hoop'} — idle` };
+      // A hoop nobody is shooting on logs nothing, so "connected" on its own
+      // used to look identical to a stream that had quietly died. Say when the
+      // hoop last answered instead.
+      const missed = Number(collector.missedBeats) || 0;
+      const beat = Number(collector.secondsSinceBeat);
+      const heard = Number.isFinite(beat)
+        ? `answered ${beat < 90 ? `${beat}s` : `${Math.round(beat / 60)}m`} ago`
+        : 'idle';
+      return {
+        pill: 'Connected',
+        tone: missed ? '' : 'good',
+        detail: missed
+          ? `${collector.serial || 'The hoop'} missed the last check — reconnecting if it stays quiet`
+          : `Listening to ${collector.serial || 'the hoop'} — ${heard}`,
+      };
     }
     if (collector.state === 'unconfigured') {
       return { pill: 'Not set up', tone: '', detail: 'Turn on wireless ADB on the hoop, then tap Discover.' };
@@ -8361,8 +8522,9 @@
   // -------------------------------------------------------------- Admin session
 
   $('btn-admin-logout')?.addEventListener('click', async () => {
-    settingsStorageRemove(SETTINGS_VIEW_KEY);
-    settingsStorageRemove(SETTINGS_SEARCH_KEY);
+    uiStorageRemove(SETTINGS_VIEW_KEY);
+    uiStorageRemove(SETTINGS_SEARCH_KEY);
+    uiStorageRemove(PUSH_VIEW_KEY);
     try {
       await apiPost('/api/admin/logout', {});
     } catch {
@@ -9087,7 +9249,23 @@
     return 'bad';
   }
 
+  /** What was asked for: the endpoint, and who asked, when we know. */
+  function vbCallTarget(call) {
+    const target = call.endpoint || call.method || '';
+    const from = call.from ? ` from ${call.from}` : '';
+    return `${target}${from}`;
+  }
+
   function vbRenderCalls() {
+    const count = $('vb-calls-count');
+    if (count) {
+      // Refusals are named while the section is still shut, so a board that is
+      // rejecting every frame does not need opening to be noticed.
+      const refused = vbCalls.filter((call) => !String(call.result || '').startsWith('200')).length;
+      const parts = vbCalls.length ? [String(vbCalls.length)] : [];
+      if (refused) parts.push(`${refused} refused`);
+      count.textContent = parts.length ? `(${parts.join(' · ')})` : '';
+    }
     const host = $('vb-calls');
     if (!host) {
       return;
@@ -9105,15 +9283,26 @@
       time.className = 'vb-row-time';
       time.textContent = vbClockOf(call.at);
 
+      const verb = document.createElement('span');
+      verb.className = 'vb-row-verb';
+      verb.textContent = call.verb || String(call.method || '').split(' ')[0];
+
       const main = document.createElement('span');
       main.className = 'vb-row-main';
-      main.textContent = call.method;
+      main.textContent = vbCallTarget(call);
+      main.title = call.agent ? `${vbCallTarget(call)} · ${call.agent}` : vbCallTarget(call);
 
       const result = document.createElement('span');
       result.className = `vb-row-result ${vbResultTone(call.result)}`;
       result.textContent = call.result;
 
-      row.append(time, main, result);
+      row.append(time, verb, main, result);
+      if (call.detail) {
+        const detail = document.createElement('span');
+        detail.className = 'vb-row-detail';
+        detail.textContent = call.detail;
+        row.appendChild(detail);
+      }
       host.appendChild(row);
     }
   }

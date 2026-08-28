@@ -149,6 +149,53 @@ test('pages of one sequence turn at their own dwell, not just the rate window', 
   assert.equal(h.transport.posts.length, 2);
 });
 
+test('a frame repeated to express a long hold is queued once, not once per copy', async () => {
+  // Guest snaps emits one copy per 30s of hold. Every copy after the first is
+  // byte-identical to what the flip just put on the board, so the head-of-queue
+  // dedupe would drop it — but only after it had held up the line.
+  const h = makeQueue();
+  const result = h.queue.submit([
+    frame('GUEST SNAPS', 1, { dwellSeconds: 30 }),
+    frame('GUEST SNAPS', 1, { dwellSeconds: 30 }),
+    frame('GUEST SNAPS', 1, { dwellSeconds: 30 }),
+  ]);
+
+  assert.equal(result.accepted, 1);
+  assert.equal(h.queue.pending().length, 1);
+
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.pending().length, 0, 'nothing left to drop later');
+  assert.equal(h.transport.posts.length, 1);
+});
+
+test('folding a repeat keeps the hold the copies were standing in for', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15 });
+  h.queue.submit([
+    frame('GUEST SNAPS', 1, { dwellSeconds: 30 }),
+    frame('GUEST SNAPS', 1, { dwellSeconds: 30 }),
+    frame('AFTER', 2, { dwellSeconds: 15 }),
+  ]);
+  await h.queue.tick();
+
+  // 60s of dwell, not 30 — the page behind it waits out both copies.
+  h.advance(45 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  h.advance(20 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+});
+
+test('only neighbouring repeats fold, so a real rotation keeps its pages', async () => {
+  const h = makeQueue();
+  const result = h.queue.submit([
+    frame('ONE', 1), frame('TWO', 2), frame('ONE AGAIN', 1),
+  ]);
+  assert.equal(result.accepted, 3);
+  assert.deepEqual(
+    h.queue.pending().map((item) => item.label),
+    ['ONE', 'TWO', 'ONE AGAIN'],
+  );
+});
+
 test('an alert jumps the line and throws away the rotation it interrupted', async () => {
   const h = makeQueue();
   h.queue.submit([frame('PAGE 1', 1), frame('PAGE 2', 2), frame('PAGE 3', 3)]);
