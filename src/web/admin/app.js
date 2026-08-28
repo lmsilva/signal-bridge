@@ -9289,9 +9289,23 @@
       const row = document.createElement('div');
       row.className = 'vb-row vb-row-call';
 
+      const meta = document.createElement('div');
+      meta.className = 'vb-row-call-meta';
+
       const time = document.createElement('span');
       time.className = 'vb-row-time';
       time.textContent = vbClockOf(call.at);
+      meta.appendChild(time);
+
+      if (call.detail) {
+        const detail = document.createElement('span');
+        detail.className = 'vb-row-detail';
+        detail.textContent = call.detail;
+        meta.appendChild(detail);
+      }
+
+      const target = document.createElement('div');
+      target.className = 'vb-row-call-target';
 
       const verb = document.createElement('span');
       verb.className = 'vb-row-verb';
@@ -9302,17 +9316,13 @@
       main.textContent = vbCallTarget(call);
       main.title = call.agent ? `${vbCallTarget(call)} · ${call.agent}` : vbCallTarget(call);
 
+      target.append(verb, main);
+
       const result = document.createElement('span');
       result.className = `vb-row-result ${vbResultTone(call.result)}`;
       result.textContent = call.result;
 
-      row.append(time, verb, main, result);
-      if (call.detail) {
-        const detail = document.createElement('span');
-        detail.className = 'vb-row-detail';
-        detail.textContent = call.detail;
-        row.appendChild(detail);
-      }
+      row.append(meta, target, result);
       host.appendChild(row);
     }
   }
