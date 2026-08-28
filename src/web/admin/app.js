@@ -4516,19 +4516,26 @@
       score.closest('.trivia-check')?.classList.toggle('is-off', !score.checked);
     }
     renderPlexPlayerList(settings.monitoredPlayers);
-    const creds = status.credentials || {};
+    renderPlexCredentials(status);
+    renderPlexStatus(status);
+  }
+
+  function renderPlexCredentials(status) {
+    const creds = status?.credentials || {};
     const hint = $('plex-token-hint');
-    if (hint) {
-      if (creds.envBlocksOverwrite) {
-        hint.textContent = 'PLEX_TOKEN is set in .env and cannot be replaced here.';
-      } else if (creds.hasToken) {
-        hint.textContent = creds.tokenHint
-          ? `Token saved (…${creds.tokenHint}). Paste a new one to replace it.`
-          : 'Token saved. Paste a new one to replace it.';
-      } else {
-        hint.textContent = 'Write-only. Stored encrypted. PLEX_TOKEN in .env wins if set.';
-      }
+    if (!hint) return;
+    if (creds.envBlocksOverwrite) {
+      hint.textContent = 'PLEX_TOKEN is set in .env and cannot be replaced here.';
+    } else if (creds.hasToken) {
+      hint.textContent = creds.tokenHint
+        ? `Token saved (…${creds.tokenHint}). Paste a new one to replace it.`
+        : 'Token saved. Paste a new one to replace it.';
+    } else {
+      hint.textContent = 'Write-only. Stored encrypted. PLEX_TOKEN in .env wins if set.';
     }
+  }
+
+  function renderPlexStatus(status) {
     const pill = $('plex-status-pill');
     const detail = $('plex-status-detail');
     const tone = plexStatusTone(status);
@@ -4556,22 +4563,20 @@
     };
   }
 
-  let plexSaveTimer = null;
   async function savePlexSettings() {
     try {
       const result = await apiFetch('/api/plex/settings', {
-        method: 'PUT',
+        method: 'POST',
         body: readPlexForm(),
       });
       renderPlexSettings(result);
+      toast(
+        result.settings?.enabled ? 'Plex settings saved — watching the theater player.' : 'Plex settings saved.',
+        'ok',
+      );
     } catch (error) {
       toast(error.message || 'Could not save Plex settings', 'bad');
     }
-  }
-
-  function queuePlexSave() {
-    clearTimeout(plexSaveTimer);
-    plexSaveTimer = setTimeout(savePlexSettings, 400);
   }
 
   async function loadPlexSettings() {
@@ -4594,13 +4599,7 @@
       if (event.target?.closest('.trivia-check')) {
         event.target.closest('.trivia-check')?.classList.toggle('is-off', !event.target.checked);
       }
-      if (event.target?.id === 'plex-token') return;
-      queuePlexSave();
     });
-    $('plex-server-url')?.addEventListener('input', queuePlexSave);
-    $('plex-poll-ms')?.addEventListener('change', queuePlexSave);
-    $('plex-stop-grace')?.addEventListener('change', queuePlexSave);
-    $('plex-end-drift')?.addEventListener('change', queuePlexSave);
     $('btn-plex-add-player')?.addEventListener('click', () => {
       const input = $('plex-player-ip');
       const ip = String(input?.value || '').trim();
@@ -4609,14 +4608,12 @@
       if (!current.includes(ip)) current.push(ip);
       renderPlexPlayerList(current);
       if (input) input.value = '';
-      queuePlexSave();
     });
     plexCard.addEventListener('click', (event) => {
       const remove = event.target.closest('.plex-remove-player');
       if (remove) {
         const ip = remove.dataset.ip;
         renderPlexPlayerList(readPlexForm().monitoredPlayers.filter((value) => value !== ip));
-        queuePlexSave();
         return;
       }
       const add = event.target.closest('.plex-add-live');
@@ -4625,8 +4622,18 @@
         const current = readPlexForm().monitoredPlayers;
         if (ip && !current.includes(ip)) current.push(ip);
         renderPlexPlayerList(current);
-        queuePlexSave();
       }
+    });
+    $('btn-plex-token-help')?.addEventListener('click', () => {
+      const panel = $('plex-token-help');
+      const button = $('btn-plex-token-help');
+      if (!panel || !button) return;
+      const open = panel.hidden;
+      panel.hidden = !open;
+      button.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    $('btn-plex-settings-save')?.addEventListener('click', () => {
+      savePlexSettings();
     });
     $('btn-plex-save-token')?.addEventListener('click', async () => {
       const token = String($('plex-token')?.value || '').trim();
@@ -4634,19 +4641,34 @@
         toast('Paste a Plex token first', 'bad');
         return;
       }
+      const serverUrl = String($('plex-server-url')?.value || '').trim();
       try {
-        await apiFetch('/api/plex/token', { method: 'POST', body: { token } });
+        const result = await apiFetch('/api/plex/token', {
+          method: 'POST',
+          body: { token, serverUrl },
+        });
         const field = $('plex-token');
         if (field) field.value = '';
+        if (serverUrl && $('plex-server-url')) {
+          $('plex-server-url').value = serverUrl;
+        }
+        renderPlexCredentials(result);
         toast('Plex token saved', 'ok');
-        await loadPlexSettings();
       } catch (error) {
         toast(error.message || 'Could not save token', 'bad');
       }
     });
     $('btn-plex-test')?.addEventListener('click', async () => {
+      const serverUrl = String($('plex-server-url')?.value || '').trim();
+      if (!serverUrl) {
+        toast('Set the Plex server URL first', 'bad');
+        return;
+      }
       try {
-        const result = await apiFetch('/api/plex/test', { method: 'POST', body: {} });
+        const result = await apiFetch('/api/plex/test', {
+          method: 'POST',
+          body: { serverUrl },
+        });
         renderPlexLivePlayers(result.players);
         const hint = $('plex-live-players-hint');
         if (hint) {
@@ -4655,7 +4677,6 @@
             : 'No sessions right now. Start a movie on the Apple TV and test again.';
         }
         toast(result.ok ? 'Plex is reachable' : (result.error || 'Test failed'), result.ok ? 'ok' : 'bad');
-        await loadPlexSettings();
       } catch (error) {
         toast(error.message || 'Plex test failed', 'bad');
       }

@@ -1140,6 +1140,22 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.settings-search-row\b/);
 });
 
+test('Plex settings save on an explicit button, not while typing the URL', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+  assert.match(html, /id="btn-plex-settings-save"/);
+  assert.match(js, /btn-plex-settings-save/);
+  assert.doesNotMatch(js, /queuePlexSave/);
+  assert.doesNotMatch(js, /plex-server-url'\)\?\.addEventListener\('input'/);
+  assert.match(css, /\.plex-preview-hint/);
+  assert.match(html, /id="btn-plex-token-help"/);
+  assert.match(html, /X-Plex-Token/);
+  assert.match(html, /support\.plex\.tv\/articles\/204059436/);
+  assert.match(js, /body: \{ token, serverUrl \}/);
+  assert.doesNotMatch(js, /await loadPlexSettings\(\)/);
+});
+
 test('the refill button answers immediately instead of holding the request open', async () => {
   // Sources allow one call every six seconds, so a pass over every category
   // runs for minutes. Awaiting it here used to hold the HTTP request open long
@@ -1386,14 +1402,14 @@ test('the Push page files its tiles behind searchable category tabs', () => {
   assert.match(css, /#tab-push \[data-push-group\]\[hidden\]/);
 });
 
-test('Steam, PSN and YouTube share one auto-mode push tile each next to Trivia', () => {
+test('Steam, PSN, YouTube and Feature Presentation share one auto-mode push tile each next to Trivia', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const rows = [...html.matchAll(/data-push-category="([^"]+)"/g)].map((match) => match[1].trim());
 
   // A category rendered by two rows would show its tiles twice.
   assert.equal(new Set(rows).size, rows.length, 'each category belongs to exactly one row');
 
-  for (const id of ['steam.now-playing', 'psn.now-playing', 'youtube.now-playing']) {
+  for (const id of ['steam.now-playing', 'psn.now-playing', 'youtube.now-playing', 'plex.now-playing']) {
     const command = COMMANDS.find((entry) => entry.id === id);
     assert.ok(command.pushable, `${id} needs a push tile`);
     assert.ok(
@@ -1408,6 +1424,7 @@ test('Steam, PSN and YouTube share one auto-mode push tile each next to Trivia',
     assert.equal(command.pushable, false, `${id} stays scheduler-only`);
     assert.equal(command.body.mode, 'last-played');
   }
+  assert.equal(COMMANDS.some((entry) => entry.id === 'plex.last-played'), false);
 });
 
 test('the YouTube TV code input regroups digits while typing', () => {

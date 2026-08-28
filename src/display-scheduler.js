@@ -20,7 +20,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createRuleStore, scoreRule, expectedPerDay, gapProfile, normaliseTarget } = require('./scheduler-rules');
+const {
+  createRuleStore, scoreRule, expectedPerDay, gapProfile, normaliseTarget, resolveCommandId,
+} = require('./scheduler-rules');
 const {
   createActivityLog, localDateKey, localParts, withinWindow,
 } = require('./scheduler-activity');
@@ -745,14 +747,20 @@ function createDisplayScheduler(deps = {}) {
       ...store,
       all: () => store.all(),
       get: (id) => store.get(id),
-      add: (raw) => store.add(raw, {
-        now: now(),
-        command: commandRegistry?.get?.(raw?.commandId) || null,
-      }),
-      update: (id, patch) => store.update(id, patch, {
-        now: now(),
-        command: commandRegistry?.get?.(patch?.commandId ?? store.get(id)?.commandId) || null,
-      }),
+      add: (raw) => {
+        const commandId = resolveCommandId(raw?.commandId);
+        return store.add(raw, {
+          now: now(),
+          command: commandRegistry?.get?.(commandId) || null,
+        });
+      },
+      update: (id, patch) => {
+        const commandId = resolveCommandId(patch?.commandId ?? store.get(id)?.commandId);
+        return store.update(id, patch, {
+          now: now(),
+          command: commandRegistry?.get?.(commandId) || null,
+        });
+      },
     },
     activity,
 

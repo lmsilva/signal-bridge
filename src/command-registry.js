@@ -75,7 +75,6 @@ const BOARD_COMMAND_IDS = new Set([
   'youtube.now-playing',
   'youtube.last-played',
   'plex.now-playing',
-  'plex.last-played',
 ]);
 
 function kindsOf(command) {
@@ -670,21 +669,6 @@ const COMMANDS = [
     defaultDurationSeconds: 90,
     kinds: ['vestaboard'],
   },
-  {
-    id: 'plex.last-played',
-    title: 'Feature Presentation — last played',
-    subtitle: 'The last movie watched',
-    group: 'Feature Presentation',
-    route: '/api/push/plex-now-playing',
-    icon: 'plex',
-    body: { mode: 'last-played' },
-    pushable: true,
-    schedulable: true,
-    supportsContentCheck: true,
-    variableDuration: false,
-    defaultDurationSeconds: 90,
-    kinds: ['vestaboard'],
-  },
 ];
 
 const REQUIRED_KEYS = [
@@ -847,7 +831,6 @@ function createCommandRegistry(deps = {}) {
     'flightplan.next': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
     'flightplan.board': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
     'plex.now-playing': () => Boolean(call(getPlexStatus)?.hasContent),
-    'plex.last-played': () => Boolean(call(getPlexStatus)?.lastPlayed),
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
     'alexa.notifications': () => Boolean(call(getNotificationsCacheStatus)?.hasContent),
   };

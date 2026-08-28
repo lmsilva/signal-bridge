@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-28 (Feature Presentation settings card spans the Media pane)
+**Last updated:** 2026-08-28 (Plex enable checkbox is Monitor Plex)
 
 ---
 
@@ -123,7 +123,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/reminder-sync.js` | Poll Amazon notifications API; mirror active `Reminder` rows; wake at fire time; UDP `reminder.fired` |
 | `src/alexa-alarms.js` | Detect show/set/cancel wake-alarm voice commands (distinct from Vivint security) |
 | `src/alexa-reminders.js` | Detect reminder set/cancel/fire from ASR + TTS (`I'll remind you to…` / `Here's your reminder`) |
-| `src/alexa-notifications.js` | Explicit *show notifications* + passive Amazon Shopping delivery TTS (intro→detail pairing, delivery-only filter) → `alexa-notifications.query` |
+| `src/alexa-notifications.js` | Explicit *show notifications* + passive Amazon Shopping delivery TTS (intro→detail pairing, delivery-only filter) → `alexa-notifications.query`. Parser honours announced count (1 spoken alert = 1 card) and does not split on `U.S.` / initials. No inbox API: phone-app weather previews never reach the bridge until someone asks Alexa to read notifications |
 | `src/notifications-cache.js` | Persist last actionable `alexa-notifications.query` payload (`data/notifications-cache.json`) for Push / scheduler replay |
 | `src/tesla-battery.js` | Voice match for "show tesla battery"; speech-parse fallback |
 | `src/tesla-dashboard.js` | Voice match for "show tesla dashboard" |
@@ -620,6 +620,11 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-28: **Monitor Plex** — the Feature Presentation enable checkbox is labelled **Monitor Plex** instead of “Watch Plex for the theater Apple TV.” Cache-bust `?v=signal115`.
+- 2026-08-28: **Feature Presentation is one command** — dropped `plex.last-played` from Push and Schedule. The remaining **Feature Presentation** tile (`plex.now-playing`) already auto-picks a live session or stored last-played. Saved `plex.last-played` scheduler rules remap on load. Cache-bust `?v=signal114`. Tests: `command-registry`, `display-scheduler`, `web-server`.
+- 2026-08-28: **Alexa notifications stay one card, and weather alerts do not auto-push** — a single spoken inbox item (e.g. NWS thunderstorm via “show my notifications”) is one overlay card, not one card per sentence; `U.S.` no longer splits the body. Phone-app notification previews are Amazon-only: `getNotifications()` is Timer/Alarm/Reminder, and the weather body only appears in voice history after someone asks Alexa to read it. Tests: `test/alexa-notifications.test.js`.
+- 2026-08-28: **Saving a Plex token no longer blanks the server URL** — Save token used to reload the whole form from disk, and the URL had not been persisted yet, so Test connection said “Set the Plex server URL first.” Token save now keeps the URL field, persists that URL with the token, and only clears the write-only token box. A **?** next to Plex token explains how to copy `X-Plex-Token` from Plex Web XML ([Plex support](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)). Cache-bust `?v=signal113`. Tests: `web-server.test.js`.
+- 2026-08-28: **Plex settings save on a button, not on every keystroke** — typing the server URL used to debounce a `PUT /api/plex/settings`, which the server rejected with **405** because that path only accepted POST. The card now has **Save settings**; watching starts only after that click. Test connection can use the URL still in the field. Preview hint has room above the button. Cache-bust `?v=signal112`. Tests: `web-server.test.js`.
 - 2026-08-28: **Plex Configuration uses the full Media pane** — the Feature Presentation card sat in a half-width grid cell next to empty space while YouTube/Slideshow spanned both columns. It now takes `grid-column: 1 / -1` and lays out URL/token, theater players, and poll/behavior/preview as one three-column row. Title is **Plex Configuration**. Cache-bust `?v=signal111`. Tests: `web-server.test.js`.
 - 2026-08-28: **Feature Presentation** — Vestaboard-only cinema frames for the theater Plex player. Polls `/status/sessions` every 15s, filters `movie` + monitored player IPs, and posts NOW PLAYING / LAST PLAYED snapshots (`cinemaFrame` red curtain, 20-col right-biased center). Never UDP, never a full-display formatter, never marks a display busy — the poster app still owns “what is playing” on the wall. Token is `PLEX_TOKEN` or encrypted `data/plex-credentials.json`. Live play/stop (and explicit Push) honour `plex.quietHoursExempt` (default on); scheduler ticks always respect 22:00–07:00. Commands `plex.now-playing` / `plex.last-played` are the first `kinds: ['vestaboard']` entries. Spec + mockups in `dev assets/plex-vestaboard/`. Tests: `vestaboard-cinema`, `plex-now-playing`, `command-registry` (vestaboard-only kinds), `vestaboard-router` (`quietHoursExempt` override). Cache-bust `?v=signal110`.
 - 2026-08-27: **Vestaboard call log POST column drifted with detail width** — the meta band used `auto` width, so a longer detail sentence widened column one and shoved **POST** sideways on the next row. Rows are now a four-column grid (fixed-width meta · verb · endpoint · result) with `display: contents` on the target wrapper so **POST** always lands in column two. Cache-bust `?v=signal109`. Tests: `web-server.test.js`.

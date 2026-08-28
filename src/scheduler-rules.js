@@ -64,6 +64,20 @@ function normaliseDays(value) {
 
 const TARGET_CLASSES = new Set(['all', 'full', 'vestaboard']);
 
+/** Retired command ids that still appear in saved rules. */
+const LEGACY_COMMAND_IDS = Object.freeze({
+  'plex.last-played': 'plex.now-playing',
+});
+
+const LEGACY_COMMAND_LABELS = Object.freeze({
+  'plex.last-played': 'Feature Presentation — last played',
+});
+
+function resolveCommandId(commandId) {
+  const id = String(commandId || '');
+  return LEGACY_COMMAND_IDS[id] || id;
+}
+
 /**
  * `"all"` | `"full"` | `"vestaboard"` | a display id.
  *
@@ -97,17 +111,27 @@ function pickColor(existingRules = []) {
  */
 function normaliseRule(raw = {}, { existingRules = [], command = null, now = Date.now() } = {}) {
   const base = raw || {};
+  const rawCommandId = String(base.commandId || '');
+  const commandId = resolveCommandId(rawCommandId);
   const intervalSeconds = clampInt(
     base.intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS, 45 * 60,
   );
+  const params = base.params && typeof base.params === 'object' ? { ...base.params } : {};
+  if (rawCommandId === 'plex.last-played' && params.mode === 'last-played') {
+    delete params.mode;
+  }
+  let label = String(base.label || command?.title || commandId || 'Rule').slice(0, 80);
+  if (rawCommandId !== commandId && label === LEGACY_COMMAND_LABELS[rawCommandId]) {
+    label = command?.title || 'Feature Presentation';
+  }
   const rule = {
     id: String(base.id || crypto.randomUUID()),
     enabled: base.enabled !== false,
-    label: String(base.label || command?.title || base.commandId || 'Rule').slice(0, 80),
+    label,
     color: /^#[0-9a-fA-F]{6}$/.test(base.color || '') ? base.color : pickColor(existingRules),
 
-    commandId: String(base.commandId || ''),
-    params: base.params && typeof base.params === 'object' ? { ...base.params } : {},
+    commandId,
+    params,
 
     intervalSeconds,
     probability: clampInt(base.probability, 0, 100, 100),
@@ -200,21 +224,26 @@ function createRuleStore(filePath, log = console) {
   function read() {
     try {
       if (!fs.existsSync(filePath)) {
-        return [];
+        return { rules: [], migrated: false };
       }
       const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       const list = Array.isArray(parsed) ? parsed : parsed?.rules;
       if (!Array.isArray(list)) {
-        return [];
+        return { rules: [], migrated: false };
       }
       const out = [];
+      let migrated = false;
       for (const raw of list) {
-        out.push(normaliseRule(raw, { existingRules: out }));
+        const rule = normaliseRule(raw, { existingRules: out });
+        if (rule.commandId !== String(raw?.commandId || '')) {
+          migrated = true;
+        }
+        out.push(rule);
       }
-      return out;
+      return { rules: out, migrated };
     } catch (error) {
       log?.warn?.('Could not read scheduler rules — starting empty', error?.message || error);
-      return [];
+      return { rules: [], migrated: false };
     }
   }
 
@@ -227,7 +256,11 @@ function createRuleStore(filePath, log = console) {
     }
   }
 
-  rules = read();
+  const loaded = read();
+  rules = loaded.rules;
+  if (loaded.migrated) {
+    persist();
+  }
 
   return {
     all: () => rules,
@@ -281,6 +314,7 @@ module.exports = {
   MIN_INTERVAL_SECONDS,
   MAX_INTERVAL_SECONDS,
   TARGET_CLASSES,
+  resolveCommandId,
   normaliseRule,
   normaliseTarget,
   scoreRule,

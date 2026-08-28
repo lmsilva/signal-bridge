@@ -44,6 +44,36 @@ test('parseNotificationsFromSpeech splits numbered notifications', () => {
   assert.match(parsed.items[1], /reminder/i);
 });
 
+test('parseNotificationsFromSpeech keeps a single Alexa Weather alert as one item', () => {
+  const spoken =
+    'You have 1 new notification from Alexa Weather. From Alexa Weather: U.S. National Weather Service has issued a Severe Thunderstorm Warning for Saratoga Springs, Utah. It\'ll be in effect until August 28, 4:30 PM MDT.';
+  const parsed = parseNotificationsFromSpeech(spoken);
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.summary, '1 notification');
+  assert.equal(parsed.body, spoken);
+  assert.match(parsed.items[0], /Severe Thunderstorm Warning/i);
+  assert.match(parsed.items[0], /Saratoga Springs/i);
+  assert.match(parsed.items[0], /4:30 PM MDT/i);
+  assert.equal(parsed.items.some((item) => /^From Alexa Weather:\s*U\.S\.?$/i.test(item)), false);
+});
+
+test('parseNotificationsFromSpeech does not sentence-split when Alexa announces one notification', () => {
+  const spoken = 'You have 1 new notification. The weather is severe. Bring an umbrella.';
+  const parsed = parseNotificationsFromSpeech(spoken);
+  assert.equal(parsed.items.length, 1);
+  assert.match(parsed.items[0], /weather is severe/i);
+  assert.match(parsed.items[0], /umbrella/i);
+});
+
+test('parseNotificationsFromSpeech still splits two ordinal items when U.S. appears in the first', () => {
+  const spoken =
+    'You have 2 notifications. First, NWS issued a warning for the U.S. Second, your package was delivered.';
+  const parsed = parseNotificationsFromSpeech(spoken);
+  assert.equal(parsed.items.length, 2);
+  assert.match(parsed.items[0], /NWS/i);
+  assert.match(parsed.items[1], /package/i);
+});
+
 test('buildNotificationsReading preserves body fallback', () => {
   const reading = buildNotificationsReading('You have one notification about your delivery.');
   assert.equal(reading.body, 'You have one notification about your delivery.');

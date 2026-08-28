@@ -165,6 +165,24 @@ test('expected-per-day and the gap profile match the §4.5 formulas', () => {
   assert.equal(gapProfile({ intervalSeconds: 600, probability: 0 }).typicalSeconds, null);
 });
 
+test('retired plex.last-played rules become Feature Presentation auto', () => {
+  const rule = normaliseRule({
+    commandId: 'plex.last-played',
+    label: 'Feature Presentation — last played',
+    params: { mode: 'last-played' },
+  });
+  assert.equal(rule.commandId, 'plex.now-playing');
+  assert.equal(rule.label, 'Feature Presentation');
+  assert.equal(rule.params.mode, undefined);
+
+  const custom = normaliseRule({
+    commandId: 'plex.last-played',
+    label: 'Movie night',
+  });
+  assert.equal(custom.commandId, 'plex.now-playing');
+  assert.equal(custom.label, 'Movie night');
+});
+
 test('rules get a stable colour from the palette, never a position-derived one', () => {
   const a = normaliseRule({ commandId: 'x' }, { existingRules: [] });
   const b = normaliseRule({ commandId: 'y' }, { existingRules: [a] });
