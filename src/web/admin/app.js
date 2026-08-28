@@ -9287,7 +9287,7 @@
     host.innerHTML = '';
     for (const call of [...vbCalls].reverse()) {
       const row = document.createElement('div');
-      row.className = 'vb-row';
+      row.className = 'vb-row vb-row-call';
 
       const time = document.createElement('span');
       time.className = 'vb-row-time';

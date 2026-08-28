@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-27 (Vestaboard weather spacing)
+**Last updated:** 2026-08-27 (Vestaboard sim call-log columns)
 
 ---
 
@@ -614,6 +614,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-27: **Vestaboard simulator call log columns drifted** — each row used `justify-content: space-between`, so a longer endpoint shoved **POST** left or right relative to the row above. API call rows now use a four-column grid (time · verb · endpoint · result) with the detail line spanning full width. Cache-bust `?v=signal107`.
 - 2026-08-27: **Vestaboard weather spacing** — the NOW and HIGH/LOW rows sit one row lower with a blank band under **WEATHER** and another above tomorrow's footer, matching the physical board's breathing room. The hourly notable line (wind/rain callout) no longer fits those four body rows and is dropped from the weather frame — `notableHourly()` remains for tests/other use. Tests: `vestaboard-alexa.test.js`.
 - 2026-08-27: **Push Share pane order and tile gaps** — Web Browser and QR Code now lead the Share tab; **Share to the display** (Guest Snaps) sits underneath. One registry tile no longer sits in a four-column grid with three empty tracks — `card-row-share` uses `auto-fit` so a lone tile uses the row, and the browser/QR columns stretch to equal height on wide screens. Cache-bust `?v=signal106`. Tests: `web-server.test.js`.
 - 2026-08-27: **Push kept reopening on Share instead of Home** — the sub-tab was saved in `localStorage`, so a prior visit to Guest Snaps / QR stuck across logins, and when Home had no tiles for the selected display (a Vestaboard hides Alexa tiles) the filter auto-jumped to the first non-empty pane — usually Share. Push now opens **Home** on every load and after login (legacy `signal.pushView` cleared on sign-in and logout); the sub-tab lives in memory only so Push ↔ Scheduler hops within one session still stick. Auto-switching to another pane happens only during an active search, not because a category is empty. Logo → Push also resets to Home. Cache-bust `?v=signal105`. Tests: `web-server.test.js`.
