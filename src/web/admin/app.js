@@ -542,9 +542,10 @@
     });
   });
 
-  // Logo / title → Push (home) from any tab.
+  // Logo / title → Push landing pane from any tab.
   $('btn-app-home')?.addEventListener('click', () => {
     activateTab('push');
+    showPushView('home');
   });
 
   // Initial state: only the default active panel should be un-hidden.
@@ -720,15 +721,13 @@
   // one pane per category, a search that counts hits on every tab, and tabs
   // that step aside when nothing in them matches. Categories come from the
   // command registry (`pushCategory`), so a new tile lands in a pane on its own.
-  const PUSH_VIEW_KEY = 'signal.pushView';
+  const PUSH_VIEW_LEGACY_KEY = 'signal.pushView';
   const PUSH_VIEW_ORDER = ['home', 'games', 'media', 'news', 'travel', 'share'];
   const PUSH_VIEWS = new Set(PUSH_VIEW_ORDER);
-
-  function currentPushView() {
-    const active = document.querySelector('#push-view-tabs .segmented-btn.active');
-    const view = active?.dataset?.pushView;
-    return PUSH_VIEWS.has(view) ? view : PUSH_VIEW_ORDER[0];
-  }
+  // In-memory only: bottom tabs never reload the page, so this survives Push ↔
+  // Settings hops. A fresh admin load (including after login) always opens Home.
+  let pushViewSession = PUSH_VIEW_ORDER[0];
+  uiStorageRemove(PUSH_VIEW_LEGACY_KEY);
 
   function applyPushFilter(preferredView = null) {
     const grid = $('push-card-grid');
@@ -765,8 +764,10 @@
       if (match && PUSH_VIEWS.has(group)) counts[group] += 1;
     });
 
-    let view = PUSH_VIEWS.has(preferredView) ? preferredView : currentPushView();
-    if (!loading && counts[view] === 0) {
+    let view = PUSH_VIEWS.has(preferredView) ? preferredView : pushViewSession;
+    // Only step aside for an active search — an empty Home pane (e.g. a board
+    // that hides Alexa tiles) must not jump to Share on load.
+    if (query && !loading && counts[view] === 0) {
       view = PUSH_VIEW_ORDER.find((name) => counts[name] > 0) || view;
     }
 
@@ -792,6 +793,15 @@
         block.hidden = true;
         return;
       }
+      if (block.classList.contains('push-share-pane')) {
+        block.hidden = false;
+        const tileSection = block.querySelector('.push-share-tiles');
+        const row = block.querySelector('[data-push-category]');
+        if (tileSection) {
+          tileSection.hidden = Boolean(row) && !loading && Number(row.dataset.pushHits || 0) === 0;
+        }
+        return;
+      }
       const row = block.querySelector('[data-push-category]');
       // A tile block earns its heading only while a tile below it still shows.
       block.hidden = Boolean(row) && !loading && Number(row.dataset.pushHits || 0) === 0;
@@ -815,7 +825,7 @@
       }
     }
 
-    uiStorageSet(PUSH_VIEW_KEY, view);
+    pushViewSession = view;
     return { view, counts, query, total };
   }
 
@@ -842,10 +852,9 @@
     input?.focus();
   });
 
-  // The pane is remembered, the search is not: Push is the landing tab, and
-  // reopening the page into a filtered grid reads as half the tiles going
-  // missing. Within a visit the query survives, because tabs never reload.
-  applyPushFilter(uiStorageGet(PUSH_VIEW_KEY, PUSH_VIEW_ORDER[0]));
+  // Push is the landing tab and always opens on Home. The sub-tab survives
+  // bottom-nav hops within one page load; search is never restored.
+  applyPushFilter(PUSH_VIEW_ORDER[0]);
 
   // ---------------------------------------------------------- Status poller
 
@@ -8524,7 +8533,8 @@
   $('btn-admin-logout')?.addEventListener('click', async () => {
     uiStorageRemove(SETTINGS_VIEW_KEY);
     uiStorageRemove(SETTINGS_SEARCH_KEY);
-    uiStorageRemove(PUSH_VIEW_KEY);
+    uiStorageRemove(PUSH_VIEW_LEGACY_KEY);
+    pushViewSession = PUSH_VIEW_ORDER[0];
     try {
       await apiPost('/api/admin/logout', {});
     } catch {

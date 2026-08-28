@@ -325,9 +325,29 @@ body[data-tab="board"] .content { max-width: 1180px; }
 /* Web Browser + QR Code sections sit stacked on mobile, side-by-side on
    wide desktop viewports (see the min-width media query near the bottom) —
    each column keeps its own label directly above its card(s). */
-.push-columns { display: flex; flex-direction: column; gap: 12px; }
-.push-column { display: flex; flex-direction: column; gap: 12px; }
+.push-columns { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+.push-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .push-column .section-label { margin-top: 0; }
+.push-column > .card { flex: 1 1 auto; }
+
+/* Share pane: browser + QR on top, registry tiles underneath. */
+.push-share-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.push-share-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.push-share-tiles .section-label { margin-top: 0; }
+
+/* One or two share tiles should grow to use the row — not sit in a 4-col grid
+   with three empty tracks (card-row-quad is for the big category rows). */
+.card-row-share {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
 
 /* ---------- Push cards ---------- */
 
@@ -1646,6 +1666,7 @@ textarea.field-input.text-input-area {
 /* Flex and grid children ignore the bare [hidden] attribute. */
 #tab-push [data-push-group][hidden],
 #tab-push [data-push-item][hidden],
+#tab-push .push-share-tiles[hidden],
 #tab-push .push-card[hidden] {
   display: none !important;
 }
@@ -2611,7 +2632,7 @@ textarea.field-input.text-input-area {
    two half-empty rows down the middle of the page. */
 @media (min-width: 860px) {
   .content { max-width: 980px; }
-  .push-columns { flex-direction: row; align-items: flex-start; }
+  .push-columns { flex-direction: row; align-items: stretch; }
   .push-column { flex: 1; min-width: 0; }
   .card-row-quad { grid-template-columns: repeat(4, 1fr); }
 

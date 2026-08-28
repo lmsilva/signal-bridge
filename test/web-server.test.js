@@ -303,16 +303,23 @@ test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload'
 
 test('Web Browser and QR Code sections share a .push-columns wrapper for wide-screen side-by-side layout', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
-  const wrapperMatch = html.match(/<div class="push-columns"[^>]*>([\s\S]*?)<\/section>/);
-  assert.ok(wrapperMatch, 'expected a .push-columns wrapper inside the Push tab');
-  const wrapper = wrapperMatch[1];
-  const webBrowserIndex = wrapper.indexOf('Web Browser');
-  const qrCodeIndex = wrapper.indexOf('QR Code');
+  const columnsStart = html.indexOf('<div class="push-columns">');
+  const shareTilesStart = html.indexOf('<div class="push-share-tiles">');
+  assert.ok(columnsStart >= 0 && shareTilesStart > columnsStart,
+    'expected Web Browser / QR Code above the Share tiles heading');
+  const webBrowserIndex = html.indexOf('Web Browser', columnsStart);
+  const qrCodeIndex = html.indexOf('QR Code', columnsStart);
+  const shareHeadingIndex = html.indexOf('Share to the display', shareTilesStart);
   assert.ok(webBrowserIndex >= 0 && qrCodeIndex >= 0 && webBrowserIndex < qrCodeIndex);
-  assert.match(wrapper, /class="push-column"/);
+  assert.ok(shareHeadingIndex > qrCodeIndex && shareHeadingIndex > shareTilesStart,
+    'Share tiles heading follows Web Browser and QR Code');
+  assert.match(html.slice(columnsStart, shareTilesStart), /class="push-column"/);
+  assert.match(html, /class="push-share-pane"/);
+  assert.match(html, /class="card-row card-row-share" id="push-row-share"/);
 
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
   assert.match(css, /\.push-columns\s*\{/);
+  assert.match(css, /\.card-row-share\s*\{/);
   // Row layout must be gated behind a min-width query, not applied unconditionally.
   assert.match(css, /@media \(min-width: \d+px\)\s*\{[\s\S]*?\.push-columns\s*\{\s*flex-direction:\s*row/);
 });
@@ -1350,7 +1357,9 @@ test('the Push page files its tiles behind searchable category tabs', () => {
 
   assert.match(js, /function applyPushFilter/);
   assert.match(js, /function showPushView/);
-  assert.match(js, /PUSH_VIEW_KEY/);
+  assert.match(js, /push-share-pane/);
+  assert.match(js, /pushViewSession/);
+  assert.match(js, /applyPushFilter\(PUSH_VIEW_ORDER\[0\]\)/);
   assert.match(js, /push-hit-count/);
   // Tiles answer to their service and command id as well as their printed copy.
   assert.match(js, /data-search-terms=/);
