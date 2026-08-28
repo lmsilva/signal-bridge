@@ -103,6 +103,48 @@ function isSeek(session, previous, pollIntervalMs) {
   return delta > (pollIntervalMs + SEEK_SLACK_MS);
 }
 
+/**
+ * Apple TV power-off often leaves a Plex session in `playing` with a frozen
+ * viewOffset. Count that stall only while PMS still claims playing — a pause
+ * is allowed to sit still.
+ */
+function notePlaybackProgress(session, next, nowMs) {
+  if (!session || !next) {
+    return;
+  }
+  if (next.player?.state === 'paused') {
+    session.stalledSince = null;
+    return;
+  }
+  if (next.player?.state !== 'playing') {
+    return;
+  }
+  if (session.viewOffsetMs == null || next.viewOffsetMs !== session.viewOffsetMs) {
+    session.stalledSince = null;
+    return;
+  }
+  if (session.stalledSince == null) {
+    session.stalledSince = nowMs;
+  }
+}
+
+function isStalledPlaying(session, stopGraceMs, nowMs) {
+  if (session?.stalledSince == null) {
+    return false;
+  }
+  return nowMs - session.stalledSince >= stopGraceMs;
+}
+
+function sessionLooksPlaying(session) {
+  if (!session || session.paused) {
+    return false;
+  }
+  if (session.playerState && session.playerState !== 'playing') {
+    return false;
+  }
+  return true;
+}
+
 function playerView(session) {
   const player = session?.player || {};
   return {
@@ -261,8 +303,10 @@ function createPlexNowPlaying({
       endsAt: ends != null ? iso(ends) : null,
       shownEndsAt: ends,
       paused: next.player?.state === 'paused',
+      playerState: next.player?.state || 'playing',
       player: playerView(next),
       lastPollAt: nowMs,
+      stalledSince: null,
     };
     persist();
     if (next.player?.state === 'playing') {
@@ -294,6 +338,7 @@ function createPlexNowPlaying({
     session.player = playerView(next);
     session.lastPollAt = nowMs;
     session.paused = paused;
+    session.playerState = next.player?.state || '';
     session.title = next.title;
     session.contentRating = next.contentRating;
     session.criticScore = next.criticScore;
@@ -361,8 +406,17 @@ function createPlexNowPlaying({
       state: entry.player?.state || '',
     }));
 
-    const next = pickSession(sessions, settings);
+    let next = pickSession(sessions, settings);
     const nowMs = now();
+
+    if (session && next && sameMovie(session, next)) {
+      notePlaybackProgress(session, next, nowMs);
+      if (next.player?.state === 'playing' && isStalledPlaying(session, settings.stopGraceMs, nowMs)) {
+        stopSession(settings);
+        return;
+      }
+    }
+
     const stopped = !next || next.player?.state === 'stopped';
 
     if (!session && next && next.player?.state === 'playing') {
@@ -451,7 +505,7 @@ function createPlexNowPlaying({
       lastPlayed,
       players: lastPollPlayers,
       hasContent: Boolean(session || lastPlayed),
-      playing: Boolean(session && !session.paused),
+      playing: sessionLooksPlaying(session),
       settings,
       credentials: credentialsStatus(credPath),
     };
@@ -509,6 +563,9 @@ function createPlexNowPlaying({
       markOk();
       const next = pickSession(sessions, settings);
       if (next && next.player?.state === 'playing') {
+        if (session && sameMovie(session, next) && isStalledPlaying(session, settings.stopGraceMs, now())) {
+          return null;
+        }
         return {
           ...next,
           startedAt: session && sameMovie(session, next) ? session.startedAt : iso(now()),
@@ -597,4 +654,7 @@ module.exports = {
   endsAtMs,
   isSeek,
   sameMovie,
+  notePlaybackProgress,
+  isStalledPlaying,
+  sessionLooksPlaying,
 };

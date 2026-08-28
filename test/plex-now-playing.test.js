@@ -145,6 +145,47 @@ test('pause does not emit', async () => {
   assert.equal(watcher._debug().session.paused, true);
 });
 
+test('a playing session whose position is frozen stops after the grace window', async () => {
+  process.env.PLEX_TOKEN = 'test-token';
+  const { watcher, sent, advance } = makeWatcher({
+    sessions: () => [movie({ viewOffsetMs: 312_000 })],
+  });
+  await watcher.tick();
+  assert.equal(watcher.statusSnapshot().playing, true);
+
+  advance(15_000);
+  await watcher.tick();
+  assert.equal(sent.length, 1);
+  assert.ok(watcher._debug().session);
+
+  advance(15_000);
+  await watcher.tick();
+  assert.ok(watcher._debug().session, 'still inside the frozen-progress grace');
+
+  advance(15_000);
+  await watcher.tick();
+  assert.equal(watcher._debug().session, null);
+  assert.equal(sent[1].payload.plex.mode, 'last-played');
+  assert.equal(watcher.statusSnapshot().playing, false);
+});
+
+test('playback that keeps moving is not a ghost stop', async () => {
+  process.env.PLEX_TOKEN = 'test-token';
+  let offset = 312_000;
+  const { watcher, sent, advance } = makeWatcher({
+    sessions: () => [movie({ viewOffsetMs: offset })],
+  });
+  await watcher.tick();
+  for (let i = 0; i < 4; i += 1) {
+    offset += 15_000;
+    advance(15_000);
+    await watcher.tick();
+  }
+  assert.equal(sent.length, 1);
+  assert.equal(watcher._debug().session.title, 'Interstellar');
+  assert.equal(watcher.statusSnapshot().playing, true);
+});
+
 test('a short resume does not re-emit; a 5+ minute pause does', async () => {
   process.env.PLEX_TOKEN = 'test-token';
   let current = [movie({ viewOffsetMs: 312_000 })];
