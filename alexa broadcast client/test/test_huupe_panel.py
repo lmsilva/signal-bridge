@@ -23,6 +23,7 @@ from src.huupe_panel import (
     deep_fade_alpha,
     deep_fade_bands,
     deep_fade_image,
+    format_point_share,
     format_score,
     glow_ring_layers,
     heat_color,
@@ -276,6 +277,31 @@ class CourtTests(unittest.TestCase):
         top = geo["court"][1]
         lowest = max(geo["centre"][index] for index in range(1, len(geo["centre"]), 2))
         self.assertGreater(lowest, top)
+
+
+class PointShareTests(unittest.TestCase):
+    def test_a_small_zone_is_not_rounded_to_zero(self):
+        self.assertEqual(format_point_share(0.4, 136.4), "0.3%")
+
+    def test_zero_points_reads_as_zero(self):
+        self.assertEqual(format_point_share(0, 100), "0%")
+
+    def test_large_shares_stay_whole_percent(self):
+        self.assertEqual(format_point_share(117, 136.4), "86%")
+
+    def test_career_dashboard_numbers_align(self):
+        """Point share on the court must match the legend headline, not FG%."""
+        rows = zone_rows([
+            {"zone": "layup", "made": 4, "attempts": 8, "scored": 0.4, "pct": 50},
+            {"zone": "one", "made": 3, "attempts": 14, "scored": 3, "pct": 21},
+            {"zone": "two", "made": 8, "attempts": 36, "scored": 16, "pct": 22},
+            {"zone": "three", "made": 39, "attempts": 136, "scored": 117, "pct": 29},
+        ])
+        bands, _, total = band_heat(rows)
+        self.assertAlmostEqual(total, 136.4, places=1)
+        self.assertEqual(bands["layup"]["share_label"], "0.3%")
+        self.assertEqual(bands["three"]["share_label"], "86%")
+        self.assertEqual(rows[0]["pct"], 50)
 
 
 class HeatTests(unittest.TestCase):
