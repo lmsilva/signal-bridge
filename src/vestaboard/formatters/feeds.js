@@ -1,5 +1,5 @@
 // Feeds family of board frames (03 §D): YouTube, The Upside, Wiki, Overhead,
-// and the gated trivia pair.
+// trivia, Flight Plan, Learn Japanese, and Quiet Hours Reminder.
 //
 // Trivia is the only formatter that refuses work. A question that cannot fit
 // a single frame is skipped rather than paged, because a multi-frame question
@@ -15,6 +15,7 @@ const {
   truncate,
   wrap,
   fold,
+  assertValidLayout,
   toNumber,
   formatWhole,
   formatCount,
@@ -28,15 +29,20 @@ const {
   chipCode,
   pageCounter,
   badgeFrame,
+  centered,
 } = require('../frames');
 
 const {
-  formatBoardFlightNumber,
-  formatBoardTime,
+  formatTrackerClock,
+  formatTrackerFlightNumber,
   resolveFlightStatus,
+  bestDepartureStamp,
+  bestArrivalStamp,
 } = require('../../flightplan-status');
 
 const { snapshotFrame, paginate, padRows } = require('./common');
+const { posLabel } = require('../../learn-japanese');
+const { layoutFor } = require('../../quiet-hours-reminder');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
@@ -430,36 +436,45 @@ function triviaFrames(payload = {}, ctx = {}) {
   return frames;
 }
 
-function flightPlanBoardLine(flight, { visitor = false, ctx = {} } = {}) {
-  const status = resolveFlightStatus(flight, ctx);
-  const airport = visitor
-    ? (flight.origin?.iata || flight.origin?.icao || '---')
-    : (flight.destination?.iata || flight.destination?.icao || '---');
-  // Scheduled departure (not arrival) — same column a real departures board uses.
-  const time = formatBoardTime(flight.scheduled?.departure);
-  const number = formatBoardFlightNumber(flight.airline, flight.number);
-  const code = String(status.boardCode || '--').slice(0, 4).padStart(4, ' ');
-  return `${time} ${number} ${String(airport || '---').slice(0, 3).padEnd(3, ' ')} ${code}`;
+const MAX_TRACKER_FRAMES = 4;
+
+function flightPlanIata(place) {
+  const code = fold(place?.iata || place?.icao || '');
+  if (code.length >= 3) return code.slice(0, 3);
+  return (code || '---').slice(0, 3).padEnd(3, '-');
 }
 
-function flightPlanBoardLegend(visitor = false) {
-  // 20-char column headers aligned with flightPlanBoardLine.
-  const place = visitor ? 'FRM' : 'TO ';
-  return `DEP  FLIGHT ${place} STAT`;
+function flightPlanBadgeRight(flight = {}, payload = {}, ctx = {}, page = 1, total = 1) {
+  let when = 'BOARD';
+  if (payload.mode === 'auto') when = 'UPDATE';
+  else if (flight.state === 'active') when = 'NOW';
+  else {
+    const stamp = flight.scheduled?.departure || flight.date;
+    if (stamp) {
+      const zone = ctx.timeZone || houseTimeZone(ctx.config);
+      const days = daysBetween(ctx.now || new Date(), stamp, zone);
+      if (days === 0) when = 'TODAY';
+      else if (days < 0) when = 'NOW';
+      else when = `D-${Math.min(999, days)}`;
+    }
+  }
+  const count = pageCounter(page, total);
+  if (!count) return when;
+  const combined = `${when} ${count}`;
+  return combined.length <= BODY_WIDTH ? combined : when;
 }
 
-function flightPlanBadgeRight(flights = [], payload = {}, ctx = {}) {
-  if (payload.mode === 'auto') return 'UPDATE';
-  const next = flights.find((row) => row.state === 'active') || flights[0];
-  if (!next) return 'BOARD';
-  if (next.state === 'active') return 'NOW';
-  const when = next.scheduled?.departure || next.date;
-  if (!when) return 'BOARD';
-  const zone = ctx.timeZone || houseTimeZone(ctx.config);
-  const days = daysBetween(ctx.now || new Date(), when, zone);
-  if (days === 0) return 'TODAY';
-  if (days < 0) return 'NOW';
-  return `D-${Math.min(999, days)}`;
+function flightPlanTripTitle(payload = {}) {
+  let name = fold(payload.trip?.name || '');
+  if (!name) {
+    return payload.mode === 'board' ? 'TRIP BOARD' : 'NEXT FLIGHT';
+  }
+  if (name.length > BADGE_TEXT_WIDTH) {
+    name = name.replace(/\b(TRIP|VACATION|VISIT|HOLIDAY)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || name;
+  }
+  return truncate(name, BADGE_TEXT_WIDTH);
 }
 
 function flightPlanAsOfLabel(payload = {}, ctx = {}) {
@@ -469,31 +484,139 @@ function flightPlanAsOfLabel(payload = {}, ctx = {}) {
   return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
 }
 
-function flightPlanBoardFrames(payload = {}, ctx = {}) {
-  const trip = payload.trip || {};
+function flightPlanStatusRow(headline, gate) {
+  if (headline && gate && headline.length + 1 + gate.length <= BODY_WIDTH) {
+    return { left: headline, right: gate };
+  }
+  return headline;
+}
+
+function flightPlanTrackerRows(flight = {}, payload = {}, ctx = {}, page = 1, total = 1) {
+  const status = resolveFlightStatus(flight, ctx);
+  const origin = flightPlanIata(flight.origin);
+  const dest = flightPlanIata(flight.destination);
+  const dep = formatTrackerClock(bestDepartureStamp(flight));
+  const arr = formatTrackerClock(bestArrivalStamp(flight));
+  const headline = fold(status.headline || 'ON TIME').slice(0, BODY_WIDTH);
+  const gate = fold(status.gateLine || '').slice(0, BODY_WIDTH);
+  const number = formatTrackerFlightNumber(flight.airline, flight.number) || 'FLIGHT';
+  return {
+    status,
+    rows: padRows([
+      { left: number, right: flightPlanBadgeRight(flight, payload, ctx, page, total) },
+      { left: `${origin} -`, right: dest },
+      { left: dep, right: arr },
+      flightPlanStatusRow(headline, gate),
+    ]),
+  };
+}
+
+function flightPlanTrackerCards(payload = {}) {
   const flights = Array.isArray(payload.flights) ? [...payload.flights] : [];
   if (!flights.length && payload.flight) flights.push(payload.flight);
-  if (!flights.length) return [];
+  if (payload.mode === 'board') {
+    return flights.slice(0, MAX_TRACKER_FRAMES).map((row) => (
+      payload.flight && payload.flight.id && payload.flight.id === row.id
+        ? { ...row, ...payload.flight }
+        : row
+    ));
+  }
+  return [payload.flight || flights[0]].filter(Boolean);
+}
 
-  const visitor = trip.kind === 'visitor';
-  // Legend takes one body row so the HHMM / airport / status columns are readable.
-  const lines = [
-    flightPlanBoardLegend(visitor),
-    ...flights.slice(0, 3).map((flight) => flightPlanBoardLine(flight, { visitor, ctx })),
-  ];
+function flightPlanBoardFrames(payload = {}, ctx = {}) {
+  const cards = flightPlanTrackerCards(payload);
+  if (!cards.length) return [];
 
-  const layout = badgeFrame({
-    color: payload.alert ? 'red' : 'blue',
-    title: truncate(fold(trip.name || 'FLIGHT PLAN'), BADGE_TEXT_WIDTH),
-    titleRight: flightPlanBadgeRight(flights, payload, ctx),
-    rows: padRows(lines),
-    footerLeft: 'AS OF',
-    footerRight: flightPlanAsOfLabel(payload, ctx),
+  const total = cards.length;
+  return cards.map((flight, index) => {
+    const { status, rows } = flightPlanTrackerRows(
+      flight, payload, ctx, index + 1, total,
+    );
+    const layout = badgeFrame({
+      color: payload.alert ? 'red' : (status.chip || 'blue'),
+      title: flightPlanTripTitle(payload),
+      rows,
+      footerLeft: 'AS OF',
+      footerRight: flightPlanAsOfLabel(payload, ctx),
+    });
+    return {
+      ...snapshotFrame(layout, 'Flight Plan', 'flightplan.flight'),
+      quietHoursExempt: false,
+    };
   });
-  return [{
-    ...snapshotFrame(layout, 'Flight Plan', 'flightplan.flight'),
-    quietHoursExempt: false,
-  }];
+}
+
+function flagChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[1] = chipCode('white');
+  row[COLS - 2] = chipCode('red');
+  row[COLS - 1] = chipCode('red');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Learn Japanese (marketplace Learn Spanish shape, hinomaru colours):
+ * white|red title chips, romaji word, part of speech, English gloss, JLPT footer.
+ */
+function learnJapaneseFrames(payload = {}) {
+  const word = payload.word || {};
+  const romaji = fold(word.romaji || '');
+  const english = fold(word.english || '');
+  if (!romaji || !english) {
+    return [];
+  }
+
+  const meaning = wrap(english, COLS).slice(0, 2);
+  const kind = fold(posLabel(word.pos) || word.pos || '');
+  const title = flagChipRow('LEARN JAPANESE');
+  const hero = centered(romaji, { from: 0, width: COLS });
+  const posRow = centered(kind, { from: 0, width: COLS });
+  const footer = flagChipRow(word.level || '');
+
+  const rows = meaning.length > 1
+    ? [
+      title,
+      hero,
+      posRow,
+      centered(meaning[0], { from: 0, width: COLS }),
+      centered(meaning[1], { from: 0, width: COLS }),
+      footer,
+    ]
+    : [
+      title,
+      blankRow(COLS),
+      hero,
+      posRow,
+      centered(meaning[0] || '', { from: 0, width: COLS }),
+      footer,
+    ];
+
+  return [snapshotFrame(
+    assertValidLayout(rows, 'learn japanese'),
+    'Learn Japanese',
+    'japanese.learn',
+  )];
+}
+
+/**
+ * Quiet Hours Reminder (marketplace night cards): moon / SHHH / stars, plus
+ * a few house extras. The variant is chosen before we get here.
+ */
+function quietHoursReminderFrames(payload = {}) {
+  const rows = layoutFor(payload);
+  if (!rows?.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'quiet hours reminder'),
+    'Quiet hours',
+    'quiet-hours.reminder',
+  )];
 }
 
 const FORMATTERS = {
@@ -503,6 +626,8 @@ const FORMATTERS = {
   'overhead.round': overheadFrames,
   'trivia.round': triviaFrames,
   'flightplan.flight': flightPlanBoardFrames,
+  'japanese.learn': learnJapaneseFrames,
+  'quiet-hours.reminder': quietHoursReminderFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -519,6 +644,8 @@ module.exports = {
   overheadFrames,
   triviaFrames,
   flightPlanBoardFrames,
+  learnJapaneseFrames,
+  quietHoursReminderFrames,
   triviaGate,
   youtubeStatsLine,
 };

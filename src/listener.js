@@ -20,8 +20,9 @@ const { formatError } = require('./error-format');
 const { createVoiceEventDedup } = require('./voice-event-dedup');
 const { needsSpokenResponseUpgrade, shouldMarkActivityProcessed } = require('./voice-event-gate');
 const { createVoiceQueryParser } = require('./voice-query-parser');
-const { extractWeatherLocation } = require('./weather-location');
+const { createLocaleSettings } = require('./locale-settings');
 const { fetchWeatherForecast, geocodeLocation } = require('./weather-fetch');
+const { extractWeatherLocation } = require('./weather-location');
 const { extractRouteLocations } = require('./route-query');
 const { fetchDrivingRoute, greatCircleEstimate } = require('./route-fetch');
 const { createEventsLog } = require('./events-log');
@@ -165,9 +166,12 @@ const PUSH_DOWN_POLL_MS = 15 * 1000;
 const HEALTH_LOG_MS = 5 * 60 * 1000;
 const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
-function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = null } = {}) {
+function createListener({
+  config, log, guestSnapsAuth = null, vestaboardHub = null, localeSettings = null,
+} = {}) {
   const alexa = new Alexa();
   // Shared with the web server when index.js injects one; otherwise local.
+  const houseLocale = localeSettings || createLocaleSettings(config, log);
   const snapsAuth = guestSnapsAuth || createGuestSnapsAuth(config, log);
   const legacyBroadcastLogPaths = [
     path.join(config.ROOT, 'broadcast.txt'),
@@ -1143,11 +1147,19 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
       payload = buildAirQualityPayload(event, config, { location, reading, monitors });
       pendingVoiceResponses.remember(event);
     } else if (event.kind === 'weather') {
-      const location = extractWeatherLocation(
+      let location = extractWeatherLocation(
         event.query,
         config.voiceEvents?.defaultLocation,
         event.spokenResponse,
       );
+      const housePin = houseLocale.weatherLocation();
+      if (
+        housePin
+        && location?.scope !== 'named'
+        && (location?.latitude == null || location?.longitude == null)
+      ) {
+        location = { ...location, ...housePin };
+      }
       let weather = null;
       if (voiceSettings.fetchWeather) {
         try {
@@ -1167,13 +1179,16 @@ function createListener({ config, log, guestSnapsAuth = null, vestaboardHub = nu
           log.warn('Weather fetch failed', error.message || error);
         }
       }
-      if (!weather && location?.scope === 'local') {
+      if (!weather) {
         const cached = loadWeatherCache(config);
         if (cached?.weather) {
           log.info('Weather unavailable, serving cached forecast', {
             cachedAt: cached.savedAt || null,
           });
           weather = cached.weather;
+          if (cached.location && (location?.latitude == null || location?.longitude == null)) {
+            location = { ...location, ...cached.location };
+          }
         }
       }
       payload = buildWeatherQueryPayload(event, config, {

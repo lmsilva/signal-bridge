@@ -20,6 +20,7 @@ const {
   fold,
   toNumber,
   formatWhole,
+  assertValidLayout,
 } = require('../encoder');
 
 const {
@@ -31,6 +32,7 @@ const {
   ALERT_DWELL_SECONDS,
   chipCode,
   lr,
+  centered,
   pageCounter,
   badgeFrame,
   borderFrame,
@@ -589,6 +591,102 @@ function weatherFrames(payload = {}, ctx = {}) {
   return [snapshotFrame(rows, 'Weather', 'weather.query')];
 }
 
+const WEEKLY_DAYS = 7;
+const WEEKLY_COL_WIDTH = 11;
+const WEEKLY_LEFT = 0;
+const WEEKLY_RIGHT = 11;
+
+/** Marketplace chips — sun orange, cloud yellow, rain blue, snow violet, storm red. */
+function weeklyConditionChip(condition) {
+  switch (String(condition || '').toLowerCase()) {
+    case 'sunny':
+    case 'clear':
+    case 'clear-night':
+      return 'orange';
+    case 'cloudy':
+    case 'partly-cloudy':
+    case 'overcast':
+      return 'yellow';
+    case 'rainy':
+      return 'blue';
+    case 'snowy':
+      return 'violet';
+    case 'stormy':
+      return 'red';
+    default:
+      return 'white';
+  }
+}
+
+function weeklyCityName(payload = {}) {
+  const loc = payload.location || {};
+  const city = fold(loc.city || '');
+  if (city) {
+    return city;
+  }
+  const label = fold(loc.label || loc.resolvedName || loc.name || '');
+  return label.split(',')[0].trim();
+}
+
+function weeklyChipRow(text, leftChips, rightChips) {
+  const row = blankRow(COLS);
+  const white = chipCode('white');
+  for (let i = 0; i < leftChips; i += 1) {
+    row[i] = white;
+  }
+  for (let i = 0; i < rightChips; i += 1) {
+    row[COLS - 1 - i] = white;
+  }
+  centered(fold(text), {
+    from: leftChips,
+    width: COLS - leftChips - rightChips,
+    row,
+  });
+  return row;
+}
+
+function placeWeeklyDay(row, day, start, unit) {
+  const weekday = fold(day.weekday || '').slice(0, 3);
+  if (weekday) {
+    placeText(row, weekday, start);
+  }
+  const temp = formatWhole(day.temp);
+  if (temp) {
+    const value = `${temp}${unit}`;
+    const codes = encodeText(value);
+    placeCodes(row, codes, start + WEEKLY_COL_WIDTH - 1 - codes.length);
+  }
+  row[start + WEEKLY_COL_WIDTH - 1] = chipCode(weeklyConditionChip(day.condition));
+}
+
+/**
+ * Vestaboard Weekly Weather Report: title + city, then two columns of
+ * `DAY    59F` + a condition chip. Today is top-left; days 1–4 down the
+ * left, 5–7 down the right, bottom-right empty.
+ */
+function weeklyWeatherFrames(payload = {}) {
+  const days = (payload.days || []).slice(0, WEEKLY_DAYS);
+  if (!days.length) {
+    return [];
+  }
+
+  const unit = String(payload.temperatureUnit || 'F').toUpperCase() === 'C' ? 'C' : 'F';
+  const body = [0, 1, 2, 3].map(() => blankRow(COLS));
+  days.forEach((day, index) => {
+    const col = index < 4 ? WEEKLY_LEFT : WEEKLY_RIGHT;
+    const row = index < 4 ? index : index - 4;
+    placeWeeklyDay(body[row], day, col, unit);
+  });
+
+  const layout = assertValidLayout([
+    weeklyChipRow(payload.title || 'WEATHER REPORT', 2, 2),
+    weeklyChipRow(weeklyCityName(payload), 1, 1),
+    ...body,
+  ], 'weekly weather');
+
+  return [snapshotFrame(layout, 'Weekly weather', 'weather.weekly')];
+}
+
 // ---------------------------------------------------------------------------
 // A9. Indoor temperature
 // ---------------------------------------------------------------------------
@@ -822,6 +920,7 @@ const FORMATTERS = {
   'reminder.fired': reminderFrames,
   'shopping-list.snapshot': shoppingListFrames,
   'weather.query': weatherFrames,
+  'weather.weekly': weeklyWeatherFrames,
   'indoor-temperature.query': indoorTemperatureFrames,
   'air-quality.query': airQualityFrames,
   'music.playing': musicFrames,
@@ -851,6 +950,7 @@ module.exports = {
   reminderFrames,
   shoppingListFrames,
   weatherFrames,
+  weeklyWeatherFrames,
   indoorTemperatureFrames,
   airQualityFrames,
   musicFrames,

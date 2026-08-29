@@ -24,7 +24,7 @@ const DEFAULTS = {
   rateWindowSeconds: 15,
   minRotationGapSeconds: 600,
   transitionStrategy: null,
-  quietHours: { start: '22:00', end: '07:00', enabled: true },
+  quietHours: { start: '22:00', end: '07:00', enabled: true, remindOnStart: true },
   events: 'all',
   tokenEnv: '',
 };
@@ -49,6 +49,7 @@ function normaliseQuietHours(value) {
     start: String(value.start || DEFAULTS.quietHours.start),
     end: String(value.end || DEFAULTS.quietHours.end),
     enabled: value.enabled !== false,
+    remindOnStart: value.remindOnStart !== false,
   };
 }
 

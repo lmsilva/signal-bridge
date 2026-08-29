@@ -15,6 +15,7 @@
  */
 
 const { estimateDuration: estimateOverheadDuration } = require('./overhead-settings');
+const { hasLocation } = require('./locale-settings');
 
 /**
  * @typedef {Object} CommandDescriptor
@@ -75,6 +76,9 @@ const BOARD_COMMAND_IDS = new Set([
   'youtube.now-playing',
   'youtube.last-played',
   'plex.now-playing',
+  'weather.weekly',
+  'japanese.learn',
+  'signal.quiet-hours',
 ]);
 
 function kindsOf(command) {
@@ -210,6 +214,35 @@ const COMMANDS = [
     supportsContentCheck: false,
     variableDuration: false,
     defaultDurationSeconds: 60,
+  },
+  {
+    id: 'weather.weekly',
+    title: 'Weekly Weather Report',
+    subtitle: 'Seven-day outlook on the board',
+    group: 'Alexa',
+    route: '/api/push/weekly-weather',
+    icon: 'weather',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 20,
+    kinds: ['vestaboard'],
+  },
+  {
+    id: 'signal.quiet-hours',
+    title: 'Quiet Hours Reminder',
+    subtitle: 'A night-sky card when the house goes quiet',
+    group: 'Alexa',
+    pushCategory: 'home',
+    route: '/api/push/quiet-hours-reminder',
+    icon: 'quiet-hours',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: false,
+    variableDuration: false,
+    defaultDurationSeconds: 20,
+    kinds: ['vestaboard'],
   },
   {
     id: 'alexa.shopping-list',
@@ -576,6 +609,20 @@ const COMMANDS = [
     defaultDurationSeconds: null,
   },
   {
+    id: 'japanese.learn',
+    title: 'Learn Japanese',
+    subtitle: 'A random word on the board',
+    group: 'Knowledge',
+    route: '/api/push/learn-japanese',
+    icon: 'japanese',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 20,
+    kinds: ['vestaboard'],
+  },
+  {
     id: 'overhead.show',
     title: 'Overhead',
     subtitle: 'Nearby aircraft on the scope',
@@ -741,6 +788,8 @@ function createCommandRegistry(deps = {}) {
     getOverheadStatus = null,
     getFlightplanStatus = null,
     getPlexStatus = null,
+    getLocaleSettings = null,
+    getLearnJapaneseStatus = null,
     getPhotoCount = null,
     getNotificationsCacheStatus = null,
     log = null,
@@ -831,6 +880,8 @@ function createCommandRegistry(deps = {}) {
     'flightplan.next': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
     'flightplan.board': () => Boolean(call(getFlightplanStatus)?.hasUpcomingFlight),
     'plex.now-playing': () => Boolean(call(getPlexStatus)?.hasContent),
+    'weather.weekly': () => hasLocation(call(getLocaleSettings) || {}),
+    'japanese.learn': () => Number(call(getLearnJapaneseStatus)?.available || 0) > 0,
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
     'alexa.notifications': () => Boolean(call(getNotificationsCacheStatus)?.hasContent),
   };

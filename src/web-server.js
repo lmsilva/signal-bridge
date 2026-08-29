@@ -31,6 +31,7 @@ const {
   buildWifiQrContent,
   buildPhotoSlideshowPayload,
   buildGuestPhotoboothPayload,
+  buildWeatherQueryPayload,
 } = require('./udp-payload');
 const {
   resolveGuestPhotoboothSettings,
@@ -118,6 +119,13 @@ const { createAutodartsService } = require('./autodarts-service');
 const { createHuupeService } = require('./huupe-service');
 const { createFlightplanService } = require('./flightplan-service');
 const { filterLegsByAirport } = require('./flightplan-api');
+const { createLocaleSettings } = require('./locale-settings');
+const { fetchWeatherForecast, resolveHouseLocale } = require('./weather-fetch');
+const { extractWeatherLocation } = require('./weather-location');
+const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
+const { buildWeeklyWeatherPayload } = require('./weekly-weather');
+const { createLearnJapanese } = require('./learn-japanese');
+const { createQuietHoursReminder } = require('./quiet-hours-reminder');
 
 const DEFAULT_PORT = 47810;
 const DEFAULT_HTTP_REDIRECT_PORT = 47811;
@@ -360,6 +368,7 @@ function createWebServer({
   vestaboardHub = null,
   scheduleRestart,
   webRoot,
+  localeSettings: localeSettingsInjected = null,
 } = {}) {
   let schedulerAir = null;
 
@@ -407,6 +416,12 @@ function createWebServer({
       });
   }
   const slideshowSettings = createSlideshowSettings(config, log);
+  const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
+  const learnJapanese = createLearnJapanese(config, log);
+  const quietHoursReminder = createQuietHoursReminder({
+    persistPath: config.quietHoursReminderPath
+      || path.join(config.ROOT || path.resolve(__dirname, '..'), 'data', 'quiet-hours-reminder.json'),
+  });
   const libraryTourSettings = libraryTourSettingsInjected || createLibraryTourSettings(config, log);
   const rollCreditsInstance = typeof rollCredits === 'function'
     ? rollCredits()
@@ -477,6 +492,8 @@ function createWebServer({
     getPlexStatus: () => getPlexStatus?.()
       || plexService()?.statusSnapshot?.()
       || null,
+    getLocaleSettings: () => localeSettings.get(),
+    getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getPhotoCount: () => qrImageCache.list().length,
     getNotificationsCacheStatus: () => ({
       hasContent: hasCachedNotification(loadNotificationsCache(config)),
@@ -1867,6 +1884,255 @@ function createWebServer({
     await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res);
   }
 
+  function handleLocaleSettingsGet(res) {
+    sendJson(res, 200, { ok: true, settings: localeSettings.get() });
+  }
+
+  async function handleLocaleSettingsPut(body, res) {
+    const city = String(body?.city ?? localeSettings.get().city ?? '').trim();
+    const postalCode = String(body?.postalCode ?? localeSettings.get().postalCode ?? '').trim();
+    const temperatureUnit = body?.temperatureUnit;
+    if (!city && !postalCode) {
+      sendJson(res, 400, { ok: false, error: 'Enter a city or ZIP code' });
+      return;
+    }
+    try {
+      const resolved = await resolveHouseLocale({ city, postalCode });
+      if (!resolved) {
+        sendJson(res, 400, { ok: false, error: 'Could not find that city or ZIP' });
+        return;
+      }
+      const settings = localeSettings.update({
+        ...resolved,
+        ...(temperatureUnit ? { temperatureUnit } : {}),
+      });
+      sendJson(res, 200, { ok: true, settings });
+    } catch (error) {
+      sendJson(res, 502, { ok: false, error: error?.message || 'Location lookup failed' });
+    }
+  }
+
+  async function handleWeeklyWeatherPush(body, res) {
+    const settings = localeSettings.get();
+    let location = localeSettings.weatherLocation();
+    if (!location) {
+      sendJson(res, 400, { ok: false, error: 'Set the house location under Settings → Global' });
+      return;
+    }
+    let weather = null;
+    try {
+      weather = await fetchWeatherForecast(location);
+    } catch (error) {
+      log.warn?.('Weekly weather fetch failed', error?.message || error);
+    }
+    if (!weather?.next7Days?.length) {
+      const cached = loadWeatherCache(config);
+      if (cached?.weather?.next7Days?.length) {
+        weather = cached.weather;
+        if (cached.location) {
+          location = { ...location, ...cached.location };
+        }
+      }
+    }
+    const payload = buildWeeklyWeatherPayload({
+      weather,
+      location: {
+        ...location,
+        city: settings.city || location.city || '',
+        label: settings.label || location.resolvedName || location.name,
+      },
+      temperatureUnit: settings.temperatureUnit,
+    });
+    if (!payload) {
+      sendJson(res, 502, { ok: false, error: 'Weather forecast is unavailable' });
+      return;
+    }
+    if (weather) {
+      saveWeatherCache(config, { location: weather.location || location, weather }, log);
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Weekly weather report', { targetId, days: payload.days.length });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleLearnJapaneseSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...learnJapanese.statusSnapshot() });
+  }
+
+  function handleLearnJapaneseSettingsPut(body, res) {
+    const settings = learnJapanese.updateSettings({
+      levels: body?.levels,
+      partsOfSpeech: body?.partsOfSpeech,
+    });
+    sendJson(res, 200, { ok: true, ...learnJapanese.statusSnapshot(), settings });
+  }
+
+  function handleLearnJapanesePush(body, res) {
+    const payload = learnJapanese.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Japanese words match the current filters — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Learn Japanese', {
+      targetId,
+      romaji: payload.word.romaji,
+      pos: payload.word.pos,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      word: payload.word,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleQuietHoursReminderPush(body, res) {
+    const boards = typeof vestaboardHub?.boards === 'function' ? vestaboardHub.boards() : [];
+    const board = boards.find((entry) => entry?.quietHours?.enabled !== false) || boards[0] || null;
+    const payload = typeof vestaboardHub?.nextQuietHoursPayload === 'function'
+      ? vestaboardHub.nextQuietHoursPayload({ quietHours: board?.quietHours })
+      : quietHoursReminder.nextPayload({ quietHours: board?.quietHours });
+    const targetId = plexTargetId(body);
+    const extra = { quietHoursExempt: true };
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Quiet hours reminder', { targetId, variant: payload.variant });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      variant: payload.variant,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  /**
+   * Weather Forecast used to go through the synthetic voice-query pipeline,
+   * which answered 202 before a forecast existed. A failed fetch (or a missing
+   * `extractWeatherLocation` import) then looked like a successful push while
+   * both the overlay and the board stayed blank. Build and deliver a real
+   * `weather.query` here, same as Weekly Weather.
+   */
+  async function handleWeatherForecastPush(body, res) {
+    const settings = localeSettings.get();
+    let location = localeSettings.weatherLocation();
+    if (!location) {
+      location = extractWeatherLocation(
+        'what is the weather',
+        config.voiceEvents?.defaultLocation,
+      );
+    }
+    let weather = null;
+    try {
+      weather = await fetchWeatherForecast(location);
+    } catch (error) {
+      log.warn?.('Weather forecast fetch failed', error?.message || error);
+    }
+    if (!weather?.current) {
+      const cached = loadWeatherCache(config);
+      if (cached?.weather?.current) {
+        weather = cached.weather;
+        if (cached.location) {
+          location = { ...(location || {}), ...cached.location };
+        }
+      }
+    }
+    if (!weather?.current) {
+      const hasPin = localeSettings.hasLocation()
+        || (config.voiceEvents?.defaultLocation?.latitude != null
+          && config.voiceEvents?.defaultLocation?.longitude != null);
+      sendJson(res, hasPin ? 502 : 400, {
+        ok: false,
+        error: hasPin
+          ? 'Weather forecast is unavailable'
+          : 'Set the house location under Settings → Global',
+      });
+      return;
+    }
+    if (weather) {
+      saveWeatherCache(config, { location: weather.location || location, weather }, log);
+    }
+    const payload = buildWeatherQueryPayload({
+      kind: 'weather',
+      device: deviceFrom(body),
+      query: 'what is the weather',
+      trigger: 'weather-query',
+      timestamp: Date.now(),
+      spokenResponse: null,
+    }, config, {
+      location: {
+        ...(weather.location || location || {}),
+        label: settings.label || location?.resolvedName || location?.name,
+      },
+      weather,
+    });
+    const targetId = targetIdFrom(body);
+    if (typeof displayRegistry?.resolveDelivery === 'function') {
+      const deliveryCheck = displayRegistry.resolveDelivery(targetId);
+      if (deliveryCheck.error && !deliveryCheck.isAll) {
+        sendJson(res, 404, { ok: false, error: deliveryCheck.error });
+        return;
+      }
+    }
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Weather forecast', {
+      targetId,
+      condition: weather.current?.condition || null,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   /**
    * Serve a cached thumbnail or avatar. Unauthenticated like the other image
    * routes so the display client can fetch without a session, and read-only
@@ -2069,7 +2335,7 @@ function createWebServer({
         case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
         case 'tesla.battery': handleTeslaPush('tesla-battery', body, res); break;
         case 'alexa.weather':
-          await handleVoiceQueryPush('weather', 'what is the weather', 'weather-query', body, res); break;
+          await handleWeatherForecastPush(body, res); break;
         case 'alexa.shopping-list':
           await handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res); break;
         case 'alexa.timers': handleTimersPush(body, res); break;
@@ -2113,6 +2379,12 @@ function createWebServer({
           await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
         case 'plex.now-playing':
           await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res); break;
+        case 'weather.weekly':
+          await handleWeeklyWeatherPush(body, res); break;
+        case 'japanese.learn':
+          handleLearnJapanesePush(body, res); break;
+        case 'signal.quiet-hours':
+          handleQuietHoursReminderPush(body, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
         case 'goodnews.show': handleUpsideNewsPush(body, res); break;
         case 'wiki.show': handleWikiPush(body, res); break;
@@ -4736,6 +5008,7 @@ function createWebServer({
           title: live.session?.title || live.lastPlayed?.title || null,
         };
       })(),
+      locale: localeSettings.get(),
       displays: {
         count: displayRegistry?.list?.()?.length || 0,
         online: (displayRegistry?.list?.() || []).filter((d) => !d.stale).length,
@@ -5146,6 +5419,16 @@ function createWebServer({
           handlePlexSettingsGet(res);
           return;
         }
+        if (pathname === '/api/locale/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleLocaleSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/learn-japanese/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleLearnJapaneseSettingsGet(res);
+          return;
+        }
         if (pathname.startsWith('/api/flightplan/')) {
           if (!requireAdminSession(req, res)) return;
           await handleFlightplanApi('GET', pathname, null, res, reqUrl.searchParams);
@@ -5475,7 +5758,7 @@ function createWebServer({
             handleTeslaPush('tesla-battery', body, res);
             return;
           case '/api/push/weather':
-            handleVoiceQueryPush('weather', 'what is the weather', 'weather-query', body, res);
+            await handleWeatherForecastPush(body, res);
             return;
           case '/api/push/shopping-list':
             handleVoiceQueryPush('shopping-list', 'show my shopping list', 'shopping-list-show', body, res);
@@ -5642,6 +5925,21 @@ function createWebServer({
             return;
           case '/api/plex/preview':
             await handlePlexPreview(body, res);
+            return;
+          case '/api/locale/settings':
+            await handleLocaleSettingsPut(body, res);
+            return;
+          case '/api/push/weekly-weather':
+            await handleWeeklyWeatherPush(body, res);
+            return;
+          case '/api/push/learn-japanese':
+            handleLearnJapanesePush(body, res);
+            return;
+          case '/api/push/quiet-hours-reminder':
+            handleQuietHoursReminderPush(body, res);
+            return;
+          case '/api/learn-japanese/settings':
+            handleLearnJapaneseSettingsPut(body, res);
             return;
           case '/api/push/trivia':
             handleTriviaPush(body, res);

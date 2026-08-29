@@ -89,6 +89,8 @@ function legSummary(row, ctx = {}) {
     },
     durationMinutes: progress.durationMinutes,
     departsInMinutes: progress.departsInMinutes,
+    remainingMinutes: progress.remainingMinutes,
+    latest: row.latest || null,
   };
 }
 

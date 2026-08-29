@@ -1016,24 +1016,111 @@ test('qr image route 404s for unknown or expired tokens', async () => {
   }
 });
 
-test('weather and shopping-list quick-push tiles feed synthetic events into the voice pipeline', async () => {
+test('shopping-list quick-push tiles feed synthetic events into the voice pipeline', async () => {
   const { webServer, base, recorded } = await startTestServer();
   try {
-    const weather = await postJson(base, '/api/push/weather');
-    assert.equal(weather.status, 202);
-    assert.equal(weather.body.ok, true);
-    assert.equal(weather.body.kind, 'weather');
-
     const shopping = await postJson(base, '/api/push/shopping-list', { device: 'iPhone' });
     assert.equal(shopping.status, 202);
 
-    assert.equal(recorded.length, 2);
-    assert.equal(recorded[0].kind, 'weather');
-    assert.equal(recorded[0].trigger, 'weather-query');
-    assert.equal(recorded[0].device, 'Signal');
-    assert.equal(recorded[1].kind, 'shopping-list');
-    assert.equal(recorded[1].trigger, 'shopping-list-show');
-    assert.equal(recorded[1].device, 'iPhone');
+    assert.equal(recorded.length, 1);
+    assert.equal(recorded[0].kind, 'shopping-list');
+    assert.equal(recorded[0].trigger, 'shopping-list-show');
+    assert.equal(recorded[0].device, 'iPhone');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('weather forecast push needs a house pin or a cached forecast', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const weather = await postJson(base, '/api/push/weather');
+    assert.equal(weather.status, 400);
+    assert.match(weather.body.error, /Settings → Global/);
+    assert.equal(sent.length, 0);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('weather forecast push delivers weather.query from the cache', async () => {
+  const { saveWeatherCache } = require('../src/weather-cache');
+  const config = makeConfig();
+  saveWeatherCache(config, {
+    location: { latitude: 40.41, longitude: -111.85, name: 'Lehi' },
+    weather: {
+      current: { temperatureF: 93, condition: 'sunny' },
+      next7Days: [{ date: '2026-08-28', highF: 96, lowF: 66, condition: 'sunny' }],
+    },
+  });
+  const { webServer, base, sent, recorded } = await startTestServer({ config });
+  try {
+    const weather = await postJson(base, '/api/push/weather');
+    assert.equal(weather.status, 200);
+    assert.equal(weather.body.ok, true);
+    assert.equal(weather.body.type, 'weather.query');
+    assert.equal(recorded.length, 0);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'weather.query');
+    assert.equal(sent[0].weather.current.temperatureF, 93);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('learn japanese push delivers a romaji word to the Vestaboard', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const settings = await getJson(base, '/api/learn-japanese/settings');
+    assert.equal(settings.status, 200);
+    assert.ok(settings.body.available > 0);
+
+    const pushed = await postJson(base, '/api/push/learn-japanese');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'japanese.learn');
+    assert.ok(pushed.body.word.romaji);
+    assert.ok(pushed.body.word.english);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'japanese.learn');
+
+    const empty = await postJson(base, '/api/learn-japanese/settings', {
+      partsOfSpeech: ['other'],
+    });
+    assert.equal(empty.status, 200);
+    assert.equal(empty.body.available, 0);
+    const refused = await postJson(base, '/api/push/learn-japanese');
+    assert.equal(refused.status, 409);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('quiet hours reminder push delivers a random night card to the Vestaboard', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const pushed = await postJson(base, '/api/push/quiet-hours-reminder');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'quiet-hours.reminder');
+    assert.match(String(pushed.body.variant || ''), /./);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'quiet-hours.reminder');
+    assert.equal(sent[0].variant, pushed.body.variant);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('weekly weather push needs a house pin from Settings → Global', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const locale = await getJson(base, '/api/locale/settings');
+    assert.equal(locale.status, 200);
+    assert.equal(locale.body.ok, true);
+    assert.equal(locale.body.settings.latitude, null);
+
+    const push = await postJson(base, '/api/push/weekly-weather');
+    assert.equal(push.status, 400);
+    assert.match(push.body.error, /Settings → Global/);
   } finally {
     webServer.stop();
   }
@@ -1104,6 +1191,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'trivia-settings-card',
     'upside-news-settings-card',
     'plex-settings-card',
+    'locale-settings-card',
   ]) {
     assert.match(
       css,
@@ -1125,10 +1213,20 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="settings-view-tabs"/);
   assert.match(html, /id="settings-search"/);
   assert.match(html, /id="settings-search-clear"/);
-  for (const view of ['accounts', 'youtube', 'games', 'news', 'travel', 'media']) {
+  for (const view of ['global', 'accounts', 'youtube', 'games', 'news', 'travel', 'media']) {
     assert.match(html, new RegExp(`data-settings-view="${view}"`));
     assert.match(html, new RegExp(`data-settings-group="${view}"`));
   }
+  assert.match(js, /SETTINGS_VIEW_ORDER = \['global'/);
+  assert.match(html, /id="locale-settings-card"/);
+  assert.match(html, /id="btn-locale-save"/);
+  assert.match(js, /\/api\/locale\/settings/);
+  assert.match(html, /id="learn-japanese-settings-card"/);
+  assert.match(js, /\/api\/learn-japanese\/settings/);
+  assert.match(html, /styles\.css\?v=signal118/);
+  assert.match(html, /app\.js\?v=signal118/);
+  assert.match(html, /id="vb-form-quiet-remind"/);
+  assert.match(js, /quiet-hours/);
   assert.match(js, /function showSettingsView/);
   assert.match(js, /function applySettingsFilter/);
   assert.match(js, /SETTINGS_VIEW_KEY/);

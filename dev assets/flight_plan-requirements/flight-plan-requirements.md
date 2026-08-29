@@ -24,7 +24,8 @@ The bridge then:
   something important changes,
 - draws a live flight tracker on the full display while a flight is in
   the air,
-- shows an old-school split-flap departure board on the Vestaboard.
+- shows a Vestaboard Flight Tracker card (one flight per frame: route,
+  both clocks, status, gate) on Next Flight and Trip Board.
 
 This is not the same thing as the existing Overhead panel. Overhead shows
 aircraft near the house. Flight Plan shows flights he cares about,
@@ -379,8 +380,8 @@ display time.
 
 ## 13. The screens
 
-Full layout, colour rules, the status vocabulary, the board grid and the
-three board frames are specified in `flight-plan-display-design.md`.
+Full layout, colour rules, the status vocabulary, the tracker card and the
+Next Flight / Trip Board / alert frames are specified in `flight-plan-display-design.md`.
 
 Two things from that document are load-bearing here, so they are repeated:
 

@@ -225,3 +225,142 @@ test('geocode and forecast fetch timeouts stay tight for voice overlays', () => 
   assert.equal(GEOCODE_FETCH_TIMEOUT_MS, 6000);
   assert.equal(DEFAULT_FETCH_TIMEOUT_MS, 8000);
 });
+
+test('geocodePostalCode resolves a US ZIP via Zippopotam', async () => {
+  const { geocodePostalCode } = require('../src/weather-fetch');
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    assert.match(String(url), /zippopotam\.us\/us\/84043/);
+    return {
+      ok: true,
+      async json() {
+        return {
+          places: [{
+            'place name': 'Lehi',
+            'state abbreviation': 'UT',
+            latitude: '40.4131',
+            longitude: '-111.8553',
+          }],
+        };
+      },
+    };
+  };
+  try {
+    const hit = await geocodePostalCode('84043-1234');
+    assert.equal(hit.city, 'Lehi');
+    assert.equal(hit.region, 'UT');
+    assert.equal(hit.postalCode, '84043');
+    assert.equal(hit.latitude, 40.4131);
+    assert.equal(hit.resolvedName, 'Lehi, UT');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('geocodePostalCode falls back to Open-Meteo when Zippopotam fails', async () => {
+  const { geocodePostalCode } = require('../src/weather-fetch');
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    const text = String(url);
+    if (text.includes('zippopotam')) {
+      return { ok: false, status: 404, async json() { return {}; } };
+    }
+    return {
+      ok: true,
+      async json() {
+        return {
+          results: [{
+            name: 'Lehi',
+            admin1: 'Utah',
+            country_code: 'US',
+            latitude: 40.39,
+            longitude: -111.85,
+            timezone: 'America/Denver',
+          }],
+        };
+      },
+    };
+  };
+  try {
+    const hit = await geocodePostalCode('84043');
+    assert.equal(hit.latitude, 40.39);
+    assert.equal(hit.postalCode, '84043');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('lookupTimeZone reads the IANA zone from Open-Meteo auto', async () => {
+  const { lookupTimeZone } = require('../src/weather-fetch');
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    assert.match(String(url), /timezone=auto/);
+    return {
+      ok: true,
+      async json() {
+        return { timezone: 'America/Denver' };
+      },
+    };
+  };
+  try {
+    assert.equal(await lookupTimeZone(40.41, -111.85), 'America/Denver');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('resolveHouseLocale prefers ZIP coordinates and a city label', async () => {
+  const { resolveHouseLocale } = require('../src/weather-fetch');
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    const text = String(url);
+    if (text.includes('zippopotam.us/us/84043')) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            places: [{
+              'place name': 'Lehi',
+              'state abbreviation': 'UT',
+              latitude: '40.4131',
+              longitude: '-111.8553',
+            }],
+          };
+        },
+      };
+    }
+    if (text.includes('geocoding-api.open-meteo.com')) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            results: [{
+              name: 'Lehi',
+              admin1: 'Utah',
+              country_code: 'US',
+              latitude: 40.39,
+              longitude: -111.85,
+              timezone: 'America/Denver',
+            }],
+          };
+        },
+      };
+    }
+    return {
+      ok: true,
+      async json() {
+        return { timezone: 'America/Denver' };
+      },
+    };
+  };
+  try {
+    const hit = await resolveHouseLocale({ city: 'Lehi, UT', postalCode: '84043' });
+    assert.equal(hit.latitude, 40.4131, 'ZIP wins the pin');
+    assert.equal(hit.postalCode, '84043');
+    assert.match(hit.label, /Lehi/);
+    assert.equal(hit.timeZone, 'America/Denver');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+

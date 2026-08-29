@@ -313,3 +313,149 @@ test('a missing booth host is not rendered as localhost', () => {
   assert.equal(signal.boothHost('https://127.0.1.10:47810/'), '127.0.1.10:47810');
   assert.equal(signal.boothHost('https://192.168.1.10:47810/'), '192.168.1.10:47810');
 });
+
+const FLIGHT_PLAN_CTX = { timeZone: 'America/Denver', now: new Date('2026-08-26T18:00:00Z') };
+
+test('next flight is a Flight Tracker card: trip name, route, both clocks, status, gate', () => {
+  const frames = feeds.flightPlanBoardFrames({
+    type: 'flightplan.flight',
+    mode: 'next',
+    asOf: '2026-08-26T18:00:00Z',
+    trip: { name: 'Japan 2027', kind: 'ours' },
+    flight: {
+      airline: 'DL',
+      number: 'DL167',
+      origin: { iata: 'SEA' },
+      destination: { iata: 'HND' },
+      scheduled: {
+        departure: '2026-08-26T13:45:00-06:00',
+        arrival: '2026-08-27T16:40:00+09:00',
+      },
+      state: 'upcoming',
+      latest: { departure: { gate: 'B14' } },
+    },
+  }, FLIGHT_PLAN_CTX);
+
+  assert.equal(frames.length, 1);
+  assertLayout(frames[0].rows, [
+    'gg JAPAN 2027       gg',
+    ' DL 167         TODAY',
+    ' SEA -            HND',
+    ' 1:45P          4:40P',
+    ' ON TIME     GATE B14',
+    'gg AS OF      12:00 gg',
+  ], 'next flight tracker');
+});
+
+test('a delayed flight uses estimated time, orange chips, and DELAYED 25 MIN', () => {
+  const frames = feeds.flightPlanBoardFrames({
+    type: 'flightplan.flight',
+    mode: 'next',
+    asOf: '2026-08-26T18:00:00Z',
+    flight: {
+      airline: 'UA',
+      number: '1234',
+      origin: { iata: 'SLC' },
+      destination: { iata: 'NRT' },
+      scheduled: {
+        departure: '2026-08-26T10:00:00-06:00',
+        arrival: '2026-08-27T13:20:00+09:00',
+      },
+      state: 'upcoming',
+      latest: {
+        status: 'Delayed',
+        departure: {
+          gate: 'A5',
+          scheduledTime: { local: '2026-08-26T10:00:00-06:00' },
+          revisedTime: { local: '2026-08-26T10:25:00-06:00' },
+        },
+      },
+    },
+  }, FLIGHT_PLAN_CTX);
+
+  assertLayout(frames[0].rows, [
+    'oo NEXT FLIGHT      oo',
+    ' UA 1234        TODAY',
+    ' SLC -            NRT',
+    ' 10:25A         1:20P',
+    ' DELAYED 25 MIN',
+    'oo AS OF      12:00 oo',
+  ], 'delayed flight tracker');
+});
+
+test('an airborne flight reads IN FLIGHT with blue chips', () => {
+  const frames = feeds.flightPlanBoardFrames({
+    type: 'flightplan.flight',
+    mode: 'next',
+    asOf: '2026-08-26T18:00:00Z',
+    flight: {
+      airline: 'DL',
+      number: '167',
+      origin: { iata: 'SEA' },
+      destination: { iata: 'HND' },
+      scheduled: {
+        departure: '2026-08-26T10:00:00-06:00',
+        arrival: '2026-08-27T14:00:00+09:00',
+      },
+      state: 'active',
+      latest: { status: 'En-Route' },
+    },
+  }, FLIGHT_PLAN_CTX);
+
+  assertLayout(frames[0].rows, [
+    'bb NEXT FLIGHT      bb',
+    ' DL 167           NOW',
+    ' SEA -            HND',
+    ' 10:00A         2:00P',
+    ' IN FLIGHT',
+    'bb AS OF      12:00 bb',
+  ], 'airborne flight tracker');
+});
+
+test('a trip board pages one tracker card per flight', () => {
+  const frames = feeds.flightPlanBoardFrames({
+    type: 'flightplan.flight',
+    mode: 'board',
+    asOf: '2026-08-26T18:00:00Z',
+    trip: { name: 'Japan 2027' },
+    flights: [{
+      airline: 'DL',
+      number: '167',
+      origin: { iata: 'SEA' },
+      destination: { iata: 'HND' },
+      scheduled: {
+        departure: '2026-08-26T13:45:00-06:00',
+        arrival: '2026-08-27T16:40:00+09:00',
+      },
+      state: 'upcoming',
+    }, {
+      airline: 'DL',
+      number: '168',
+      origin: { iata: 'HND' },
+      destination: { iata: 'SEA' },
+      scheduled: {
+        departure: '2026-08-30T11:00:00+09:00',
+        arrival: '2026-08-30T05:30:00-07:00',
+      },
+      state: 'upcoming',
+    }],
+  }, FLIGHT_PLAN_CTX);
+
+  assert.equal(frames.length, 2);
+  assertLayout(frames[0].rows, [
+    'gg JAPAN 2027       gg',
+    ' DL 167     TODAY 1/2',
+    ' SEA -            HND',
+    ' 1:45P          4:40P',
+    ' ON TIME',
+    'gg AS OF      12:00 gg',
+  ], 'trip board page 1');
+  assertLayout(frames[1].rows, [
+    'gg JAPAN 2027       gg',
+    ' DL 168       D-3 2/2',
+    ' HND -            SEA',
+    ' 11:00A         5:30A',
+    ' ON TIME',
+    'gg AS OF      12:00 gg',
+  ], 'trip board page 2');
+});

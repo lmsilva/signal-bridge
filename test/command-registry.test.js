@@ -190,6 +190,12 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('alexa.weather', 'all'), true);
   assert.equal(supportsKind('plex.now-playing', 'vestaboard'), true);
   assert.equal(supportsKind('plex.now-playing', 'full'), false);
+  assert.equal(supportsKind('weather.weekly', 'vestaboard'), true);
+  assert.equal(supportsKind('weather.weekly', 'full'), false);
+  assert.equal(supportsKind('japanese.learn', 'vestaboard'), true);
+  assert.equal(supportsKind('japanese.learn', 'full'), false);
+  assert.equal(supportsKind('signal.quiet-hours', 'vestaboard'), true);
+  assert.equal(supportsKind('signal.quiet-hours', 'full'), false);
 });
 
 test('every board-capable command has a Vestaboard formatter', () => {
@@ -243,6 +249,61 @@ test('psn.now-playing has content only while a session is live', () => {
   assert.equal(registry.hasContent('psn.now-playing'), false);
   status = { session: { titleId: 'PPSA01668', suppressed: false } };
   assert.equal(registry.hasContent('psn.now-playing'), true);
+});
+
+test('weather.weekly is Vestaboard-only and needs a house pin', () => {
+  const weekly = COMMANDS.find((command) => command.id === 'weather.weekly');
+  assert.ok(weekly);
+  assert.ok(weekly.pushable);
+  assert.ok(weekly.schedulable);
+  assert.equal(weekly.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(weekly), ['vestaboard']);
+  assert.equal(pushCategoryOf(weekly), 'home');
+  assert.equal(weekly.route, '/api/push/weekly-weather');
+  assert.equal(weekly.defaultDurationSeconds, 20);
+
+  let locale = null;
+  const registry = createCommandRegistry({ getLocaleSettings: () => locale });
+  assert.equal(registry.hasContent('weather.weekly'), false);
+
+  locale = { latitude: 40.41, longitude: -111.85 };
+  assert.equal(registry.hasContent('weather.weekly'), true);
+
+  locale = { latitude: null, longitude: -111.85 };
+  assert.equal(registry.hasContent('weather.weekly'), false);
+});
+
+test('japanese.learn is Vestaboard-only and needs a matching word', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'japanese.learn');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/learn-japanese');
+  assert.equal(command.defaultDurationSeconds, 20);
+
+  const empty = createCommandRegistry({ getLearnJapaneseStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('japanese.learn'), false);
+
+  const ready = createCommandRegistry({ getLearnJapaneseStatus: () => ({ available: 80 }) });
+  assert.equal(ready.hasContent('japanese.learn'), true);
+});
+
+test('signal.quiet-hours is Vestaboard-only and always has content', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'signal.quiet-hours');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, false);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'home');
+  assert.equal(command.route, '/api/push/quiet-hours-reminder');
+  assert.equal(command.defaultDurationSeconds, 20);
+
+  const registry = createCommandRegistry();
+  assert.equal(registry.hasContent('signal.quiet-hours'), true);
 });
 
 test('plex.now-playing has content when a session or last-played exists', () => {

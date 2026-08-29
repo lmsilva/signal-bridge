@@ -59,6 +59,9 @@ const COMMAND_TO_TYPE = {
   'plex.last-played': 'plex.now-playing',
   'flightplan.next': 'flightplan.flight',
   'flightplan.board': 'flightplan.flight',
+  'weather.weekly': 'weather.weekly',
+  'japanese.learn': 'japanese.learn',
+  'signal.quiet-hours': 'quiet-hours.reminder',
 };
 
 function typeOf(payload, commandId) {

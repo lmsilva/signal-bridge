@@ -15,6 +15,7 @@ const { createQueue } = require('./queue');
 const { identityFrame } = require('./formatters/signal');
 const { routeEvent } = require('./router');
 const { houseTimeZone } = require('./clock');
+const { createQuietHoursReminder, createQuietHoursWatch } = require('../quiet-hours-reminder');
 
 const REAL_BOARD_PORT = 7000;
 
@@ -24,6 +25,8 @@ function createVestaboardHub({
   simulator = null,
   settings: injectedSettings = null,
   now = () => Date.now(),
+  setTimer = setInterval,
+  clearTimer = clearInterval,
 } = {}) {
   const settings = injectedSettings || createVestaboardSettings({ config, log });
   const runtimePath = config.vestaboardRuntimePath
@@ -329,6 +332,22 @@ function createVestaboardHub({
       : { ok: true, queued: true, state: entry.queue.state() };
   }
 
+  const quietHoursReminder = createQuietHoursReminder({
+    persistPath: config.quietHoursReminderPath
+      || path.join(config.ROOT || path.resolve(__dirname, '..', '..'), 'data', 'quiet-hours-reminder.json'),
+  });
+
+  const quietHoursWatch = createQuietHoursWatch({
+    reminder: quietHoursReminder,
+    getBoards: () => [...boards.values()].map((entry) => entry.board),
+    pushEvent,
+    timeZone: () => houseTimeZone(config),
+    now,
+    setTimer,
+    clearTimer,
+    log,
+  });
+
   const unwatchSettings = settings.onChange(() => {
     if (started) {
       sync();
@@ -348,10 +367,17 @@ function createVestaboardHub({
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    nextQuietHoursPayload(options = {}) {
+      return quietHoursReminder.nextPayload(options);
+    },
+    tickQuietHoursReminder(at) {
+      return quietHoursWatch.tick(at);
+    },
     async start() {
       await adoptSimulator();
       started = true;
       sync();
+      quietHoursWatch.start();
       // Recreate / restart forgets the in-memory queue clock. The simulator
       // still knows when it last flipped, so honour that before the first tick.
       if (simulator?.snapshot) {
@@ -364,6 +390,7 @@ function createVestaboardHub({
     },
     stop() {
       started = false;
+      quietHoursWatch.stop();
       unwatchSettings();
       for (const entry of boards.values()) {
         teardown(entry);
