@@ -107,16 +107,19 @@ function parseSessions(body) {
   return metadata.map(parseSession).filter(Boolean);
 }
 
-async function fetchSessions({
-  serverUrl,
+/**
+ * One authenticated GET against any Plex host — the local server or a cloud
+ * provider such as discover.provider.plex.tv. Returns the parsed body and
+ * classifies failures the same way `fetchSessions` does.
+ */
+async function fetchPlexJson(url, {
   token,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   fetchImpl = globalThis.fetch,
   version = bridgeVersion(),
 } = {}) {
-  const base = normaliseServerUrl(serverUrl);
-  if (!base) {
-    throw plexError('Plex server URL is empty', { kind: 'config' });
+  if (!String(url || '').trim()) {
+    throw plexError('Plex request URL is empty', { kind: 'config' });
   }
   if (!String(token || '').trim()) {
     throw plexError('Plex token is empty', { kind: 'auth', status: 401 });
@@ -125,7 +128,7 @@ async function fetchSessions({
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(sessionsUrl(base), {
+    const response = await fetchImpl(url, {
       method: 'GET',
       headers: plexHeaders(token, { version }),
       signal: controller.signal,
@@ -145,7 +148,7 @@ async function fetchSessions({
         kind: classifyStatus(response.status),
       });
     }
-    return parseSessions(data);
+    return data;
   } catch (error) {
     if (error?.kind) {
       throw error;
@@ -159,6 +162,23 @@ async function fetchSessions({
   }
 }
 
+async function fetchSessions({
+  serverUrl,
+  token,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  fetchImpl = globalThis.fetch,
+  version = bridgeVersion(),
+} = {}) {
+  const base = normaliseServerUrl(serverUrl);
+  if (!base) {
+    throw plexError('Plex server URL is empty', { kind: 'config' });
+  }
+  const data = await fetchPlexJson(sessionsUrl(base), {
+    token, timeoutMs, fetchImpl, version,
+  });
+  return parseSessions(data);
+}
+
 module.exports = {
   DEFAULT_TIMEOUT_MS,
   PRODUCT,
@@ -169,5 +189,8 @@ module.exports = {
   plexHeaders,
   parseSession,
   parseSessions,
+  fetchPlexJson,
   fetchSessions,
+  plexError,
+  asArray,
 };

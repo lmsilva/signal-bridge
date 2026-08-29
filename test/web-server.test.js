@@ -1112,6 +1112,29 @@ test('learn japanese push delivers a romaji word to the Vestaboard', async () =>
   }
 });
 
+test('learn spanish push delivers a shipped word and keeps japanese.learn separate', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const settings = await getJson(base, '/api/learn-spanish/settings');
+    assert.equal(settings.status, 200);
+    assert.ok(settings.body.available > 200);
+    assert.equal(settings.body.language, 'spanish');
+
+    const pushed = await postJson(base, '/api/push/learn-spanish');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'spanish.learn');
+    assert.ok(pushed.body.word.word);
+    assert.ok(pushed.body.word.english);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'spanish.learn');
+
+    const japanese = await getJson(base, '/api/learn-japanese/settings');
+    assert.equal(japanese.body.available > 0, true);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('chuck norris push delivers a board-fit fact and settings can add one', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1268,6 +1291,89 @@ test('on this day push delivers a history fact and settings can add one', async 
   } finally {
     webServer.stop();
   }
+});
+
+test('calendar clock push delivers a monthly grid and settings can change week start', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const status = await getJson(base, '/api/calendar-clock/settings');
+    assert.equal(status.status, 200);
+    assert.equal(status.body.settings.weekStartsOn, 'sunday');
+    assert.equal(status.body.payload?.type, 'calendar.clock');
+    assert.ok(status.body.payload?.cells?.length >= 28);
+    assert.match(String(status.body.payload?.weekdayName || ''), /DAY$/);
+
+    const pushed = await postJson(base, '/api/push/calendar-clock');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'calendar.clock');
+    assert.match(String(pushed.body.weekdayName || ''), /DAY$/);
+    assert.match(String(pushed.body.timeLabel || ''), /AM|PM/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'calendar.clock');
+    assert.ok(Array.isArray(sent[0].cells));
+
+    const saved = await postJson(base, '/api/calendar-clock/settings', {
+      weekStartsOn: 'monday',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.weekStartsOn, 'monday');
+    assert.equal(saved.body.payload.weekStartsOn, 'monday');
+
+    const reset = await postJson(base, '/api/calendar-clock/settings', { reset: true });
+    assert.equal(reset.status, 200);
+    assert.equal(reset.body.settings.weekStartsOn, 'sunday');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('plex top 10 settings round-trip and the push needs a linked Plex', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const status = await getJson(base, '/api/plex-top10/settings');
+    assert.equal(status.status, 200);
+    assert.equal(status.body.settings.source, 'library');
+    assert.deepEqual(status.body.settings.genres, []);
+    assert.deepEqual(status.body.genres, []);
+    assert.equal(status.body.linked, false);
+
+    const saved = await postJson(base, '/api/plex-top10/settings', {
+      source: 'global',
+      genres: ['Action', 'Comedy'],
+      cacheMinutes: 60,
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.source, 'global');
+    assert.deepEqual(saved.body.settings.genres, ['Action', 'Comedy']);
+    assert.equal(saved.body.settings.cacheMinutes, 60);
+
+    // No token on the test rig, so the board must refuse rather than flip a
+    // half-built chart — and nothing may reach the display.
+    const pushed = await postJson(base, '/api/push/plex-top10');
+    assert.equal(pushed.status, 409);
+    assert.match(String(pushed.body.error || ''), /not linked/i);
+    assert.equal(sent.length, 0);
+
+    const reset = await postJson(base, '/api/plex-top10/settings', { reset: true });
+    assert.equal(reset.status, 200);
+    assert.equal(reset.body.settings.source, 'library');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('admin Settings has a Plex Top 10 card under Media with a genre picker', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+
+  assert.match(html, /id="plex-top10-settings-card"[^>]*data-settings-group="media"/);
+  assert.match(html, /data-plex-top10-source="library"/);
+  assert.match(html, /data-plex-top10-source="global"/);
+  assert.match(html, /id="plex-top10-genres"/);
+  assert.match(js, /\/api\/plex-top10\/settings/);
+  assert.match(js, /\/api\/push\/plex-top10/);
+  // The board is two frames of five, so the Media pane gained a tile.
+  assert.match(html, /id="push-row-media"[^>]*data-push-category="media"[\s\S]{0,120}data-skeleton-count="5"/);
 });
 
 test('world population push delivers an estimate and settings can retune the model', async () => {
@@ -1730,6 +1836,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'plex-settings-card',
     'locale-settings-card',
     'learn-japanese-settings-card',
+    'learn-language-settings-card',
   ]) {
     assert.match(
       css,
@@ -1753,7 +1860,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="settings-search-clear"/);
   assert.match(html, /id="settings-kind-filter"/);
   assert.match(html, /Applies to/);
-  for (const view of ['global', 'accounts', 'youtube', 'games', 'news', 'travel', 'media']) {
+  for (const view of ['global', 'accounts', 'youtube', 'games', 'news', 'language', 'travel', 'media']) {
     assert.match(html, new RegExp(`data-settings-view="${view}"`));
     assert.match(html, new RegExp(`data-settings-group="${view}"`));
   }
@@ -1763,10 +1870,15 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/locale\/settings/);
   assert.match(html, /id="learn-japanese-settings-card"/);
   assert.match(html, /id="btn-learn-japanese-push"/);
+  assert.match(html, /id="learn-spanish-settings-card"/);
+  assert.match(html, /id="btn-learn-portuguese-push"/);
+  assert.match(html, /data-settings-group="language"/);
   assert.match(js, /\/api\/learn-japanese\/settings/);
   assert.match(js, /\/api\/push\/learn-japanese/);
-  assert.match(html, /styles\.css\?v=signal155/);
-  assert.match(html, /app\.js\?v=signal155/);
+  assert.match(js, /\/api\/learn-\$\{language\}\/settings/);
+  assert.match(js, /\/api\/push\/learn-\$\{language\}/);
+  assert.match(html, /styles\.css\?v=signal158/);
+  assert.match(html, /app\.js\?v=signal158/);
   assert.doesNotMatch(html, /document\.write/);
   assert.match(js, /function confirmCorpusRemove\(/);
   assert.match(js, /data-cn-remove/);
@@ -1833,6 +1945,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="locale-currency"/);
   assert.match(html, /id="world-population-settings-card"/);
   assert.match(html, /id="btn-world-population-push"/);
+  assert.match(html, /id="calendar-clock-settings-card"/);
+  assert.match(html, /id="btn-calendar-clock-push"/);
+  assert.match(html, /id="calendar-clock-week-start"/);
   assert.match(html, /id="weather-alerts-settings-card"/);
   assert.match(html, /id="btn-weather-alerts-push"/);
   assert.match(js, /quiet-hours/);
@@ -1863,6 +1978,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/starlink-tracker/);
   assert.match(js, /\/api\/world-population\/settings/);
   assert.match(js, /\/api\/push\/world-population/);
+  assert.match(js, /\/api\/calendar-clock\/settings/);
+  assert.match(js, /\/api\/push\/calendar-clock/);
   assert.match(js, /\/api\/weather-alerts\/settings/);
   assert.match(js, /\/api\/push\/weather-alerts/);
   assert.match(css, /\.conversation-starters-settings-card/);
@@ -1876,6 +1993,11 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.iss-tracker-settings-card/);
   assert.match(css, /\.starlink-tracker-settings-card/);
   assert.match(css, /\.world-population-settings-card/);
+  assert.match(css, /\.calendar-clock-settings-card/);
+  assert.match(css, /\.is-chip-violet/);
+  assert.match(css, /\.is-chip-blue/);
+  assert.match(css, /\.is-chip-orange/);
+  assert.match(css, /\.is-chip-yellow/);
   assert.match(css, /\.weather-alerts-settings-card/);
   assert.match(js, /function showSettingsView/);
   assert.match(js, /function applySettingsFilter/);
@@ -2111,7 +2233,7 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   assert.match(html, /push-card-skeleton/);
   // Skeletons reserve exactly the height the pane will need, so nothing
   // shuffles as the tiles land.
-  for (const category of ['home', 'games', 'media', 'news', 'travel', 'share']) {
+  for (const category of ['home', 'games', 'media', 'news', 'language', 'travel', 'share']) {
     const count = COMMANDS.filter(
       (c) => c.pushable && pushCategoryOf(c) === category,
     ).length;

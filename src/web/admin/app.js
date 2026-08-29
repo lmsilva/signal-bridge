@@ -835,9 +835,15 @@
     'locale-settings-card': ['full', 'vestaboard'],
     'weather-alerts-settings-card': ['vestaboard'],
     'world-population-settings-card': ['vestaboard'],
+    'calendar-clock-settings-card': ['vestaboard'],
     'youtube-settings-card': ['full'],
     'upside-news-settings-card': ['full', 'vestaboard'],
     'learn-japanese-settings-card': ['vestaboard'],
+    'learn-portuguese-settings-card': ['vestaboard'],
+    'learn-spanish-settings-card': ['vestaboard'],
+    'learn-french-settings-card': ['vestaboard'],
+    'learn-german-settings-card': ['vestaboard'],
+    'learn-italian-settings-card': ['vestaboard'],
     'chuck-norris-settings-card': ['vestaboard'],
     'amazing-facts-settings-card': ['vestaboard'],
     'world-geography-facts-settings-card': ['vestaboard'],
@@ -847,6 +853,7 @@
     'baking-inspiration-settings-card': ['vestaboard'],
     'stock-market-settings-card': ['vestaboard'],
     'currency-rates-settings-card': ['vestaboard'],
+    'plex-top10-settings-card': ['vestaboard'],
     'wiki-ck-settings-card': ['full', 'vestaboard'],
     'starlink-tracker-settings-card': ['vestaboard'],
     'iss-tracker-settings-card': ['vestaboard'],
@@ -924,7 +931,7 @@
 
   const SETTINGS_VIEW_KEY = 'signal.settingsView';
   const SETTINGS_SEARCH_KEY = 'signal.settingsSearch';
-  const SETTINGS_VIEW_ORDER = ['global', 'accounts', 'youtube', 'games', 'news', 'travel', 'media'];
+  const SETTINGS_VIEW_ORDER = ['global', 'accounts', 'youtube', 'games', 'news', 'language', 'travel', 'media'];
   const SETTINGS_VIEWS = new Set(SETTINGS_VIEW_ORDER);
 
   function currentSettingsView() {
@@ -1077,7 +1084,7 @@
   // that step aside when nothing in them matches. Categories come from the
   // command registry (`pushCategory`), so a new tile lands in a pane on its own.
   const PUSH_VIEW_LEGACY_KEY = 'signal.pushView';
-  const PUSH_VIEW_ORDER = ['home', 'games', 'media', 'news', 'travel', 'share'];
+  const PUSH_VIEW_ORDER = ['home', 'games', 'media', 'news', 'language', 'travel', 'share'];
   const PUSH_VIEWS = new Set(PUSH_VIEW_ORDER);
   // In-memory only: bottom tabs never reload the page, so this survives Push ↔
   // Settings hops. A fresh admin load (including after login) always opens Home.
@@ -1489,6 +1496,11 @@
     news: '<path d="M4 5.5h12.5A2.5 2.5 0 0 1 19 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M8 9h6M8 12h6M8 15h3.5"/><path d="M19 10.5h1.5A1.5 1.5 0 0 1 22 12v5.5A1.5 1.5 0 0 1 20.5 19H19"/>',
     wiki: '<path d="M5 4.5h8a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2v-13Z"/><path d="M9 4.5V3h6v1.5"/><path d="M8 10h6M8 13.5h4"/>',
     japanese: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/>',
+    portuguese: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 12h18"/><circle cx="9" cy="12" r="3"/>',
+    spanish: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18"/>',
+    french: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 5v14M15 5v14"/>',
+    german: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9.7h18M3 14.3h18"/>',
+    italian: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 5v14M15 5v14"/>',
     chuck: '<circle cx="12" cy="8.5" r="3.2"/><path d="M7 20c.6-3.2 2.6-5 5-5s4.4 1.8 5 5"/><path d="M5 10.5c2-.8 4-.8 7-.8s5 0 7 .8"/><path d="M8.2 13.2 6.5 15M15.8 13.2 17.5 15"/>',
     amazing: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="m8.5 4.5 1 1.5M15.5 4.5l-1 1.5M5.5 9l1.5.8M18.5 9l-1.5.8"/>',
     talk: '<path d="M5 6.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H10l-3.5 3v-3H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"/><path d="M14 9.5h5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-1v2l-2.5-2"/>',
@@ -1498,6 +1510,7 @@
     stocks: '<path d="M4 18V6M4 18h16"/><path d="m7 14 3-4 3 2 4-6"/>',
     currency: '<circle cx="12" cy="12" r="9"/><path d="M12 6v12M9.5 9.5c.6-1 1.6-1.5 2.5-1.5 1.4 0 2.5.9 2.5 2s-1.1 2-2.5 2h-1c-1.4 0-2.5.9-2.5 2s1.1 2 2.5 2c.9 0 1.9-.5 2.5-1.5"/>',
     world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 3.2 2.8 14.8 0 18M12 3c-2.8 3.2-2.8 14.8 0 18"/><path d="M5.5 7.5c2 .8 4 .8 6.5.8s4.5 0 6.5-.8M5.5 16.5c2-.8 4-.8 6.5-.8s4.5 0 6.5.8"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/>',
     'quiet-hours': '<path d="M14.5 4.5A7.5 7.5 0 1 0 19.5 16 6.2 6.2 0 0 1 14.5 4.5Z"/><path d="M16.2 6.2 17 4.4M18.4 8.8l1.6-.6M19.2 12l1.8.2"/>',
     sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
     iss: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M3 12h4M17 12h4M12 3v4M12 17v4"/><path d="M7.5 7.5l2 2M14.5 14.5l2 2M16.5 7.5l-2 2M9.5 14.5l-2 2"/>',
@@ -5629,6 +5642,156 @@
     loadWorldPopulationSettings();
   }, 5000);
 
+  // ------------------------------------------- Settings → Calendar Clock
+
+  const CALENDAR_CLOCK_CHIP_COLORS = new Set([
+    'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white',
+  ]);
+
+  function calendarClockWeekStart() {
+    const active = document.querySelector('#calendar-clock-week-start .segmented-btn.active');
+    return active?.dataset?.weekStart === 'monday' ? 'monday' : 'sunday';
+  }
+
+  function setCalendarClockWeekStart(value) {
+    const want = value === 'monday' ? 'monday' : 'sunday';
+    document.querySelectorAll('#calendar-clock-week-start .segmented-btn').forEach((btn) => {
+      const on = btn.dataset.weekStart === want;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function placeCalendarClockText(grid, text, row, startCol) {
+    const body = String(text || '').toUpperCase();
+    for (let i = 0; i < body.length; i += 1) {
+      const col = startCol + i;
+      if (col < 0 || col >= 22 || !grid[row]) {
+        continue;
+      }
+      grid[row][col].text = body[i] === ' ' ? '' : body[i];
+    }
+  }
+
+  function renderCalendarClockPreview(payload = {}) {
+    const host = $('calendar-clock-preview');
+    if (!host) {
+      return;
+    }
+    const grid = [0, 1, 2, 3, 4, 5].map(() => (
+      Array.from({ length: 22 }, () => ({ text: '', chip: '' }))
+    ));
+    const dayRow0 = payload.showHeader ? 1 : 0;
+    if (payload.showHeader && payload.header) {
+      placeCalendarClockText(grid, payload.header, 0, 0);
+    }
+    const monthChip = String(payload.theme?.month || '').toLowerCase();
+    const todayChip = String(payload.theme?.today || '').toLowerCase();
+    for (const cell of payload.cells || []) {
+      const row = dayRow0 + Number(cell.row);
+      const col = Number(cell.col);
+      if (!grid[row] || col < 0 || col >= 7) {
+        continue;
+      }
+      const color = cell.today ? todayChip : monthChip;
+      grid[row][col].chip = CALENDAR_CLOCK_CHIP_COLORS.has(color) ? color : '';
+    }
+    placeCalendarClockText(grid, payload.weekdayName, 1, 8);
+    placeCalendarClockText(grid, `${payload.monthName || ''}  ${payload.day ?? ''}`.trim(), 2, 8);
+    placeCalendarClockText(grid, payload.timeLabel, 4, 8);
+    host.innerHTML = grid.map((row) => (
+      `<div class="cn-preview-row">${row.map((cell) => {
+        const cls = cell.chip ? ` is-chip-${cell.chip}` : '';
+        return `<span class="${cls.trim()}">${escapeHtml(cell.chip ? '' : cell.text)}</span>`;
+      }).join('')}</div>`
+    )).join('');
+  }
+
+  function renderCalendarClockSettings(data = {}) {
+    const settings = data.settings || {};
+    const payload = data.payload || {};
+    setCalendarClockWeekStart(settings.weekStartsOn);
+    const pill = $('calendar-clock-status-pill');
+    const detail = $('calendar-clock-status-detail');
+    if (pill) {
+      const ready = Boolean(payload.monthName && payload.timeLabel);
+      pill.textContent = ready ? 'Ready' : '…';
+      pill.className = `status-pill ${ready ? 'is-ok' : ''}`;
+    }
+    if (detail) {
+      if (payload.weekdayName && payload.monthName) {
+        const header = payload.showHeader ? 'Weekday letters on row 1' : 'Six-week month — no header';
+        detail.textContent = `${payload.weekdayName} ${payload.monthName} ${payload.day} · ${payload.timeLabel} · ${header}`;
+      } else {
+        detail.textContent = 'Monthly calendar chips plus the house clock. Weekday letters appear only when the month fits in five rows.';
+      }
+    }
+    renderCalendarClockPreview(payload);
+  }
+
+  async function loadCalendarClockSettings() {
+    try {
+      const data = await apiGet('/api/calendar-clock/settings');
+      renderCalendarClockSettings(data);
+    } catch {
+      renderCalendarClockSettings({});
+    }
+  }
+
+  async function saveCalendarClockWeekStart(weekStartsOn) {
+    setCalendarClockWeekStart(weekStartsOn);
+    try {
+      const result = await apiPost('/api/calendar-clock/settings', { weekStartsOn });
+      renderCalendarClockSettings(result);
+    } catch (error) {
+      toast(error?.message || 'Could not save Calendar Clock settings', 'bad');
+      loadCalendarClockSettings();
+    }
+  }
+
+  $('calendar-clock-week-start')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-week-start]');
+    if (!btn) return;
+    saveCalendarClockWeekStart(btn.dataset.weekStart);
+  });
+
+  $('btn-calendar-clock-reset')?.addEventListener('click', async () => {
+    const button = $('btn-calendar-clock-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/calendar-clock/settings', { reset: true });
+      renderCalendarClockSettings(result);
+      toast('Calendar Clock defaults restored', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset Calendar Clock', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-calendar-clock-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/calendar-clock', withTarget());
+      const label = [result.weekdayName, result.monthName, result.day].filter(Boolean).join(' ');
+      toast(label || result.timeLabel || 'Calendar Clock on the board', 'good');
+    } catch (error) {
+      toast(error?.message || 'Calendar Clock push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadCalendarClockSettings();
+  window.setInterval(() => {
+    if (document.hidden) return;
+    if (!$('calendar-clock-settings-card')) return;
+    const view = typeof currentSettingsView === 'function' ? currentSettingsView() : 'global';
+    if (view !== 'global' && view !== 'all') return;
+    loadCalendarClockSettings();
+  }, 15000);
+
   // ------------------------------------------- Settings → Learn Japanese
 
   function collectLearnJapaneseList(attr) {
@@ -5711,6 +5874,207 @@
   });
 
   loadLearnJapaneseSettings();
+
+  // ------------------------------------------- Settings → Learn {Language}
+
+  function bindLearnLanguageCard(language, title) {
+    const card = $(`learn-${language}-settings-card`);
+    if (!card) return;
+
+    function collect(attr) {
+      return [...card.querySelectorAll(`[${attr}]:checked`)].map((input) => input.getAttribute(attr));
+    }
+
+    function setList(attr, values) {
+      const want = new Set(values || []);
+      card.querySelectorAll(`[${attr}]`).forEach((input) => {
+        input.checked = want.has(input.getAttribute(attr));
+      });
+    }
+
+    function render(status = {}) {
+      const settings = status.settings || {};
+      setList('data-learn-language-level', settings.levels || ['A1', 'A2']);
+      setList('data-learn-language-pos', settings.partsOfSpeech || []);
+      const pill = $(`learn-${language}-status-pill`);
+      const detail = $(`learn-${language}-status-detail`);
+      const hint = $(`learn-${language}-pool-hint`);
+      const available = Number(status.available || 0);
+      const total = Number(status.total || 0);
+      if (pill) {
+        pill.textContent = available ? `${available} words` : 'Empty';
+        pill.className = `status-pill ${available ? 'is-ok' : 'is-warn'}`;
+      }
+      if (detail && available) {
+        detail.textContent = `${available} of ${total} shipped words match the filters.`;
+      }
+      if (hint) {
+        hint.textContent = total
+          ? `Shipped A1/A2 list: ${total} words.`
+          : 'No lexicon loaded.';
+      }
+    }
+
+    async function load() {
+      try {
+        render(await apiGet(`/api/learn-${language}/settings`));
+      } catch {
+        render({});
+      }
+    }
+
+    async function save() {
+      try {
+        const result = await apiPost(`/api/learn-${language}/settings`, {
+          levels: collect('data-learn-language-level'),
+          partsOfSpeech: collect('data-learn-language-pos'),
+        });
+        render(result);
+      } catch (error) {
+        toast(error.message || `Could not save ${title} settings`, 'bad');
+      }
+    }
+
+    card.addEventListener('change', (event) => {
+      if (!event.target.closest('[data-learn-language-level], [data-learn-language-pos]')) {
+        return;
+      }
+      save();
+    });
+
+    $(`btn-learn-${language}-push`)?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await apiPost(`/api/push/learn-${language}`, withTarget());
+        toast(`${title}: ${result.word?.word || 'word'}`, 'good');
+      } catch (error) {
+        toast(error?.message || `Could not push ${title}`, 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    load();
+  }
+
+  bindLearnLanguageCard('portuguese', 'Learn Portuguese');
+  bindLearnLanguageCard('spanish', 'Learn Spanish');
+  bindLearnLanguageCard('french', 'Learn French');
+  bindLearnLanguageCard('german', 'Learn German');
+  bindLearnLanguageCard('italian', 'Learn Italian');
+
+  // ------------------------------------------- Settings → Plex Top 10 Movies
+
+  (function bindPlexTop10Card() {
+    const card = $('plex-top10-settings-card');
+    if (!card) return;
+
+    const genreBox = $('plex-top10-genres');
+    let source = 'library';
+
+    function renderGenres(all = [], picked = []) {
+      if (!genreBox) return;
+      const want = new Set((picked || []).map((name) => String(name).toLowerCase()));
+      genreBox.innerHTML = '';
+      for (const name of all) {
+        const label = document.createElement('label');
+        label.className = 'trivia-check';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.setAttribute('data-plex-top10-genre', name);
+        input.checked = want.has(String(name).toLowerCase());
+        const span = document.createElement('span');
+        span.textContent = name;
+        label.append(input, span);
+        genreBox.append(label);
+      }
+    }
+
+    function pickedGenres() {
+      return [...card.querySelectorAll('[data-plex-top10-genre]:checked')]
+        .map((input) => input.getAttribute('data-plex-top10-genre'));
+    }
+
+    function render(status = {}) {
+      const settings = status.settings || {};
+      source = settings.source === 'global' ? 'global' : 'library';
+      card.querySelectorAll('[data-plex-top10-source]').forEach((button) => {
+        button.classList.toggle('active', button.getAttribute('data-plex-top10-source') === source);
+      });
+      const cache = $('plex-top10-cache');
+      if (cache) cache.value = settings.cacheMinutes ?? 180;
+      renderGenres(status.genres || [], settings.genres || []);
+
+      const pill = $('plex-top10-status-pill');
+      const detail = $('plex-top10-status-detail');
+      const hint = $('plex-top10-genre-hint');
+      if (pill) {
+        pill.textContent = status.linked ? 'Linked' : 'No token';
+        pill.className = `status-pill ${status.linked ? 'is-ok' : 'is-warn'}`;
+      }
+      if (detail) {
+        detail.textContent = status.linked
+          ? (source === 'global'
+            ? 'Ranking what is popular across Plex.'
+            : 'Ranking your own library by play count.')
+          : 'Save a Plex token under Feature Presentation first.';
+      }
+      if (hint) {
+        const count = (status.genres || []).length;
+        hint.textContent = count
+          ? `${count} genres in your movie library.`
+          : 'Genres load once Plex is reachable.';
+      }
+    }
+
+    async function load() {
+      try {
+        render(await apiGet('/api/plex-top10/settings'));
+      } catch {
+        render({});
+      }
+    }
+
+    async function save() {
+      try {
+        render(await apiPost('/api/plex-top10/settings', {
+          source,
+          genres: pickedGenres(),
+          cacheMinutes: Number($('plex-top10-cache')?.value ?? 180),
+        }));
+        toast('Plex Top 10 settings saved', 'good');
+      } catch (error) {
+        toast(error?.message || 'Could not save Plex Top 10 settings', 'bad');
+      }
+    }
+
+    card.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-plex-top10-source]');
+      if (!button) return;
+      source = button.getAttribute('data-plex-top10-source');
+      card.querySelectorAll('[data-plex-top10-source]').forEach((entry) => {
+        entry.classList.toggle('active', entry === button);
+      });
+    });
+
+    $('btn-plex-top10-save')?.addEventListener('click', save);
+
+    $('btn-plex-top10-push')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await apiPost('/api/push/plex-top10', withTarget({ refresh: true }));
+        toast(`Plex Top 10: ${result.movies?.length || 0} movies`, 'good');
+      } catch (error) {
+        toast(error?.message || 'Could not push Plex Top 10', 'bad');
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    load();
+  }());
 
   // ------------------------------------------- Settings → Chuck Norris
 

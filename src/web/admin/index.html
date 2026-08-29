@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal155">
+  <link rel="stylesheet" href="styles.css?v=signal158">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -105,6 +105,10 @@
             <span class="push-view-label">News</span>
             <span class="push-hit-count" hidden>0</span>
           </button>
+          <button type="button" class="segmented-btn" data-push-view="language" role="tab" aria-selected="false">
+            <span class="push-view-label">Language</span>
+            <span class="push-hit-count" hidden>0</span>
+          </button>
           <button type="button" class="segmented-btn" data-push-view="travel" role="tab" aria-selected="false">
             <span class="push-view-label">Travel</span>
             <span class="push-hit-count" hidden>0</span>
@@ -143,13 +147,19 @@
         <div class="push-block" data-push-group="media">
           <div class="section-label">Now playing</div>
           <div class="card-row card-row-quad" id="push-row-media" data-push-category="media"
-               data-skeleton-count="4" aria-busy="true"></div>
+               data-skeleton-count="5" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="13" aria-busy="true"></div>
+               data-skeleton-count="12" aria-busy="true"></div>
+        </div>
+
+        <div class="push-block" data-push-group="language">
+          <div class="section-label">Word of the flip</div>
+          <div class="card-row card-row-quad" id="push-row-language" data-push-category="language"
+               data-skeleton-count="6" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="travel">
@@ -749,6 +759,10 @@
             <span class="settings-view-label">News</span>
             <span class="settings-hit-count" hidden>0</span>
           </button>
+          <button type="button" class="segmented-btn" data-settings-view="language" role="tab" aria-selected="false">
+            <span class="settings-view-label">Language</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
           <button type="button" class="segmented-btn" data-settings-view="travel" role="tab" aria-selected="false">
             <span class="settings-view-label">Travel</span>
             <span class="settings-hit-count" hidden>0</span>
@@ -849,6 +863,36 @@
               <p class="hint" id="weather-alerts-hint" style="margin-top:12px">
                 Alerts come from api.weather.gov for U.S. coordinates. Outside the U.S. the board shows a coverage notice.
               </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card calendar-clock-settings-card" id="calendar-clock-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Calendar Clock</div>
+            <span class="status-pill" id="calendar-clock-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="calendar-clock-status-detail">
+            Monthly calendar chips plus the house clock. Weekday letters appear only when the month fits in five rows.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Week starts on</label>
+              <div class="segmented" id="calendar-clock-week-start" role="group" aria-label="First day of the week">
+                <button type="button" class="segmented-btn active" data-week-start="sunday" aria-pressed="true">Sunday</button>
+                <button type="button" class="segmented-btn" data-week-start="monday" aria-pressed="false">Monday</button>
+              </div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-outline" id="btn-calendar-clock-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-calendar-clock-push">Push Now</button>
+              </div>
+              <p class="hint" id="calendar-clock-hint" style="margin-top:12px">
+                Each month has its own chip colour; today is the contrasting square. The house timezone sets the date and clock.
+              </p>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Board preview</label>
+              <div class="cn-preview" id="calendar-clock-preview" aria-hidden="true"></div>
             </div>
           </div>
         </div>
@@ -1141,8 +1185,8 @@
           </div>
         </div>
 
-        <div class="section-label" data-settings-group="news">Learn Japanese</div>
-        <div class="card learn-japanese-settings-card" id="learn-japanese-settings-card" data-settings-group="news">
+        <div class="section-label" data-settings-group="language">Learn Japanese</div>
+        <div class="card learn-japanese-settings-card" id="learn-japanese-settings-card" data-settings-group="language">
           <div class="auth-head">
             <div class="auth-name">Word of the flip</div>
             <span class="status-pill" id="learn-japanese-status-pill">…</span>
@@ -1175,6 +1219,186 @@
               <p class="hint" id="learn-japanese-pool-hint">Loading…</p>
               <p class="hint">White and red chips follow the Japanese flag. Vestaboard only.</p>
               <button type="button" class="btn btn-accent btn-block" id="btn-learn-japanese-push">Push Random Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="language">Learn Portuguese</div>
+        <div class="card learn-language-settings-card" id="learn-portuguese-settings-card" data-settings-group="language" data-learn-language="portuguese">
+          <div class="auth-head">
+            <div class="auth-name">Word of the flip</div>
+            <span class="status-pill" id="learn-portuguese-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="learn-portuguese-status-detail">
+            A random European Portuguese word from the shipped A1/A2 list — no network.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">CEFR levels</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A1" checked><span>A1</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A2" checked><span>A2</span></label>
+              </div>
+              <label class="field-label field-label-spaced">Parts of speech</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="noun" checked><span>Noun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="verb" checked><span>Verb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adj" checked><span>Adjective</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adverb" checked><span>Adverb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="phrase" checked><span>Phrase</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="pronoun" checked><span>Pronoun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="other" checked><span>Other</span></label>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Pool</label>
+              <p class="hint" id="learn-portuguese-pool-hint">Loading…</p>
+              <p class="hint">Green and red chips follow the Portuguese flag. Vestaboard only.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-learn-portuguese-push">Push Random Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="language">Learn Spanish</div>
+        <div class="card learn-language-settings-card" id="learn-spanish-settings-card" data-settings-group="language" data-learn-language="spanish">
+          <div class="auth-head">
+            <div class="auth-name">Word of the flip</div>
+            <span class="status-pill" id="learn-spanish-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="learn-spanish-status-detail">
+            A random Spanish word from the shipped A1/A2 list — no network.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">CEFR levels</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A1" checked><span>A1</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A2" checked><span>A2</span></label>
+              </div>
+              <label class="field-label field-label-spaced">Parts of speech</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="noun" checked><span>Noun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="verb" checked><span>Verb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adj" checked><span>Adjective</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adverb" checked><span>Adverb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="phrase" checked><span>Phrase</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="pronoun" checked><span>Pronoun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="other" checked><span>Other</span></label>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Pool</label>
+              <p class="hint" id="learn-spanish-pool-hint">Loading…</p>
+              <p class="hint">Red and yellow chips follow the Spanish flag. Vestaboard only.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-learn-spanish-push">Push Random Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="language">Learn French</div>
+        <div class="card learn-language-settings-card" id="learn-french-settings-card" data-settings-group="language" data-learn-language="french">
+          <div class="auth-head">
+            <div class="auth-name">Word of the flip</div>
+            <span class="status-pill" id="learn-french-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="learn-french-status-detail">
+            A random French word from the shipped A1/A2 list — no network.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">CEFR levels</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A1" checked><span>A1</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A2" checked><span>A2</span></label>
+              </div>
+              <label class="field-label field-label-spaced">Parts of speech</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="noun" checked><span>Noun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="verb" checked><span>Verb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adj" checked><span>Adjective</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adverb" checked><span>Adverb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="phrase" checked><span>Phrase</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="pronoun" checked><span>Pronoun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="other" checked><span>Other</span></label>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Pool</label>
+              <p class="hint" id="learn-french-pool-hint">Loading…</p>
+              <p class="hint">Blue and red chips follow the French flag. Vestaboard only.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-learn-french-push">Push Random Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="language">Learn German</div>
+        <div class="card learn-language-settings-card" id="learn-german-settings-card" data-settings-group="language" data-learn-language="german">
+          <div class="auth-head">
+            <div class="auth-name">Word of the flip</div>
+            <span class="status-pill" id="learn-german-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="learn-german-status-detail">
+            A random German word from the shipped A1/A2 list — no network.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">CEFR levels</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A1" checked><span>A1</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A2" checked><span>A2</span></label>
+              </div>
+              <label class="field-label field-label-spaced">Parts of speech</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="noun" checked><span>Noun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="verb" checked><span>Verb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adj" checked><span>Adjective</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adverb" checked><span>Adverb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="phrase" checked><span>Phrase</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="pronoun" checked><span>Pronoun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="other" checked><span>Other</span></label>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Pool</label>
+              <p class="hint" id="learn-german-pool-hint">Loading…</p>
+              <p class="hint">Yellow and red chips follow the German flag. Vestaboard only.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-learn-german-push">Push Random Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="language">Learn Italian</div>
+        <div class="card learn-language-settings-card" id="learn-italian-settings-card" data-settings-group="language" data-learn-language="italian">
+          <div class="auth-head">
+            <div class="auth-name">Word of the flip</div>
+            <span class="status-pill" id="learn-italian-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="learn-italian-status-detail">
+            A random Italian word from the shipped A1/A2 list — no network.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">CEFR levels</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A1" checked><span>A1</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-level="A2" checked><span>A2</span></label>
+              </div>
+              <label class="field-label field-label-spaced">Parts of speech</label>
+              <div class="trivia-check-row">
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="noun" checked><span>Noun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="verb" checked><span>Verb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adj" checked><span>Adjective</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="adverb" checked><span>Adverb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="phrase" checked><span>Phrase</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="pronoun" checked><span>Pronoun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-language-pos="other" checked><span>Other</span></label>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Pool</label>
+              <p class="hint" id="learn-italian-pool-hint">Loading…</p>
+              <p class="hint">Green and white chips follow the Italian flag. Vestaboard only.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-learn-italian-push">Push Random Word</button>
             </div>
           </div>
         </div>
@@ -2034,6 +2258,38 @@
               <label class="field-label field-label-spaced">Preview</label>
               <p class="hint plex-preview-hint">Queue the auto frame (now playing, or last played) on a chosen Vestaboard.</p>
               <button type="button" class="btn btn-outline" id="btn-plex-preview">Preview on board</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="media">Plex Top 10 Movies</div>
+        <div class="card plex-top10-settings-card" id="plex-top10-settings-card" data-settings-group="media">
+          <div class="auth-head">
+            <div class="auth-name">Top 10 Movies</div>
+            <span class="status-pill" id="plex-top10-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="plex-top10-status-detail">Loading…</p>
+
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Chart</label>
+              <div class="segmented" id="plex-top10-source-tabs">
+                <button type="button" class="segmented-btn active" data-plex-top10-source="library">My library</button>
+                <button type="button" class="segmented-btn" data-plex-top10-source="global">Across the world</button>
+              </div>
+              <p class="hint">My library ranks your own server by play count. Across the world asks Plex Discover what is popular on the platform.</p>
+              <label class="field-label field-label-spaced" for="plex-top10-cache">Re-ask Plex at most every (minutes)</label>
+              <input type="number" id="plex-top10-cache" class="field-input" min="0" max="1440" step="15" value="180">
+              <p class="hint">Uses the same server URL and token as Feature Presentation above.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-plex-top10-save" style="margin-top:10px">Save settings</button>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Genres</label>
+              <p class="hint">Leave everything unticked to use all genres.</p>
+              <div class="trivia-check-row" id="plex-top10-genres"></div>
+              <p class="hint" id="plex-top10-genre-hint">Loading…</p>
+              <p class="hint">Ten movies, five to a frame, in Plex yellow. Vestaboard only.</p>
+              <button type="button" class="btn btn-outline btn-block" id="btn-plex-top10-push" style="margin-top:10px">Push Top 10</button>
             </div>
           </div>
         </div>
@@ -2938,6 +3194,6 @@
        grid is static data, so it must not wait on /api/commands. -->
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
-  <script src="app.js?v=signal155"></script>
+  <script src="app.js?v=signal158"></script>
 </body>
 </html>

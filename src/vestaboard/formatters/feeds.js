@@ -1,7 +1,8 @@
 // Feeds family of board frames (03 §D): YouTube, The Upside, Wiki, Overhead,
-// trivia, Flight Plan, Learn Japanese, Quiet Hours Reminder, Chuck Norris,
+// trivia, Flight Plan, Learn Japanese and the European Learn {Language}
+// boards, Quiet Hours Reminder, Chuck Norris,
 // Amazing Facts, Conversation Starters, Stoic Quotes, On This Day, Baking
-// Inspiration, and World Population Tracker.
+// Inspiration, World Population Tracker, and Calendar Clock.
 //
 // Trivia is the only formatter that refuses work. A question that cannot fit
 // a single frame is skipped rather than paged, because a multi-frame question
@@ -44,8 +45,10 @@ const {
 
 const { snapshotFrame, paginate, padRows } = require('./common');
 const { posLabel } = require('../../learn-japanese');
+const { languageOf, posLabel: europeanPosLabel } = require('../../learn-language');
 const { layoutFor } = require('../../quiet-hours-reminder');
 const { formatPopulation, formatRate } = require('../../world-population');
+const { calendarClockRows } = require('../../calendar-clock');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
@@ -550,16 +553,22 @@ function flightPlanBoardFrames(payload = {}, ctx = {}) {
   });
 }
 
-function flagChipRow(text, options = {}) {
+function languageChipRow(text, chips = {}, options = {}) {
   const row = blankRow(COLS);
-  row[0] = chipCode('white');
-  row[1] = chipCode('white');
-  row[COLS - 2] = chipCode('red');
-  row[COLS - 1] = chipCode('red');
+  const left = chips.left || 'white';
+  const right = chips.right || 'red';
+  row[0] = chipCode(left);
+  row[1] = chipCode(left);
+  row[COLS - 2] = chipCode(right);
+  row[COLS - 1] = chipCode(right);
   if (text) {
     centered(fold(text), { from: 2, width: 18, row, lean: options.lean });
   }
   return row;
+}
+
+function flagChipRow(text, options = {}) {
+  return languageChipRow(text, { left: 'white', right: 'red' }, options);
 }
 
 /** Left-leaning centre — odd leftover blank goes on the right. */
@@ -624,6 +633,58 @@ function learnJapaneseFrames(payload = {}) {
     assertValidLayout(rows, 'learn japanese'),
     'Learn Japanese',
     'japanese.learn',
+  )];
+}
+
+/**
+ * Learn Portuguese / Spanish / French / German / Italian — same card as
+ * Japanese (WORD / MEANS / POS / LEVEL) with each language's flag chips.
+ */
+function learnLanguageFrames(payload = {}) {
+  const spec = languageOf(payload.language || payload.type);
+  const word = payload.word || {};
+  const native = fold(word.word || '');
+  const english = fold(word.english || '');
+  if (!native || !english) {
+    return [];
+  }
+
+  const meaning = wrap(english, COLS).slice(0, 2);
+  const kind = fold(europeanPosLabel(word.pos) || word.pos || '');
+  const posText = kind ? `(${kind})` : '';
+  const titleText = fold(payload.title || spec?.title || 'LEARN');
+  const title = languageChipRow(titleText, payload.chips || spec?.chips || {}, { lean: 'left' });
+  const level = fold(word.level || '');
+  const difficulty = level
+    ? (fold(`LEVEL: ${level}`).length <= 18 ? `LEVEL: ${level}` : level)
+    : '';
+  const footer = languageChipRow(difficulty, payload.chips || spec?.chips || {}, { lean: 'left' });
+  const hero = jpLabeled('WORD: ', native);
+  const posRow = jpCenter(posText);
+  const source = spec?.commandId || payload.type || 'language.learn';
+
+  const rows = meaning.length > 1
+    ? [
+      title,
+      hero,
+      posRow,
+      jpCenter(meaning[0]),
+      jpCenter(meaning[1]),
+      footer,
+    ]
+    : [
+      title,
+      blankRow(COLS),
+      hero,
+      posRow,
+      jpLabeled('MEANS: ', meaning[0] || ''),
+      footer,
+    ];
+
+  return [snapshotFrame(
+    assertValidLayout(rows, spec?.title || 'learn language'),
+    spec?.title || 'Learn',
+    source,
   )];
 }
 
@@ -968,6 +1029,23 @@ function bakingInspirationFrames(payload = {}) {
   )];
 }
 
+/**
+ * Calendar Clock (marketplace productivity): 7-col month chips on the left,
+ * weekday / month+day / 12h clock on the right. `SMTWTFS` only when the
+ * month fits in five week rows.
+ */
+function calendarClockFrames(payload = {}) {
+  const rows = calendarClockRows(payload);
+  if (!rows) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'calendar clock'),
+    'Calendar Clock',
+    'calendar.clock',
+  )];
+}
+
 function worldPopChipRow(text) {
   const row = blankRow(COLS);
   row[0] = chipCode('green');
@@ -1192,6 +1270,74 @@ function currencyRatesFrames(payload = {}) {
   return frames;
 }
 
+// Ranks own the first two columns and the title runs to the right edge, the
+// way the marketplace Top 10 card does — `10 MISSION: IMPOSSIBLE` is exactly
+// the 22 flaps of a row.
+const PLEX_TOP10_TITLE_COL = 3;
+const PLEX_TOP10_TITLE_WIDTH = COLS - PLEX_TOP10_TITLE_COL;
+const PLEX_TOP10_PER_FRAME = 5;
+
+function plexTop10ChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('yellow');
+  row[1] = chipCode('yellow');
+  row[COLS - 2] = chipCode('yellow');
+  row[COLS - 1] = chipCode('yellow');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/** Keep whole words: `The Super Mario Galaxy Movie` reads as `THE SUPER MARIO`. */
+function plexTop10Title(title) {
+  const text = fold(title || '');
+  if (text.length <= PLEX_TOP10_TITLE_WIDTH) {
+    return text;
+  }
+  const cut = text.slice(0, PLEX_TOP10_TITLE_WIDTH + 1);
+  const space = cut.lastIndexOf(' ');
+  const kept = space > 0 ? cut.slice(0, space) : text.slice(0, PLEX_TOP10_TITLE_WIDTH);
+  return kept.trim();
+}
+
+function plexTop10EntryRow(entry, rank) {
+  const row = blankRow(COLS);
+  placeText(row, String(rank).padStart(2, '0'), 0);
+  const title = plexTop10Title(entry.title);
+  if (title) {
+    placeText(row, title, PLEX_TOP10_TITLE_COL);
+  }
+  return row;
+}
+
+/**
+ * Plex Top 10 Movies — five ranks a frame, so a full chart is two flips.
+ * Both frames keep the title row; the rank tells you where you are.
+ */
+function plexTop10Frames(payload = {}) {
+  const movies = (payload.movies || []).filter((movie) => movie?.title);
+  if (!movies.length) {
+    return [];
+  }
+  const heading = fold(payload.boardTitle || 'PLEX TOP 10 MOVIES');
+  const frames = [];
+  for (let index = 0; index < movies.length; index += PLEX_TOP10_PER_FRAME) {
+    const chunk = movies.slice(index, index + PLEX_TOP10_PER_FRAME);
+    const body = [0, 1, 2, 3, 4].map((rowIndex) => (
+      chunk[rowIndex]
+        ? plexTop10EntryRow(chunk[rowIndex], chunk[rowIndex].rank || index + rowIndex + 1)
+        : blankRow(COLS)
+    ));
+    frames.push(snapshotFrame(
+      assertValidLayout([plexTop10ChipRow(heading), ...body], 'plex top 10'),
+      'Plex Top 10 Movies',
+      'plex.top10',
+    ));
+  }
+  return frames;
+}
+
 function issOrbitTitleRow() {
   const row = blankRow(COLS);
   row[0] = chipCode('white');
@@ -1335,6 +1481,11 @@ const FORMATTERS = {
   'trivia.round': triviaFrames,
   'flightplan.flight': flightPlanBoardFrames,
   'japanese.learn': learnJapaneseFrames,
+  'portuguese.learn': learnLanguageFrames,
+  'spanish.learn': learnLanguageFrames,
+  'french.learn': learnLanguageFrames,
+  'german.learn': learnLanguageFrames,
+  'italian.learn': learnLanguageFrames,
   'quiet-hours.reminder': quietHoursReminderFrames,
   'chuck.facts': chuckNorrisFrames,
   'amazing.facts': amazingFactsFrames,
@@ -1344,8 +1495,10 @@ const FORMATTERS = {
   'history.day': onThisDayFrames,
   'bake.inspire': bakingInspirationFrames,
   'world.population': worldPopulationFrames,
+  'calendar.clock': calendarClockFrames,
   'stocks.market': stockMarketFrames,
   'fx.rates': currencyRatesFrames,
+  'plex.top10': plexTop10Frames,
   'iss.track': issTrackFrames,
   'starlink.track': starlinkTrackFrames,
 };
@@ -1365,6 +1518,7 @@ module.exports = {
   triviaFrames,
   flightPlanBoardFrames,
   learnJapaneseFrames,
+  learnLanguageFrames,
   quietHoursReminderFrames,
   chuckNorrisFrames,
   amazingFactsFrames,
@@ -1374,8 +1528,11 @@ module.exports = {
   onThisDayFrames,
   bakingInspirationFrames,
   worldPopulationFrames,
+  calendarClockFrames,
   stockMarketFrames,
   currencyRatesFrames,
+  plexTop10Frames,
+  plexTop10Title,
   issTrackFrames,
   starlinkTrackFrames,
   triviaGate,

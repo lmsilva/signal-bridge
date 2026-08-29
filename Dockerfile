@@ -41,6 +41,7 @@ ENV YOUTUBE_PYTHON_BIN=/opt/youtube-venv/bin/python3
 ENV YT_DLP_BIN=/opt/youtube-venv/bin/yt-dlp
 
 COPY src ./src
+COPY tools/learn-language-concepts.js ./tools/learn-language-concepts.js
 COPY scripts ./scripts
 RUN chmod +x /app/scripts/*.sh
 
