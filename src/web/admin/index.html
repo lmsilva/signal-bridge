@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal120">
+  <link rel="stylesheet" href="styles.css?v=signal139">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -120,7 +120,7 @@
         <div class="push-block" data-push-group="home">
           <div class="section-label">Around the house</div>
           <div class="card-row card-row-quad" id="push-row-home" data-push-category="home"
-               data-skeleton-count="8" aria-busy="true"></div>
+               data-skeleton-count="9" aria-busy="true"></div>
         </div>
 
         <!-- Steam / PSN / YouTube / Autodarts / Huupe are one auto-mode tile
@@ -141,13 +141,13 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="4" aria-busy="true"></div>
+               data-skeleton-count="12" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="travel">
           <div class="section-label">Car &amp; sky</div>
           <div class="card-row card-row-quad" id="push-row-travel" data-push-category="travel"
-               data-skeleton-count="5" aria-busy="true"></div>
+               data-skeleton-count="7" aria-busy="true"></div>
         </div>
 
         <!-- Web Browser and QR Code lead the Share pane; registry tiles
@@ -751,11 +751,111 @@
                 <button type="button" class="segmented-btn active" data-locale-unit="F">°F</button>
                 <button type="button" class="segmented-btn" data-locale-unit="C">°C</button>
               </div>
+              <label class="field-label field-label-spaced" for="locale-currency">Base currency</label>
+              <select id="locale-currency" class="field-input">
+                <option value="USD">USD — US Dollar</option>
+                <option value="EUR">EUR — Euro</option>
+                <option value="GBP">GBP — British Pound</option>
+                <option value="CAD">CAD — Canadian Dollar</option>
+                <option value="MXN">MXN — Mexican Peso</option>
+                <option value="JPY">JPY — Japanese Yen</option>
+                <option value="AUD">AUD — Australian Dollar</option>
+                <option value="CHF">CHF — Swiss Franc</option>
+                <option value="CNY">CNY — Chinese Yuan</option>
+                <option value="BRL">BRL — Brazilian Real</option>
+                <option value="INR">INR — Indian Rupee</option>
+              </select>
               <button type="button" class="btn btn-accent btn-block" id="btn-locale-save" style="margin-top:14px">Save location</button>
             </div>
             <div class="settings-col">
               <label class="field-label">Resolved</label>
               <p class="hint" id="locale-resolved">Save a city or ZIP to pin the house here.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="global">Weather</div>
+        <div class="card weather-alerts-settings-card" id="weather-alerts-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Weather Alerts</div>
+            <span class="status-pill" id="weather-alerts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="weather-alerts-status-detail">
+            Active U.S. National Weather Service alerts for the house pin. Free — no API key.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="weather-alerts-min-severity">Minimum severity</label>
+              <select id="weather-alerts-min-severity" class="field-input">
+                <option value="Minor">Minor and above</option>
+                <option value="Moderate">Moderate and above</option>
+                <option value="Severe">Severe and above</option>
+                <option value="Extreme">Extreme only</option>
+              </select>
+              <label class="field-label field-label-spaced" for="weather-alerts-max">Max alerts on board</label>
+              <select id="weather-alerts-max" class="field-input">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="weather-alerts-watches">
+                <span>Include watches</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="weather-alerts-advisories">
+                <span>Include advisories</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-weather-alerts-save">Save filters</button>
+                <button type="button" class="btn btn-outline" id="btn-weather-alerts-push">Push Now</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">House pin</label>
+              <p class="hint" id="weather-alerts-location">Set a city or ZIP under Location.</p>
+              <p class="hint" id="weather-alerts-hint" style="margin-top:12px">
+                Alerts come from api.weather.gov for U.S. coordinates. Outside the U.S. the board shows a coverage notice.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="global">World</div>
+        <div class="card world-population-settings-card" id="world-population-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">World Population Tracker</div>
+            <span class="status-pill" id="world-population-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="world-population-status-detail">
+            Estimated live headcount from a UN-style baseline — no network call.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="world-pop-base">Base population</label>
+              <input type="text" id="world-pop-base" class="field-input" inputmode="numeric" spellcheck="false" autocomplete="off">
+              <label class="field-label field-label-spaced" for="world-pop-base-at">Base date (UTC)</label>
+              <input type="text" id="world-pop-base-at" class="field-input" placeholder="2026-01-01T00:00:00.000Z" spellcheck="false" autocomplete="off">
+              <label class="field-label field-label-spaced" for="world-pop-births">Births per year</label>
+              <input type="text" id="world-pop-births" class="field-input" inputmode="numeric" spellcheck="false" autocomplete="off">
+              <label class="field-label field-label-spaced" for="world-pop-deaths">Deaths per year</label>
+              <input type="text" id="world-pop-deaths" class="field-input" inputmode="numeric" spellcheck="false" autocomplete="off">
+              <label class="field-label field-label-spaced" for="world-pop-source">Board footer label</label>
+              <input type="text" id="world-pop-source" class="field-input" maxlength="40" spellcheck="false" autocomplete="off">
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-world-population-save">Save model</button>
+                <button type="button" class="btn btn-outline" id="btn-world-population-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-world-population-push">Push Now</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Live estimate</label>
+              <p class="hint" id="world-population-live" style="font-size:1.35rem; font-variant-numeric:tabular-nums; margin:0 0 8px">…</p>
+              <p class="hint" id="world-population-rates">…</p>
+              <label class="field-label field-label-spaced">Board preview</label>
+              <div class="cn-preview" id="world-population-preview" aria-hidden="true"></div>
+              <p class="hint" id="world-population-hint" style="margin-top:8px">Tune the baseline when UN figures update; the board advances by births − deaths each second.</p>
             </div>
           </div>
         </div>
@@ -1042,7 +1142,8 @@
             <div class="settings-col">
               <label class="field-label">Pool</label>
               <p class="hint" id="learn-japanese-pool-hint">Loading…</p>
-              <p class="hint">White and red chips follow the Japanese flag. Push or schedule it from the News pane — Vestaboard only.</p>
+              <p class="hint">White and red chips follow the Japanese flag. Vestaboard only.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-learn-japanese-push">Push Random Word</button>
             </div>
           </div>
         </div>
@@ -1055,31 +1156,164 @@
             <span class="status-pill" id="chuck-norris-status-pill">…</span>
           </div>
           <p class="auth-detail" id="chuck-norris-status-detail">
-            A local list of Chuck Norris facts that fit the board. Hide the duds, edit a line, or add your own.
+            Local board-fit Chuck Norris facts. Manage the list in a sheet, or push a random one to test.
           </p>
-          <div class="cn-compose">
-            <div class="cn-compose-form">
-              <label class="field-label" for="chuck-norris-new">New fact</label>
-              <textarea class="field-input cn-fact-input" id="chuck-norris-new" rows="3" maxlength="220" placeholder="Chuck Norris can…"></textarea>
-              <div class="cn-compose-actions">
-                <button type="button" class="btn btn-accent" id="btn-chuck-norris-add">Add fact</button>
-                <span class="hint" id="chuck-norris-fit-hint"></span>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-chuck-norris-manage">Manage facts</button>
+            <button type="button" class="btn btn-accent" id="btn-chuck-norris-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Amazing Facts</div>
+        <div class="card amazing-facts-settings-card" id="amazing-facts-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Quirky science &amp; trivia</div>
+            <span class="status-pill" id="amazing-facts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="amazing-facts-status-detail">
+            Local amazing facts for the Vestaboard. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-amazing-facts-manage">Manage facts</button>
+            <button type="button" class="btn btn-accent" id="btn-amazing-facts-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Conversation Starters</div>
+        <div class="card conversation-starters-settings-card" id="conversation-starters-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Let&apos;s talk</div>
+            <span class="status-pill" id="conversation-starters-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="conversation-starters-status-detail">
+            Local icebreaker prompts for the Vestaboard. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-conversation-starters-manage">Manage prompts</button>
+            <button type="button" class="btn btn-accent" id="btn-conversation-starters-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Stoic Quotes</div>
+        <div class="card stoic-quotes-settings-card" id="stoic-quotes-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Self-mastery on the flaps</div>
+            <span class="status-pill" id="stoic-quotes-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="stoic-quotes-status-detail">
+            Local Stoic quotes for the Vestaboard. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-stoic-quotes-manage">Manage quotes</button>
+            <button type="button" class="btn btn-accent" id="btn-stoic-quotes-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">On This Day in History</div>
+        <div class="card on-this-day-settings-card" id="on-this-day-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">A notable event from today’s date</div>
+            <span class="status-pill" id="on-this-day-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="on-this-day-status-detail">
+            Local Wikipedia-sourced history for the Vestaboard. Manage facts in a sheet, or push today’s pick to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-on-this-day-manage">Manage facts</button>
+            <button type="button" class="btn btn-accent" id="btn-on-this-day-push">Push Today</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Baking Inspiration</div>
+        <div class="card baking-inspiration-settings-card" id="baking-inspiration-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Five ingredients or less</div>
+            <span class="status-pill" id="baking-inspiration-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="baking-inspiration-status-detail">
+            Local baking ideas for the Vestaboard. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-baking-inspiration-manage">Manage ideas</button>
+            <button type="button" class="btn btn-accent" id="btn-baking-inspiration-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Stock Market</div>
+        <div class="card stock-market-settings-card" id="stock-market-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Watchlist on the flaps</div>
+            <span class="status-pill" id="stock-market-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="stock-market-status-detail">
+            Up to 10 tickers via Yahoo Finance (no API key). Optional Finnhub key if you prefer it.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="stock-market-tickers">Tickers (max 10)</label>
+              <textarea class="field-input" id="stock-market-tickers" rows="3" maxlength="120" placeholder="AAPL, MSFT, GOOGL, AMZN, NVDA" spellcheck="false"></textarea>
+              <label class="field-label field-label-spaced">Change display</label>
+              <div class="segmented" id="stock-market-change-mode" role="group" aria-label="Change display">
+                <button type="button" class="segmented-btn active" data-stock-change="percent">Percent</button>
+                <button type="button" class="segmented-btn" data-stock-change="points">Points</button>
+              </div>
+              <label class="field-label field-label-spaced" for="stock-market-provider">Quote source</label>
+              <select id="stock-market-provider" class="field-input">
+                <option value="auto">Auto (Finnhub if keyed, else Yahoo)</option>
+                <option value="yahoo">Yahoo Finance (no key)</option>
+                <option value="finnhub">Finnhub (API key)</option>
+              </select>
+              <label class="field-label field-label-spaced" for="stock-market-finnhub-key">Finnhub API key (optional)</label>
+              <input type="password" id="stock-market-finnhub-key" class="field-input" maxlength="128" placeholder="Leave blank to keep saved key" autocomplete="off" spellcheck="false">
+              <label class="trivia-check">
+                <input type="checkbox" id="stock-market-clear-key">
+                <span>Clear saved Finnhub key</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-stock-market-save">Save watchlist</button>
+                <button type="button" class="btn btn-outline" id="btn-stock-market-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-stock-market-push">Push Now</button>
               </div>
             </div>
-            <div class="cn-board-preview" id="chuck-norris-preview" aria-hidden="true"></div>
+            <div class="settings-col">
+              <label class="field-label">Board preview</label>
+              <div class="cn-board-preview cn-board-preview-stoic" id="stock-market-preview" aria-hidden="true"></div>
+              <p class="hint" id="stock-market-hint" style="margin-top:8px">
+                Defaults cover mega-cap tech plus SPY/QQQ/DIA. Indexes use Yahoo symbols like ^GSPC.
+              </p>
+            </div>
           </div>
-          <div class="cn-toolbar">
-            <input type="search" class="field-input" id="chuck-norris-search" placeholder="Search facts" autocomplete="off">
-            <label class="trivia-check">
-              <input type="checkbox" id="chuck-norris-show-hidden">
-              <span>Show hidden</span>
-            </label>
+        </div>
+
+        <div class="section-label" data-settings-group="news">World Currency Rates</div>
+        <div class="card currency-rates-settings-card" id="currency-rates-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">FX watchlist</div>
+            <span class="status-pill" id="currency-rates-status-pill">…</span>
           </div>
-          <div class="cn-fact-list" id="chuck-norris-fact-list"></div>
-          <div class="cn-pager">
-            <button type="button" class="btn btn-outline btn-sm" id="btn-chuck-norris-prev">Previous</button>
-            <span class="hint" id="chuck-norris-page-label"></span>
-            <button type="button" class="btn btn-outline btn-sm" id="btn-chuck-norris-next">Next</button>
+          <p class="auth-detail" id="currency-rates-status-detail">
+            Live rates vs your base currency with day-over-day % (green up / red down). Free — no API key.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="currency-rates-quotes">Currencies to show (max 12)</label>
+              <textarea class="field-input" id="currency-rates-quotes" rows="3" maxlength="80" placeholder="EUR, GBP, JPY, CAD, MXN, ARS, BSD, CNY" spellcheck="false"></textarea>
+              <p class="hint" style="margin-top:8px">
+                Base currency is set under Settings → Global → Location. Four quotes per board page with rate, ±%, and a colour chip.
+              </p>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-currency-rates-save">Save list</button>
+                <button type="button" class="btn btn-outline" id="btn-currency-rates-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-currency-rates-push">Push Now</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Board preview</label>
+              <div class="cn-board-preview cn-board-preview-stoic" id="currency-rates-preview" aria-hidden="true"></div>
+              <p class="hint" id="currency-rates-hint" style="margin-top:8px">
+                Defaults: Euro, GBP, Yen, CAD, Mexican &amp; Argentine pesos, Bahamas dollar, Chinese yuan.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -1155,6 +1389,103 @@
                 <button class="btn btn-outline" id="btn-wiki-ck-poll">Refresh cache</button>
                 <button class="btn btn-outline" id="btn-wiki-ck-backfill">Backfill 7 days</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="travel">Starlink Tracker</div>
+        <div class="card starlink-tracker-settings-card" id="starlink-tracker-settings-card" data-settings-group="travel">
+          <div class="auth-head">
+            <div class="auth-name">Next visible train</div>
+            <span class="status-pill" id="starlink-tracker-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="starlink-tracker-status-detail">
+            Next Starlink pass over the house pin — time, sky position, and conditions. Free — no API key.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="starlink-hours-ahead">Look ahead</label>
+              <select id="starlink-hours-ahead" class="field-input">
+                <option value="24">24 hours</option>
+                <option value="48">48 hours</option>
+                <option value="72" selected>72 hours</option>
+                <option value="168">7 days</option>
+              </select>
+              <label class="field-label field-label-spaced" for="starlink-min-elevation">Minimum elevation</label>
+              <select id="starlink-min-elevation" class="field-input">
+                <option value="10">10°</option>
+                <option value="20" selected>20°</option>
+                <option value="30">30°</option>
+                <option value="40">40°</option>
+              </select>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="starlink-prefer-visible" checked>
+                <span>Prefer naked-eye visible passes</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="starlink-show-weather" checked>
+                <span>Show local sky conditions</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="starlink-show-visibility" checked>
+                <span>Show visibility quality</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-starlink-tracker-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-starlink-tracker-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-starlink-tracker-push">Push Now</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Board preview</label>
+              <div class="cn-board-preview cn-board-preview-stoic" id="starlink-tracker-preview" aria-hidden="true"></div>
+              <p class="hint" id="starlink-tracker-location" style="margin-top:8px">
+                Uses the house pin under Settings → Global → Location.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="travel">International Space Station</div>
+        <div class="card iss-tracker-settings-card" id="iss-tracker-settings-card" data-settings-group="travel">
+          <div class="auth-head">
+            <div class="auth-name">ISS tracker</div>
+            <span class="status-pill" id="iss-tracker-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="iss-tracker-status-detail">
+            Live position and speed relative to the house pin. Free — no API key.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Distance units</label>
+              <div class="segmented" id="iss-tracker-unit" role="group" aria-label="Distance units">
+                <button type="button" class="segmented-btn active" data-iss-unit="miles">Miles</button>
+                <button type="button" class="segmented-btn" data-iss-unit="km">Kilometers</button>
+              </div>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="iss-tracker-show-coords" checked>
+                <span>Show coordinates</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="iss-tracker-show-altitude" checked>
+                <span>Show altitude</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="iss-tracker-show-visibility" checked>
+                <span>Show daylight / eclipsed</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-iss-tracker-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-iss-tracker-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-iss-tracker-push">Push Now</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Board preview</label>
+              <div class="cn-board-preview cn-board-preview-stoic" id="iss-tracker-preview" aria-hidden="true"></div>
+              <p class="hint" id="iss-tracker-location" style="margin-top:8px">
+                Uses the house pin under Settings → Global → Location for distance and bearing.
+              </p>
             </div>
           </div>
         </div>
@@ -1757,6 +2088,7 @@
             <p class="hint">Loading…</p>
           </div>
 
+          <button type="button" class="btn btn-outline btn-block" id="btn-vb-quiet-hours-push">Push Quiet Hours Reminder</button>
           <button type="button" class="btn btn-outline btn-block" id="btn-vb-add">Add a board</button>
 
           <form class="vb-board-form" id="vb-board-form" hidden>
@@ -1766,11 +2098,11 @@
 
             <label class="field-label field-label-spaced" for="vb-form-url">Address</label>
             <input type="text" class="field-input" id="vb-form-url" placeholder="http://192.168.1.42:7000" autocomplete="off" spellcheck="false">
-            <p class="hint">Use the board's IP rather than its .local name — mDNS does not resolve from inside Docker.</p>
+            <p class="hint" id="vb-form-url-hint">Use the board's IP rather than its .local name — mDNS does not resolve from inside Docker.</p>
 
             <label class="field-label field-label-spaced" for="vb-form-key">Local API key</label>
             <input type="password" class="field-input" id="vb-form-key" placeholder="Leave blank to keep the saved key" autocomplete="new-password" spellcheck="false">
-            <p class="hint">Request one from Vestaboard, then paste the key they email you.</p>
+            <p class="hint" id="vb-form-key-hint">Request one from Vestaboard, then paste the key they email you.</p>
 
             <div class="vb-form-row">
               <label class="vb-form-field">
@@ -1951,6 +2283,271 @@
       <div class="sheet-actions sheet-actions-confirm">
         <button class="btn btn-outline" id="photo-delete-cancel">Cancel</button>
         <button class="btn btn-danger" id="photo-delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chuck Norris fact manager -->
+  <div class="sheet-backdrop" id="chuck-norris-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="chuck-norris-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="chuck-norris-manage-title">Manage Chuck Norris facts</div>
+        <button type="button" class="credits-sheet-close" id="btn-chuck-norris-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="chuck-norris-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="chuck-norris-new">New fact</label>
+          <textarea class="field-input cn-fact-input" id="chuck-norris-new" rows="3" maxlength="220" placeholder="Chuck Norris can…"></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-chuck-norris-add">Add fact</button>
+            <span class="hint" id="chuck-norris-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-board-preview" id="chuck-norris-preview" aria-hidden="true"></div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="chuck-norris-search" placeholder="Search facts" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="chuck-norris-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="chuck-norris-fact-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-chuck-norris-prev">Previous</button>
+        <span class="hint" id="chuck-norris-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-chuck-norris-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Amazing Facts manager -->
+  <div class="sheet-backdrop" id="amazing-facts-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="amazing-facts-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="amazing-facts-manage-title">Manage Amazing Facts</div>
+        <button type="button" class="credits-sheet-close" id="btn-amazing-facts-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="amazing-facts-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="amazing-facts-new">New fact</label>
+          <textarea class="field-input cn-fact-input" id="amazing-facts-new" rows="3" maxlength="220" placeholder="Octopuses have three hearts…"></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-amazing-facts-add">Add fact</button>
+            <span class="hint" id="amazing-facts-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-board-preview cn-board-preview-stoic" id="amazing-facts-preview" aria-hidden="true"></div>
+      </div>
+      <div class="settings-columns" style="margin:0 0 12px">
+        <div class="settings-col">
+          <label class="field-label" for="amazing-facts-browse-category">Browse category</label>
+          <select id="amazing-facts-browse-category" class="field-input">
+            <option value="">All categories</option>
+          </select>
+        </div>
+        <div class="settings-col">
+          <label class="field-label" for="amazing-facts-pool-categories">Push pool (optional)</label>
+          <select id="amazing-facts-pool-categories" class="field-input" multiple size="5" aria-label="Restrict push categories"></select>
+          <div class="btn-row" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-save-pool">Save pool</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-clear-pool">Use all</button>
+          </div>
+          <p class="hint" id="amazing-facts-attribution" style="margin-top:8px"></p>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="amazing-facts-search" placeholder="Search facts" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="amazing-facts-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="amazing-facts-fact-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-prev">Previous</button>
+        <span class="hint" id="amazing-facts-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conversation Starters manager -->
+  <div class="sheet-backdrop" id="conversation-starters-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="conversation-starters-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="conversation-starters-manage-title">Manage Conversation Starters</div>
+        <button type="button" class="credits-sheet-close" id="btn-conversation-starters-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="conversation-starters-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="conversation-starters-new">New prompt</label>
+          <textarea class="field-input cn-fact-input" id="conversation-starters-new" rows="3" maxlength="220" placeholder="What is the best meal you have ever had?"></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-conversation-starters-add">Add prompt</button>
+            <span class="hint" id="conversation-starters-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-board-preview cn-board-preview-violet" id="conversation-starters-preview" aria-hidden="true"></div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="conversation-starters-search" placeholder="Search prompts" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="conversation-starters-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="conversation-starters-prompt-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-conversation-starters-prev">Previous</button>
+        <span class="hint" id="conversation-starters-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-conversation-starters-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stoic Quotes manager -->
+  <div class="sheet-backdrop" id="stoic-quotes-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="stoic-quotes-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="stoic-quotes-manage-title">Manage Stoic Quotes</div>
+        <button type="button" class="credits-sheet-close" id="btn-stoic-quotes-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="stoic-quotes-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="stoic-quotes-new">New quote</label>
+          <textarea class="field-input cn-fact-input" id="stoic-quotes-new" rows="3" maxlength="220" placeholder="You have power over your mind — not outside events."></textarea>
+          <label class="field-label field-label-spaced" for="stoic-quotes-author">Author</label>
+          <input type="text" class="field-input" id="stoic-quotes-author" maxlength="40" placeholder="Marcus Aurelius" autocomplete="off">
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-stoic-quotes-add">Add quote</button>
+            <span class="hint" id="stoic-quotes-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-board-preview cn-board-preview-stoic" id="stoic-quotes-preview" aria-hidden="true"></div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="stoic-quotes-search" placeholder="Search quotes or authors" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="stoic-quotes-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="stoic-quotes-quote-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-stoic-quotes-prev">Previous</button>
+        <span class="hint" id="stoic-quotes-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-stoic-quotes-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- On This Day manager -->
+  <div class="sheet-backdrop" id="on-this-day-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="on-this-day-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="on-this-day-manage-title">Manage On This Day facts</div>
+        <button type="button" class="credits-sheet-close" id="btn-on-this-day-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="on-this-day-manage-summary">Loading…</p>
+      <div class="settings-columns" style="margin-bottom:12px">
+        <div class="settings-col">
+          <label class="field-label" for="on-this-day-min-year">Earliest year (optional)</label>
+          <input type="number" class="field-input" id="on-this-day-min-year" placeholder="e.g. 1800" step="1">
+          <label class="field-label field-label-spaced" for="on-this-day-max-year">Latest year (optional)</label>
+          <input type="number" class="field-input" id="on-this-day-max-year" placeholder="e.g. 2020" step="1">
+          <div class="btn-row" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-on-this-day-save-filters">Save year range</button>
+          </div>
+          <p class="hint" id="on-this-day-attribution" style="margin-top:10px"></p>
+        </div>
+        <div class="settings-col">
+          <label class="field-label">Board preview</label>
+          <div class="cn-board-preview cn-board-preview-stoic" id="on-this-day-preview" aria-hidden="true"></div>
+          <span class="hint" id="on-this-day-fit-hint"></span>
+        </div>
+      </div>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="on-this-day-new-text">New fact</label>
+          <textarea class="field-input cn-fact-input" id="on-this-day-new-text" rows="3" maxlength="220" placeholder="Apollo 11 returns to Earth after the first crewed Moon landing."></textarea>
+          <div class="settings-columns" style="margin-top:10px">
+            <div class="settings-col">
+              <label class="field-label" for="on-this-day-new-month">Month</label>
+              <select id="on-this-day-new-month" class="field-input"></select>
+            </div>
+            <div class="settings-col">
+              <label class="field-label" for="on-this-day-new-day">Day</label>
+              <input type="number" class="field-input" id="on-this-day-new-day" min="1" max="31" step="1">
+            </div>
+            <div class="settings-col">
+              <label class="field-label" for="on-this-day-new-year">Year</label>
+              <input type="number" class="field-input" id="on-this-day-new-year" step="1" placeholder="1969 (negative = BC)">
+            </div>
+          </div>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-on-this-day-add">Add fact</button>
+            <span class="hint">Uses today’s house-timezone date when month/day are blank.</span>
+          </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="on-this-day-search" placeholder="Search facts or years" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="on-this-day-today-only" checked>
+          <span>Today only</span>
+        </label>
+        <label class="trivia-check">
+          <input type="checkbox" id="on-this-day-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="on-this-day-event-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-on-this-day-prev">Previous</button>
+        <span class="hint" id="on-this-day-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-on-this-day-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Baking Inspiration manager -->
+  <div class="sheet-backdrop" id="baking-inspiration-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="baking-inspiration-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="baking-inspiration-manage-title">Manage Baking Inspiration</div>
+        <button type="button" class="credits-sheet-close" id="btn-baking-inspiration-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="baking-inspiration-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="baking-inspiration-new-title">New idea</label>
+          <input type="text" class="field-input" id="baking-inspiration-new-title" maxlength="40" placeholder="LEMON BLUEBERRY MUFFINS" autocomplete="off">
+          <label class="field-label field-label-spaced" for="baking-inspiration-new-ings">Ingredients (≤5, comma separated)</label>
+          <textarea class="field-input cn-fact-input" id="baking-inspiration-new-ings" rows="2" maxlength="160" placeholder="FLOUR, EGG, MILK, LEMON, BLUEBERRY"></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-baking-inspiration-add">Add idea</button>
+            <span class="hint" id="baking-inspiration-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-board-preview cn-board-preview-bake" id="baking-inspiration-preview" aria-hidden="true"></div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="baking-inspiration-search" placeholder="Search titles or ingredients" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="baking-inspiration-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="baking-inspiration-idea-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-baking-inspiration-prev">Previous</button>
+        <span class="hint" id="baking-inspiration-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-baking-inspiration-next">Next</button>
       </div>
     </div>
   </div>
@@ -2228,6 +2825,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal120"></script>
+  <script src="app.js?v=signal139"></script>
 </body>
 </html>

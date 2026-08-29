@@ -1120,6 +1120,176 @@ test('chuck norris push delivers a board-fit fact and settings can add one', asy
   }
 });
 
+test('amazing facts push delivers a board-fit fact and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/amazing-facts/facts?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.facts.length > 0);
+
+    const pushed = await postJson(base, '/api/push/amazing-facts');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'amazing.facts');
+    assert.match(String(pushed.body.fact?.text || ''), /./);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'amazing.facts');
+
+    const added = await postJson(base, '/api/amazing-facts/facts', {
+      text: 'Signal Bridge can flip amazing facts onto a Vestaboard without an API key.',
+      category: 'technology',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('conversation starters push delivers a prompt and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/conversation-starters/prompts?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.prompts.length > 0);
+
+    const pushed = await postJson(base, '/api/push/conversation-starters');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'talk.starters');
+    assert.match(String(pushed.body.prompt?.text || ''), /./);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'talk.starters');
+
+    const added = await postJson(base, '/api/conversation-starters/prompts', {
+      text: 'What should we put on the Vestaboard next?',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('stoic quotes push delivers a quote and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/stoic-quotes/quotes?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.quotes.length > 0);
+
+    const pushed = await postJson(base, '/api/push/stoic-quotes');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'stoic.quotes');
+    assert.match(String(pushed.body.quote?.text || ''), /./);
+    assert.match(String(pushed.body.quote?.author || ''), /./);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'stoic.quotes');
+
+    const added = await postJson(base, '/api/stoic-quotes/quotes', {
+      text: 'The obstacle is the way.',
+      author: 'Marcus Aurelius',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('on this day push delivers a history fact and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/on-this-day/events?pageSize=5&month=8&day=29');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.total > 0);
+    assert.ok(listed.body.events.length > 0);
+
+    const pushed = await postJson(base, '/api/push/on-this-day', { month: 8, day: 29 });
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'history.day');
+    assert.match(String(pushed.body.event?.text || ''), /./);
+    assert.match(String(pushed.body.event?.dateLine || ''), /AUG 29/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'history.day');
+
+    const added = await postJson(base, '/api/on-this-day/events', {
+      month: 8,
+      day: 29,
+      year: 2099,
+      text: 'Signal Bridge ships On This Day for the Vestaboard flaps.',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('world population push delivers an estimate and settings can retune the model', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const status = await getJson(base, '/api/world-population/settings');
+    assert.equal(status.status, 200);
+    assert.ok(status.body.estimate?.population > 0);
+    assert.match(String(status.body.formatted || ''), /,/);
+
+    const pushed = await postJson(base, '/api/push/world-population');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'world.population');
+    assert.ok(pushed.body.population?.total > 0);
+    assert.match(String(pushed.body.population?.formatted || ''), /,/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'world.population');
+
+    const saved = await postJson(base, '/api/world-population/settings', {
+      basePopulation: 9_000_000_000,
+      baseAt: '2026-01-01T00:00:00.000Z',
+      birthsPerYear: 100_000_000,
+      deathsPerYear: 40_000_000,
+      sourceLabel: 'TEST MODEL',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.basePopulation, 9_000_000_000);
+    assert.equal(saved.body.settings.sourceLabel, 'TEST MODEL');
+
+    const reset = await postJson(base, '/api/world-population/settings', { reset: true });
+    assert.equal(reset.status, 200);
+    assert.ok(reset.body.settings.basePopulation < 9_000_000_000);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('baking inspiration push delivers an idea and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/baking-inspiration/ideas?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.ideas.length > 0);
+
+    const pushed = await postJson(base, '/api/push/baking-inspiration');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'bake.inspire');
+    assert.match(String(pushed.body.idea?.title || ''), /./);
+    assert.ok(Array.isArray(pushed.body.idea?.ingredients));
+    assert.ok(pushed.body.idea.ingredients.length >= 1);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'bake.inspire');
+
+    const added = await postJson(base, '/api/baking-inspiration/ideas', {
+      title: 'TEST HOUSE COOKIES',
+      ingredients: 'FLOUR, BUTTER, SUGAR',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('quiet hours reminder push delivers a random night card to the Vestaboard', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1146,6 +1316,305 @@ test('weekly weather push needs a house pin from Settings → Global', async () 
     const push = await postJson(base, '/api/push/weekly-weather');
     assert.equal(push.status, 400);
     assert.match(push.body.error, /Settings → Global/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('weather alerts push needs a house pin and can deliver a mocked NWS alert', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const missing = await postJson(base, '/api/push/weather-alerts');
+    assert.equal(missing.status, 400);
+    assert.match(missing.body.error, /Settings → Global/);
+  } finally {
+    webServer.stop();
+  }
+
+  const config = makeConfig({
+    weatherAlertsFetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          features: [{
+            id: 'alert-1',
+            properties: {
+              id: 'alert-1',
+              event: 'Tornado Warning',
+              headline: 'Tornado Warning for Utah County',
+              severity: 'Extreme',
+              urgency: 'Immediate',
+              certainty: 'Observed',
+              ends: '2026-08-28T20:45:00-06:00',
+              areaDesc: 'Utah, UT',
+            },
+          }],
+        };
+      },
+    }),
+  });
+  fs.mkdirSync(path.join(config.ROOT, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(config.ROOT, 'data', 'locale-settings.json'), `${JSON.stringify({
+    city: 'Lehi',
+    label: 'Lehi, UT',
+    postalCode: '84043',
+    country: 'US',
+    latitude: 40.41,
+    longitude: -111.85,
+    timeZone: 'America/Denver',
+    temperatureUnit: 'F',
+  }, null, 2)}\n`);
+
+  const { webServer: server2, base: base2, sent } = await startTestServer({ config });
+  try {
+    const settings = await getJson(base2, '/api/weather-alerts/settings');
+    assert.equal(settings.status, 200);
+    assert.equal(settings.body.hasLocation, true);
+    assert.equal(settings.body.source, 'NWS');
+
+    const pushed = await postJson(base2, '/api/push/weather-alerts');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'weather.alerts');
+    assert.equal(pushed.body.mode, 'alerts');
+    assert.equal(pushed.body.alerts.length, 1);
+    assert.match(String(pushed.body.alerts[0].event || ''), /TORNADO/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'weather.alerts');
+
+    const saved = await postJson(base2, '/api/weather-alerts/settings', {
+      minSeverity: 'Severe',
+      maxAlerts: 2,
+      includeWatches: false,
+      includeAdvisories: false,
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.minSeverity, 'Severe');
+  } finally {
+    server2.stop();
+  }
+});
+
+test('stock market push delivers quotes and settings can retune the watchlist', async () => {
+  const config = makeConfig({
+    stockMarketFetchImpl: async (url) => {
+      const symbol = String(url).includes('/MSFT') ? 'MSFT' : 'AAPL';
+      const price = symbol === 'MSFT' ? 513.53 : 319.7;
+      const previous = symbol === 'MSFT' ? 483.24 : 309.35;
+      return {
+        ok: true,
+        async json() {
+          return {
+            chart: {
+              result: [{
+                meta: {
+                  symbol,
+                  regularMarketPrice: price,
+                  chartPreviousClose: previous,
+                  currency: 'USD',
+                },
+              }],
+            },
+          };
+        },
+      };
+    },
+  });
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const saved = await postJson(base, '/api/stock-market/settings', {
+      tickers: 'AAPL, MSFT',
+      changeMode: 'percent',
+      provider: 'yahoo',
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body.settings.tickers, ['AAPL', 'MSFT']);
+
+    const pushed = await postJson(base, '/api/push/stock-market');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'stocks.market');
+    assert.equal(pushed.body.quotes.length, 2);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'stocks.market');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('currency rates push delivers FX quotes against the locale base', async () => {
+  const config = makeConfig({
+    currencyRatesFetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          result: 'success',
+          base_code: 'USD',
+          rates: {
+            EUR: 0.86,
+            GBP: 0.74,
+            JPY: 160,
+            CAD: 1.39,
+          },
+        };
+      },
+    }),
+  });
+  fs.mkdirSync(path.join(config.ROOT, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(config.ROOT, 'data', 'locale-settings.json'), `${JSON.stringify({
+    city: 'Lehi',
+    label: 'Lehi, UT',
+    postalCode: '84043',
+    country: 'US',
+    latitude: 40.41,
+    longitude: -111.85,
+    timeZone: 'America/Denver',
+    temperatureUnit: 'F',
+    currencyCode: 'USD',
+  }, null, 2)}\n`);
+
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const saved = await postJson(base, '/api/currency-rates/settings', {
+      quotes: 'EUR, GBP, JPY, CAD',
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body.settings.quotes, ['EUR', 'GBP', 'JPY', 'CAD']);
+    assert.equal(saved.body.baseCurrency, 'USD');
+
+    const pushed = await postJson(base, '/api/push/currency-rates');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'fx.rates');
+    assert.equal(pushed.body.base, 'USD');
+    assert.equal(pushed.body.quotes.length, 4);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'fx.rates');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('ISS tracker push delivers position relative to the house pin', async () => {
+  const config = makeConfig({
+    issTrackerFetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          name: 'iss',
+          id: 25544,
+          latitude: 41.2,
+          longitude: -112.0,
+          altitude: 420,
+          velocity: 27600,
+          visibility: 'daylight',
+          units: 'kilometers',
+          timestamp: Math.floor(Date.now() / 1000),
+        };
+      },
+    }),
+  });
+  fs.mkdirSync(path.join(config.ROOT, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(config.ROOT, 'data', 'locale-settings.json'), `${JSON.stringify({
+    city: 'Lehi',
+    label: 'Lehi, UT',
+    postalCode: '84043',
+    country: 'US',
+    latitude: 40.41,
+    longitude: -111.85,
+    timeZone: 'America/Denver',
+    temperatureUnit: 'F',
+  }, null, 2)}\n`);
+
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const saved = await postJson(base, '/api/iss-tracker/settings', {
+      distanceUnit: 'miles',
+      showAltitude: true,
+      showCoordinates: true,
+      showVisibility: true,
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.distanceUnit, 'miles');
+    assert.equal(saved.body.hasLocation, true);
+
+    const pushed = await postJson(base, '/api/push/iss-tracker');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'iss.track');
+    assert.ok(pushed.body.relativeLabel);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'iss.track');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('Starlink tracker push delivers the next pass over the house pin', async () => {
+  const nowMs = Date.now();
+  const config = makeConfig({
+    starlinkTrackerFetchImpl: async (url) => {
+      const href = String(url);
+      if (href.includes('/satellites')) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              results: [
+                { name: 'STARLINK-A', norad_id: '90001', category: 'STARLINK' },
+                { name: 'STARLINK-B', norad_id: '90002', category: 'STARLINK' },
+              ],
+            };
+          },
+        };
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            passes: [{
+              start_utc: new Date(nowMs + 2 * 3600_000).toISOString(),
+              end_utc: new Date(nowMs + 2 * 3600_000 + 240_000).toISOString(),
+              max_elevation_deg: 44,
+              direction: 'NE',
+              sky_condition: 'Night',
+              visibility_score: 75,
+              visibility_label: 'Good',
+              satellite_illuminated: true,
+            }],
+          };
+        },
+      };
+    },
+  });
+  fs.mkdirSync(path.join(config.ROOT, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(config.ROOT, 'data', 'locale-settings.json'), `${JSON.stringify({
+    city: 'Lehi',
+    label: 'Lehi, UT',
+    postalCode: '84043',
+    country: 'US',
+    latitude: 40.41,
+    longitude: -111.85,
+    timeZone: 'America/Denver',
+    temperatureUnit: 'F',
+  }, null, 2)}\n`);
+
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const saved = await postJson(base, '/api/starlink-tracker/settings', {
+      hoursAhead: 48,
+      minElevation: 20,
+      preferVisible: true,
+      showWeather: false,
+      showVisibility: true,
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.hoursAhead, 48);
+    assert.equal(saved.body.hasLocation, true);
+
+    const pushed = await postJson(base, '/api/push/starlink-tracker');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'starlink.track');
+    assert.ok(pushed.body.whenLabel);
+    assert.ok(pushed.body.directionLabel);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'starlink.track');
   } finally {
     webServer.stop();
   }
@@ -1217,6 +1686,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'upside-news-settings-card',
     'plex-settings-card',
     'locale-settings-card',
+    'learn-japanese-settings-card',
   ]) {
     assert.match(
       css,
@@ -1247,14 +1717,88 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-locale-save"/);
   assert.match(js, /\/api\/locale\/settings/);
   assert.match(html, /id="learn-japanese-settings-card"/);
+  assert.match(html, /id="btn-learn-japanese-push"/);
   assert.match(js, /\/api\/learn-japanese\/settings/);
-  assert.match(html, /styles\.css\?v=signal120/);
-  assert.match(html, /app\.js\?v=signal120/);
+  assert.match(js, /\/api\/push\/learn-japanese/);
+  assert.match(html, /styles\.css\?v=signal139/);
+  assert.match(html, /app\.js\?v=signal139/);
   assert.match(js, /tabId === 'settings'[\s\S]*applySettingsFilter\(currentSettingsView\(\)\)/);
   assert.match(html, /id="vb-form-quiet-remind"/);
+  assert.match(html, /id="btn-vb-quiet-hours-push"/);
+  assert.match(js, /vbSetRemindOnStart/);
+  assert.match(js, /\/api\/push\/quiet-hours-reminder/);
+  assert.match(css, /\.learn-japanese-settings-card/);
   assert.match(html, /id="chuck-norris-settings-card"/);
+  assert.match(html, /id="btn-chuck-norris-manage"/);
+  assert.match(html, /id="btn-chuck-norris-push"/);
+  assert.match(html, /id="chuck-norris-manage-sheet"/);
+  assert.match(html, /id="amazing-facts-settings-card"/);
+  assert.match(html, /id="btn-amazing-facts-manage"/);
+  assert.match(html, /id="btn-amazing-facts-push"/);
+  assert.match(html, /id="amazing-facts-manage-sheet"/);
+  assert.match(html, /id="conversation-starters-settings-card"/);
+  assert.match(html, /id="btn-conversation-starters-manage"/);
+  assert.match(html, /id="btn-conversation-starters-push"/);
+  assert.match(html, /id="conversation-starters-manage-sheet"/);
+  assert.match(html, /id="stoic-quotes-settings-card"/);
+  assert.match(html, /id="btn-stoic-quotes-manage"/);
+  assert.match(html, /id="btn-stoic-quotes-push"/);
+  assert.match(html, /id="stoic-quotes-manage-sheet"/);
+  assert.match(html, /id="on-this-day-settings-card"/);
+  assert.match(html, /id="btn-on-this-day-manage"/);
+  assert.match(html, /id="btn-on-this-day-push"/);
+  assert.match(html, /id="on-this-day-manage-sheet"/);
+  assert.match(html, /id="baking-inspiration-settings-card"/);
+  assert.match(html, /id="btn-baking-inspiration-manage"/);
+  assert.match(html, /id="btn-baking-inspiration-push"/);
+  assert.match(html, /id="baking-inspiration-manage-sheet"/);
+  assert.match(html, /id="stock-market-settings-card"/);
+  assert.match(html, /id="btn-stock-market-push"/);
+  assert.match(html, /id="currency-rates-settings-card"/);
+  assert.match(html, /id="btn-currency-rates-push"/);
+  assert.match(html, /id="iss-tracker-settings-card"/);
+  assert.match(html, /id="btn-iss-tracker-push"/);
+  assert.match(html, /id="starlink-tracker-settings-card"/);
+  assert.match(html, /id="btn-starlink-tracker-push"/);
+  assert.match(html, /id="locale-currency"/);
+  assert.match(html, /id="world-population-settings-card"/);
+  assert.match(html, /id="btn-world-population-push"/);
+  assert.match(html, /id="weather-alerts-settings-card"/);
+  assert.match(html, /id="btn-weather-alerts-push"/);
   assert.match(js, /quiet-hours/);
   assert.match(js, /\/api\/chuck-norris\/facts/);
+  assert.match(js, /\/api\/push\/chuck-norris/);
+  assert.match(js, /\/api\/amazing-facts\/facts/);
+  assert.match(js, /\/api\/push\/amazing-facts/);
+  assert.match(js, /\/api\/conversation-starters\/prompts/);
+  assert.match(js, /\/api\/stoic-quotes\/quotes/);
+  assert.match(js, /\/api\/on-this-day\/events/);
+  assert.match(js, /\/api\/push\/on-this-day/);
+  assert.match(js, /\/api\/baking-inspiration\/ideas/);
+  assert.match(js, /\/api\/push\/baking-inspiration/);
+  assert.match(js, /\/api\/stock-market\/settings/);
+  assert.match(js, /\/api\/push\/stock-market/);
+  assert.match(js, /\/api\/currency-rates\/settings/);
+  assert.match(js, /\/api\/push\/currency-rates/);
+  assert.match(js, /\/api\/iss-tracker\/settings/);
+  assert.match(js, /\/api\/push\/iss-tracker/);
+  assert.match(js, /\/api\/starlink-tracker\/settings/);
+  assert.match(js, /\/api\/push\/starlink-tracker/);
+  assert.match(js, /\/api\/world-population\/settings/);
+  assert.match(js, /\/api\/push\/world-population/);
+  assert.match(js, /\/api\/weather-alerts\/settings/);
+  assert.match(js, /\/api\/push\/weather-alerts/);
+  assert.match(css, /\.conversation-starters-settings-card/);
+  assert.match(css, /\.amazing-facts-settings-card/);
+  assert.match(css, /\.stoic-quotes-settings-card/);
+  assert.match(css, /\.on-this-day-settings-card/);
+  assert.match(css, /\.baking-inspiration-settings-card/);
+  assert.match(css, /\.stock-market-settings-card/);
+  assert.match(css, /\.currency-rates-settings-card/);
+  assert.match(css, /\.iss-tracker-settings-card/);
+  assert.match(css, /\.starlink-tracker-settings-card/);
+  assert.match(css, /\.world-population-settings-card/);
+  assert.match(css, /\.weather-alerts-settings-card/);
   assert.match(js, /function showSettingsView/);
   assert.match(js, /function applySettingsFilter/);
   assert.match(js, /SETTINGS_VIEW_KEY/);

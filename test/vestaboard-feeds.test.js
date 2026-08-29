@@ -37,8 +37,8 @@ test('youtube wraps the title and abbreviates the view count', () => {
 
   assertLayout(frames[0].rows, [
     'rr YOUTUBE          rr',
-    ' SHOULD YOU BUILD A',
-    ' GAMING SERVER?',
+    ' SHOULD YOU BUILD',
+    ' A GAMING SERVER?',
     ' JAKE SIMMONS',
     ' 37K VIEWS 1482+ 12-',
     'rr MOVIE THEATER TV rr',

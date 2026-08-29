@@ -95,14 +95,17 @@ function lr(left, right, options = {}) {
 
 /**
  * Centre text within a span. An odd remainder puts the extra blank on the
- * left, which is how the spec draws a short centred alert.
+ * left by default (text leans right), which is how the spec draws a short
+ * centred alert. Pass `lean: 'left'` to put the extra blank on the right.
  */
 function centered(text, options = {}) {
   const from = options.from ?? BORDER_TEXT_FROM;
   const width = options.width ?? BORDER_TEXT_WIDTH;
   const row = options.row || blankRow(COLS);
   const codes = encodeText(text).slice(0, width);
-  const start = from + Math.ceil((width - codes.length) / 2);
+  const pad = width - codes.length;
+  const inset = options.lean === 'left' ? Math.floor(pad / 2) : Math.ceil(pad / 2);
+  const start = from + inset;
   return placeCodes(row, codes, start);
 }
 

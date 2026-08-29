@@ -252,6 +252,44 @@ test('air-now fires the real push handler and records an airing', async () => {
   }
 });
 
+test('air-now for Vestaboard-only skills reaches the boards even when the rule says full', async () => {
+  const { webServer, api } = await startServer();
+  try {
+    const stoic = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: {
+        commandId: 'stoic.quotes',
+        intervalSeconds: 7200,
+        probability: 0,
+        target: 'full',
+      },
+    });
+    assert.equal(stoic.body.rule.target, 'full');
+    const firedStoic = await api(`${ROUTE}/rules/${stoic.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(firedStoic.status, 202, firedStoic.body?.error || 'stoic air');
+    assert.equal(firedStoic.body.event.outcome, 'aired');
+
+    const world = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: { commandId: 'world.population', intervalSeconds: 7200, probability: 0 },
+    });
+    assert.equal(world.body.rule.target, 'vestaboard', 'new board-only rules default onto the flaps');
+    const firedWorld = await api(`${ROUTE}/rules/${world.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(firedWorld.status, 202, firedWorld.body?.error || 'world air');
+    assert.equal(firedWorld.body.event.outcome, 'aired');
+
+    const history = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: { commandId: 'history.day', intervalSeconds: 7200, probability: 0 },
+    });
+    const firedHistory = await api(`${ROUTE}/rules/${history.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(firedHistory.status, 202, firedHistory.body?.error || 'history air');
+    assert.equal(firedHistory.body.event.outcome, 'aired');
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('airing the slideshow pulls the shared photos itself', async () => {
   // Regression: the push handler only ever read `body.photos`, which the admin
   // UI supplies from the list already on screen. The scheduler has no such

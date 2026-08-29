@@ -199,8 +199,19 @@ function decodeCodes(codes) {
 }
 
 /**
- * Greedy word wrap. Words are never broken except when a single word cannot
- * fit a line at all, in which case it splits with a trailing hyphen.
+ * Greedy word wrap with orphan-aware line breaks.
+ *
+ * Words are never broken except when a single token cannot fit a line at all,
+ * in which case it splits with a trailing hyphen.
+ *
+ * When the next word does not fit, a short trailing word on the current line
+ * (articles, tiny glue words) is pulled onto the next line with it so we do
+ * not leave orphans like:
+ *   INSTRUMENTAL A
+ *   CAPELLA.
+ * Prefer:
+ *   INSTRUMENTAL
+ *   A CAPELLA.
  */
 function wrap(text, width) {
   const limit = Math.max(2, Math.floor(width) || 0);
@@ -217,6 +228,17 @@ function wrap(text, width) {
       lines.push(current);
       current = '';
     }
+  };
+
+  const isOrphanCandidate = (word) => {
+    const token = String(word || '');
+    // Articles and tiny glue words only — pulling 3-letter tokens changes too
+    // many otherwise-fine greedy wraps.
+    if (!token || token.length > 2) {
+      return false;
+    }
+    // Keep punctuation-only tokens where they landed; move letter/digit glue.
+    return /[A-Z0-9]/.test(token);
   };
 
   for (const rawWord of folded.split(' ')) {
@@ -237,8 +259,20 @@ function wrap(text, width) {
     } else if (current.length + 1 + word.length <= limit) {
       current += ` ${word}`;
     } else {
-      flush();
-      current = word;
+      const parts = current.split(' ');
+      const last = parts[parts.length - 1];
+      if (
+        parts.length > 1
+        && isOrphanCandidate(last)
+        && last.length + 1 + word.length <= limit
+      ) {
+        parts.pop();
+        lines.push(parts.join(' '));
+        current = `${last} ${word}`;
+      } else {
+        flush();
+        current = word;
+      }
     }
   }
 

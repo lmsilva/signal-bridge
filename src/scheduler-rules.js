@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const { kindsOf, COMMANDS } = require('./command-registry');
+
 const IMPORTANCE_LABELS = {
   1: 'Background',
   2: 'Low',
@@ -81,13 +83,22 @@ function resolveCommandId(commandId) {
 /**
  * `"all"` | `"full"` | `"vestaboard"` | a display id.
  *
- * Missing / blank becomes `"full"` so a rules file from before boards existed
- * keeps its old behaviour: UDP to the Windows clients, nothing on a Vestaboard.
+ * Missing / blank uses the command's natural home: Vestaboard-only skills
+ * default to the boards; everything else stays on the Windows overlay so
+ * pre-board rule files do not suddenly flip the kitchen.
  */
-function normaliseTarget(value) {
+function defaultTargetForCommand(command) {
+  const kinds = kindsOf(command);
+  if (kinds.length === 1 && kinds[0] === 'vestaboard') {
+    return 'vestaboard';
+  }
+  return 'full';
+}
+
+function normaliseTarget(value, { command = null } = {}) {
   const raw = String(value == null ? '' : value).trim();
   if (!raw) {
-    return 'full';
+    return defaultTargetForCommand(command);
   }
   const lower = raw.toLowerCase();
   if (lower === '*' || lower === 'all') {
@@ -113,6 +124,9 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
   const base = raw || {};
   const rawCommandId = String(base.commandId || '');
   const commandId = resolveCommandId(rawCommandId);
+  const resolvedCommand = command
+    || COMMANDS.find((entry) => entry.id === commandId)
+    || null;
   const intervalSeconds = clampInt(
     base.intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS, 45 * 60,
   );
@@ -120,9 +134,9 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
   if (rawCommandId === 'plex.last-played' && params.mode === 'last-played') {
     delete params.mode;
   }
-  let label = String(base.label || command?.title || commandId || 'Rule').slice(0, 80);
+  let label = String(base.label || resolvedCommand?.title || commandId || 'Rule').slice(0, 80);
   if (rawCommandId !== commandId && label === LEGACY_COMMAND_LABELS[rawCommandId]) {
-    label = command?.title || 'Feature Presentation';
+    label = resolvedCommand?.title || 'Feature Presentation';
   }
   const rule = {
     id: String(base.id || crypto.randomUUID()),
@@ -163,14 +177,14 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
   if (base.displayDurationSeconds != null) {
     rule.displayDurationSeconds = clampInt(base.displayDurationSeconds, 5, 3600, undefined);
   }
-  // Existing rules have no target; they were written for the Windows overlay
-  // and must keep airing there, not suddenly start flipping the kitchen board.
-  rule.target = normaliseTarget(base.target);
+  // Existing rules have no target; prefer the command's natural home so
+  // Vestaboard-only skills do not quietly air into the Windows overlay void.
+  rule.target = normaliseTarget(base.target, { command: resolvedCommand });
   // §7.3: default the guard on wherever it is supported — an empty "now
   // playing" panel is worse than showing nothing.
   if (base.guard === 'requires-content') {
     rule.guard = 'requires-content';
-  } else if (base.guard === undefined && command?.supportsContentCheck) {
+  } else if (base.guard === undefined && resolvedCommand?.supportsContentCheck) {
     rule.guard = 'requires-content';
   }
   return rule;

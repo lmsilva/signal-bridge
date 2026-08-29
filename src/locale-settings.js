@@ -20,6 +20,7 @@ const FALLBACK = {
   timeZone: 'America/Denver',
   label: '',
   temperatureUnit: 'F',
+  currencyCode: 'USD',
 };
 
 function finiteCoord(value) {
@@ -28,6 +29,14 @@ function finiteCoord(value) {
   }
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function cleanCurrencyCode(value, fallback = 'USD') {
+  const code = String(value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (code === 'RMB') {
+    return 'CNY';
+  }
+  return code || fallback;
 }
 
 function sanitiseSettings(raw = {}, base = FALLBACK) {
@@ -47,6 +56,10 @@ function sanitiseSettings(raw = {}, base = FALLBACK) {
     timeZone,
     label: String(merged.label || '').trim(),
     temperatureUnit: unit === 'C' ? 'C' : 'F',
+    currencyCode: cleanCurrencyCode(
+      merged.currencyCode != null ? merged.currencyCode : base.currencyCode,
+      base.currencyCode || 'USD',
+    ),
   };
 }
 
@@ -162,5 +175,6 @@ module.exports = {
   hasLocation,
   applyToConfig,
   toWeatherLocation,
+  cleanCurrencyCode,
   createLocaleSettings,
 };

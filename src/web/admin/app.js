@@ -1099,6 +1099,7 @@
     'tesla-battery': '<rect x="2.5" y="7.5" width="17" height="9" rx="2"/><path d="M21.5 10.5v3"/><path d="M6 10.5v3M9.5 10.5v3M13 10.5v3"/>',
     photo: '<rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/>',
     weather: '<path d="M7.5 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 12.1 3.5 3.5 0 0 0 7.5 18Z"/>',
+    'weather-alert': '<path d="M7.5 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 12.1 3.5 3.5 0 0 0 7.5 18Z"/><path d="M12 8v4M12 14.5v.5"/>',
     'shopping-list': '<path d="M6 6h14l-1.5 9h-11z"/><path d="M6 6 5 3H3"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="16.5" cy="19" r="1.5"/>',
     timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/>',
     'guest-snaps': '<rect x="3" y="3" width="8" height="8" rx="1.5"/><path d="M5.5 7h3M7 5.5v3"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M15 17h4M17 15v4"/><path d="M13 7h4M17 3v4M3 17h4M7 13v4"/>',
@@ -1111,8 +1112,18 @@
     wiki: '<path d="M5 4.5h8a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2v-13Z"/><path d="M9 4.5V3h6v1.5"/><path d="M8 10h6M8 13.5h4"/>',
     japanese: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/>',
     chuck: '<circle cx="12" cy="8.5" r="3.2"/><path d="M7 20c.6-3.2 2.6-5 5-5s4.4 1.8 5 5"/><path d="M5 10.5c2-.8 4-.8 7-.8s5 0 7 .8"/><path d="M8.2 13.2 6.5 15M15.8 13.2 17.5 15"/>',
+    amazing: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="m8.5 4.5 1 1.5M15.5 4.5l-1 1.5M5.5 9l1.5.8M18.5 9l-1.5.8"/>',
+    talk: '<path d="M5 6.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H10l-3.5 3v-3H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"/><path d="M14 9.5h5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-1v2l-2.5-2"/>',
+    stoic: '<path d="M8 4h8v3.5c0 2.2-1.8 4-4 4s-4-1.8-4-4V4Z"/><path d="M7 20c.8-3.5 2.8-5.5 5-5.5s4.2 2 5 5.5"/><path d="M9.5 9.5h5"/>',
+    history: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M16.5 15.5 18 18"/>',
+    bake: '<path d="M7 14h10v5H7z"/><path d="M8 14c0-3 1.5-6 4-6s4 3 4 6"/><path d="M9 9.5c.5-1.5 1.5-2.5 3-2.5s2.5 1 3 2.5"/><path d="M6 19h12"/>',
+    stocks: '<path d="M4 18V6M4 18h16"/><path d="m7 14 3-4 3 2 4-6"/>',
+    currency: '<circle cx="12" cy="12" r="9"/><path d="M12 6v12M9.5 9.5c.6-1 1.6-1.5 2.5-1.5 1.4 0 2.5.9 2.5 2s-1.1 2-2.5 2h-1c-1.4 0-2.5.9-2.5 2s1.1 2 2.5 2c.9 0 1.9-.5 2.5-1.5"/>',
+    world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 3.2 2.8 14.8 0 18M12 3c-2.8 3.2-2.8 14.8 0 18"/><path d="M5.5 7.5c2 .8 4 .8 6.5.8s4.5 0 6.5-.8M5.5 16.5c2-.8 4-.8 6.5-.8s4.5 0 6.5.8"/>',
     'quiet-hours': '<path d="M14.5 4.5A7.5 7.5 0 1 0 19.5 16 6.2 6.2 0 0 1 14.5 4.5Z"/><path d="M16.2 6.2 17 4.4M18.4 8.8l1.6-.6M19.2 12l1.8.2"/>',
     sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
+    iss: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M3 12h4M17 12h4M12 3v4M12 17v4"/><path d="M7.5 7.5l2 2M14.5 14.5l2 2M16.5 7.5l-2 2M9.5 14.5l-2 2"/>',
+    starlink: '<circle cx="12" cy="12" r="9"/><path d="M5 12h14M12 5v14"/><circle cx="7" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="0.9" fill="currentColor" stroke="none"/>',
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
     steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
     psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
@@ -2721,11 +2732,12 @@
       ? command.kinds
       : ['full'];
     const boardCapable = kinds.includes('vestaboard');
-    const current = rule.target || 'full';
-    const options = [
-      ['full', 'Full displays'],
-      ['all', 'All displays'],
-    ];
+    const boardOnly = kinds.length === 1 && kinds[0] === 'vestaboard';
+    const current = rule.target || (boardOnly ? 'vestaboard' : 'full');
+    const options = [];
+    if (!boardOnly) {
+      options.push(['full', 'Full displays'], ['all', 'All displays']);
+    }
     if (boardCapable) {
       options.push(['vestaboard', 'Vestaboards']);
       for (const display of knownDisplays.filter((entry) => entry.kind === 'vestaboard')) {
@@ -2733,6 +2745,9 @@
       }
     }
     for (const display of knownDisplays.filter((entry) => entry.kind !== 'vestaboard')) {
+      if (boardOnly) {
+        continue;
+      }
       options.push([display.id, display.label || display.name]);
     }
     if (current && !options.some(([value]) => value === current)) {
@@ -4718,8 +4733,19 @@
   function renderLocaleSettings(settings = {}) {
     const city = $('locale-city');
     const zip = $('locale-zip');
+    const currency = $('locale-currency');
     if (city && document.activeElement !== city) city.value = settings.city || '';
     if (zip && document.activeElement !== zip) zip.value = settings.postalCode || '';
+    if (currency && document.activeElement !== currency) {
+      const code = String(settings.currencyCode || 'USD').toUpperCase();
+      if (![...currency.options].some((opt) => opt.value === code)) {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = `${code} — Custom`;
+        currency.appendChild(opt);
+      }
+      currency.value = code;
+    }
     setLocaleUnit(settings.temperatureUnit);
     const pill = $('locale-status-pill');
     const detail = $('locale-status-detail');
@@ -4741,7 +4767,8 @@
       } else {
         const lat = Number(settings.latitude).toFixed(4);
         const lon = Number(settings.longitude).toFixed(4);
-        resolved.textContent = `${settings.label || 'Home'}\n${lat}, ${lon}\n${settings.timeZone || ''} · °${settings.temperatureUnit || 'F'}`;
+        const fx = settings.currencyCode || 'USD';
+        resolved.textContent = `${settings.label || 'Home'}\n${lat}, ${lon}\n${settings.timeZone || ''} · °${settings.temperatureUnit || 'F'} · ${fx}`;
         resolved.style.whiteSpace = 'pre-line';
       }
     }
@@ -4770,10 +4797,13 @@
         city: $('locale-city')?.value || '',
         postalCode: $('locale-zip')?.value || '',
         temperatureUnit: localeUnit(),
+        currencyCode: $('locale-currency')?.value || 'USD',
       });
       renderLocaleSettings(result.settings || {});
       toast('House location saved', 'ok');
       loadOverheadSettings();
+      loadIssTrackerSettings();
+      loadStarlinkTrackerSettings();
     } catch (error) {
       toast(error.message || 'Could not save location', 'bad');
     } finally {
@@ -4782,6 +4812,262 @@
   });
 
   loadLocaleSettings();
+
+  // ------------------------------------------ Settings → Weather Alerts
+
+  function renderWeatherAlertsSettings(data = {}) {
+    const settings = data.settings || {};
+    const severity = $('weather-alerts-min-severity');
+    const maxAlerts = $('weather-alerts-max');
+    const watches = $('weather-alerts-watches');
+    const advisories = $('weather-alerts-advisories');
+    if (severity && document.activeElement !== severity) {
+      severity.value = settings.minSeverity || 'Minor';
+    }
+    if (maxAlerts && document.activeElement !== maxAlerts) {
+      maxAlerts.value = String(settings.maxAlerts || 3);
+    }
+    if (watches) watches.checked = settings.includeWatches !== false;
+    if (advisories) advisories.checked = settings.includeAdvisories !== false;
+
+    const pill = $('weather-alerts-status-pill');
+    const detail = $('weather-alerts-status-detail');
+    const location = $('weather-alerts-location');
+    const hasPin = Boolean(data.hasLocation);
+    if (pill) {
+      pill.textContent = hasPin ? 'Ready' : 'Needs pin';
+      pill.className = `status-pill ${hasPin ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = hasPin
+        ? 'Active U.S. National Weather Service alerts for the house pin. Free — no API key.'
+        : 'Set the house location under Location, then push Weather Alerts.';
+    }
+    if (location) {
+      const loc = data.location || {};
+      if (!hasPin) {
+        location.textContent = 'Set a city or ZIP under Location.';
+      } else {
+        location.textContent = `${loc.label || loc.city || 'Home'}`
+          + (loc.timeZone ? ` · ${loc.timeZone}` : '')
+          + ' · NWS';
+      }
+    }
+  }
+
+  async function loadWeatherAlertsSettings() {
+    try {
+      const data = await apiGet('/api/weather-alerts/settings');
+      renderWeatherAlertsSettings(data);
+    } catch (_error) {
+      renderWeatherAlertsSettings({});
+    }
+  }
+
+  $('btn-weather-alerts-save')?.addEventListener('click', async () => {
+    const button = $('btn-weather-alerts-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/weather-alerts/settings', {
+        minSeverity: $('weather-alerts-min-severity')?.value,
+        maxAlerts: Number($('weather-alerts-max')?.value || 3),
+        includeWatches: Boolean($('weather-alerts-watches')?.checked),
+        includeAdvisories: Boolean($('weather-alerts-advisories')?.checked),
+      });
+      renderWeatherAlertsSettings(result);
+      toast('Weather alert filters saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save weather alert filters', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-weather-alerts-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/weather-alerts', withTarget());
+      if (result.mode === 'alerts') {
+        const count = result.alerts?.length || 0;
+        const first = result.alerts?.[0]?.event || 'Alert';
+        toast(`${first}${count > 1 ? ` (+${count - 1})` : ''}`, 'good');
+      } else if (result.mode === 'outside-us') {
+        toast('NWS alerts need a U.S. house pin', 'bad');
+      } else {
+        toast('All clear — no active alerts', 'good');
+      }
+    } catch (error) {
+      toast(error?.message || 'Weather Alerts push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadWeatherAlertsSettings();
+
+  // ----------------------------------------- Settings → World Population
+
+  function formatWorldPopNumber(value) {
+    const number = Math.round(Number(value));
+    if (!Number.isFinite(number)) {
+      return '';
+    }
+    return String(number).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function formatWorldPopRate(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return '';
+    }
+    const fixed = Math.abs(number) >= 10 ? number.toFixed(0) : number.toFixed(1);
+    return fixed.replace(/\.0$/, '');
+  }
+
+  function renderWorldPopulationPreview(data = {}) {
+    const host = $('world-population-preview');
+    if (!host) {
+      return;
+    }
+    const estimate = data.estimate || {};
+    const formatted = data.formatted || formatWorldPopNumber(estimate.population);
+    const births = formatWorldPopRate(estimate.birthsPerSec);
+    const deaths = formatWorldPopRate(estimate.deathsPerSec);
+    const net = formatWorldPopRate(estimate.netPerSec);
+    const detail = (births && deaths) ? `B ${births}/S  D ${deaths}/S` : '';
+    const rate = net ? `NET +${net} / SECOND` : '';
+    const source = String(data.settings?.sourceLabel || estimate.sourceLabel || 'ESTIMATE').slice(0, 18);
+    const lines = [
+      'WORLD POPULATION',
+      '',
+      formatted,
+      detail || rate,
+      detail ? rate : '',
+      source,
+    ];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.slice(0, 6).map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+  }
+
+  function renderWorldPopulationSettings(data = {}) {
+    const settings = data.settings || {};
+    const estimate = data.estimate || {};
+    const fields = {
+      'world-pop-base': settings.basePopulation,
+      'world-pop-base-at': settings.baseAt,
+      'world-pop-births': settings.birthsPerYear,
+      'world-pop-deaths': settings.deathsPerYear,
+      'world-pop-source': settings.sourceLabel,
+    };
+    Object.entries(fields).forEach(([id, value]) => {
+      const input = $(id);
+      if (input && document.activeElement !== input) {
+        input.value = value == null ? '' : String(value);
+      }
+    });
+    const pill = $('world-population-status-pill');
+    const detail = $('world-population-status-detail');
+    const live = $('world-population-live');
+    const rates = $('world-population-rates');
+    const formatted = data.formatted || formatWorldPopNumber(estimate.population);
+    if (pill) {
+      pill.textContent = formatted ? 'Live' : '…';
+      pill.className = `status-pill ${formatted ? 'is-ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = formatted
+        ? `${formatted} people · estimated from your baseline`
+        : 'Estimated live headcount from a UN-style baseline — no network call.';
+    }
+    if (live) {
+      live.textContent = formatted || '…';
+    }
+    if (rates) {
+      const births = formatWorldPopRate(estimate.birthsPerSec);
+      const deaths = formatWorldPopRate(estimate.deathsPerSec);
+      const net = formatWorldPopRate(estimate.netPerSec);
+      rates.textContent = (births && deaths && net)
+        ? `+${net}/s net · ${births} births/s · ${deaths} deaths/s`
+        : '…';
+    }
+    renderWorldPopulationPreview(data);
+  }
+
+  async function loadWorldPopulationSettings() {
+    try {
+      const data = await apiGet('/api/world-population/settings');
+      renderWorldPopulationSettings(data);
+    } catch (_error) {
+      renderWorldPopulationSettings({});
+    }
+  }
+
+  function readWorldPopulationForm() {
+    return {
+      basePopulation: $('world-pop-base')?.value,
+      baseAt: $('world-pop-base-at')?.value,
+      birthsPerYear: $('world-pop-births')?.value,
+      deathsPerYear: $('world-pop-deaths')?.value,
+      sourceLabel: $('world-pop-source')?.value,
+    };
+  }
+
+  $('btn-world-population-save')?.addEventListener('click', async () => {
+    const button = $('btn-world-population-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/world-population/settings', readWorldPopulationForm());
+      renderWorldPopulationSettings(result);
+      toast('World population model saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save population model', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-world-population-reset')?.addEventListener('click', async () => {
+    const button = $('btn-world-population-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/world-population/settings', { reset: true });
+      renderWorldPopulationSettings(result);
+      toast('Reset to UN defaults', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset population model', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-world-population-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/world-population', withTarget());
+      const count = result.population?.formatted || 'World population';
+      toast(count, 'good');
+    } catch (error) {
+      toast(error?.message || 'World Population push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadWorldPopulationSettings();
+  window.setInterval(() => {
+    if (document.hidden) return;
+    if (!$('world-population-settings-card')) return;
+    const view = typeof currentSettingsView === 'function' ? currentSettingsView() : 'global';
+    if (view !== 'global' && view !== 'all') return;
+    loadWorldPopulationSettings();
+  }, 5000);
 
   // ------------------------------------------- Settings → Learn Japanese
 
@@ -4850,6 +5136,20 @@
     saveLearnJapaneseSettings();
   });
 
+  $('btn-learn-japanese-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/learn-japanese', withTarget());
+      const romaji = result.word?.romaji || 'word';
+      toast(`Learn Japanese: ${romaji}`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Learn Japanese', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   loadLearnJapaneseSettings();
 
   // ------------------------------------------- Settings → Chuck Norris
@@ -4870,21 +5170,75 @@
     const words = foldPreview(text).split(' ').filter(Boolean);
     const lines = [];
     let line = '';
+    const isOrphanCandidate = (word) => word
+      && word.length <= 2
+      && /[A-Z0-9]/.test(word);
     for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
+      let token = word;
+      if (token.length > width) {
+        if (line) {
+          lines.push(line);
+          line = '';
+        }
+        while (token.length > width) {
+          lines.push(token.slice(0, width));
+          token = token.slice(width);
+        }
+        if (!token) {
+          continue;
+        }
+      }
+      const next = line ? `${line} ${token}` : token;
       if (next.length <= width) {
         line = next;
         continue;
       }
       if (line) {
+        const parts = line.split(' ');
+        const last = parts[parts.length - 1];
+        if (
+          parts.length > 1
+          && isOrphanCandidate(last)
+          && last.length + 1 + token.length <= width
+        ) {
+          parts.pop();
+          lines.push(parts.join(' '));
+          line = `${last} ${token}`;
+          continue;
+        }
         lines.push(line);
       }
-      line = word.length <= width ? word : word.slice(0, width);
+      line = token;
     }
     if (line) {
       lines.push(line);
     }
     return lines;
+  }
+
+  function chuckNorrisCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} facts ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderChuckNorrisCard(data = {}) {
+    const pill = $('chuck-norris-status-pill');
+    const detail = $('chuck-norris-status-detail');
+    const summary = $('chuck-norris-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${chuckNorrisCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit Chuck Norris facts. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? chuckNorrisCountsLine(data) : 'Loading…';
+    }
   }
 
   function renderChuckNorrisPreview(text) {
@@ -4910,18 +5264,7 @@
   }
 
   function renderChuckNorrisSettings(data = {}) {
-    const pill = $('chuck-norris-status-pill');
-    const detail = $('chuck-norris-status-detail');
-    if (pill) {
-      pill.textContent = data.available != null ? `${data.available} ready` : '…';
-    }
-    if (detail) {
-      const hidden = Number(data.hiddenCount || 0);
-      const custom = Number(data.customCount || 0);
-      detail.textContent = `${data.available || 0} facts ready`
-        + (custom ? ` · ${custom} added here` : '')
-        + (hidden ? ` · ${hidden} hidden` : '');
-    }
+    renderChuckNorrisCard(data);
     const list = $('chuck-norris-fact-list');
     if (list) {
       const facts = data.facts || [];
@@ -4953,6 +5296,15 @@
     if (next) next.disabled = chuckNorrisPage >= (data.pages || 1);
   }
 
+  async function loadChuckNorrisStatus() {
+    try {
+      const data = await apiGet('/api/chuck-norris/facts?page=1&pageSize=1');
+      renderChuckNorrisCard(data);
+    } catch {
+      renderChuckNorrisCard({});
+    }
+  }
+
   async function loadChuckNorrisFacts(page = chuckNorrisPage) {
     const query = $('chuck-norris-search')?.value || '';
     const hidden = Boolean($('chuck-norris-show-hidden')?.checked);
@@ -4971,6 +5323,42 @@
       renderChuckNorrisSettings({});
     }
   }
+
+  function openChuckNorrisManageSheet() {
+    const sheet = $('chuck-norris-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    renderChuckNorrisPreview($('chuck-norris-new')?.value || '');
+    loadChuckNorrisFacts(1);
+  }
+
+  function closeChuckNorrisManageSheet() {
+    const sheet = $('chuck-norris-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadChuckNorrisStatus();
+  }
+
+  $('btn-chuck-norris-manage')?.addEventListener('click', () => openChuckNorrisManageSheet());
+  $('btn-chuck-norris-manage-close')?.addEventListener('click', () => closeChuckNorrisManageSheet());
+  registerSheetDismiss('chuck-norris-manage-sheet', () => closeChuckNorrisManageSheet());
+
+  $('btn-chuck-norris-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/chuck-norris', withTarget());
+      const preview = String(result.fact?.text || 'Chuck Norris fact').slice(0, 60);
+      toast(preview, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Chuck Norris Fun Facts', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   $('btn-chuck-norris-add')?.addEventListener('click', async () => {
     const input = $('chuck-norris-new');
@@ -5015,7 +5403,7 @@
       } else if (event.target.closest('[data-cn-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/chuck-norris/facts', { id, hidden: !restore });
-        toast(restore ? 'Fact restored' : 'Fact hidden', 'good');
+        toast(restore ? 'Fact restored' : (article.classList.contains('is-custom') ? 'Fact removed' : 'Fact hidden'), 'good');
       } else {
         return;
       }
@@ -5025,8 +5413,1818 @@
     }
   });
 
-  renderChuckNorrisPreview('');
-  loadChuckNorrisFacts(1);
+  loadChuckNorrisStatus();
+
+  // ------------------------------------------- Settings → Amazing Facts
+
+  const AF_PAGE_SIZE = 12;
+  let amazingFactsPage = 1;
+  let amazingFactsTimer = 0;
+  let amazingFactsCategoryOptions = [];
+
+  function labelAmazingCategory(id) {
+    return String(id || '')
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ') || 'Trivia';
+  }
+
+  function fillAmazingCategorySelects(options = [], selectedPool = []) {
+    amazingFactsCategoryOptions = options;
+    const browse = $('amazing-facts-browse-category');
+    const pool = $('amazing-facts-pool-categories');
+    const selected = new Set((selectedPool || []).map(String));
+    if (browse) {
+      const current = browse.value || '';
+      browse.innerHTML = '<option value="">All categories</option>'
+        + options.map((row) => (
+          `<option value="${escapeHtml(row.id)}">${escapeHtml(labelAmazingCategory(row.id))} (${row.count || 0})</option>`
+        )).join('');
+      browse.value = current;
+    }
+    if (pool) {
+      pool.innerHTML = options.map((row) => (
+        `<option value="${escapeHtml(row.id)}"${selected.has(row.id) ? ' selected' : ''}>${escapeHtml(labelAmazingCategory(row.id))} (${row.count || 0})</option>`
+      )).join('');
+    }
+  }
+
+  function renderAmazingFactsPreview(text) {
+    const host = $('amazing-facts-preview');
+    if (!host) {
+      return;
+    }
+    const lines = ['AMAZING FACT', ...wrapPreview(text, 22).slice(0, 5)];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('amazing-facts-fit-hint');
+    if (hint) {
+      const rows = wrapPreview(text, 22).length;
+      hint.textContent = text
+        ? (rows <= 5 ? `Fits in ${rows} row${rows === 1 ? '' : 's'}` : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function amazingFactsCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    const pool = Array.isArray(data.categories) ? data.categories.length : 0;
+    return `${data.available || 0} facts ready`
+      + (pool ? ` · pool: ${pool} categor${pool === 1 ? 'y' : 'ies'}` : '')
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderAmazingFactsCard(data = {}) {
+    const pill = $('amazing-facts-status-pill');
+    const detail = $('amazing-facts-status-detail');
+    const summary = $('amazing-facts-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${amazingFactsCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local amazing facts for the Vestaboard. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? amazingFactsCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderAmazingFactsSettings(data = {}) {
+    renderAmazingFactsCard(data);
+    const attribution = $('amazing-facts-attribution');
+    if (attribution) {
+      attribution.textContent = data.attribution
+        ? `${data.attribution}${data.license ? ` (${data.license})` : ''}`
+        : '';
+    }
+    fillAmazingCategorySelects(data.categoryOptions || amazingFactsCategoryOptions, data.categories || []);
+    const list = $('amazing-facts-fact-list');
+    if (list) {
+      const facts = data.facts || [];
+      if (!facts.length) {
+        list.innerHTML = '<p class="hint">No facts match that search.</p>';
+      } else {
+        list.innerHTML = facts.map((fact) => `
+          <article class="cn-fact${fact.hidden ? ' is-hidden' : ''}${fact.custom ? ' is-custom' : ''}" data-af-id="${escapeHtml(fact.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(fact.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${fact.custom ? 'Yours' : 'Shipped'} · ${escapeHtml(labelAmazingCategory(fact.category))} · ${fact.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-af-save>Save</button>
+                <button type="button" class="btn btn-outline btn-sm" data-af-hide>${fact.hidden ? 'Restore' : (fact.custom ? 'Remove' : 'Hide')}</button>
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('amazing-facts-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    amazingFactsPage = data.page || 1;
+    const prev = $('btn-amazing-facts-prev');
+    const next = $('btn-amazing-facts-next');
+    if (prev) prev.disabled = amazingFactsPage <= 1;
+    if (next) next.disabled = amazingFactsPage >= (data.pages || 1);
+  }
+
+  async function loadAmazingFactsStatus() {
+    try {
+      const data = await apiGet('/api/amazing-facts/facts?page=1&pageSize=1');
+      renderAmazingFactsCard(data);
+    } catch {
+      renderAmazingFactsCard({});
+    }
+  }
+
+  async function loadAmazingFacts(page = amazingFactsPage) {
+    const query = $('amazing-facts-search')?.value || '';
+    const hidden = Boolean($('amazing-facts-show-hidden')?.checked);
+    const category = $('amazing-facts-browse-category')?.value || '';
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(AF_PAGE_SIZE),
+    });
+    if (query) params.set('q', query);
+    if (hidden) params.set('hidden', '1');
+    if (category) params.set('category', category);
+    try {
+      const data = await apiGet(`/api/amazing-facts/facts?${params}`);
+      renderAmazingFactsSettings(data);
+    } catch (error) {
+      toast(error.message || 'Could not load Amazing Facts', 'bad');
+    }
+  }
+
+  function openAmazingFactsManageSheet() {
+    const sheet = $('amazing-facts-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    renderAmazingFactsPreview($('amazing-facts-new')?.value || '');
+    loadAmazingFacts(1);
+  }
+
+  function closeAmazingFactsManageSheet() {
+    const sheet = $('amazing-facts-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadAmazingFactsStatus();
+  }
+
+  $('btn-amazing-facts-manage')?.addEventListener('click', () => openAmazingFactsManageSheet());
+  $('btn-amazing-facts-manage-close')?.addEventListener('click', () => closeAmazingFactsManageSheet());
+  registerSheetDismiss('amazing-facts-manage-sheet', () => closeAmazingFactsManageSheet());
+
+  $('btn-amazing-facts-add')?.addEventListener('click', async () => {
+    const input = $('amazing-facts-new');
+    try {
+      await apiPost('/api/amazing-facts/facts', {
+        text: input?.value || '',
+        category: $('amazing-facts-browse-category')?.value || 'custom',
+      });
+      if (input) input.value = '';
+      toast('Fact added', 'good');
+      await loadAmazingFacts(1);
+      renderAmazingFactsPreview('');
+    } catch (error) {
+      toast(error.message || 'Could not add that fact', 'bad');
+    }
+  });
+
+  $('btn-amazing-facts-push')?.addEventListener('click', async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/amazing-facts', withTarget());
+      toast(result.fact?.text ? 'Pushed an amazing fact' : 'Pushed Amazing Facts', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not push Amazing Facts', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-amazing-facts-save-pool')?.addEventListener('click', async () => {
+    const pool = $('amazing-facts-pool-categories');
+    const categories = pool
+      ? [...pool.selectedOptions].map((option) => option.value).filter(Boolean)
+      : [];
+    try {
+      await apiPost('/api/amazing-facts/facts', { categories });
+      toast(categories.length ? 'Push pool saved' : 'Push pool uses every category', 'good');
+      await loadAmazingFacts(1);
+    } catch (error) {
+      toast(error.message || 'Could not save push pool', 'bad');
+    }
+  });
+
+  $('btn-amazing-facts-clear-pool')?.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/amazing-facts/facts', { categories: [] });
+      toast('Push pool uses every category', 'good');
+      await loadAmazingFacts(amazingFactsPage);
+    } catch (error) {
+      toast(error.message || 'Could not clear push pool', 'bad');
+    }
+  });
+
+  $('amazing-facts-new')?.addEventListener('input', () => {
+    renderAmazingFactsPreview($('amazing-facts-new')?.value || '');
+  });
+  $('amazing-facts-search')?.addEventListener('input', () => {
+    window.clearTimeout(amazingFactsTimer);
+    amazingFactsTimer = window.setTimeout(() => loadAmazingFacts(1), 250);
+  });
+  $('amazing-facts-browse-category')?.addEventListener('change', () => loadAmazingFacts(1));
+  $('amazing-facts-show-hidden')?.addEventListener('change', () => loadAmazingFacts(1));
+  $('btn-amazing-facts-prev')?.addEventListener('click', () => loadAmazingFacts(amazingFactsPage - 1));
+  $('btn-amazing-facts-next')?.addEventListener('click', () => loadAmazingFacts(amazingFactsPage + 1));
+
+  $('amazing-facts-fact-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-af-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-af-id');
+    const text = article.querySelector('.cn-fact-text')?.value || '';
+    try {
+      if (event.target.matches('[data-af-save]')) {
+        await apiPost('/api/amazing-facts/facts', { id, text });
+        toast('Fact saved', 'good');
+      } else if (event.target.matches('[data-af-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/amazing-facts/facts', { id, hidden: !restore });
+        toast(restore ? 'Fact restored' : (article.classList.contains('is-custom') ? 'Fact removed' : 'Fact hidden'), 'good');
+      } else {
+        return;
+      }
+      await loadAmazingFacts(amazingFactsPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that fact', 'bad');
+    }
+  });
+
+  loadAmazingFactsStatus();
+
+  // ------------------------------------------- Settings → Conversation Starters
+
+  const CS_PAGE_SIZE = 12;
+  let conversationStartersPage = 1;
+  let conversationStartersTimer = 0;
+
+  function renderConversationStartersPreview(text) {
+    const host = $('conversation-starters-preview');
+    if (!host) {
+      return;
+    }
+    const body = wrapPreview(text, 22).slice(0, 5);
+    const padTop = Math.floor((5 - body.length) / 2);
+    const lines = ["LET'S TALK"];
+    for (let i = 0; i < 5; i += 1) {
+      lines.push(body[i - padTop] || '');
+    }
+    host.innerHTML = lines.map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('conversation-starters-fit-hint');
+    if (hint) {
+      const rows = wrapPreview(text, 22).length;
+      hint.textContent = text
+        ? (rows <= 5 ? `Fits in ${rows} row${rows === 1 ? '' : 's'}` : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function conversationStartersCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} prompts ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderConversationStartersCard(data = {}) {
+    const pill = $('conversation-starters-status-pill');
+    const detail = $('conversation-starters-status-detail');
+    const summary = $('conversation-starters-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${conversationStartersCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local icebreaker prompts for the Vestaboard. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? conversationStartersCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderConversationStartersSettings(data = {}) {
+    renderConversationStartersCard(data);
+    const list = $('conversation-starters-prompt-list');
+    if (list) {
+      const prompts = data.prompts || [];
+      if (!prompts.length) {
+        list.innerHTML = '<p class="hint">No prompts match that search.</p>';
+      } else {
+        list.innerHTML = prompts.map((prompt) => `
+          <article class="cn-fact${prompt.hidden ? ' is-hidden' : ''}${prompt.custom ? ' is-custom' : ''}" data-cs-id="${escapeHtml(prompt.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(prompt.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${prompt.custom ? 'Yours' : 'Shipped'} · ${prompt.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-cs-save>Save</button>
+                <button type="button" class="btn btn-outline btn-sm" data-cs-hide>${prompt.hidden ? 'Restore' : (prompt.custom ? 'Remove' : 'Hide')}</button>
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('conversation-starters-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    conversationStartersPage = data.page || 1;
+    const prev = $('btn-conversation-starters-prev');
+    const next = $('btn-conversation-starters-next');
+    if (prev) prev.disabled = conversationStartersPage <= 1;
+    if (next) next.disabled = conversationStartersPage >= (data.pages || 1);
+  }
+
+  async function loadConversationStartersStatus() {
+    try {
+      const data = await apiGet('/api/conversation-starters/prompts?page=1&pageSize=1');
+      renderConversationStartersCard(data);
+    } catch {
+      renderConversationStartersCard({});
+    }
+  }
+
+  async function loadConversationStarters(page = conversationStartersPage) {
+    const query = $('conversation-starters-search')?.value || '';
+    const hidden = Boolean($('conversation-starters-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(CS_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      const data = await apiGet(`/api/conversation-starters/prompts?${params}`);
+      renderConversationStartersSettings(data);
+    } catch {
+      renderConversationStartersSettings({});
+    }
+  }
+
+  function openConversationStartersManageSheet() {
+    const sheet = $('conversation-starters-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    renderConversationStartersPreview($('conversation-starters-new')?.value || '');
+    loadConversationStarters(1);
+  }
+
+  function closeConversationStartersManageSheet() {
+    const sheet = $('conversation-starters-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadConversationStartersStatus();
+  }
+
+  $('btn-conversation-starters-manage')?.addEventListener('click', () => openConversationStartersManageSheet());
+  $('btn-conversation-starters-manage-close')?.addEventListener('click', () => closeConversationStartersManageSheet());
+  registerSheetDismiss('conversation-starters-manage-sheet', () => closeConversationStartersManageSheet());
+
+  $('btn-conversation-starters-add')?.addEventListener('click', async () => {
+    const input = $('conversation-starters-new');
+    const text = input?.value || '';
+    try {
+      await apiPost('/api/conversation-starters/prompts', { text });
+      if (input) input.value = '';
+      renderConversationStartersPreview('');
+      toast('Prompt added', 'good');
+      await loadConversationStarters(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that prompt', 'bad');
+    }
+  });
+
+  $('btn-conversation-starters-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/conversation-starters', withTarget());
+      const preview = String(result.prompt?.text || 'Conversation starter').slice(0, 60);
+      toast(preview, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Conversation Starters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('conversation-starters-new')?.addEventListener('input', (event) => {
+    renderConversationStartersPreview(event.target.value);
+  });
+
+  $('conversation-starters-search')?.addEventListener('input', () => {
+    window.clearTimeout(conversationStartersTimer);
+    conversationStartersTimer = window.setTimeout(() => {
+      loadConversationStarters(1);
+    }, 250);
+  });
+
+  $('conversation-starters-show-hidden')?.addEventListener('change', () => loadConversationStarters(1));
+  $('btn-conversation-starters-prev')?.addEventListener('click', () => loadConversationStarters(conversationStartersPage - 1));
+  $('btn-conversation-starters-next')?.addEventListener('click', () => loadConversationStarters(conversationStartersPage + 1));
+
+  $('conversation-starters-prompt-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-cs-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-cs-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    try {
+      if (event.target.closest('[data-cs-save]')) {
+        await apiPost('/api/conversation-starters/prompts', { id, text });
+        toast('Prompt saved', 'good');
+      } else if (event.target.closest('[data-cs-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/conversation-starters/prompts', { id, hidden: !restore });
+        toast(restore ? 'Prompt restored' : (article.classList.contains('is-custom') ? 'Prompt removed' : 'Prompt hidden'), 'good');
+      } else {
+        return;
+      }
+      await loadConversationStarters(conversationStartersPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that prompt', 'bad');
+    }
+  });
+
+  loadConversationStartersStatus();
+
+  // ------------------------------------------- Settings → Stoic Quotes
+
+  const SQ_PAGE_SIZE = 12;
+  let stoicQuotesPage = 1;
+  let stoicQuotesTimer = 0;
+
+  function renderStoicQuotesPreview(text, author) {
+    const host = $('stoic-quotes-preview');
+    if (!host) {
+      return;
+    }
+    const quoteLines = wrapPreview(text, 22).slice(0, 4);
+    const who = foldPreview(author || '');
+    const authorLine = who ? `- ${who}`.slice(0, 22) : '';
+    const lines = ['STOIC', ...quoteLines];
+    while (lines.length < 5) {
+      lines.push('');
+    }
+    lines.push(authorLine);
+    host.innerHTML = lines.map((line, index) => {
+      let cells = String(line).padEnd(22, ' ').slice(0, 22);
+      if (index === 5 && authorLine) {
+        cells = String(authorLine).padStart(22, ' ').slice(-22);
+      }
+      return `<div class="cn-preview-row">${cells.split('').map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('stoic-quotes-fit-hint');
+    if (hint) {
+      const rows = wrapPreview(text, 22).length;
+      hint.textContent = text
+        ? (rows <= 4 ? `Fits in ${rows} row${rows === 1 ? '' : 's'} + author` : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function stoicQuotesCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} quotes ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderStoicQuotesCard(data = {}) {
+    const pill = $('stoic-quotes-status-pill');
+    const detail = $('stoic-quotes-status-detail');
+    const summary = $('stoic-quotes-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${stoicQuotesCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local Stoic quotes for the Vestaboard. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? stoicQuotesCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderStoicQuotesSettings(data = {}) {
+    renderStoicQuotesCard(data);
+    const list = $('stoic-quotes-quote-list');
+    if (list) {
+      const quotes = data.quotes || [];
+      if (!quotes.length) {
+        list.innerHTML = '<p class="hint">No quotes match that search.</p>';
+      } else {
+        list.innerHTML = quotes.map((quote) => `
+          <article class="cn-fact${quote.hidden ? ' is-hidden' : ''}${quote.custom ? ' is-custom' : ''}" data-sq-id="${escapeHtml(quote.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(quote.text)}</textarea>
+            <input type="text" class="field-input cn-fact-author" maxlength="40" value="${escapeHtml(quote.author || '')}" placeholder="Author">
+            <div class="cn-fact-meta">
+              <span class="hint">${quote.custom ? 'Yours' : 'Shipped'} · ${quote.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-sq-save>Save</button>
+                <button type="button" class="btn btn-outline btn-sm" data-sq-hide>${quote.hidden ? 'Restore' : (quote.custom ? 'Remove' : 'Hide')}</button>
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('stoic-quotes-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    stoicQuotesPage = data.page || 1;
+    const prev = $('btn-stoic-quotes-prev');
+    const next = $('btn-stoic-quotes-next');
+    if (prev) prev.disabled = stoicQuotesPage <= 1;
+    if (next) next.disabled = stoicQuotesPage >= (data.pages || 1);
+  }
+
+  async function loadStoicQuotesStatus() {
+    try {
+      const data = await apiGet('/api/stoic-quotes/quotes?page=1&pageSize=1');
+      renderStoicQuotesCard(data);
+    } catch {
+      renderStoicQuotesCard({});
+    }
+  }
+
+  async function loadStoicQuotes(page = stoicQuotesPage) {
+    const query = $('stoic-quotes-search')?.value || '';
+    const hidden = Boolean($('stoic-quotes-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(SQ_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      const data = await apiGet(`/api/stoic-quotes/quotes?${params}`);
+      renderStoicQuotesSettings(data);
+    } catch {
+      renderStoicQuotesSettings({});
+    }
+  }
+
+  function refreshStoicPreview() {
+    renderStoicQuotesPreview(
+      $('stoic-quotes-new')?.value || '',
+      $('stoic-quotes-author')?.value || '',
+    );
+  }
+
+  function openStoicQuotesManageSheet() {
+    const sheet = $('stoic-quotes-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    refreshStoicPreview();
+    loadStoicQuotes(1);
+  }
+
+  function closeStoicQuotesManageSheet() {
+    const sheet = $('stoic-quotes-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadStoicQuotesStatus();
+  }
+
+  $('btn-stoic-quotes-manage')?.addEventListener('click', () => openStoicQuotesManageSheet());
+  $('btn-stoic-quotes-manage-close')?.addEventListener('click', () => closeStoicQuotesManageSheet());
+  registerSheetDismiss('stoic-quotes-manage-sheet', () => closeStoicQuotesManageSheet());
+
+  $('btn-stoic-quotes-add')?.addEventListener('click', async () => {
+    const input = $('stoic-quotes-new');
+    const author = $('stoic-quotes-author');
+    try {
+      await apiPost('/api/stoic-quotes/quotes', {
+        text: input?.value || '',
+        author: author?.value || '',
+      });
+      if (input) input.value = '';
+      if (author) author.value = '';
+      refreshStoicPreview();
+      toast('Quote added', 'good');
+      await loadStoicQuotes(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that quote', 'bad');
+    }
+  });
+
+  $('btn-stoic-quotes-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/stoic-quotes', withTarget());
+      const who = result.quote?.author || 'Stoic';
+      const preview = String(result.quote?.text || 'Stoic quote').slice(0, 48);
+      toast(`${who}: ${preview}`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Stoic Quotes', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('stoic-quotes-new')?.addEventListener('input', refreshStoicPreview);
+  $('stoic-quotes-author')?.addEventListener('input', refreshStoicPreview);
+
+  $('stoic-quotes-search')?.addEventListener('input', () => {
+    window.clearTimeout(stoicQuotesTimer);
+    stoicQuotesTimer = window.setTimeout(() => {
+      loadStoicQuotes(1);
+    }, 250);
+  });
+
+  $('stoic-quotes-show-hidden')?.addEventListener('change', () => loadStoicQuotes(1));
+  $('btn-stoic-quotes-prev')?.addEventListener('click', () => loadStoicQuotes(stoicQuotesPage - 1));
+  $('btn-stoic-quotes-next')?.addEventListener('click', () => loadStoicQuotes(stoicQuotesPage + 1));
+
+  $('stoic-quotes-quote-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-sq-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-sq-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    const author = article.querySelector('.cn-fact-author')?.value;
+    try {
+      if (event.target.closest('[data-sq-save]')) {
+        await apiPost('/api/stoic-quotes/quotes', { id, text, author });
+        toast('Quote saved', 'good');
+      } else if (event.target.closest('[data-sq-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/stoic-quotes/quotes', { id, hidden: !restore });
+        toast(restore ? 'Quote restored' : (article.classList.contains('is-custom') ? 'Quote removed' : 'Quote hidden'), 'good');
+      } else {
+        return;
+      }
+      await loadStoicQuotes(stoicQuotesPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that quote', 'bad');
+    }
+  });
+
+  loadStoicQuotesStatus();
+
+  // ------------------------------------ Settings → On This Day in History
+
+  const OTD_PAGE_SIZE = 12;
+  const OTD_MONTHS = [
+    '', 'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  let onThisDayPage = 1;
+  let onThisDayTimer = 0;
+  let onThisDayToday = { month: new Date().getMonth() + 1, day: new Date().getDate() };
+
+  function fillOnThisDayMonthSelect() {
+    const select = $('on-this-day-new-month');
+    if (!select || select.options.length) {
+      return;
+    }
+    for (let month = 1; month <= 12; month += 1) {
+      const option = document.createElement('option');
+      option.value = String(month);
+      option.textContent = OTD_MONTHS[month];
+      select.appendChild(option);
+    }
+  }
+
+  function formatOtdDateLine(month, day, year) {
+    const mon = ['', 'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][Number(month)] || '';
+    const y = Number(year);
+    const yearLabel = Number.isFinite(y) && y < 0 ? `${Math.abs(y)} BC` : String(year || '');
+    if (!mon || !day || !yearLabel) {
+      return '';
+    }
+    return `${mon} ${Number(day)}, ${yearLabel}`.slice(0, 22);
+  }
+
+  function renderOnThisDayPreview(text, month, day, year) {
+    const host = $('on-this-day-preview');
+    if (!host) {
+      return;
+    }
+    const dateLine = formatOtdDateLine(month, day, year);
+    const body = wrapPreview(text, 22).slice(0, 4);
+    const lines = ['ON THIS DAY', dateLine, ...body];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.map((line, index) => {
+      let cells = String(line || '').padEnd(22, ' ').slice(0, 22);
+      if (index === 1 && dateLine) {
+        const pad = Math.max(0, Math.floor((22 - dateLine.length) / 2));
+        cells = `${' '.repeat(pad)}${dateLine}`.padEnd(22, ' ').slice(0, 22);
+      }
+      return `<div class="cn-preview-row">${cells.split('').map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('on-this-day-fit-hint');
+    if (hint) {
+      const rows = wrapPreview(text, 22).length;
+      hint.textContent = text
+        ? (rows <= 4 ? `Fits in ${rows} row${rows === 1 ? '' : 's'} + date` : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function refreshOnThisDayPreview() {
+    renderOnThisDayPreview(
+      $('on-this-day-new-text')?.value || '',
+      $('on-this-day-new-month')?.value || onThisDayToday.month,
+      $('on-this-day-new-day')?.value || onThisDayToday.day,
+      $('on-this-day-new-year')?.value || new Date().getFullYear(),
+    );
+  }
+
+  function onThisDayCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    const label = data.today?.label || 'today';
+    return `${data.available || 0} ready for ${label}`
+      + (data.totalAvailable != null ? ` · ${data.totalAvailable} year-round` : '')
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderOnThisDayCard(data = {}) {
+    if (data.today) {
+      onThisDayToday = {
+        month: Number(data.today.month) || onThisDayToday.month,
+        day: Number(data.today.day) || onThisDayToday.day,
+      };
+    }
+    const pill = $('on-this-day-status-pill');
+    const detail = $('on-this-day-status-detail');
+    const summary = $('on-this-day-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} today` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${onThisDayCountsLine(data)}. Manage facts in a sheet, or push today’s pick to test.`
+        : 'Local Wikipedia-sourced history for the Vestaboard. Manage facts in a sheet, or push today’s pick to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? onThisDayCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderOnThisDaySettings(data = {}) {
+    renderOnThisDayCard(data);
+    const attribution = $('on-this-day-attribution');
+    if (attribution) {
+      attribution.textContent = data.attribution
+        ? `${data.attribution}${data.license ? ` (${data.license})` : ''}`
+        : '';
+    }
+    const minYear = $('on-this-day-min-year');
+    const maxYear = $('on-this-day-max-year');
+    if (minYear && document.activeElement !== minYear) {
+      minYear.value = data.minYear != null ? String(data.minYear) : '';
+    }
+    if (maxYear && document.activeElement !== maxYear) {
+      maxYear.value = data.maxYear != null ? String(data.maxYear) : '';
+    }
+    const monthSelect = $('on-this-day-new-month');
+    const dayInput = $('on-this-day-new-day');
+    if (monthSelect && !monthSelect.value) {
+      monthSelect.value = String(onThisDayToday.month);
+    }
+    if (dayInput && !dayInput.value) {
+      dayInput.value = String(onThisDayToday.day);
+    }
+    const list = $('on-this-day-event-list');
+    if (list) {
+      const events = data.events || [];
+      if (!events.length) {
+        list.innerHTML = '<p class="hint">No facts match that search.</p>';
+      } else {
+        list.innerHTML = events.map((event) => {
+          const label = formatOtdDateLine(event.month, event.day, event.year);
+          return `
+          <article class="cn-fact${event.hidden ? ' is-hidden' : ''}${event.custom ? ' is-custom' : ''}" data-otd-id="${escapeHtml(event.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(event.text)}</textarea>
+            <input type="number" class="field-input cn-fact-author" data-otd-year maxlength="6" value="${escapeHtml(String(event.year))}" placeholder="Year">
+            <div class="cn-fact-meta">
+              <span class="hint">${event.custom ? 'Yours' : 'Shipped'} · ${escapeHtml(label)} · ${event.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-otd-save>Save</button>
+                <button type="button" class="btn btn-outline btn-sm" data-otd-hide>${event.hidden ? 'Restore' : (event.custom ? 'Remove' : 'Hide')}</button>
+              </div>
+            </div>
+          </article>`;
+        }).join('');
+      }
+    }
+    const pageLabel = $('on-this-day-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    onThisDayPage = data.page || 1;
+    const prev = $('btn-on-this-day-prev');
+    const next = $('btn-on-this-day-next');
+    if (prev) prev.disabled = onThisDayPage <= 1;
+    if (next) next.disabled = onThisDayPage >= (data.pages || 1);
+  }
+
+  async function loadOnThisDayStatus() {
+    try {
+      const params = new URLSearchParams({
+        page: '1',
+        pageSize: '1',
+        month: String(onThisDayToday.month),
+        day: String(onThisDayToday.day),
+      });
+      const data = await apiGet(`/api/on-this-day/events?${params}`);
+      renderOnThisDayCard(data);
+    } catch {
+      renderOnThisDayCard({});
+    }
+  }
+
+  async function loadOnThisDay(page = onThisDayPage) {
+    const query = $('on-this-day-search')?.value || '';
+    const hidden = Boolean($('on-this-day-show-hidden')?.checked);
+    const todayOnly = Boolean($('on-this-day-today-only')?.checked);
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(OTD_PAGE_SIZE),
+    });
+    if (query) params.set('q', query);
+    if (hidden) params.set('hidden', '1');
+    if (todayOnly) {
+      params.set('month', String(onThisDayToday.month));
+      params.set('day', String(onThisDayToday.day));
+    }
+    try {
+      const data = await apiGet(`/api/on-this-day/events?${params}`);
+      renderOnThisDaySettings(data);
+    } catch (error) {
+      toast(error.message || 'Could not load On This Day facts', 'bad');
+    }
+  }
+
+  function openOnThisDayManageSheet() {
+    const sheet = $('on-this-day-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    fillOnThisDayMonthSelect();
+    refreshOnThisDayPreview();
+    loadOnThisDay(1);
+  }
+
+  function closeOnThisDayManageSheet() {
+    const sheet = $('on-this-day-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadOnThisDayStatus();
+  }
+
+  fillOnThisDayMonthSelect();
+
+  $('btn-on-this-day-manage')?.addEventListener('click', () => openOnThisDayManageSheet());
+  $('btn-on-this-day-manage-close')?.addEventListener('click', () => closeOnThisDayManageSheet());
+  registerSheetDismiss('on-this-day-manage-sheet', () => closeOnThisDayManageSheet());
+
+  $('btn-on-this-day-add')?.addEventListener('click', async () => {
+    const text = $('on-this-day-new-text');
+    try {
+      await apiPost('/api/on-this-day/events', {
+        text: text?.value || '',
+        month: $('on-this-day-new-month')?.value || onThisDayToday.month,
+        day: $('on-this-day-new-day')?.value || onThisDayToday.day,
+        year: $('on-this-day-new-year')?.value,
+      });
+      if (text) text.value = '';
+      toast('Fact added', 'good');
+      await loadOnThisDay(1);
+      refreshOnThisDayPreview();
+    } catch (error) {
+      toast(error.message || 'Could not add that fact', 'bad');
+    }
+  });
+
+  $('btn-on-this-day-save-filters')?.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/on-this-day/events', {
+        minYear: $('on-this-day-min-year')?.value ?? '',
+        maxYear: $('on-this-day-max-year')?.value ?? '',
+      });
+      toast('Year range saved', 'good');
+      await loadOnThisDay(1);
+    } catch (error) {
+      toast(error.message || 'Could not save year range', 'bad');
+    }
+  });
+
+  $('btn-on-this-day-push')?.addEventListener('click', async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/on-this-day', withTarget());
+      toast(result.event?.dateLine ? `Pushed ${result.event.dateLine}` : 'Pushed On This Day', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not push On This Day', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('on-this-day-new-text')?.addEventListener('input', refreshOnThisDayPreview);
+  $('on-this-day-new-month')?.addEventListener('change', refreshOnThisDayPreview);
+  $('on-this-day-new-day')?.addEventListener('input', refreshOnThisDayPreview);
+  $('on-this-day-new-year')?.addEventListener('input', refreshOnThisDayPreview);
+
+  $('on-this-day-search')?.addEventListener('input', () => {
+    window.clearTimeout(onThisDayTimer);
+    onThisDayTimer = window.setTimeout(() => {
+      loadOnThisDay(1);
+    }, 250);
+  });
+  $('on-this-day-today-only')?.addEventListener('change', () => loadOnThisDay(1));
+  $('on-this-day-show-hidden')?.addEventListener('change', () => loadOnThisDay(1));
+  $('btn-on-this-day-prev')?.addEventListener('click', () => loadOnThisDay(onThisDayPage - 1));
+  $('btn-on-this-day-next')?.addEventListener('click', () => loadOnThisDay(onThisDayPage + 1));
+
+  $('on-this-day-event-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-otd-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-otd-id');
+    const text = article.querySelector('.cn-fact-text')?.value || '';
+    const year = article.querySelector('[data-otd-year]')?.value;
+    try {
+      if (event.target.matches('[data-otd-save]')) {
+        await apiPost('/api/on-this-day/events', { id, text, year });
+        toast('Fact saved', 'good');
+      } else if (event.target.matches('[data-otd-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/on-this-day/events', { id, hidden: !restore });
+        toast(restore ? 'Fact restored' : (article.classList.contains('is-custom') ? 'Fact removed' : 'Fact hidden'), 'good');
+      } else {
+        return;
+      }
+      await loadOnThisDay(onThisDayPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that fact', 'bad');
+    }
+  });
+
+  loadOnThisDayStatus();
+
+  // ---------------------------------------- Settings → Baking Inspiration
+
+  let bakingInspirationPage = 1;
+  let bakingInspirationTimer = 0;
+
+  function parseBakingIngredients(value) {
+    return String(value || '')
+      .split(/[,\n+/|]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+
+  function renderBakingInspirationPreview(title, ingredients) {
+    const host = $('baking-inspiration-preview');
+    if (!host) {
+      return;
+    }
+    const name = String(title || '').trim().toUpperCase().slice(0, 22);
+    const parts = parseBakingIngredients(ingredients).map((item) => item.toUpperCase().slice(0, 22));
+    const ingLines = wrapPreview(parts.join(' + '), 22).slice(0, 4);
+    const lines = ['BAKE THIS', name, ...ingLines];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.slice(0, 6).map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('baking-inspiration-fit-hint');
+    if (hint) {
+      if (!name && !parts.length) {
+        hint.textContent = '';
+      } else if (!name || !parts.length) {
+        hint.textContent = 'Need a title and ingredients';
+      } else if (ingLines.length > 4 || parts.length > 5) {
+        hint.textContent = 'Too long for one frame';
+      } else {
+        hint.textContent = `${parts.length} ingredient${parts.length === 1 ? '' : 's'} · fits`;
+      }
+    }
+  }
+
+  function refreshBakingPreview() {
+    renderBakingInspirationPreview(
+      $('baking-inspiration-new-title')?.value || '',
+      $('baking-inspiration-new-ings')?.value || '',
+    );
+  }
+
+  function bakingInspirationCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} ideas ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderBakingInspirationCard(data = {}) {
+    const pill = $('baking-inspiration-status-pill');
+    const detail = $('baking-inspiration-status-detail');
+    const summary = $('baking-inspiration-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${bakingInspirationCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local baking ideas for the Vestaboard. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? bakingInspirationCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderBakingInspirationSettings(data = {}) {
+    renderBakingInspirationCard(data);
+    const list = $('baking-inspiration-idea-list');
+    if (list) {
+      const ideas = data.ideas || [];
+      if (!ideas.length) {
+        list.innerHTML = '<p class="hint">No ideas match that search.</p>';
+      } else {
+        list.innerHTML = ideas.map((idea) => `
+          <article class="cn-fact${idea.hidden ? ' is-hidden' : ''}${idea.custom ? ' is-custom' : ''}" data-bake-id="${escapeHtml(idea.id)}">
+            <input type="text" class="field-input cn-fact-author" maxlength="40" value="${escapeHtml(idea.title)}" placeholder="Title">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="160">${escapeHtml((idea.ingredients || []).join(', '))}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${idea.custom ? 'Yours' : 'Shipped'} · ${(idea.ingredients || []).length} ingredients</span>
+              <div class="cn-fact-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-bake-save>Save</button>
+                <button type="button" class="btn btn-outline btn-sm" data-bake-hide>${idea.hidden ? 'Restore' : (idea.custom ? 'Remove' : 'Hide')}</button>
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('baking-inspiration-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    bakingInspirationPage = data.page || 1;
+    const prev = $('btn-baking-inspiration-prev');
+    const next = $('btn-baking-inspiration-next');
+    if (prev) prev.disabled = bakingInspirationPage <= 1;
+    if (next) next.disabled = bakingInspirationPage >= (data.pages || 1);
+  }
+
+  async function loadBakingInspirationStatus() {
+    try {
+      const data = await apiGet('/api/baking-inspiration/ideas?page=1&pageSize=1');
+      renderBakingInspirationCard(data);
+    } catch {
+      renderBakingInspirationCard({});
+    }
+  }
+
+  async function loadBakingInspiration(page = bakingInspirationPage) {
+    const query = $('baking-inspiration-search')?.value || '';
+    const hidden = Boolean($('baking-inspiration-show-hidden')?.checked);
+    const params = new URLSearchParams({
+      page: String(Math.max(1, page)),
+      pageSize: '12',
+    });
+    if (query) params.set('q', query);
+    if (hidden) params.set('hidden', '1');
+    try {
+      const data = await apiGet(`/api/baking-inspiration/ideas?${params}`);
+      renderBakingInspirationSettings(data);
+    } catch (error) {
+      renderBakingInspirationSettings({});
+      toast(error?.message || 'Could not load baking ideas', 'bad');
+    }
+  }
+
+  function openBakingInspirationManageSheet() {
+    const sheet = $('baking-inspiration-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    refreshBakingPreview();
+    loadBakingInspiration(1);
+  }
+
+  function closeBakingInspirationManageSheet() {
+    const sheet = $('baking-inspiration-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadBakingInspirationStatus();
+  }
+
+  $('btn-baking-inspiration-manage')?.addEventListener('click', () => openBakingInspirationManageSheet());
+  $('btn-baking-inspiration-manage-close')?.addEventListener('click', () => closeBakingInspirationManageSheet());
+  registerSheetDismiss('baking-inspiration-manage-sheet', () => closeBakingInspirationManageSheet());
+
+  $('btn-baking-inspiration-add')?.addEventListener('click', async () => {
+    const title = $('baking-inspiration-new-title');
+    const ings = $('baking-inspiration-new-ings');
+    try {
+      await apiPost('/api/baking-inspiration/ideas', {
+        title: title?.value,
+        ingredients: ings?.value,
+      });
+      if (title) title.value = '';
+      if (ings) ings.value = '';
+      refreshBakingPreview();
+      toast('Baking idea added', 'good');
+      await loadBakingInspiration(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that idea', 'bad');
+    }
+  });
+
+  $('btn-baking-inspiration-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/baking-inspiration', withTarget());
+      const name = result.idea?.title || 'Baking idea';
+      toast(name, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Baking Inspiration', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('baking-inspiration-new-title')?.addEventListener('input', refreshBakingPreview);
+  $('baking-inspiration-new-ings')?.addEventListener('input', refreshBakingPreview);
+
+  $('baking-inspiration-search')?.addEventListener('input', () => {
+    window.clearTimeout(bakingInspirationTimer);
+    bakingInspirationTimer = window.setTimeout(() => {
+      loadBakingInspiration(1);
+    }, 250);
+  });
+  $('baking-inspiration-show-hidden')?.addEventListener('change', () => loadBakingInspiration(1));
+  $('btn-baking-inspiration-prev')?.addEventListener('click', () => loadBakingInspiration(bakingInspirationPage - 1));
+  $('btn-baking-inspiration-next')?.addEventListener('click', () => loadBakingInspiration(bakingInspirationPage + 1));
+
+  $('baking-inspiration-idea-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-bake-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-bake-id');
+    const title = article.querySelector('.cn-fact-author')?.value;
+    const ingredients = article.querySelector('.cn-fact-text')?.value;
+    try {
+      if (event.target.closest('[data-bake-save]')) {
+        await apiPost('/api/baking-inspiration/ideas', { id, title, ingredients });
+        toast('Idea saved', 'good');
+      } else if (event.target.closest('[data-bake-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/baking-inspiration/ideas', { id, hidden: !restore });
+        toast(restore ? 'Idea restored' : (article.classList.contains('is-custom') ? 'Idea removed' : 'Idea hidden'), 'good');
+      } else {
+        return;
+      }
+      await loadBakingInspiration(bakingInspirationPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that idea', 'bad');
+    }
+  });
+
+  loadBakingInspirationStatus();
+
+  // --------------------------------------------- Settings → Stock Market
+
+  function setStockChangeMode(mode) {
+    const want = mode === 'points' ? 'points' : 'percent';
+    document.querySelectorAll('#stock-market-change-mode [data-stock-change]').forEach((btn) => {
+      const on = btn.getAttribute('data-stock-change') === want;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function currentStockChangeMode() {
+    const active = document.querySelector('#stock-market-change-mode .segmented-btn.active');
+    return active?.getAttribute('data-stock-change') === 'points' ? 'points' : 'percent';
+  }
+
+  function renderStockMarketPreview(tickers = []) {
+    const host = $('stock-market-preview');
+    if (!host) {
+      return;
+    }
+    const list = (tickers || []).slice(0, 5);
+    const lines = ['STOCK MARKET', ...list.map((ticker, index) => {
+      const samples = [
+        { price: '319.70', change: '+3.3%' },
+        { price: '513.50', change: '+6.3%' },
+        { price: '346.60', change: '+0.5%' },
+        { price: '185.00', change: '-0.4%' },
+        { price: '120.50', change: '+1.2%' },
+      ];
+      const sample = samples[index % samples.length];
+      const symbol = String(ticker || '').toUpperCase().slice(0, 5).padEnd(5, ' ');
+      return `${symbol} ${sample.price} ${sample.change}`;
+    })];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.slice(0, 6).map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+  }
+
+  function renderStockMarketSettings(data = {}) {
+    const settings = data.settings || {};
+    const tickers = settings.tickers || data.defaults?.tickers || [];
+    const input = $('stock-market-tickers');
+    if (input && document.activeElement !== input) {
+      input.value = tickers.join(', ');
+    }
+    setStockChangeMode(settings.changeMode || 'percent');
+    const provider = $('stock-market-provider');
+    if (provider && document.activeElement !== provider) {
+      provider.value = settings.provider || 'auto';
+    }
+    const keyInput = $('stock-market-finnhub-key');
+    if (keyInput && document.activeElement !== keyInput) {
+      keyInput.value = '';
+      keyInput.placeholder = settings.hasFinnhubKey
+        ? 'Key saved — leave blank to keep'
+        : 'Optional Finnhub API key';
+    }
+    const clear = $('stock-market-clear-key');
+    if (clear) clear.checked = false;
+
+    const pill = $('stock-market-status-pill');
+    const detail = $('stock-market-status-detail');
+    if (pill) {
+      pill.textContent = tickers.length ? `${tickers.length} tickers` : 'Empty';
+      pill.className = `status-pill ${tickers.length ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = settings.hasFinnhubKey
+        ? `${tickers.length} tickers · Finnhub key saved · Yahoo fallback`
+        : `${tickers.length} tickers · Yahoo Finance (no API key)`;
+    }
+    renderStockMarketPreview(tickers);
+  }
+
+  async function loadStockMarketSettings() {
+    try {
+      const data = await apiGet('/api/stock-market/settings');
+      renderStockMarketSettings(data);
+    } catch (_error) {
+      renderStockMarketSettings({});
+    }
+  }
+
+  $('stock-market-change-mode')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-stock-change]');
+    if (!btn) return;
+    setStockChangeMode(btn.getAttribute('data-stock-change'));
+  });
+
+  $('stock-market-tickers')?.addEventListener('input', () => {
+    const tickers = String($('stock-market-tickers')?.value || '')
+      .split(/[\s,;|]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    renderStockMarketPreview(tickers);
+  });
+
+  $('btn-stock-market-save')?.addEventListener('click', async () => {
+    const button = $('btn-stock-market-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/stock-market/settings', {
+        tickers: $('stock-market-tickers')?.value,
+        changeMode: currentStockChangeMode(),
+        provider: $('stock-market-provider')?.value,
+        finnhubApiKey: $('stock-market-finnhub-key')?.value,
+        clearFinnhubApiKey: Boolean($('stock-market-clear-key')?.checked),
+      });
+      renderStockMarketSettings(result);
+      toast('Stock watchlist saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save stock watchlist', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-stock-market-reset')?.addEventListener('click', async () => {
+    const button = $('btn-stock-market-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/stock-market/settings', { reset: true });
+      renderStockMarketSettings(result);
+      toast('Reset to default tickers', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset stock watchlist', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-stock-market-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/stock-market', withTarget());
+      const count = result.quotes?.length || 0;
+      toast(`${count} quote${count === 1 ? '' : 's'} on the board`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Stock Market push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadStockMarketSettings();
+
+  // ------------------------------------------- Settings → World Currency Rates
+
+  const CURRENCY_RATES_DEFAULT_QUOTES = Object.freeze([
+    'EUR', 'GBP', 'JPY', 'CAD', 'MXN', 'ARS', 'BSD', 'CNY',
+  ]);
+  let currencyRatesDefaultQuotes = [...CURRENCY_RATES_DEFAULT_QUOTES];
+
+  function resolveCurrencyRatesQuotes(quotes = []) {
+    const list = (Array.isArray(quotes) ? quotes : [])
+      .map((code) => String(code || '').trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 12);
+    return list.length ? list : [...currencyRatesDefaultQuotes];
+  }
+
+  function renderCurrencyRatesPreview(quotes = [], base = 'USD') {
+    const host = $('currency-rates-preview');
+    if (!host) return;
+    // Empty watchlist → system defaults (same as a saved empty list on the server).
+    const list = resolveCurrencyRatesQuotes(quotes).slice(0, 4);
+    const baseCode = String(base || 'USD').toUpperCase().slice(0, 3);
+    const samples = [
+      { rate: '0.915', change: '- 0.09%', dir: 'down' },
+      { rate: '0.767', change: '+ 0.20%', dir: 'up' },
+      { rate: '151.2', change: '+ 0.12%', dir: 'up' },
+      { rate: '1.385', change: '- 0.32%', dir: 'down' },
+    ];
+    const titleText = `${baseCode} CONVERSIONS`;
+    const titlePad = Math.max(0, 22 - titleText.length);
+    const titleLeft = Math.floor(titlePad / 2);
+    const title = `${' '.repeat(titleLeft)}${titleText}${' '.repeat(titlePad - titleLeft)}`.slice(0, 22);
+    const header = '       $    + / - %  ';
+    const dataLines = list.map((code, index) => {
+      const sample = samples[index % samples.length];
+      const symbol = String(code || '').toUpperCase().slice(0, 3).padEnd(3, ' ');
+      const rate = String(sample.rate).padEnd(7, ' ').slice(0, 7);
+      const change = String(sample.change).padStart(9, ' ').slice(-9);
+      return `${symbol}  ${rate}${change}#`.padEnd(22, ' ').slice(0, 22);
+    });
+    const lines = [title, header, ...dataLines];
+    while (lines.length < 6) lines.push('');
+    host.innerHTML = lines.slice(0, 6).map((line, rowIndex) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      if (rowIndex === 0) {
+        cells[0] = '■';
+        cells[1] = '■';
+        cells[20] = '■';
+        cells[21] = '■';
+      }
+      return `<div class="cn-preview-row">${cells.map((ch, col) => {
+        let cls = '';
+        if (rowIndex === 0 && (col === 0 || col === 1 || col === 20 || col === 21)) {
+          cls = ' is-chip-white';
+        } else if (rowIndex >= 2 && col === 21 && ch === '#') {
+          const dir = samples[(rowIndex - 2) % samples.length]?.dir;
+          cls = dir === 'up' ? ' is-chip-green' : dir === 'down' ? ' is-chip-red' : ' is-chip-white';
+          ch = '';
+        }
+        return `<span class="${cls.trim()}">${escapeHtml(ch === ' ' || ch === '■' ? '' : ch)}</span>`;
+      }).join('')}</div>`;
+    }).join('');
+  }
+
+  function renderCurrencyRatesSettings(data = {}) {
+    const settings = data.settings || {};
+    if (Array.isArray(data.defaults?.quotes) && data.defaults.quotes.length) {
+      currencyRatesDefaultQuotes = data.defaults.quotes
+        .map((code) => String(code || '').trim().toUpperCase())
+        .filter(Boolean)
+        .slice(0, 12);
+    }
+    const input = $('currency-rates-quotes');
+    const quotes = resolveCurrencyRatesQuotes(settings.quotes || []);
+    if (input && document.activeElement !== input) {
+      // Keep the field showing the effective list (defaults when unset).
+      input.value = quotes.join(', ');
+    }
+    const base = data.baseCurrency || 'USD';
+    const pill = $('currency-rates-status-pill');
+    const detail = $('currency-rates-status-detail');
+    if (pill) {
+      const count = quotes.length;
+      pill.textContent = count ? `${count} vs ${base}` : 'Empty';
+      pill.className = `status-pill ${count ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = `Live rates vs ${base} with day-over-day % (green up / red down). Free — no API key.`;
+    }
+    renderCurrencyRatesPreview(quotes, base);
+  }
+
+  async function loadCurrencyRatesSettings() {
+    try {
+      const data = await apiGet('/api/currency-rates/settings');
+      renderCurrencyRatesSettings(data);
+    } catch {
+      renderCurrencyRatesSettings({});
+    }
+  }
+
+  $('currency-rates-quotes')?.addEventListener('input', () => {
+    const quotes = String($('currency-rates-quotes')?.value || '')
+      .split(/[\s,;|/]+/)
+      .map((part) => part.trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 12);
+    const base = ($('locale-currency')?.value || 'USD').toUpperCase();
+    renderCurrencyRatesPreview(quotes, base);
+  });
+
+  $('btn-currency-rates-save')?.addEventListener('click', async () => {
+    const button = $('btn-currency-rates-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/currency-rates/settings', {
+        quotes: $('currency-rates-quotes')?.value,
+      });
+      renderCurrencyRatesSettings(result);
+      toast('Currency list saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save currency list', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-currency-rates-reset')?.addEventListener('click', async () => {
+    const button = $('btn-currency-rates-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/currency-rates/settings', { reset: true });
+      renderCurrencyRatesSettings(result);
+      toast('Reset to default currencies', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset currency list', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-currency-rates-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/currency-rates', withTarget());
+      const count = result.quotes?.length || 0;
+      toast(`${count} rate${count === 1 ? '' : 's'} vs ${result.base || 'USD'}`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Currency Rates push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadCurrencyRatesSettings();
+
+  // ------------------------------------------- Settings → Starlink Tracker
+
+  function renderStarlinkTrackerPreview(settings = {}) {
+    const host = $('starlink-tracker-preview');
+    if (!host) return;
+    const lines = [
+      'STARLINK',
+      '',
+      'TONIGHT 9:42PM',
+      'NW HIGH 52DEG',
+    ];
+    if (settings.showWeather !== false) lines.push('CLEAR SKY');
+    if (settings.showVisibility !== false) lines.push('GOOD');
+    while (lines.length < 6) lines.push('');
+    host.innerHTML = lines.slice(0, 6).map((line) => (
+      `<div class="cn-board-row">${escapeHtml(String(line).padEnd(22).slice(0, 22))}</div>`
+    )).join('');
+  }
+
+  function renderStarlinkTrackerSettings(data = {}) {
+    const settings = data.settings || {};
+    const hours = $('starlink-hours-ahead');
+    const elev = $('starlink-min-elevation');
+    if (hours && document.activeElement !== hours) hours.value = String(settings.hoursAhead || 72);
+    if (elev && document.activeElement !== elev) elev.value = String(settings.minElevation || 20);
+    setChecked('starlink-prefer-visible', settings.preferVisible !== false);
+    setChecked('starlink-show-weather', settings.showWeather !== false);
+    setChecked('starlink-show-visibility', settings.showVisibility !== false);
+    const pill = $('starlink-tracker-status-pill');
+    const detail = $('starlink-tracker-status-detail');
+    const location = $('starlink-tracker-location');
+    const hasLocation = Boolean(data.hasLocation);
+    if (pill) {
+      pill.textContent = hasLocation ? 'Ready' : 'No house pin';
+      pill.className = `status-pill ${hasLocation ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = hasLocation
+        ? 'Next Starlink pass over the house pin — time, sky position, and conditions. Free — no API key.'
+        : 'Set a city or ZIP under Location to predict passes from home.';
+    }
+    if (location) {
+      const loc = data.location || {};
+      location.textContent = hasLocation
+        ? `House pin: ${loc.label || loc.city || 'Home'} (${Number(loc.latitude).toFixed(2)}, ${Number(loc.longitude).toFixed(2)})`
+        : 'Uses the house pin under Settings → Global → Location.';
+    }
+    renderStarlinkTrackerPreview(settings);
+  }
+
+  async function loadStarlinkTrackerSettings() {
+    try {
+      const data = await apiGet('/api/starlink-tracker/settings');
+      renderStarlinkTrackerSettings(data);
+    } catch {
+      renderStarlinkTrackerSettings({});
+    }
+  }
+
+  function starlinkSettingsFromForm() {
+    return {
+      hoursAhead: Number($('starlink-hours-ahead')?.value || 72),
+      minElevation: Number($('starlink-min-elevation')?.value || 20),
+      preferVisible: Boolean($('starlink-prefer-visible')?.checked),
+      showWeather: Boolean($('starlink-show-weather')?.checked),
+      showVisibility: Boolean($('starlink-show-visibility')?.checked),
+    };
+  }
+
+  ['starlink-hours-ahead', 'starlink-min-elevation', 'starlink-prefer-visible',
+    'starlink-show-weather', 'starlink-show-visibility'].forEach((id) => {
+    $(id)?.addEventListener('change', () => renderStarlinkTrackerPreview(starlinkSettingsFromForm()));
+  });
+
+  $('btn-starlink-tracker-save')?.addEventListener('click', async () => {
+    const button = $('btn-starlink-tracker-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/starlink-tracker/settings', starlinkSettingsFromForm());
+      renderStarlinkTrackerSettings(result);
+      toast('Starlink settings saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save Starlink settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-starlink-tracker-reset')?.addEventListener('click', async () => {
+    const button = $('btn-starlink-tracker-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/starlink-tracker/settings', { reset: true });
+      renderStarlinkTrackerSettings(result);
+      toast('Reset to Starlink defaults', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset Starlink settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-starlink-tracker-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/starlink-tracker', withTarget());
+      toast(result.whenLabel || 'Starlink on the board', 'good');
+    } catch (error) {
+      toast(error?.message || 'Starlink tracker push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadStarlinkTrackerSettings();
+
+  // ------------------------------------------- Settings → ISS Tracker
+
+  function issUnit() {
+    const active = document.querySelector('#iss-tracker-unit .segmented-btn.active');
+    return active?.dataset?.issUnit === 'km' ? 'km' : 'miles';
+  }
+
+  function setIssUnit(unit) {
+    const want = unit === 'km' ? 'km' : 'miles';
+    document.querySelectorAll('#iss-tracker-unit .segmented-btn').forEach((btn) => {
+      const on = btn.dataset.issUnit === want;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function renderIssTrackerPreview(settings = {}, hasLocation = false) {
+    const host = $('iss-tracker-preview');
+    if (!host) return;
+    const unit = settings.distanceUnit === 'km' ? 'KM' : 'MI';
+    const speed = settings.distanceUnit === 'km' ? '27600 KM/H' : '17150 MPH';
+    const alt = settings.distanceUnit === 'km' ? '420 KM UP' : '260 MI UP';
+    const lines = [
+      'ISS',
+      '',
+      hasLocation ? `842 ${unit} NE` : 'SET HOUSE PIN',
+    ];
+    if (settings.showCoordinates !== false) lines.push('41.2N 112.0W');
+    if (settings.showAltitude !== false) lines.push(alt);
+    if (lines.length < 5) lines.splice(3, 0, speed);
+    while (lines.length < 6) lines.push('');
+    host.innerHTML = lines.slice(0, 6).map((line) => (
+      `<div class="cn-board-row">${escapeHtml(String(line).padEnd(22).slice(0, 22))}</div>`
+    )).join('');
+  }
+
+  function renderIssTrackerSettings(data = {}) {
+    const settings = data.settings || {};
+    setIssUnit(settings.distanceUnit);
+    setChecked('iss-tracker-show-coords', settings.showCoordinates !== false);
+    setChecked('iss-tracker-show-altitude', settings.showAltitude !== false);
+    setChecked('iss-tracker-show-visibility', settings.showVisibility !== false);
+    const pill = $('iss-tracker-status-pill');
+    const detail = $('iss-tracker-status-detail');
+    const location = $('iss-tracker-location');
+    const hasLocation = Boolean(data.hasLocation);
+    if (pill) {
+      pill.textContent = hasLocation ? 'Ready' : 'No house pin';
+      pill.className = `status-pill ${hasLocation ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = hasLocation
+        ? 'Live position and speed relative to the house pin. Free — no API key.'
+        : 'Set a city or ZIP under Location to show distance and bearing from home.';
+    }
+    if (location) {
+      const loc = data.location || {};
+      location.textContent = hasLocation
+        ? `House pin: ${loc.label || loc.city || 'Home'} (${Number(loc.latitude).toFixed(2)}, ${Number(loc.longitude).toFixed(2)})`
+        : 'Uses the house pin under Settings → Global → Location for distance and bearing.';
+    }
+    renderIssTrackerPreview(settings, hasLocation);
+  }
+
+  async function loadIssTrackerSettings() {
+    try {
+      const data = await apiGet('/api/iss-tracker/settings');
+      renderIssTrackerSettings(data);
+    } catch {
+      renderIssTrackerSettings({});
+    }
+  }
+
+  $('iss-tracker-unit')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-iss-unit]');
+    if (!btn) return;
+    setIssUnit(btn.dataset.issUnit);
+    renderIssTrackerPreview({
+      distanceUnit: issUnit(),
+      showCoordinates: Boolean($('iss-tracker-show-coords')?.checked),
+      showAltitude: Boolean($('iss-tracker-show-altitude')?.checked),
+      showVisibility: Boolean($('iss-tracker-show-visibility')?.checked),
+    }, true);
+  });
+
+  ['iss-tracker-show-coords', 'iss-tracker-show-altitude', 'iss-tracker-show-visibility']
+    .forEach((id) => {
+      $(id)?.addEventListener('change', () => {
+        renderIssTrackerPreview({
+          distanceUnit: issUnit(),
+          showCoordinates: Boolean($('iss-tracker-show-coords')?.checked),
+          showAltitude: Boolean($('iss-tracker-show-altitude')?.checked),
+          showVisibility: Boolean($('iss-tracker-show-visibility')?.checked),
+        }, true);
+      });
+    });
+
+  $('btn-iss-tracker-save')?.addEventListener('click', async () => {
+    const button = $('btn-iss-tracker-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/iss-tracker/settings', {
+        distanceUnit: issUnit(),
+        showCoordinates: Boolean($('iss-tracker-show-coords')?.checked),
+        showAltitude: Boolean($('iss-tracker-show-altitude')?.checked),
+        showVisibility: Boolean($('iss-tracker-show-visibility')?.checked),
+      });
+      renderIssTrackerSettings(result);
+      toast('ISS tracker settings saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save ISS settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-iss-tracker-reset')?.addEventListener('click', async () => {
+    const button = $('btn-iss-tracker-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/iss-tracker/settings', { reset: true });
+      renderIssTrackerSettings(result);
+      toast('Reset to ISS defaults', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset ISS settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-iss-tracker-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/iss-tracker', withTarget());
+      toast(result.relativeLabel || result.speedLabel || 'ISS on the board', 'good');
+    } catch (error) {
+      toast(error?.message || 'ISS tracker push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadIssTrackerSettings();
 
   // ------------------------------------------- Settings → Overhead
 
@@ -9200,7 +11398,26 @@
     detail.className = 'auth-detail';
     const bits = [board.simulator ? 'Simulator' : 'Local API'];
     if (!board.hasKey) bits.push('no key yet');
+    if (board.quietHours?.enabled === false) {
+      bits.push('quiet hours off');
+    } else if (board.quietHours?.remindOnStart === false) {
+      bits.push('no quiet reminder');
+    } else {
+      bits.push('quiet reminder on');
+    }
     detail.textContent = bits.join(' · ');
+
+    const remind = document.createElement('label');
+    remind.className = 'trivia-check vb-board-remind';
+    const remindInput = document.createElement('input');
+    remindInput.type = 'checkbox';
+    remindInput.checked = board.quietHours?.remindOnStart !== false;
+    remindInput.addEventListener('change', () => {
+      vbSetRemindOnStart(board.id, remindInput.checked);
+    });
+    const remindSpan = document.createElement('span');
+    remindSpan.textContent = 'Quiet Hours Reminder when quiet starts';
+    remind.append(remindInput, remindSpan);
 
     const actions = document.createElement('div');
     actions.className = 'vb-board-actions';
@@ -9218,19 +11435,19 @@
     toggle.textContent = board.enabled ? 'Switch off' : 'Switch on';
     toggle.addEventListener('click', () => vbSetEnabled(board.id, !board.enabled));
 
-    actions.append(test, toggle);
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn btn-outline btn-sm';
+    edit.textContent = 'Edit';
+    edit.addEventListener('click', () => vbOpenForm(board));
+
+    actions.append(test, toggle, edit);
 
     if (!board.simulator) {
-      const edit = document.createElement('button');
-      edit.type = 'button';
-      edit.className = 'btn btn-outline btn-sm';
-      edit.textContent = 'Edit';
-      edit.addEventListener('click', () => vbOpenForm(board));
-
-      actions.append(edit, vbRemoveButton(board));
+      actions.append(vbRemoveButton(board));
     }
 
-    row.append(head, detail, actions);
+    row.append(head, detail, remind, actions);
     return row;
   }
 
@@ -9267,6 +11484,7 @@
     if (!form) {
       return;
     }
+    const isSim = Boolean(board?.simulator);
     $('vb-form-id').value = board?.id || '';
     $('vb-form-name').value = board?.name || '';
     $('vb-form-url').value = board?.baseUrl || '';
@@ -9276,8 +11494,22 @@
     $('vb-form-quiet-end').value = board?.quietHours?.end || '07:00';
     $('vb-form-quiet-enabled').checked = board?.quietHours?.enabled !== false;
     $('vb-form-quiet-remind').checked = board?.quietHours?.remindOnStart !== false;
+    $('vb-form-url').disabled = isSim;
+    $('vb-form-key').disabled = isSim;
+    const urlHint = $('vb-form-url-hint');
+    const keyHint = $('vb-form-key-hint');
+    if (urlHint) {
+      urlHint.textContent = isSim
+        ? 'The simulator address is fixed on this host.'
+        : 'Use the board\'s IP rather than its .local name — mDNS does not resolve from inside Docker.';
+    }
+    if (keyHint) {
+      keyHint.hidden = isSim;
+    }
     form.hidden = false;
     $('btn-vb-add').hidden = true;
+    const quietPush = $('btn-vb-quiet-hours-push');
+    if (quietPush) quietPush.hidden = true;
     $('vb-form-name').focus();
   }
 
@@ -9286,6 +11518,12 @@
     if (form) form.hidden = true;
     const add = $('btn-vb-add');
     if (add) add.hidden = false;
+    const push = $('btn-vb-quiet-hours-push');
+    if (push) push.hidden = false;
+    $('vb-form-url').disabled = false;
+    $('vb-form-key').disabled = false;
+    const keyHint = $('vb-form-key-hint');
+    if (keyHint) keyHint.hidden = false;
   }
 
   async function vbTestFlip(id, button) {
@@ -9307,6 +11545,38 @@
       vbRenderBoards();
     } catch (error) {
       toast(error?.message || 'Could not change the board', 'bad');
+    }
+  }
+
+  async function vbSetRemindOnStart(id, remindOnStart) {
+    const board = vbBoards.find((entry) => entry.id === id);
+    if (!board) {
+      return;
+    }
+    try {
+      const data = await apiPost('/api/vestaboards', {
+        id: board.id,
+        name: board.name,
+        baseUrl: board.baseUrl || '',
+        dwellSeconds: board.dwellSeconds,
+        enabled: board.enabled,
+        simulator: board.simulator,
+        quietHours: {
+          start: board.quietHours?.start || '22:00',
+          end: board.quietHours?.end || '07:00',
+          enabled: board.quietHours?.enabled !== false,
+          remindOnStart: Boolean(remindOnStart),
+        },
+      });
+      vbBoards = data.boards || [];
+      vbRenderBoards();
+      toast(
+        remindOnStart ? 'Quiet Hours Reminder on' : 'Quiet Hours Reminder off',
+        'good',
+      );
+    } catch (error) {
+      toast(error?.message || 'Could not update Quiet Hours Reminder', 'bad');
+      await loadVestaboards();
     }
   }
 
@@ -9349,6 +11619,19 @@
 
   $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   $('btn-vb-cancel')?.addEventListener('click', () => vbCloseForm());
+
+  $('btn-vb-quiet-hours-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/quiet-hours-reminder', withTarget());
+      toast(`Quiet Hours Reminder (${result.variant || 'night card'})`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Quiet Hours Reminder', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   $('vb-board-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -10069,8 +12352,12 @@
 
   document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
     loadOverheadSettings();
+    loadIssTrackerSettings();
+    loadStarlinkTrackerSettings();
     loadFlightplanSettings();
     loadLocaleSettings();
+    loadWeatherAlertsSettings();
+    loadWorldPopulationSettings();
   });
 
   // ---------------------------------------------------------- Flight Plan

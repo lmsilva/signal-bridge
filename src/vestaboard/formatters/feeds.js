@@ -1,5 +1,7 @@
 // Feeds family of board frames (03 §D): YouTube, The Upside, Wiki, Overhead,
-// trivia, Flight Plan, Learn Japanese, Quiet Hours Reminder, and Chuck Norris.
+// trivia, Flight Plan, Learn Japanese, Quiet Hours Reminder, Chuck Norris,
+// Amazing Facts, Conversation Starters, Stoic Quotes, On This Day, Baking
+// Inspiration, and World Population Tracker.
 //
 // Trivia is the only formatter that refuses work. A question that cannot fit
 // a single frame is skipped rather than paged, because a multi-frame question
@@ -43,6 +45,7 @@ const {
 const { snapshotFrame, paginate, padRows } = require('./common');
 const { posLabel } = require('../../learn-japanese');
 const { layoutFor } = require('../../quiet-hours-reminder');
+const { formatPopulation, formatRate } = require('../../world-population');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
@@ -547,21 +550,37 @@ function flightPlanBoardFrames(payload = {}, ctx = {}) {
   });
 }
 
-function flagChipRow(text) {
+function flagChipRow(text, options = {}) {
   const row = blankRow(COLS);
   row[0] = chipCode('white');
   row[1] = chipCode('white');
   row[COLS - 2] = chipCode('red');
   row[COLS - 1] = chipCode('red');
   if (text) {
-    centered(fold(text), { from: 2, width: 18, row });
+    centered(fold(text), { from: 2, width: 18, row, lean: options.lean });
   }
   return row;
 }
 
+/** Left-leaning centre — odd leftover blank goes on the right. */
+function jpCenter(text, options = {}) {
+  return centered(text, { from: 0, width: COLS, lean: 'left', ...options });
+}
+
+/**
+ * Prefer a `WORD: ` / `MEANS: ` label when the whole line still fits;
+ * otherwise fall back to the bare value so long romaji/glosses are not cut.
+ */
+function jpLabeled(prefix, value) {
+  const labeled = `${prefix}${value}`;
+  const useLabel = encodeText(labeled).length <= COLS;
+  return jpCenter(useLabel ? labeled : value);
+}
+
 /**
  * Learn Japanese (marketplace Learn Spanish shape, hinomaru colours):
- * white|red title chips, romaji word, part of speech, English gloss, JLPT footer.
+ * white|red title chips, labeled romaji + gloss when they fit, POS in
+ * parentheses, Difficulty footer. Lines lean left on an odd remainder.
  */
 function learnJapaneseFrames(payload = {}) {
   const word = payload.word || {};
@@ -573,18 +592,23 @@ function learnJapaneseFrames(payload = {}) {
 
   const meaning = wrap(english, COLS).slice(0, 2);
   const kind = fold(posLabel(word.pos) || word.pos || '');
-  const title = flagChipRow('LEARN JAPANESE');
-  const hero = centered(romaji, { from: 0, width: COLS });
-  const posRow = centered(kind, { from: 0, width: COLS });
-  const footer = flagChipRow(word.level || '');
+  const posText = kind ? `(${kind})` : '';
+  const title = flagChipRow('LEARN JAPANESE', { lean: 'left' });
+  const level = fold(word.level || '');
+  const difficulty = level
+    ? (fold(`DIFFICULTY: ${level}`).length <= 18 ? `DIFFICULTY: ${level}` : level)
+    : '';
+  const footer = flagChipRow(difficulty, { lean: 'left' });
+  const hero = jpLabeled('WORD: ', romaji);
+  const posRow = jpCenter(posText);
 
   const rows = meaning.length > 1
     ? [
       title,
       hero,
       posRow,
-      centered(meaning[0], { from: 0, width: COLS }),
-      centered(meaning[1], { from: 0, width: COLS }),
+      jpCenter(meaning[0]),
+      jpCenter(meaning[1]),
       footer,
     ]
     : [
@@ -592,7 +616,7 @@ function learnJapaneseFrames(payload = {}) {
       blankRow(COLS),
       hero,
       posRow,
-      centered(meaning[0] || '', { from: 0, width: COLS }),
+      jpLabeled('MEANS: ', meaning[0] || ''),
       footer,
     ];
 
@@ -664,6 +688,574 @@ function chuckNorrisFrames(payload = {}) {
   return frames;
 }
 
+function amazingChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('yellow');
+  row[1] = chipCode('yellow');
+  row[COLS - 2] = chipCode('yellow');
+  row[COLS - 1] = chipCode('yellow');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Amazing Facts (marketplace education / Mental Floss vibe): yellow
+ * AMAZING FACT chips, left-aligned quirk. Pages if a custom fact runs long.
+ */
+function amazingFactsFrames(payload = {}) {
+  const text = fold(payload.fact?.text || payload.text || '');
+  if (!text) {
+    return [];
+  }
+  const lines = wrap(text, COLS);
+  if (!lines.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < lines.length; index += 5) {
+    const chunk = lines.slice(index, index + 5);
+    const body = [0, 1, 2, 3, 4].map((rowIndex) => {
+      const row = blankRow(COLS);
+      if (chunk[rowIndex]) {
+        placeText(row, chunk[rowIndex], 0);
+      }
+      return row;
+    });
+    frames.push(snapshotFrame(
+      assertValidLayout([amazingChipRow('AMAZING FACT'), ...body], 'amazing facts'),
+      'Amazing Facts',
+      'amazing.facts',
+    ));
+  }
+  return frames;
+}
+
+function talkChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('violet');
+  row[1] = chipCode('violet');
+  row[COLS - 2] = chipCode('violet');
+  row[COLS - 1] = chipCode('violet');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Conversation Starters (marketplace entertainment): violet LET'S TALK chips,
+ * left-aligned prompt. Body lines are vertically centred in the five rows
+ * under the title when the prompt is short, so short icebreakers do not sit
+ * glued to the top with a big empty belly below. Custom long prompts may page.
+ */
+function conversationStartersFrames(payload = {}) {
+  const text = fold(payload.prompt?.text || payload.text || '');
+  if (!text) {
+    return [];
+  }
+  const lines = wrap(text, COLS);
+  if (!lines.length) {
+    return [];
+  }
+  const BODY_SLOTS = 5;
+  const frames = [];
+  for (let index = 0; index < lines.length; index += BODY_SLOTS) {
+    const chunk = lines.slice(index, index + BODY_SLOTS);
+    const padTop = Math.floor((BODY_SLOTS - chunk.length) / 2);
+    const body = [];
+    for (let rowIndex = 0; rowIndex < BODY_SLOTS; rowIndex += 1) {
+      const row = blankRow(COLS);
+      const line = chunk[rowIndex - padTop];
+      if (line) {
+        placeText(row, line, 0);
+      }
+      body.push(row);
+    }
+    frames.push(snapshotFrame(
+      assertValidLayout([talkChipRow("LET'S TALK"), ...body], 'conversation starters'),
+      'Conversation Starters',
+      'talk.starters',
+    ));
+  }
+  return frames;
+}
+
+function stoicChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[1] = chipCode('white');
+  row[COLS - 2] = chipCode('white');
+  row[COLS - 1] = chipCode('white');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Stoic Quotes (marketplace lifestyle): white STOIC chips, left-aligned quote,
+ * author right-aligned on the last body row.
+ */
+function stoicQuotesFrames(payload = {}) {
+  const text = fold(payload.quote?.text || payload.text || '');
+  const author = fold(payload.quote?.author || payload.author || '');
+  if (!text) {
+    return [];
+  }
+  const lines = wrap(text, COLS).slice(0, 4);
+  if (!lines.length) {
+    return [];
+  }
+  const body = [0, 1, 2, 3].map((rowIndex) => {
+    const row = blankRow(COLS);
+    if (lines[rowIndex]) {
+      placeText(row, lines[rowIndex], 0);
+    }
+    return row;
+  });
+  const authorRow = blankRow(COLS);
+  if (author) {
+    const label = encodeText(fold(`- ${author}`)).length <= COLS
+      ? fold(`- ${author}`)
+      : author;
+    const codes = encodeText(label).slice(0, COLS);
+    placeText(authorRow, label, Math.max(0, COLS - codes.length));
+  }
+  return [snapshotFrame(
+    assertValidLayout([stoicChipRow('STOIC'), ...body, authorRow], 'stoic quotes'),
+    'Stoic Quotes',
+    'stoic.quotes',
+  )];
+}
+
+function historyChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('red');
+  row[1] = chipCode('red');
+  row[COLS - 2] = chipCode('red');
+  row[COLS - 1] = chipCode('red');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * On This Day in History (marketplace education): red ON THIS DAY chips,
+ * centered date/year line, left-aligned event text.
+ */
+function onThisDayFrames(payload = {}) {
+  const event = payload.event || {};
+  const text = fold(event.text || payload.text || '');
+  if (!text) {
+    return [];
+  }
+  const dateLine = fold(event.dateLine || '');
+  const lines = wrap(text, COLS).slice(0, 4);
+  if (!lines.length) {
+    return [];
+  }
+  const dateRow = blankRow(COLS);
+  if (dateLine) {
+    centered(dateLine, { from: 0, width: COLS, row: dateRow });
+  }
+  const body = [0, 1, 2, 3].map((rowIndex) => {
+    const row = blankRow(COLS);
+    if (lines[rowIndex]) {
+      placeText(row, lines[rowIndex], 0);
+    }
+    return row;
+  });
+  return [snapshotFrame(
+    assertValidLayout([historyChipRow('ON THIS DAY'), dateRow, ...body], 'on this day'),
+    'On This Day in History',
+    'history.day',
+  )];
+}
+
+function bakeChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('yellow');
+  row[1] = chipCode('yellow');
+  row[COLS - 2] = chipCode('yellow');
+  row[COLS - 1] = chipCode('yellow');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Baking Inspiration (marketplace lifestyle): yellow BAKE THIS chips, recipe
+ * title, then ≤5 ingredients joined with + across the remaining rows.
+ */
+function bakingInspirationFrames(payload = {}) {
+  const idea = payload.idea || {};
+  const title = fold(idea.title || payload.title || '');
+  const ingredients = Array.isArray(idea.ingredients)
+    ? idea.ingredients
+    : (Array.isArray(payload.ingredients) ? payload.ingredients : []);
+  const parts = ingredients.map((item) => fold(item)).filter(Boolean);
+  if (!title || !parts.length) {
+    return [];
+  }
+  const titleRow = blankRow(COLS);
+  placeText(titleRow, title.slice(0, COLS), 0);
+  const ingLines = wrap(parts.join(' + '), COLS).slice(0, 4);
+  const body = [0, 1, 2, 3].map((rowIndex) => {
+    const row = blankRow(COLS);
+    if (ingLines[rowIndex]) {
+      placeText(row, ingLines[rowIndex], 0);
+    }
+    return row;
+  });
+  return [snapshotFrame(
+    assertValidLayout([bakeChipRow('BAKE THIS'), titleRow, ...body], 'baking inspiration'),
+    'Baking Inspiration',
+    'bake.inspire',
+  )];
+}
+
+function worldPopChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('green');
+  row[1] = chipCode('green');
+  row[COLS - 2] = chipCode('green');
+  row[COLS - 1] = chipCode('green');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * World Population Tracker (marketplace education): green title chips, the
+ * estimated headcount with commas, net growth per second, estimate footer.
+ */
+function worldPopulationFrames(payload = {}) {
+  const pop = payload.population || {};
+  const total = pop.total != null ? pop.total : payload.total;
+  const formatted = fold(pop.formatted || formatPopulation(total) || '');
+  if (!formatted) {
+    return [];
+  }
+  const net = formatRate(pop.netPerSec);
+  const births = formatRate(pop.birthsPerSec);
+  const deaths = formatRate(pop.deathsPerSec);
+  const rateLine = net
+    ? fold(`NET +${net} / SECOND`)
+    : '';
+  const detail = (births && deaths)
+    ? fold(`B ${births}/S  D ${deaths}/S`)
+    : '';
+  const source = fold(pop.sourceLabel || 'ESTIMATE');
+  const footer = source.length <= 18 ? source : 'ESTIMATE';
+
+  const numberRow = blankRow(COLS);
+  centered(formatted, { row: numberRow });
+
+  const mid = blankRow(COLS);
+  if (detail && detail.length <= COLS) {
+    centered(detail, { row: mid });
+  } else if (rateLine) {
+    centered(rateLine, { row: mid });
+  }
+
+  const netRow = blankRow(COLS);
+  if (detail && rateLine) {
+    centered(rateLine, { row: netRow });
+  }
+
+  const rows = [
+    worldPopChipRow('WORLD POPULATION'),
+    blankRow(COLS),
+    numberRow,
+    mid,
+    netRow,
+    worldPopChipRow(footer),
+  ];
+
+  return [snapshotFrame(
+    assertValidLayout(rows, 'world population'),
+    'World Population',
+    'world.population',
+  )];
+}
+
+function stocksChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[1] = chipCode('white');
+  row[COLS - 2] = chipCode('white');
+  row[COLS - 1] = chipCode('white');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+function stockDirectionChip(direction) {
+  if (direction === 'up') {
+    return 'green';
+  }
+  if (direction === 'down') {
+    return 'red';
+  }
+  return 'white';
+}
+
+function stockQuoteRow(quote = {}) {
+  const row = blankRow(COLS);
+  const symbol = fold(quote.boardSymbol || quote.symbol || '').slice(0, 5);
+  const price = fold(quote.priceLabel || '');
+  const change = fold(quote.changeLabel || '');
+  if (!symbol || !price) {
+    return row;
+  }
+  placeText(row, symbol, 0);
+  // SYMBOL____PRICE__CHANGE_#
+  const right = change ? `${price} ${change}` : price;
+  const codes = encodeText(right).slice(0, 15);
+  placeText(row, right, Math.max(6, COLS - 1 - codes.length - 1));
+  row[COLS - 1] = chipCode(stockDirectionChip(quote.direction));
+  return row;
+}
+
+/**
+ * Stock Market (marketplace business): white STOCK MARKET chips, up to five
+ * ticker rows per page with a green/red direction chip.
+ */
+function stockMarketFrames(payload = {}) {
+  const quotes = (payload.quotes || []).filter((quote) => quote?.priceLabel);
+  if (!quotes.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < quotes.length; index += 5) {
+    const chunk = quotes.slice(index, index + 5);
+    const body = [0, 1, 2, 3, 4].map((rowIndex) => (
+      chunk[rowIndex] ? stockQuoteRow(chunk[rowIndex]) : blankRow(COLS)
+    ));
+    const title = quotes.length > 5
+      ? `STOCKS ${Math.floor(index / 5) + 1}/${Math.ceil(quotes.length / 5)}`
+      : 'STOCK MARKET';
+    frames.push(snapshotFrame(
+      assertValidLayout([stocksChipRow(title), ...body], 'stock market'),
+      'Stock Market',
+      'stocks.market',
+    ));
+  }
+  return frames;
+}
+
+function fxChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[1] = chipCode('white');
+  row[COLS - 2] = chipCode('white');
+  row[COLS - 1] = chipCode('white');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/** Column labels under the title: $ over rates, + / - % over change. */
+function fxColumnHeaderRow() {
+  const row = blankRow(COLS);
+  placeText(row, '$', 7);
+  placeText(row, '+ / - %', 12);
+  return row;
+}
+
+/**
+ * CODE  RATE    ± change% ■ — green chip on gain, red on loss (marketplace FX).
+ */
+function fxQuoteRow(quote = {}) {
+  const row = blankRow(COLS);
+  const code = fold(quote.code || '').slice(0, 3);
+  const rate = fold(quote.rateLabel || '').slice(0, 7);
+  const change = fold(quote.changeLabel || '').slice(0, 9);
+  if (!code || !rate) {
+    return row;
+  }
+  placeText(row, code, 0);
+  placeText(row, rate, 5);
+  if (change) {
+    const codes = encodeText(change);
+    placeText(row, change, COLS - 1 - codes.length);
+  }
+  row[COLS - 1] = chipCode(stockDirectionChip(quote.direction));
+  return row;
+}
+
+/**
+ * World Currency Rates (marketplace business): white `{BASE} CONVERSIONS` chips,
+ * $ / +/−% column headers, up to four quote rows with day-over-day change and
+ * a green/red direction chip.
+ */
+function currencyRatesFrames(payload = {}) {
+  const quotes = (payload.quotes || []).filter((quote) => quote?.rateLabel && quote?.code);
+  if (!quotes.length) {
+    return [];
+  }
+  const base = fold(payload.base || 'USD').slice(0, 3) || 'USD';
+  const perPage = 4;
+  const frames = [];
+  for (let index = 0; index < quotes.length; index += perPage) {
+    const chunk = quotes.slice(index, index + perPage);
+    const body = [0, 1, 2, 3].map((rowIndex) => (
+      chunk[rowIndex] ? fxQuoteRow(chunk[rowIndex]) : blankRow(COLS)
+    ));
+    const pages = Math.ceil(quotes.length / perPage);
+    const title = pages > 1
+      ? `${base} CONV ${Math.floor(index / perPage) + 1}/${pages}`
+      : `${base} CONVERSIONS`;
+    frames.push(snapshotFrame(
+      assertValidLayout([
+        fxChipRow(title),
+        fxColumnHeaderRow(),
+        ...body,
+      ], 'currency rates'),
+      'World Currency Rates',
+      'fx.rates',
+    ));
+  }
+  return frames;
+}
+
+function issChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[1] = chipCode('white');
+  row[COLS - 2] = chipCode('white');
+  row[COLS - 1] = chipCode('white');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * International Space Station tracker: white ISS chips, distance/bearing
+ * relative to the house pin, coordinates, speed, and altitude.
+ */
+function issTrackFrames(payload = {}) {
+  if (!Number.isFinite(Number(payload.latitude)) || !Number.isFinite(Number(payload.longitude))) {
+    return [];
+  }
+  const settings = payload.settings || {};
+  const lines = [];
+  if (payload.relativeLabel) {
+    lines.push(fold(payload.relativeLabel).slice(0, 22));
+  } else if (payload.hasHome === false) {
+    lines.push(fold('SET HOUSE PIN').slice(0, 22));
+  }
+  if (settings.showCoordinates !== false && payload.coordLabel) {
+    lines.push(fold(payload.coordLabel).slice(0, 22));
+  }
+  if (payload.speedLabel) {
+    lines.push(fold(payload.speedLabel).slice(0, 22));
+  }
+  if (settings.showAltitude !== false && payload.altitudeLabel) {
+    lines.push(fold(payload.altitudeLabel).slice(0, 22));
+  }
+  if (settings.showVisibility !== false && payload.visibilityLabel) {
+    lines.push(fold(payload.visibilityLabel).slice(0, 22));
+  }
+  while (lines.length < 4) {
+    lines.push('');
+  }
+  const body = lines.slice(0, 4).map((line) => (
+    line ? centered(line) : blankRow(COLS)
+  ));
+  const rows = [
+    issChipRow('ISS'),
+    blankRow(COLS),
+    ...body,
+  ];
+  // 1 title + 1 blank + 4 body = 6
+  return [snapshotFrame(
+    assertValidLayout(rows.slice(0, 6), 'iss track'),
+    'International Space Station',
+    'iss.track',
+  )];
+}
+
+function starlinkChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[1] = chipCode('white');
+  row[COLS - 2] = chipCode('white');
+  row[COLS - 1] = chipCode('white');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Starlink Tracker: next pass/train over the house pin — when, sky position,
+ * and local sky conditions.
+ */
+function starlinkTrackFrames(payload = {}) {
+  if (payload.mode === 'none') {
+    const rows = [
+      starlinkChipRow('STARLINK'),
+      blankRow(COLS),
+      centered(fold(payload.whenLabel || 'NO PASS SOON')),
+      payload.directionLabel ? centered(fold(payload.directionLabel)) : blankRow(COLS),
+      blankRow(COLS),
+      starlinkChipRow(payload.home?.city || 'HOME'),
+    ];
+    return [snapshotFrame(
+      assertValidLayout(rows, 'starlink none'),
+      'Starlink Tracker',
+      'starlink.track',
+    )];
+  }
+
+  if (!payload.whenLabel && !payload.startUtc) {
+    return [];
+  }
+
+  const settings = payload.settings || {};
+  const lines = [];
+  if (payload.whenLabel) {
+    lines.push(fold(payload.whenLabel).slice(0, 22));
+  }
+  if (payload.directionLabel) {
+    lines.push(fold(payload.directionLabel).slice(0, 22));
+  }
+  if (settings.showWeather !== false && payload.weatherLabel) {
+    lines.push(fold(payload.weatherLabel).slice(0, 22));
+  } else if (payload.skyCondition) {
+    lines.push(fold(payload.skyCondition).slice(0, 22));
+  }
+  if (settings.showVisibility !== false && payload.visibilityBoard) {
+    lines.push(fold(payload.visibilityBoard).slice(0, 22));
+  } else if (payload.lookLabel && lines.length < 4) {
+    lines.push(fold(payload.lookLabel).slice(0, 22));
+  }
+  while (lines.length < 4) {
+    lines.push('');
+  }
+  const body = lines.slice(0, 4).map((line) => (
+    line ? centered(line) : blankRow(COLS)
+  ));
+  return [snapshotFrame(
+    assertValidLayout([
+      starlinkChipRow('STARLINK'),
+      blankRow(COLS),
+      ...body,
+    ], 'starlink track'),
+    'Starlink Tracker',
+    'starlink.track',
+  )];
+}
+
 const FORMATTERS = {
   'youtube.now-playing': youtubeFrames,
   'upside-news.round': upsideFrames,
@@ -674,6 +1266,16 @@ const FORMATTERS = {
   'japanese.learn': learnJapaneseFrames,
   'quiet-hours.reminder': quietHoursReminderFrames,
   'chuck.facts': chuckNorrisFrames,
+  'amazing.facts': amazingFactsFrames,
+  'talk.starters': conversationStartersFrames,
+  'stoic.quotes': stoicQuotesFrames,
+  'history.day': onThisDayFrames,
+  'bake.inspire': bakingInspirationFrames,
+  'world.population': worldPopulationFrames,
+  'stocks.market': stockMarketFrames,
+  'fx.rates': currencyRatesFrames,
+  'iss.track': issTrackFrames,
+  'starlink.track': starlinkTrackFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -693,6 +1295,16 @@ module.exports = {
   learnJapaneseFrames,
   quietHoursReminderFrames,
   chuckNorrisFrames,
+  amazingFactsFrames,
+  conversationStartersFrames,
+  stoicQuotesFrames,
+  onThisDayFrames,
+  bakingInspirationFrames,
+  worldPopulationFrames,
+  stockMarketFrames,
+  currencyRatesFrames,
+  issTrackFrames,
+  starlinkTrackFrames,
   triviaGate,
   youtubeStatsLine,
 };

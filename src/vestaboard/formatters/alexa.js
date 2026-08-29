@@ -687,6 +687,108 @@ function weeklyWeatherFrames(payload = {}) {
   return [snapshotFrame(layout, 'Weekly weather', 'weather.weekly')];
 }
 
+function weatherAlertChipRow(text, color = 'red') {
+  const row = blankRow(COLS);
+  const chip = chipCode(color);
+  row[0] = chip;
+  row[1] = chip;
+  row[COLS - 2] = chip;
+  row[COLS - 1] = chip;
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+function weatherAlertTitle(alert = {}) {
+  const event = fold(alert.event || '');
+  if (event && encodeText(event).length <= 18) {
+    return event;
+  }
+  return 'WEATHER ALERT';
+}
+
+/** Body lines on the clear / alert cards have no side chips — use all 22 columns. */
+function weatherAlertBodyRow(text) {
+  const line = truncate(fold(text), COLS);
+  if (!line) {
+    return blankRow(COLS);
+  }
+  return centered(line, { from: 0, width: COLS });
+}
+
+/**
+ * Weather Alerts (marketplace news/weather): colour-coded chips by event
+ * family, one frame per alert. Clear / outside-US cards when there is nothing
+ * active for the house pin.
+ */
+function weatherAlertsFrames(payload = {}) {
+  const mode = payload.mode || (payload.alerts?.length ? 'alerts' : 'clear');
+  const city = fold(payload.city || payload.location?.city || payload.location?.label || 'HOME')
+    .split(',')[0]
+    .trim();
+
+  if (mode === 'outside-us') {
+    const rows = [
+      weatherAlertChipRow('NO COVERAGE', 'yellow'),
+      blankRow(COLS),
+      weatherAlertBodyRow('NWS ALERTS NEED'),
+      weatherAlertBodyRow('A US HOUSE PIN'),
+      blankRow(COLS),
+      weatherAlertChipRow(truncate(city || 'HOME', 18), 'yellow'),
+    ];
+    return [snapshotFrame(assertValidLayout(rows, 'weather alerts outside'), 'Weather alerts', 'weather.alerts')];
+  }
+
+  if (mode !== 'alerts' || !payload.alerts?.length) {
+    const rows = [
+      weatherAlertChipRow('ALL CLEAR', 'green'),
+      blankRow(COLS),
+      weatherAlertBodyRow('NO ACTIVE ALERTS'),
+      city ? weatherAlertBodyRow(`FOR ${city}`) : blankRow(COLS),
+      blankRow(COLS),
+      weatherAlertChipRow('NWS', 'green'),
+    ];
+    return [snapshotFrame(assertValidLayout(rows, 'weather alerts clear'), 'Weather alerts', 'weather.alerts')];
+  }
+
+  return payload.alerts.slice(0, 4).map((alert, index, list) => {
+    const color = alert.color || chipColorForFallback(alert);
+    const title = weatherAlertTitle(alert);
+    const eventLine = title === 'WEATHER ALERT'
+      ? fold(alert.event || '')
+      : fold(alert.severity || '').toUpperCase();
+    const until = fold(alert.until || '');
+    const area = fold(alert.area || city || '');
+    const body = [
+      weatherAlertChipRow(title, color),
+      blankRow(COLS),
+      eventLine ? weatherAlertBodyRow(eventLine) : blankRow(COLS),
+      until ? weatherAlertBodyRow(until) : blankRow(COLS),
+      area ? weatherAlertBodyRow(area) : blankRow(COLS),
+      weatherAlertChipRow(
+        list.length > 1 ? `${index + 1} OF ${list.length}` : (fold(alert.severity || 'ALERT')),
+        color,
+      ),
+    ];
+    const layout = assertValidLayout(body, 'weather alert');
+    const severe = ['Extreme', 'Severe'].includes(alert.severity) || alert.kind === 'warning';
+    if (severe) {
+      return alertFrame(layout, alert.event || 'Weather alert', 'weather.alerts', {
+        more: index < list.length - 1,
+      });
+    }
+    return snapshotFrame(layout, alert.event || 'Weather alert', 'weather.alerts');
+  });
+}
+
+function chipColorForFallback(alert = {}) {
+  if (alert.color) {
+    return alert.color;
+  }
+  return 'yellow';
+}
+
 // ---------------------------------------------------------------------------
 // A9. Indoor temperature
 // ---------------------------------------------------------------------------
@@ -921,6 +1023,7 @@ const FORMATTERS = {
   'shopping-list.snapshot': shoppingListFrames,
   'weather.query': weatherFrames,
   'weather.weekly': weeklyWeatherFrames,
+  'weather.alerts': weatherAlertsFrames,
   'indoor-temperature.query': indoorTemperatureFrames,
   'air-quality.query': airQualityFrames,
   'music.playing': musicFrames,
@@ -951,6 +1054,7 @@ module.exports = {
   shoppingListFrames,
   weatherFrames,
   weeklyWeatherFrames,
+  weatherAlertsFrames,
   indoorTemperatureFrames,
   airQualityFrames,
   musicFrames,
