@@ -1,21 +1,43 @@
 /**
- * Chuck Norris Fun Facts — pick a shipped (or house-edited) joke for the board.
+ * World Geography Facts — pick a shipped (or house-edited) geo fact for the board.
  *
- * Corpus is local JSON from chucknorris.io. No network at runtime.
+ * Corpus is local JSON built from open country data + curated landmarks.
+ * No network and no API keys at runtime.
  */
 
 const crypto = require('crypto');
-const SHIPPED = require('./chuck-norris-facts.json');
-const { cleanText, createChuckNorrisSettings } = require('./chuck-norris-settings');
+const SHIPPED = require('./world-geography-facts-facts.json');
+const {
+  cleanText,
+  cleanCategory,
+  createWorldGeographyFactsSettings,
+} = require('./world-geography-facts-settings');
 const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap } = require('./vestaboard/encoder');
 
-const TYPE = 'chuck.facts';
+const TYPE = 'geo.facts';
 const BODY_ROWS = 5;
 const BODY_WIDTH = 22;
 
 function loadShipped() {
   return Array.isArray(SHIPPED?.facts) ? SHIPPED.facts : [];
+}
+
+function shippedCategories() {
+  if (Array.isArray(SHIPPED?.categories) && SHIPPED.categories.length) {
+    return SHIPPED.categories.map((row) => ({
+      id: cleanCategory(row.id || row),
+      count: Number(row.count) || 0,
+    })).filter((row) => row.id);
+  }
+  const counts = new Map();
+  for (const fact of loadShipped()) {
+    const id = cleanCategory(fact.category) || 'trivia';
+    counts.set(id, (counts.get(id) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([id, count]) => ({ id, count }));
 }
 
 function factRows(text) {
@@ -51,9 +73,11 @@ function resolveFacts(settings = {}, { computeRows = true } = {}) {
     rows.push({
       id,
       text,
+      category: cleanCategory(fact.category) || 'trivia',
       custom: false,
       hidden: hidden.has(id),
       rows: computeRows || overridden ? factRows(text).length : (text ? 1 : 0),
+      source: fact.source || 'shipped',
     });
   }
 
@@ -66,9 +90,11 @@ function resolveFacts(settings = {}, { computeRows = true } = {}) {
     rows.push({
       id,
       text,
+      category: cleanCategory(fact.category) || 'custom',
       custom: true,
       hidden: false,
       rows: computeRows ? factRows(text).length : (fitsBoard(text) ? 1 : 0),
+      source: 'custom',
     });
   }
 
@@ -76,8 +102,16 @@ function resolveFacts(settings = {}, { computeRows = true } = {}) {
 }
 
 function matchingFacts(settings = {}) {
-  return resolveFacts(settings, { computeRows: false })
-    .filter((fact) => !fact.hidden && fact.text && fact.rows > 0);
+  const allowed = new Set((settings.categories || []).map(cleanCategory).filter(Boolean));
+  return resolveFacts(settings, { computeRows: false }).filter((fact) => {
+    if (fact.hidden || !fact.text || fact.rows <= 0) {
+      return false;
+    }
+    if (allowed.size && !allowed.has(fact.category)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 function countAvailable(settings = {}) {
@@ -96,7 +130,7 @@ function pickFact(settings = {}, { random = Math.random } = {}) {
   return choices[Math.max(0, index)] || null;
 }
 
-function buildChuckNorrisPayload(fact, { asOf } = {}) {
+function buildWorldGeographyFactsPayload(fact, { asOf } = {}) {
   const text = cleanText(fact?.text);
   if (!text) {
     return null;
@@ -107,18 +141,30 @@ function buildChuckNorrisPayload(fact, { asOf } = {}) {
     fact: {
       id: fact.id || '',
       text,
+      category: cleanCategory(fact.category) || '',
     },
   };
 }
 
-function listFacts(settings = {}, { query = '', hidden = false, page = 1, pageSize = 20 } = {}) {
+function listFacts(settings = {}, {
+  query = '',
+  hidden = false,
+  page = 1,
+  pageSize = 20,
+  category = '',
+} = {}) {
   const needle = String(query || '').trim().toLowerCase();
+  const categoryFilter = cleanCategory(category);
   let rows = resolveFacts(settings, { computeRows: false });
   if (!hidden) {
     rows = rows.filter((fact) => !fact.hidden);
   }
+  if (categoryFilter) {
+    rows = rows.filter((fact) => fact.category === categoryFilter);
+  }
   if (needle) {
     rows = rows.filter((fact) => fact.text.toLowerCase().includes(needle)
+      || fact.category.toLowerCase().includes(needle)
       || fact.id.toLowerCase().includes(needle));
   }
   const size = Math.min(50, Math.max(5, Number(pageSize) || 20));
@@ -132,6 +178,7 @@ function listFacts(settings = {}, { query = '', hidden = false, page = 1, pageSi
   }));
   return {
     query: needle,
+    category: categoryFilter,
     page: current,
     pageSize: size,
     pages,
@@ -140,8 +187,8 @@ function listFacts(settings = {}, { query = '', hidden = false, page = 1, pageSi
   };
 }
 
-function createChuckNorris(config, log) {
-  const settingsApi = createChuckNorrisSettings(config, log);
+function createWorldGeographyFacts(config, log) {
+  const settingsApi = createWorldGeographyFactsSettings(config, log);
 
   function snapshot(extra = {}) {
     const settings = settingsApi.get();
@@ -150,6 +197,10 @@ function createChuckNorris(config, log) {
       total: loadShipped().length + settings.custom.length,
       customCount: settings.custom.length,
       hiddenCount: settings.hiddenIds.length,
+      categories: settings.categories,
+      categoryOptions: shippedCategories(),
+      attribution: SHIPPED?.attribution || '',
+      license: SHIPPED?.license || '',
       ...extra,
     };
   }
@@ -159,22 +210,35 @@ function createChuckNorris(config, log) {
     statusSnapshot(query) {
       const settings = settingsApi.get();
       if (query && (query.page != null || query.pageSize != null || query.query
-        || query.q || query.hidden)) {
+        || query.q || query.category || query.hidden)) {
         return snapshot(listFacts(settings, query));
       }
       return snapshot();
     },
-    addFact(text) {
+    updateFilters({ categories } = {}) {
+      settingsApi.update({
+        categories: categories == null ? [] : categories,
+      });
+      return { ok: true, ...this.statusSnapshot() };
+    },
+    addFact(text, category) {
       const next = cleanText(text);
       if (!next) {
-        return { ok: false, error: 'Type a Chuck Norris fact' };
+        return { ok: false, error: 'Type a geography fact' };
+      }
+      if (!fitsBoard(next)) {
+        return { ok: false, error: 'That fact is too long for the Vestaboard' };
       }
       const settings = settingsApi.get();
-      const custom = [...settings.custom, { id: newCustomId(), text: next }];
+      const custom = [...settings.custom, {
+        id: newCustomId(),
+        text: next,
+        category: cleanCategory(category) || 'custom',
+      }];
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updateFact(id, { text, hidden, remove } = {}) {
+    updateFact(id, { text, hidden, category, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing fact id' };
@@ -195,12 +259,22 @@ function createChuckNorris(config, log) {
         const custom = [...settings.custom];
         if (hidden) {
           custom.splice(customIndex, 1);
-        } else if (text != null) {
-          const next = cleanText(text);
-          if (!next) {
-            return { ok: false, error: 'Type a Chuck Norris fact' };
+        } else {
+          const current = custom[customIndex];
+          const nextText = text != null ? cleanText(text) : current.text;
+          if (!nextText) {
+            return { ok: false, error: 'Type a geography fact' };
           }
-          custom[customIndex] = { ...custom[customIndex], text: next };
+          if (!fitsBoard(nextText)) {
+            return { ok: false, error: 'That fact is too long for the Vestaboard' };
+          }
+          custom[customIndex] = {
+            ...current,
+            text: nextText,
+            category: category != null
+              ? (cleanCategory(category) || 'custom')
+              : current.category,
+          };
         }
         settingsApi.update({ custom });
         return { ok: true, ...this.statusSnapshot() };
@@ -220,7 +294,10 @@ function createChuckNorris(config, log) {
       if (text != null) {
         const next = cleanText(text);
         if (!next) {
-          return { ok: false, error: 'Type a Chuck Norris fact' };
+          return { ok: false, error: 'Type a geography fact' };
+        }
+        if (!fitsBoard(next)) {
+          return { ok: false, error: 'That fact is too long for the Vestaboard' };
         }
         const original = loadShipped().find((row) => row.id === key);
         if (original && cleanText(original.text) === next) {
@@ -242,7 +319,7 @@ function createChuckNorris(config, log) {
         return null;
       }
       settingsApi.remember(fact.id);
-      return buildChuckNorrisPayload(fact, options);
+      return buildWorldGeographyFactsPayload(fact, options);
     },
   };
 }
@@ -252,12 +329,14 @@ module.exports = {
   BODY_ROWS,
   BODY_WIDTH,
   loadShipped,
+  shippedCategories,
   factRows,
   fitsBoard,
   resolveFacts,
   matchingFacts,
+  countAvailable,
   pickFact,
   listFacts,
-  buildChuckNorrisPayload,
-  createChuckNorris,
+  buildWorldGeographyFactsPayload,
+  createWorldGeographyFacts,
 };

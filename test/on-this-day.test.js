@@ -98,6 +98,25 @@ test('year range filters shrink the matching pool', () => {
   assert.ok(modern.every((row) => row.year >= 1900));
 });
 
+test('statusSnapshot without a query is a cheap count, not a full wrap', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'on-this-day-'));
+  const api = createOnThisDay({
+    ROOT: dir,
+    onThisDaySettingsPath: path.join(dir, 'settings.json'),
+  }, console, {
+    getLocaleSettings: () => ({ timeZone: 'UTC' }),
+  });
+  const cheap = api.statusSnapshot();
+  assert.equal(cheap.events, undefined);
+  assert.ok(Number(cheap.available) > 0);
+  assert.equal(cheap.available, cheap.todayAvailable);
+  const today = cheap.today;
+  assert.equal(
+    cheap.available,
+    matchingEvents({}, { month: today.month, day: today.day }).length,
+  );
+});
+
 test('createOnThisDay remembers recent picks and accepts custom facts', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'on-this-day-'));
   const api = createOnThisDay({
@@ -121,6 +140,16 @@ test('createOnThisDay remembers recent picks and accepts custom facts', () => {
 
   const listed = api.statusSnapshot({ month: 8, day: 29, pageSize: 50 });
   assert.ok(listed.events.some((row) => row.custom && /Signal Bridge/.test(row.text)));
+
+  const customId = listed.events.find((row) => row.custom).id;
+  const removedCustom = api.updateEvent(customId, { remove: true });
+  assert.equal(removedCustom.ok, true);
+  assert.equal(api.getSettings().custom.some((row) => row.id === customId), false);
+
+  const shippedId = payload.event.id;
+  const removedShipped = api.updateEvent(shippedId, { remove: true });
+  assert.equal(removedShipped.ok, true);
+  assert.ok(api.getSettings().removedIds.includes(shippedId));
 });
 
 test('sanitiseSettings keeps year bounds and custom rows', () => {

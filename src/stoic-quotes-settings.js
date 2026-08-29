@@ -16,6 +16,7 @@ const AUTHOR_MAX = 40;
 const FALLBACK = {
   recentIds: [],
   hiddenIds: [],
+  removedIds: [],
   overrides: {},
   custom: [],
 };
@@ -105,6 +106,7 @@ function sanitiseSettings(raw = {}, base = FALLBACK) {
   return {
     recentIds: uniqueIds(recentSource).slice(-RECENT_CAP),
     hiddenIds: uniqueIds(incoming.hiddenIds != null ? incoming.hiddenIds : base.hiddenIds),
+    removedIds: uniqueIds(incoming.removedIds != null ? incoming.removedIds : base.removedIds),
     overrides: sanitiseOverrides(incoming.overrides != null ? incoming.overrides : base.overrides),
     custom: sanitiseCustom(incoming.custom != null ? incoming.custom : base.custom),
   };
@@ -113,7 +115,7 @@ function sanitiseSettings(raw = {}, base = FALLBACK) {
 function createStoicQuotesSettings(config = {}, log = console) {
   const settingsPath = config.stoicQuotesSettingsPath
     || path.resolve(config.ROOT || path.resolve(__dirname, '..'), 'data', 'stoic-quotes-settings.json');
-  let current = { ...FALLBACK, overrides: {}, custom: [], hiddenIds: [], recentIds: [] };
+  let current = { ...FALLBACK, overrides: {}, custom: [], hiddenIds: [], removedIds: [], recentIds: [] };
 
   function load() {
     try {
@@ -144,6 +146,7 @@ function createStoicQuotesSettings(config = {}, log = console) {
     get: () => ({
       recentIds: [...current.recentIds],
       hiddenIds: [...current.hiddenIds],
+      removedIds: [...current.removedIds],
       overrides: { ...current.overrides },
       custom: current.custom.map((row) => ({ ...row })),
     }),

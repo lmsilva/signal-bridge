@@ -127,6 +127,7 @@ const { buildWeeklyWeatherPayload } = require('./weekly-weather');
 const { createLearnJapanese } = require('./learn-japanese');
 const { createChuckNorris } = require('./chuck-norris');
 const { createAmazingFacts } = require('./amazing-facts');
+const { createWorldGeographyFacts } = require('./world-geography-facts');
 const { createConversationStarters } = require('./conversation-starters');
 const { createStoicQuotes } = require('./stoic-quotes');
 const { createOnThisDay } = require('./on-this-day');
@@ -152,6 +153,10 @@ const URL_CHECK_TIMEOUT_MS = 5000;
 // port forever when the user abandons the login.
 const TESLA_CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
 const RESTART_DELAY_MS = 4000;
+
+// Placeholder in `src/web/admin/index.html` swapped for the Push tile catalog
+// as the page is served. Keep the two in step.
+const PUSH_CATALOG_TOKEN = '"__PUSH_CATALOG__"';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -432,6 +437,7 @@ function createWebServer({
   const learnJapanese = createLearnJapanese(config, log);
   const chuckNorris = createChuckNorris(config, log);
   const amazingFacts = createAmazingFacts(config, log);
+  const worldGeographyFacts = createWorldGeographyFacts(config, log);
   const conversationStarters = createConversationStarters(config, log);
   const stoicQuotes = createStoicQuotes(config, log);
   const onThisDay = createOnThisDay(config, log, {
@@ -522,6 +528,7 @@ function createWebServer({
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
     getAmazingFactsStatus: () => amazingFacts.statusSnapshot(),
+    getWorldGeographyFactsStatus: () => worldGeographyFacts.statusSnapshot(),
     getConversationStartersStatus: () => conversationStarters.statusSnapshot(),
     getStoicQuotesStatus: () => stoicQuotes.statusSnapshot(),
     getOnThisDayStatus: () => onThisDay.statusSnapshot(),
@@ -2401,6 +2408,7 @@ function createWebServer({
     const result = chuckNorris.updateFact(body?.id, {
       text: body?.text,
       hidden: body?.hidden,
+      remove: body?.remove,
     });
     sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -2462,6 +2470,7 @@ function createWebServer({
       text: body?.text,
       hidden: body?.hidden,
       category: body?.category,
+      remove: body?.remove,
     });
     sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -2496,6 +2505,68 @@ function createWebServer({
     });
   }
 
+  function handleWorldGeographyFactsGet(query, res) {
+    sendJson(res, 200, { ok: true, ...worldGeographyFacts.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+      category: query?.category,
+    }) });
+  }
+
+  function handleWorldGeographyFactPost(body, res) {
+    if (body?.categories != null || body?.filters) {
+      const result = worldGeographyFacts.updateFilters({
+        categories: body?.categories,
+      });
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+    const result = worldGeographyFacts.addFact(body?.text, body?.category);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWorldGeographyFactPut(body, res) {
+    const result = worldGeographyFacts.updateFact(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+      category: body?.category,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWorldGeographyFactsPush(body, res) {
+    const payload = worldGeographyFacts.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No World Geography Facts are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('World geography fact', { targetId, id: payload.fact.id, category: payload.fact.category });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      fact: payload.fact,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleConversationStartersGet(query, res) {
     sendJson(res, 200, { ok: true, ...conversationStarters.statusSnapshot({
       query: query?.q || query?.query,
@@ -2514,6 +2585,7 @@ function createWebServer({
     const result = conversationStarters.updatePrompt(body?.id, {
       text: body?.text,
       hidden: body?.hidden,
+      remove: body?.remove,
     });
     sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -2567,6 +2639,7 @@ function createWebServer({
       text: body?.text,
       author: body?.author,
       hidden: body?.hidden,
+      remove: body?.remove,
     });
     sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -2637,6 +2710,7 @@ function createWebServer({
       month: body?.month,
       day: body?.day,
       hidden: body?.hidden,
+      remove: body?.remove,
     });
     sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -2698,6 +2772,7 @@ function createWebServer({
       title: body?.title,
       ingredients: body?.ingredients,
       hidden: body?.hidden,
+      remove: body?.remove,
     });
     sendJson(res, result.ok ? 200 : 400, result);
   }
@@ -3209,6 +3284,8 @@ function createWebServer({
           handleChuckNorrisPush(body, res); break;
         case 'amazing.facts':
           handleAmazingFactsPush(body, res); break;
+        case 'geo.facts':
+          handleWorldGeographyFactsPush(body, res); break;
         case 'talk.starters':
           handleConversationStartersPush(body, res); break;
         case 'stoic.quotes':
@@ -5867,6 +5944,26 @@ function createWebServer({
     }
   }
 
+  /**
+   * The admin's Push grid used to stay empty until `GET /api/commands`
+   * answered, so a slow provider probe left the page looking broken. The tile
+   * catalog is static data, so it ships inside the HTML instead: same single
+   * request, no readiness checks, and the grid paints before app.js runs.
+   */
+  function inlinePushCatalog(html) {
+    if (!html.includes(PUSH_CATALOG_TOKEN)) {
+      return html;
+    }
+    let json = '[]';
+    try {
+      json = JSON.stringify(commandRegistry.list({ skipContentCheck: true }));
+    } catch (error) {
+      log?.warn?.(`admin: could not inline push catalog — ${error?.message || error}`);
+    }
+    // `</script>` inside a JSON island would close the element early.
+    return html.replace(PUSH_CATALOG_TOKEN, json.replace(/</g, '\\u003c'));
+  }
+
   function redirectToAdminLogin(res, pathname) {
     const next = encodeURIComponent(pathname || '/admin/');
     res.writeHead(302, {
@@ -5897,6 +5994,7 @@ function createWebServer({
         .replace(/(src="(?:\.\/)?app\.js)(?:\?[^"]*)?(")/, `$1?v=${vApp}$2`)
         .replace(/(href="(?:\.\/)?booth\.css)(?:\?[^"]*)?(")/, `$1?v=${vBoothCss}$2`)
         .replace(/(src="(?:\.\/)?booth\.js)(?:\?[^"]*)?(")/, `$1?v=${vBoothJs}$2`);
+      html = inlinePushCatalog(html);
       res.writeHead(200, {
         'Content-Type': MIME_TYPES[ext] || 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -6299,6 +6397,11 @@ function createWebServer({
         if (pathname === '/api/amazing-facts/facts') {
           if (!requireAdminSession(req, res)) return;
           handleAmazingFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/world-geography-facts/facts') {
+          if (!requireAdminSession(req, res)) return;
+          handleWorldGeographyFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
         if (pathname === '/api/conversation-starters/prompts') {
@@ -6880,6 +6983,16 @@ function createWebServer({
               handleAmazingFactPut(body, res);
             } else {
               handleAmazingFactPost(body, res);
+            }
+            return;
+          case '/api/push/world-geography-facts':
+            handleWorldGeographyFactsPush(body, res);
+            return;
+          case '/api/world-geography-facts/facts':
+            if (body?.id) {
+              handleWorldGeographyFactPut(body, res);
+            } else {
+              handleWorldGeographyFactPost(body, res);
             }
             return;
           case '/api/push/conversation-starters':

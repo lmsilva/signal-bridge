@@ -126,6 +126,16 @@ function compassLabel(bearing) {
   return dirs[index] || 'N';
 }
 
+function formatCommaNumber(value) {
+  const number = Math.round(Number(value));
+  if (!Number.isFinite(number)) {
+    return '';
+  }
+  const sign = number < 0 ? '-' : '';
+  const digits = String(Math.abs(number));
+  return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 function formatCoord(lat, lon) {
   const latitude = Number(lat);
   const longitude = Number(lon);
@@ -136,9 +146,10 @@ function formatCoord(lat, lon) {
   const ew = longitude >= 0 ? 'E' : 'W';
   const latAbs = Math.abs(latitude);
   const lonAbs = Math.abs(longitude);
-  const latStr = latAbs >= 10 ? latAbs.toFixed(1) : latAbs.toFixed(2);
-  const lonStr = lonAbs >= 100 ? lonAbs.toFixed(1) : lonAbs.toFixed(1);
-  return `${latStr}${ns} ${lonStr}${ew}`;
+  // Marketplace: `1.45° S,  33.56° W` — tighten lon decimals when >= 100.
+  const latStr = latAbs.toFixed(2);
+  const lonStr = lonAbs >= 100 ? lonAbs.toFixed(1) : lonAbs.toFixed(2);
+  return `${latStr}° ${ns},  ${lonStr}° ${ew}`;
 }
 
 function formatDistance(km, unit) {
@@ -147,13 +158,14 @@ function formatDistance(km, unit) {
   if (!Number.isFinite(value) || value < 0) {
     return '';
   }
-  if (value >= 1000) {
-    return `${Math.round(value)} ${label}`;
-  }
-  if (value >= 100) {
-    return `${Math.round(value)} ${label}`;
-  }
-  return `${value.toFixed(0)} ${label}`;
+  const amount = formatCommaNumber(value);
+  return amount ? `${amount} ${label}` : '';
+}
+
+/** Marketplace away line: `3,917 MI AWAY @`. */
+function formatAway(km, unit) {
+  const distance = formatDistance(km, unit);
+  return distance ? `${distance} AWAY @` : '';
 }
 
 function formatSpeed(kmh, unit) {
@@ -162,7 +174,14 @@ function formatSpeed(kmh, unit) {
   if (!Number.isFinite(value) || value <= 0) {
     return '';
   }
-  return `${Math.round(value)} ${label}`;
+  const amount = formatCommaNumber(value);
+  return amount ? `${amount} ${label}` : '';
+}
+
+/** Marketplace speed line: `GOING 17,130 MPH`. */
+function formatGoing(kmh, unit) {
+  const speed = formatSpeed(kmh, unit);
+  return speed ? `GOING ${speed}` : '';
 }
 
 function formatAltitude(km, unit) {
@@ -171,7 +190,49 @@ function formatAltitude(km, unit) {
   if (!Number.isFinite(value) || value <= 0) {
     return '';
   }
-  return `${Math.round(value)} ${label} UP`;
+  const amount = formatCommaNumber(value);
+  return amount ? `${amount} ${label}` : '';
+}
+
+/** Marketplace altitude line: `@  262 MI HIGH`. */
+function formatHigh(km, unit) {
+  const altitude = formatAltitude(km, unit);
+  return altitude ? `@  ${altitude} HIGH` : '';
+}
+
+/**
+ * Marketplace clock: `09:20 AM` (leading zero, space before meridiem).
+ */
+function formatIssClock(value, timeZone) {
+  const date = value instanceof Date ? value : new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timeZone || undefined,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const parts = fmt.formatToParts(date);
+    const hour = parts.find((part) => part.type === 'hour')?.value || '';
+    const minute = parts.find((part) => part.type === 'minute')?.value || '';
+    const dayPeriod = String(parts.find((part) => part.type === 'dayPeriod')?.value || '')
+      .toUpperCase()
+      .replace(/\./g, '');
+    if (!hour || !minute || !dayPeriod) {
+      return '';
+    }
+    return `${hour.padStart(2, '0')}:${minute} ${dayPeriod}`;
+  } catch (_error) {
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const meridiem = hours >= 12 ? 'PM' : 'AM';
+    hours %= 12;
+    if (hours === 0) hours = 12;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${meridiem}`;
+  }
 }
 
 function visibilityLabel(raw) {
@@ -295,13 +356,14 @@ function buildIssTrackPayload({
 
   const city = fold(locale.city || locale.label || 'HOME').split(',')[0].trim().slice(0, 18);
   const distanceLabel = hasHome ? formatDistance(distanceKm, unit) : '';
-  const relativeLabel = hasHome && distanceLabel && direction
-    ? `${distanceLabel} ${direction}`
-    : (distanceLabel || '');
+  const awayLabel = hasHome ? formatAway(distanceKm, unit) : '';
+  const relativeLabel = awayLabel;
+  const timeZone = String(locale.timeZone || '').trim() || undefined;
+  const asOfIso = asOf || new Date(position.timestamp || Date.now()).toISOString();
 
   return {
     type: TYPE,
-    asOf: asOf || new Date(position.timestamp || Date.now()).toISOString(),
+    asOf: asOfIso,
     source: position.source || '',
     latitude: Number(position.latitude),
     longitude: Number(position.longitude),
@@ -309,13 +371,16 @@ function buildIssTrackPayload({
     speedKmh: Number(position.speedKmh),
     visibility: String(position.visibility || ''),
     visibilityLabel: visibilityLabel(position.visibility),
+    timeLabel: formatIssClock(asOfIso, timeZone),
+    timeZone: timeZone || '',
     coordLabel: formatCoord(position.latitude, position.longitude),
-    speedLabel: formatSpeed(position.speedKmh, unit),
-    altitudeLabel: formatAltitude(position.altitudeKm, unit),
+    speedLabel: formatGoing(position.speedKmh, unit),
+    altitudeLabel: formatHigh(position.altitudeKm, unit),
     distanceKm: hasHome ? distanceKm : null,
     bearing: hasHome ? bearing : null,
     direction,
     distanceLabel,
+    awayLabel,
     relativeLabel,
     unit,
     hasHome,
@@ -386,10 +451,15 @@ module.exports = {
   haversineKm,
   bearingDegrees,
   compassLabel,
+  formatCommaNumber,
   formatCoord,
   formatDistance,
+  formatAway,
   formatSpeed,
+  formatGoing,
   formatAltitude,
+  formatHigh,
+  formatIssClock,
   visibilityLabel,
   fetchWtiaPosition,
   fetchOpenNotifyPosition,

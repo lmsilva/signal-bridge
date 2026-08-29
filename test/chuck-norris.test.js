@@ -115,6 +115,20 @@ test('house edits hide, override, and add facts', () => {
   assert.equal(payload.type, 'chuck.facts');
   assert.ok(payload.fact.text);
 
+  const customId = chuck.getSettings().custom[0].id;
+  const removedCustom = chuck.updateFact(customId, { remove: true });
+  assert.equal(removedCustom.ok, true);
+  assert.equal(chuck.getSettings().custom.some((row) => row.id === customId), false);
+
+  const removedShipped = chuck.updateFact(shipped.id, { remove: true });
+  assert.equal(removedShipped.ok, true);
+  assert.ok(chuck.getSettings().removedIds.includes(shipped.id));
+  assert.equal(matchingFacts(chuck.getSettings()).some((fact) => fact.id === shipped.id), false);
+  assert.equal(
+    listFacts(chuck.getSettings(), { hidden: true }).facts.some((fact) => fact.id === shipped.id),
+    false,
+  );
+
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -123,8 +137,10 @@ test('sanitiseSettings keeps recent ids capped and custom text trimmed', () => {
     recentIds: Array.from({ length: 120 }, (_, index) => `id-${index}`),
     custom: [{ id: 'custom-1', text: '  Chuck Norris.  ' }, { text: '' }],
     hiddenIds: ['a', 'a', ''],
+    removedIds: ['b', 'b', ''],
   });
   assert.equal(settings.recentIds.length, 80);
   assert.deepEqual(settings.custom, [{ id: 'custom-1', text: 'Chuck Norris.' }]);
   assert.deepEqual(settings.hiddenIds, ['a']);
+  assert.deepEqual(settings.removedIds, ['b']);
 });

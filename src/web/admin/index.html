@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal139">
+  <link rel="stylesheet" href="styles.css?v=signal155">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -64,7 +64,7 @@
 
     <!-- ============================ PUSH TAB ============================ -->
     <section class="tab-panel active" id="tab-push">
-      <div class="push-head">
+      <div class="push-head tab-sticky-head" id="push-head">
         <div class="push-search-row">
           <label class="push-search" for="push-search">
             <input
@@ -78,6 +78,14 @@
               aria-label="Search pushes"
             >
           </label>
+          <div class="display-kind-filter-wrap">
+            <span class="display-kind-filter-label" id="push-kind-filter-label">Applies to</span>
+            <div class="segmented display-kind-filter" id="push-kind-filter" role="group" aria-labelledby="push-kind-filter-label">
+              <button type="button" class="segmented-btn active" data-kind-filter="all" title="All Displays" aria-pressed="true">All</button>
+              <button type="button" class="segmented-btn" data-kind-filter="vestaboard" title="Vestaboard" aria-pressed="false">Vestaboard</button>
+              <button type="button" class="segmented-btn" data-kind-filter="full" title="Software Display" aria-pressed="false">Software</button>
+            </div>
+          </div>
           <button type="button" class="btn btn-outline btn-sm" id="push-search-clear" hidden>Clear</button>
         </div>
         <div class="segmented push-view-tabs" id="push-view-tabs" role="tablist" aria-label="Push sections">
@@ -141,7 +149,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="12" aria-busy="true"></div>
+               data-skeleton-count="13" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="travel">
@@ -154,7 +162,7 @@
              (Guest Snaps, …) follow under their own heading. -->
         <div class="push-share-pane" data-push-group="share">
           <div class="push-columns">
-          <div class="push-column" data-push-item="web-browser">
+          <div class="push-column" data-push-item="web-browser" data-display-kinds="full">
             <div class="section-label">Web Browser</div>
 
             <div class="card" id="browser-active-card" hidden>
@@ -186,7 +194,7 @@
             </div>
           </div>
 
-          <div class="push-column" data-push-item="qr-code">
+          <div class="push-column" data-push-item="qr-code" data-display-kinds="full">
             <div class="section-label">QR Code</div>
             <div class="card">
               <label class="field-label">Generate a QR code on the display</label>
@@ -350,7 +358,7 @@
     <!-- ========================= SCHEDULER TAB ========================= -->
     <section class="tab-panel" id="tab-scheduler">
       <div class="card-grid">
-        <div class="sched-head">
+        <div class="sched-head tab-sticky-head" id="sched-head">
           <div class="segmented sched-view-tabs" id="sched-view-tabs">
             <button type="button" class="segmented-btn active" data-sched-view="schedule">Schedule</button>
             <button type="button" class="segmented-btn" data-sched-view="activity">Activity</button>
@@ -379,10 +387,25 @@
               </div>
               <button type="button" class="btn btn-outline btn-sm" id="sched-rule-search-clear" hidden>Clear</button>
             </div>
-            <div class="sched-add-row">
+            <div class="sched-add-row" id="sched-add-row">
               <div class="sched-add-command-wrap">
-                <label class="field-label" for="sched-add-command">Add a rule</label>
-                <select class="field-input" id="sched-add-command"></select>
+                <label class="field-label" for="sched-add-command-search">Add a rule</label>
+                <div class="sched-command-picker">
+                  <input
+                    class="field-input"
+                    type="search"
+                    id="sched-add-command-search"
+                    placeholder="Type to find an event…"
+                    autocomplete="off"
+                    spellcheck="false"
+                    role="combobox"
+                    aria-expanded="false"
+                    aria-controls="sched-add-command-list"
+                    aria-autocomplete="list"
+                  >
+                  <input type="hidden" id="sched-add-command" value="">
+                  <div class="typeahead-list sched-command-list" id="sched-add-command-list" role="listbox" hidden></div>
+                </div>
               </div>
               <button class="btn btn-accent" id="btn-sched-add">Add rule</button>
             </div>
@@ -681,7 +704,7 @@
 
     <!-- ========================== SETTINGS TAB ========================== -->
     <section class="tab-panel" id="tab-settings">
-      <div class="settings-head">
+      <div class="settings-head tab-sticky-head" id="settings-head">
         <div class="settings-search-row">
           <label class="settings-search" for="settings-search">
             <input
@@ -695,6 +718,14 @@
               aria-label="Search settings"
             >
           </label>
+          <div class="display-kind-filter-wrap">
+            <span class="display-kind-filter-label" id="settings-kind-filter-label">Applies to</span>
+            <div class="segmented display-kind-filter" id="settings-kind-filter" role="group" aria-labelledby="settings-kind-filter-label">
+              <button type="button" class="segmented-btn active" data-kind-filter="all" title="All Displays" aria-pressed="true">All</button>
+              <button type="button" class="segmented-btn" data-kind-filter="vestaboard" title="Vestaboard" aria-pressed="false">Vestaboard</button>
+              <button type="button" class="segmented-btn" data-kind-filter="full" title="Software Display" aria-pressed="false">Software</button>
+            </div>
+          </div>
           <button type="button" class="btn btn-outline btn-sm" id="settings-search-clear" hidden>Clear</button>
         </div>
         <div class="segmented settings-view-tabs" id="settings-view-tabs" role="tablist" aria-label="Settings sections">
@@ -1177,6 +1208,35 @@
             <button type="button" class="btn btn-outline" id="btn-amazing-facts-manage">Manage facts</button>
             <button type="button" class="btn btn-accent" id="btn-amazing-facts-push">Push Random</button>
           </div>
+          <details class="af-pool-panel" id="amazing-facts-pool-panel">
+            <summary>
+              <span class="af-pool-panel-title">Topics for random push</span>
+              <span class="af-pool-panel-summary" id="amazing-facts-pool-summary">All topics</span>
+            </summary>
+            <p class="hint af-pool-panel-hint">
+              Checked topics feed <strong>Push Random</strong> and the scheduler. Leave every topic checked to draw from the whole library.
+            </p>
+            <p class="hint" id="amazing-facts-attribution"></p>
+            <div class="af-pool-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-pool-all">Select all</button>
+            </div>
+            <div class="af-pool-chips" id="amazing-facts-pool-categories" role="group" aria-label="Topics for random push"></div>
+          </details>
+        </div>
+
+        <div class="section-label" data-settings-group="news">World Geography Facts</div>
+        <div class="card world-geography-facts-settings-card" id="world-geography-facts-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Capitals, landmarks &amp; planet quirks</div>
+            <span class="status-pill" id="world-geography-facts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="world-geography-facts-status-detail">
+            Local world geography facts for the Vestaboard. No API key — manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-world-geography-facts-manage">Manage facts</button>
+            <button type="button" class="btn btn-accent" id="btn-world-geography-facts-push">Push Random</button>
+          </div>
         </div>
 
         <div class="section-label" data-settings-group="news">Conversation Starters</div>
@@ -1470,10 +1530,6 @@
                 <input type="checkbox" id="iss-tracker-show-altitude" checked>
                 <span>Show altitude</span>
               </label>
-              <label class="trivia-check">
-                <input type="checkbox" id="iss-tracker-show-visibility" checked>
-                <span>Show daylight / eclipsed</span>
-              </label>
               <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
                 <button type="button" class="btn btn-accent" id="btn-iss-tracker-save">Save</button>
                 <button type="button" class="btn btn-outline" id="btn-iss-tracker-reset">Reset defaults</button>
@@ -1484,7 +1540,7 @@
               <label class="field-label">Board preview</label>
               <div class="cn-board-preview cn-board-preview-stoic" id="iss-tracker-preview" aria-hidden="true"></div>
               <p class="hint" id="iss-tracker-location" style="margin-top:8px">
-                Uses the house pin under Settings → Global → Location for distance and bearing.
+                Uses the house pin under Settings → Global → Location for the AWAY distance.
               </p>
             </div>
           </div>
@@ -2304,7 +2360,10 @@
             <span class="hint" id="chuck-norris-fit-hint"></span>
           </div>
         </div>
-        <div class="cn-board-preview" id="chuck-norris-preview" aria-hidden="true"></div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview" id="chuck-norris-preview" aria-hidden="true"></div>
+        </div>
       </div>
       <div class="cn-toolbar">
         <input type="search" class="field-input" id="chuck-norris-search" placeholder="Search facts" autocomplete="off">
@@ -2339,26 +2398,15 @@
             <span class="hint" id="amazing-facts-fit-hint"></span>
           </div>
         </div>
-        <div class="cn-board-preview cn-board-preview-stoic" id="amazing-facts-preview" aria-hidden="true"></div>
-      </div>
-      <div class="settings-columns" style="margin:0 0 12px">
-        <div class="settings-col">
-          <label class="field-label" for="amazing-facts-browse-category">Browse category</label>
-          <select id="amazing-facts-browse-category" class="field-input">
-            <option value="">All categories</option>
-          </select>
-        </div>
-        <div class="settings-col">
-          <label class="field-label" for="amazing-facts-pool-categories">Push pool (optional)</label>
-          <select id="amazing-facts-pool-categories" class="field-input" multiple size="5" aria-label="Restrict push categories"></select>
-          <div class="btn-row" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
-            <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-save-pool">Save pool</button>
-            <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-clear-pool">Use all</button>
-          </div>
-          <p class="hint" id="amazing-facts-attribution" style="margin-top:8px"></p>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview cn-board-preview-amazing" id="amazing-facts-preview" aria-hidden="true"></div>
         </div>
       </div>
       <div class="cn-toolbar">
+        <select id="amazing-facts-browse-category" class="field-input af-browse-select" aria-label="Browse category">
+          <option value="">All categories</option>
+        </select>
         <input type="search" class="field-input" id="amazing-facts-search" placeholder="Search facts" autocomplete="off">
         <label class="trivia-check">
           <input type="checkbox" id="amazing-facts-show-hidden">
@@ -2370,6 +2418,61 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-prev">Previous</button>
         <span class="hint" id="amazing-facts-page-label"></span>
         <button type="button" class="btn btn-outline btn-sm" id="btn-amazing-facts-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- World Geography Facts manager -->
+  <div class="sheet-backdrop" id="world-geography-facts-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="world-geography-facts-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="world-geography-facts-manage-title">Manage World Geography Facts</div>
+        <button type="button" class="credits-sheet-close" id="btn-world-geography-facts-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="world-geography-facts-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="world-geography-facts-new">New fact</label>
+          <textarea class="field-input cn-fact-input" id="world-geography-facts-new" rows="3" maxlength="220" placeholder="Istanbul spans Europe and Asia…"></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-world-geography-facts-add">Add fact</button>
+            <span class="hint" id="world-geography-facts-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview cn-board-preview-stoic" id="world-geography-facts-preview" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="settings-columns" style="margin:0 0 12px">
+        <div class="settings-col">
+          <label class="field-label" for="world-geography-facts-browse-category">Browse category</label>
+          <select id="world-geography-facts-browse-category" class="field-input">
+            <option value="">All categories</option>
+          </select>
+        </div>
+        <div class="settings-col">
+          <label class="field-label" for="world-geography-facts-pool-categories">Push pool (optional)</label>
+          <select id="world-geography-facts-pool-categories" class="field-input" multiple size="5" aria-label="Restrict push categories"></select>
+          <div class="btn-row" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-world-geography-facts-save-pool">Save pool</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-world-geography-facts-clear-pool">Use all</button>
+          </div>
+          <p class="hint" id="world-geography-facts-attribution" style="margin-top:8px"></p>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="world-geography-facts-search" placeholder="Search facts" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="world-geography-facts-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="world-geography-facts-fact-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-world-geography-facts-prev">Previous</button>
+        <span class="hint" id="world-geography-facts-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-world-geography-facts-next">Next</button>
       </div>
     </div>
   </div>
@@ -2391,7 +2494,10 @@
             <span class="hint" id="conversation-starters-fit-hint"></span>
           </div>
         </div>
-        <div class="cn-board-preview cn-board-preview-violet" id="conversation-starters-preview" aria-hidden="true"></div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview cn-board-preview-violet" id="conversation-starters-preview" aria-hidden="true"></div>
+        </div>
       </div>
       <div class="cn-toolbar">
         <input type="search" class="field-input" id="conversation-starters-search" placeholder="Search prompts" autocomplete="off">
@@ -2428,7 +2534,10 @@
             <span class="hint" id="stoic-quotes-fit-hint"></span>
           </div>
         </div>
-        <div class="cn-board-preview cn-board-preview-stoic" id="stoic-quotes-preview" aria-hidden="true"></div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview cn-board-preview-stoic" id="stoic-quotes-preview" aria-hidden="true"></div>
+        </div>
       </div>
       <div class="cn-toolbar">
         <input type="search" class="field-input" id="stoic-quotes-search" placeholder="Search quotes or authors" autocomplete="off">
@@ -2534,7 +2643,10 @@
             <span class="hint" id="baking-inspiration-fit-hint"></span>
           </div>
         </div>
-        <div class="cn-board-preview cn-board-preview-bake" id="baking-inspiration-preview" aria-hidden="true"></div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview cn-board-preview-bake" id="baking-inspiration-preview" aria-hidden="true"></div>
+        </div>
       </div>
       <div class="cn-toolbar">
         <input type="search" class="field-input" id="baking-inspiration-search" placeholder="Search titles or ingredients" autocomplete="off">
@@ -2817,14 +2929,15 @@
 
   <div class="toast-wrap" id="toast-wrap"></div>
 
+  <div class="page-jump" id="page-jump" hidden>
+    <button type="button" class="page-jump-btn" id="btn-jump-top" title="Jump to top" aria-label="Jump to top">↑</button>
+    <button type="button" class="page-jump-btn" id="btn-jump-bottom" title="Jump to bottom" aria-label="Jump to bottom">↓</button>
+  </div>
+
+  <!-- Push tile catalog, inlined by the bridge as this page is served. The
+       grid is static data, so it must not wait on /api/commands. -->
+  <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
-  <script>
-    // Fallback: if the vendored copy is missing on the bridge, load from CDN
-    // (the phone has internet even though the bridge page is LAN-hosted).
-    if (typeof jsQR !== 'function') {
-      document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
-    }
-  </script>
-  <script src="app.js?v=signal139"></script>
+  <script src="app.js?v=signal155"></script>
 </body>
 </html>

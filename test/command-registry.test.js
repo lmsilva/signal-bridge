@@ -200,6 +200,8 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('chuck.facts', 'full'), false);
   assert.equal(supportsKind('amazing.facts', 'vestaboard'), true);
   assert.equal(supportsKind('amazing.facts', 'full'), false);
+  assert.equal(supportsKind('geo.facts', 'vestaboard'), true);
+  assert.equal(supportsKind('geo.facts', 'full'), false);
   assert.equal(supportsKind('talk.starters', 'vestaboard'), true);
   assert.equal(supportsKind('talk.starters', 'full'), false);
   assert.equal(supportsKind('stoic.quotes', 'vestaboard'), true);
@@ -245,6 +247,34 @@ test('list() can filter to pushable or schedulable commands', () => {
     COMMANDS.filter((c) => c.schedulable).map((c) => c.id),
   );
   assert.ok(registry.list().length >= registry.list({ pushableOnly: true }).length);
+});
+
+test('list({ skipContentCheck }) runs no readiness probes', () => {
+  // The admin Push grid only needs titles, icons and categories, and the
+  // probes fan out into every provider — that cost is why the grid used to
+  // sit on skeletons. This shape is what gets inlined into the admin page.
+  let probes = 0;
+  const registry = createCommandRegistry({
+    getChuckNorrisStatus: () => { probes += 1; return { available: 0 }; },
+    getSteamStatus: () => { probes += 1; return { session: null }; },
+    getPhotoCount: () => { probes += 1; return 0; },
+  });
+
+  const cheap = registry.list({ skipContentCheck: true });
+  assert.equal(probes, 0, 'no provider was asked whether it has content');
+  assert.deepEqual(cheap.map((c) => c.id), registry.list({ skipContentCheck: true }).map((c) => c.id));
+  assert.ok(cheap.every((command) => command.hasContent === true));
+  const chuck = cheap.find((command) => command.id === 'chuck.facts');
+  assert.equal(chuck.title, COMMANDS.find((c) => c.id === 'chuck.facts').title);
+  assert.equal(
+    chuck.estimatedDurationSeconds,
+    COMMANDS.find((c) => c.id === 'chuck.facts').defaultDurationSeconds,
+  );
+
+  // The default shape still asks, and still reports an empty corpus as empty.
+  const full = registry.list();
+  assert.ok(probes > 0);
+  assert.equal(full.find((command) => command.id === 'chuck.facts').hasContent, false);
 });
 
 test('commands without a content check always report content', () => {
@@ -433,6 +463,24 @@ test('amazing.facts is Vestaboard-only and needs a ready fact', () => {
 
   const ready = createCommandRegistry({ getAmazingFactsStatus: () => ({ available: 80 }) });
   assert.equal(ready.hasContent('amazing.facts'), true);
+});
+
+test('geo.facts is Vestaboard-only and needs a ready fact', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'geo.facts');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/world-geography-facts');
+  assert.equal(command.defaultDurationSeconds, 20);
+
+  const empty = createCommandRegistry({ getWorldGeographyFactsStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('geo.facts'), false);
+
+  const ready = createCommandRegistry({ getWorldGeographyFactsStatus: () => ({ available: 80 }) });
+  assert.equal(ready.hasContent('geo.facts'), true);
 });
 
 test('talk.starters is Vestaboard-only and needs a ready prompt', () => {

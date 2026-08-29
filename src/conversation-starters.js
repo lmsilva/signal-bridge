@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const SHIPPED = require('./conversation-starters-prompts.json');
 const { cleanText, createConversationStartersSettings } = require('./conversation-starters-settings');
+const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap } = require('./vestaboard/encoder');
 
 const TYPE = 'talk.starters';
@@ -34,23 +35,25 @@ function newCustomId() {
   return `custom-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
 }
 
-function resolvePrompts(settings = {}) {
+function resolvePrompts(settings = {}, { computeRows = true } = {}) {
   const hidden = new Set(settings.hiddenIds || []);
+  const removed = new Set(settings.removedIds || []);
   const overrides = settings.overrides || {};
   const rows = [];
 
   for (const prompt of loadShipped()) {
     const id = String(prompt.id || '').trim();
-    if (!id) {
+    if (!id || removed.has(id)) {
       continue;
     }
     const text = cleanText(overrides[id] != null ? overrides[id] : prompt.text);
+    const overridden = overrides[id] != null;
     rows.push({
       id,
       text,
       custom: false,
       hidden: hidden.has(id),
-      rows: promptRows(text).length,
+      rows: computeRows || overridden ? promptRows(text).length : (text ? 1 : 0),
       source: prompt.source || 'shipped',
     });
   }
@@ -66,7 +69,7 @@ function resolvePrompts(settings = {}) {
       text,
       custom: true,
       hidden: false,
-      rows: promptRows(text).length,
+      rows: computeRows ? promptRows(text).length : (fitsBoard(text) ? 1 : 0),
       source: 'custom',
     });
   }
@@ -75,7 +78,12 @@ function resolvePrompts(settings = {}) {
 }
 
 function matchingPrompts(settings = {}) {
-  return resolvePrompts(settings).filter((prompt) => !prompt.hidden && prompt.text && prompt.rows > 0);
+  return resolvePrompts(settings, { computeRows: false })
+    .filter((prompt) => !prompt.hidden && prompt.text && prompt.rows > 0);
+}
+
+function countAvailable(settings = {}) {
+  return matchingPrompts(settings).length;
 }
 
 function pickPrompt(settings = {}, { random = Math.random } = {}) {
@@ -107,7 +115,7 @@ function buildConversationStartersPayload(prompt, { asOf } = {}) {
 
 function listPrompts(settings = {}, { query = '', hidden = false, page = 1, pageSize = 20 } = {}) {
   const needle = String(query || '').trim().toLowerCase();
-  let rows = resolvePrompts(settings);
+  let rows = resolvePrompts(settings, { computeRows: false });
   if (!hidden) {
     rows = rows.filter((prompt) => !prompt.hidden);
   }
@@ -120,13 +128,17 @@ function listPrompts(settings = {}, { query = '', hidden = false, page = 1, page
   const pages = Math.max(1, Math.ceil(total / size));
   const current = Math.min(pages, Math.max(1, Number(page) || 1));
   const start = (current - 1) * size;
+  const prompts = rows.slice(start, start + size).map((prompt) => ({
+    ...prompt,
+    rows: promptRows(prompt.text).length,
+  }));
   return {
     query: needle,
     page: current,
     pageSize: size,
     pages,
     total,
-    prompts: rows.slice(start, start + size),
+    prompts,
   };
 }
 
@@ -135,9 +147,8 @@ function createConversationStarters(config, log) {
 
   function snapshot(extra = {}) {
     const settings = settingsApi.get();
-    const all = resolvePrompts(settings);
     return {
-      available: all.filter((prompt) => !prompt.hidden && prompt.rows > 0).length,
+      available: countAvailable(settings),
       total: loadShipped().length + settings.custom.length,
       customCount: settings.custom.length,
       hiddenCount: settings.hiddenIds.length,
@@ -149,7 +160,11 @@ function createConversationStarters(config, log) {
     getSettings: () => settingsApi.get(),
     statusSnapshot(query) {
       const settings = settingsApi.get();
-      return snapshot(listPrompts(settings, query));
+      if (query && (query.page != null || query.pageSize != null || query.query
+        || query.q || query.hidden)) {
+        return snapshot(listPrompts(settings, query));
+      }
+      return snapshot();
     },
     addPrompt(text) {
       const next = cleanText(text);
@@ -161,7 +176,7 @@ function createConversationStarters(config, log) {
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updatePrompt(id, { text, hidden } = {}) {
+    updatePrompt(id, { text, hidden, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing prompt id' };
@@ -169,6 +184,14 @@ function createConversationStarters(config, log) {
       const settings = settingsApi.get();
       const customIndex = settings.custom.findIndex((row) => row.id === key);
       const shipped = loadShipped().some((row) => row.id === key);
+      if (remove) {
+        const result = applyCorpusRemove(settings, key, { isShipped: shipped });
+        if (!result.ok) {
+          return { ok: false, error: 'Unknown prompt' };
+        }
+        settingsApi.update(result.patch);
+        return { ok: true, ...this.statusSnapshot() };
+      }
 
       if (customIndex >= 0) {
         const custom = [...settings.custom];

@@ -11,6 +11,7 @@ const {
   cleanAuthor,
   createStoicQuotesSettings,
 } = require('./stoic-quotes-settings');
+const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap, encodeText, COLS } = require('./vestaboard/encoder');
 
 const TYPE = 'stoic.quotes';
@@ -51,12 +52,13 @@ function newCustomId() {
 
 function resolveQuotes(settings = {}) {
   const hidden = new Set(settings.hiddenIds || []);
+  const removed = new Set(settings.removedIds || []);
   const overrides = settings.overrides || {};
   const rows = [];
 
   for (const quote of loadShipped()) {
     const id = String(quote.id || '').trim();
-    if (!id) {
+    if (!id || removed.has(id)) {
       continue;
     }
     const patch = overrides[id] || {};
@@ -176,7 +178,16 @@ function createStoicQuotes(config, log) {
     getSettings: () => settingsApi.get(),
     statusSnapshot(query) {
       const settings = settingsApi.get();
-      return snapshot(listQuotes(settings, query));
+      if (query && (query.page != null || query.pageSize != null || query.query
+        || query.q || query.hidden)) {
+        return snapshot(listQuotes(settings, query));
+      }
+      return {
+        available: matchingQuotes(settings).length,
+        total: loadShipped().length + settings.custom.length,
+        customCount: settings.custom.length,
+        hiddenCount: settings.hiddenIds.length,
+      };
     },
     addQuote(text, author) {
       const next = cleanText(text);
@@ -189,7 +200,7 @@ function createStoicQuotes(config, log) {
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updateQuote(id, { text, author, hidden } = {}) {
+    updateQuote(id, { text, author, hidden, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing quote id' };
@@ -197,6 +208,14 @@ function createStoicQuotes(config, log) {
       const settings = settingsApi.get();
       const customIndex = settings.custom.findIndex((row) => row.id === key);
       const shipped = loadShipped().some((row) => row.id === key);
+      if (remove) {
+        const result = applyCorpusRemove(settings, key, { isShipped: shipped });
+        if (!result.ok) {
+          return { ok: false, error: 'Unknown quote' };
+        }
+        settingsApi.update(result.patch);
+        return { ok: true, ...this.statusSnapshot() };
+      }
 
       if (customIndex >= 0) {
         const custom = [...settings.custom];

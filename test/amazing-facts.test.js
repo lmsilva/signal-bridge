@@ -48,6 +48,33 @@ test('buildAmazingFactsPayload is a vestaboard amazing.facts card', () => {
   assert.equal(validate(frames[0].rows).ok, true);
 });
 
+test('short amazing facts are vertically centred in the body rows', () => {
+  const frames = amazingFactsFrames({
+    fact: { text: 'Diet affects epigenetic markers.' },
+  });
+  assert.equal(frames.length, 1);
+  const drawing = formatLayout(frames[0].rows).split('\n');
+  assert.match(drawing[0], /AMAZING FACT/);
+  // 2 body lines → padTop 1 → blank, line, line, blank, blank under the title.
+  assert.equal(drawing[1].trim(), '');
+  assert.match(drawing[2], /DIET AFFECTS/);
+  assert.match(drawing[3], /EPIGENETIC MARKERS/);
+  assert.equal(drawing[4].trim(), '');
+  assert.equal(drawing[5].trim(), '');
+});
+
+test('full-height amazing facts stay top-aligned', () => {
+  const frames = amazingFactsFrames({
+    fact: {
+      text: 'Aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa aaaaa.',
+    },
+  });
+  assert.ok(frames.length >= 1);
+  const drawing = formatLayout(frames[0].rows).split('\n');
+  assert.match(drawing[0], /AMAZING FACT/);
+  assert.ok(drawing[1].trim().length > 0, 'first body row should hold text when the fact fills five lines');
+});
+
 test('amazing facts with no text renders nothing', () => {
   assert.deepEqual(amazingFactsFrames({ type: 'amazing.facts' }), []);
   assert.deepEqual(amazingFactsFrames({}), []);

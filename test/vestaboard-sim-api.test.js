@@ -660,6 +660,12 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.match(css, /vb-flap 100ms/);
   assert.equal(/vb-flap 450ms/.test(css), false);
   assert.match(js, /function vbPlayCascade\(/);
+  assert.match(js, /function vbBoardWatching\(/);
+  assert.match(js, /function vbOnBoardTabEnter\(/);
+  assert.match(js, /function vbOnBoardTabLeave\(/);
+  assert.match(js, /vbPendingReplay/);
+  // Tab entry must unlock audio only — never fire the cascade with no flaps.
+  assert.doesNotMatch(js, /vbHeardSample/);
   assert.match(js, /vb-flip\.wav/);
   assert.match(html, /btn-vb-sound/);
   assert.match(html, /app\.js\?v=signal\d+/);

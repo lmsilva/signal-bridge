@@ -276,10 +276,10 @@ function formatDirectionLabel(pass) {
 function formatVisibilityBoard(pass) {
   const label = fold(pass.visibilityLabel || '').slice(0, 22);
   if (label && label !== 'NONE') {
-    return label;
+    return fold(`${label} VISIBILITY`).slice(0, 22);
   }
   if (isLikelyVisible(pass)) {
-    return 'VISIBLE';
+    return fold('GOOD VISIBILITY').slice(0, 22);
   }
   const sky = fold(pass.skyCondition || '').slice(0, 22);
   return sky || '';

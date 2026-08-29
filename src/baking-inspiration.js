@@ -14,6 +14,7 @@ const {
   createBakingInspirationSettings,
   MAX_INGREDIENTS,
 } = require('./baking-inspiration-settings');
+const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap, encodeText } = require('./vestaboard/encoder');
 
 const TYPE = 'bake.inspire';
@@ -60,12 +61,13 @@ function newCustomId() {
 
 function resolveIdeas(settings = {}) {
   const hidden = new Set(settings.hiddenIds || []);
+  const removed = new Set(settings.removedIds || []);
   const overrides = settings.overrides || {};
   const rows = [];
 
   for (const idea of loadShipped()) {
     const id = String(idea.id || '').trim();
-    if (!id) {
+    if (!id || removed.has(id)) {
       continue;
     }
     const patch = overrides[id] || {};
@@ -186,7 +188,17 @@ function createBakingInspiration(config, log) {
     getSettings: () => settingsApi.get(),
     statusSnapshot(query) {
       const settings = settingsApi.get();
-      return snapshot(listIdeas(settings, query));
+      if (query && (query.page != null || query.pageSize != null || query.query
+        || query.q || query.hidden)) {
+        return snapshot(listIdeas(settings, query));
+      }
+      const all = resolveIdeas(settings);
+      return {
+        available: all.filter((idea) => !idea.hidden && idea.title).length,
+        total: loadShipped().length + settings.custom.length,
+        customCount: settings.custom.length,
+        hiddenCount: settings.hiddenIds.length,
+      };
     },
     addIdea(title, ingredients) {
       const nextTitle = cleanTitle(title);
@@ -209,7 +221,7 @@ function createBakingInspiration(config, log) {
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updateIdea(id, { title, ingredients, hidden } = {}) {
+    updateIdea(id, { title, ingredients, hidden, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing idea id' };
@@ -217,6 +229,14 @@ function createBakingInspiration(config, log) {
       const settings = settingsApi.get();
       const customIndex = settings.custom.findIndex((row) => row.id === key);
       const shipped = loadShipped().some((row) => row.id === key);
+      if (remove) {
+        const result = applyCorpusRemove(settings, key, { isShipped: shipped });
+        if (!result.ok) {
+          return { ok: false, error: 'Unknown baking idea' };
+        }
+        settingsApi.update(result.patch);
+        return { ok: true, ...this.statusSnapshot() };
+      }
 
       if (customIndex >= 0) {
         const custom = [...settings.custom];

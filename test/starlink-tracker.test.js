@@ -97,11 +97,15 @@ test('buildStarlinkTrackPayload makes a starlink.track card', () => {
   assert.ok(payload.whenLabel);
   assert.ok(payload.directionLabel);
   assert.equal(payload.weatherLabel, 'CLEAR SKY');
+  assert.equal(payload.visibilityBoard, 'GOOD VISIBILITY');
 
   const frames = starlinkTrackFrames(payload);
   assert.equal(frames.length, 1);
   assert.equal(frames[0].source, 'starlink.track');
   assert.equal(frames[0].rows.length, 6);
+  const { decodeCodes } = require('../src/vestaboard/encoder');
+  assert.match(decodeCodes(frames[0].rows[0]), /STARLINK TRACKER/);
+  assert.match(decodeCodes(frames[0].rows[5]), /GOOD VISIBILITY/);
 });
 
 test('starlinkTrackFrames support a no-pass card', () => {

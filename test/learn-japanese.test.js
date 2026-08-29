@@ -109,7 +109,7 @@ test('Learn Japanese matches the hinomaru marketplace card', () => {
     '     WORD: TABERU     ',
     '        (VERB)        ',
     '    MEANS: TO EAT     ',
-    'ww  DIFFICULTY: N5  rr',
+    'ww    LEVEL: N5     rr',
   ], 'learn japanese taberu');
 });
 
@@ -124,7 +124,7 @@ test('Learn Japanese leans left and labels short glosses', () => {
     '      WORD: NEKO      ',
     '        (NOUN)        ',
     '      MEANS: CAT      ',
-    'ww  DIFFICULTY: N5  rr',
+    'ww    LEVEL: N5     rr',
   ], 'learn japanese neko');
 });
 
@@ -144,11 +144,11 @@ test('a long English gloss wraps and keeps the flag footer', () => {
     ' WORD: GASORINSUTANDO ',
     '        (NOUN)        ',
     'MEANS: PETROL STATION ',
-    'ww  DIFFICULTY: N4  rr',
+    'ww    LEVEL: N4     rr',
   ], 'learn japanese long noun');
 });
 
-test('a wrapping gloss drops the MEANS label and keeps Difficulty', () => {
+test('a wrapping gloss drops the MEANS label and keeps the level footer', () => {
   const frames = learnJapaneseFrames({
     type: 'japanese.learn',
     word: {
@@ -165,7 +165,7 @@ test('a wrapping gloss drops the MEANS label and keeps Difficulty', () => {
   assert.match(drawing[2], /\(NOUN\)/);
   assert.equal(drawing[3].includes('MEANS:'), false);
   assert.equal(drawing[4].includes('MEANS:'), false);
-  assert.match(drawing[5], /DIFFICULTY: N4/);
+  assert.match(drawing[5], /LEVEL: N4/);
 });
 
 test('learn japanese with no word renders nothing', () => {
