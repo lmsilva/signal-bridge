@@ -29,13 +29,15 @@ test('formatRate picks board-friendly precision', () => {
 });
 
 test('formatChangePercent matches marketplace spacing', () => {
+  // The sign hugs the number: six cells wide puts the decimal point under the
+  // board's `+/-%` header. A space after the sign pushed it one cell left.
   assert.deepEqual(formatChangePercent(0.2), {
-    changeLabel: '+ 0.20%',
+    changeLabel: '+0.20%',
     changePercent: 0.2,
     direction: 'up',
   });
   assert.deepEqual(formatChangePercent(-0.09), {
-    changeLabel: '- 0.09%',
+    changeLabel: '-0.09%',
     changePercent: -0.09,
     direction: 'down',
   });
@@ -63,7 +65,7 @@ test('buildCurrencyRatesPayload includes day-over-day change', () => {
   assert.equal(payload.quotes[0].code, 'EUR');
   assert.ok(payload.quotes[0].rateLabel);
   assert.equal(payload.quotes[0].direction, 'up');
-  assert.match(payload.quotes[0].changeLabel, /^\+ /);
+  assert.match(payload.quotes[0].changeLabel, /^\+\d/);
   assert.equal(payload.quotes[1].direction, 'down');
   assert.equal(payload.quotes[2].direction, 'flat');
 
@@ -73,11 +75,45 @@ test('buildCurrencyRatesPayload includes day-over-day change', () => {
   assert.equal(frames[0].rows.length, 6);
   assert.match(decodeCodes(frames[0].rows[0]), /USD CONVERSIONS/);
   assert.match(decodeCodes(frames[0].rows[1]), /\$/);
-  assert.match(decodeCodes(frames[0].rows[1]), /\+ \/ - %/);
+  assert.match(decodeCodes(frames[0].rows[1]), /\+\/-%/);
   assert.match(decodeCodes(frames[0].rows[2]), /EUR/);
   assert.match(decodeCodes(frames[0].rows[2]), /\+/);
   assert.equal(frames[0].rows[2][21], CHIPS.green);
   assert.equal(frames[0].rows[3][21], CHIPS.red);
+});
+
+test('currency columns line up: $ over the rates, +/-% over the change', () => {
+  // The header used to read `+ / - %` starting five cells left of the numbers
+  // it labelled, and the rates started two cells left of the `$`.
+  const payload = buildCurrencyRatesPayload({
+    base: 'USD',
+    quotes: ['AUD', 'GBP', 'ARS', 'BSD'],
+    // A five-char rate, a four-digit rate, a bare integer, and a flat quote
+    // (no sign) — the alignment has to survive all of them.
+    rates: {
+      AUD: 1.487, GBP: 0.767, ARS: 1513, BSD: 1,
+    },
+    previousRates: {
+      AUD: 1.4883, GBP: 0.76547, ARS: 1513, BSD: 1,
+    },
+  });
+  const [header, ...body] = currencyRatesFrames(payload)[0].rows.slice(1);
+  const headerText = decodeCodes(header);
+
+  assert.equal(headerText.indexOf('$'), 7);
+  assert.equal(headerText.indexOf('+/-%'), 17);
+  // `%` of the header over `%` of every row.
+  assert.equal(headerText.indexOf('%'), 20);
+
+  for (const row of body) {
+    const text = decodeCodes(row);
+    assert.equal(text[20], '%', `${text.trim()} ends its percent at column 20`);
+    // The `+` of the header sits on the decimal point below it.
+    assert.equal(text[17], '.', `${text.trim()} puts its point at column 17`);
+    // Rates start under the `$` rather than two cells to its left.
+    assert.match(text.slice(7, 8), /\d/, `${text.trim()} starts its rate at column 7`);
+    assert.equal(text.slice(3, 7).trim(), '', `${text.trim()} leaves the code column clear`);
+  }
 });
 
 test('currencyRatesFrames page after four quotes', () => {

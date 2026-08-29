@@ -16,6 +16,7 @@ const CATEGORY_MAX = 40;
 const FALLBACK = {
   recentIds: [],
   hiddenIds: [],
+  removedIds: [],
   overrides: {},
   custom: [],
   categories: [],
@@ -108,6 +109,7 @@ function sanitiseSettings(raw = {}, base = FALLBACK) {
   return {
     recentIds: uniqueIds(recentSource).slice(-RECENT_CAP),
     hiddenIds: uniqueIds(incoming.hiddenIds != null ? incoming.hiddenIds : base.hiddenIds),
+    removedIds: uniqueIds(incoming.removedIds != null ? incoming.removedIds : base.removedIds),
     overrides: sanitiseOverrides(incoming.overrides != null ? incoming.overrides : base.overrides),
     custom: sanitiseCustom(incoming.custom != null ? incoming.custom : base.custom),
     categories: uniqueCategories(incoming.categories != null ? incoming.categories : base.categories),
@@ -122,6 +124,7 @@ function createAmazingFactsSettings(config = {}, log = console) {
     overrides: {},
     custom: [],
     hiddenIds: [],
+    removedIds: [],
     recentIds: [],
     categories: [],
   };
@@ -155,6 +158,7 @@ function createAmazingFactsSettings(config = {}, log = console) {
     get: () => ({
       recentIds: [...current.recentIds],
       hiddenIds: [...current.hiddenIds],
+      removedIds: [...current.removedIds],
       overrides: { ...current.overrides },
       custom: current.custom.map((row) => ({ ...row })),
       categories: [...current.categories],

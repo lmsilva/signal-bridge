@@ -128,6 +128,15 @@ test('createConversationStarters can add hide and restore', () => {
   const hidden = api.updatePrompt(shipped.id, { hidden: true });
   assert.equal(hidden.ok, true);
   assert.ok(hidden.hiddenCount >= 1);
+
+  const customId = api.getSettings().custom[0].id;
+  const removedCustom = api.updatePrompt(customId, { remove: true });
+  assert.equal(removedCustom.ok, true);
+  assert.equal(api.getSettings().custom.some((row) => row.id === customId), false);
+
+  const removedShipped = api.updatePrompt(shipped.id, { remove: true });
+  assert.equal(removedShipped.ok, true);
+  assert.ok(api.getSettings().removedIds.includes(shipped.id));
 });
 
 test('settings keep recent ids when only custom changes', () => {

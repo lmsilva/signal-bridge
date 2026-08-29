@@ -580,7 +580,7 @@ function jpLabeled(prefix, value) {
 /**
  * Learn Japanese (marketplace Learn Spanish shape, hinomaru colours):
  * white|red title chips, labeled romaji + gloss when they fit, POS in
- * parentheses, Difficulty footer. Lines lean left on an odd remainder.
+ * parentheses, JLPT level footer. Lines lean left on an odd remainder.
  */
 function learnJapaneseFrames(payload = {}) {
   const word = payload.word || {};
@@ -596,7 +596,7 @@ function learnJapaneseFrames(payload = {}) {
   const title = flagChipRow('LEARN JAPANESE', { lean: 'left' });
   const level = fold(word.level || '');
   const difficulty = level
-    ? (fold(`DIFFICULTY: ${level}`).length <= 18 ? `DIFFICULTY: ${level}` : level)
+    ? (fold(`LEVEL: ${level}`).length <= 18 ? `LEVEL: ${level}` : level)
     : '';
   const footer = flagChipRow(difficulty, { lean: 'left' });
   const hero = jpLabeled('WORD: ', romaji);
@@ -702,9 +702,59 @@ function amazingChipRow(text) {
 
 /**
  * Amazing Facts (marketplace education / Mental Floss vibe): yellow
- * AMAZING FACT chips, left-aligned quirk. Pages if a custom fact runs long.
+ * AMAZING FACT chips, left-aligned quirk. Short facts are vertically centred
+ * in the five body rows (same idea as Conversation Starters). Pages if a
+ * custom fact runs long.
  */
 function amazingFactsFrames(payload = {}) {
+  const text = fold(payload.fact?.text || payload.text || '');
+  if (!text) {
+    return [];
+  }
+  const lines = wrap(text, COLS);
+  if (!lines.length) {
+    return [];
+  }
+  const BODY_SLOTS = 5;
+  const frames = [];
+  for (let index = 0; index < lines.length; index += BODY_SLOTS) {
+    const chunk = lines.slice(index, index + BODY_SLOTS);
+    const padTop = Math.floor((BODY_SLOTS - chunk.length) / 2);
+    const body = [];
+    for (let rowIndex = 0; rowIndex < BODY_SLOTS; rowIndex += 1) {
+      const row = blankRow(COLS);
+      const line = chunk[rowIndex - padTop];
+      if (line) {
+        placeText(row, line, 0);
+      }
+      body.push(row);
+    }
+    frames.push(snapshotFrame(
+      assertValidLayout([amazingChipRow('AMAZING FACT'), ...body], 'amazing facts'),
+      'Amazing Facts',
+      'amazing.facts',
+    ));
+  }
+  return frames;
+}
+
+function geographyChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('green');
+  row[1] = chipCode('green');
+  row[COLS - 2] = chipCode('green');
+  row[COLS - 1] = chipCode('green');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * World Geography Facts (marketplace education): green WORLD GEOGRAPHY chips,
+ * left-aligned geo quirk. Pages if a custom fact runs long.
+ */
+function worldGeographyFactsFrames(payload = {}) {
   const text = fold(payload.fact?.text || payload.text || '');
   if (!text) {
     return [];
@@ -724,9 +774,9 @@ function amazingFactsFrames(payload = {}) {
       return row;
     });
     frames.push(snapshotFrame(
-      assertValidLayout([amazingChipRow('AMAZING FACT'), ...body], 'amazing facts'),
-      'Amazing Facts',
-      'amazing.facts',
+      assertValidLayout([geographyChipRow('WORLD GEOGRAPHY'), ...body], 'world geography facts'),
+      'World Geography Facts',
+      'geo.facts',
     ));
   }
   return frames;
@@ -1062,27 +1112,43 @@ function fxChipRow(text) {
   return row;
 }
 
-/** Column labels under the title: $ over rates, + / - % over change. */
+// Rate column: the `$` header sits directly over the first digit of every rate.
+const FX_RATE_COL = 7;
+// Widest rate that still clears the change column beside it.
+const FX_RATE_WIDTH = 7;
+// Change labels right-align to the chip, so a two-decimal percent always puts
+// its point on FX_POINT_COL — which is where the `+` of the header lands.
+const FX_CHANGE_WIDTH = 7;
+const FX_CHANGE_HEADER = '+/-%';
+
+/**
+ * Column labels under the title: `$` over the rates, `+/-%` over the change.
+ *
+ * The header block is four contiguous cells right-aligned to the change column,
+ * so its `%` sits over the `%` below it and its `+` over the decimal point.
+ * Spelling it `+ / - %` spread the block five cells left of the numbers it
+ * labelled, which read as a separate, unaligned row.
+ */
 function fxColumnHeaderRow() {
   const row = blankRow(COLS);
-  placeText(row, '$', 7);
-  placeText(row, '+ / - %', 12);
+  placeText(row, '$', FX_RATE_COL);
+  placeText(row, FX_CHANGE_HEADER, COLS - 1 - FX_CHANGE_HEADER.length);
   return row;
 }
 
 /**
- * CODE  RATE    ± change% ■ — green chip on gain, red on loss (marketplace FX).
+ * CODE  RATE    ±change% ■ — green chip on gain, red on loss (marketplace FX).
  */
 function fxQuoteRow(quote = {}) {
   const row = blankRow(COLS);
   const code = fold(quote.code || '').slice(0, 3);
-  const rate = fold(quote.rateLabel || '').slice(0, 7);
-  const change = fold(quote.changeLabel || '').slice(0, 9);
+  const rate = fold(quote.rateLabel || '').slice(0, FX_RATE_WIDTH);
+  const change = fold(quote.changeLabel || '').slice(0, FX_CHANGE_WIDTH);
   if (!code || !rate) {
     return row;
   }
   placeText(row, code, 0);
-  placeText(row, rate, 5);
+  placeText(row, rate, FX_RATE_COL);
   if (change) {
     const codes = encodeText(change);
     placeText(row, change, COLS - 1 - codes.length);
@@ -1126,59 +1192,64 @@ function currencyRatesFrames(payload = {}) {
   return frames;
 }
 
-function issChipRow(text) {
+function issOrbitTitleRow() {
   const row = blankRow(COLS);
   row[0] = chipCode('white');
   row[1] = chipCode('white');
   row[COLS - 2] = chipCode('white');
   row[COLS - 1] = chipCode('white');
-  if (text) {
-    centered(fold(text), { from: 2, width: 18, row });
+  centered(fold('ISS SPACE ORBIT'), { from: 2, width: 18, row });
+  return row;
+}
+
+/** Bottom of the corner L ornaments, with the local clock centred between. */
+function issOrbitTimeRow(timeLabel) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('white');
+  row[COLS - 1] = chipCode('white');
+  if (timeLabel) {
+    centered(fold(timeLabel), { from: 1, width: 20, row });
   }
   return row;
 }
 
 /**
- * International Space Station tracker: white ISS chips, distance/bearing
- * relative to the house pin, coordinates, speed, and altitude.
+ * International Space Station (marketplace): white L-corner ornaments around
+ * `ISS SPACE ORBIT` + local clock, then away / coords / altitude / speed.
  */
-function issTrackFrames(payload = {}) {
+function issTrackFrames(payload = {}, ctx = {}) {
   if (!Number.isFinite(Number(payload.latitude)) || !Number.isFinite(Number(payload.longitude))) {
     return [];
   }
   const settings = payload.settings || {};
-  const lines = [];
-  if (payload.relativeLabel) {
-    lines.push(fold(payload.relativeLabel).slice(0, 22));
-  } else if (payload.hasHome === false) {
-    lines.push(fold('SET HOUSE PIN').slice(0, 22));
+  const zone = ctx.timeZone || payload.timeZone || houseTimeZone(ctx.config || {});
+  let timeLabel = fold(payload.timeLabel || '');
+  if (!timeLabel) {
+    const parts = dateParts(payload.asOf || new Date(), zone);
+    if (parts) {
+      let hours = parts.hour % 12;
+      if (hours === 0) hours = 12;
+      const meridiem = parts.hour >= 12 ? 'PM' : 'AM';
+      timeLabel = `${String(hours).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')} ${meridiem}`;
+    }
   }
-  if (settings.showCoordinates !== false && payload.coordLabel) {
-    lines.push(fold(payload.coordLabel).slice(0, 22));
-  }
-  if (payload.speedLabel) {
-    lines.push(fold(payload.speedLabel).slice(0, 22));
-  }
-  if (settings.showAltitude !== false && payload.altitudeLabel) {
-    lines.push(fold(payload.altitudeLabel).slice(0, 22));
-  }
-  if (settings.showVisibility !== false && payload.visibilityLabel) {
-    lines.push(fold(payload.visibilityLabel).slice(0, 22));
-  }
-  while (lines.length < 4) {
-    lines.push('');
-  }
-  const body = lines.slice(0, 4).map((line) => (
-    line ? centered(line) : blankRow(COLS)
-  ));
+
+  const away = payload.awayLabel || payload.relativeLabel
+    || (payload.hasHome === false ? 'SET HOUSE PIN' : '');
+  const coords = settings.showCoordinates !== false ? (payload.coordLabel || '') : '';
+  const altitude = settings.showAltitude !== false ? (payload.altitudeLabel || '') : '';
+  const going = payload.speedLabel || '';
+
   const rows = [
-    issChipRow('ISS'),
-    blankRow(COLS),
-    ...body,
+    issOrbitTitleRow(),
+    issOrbitTimeRow(timeLabel),
+    away ? centered(fold(away).slice(0, 22)) : blankRow(COLS),
+    coords ? centered(fold(coords).slice(0, 22)) : blankRow(COLS),
+    altitude ? centered(fold(altitude).slice(0, 22)) : blankRow(COLS),
+    going ? centered(fold(going).slice(0, 22)) : blankRow(COLS),
   ];
-  // 1 title + 1 blank + 4 body = 6
   return [snapshotFrame(
-    assertValidLayout(rows.slice(0, 6), 'iss track'),
+    assertValidLayout(rows, 'iss track'),
     'International Space Station',
     'iss.track',
   )];
@@ -1203,7 +1274,7 @@ function starlinkChipRow(text) {
 function starlinkTrackFrames(payload = {}) {
   if (payload.mode === 'none') {
     const rows = [
-      starlinkChipRow('STARLINK'),
+      starlinkChipRow('STARLINK TRACKER'),
       blankRow(COLS),
       centered(fold(payload.whenLabel || 'NO PASS SOON')),
       payload.directionLabel ? centered(fold(payload.directionLabel)) : blankRow(COLS),
@@ -1247,7 +1318,7 @@ function starlinkTrackFrames(payload = {}) {
   ));
   return [snapshotFrame(
     assertValidLayout([
-      starlinkChipRow('STARLINK'),
+      starlinkChipRow('STARLINK TRACKER'),
       blankRow(COLS),
       ...body,
     ], 'starlink track'),
@@ -1267,6 +1338,7 @@ const FORMATTERS = {
   'quiet-hours.reminder': quietHoursReminderFrames,
   'chuck.facts': chuckNorrisFrames,
   'amazing.facts': amazingFactsFrames,
+  'geo.facts': worldGeographyFactsFrames,
   'talk.starters': conversationStartersFrames,
   'stoic.quotes': stoicQuotesFrames,
   'history.day': onThisDayFrames,
@@ -1296,6 +1368,7 @@ module.exports = {
   quietHoursReminderFrames,
   chuckNorrisFrames,
   amazingFactsFrames,
+  worldGeographyFactsFrames,
   conversationStartersFrames,
   stoicQuotesFrames,
   onThisDayFrames,

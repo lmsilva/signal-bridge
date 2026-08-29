@@ -82,6 +82,7 @@ const BOARD_COMMAND_IDS = new Set([
   'signal.quiet-hours',
   'chuck.facts',
   'amazing.facts',
+  'geo.facts',
   'talk.starters',
   'stoic.quotes',
   'history.day',
@@ -678,6 +679,20 @@ const COMMANDS = [
     kinds: ['vestaboard'],
   },
   {
+    id: 'geo.facts',
+    title: 'World Geography Facts',
+    subtitle: 'Capitals, landmarks & planet quirks',
+    group: 'Knowledge',
+    route: '/api/push/world-geography-facts',
+    icon: 'world',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 20,
+    kinds: ['vestaboard'],
+  },
+  {
     id: 'talk.starters',
     title: 'Conversation Starters',
     subtitle: 'A prompt to get the table talking',
@@ -973,6 +988,7 @@ function createCommandRegistry(deps = {}) {
     getLearnJapaneseStatus = null,
     getChuckNorrisStatus = null,
     getAmazingFactsStatus = null,
+    getWorldGeographyFactsStatus = null,
     getConversationStartersStatus = null,
     getStoicQuotesStatus = null,
     getOnThisDayStatus = null,
@@ -1074,6 +1090,7 @@ function createCommandRegistry(deps = {}) {
     'japanese.learn': () => Number(call(getLearnJapaneseStatus)?.available || 0) > 0,
     'chuck.facts': () => Number(call(getChuckNorrisStatus)?.available || 0) > 0,
     'amazing.facts': () => Number(call(getAmazingFactsStatus)?.available || 0) > 0,
+    'geo.facts': () => Number(call(getWorldGeographyFactsStatus)?.available || 0) > 0,
     'talk.starters': () => Number(call(getConversationStartersStatus)?.available || 0) > 0,
     'stoic.quotes': () => Number(call(getStoicQuotesStatus)?.available || 0) > 0,
     'history.day': () => Number(call(getOnThisDayStatus)?.available || 0) > 0,
@@ -1258,8 +1275,20 @@ function createCommandRegistry(deps = {}) {
     return command.defaultDurationSeconds || null;
   }
 
-  /** JSON-safe view for `GET /api/commands` and the admin UI. */
-  function list({ pushableOnly = false, schedulableOnly = false } = {}) {
+  /**
+   * JSON-safe view for `GET /api/commands` and the admin UI.
+   *
+   * `skipContentCheck` drops the per-command readiness probes and duration
+   * estimators. Those fan out into every provider (Steam, PSN, Plex, the fact
+   * corpora…) and are what make a full list slow, so the admin's Push grid —
+   * which only needs titles, icons and categories — asks for the cheap shape
+   * and the shell can be inlined into the page without a round trip.
+   */
+  function list({
+    pushableOnly = false,
+    schedulableOnly = false,
+    skipContentCheck = false,
+  } = {}) {
     return COMMANDS
       .filter((command) => (!pushableOnly || command.pushable))
       .filter((command) => (!schedulableOnly || command.schedulable))
@@ -1279,8 +1308,12 @@ function createCommandRegistry(deps = {}) {
         variableDuration: Boolean(command.variableDuration),
         defaultDurationSeconds: command.defaultDurationSeconds ?? null,
         kinds: kindsOf(command),
-        hasContent: command.supportsContentCheck ? hasContent(command.id) : true,
-        estimatedDurationSeconds: estimateDuration(command.id),
+        hasContent: command.supportsContentCheck && !skipContentCheck
+          ? hasContent(command.id)
+          : true,
+        estimatedDurationSeconds: skipContentCheck
+          ? (command.defaultDurationSeconds ?? null)
+          : estimateDuration(command.id),
       }));
   }
 

@@ -199,7 +199,9 @@ function formatRate(value) {
 }
 
 /**
- * Marketplace mock style: "+ 0.20%" / "- 0.09%" with a space after the sign.
+ * Marketplace mock style: "+0.20%" / "-0.09%". The sign hugs the number so the
+ * label is six cells wide, which lands the decimal point under the board's
+ * `+/-%` header (see fxQuoteRow).
  */
 function formatChangePercent(percent) {
   if (!Number.isFinite(Number(percent))) {
@@ -212,7 +214,7 @@ function formatChangePercent(percent) {
     ? abs.toFixed(1).replace(/\.0$/, '')
     : abs.toFixed(2);
   const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-  const changeLabel = sign ? `${sign} ${body}%` : `${body}%`;
+  const changeLabel = `${sign}${body}%`;
   return { changeLabel, changePercent: value, direction };
 }
 

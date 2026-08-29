@@ -379,6 +379,23 @@ test('serves real guest booth and admin SPA with cache-busted assets', async () 
     assert.match(admin.text, /src="app\.js\?v=\d+(?:\.\d+)?"/);
     assert.doesNotMatch(admin.text, /href="\/styles\.css/);
 
+    // The Push grid must not wait on /api/commands, so the tile catalog ships
+    // inside the page. An unsubstituted placeholder would mean an empty grid.
+    assert.doesNotMatch(admin.text, /__PUSH_CATALOG__/);
+    const catalogJson = admin.text.match(
+      /<script type="application\/json" id="push-catalog">([\s\S]*?)<\/script>/,
+    );
+    assert.ok(catalogJson, 'admin HTML carries an inline push catalog');
+    const catalog = JSON.parse(catalogJson[1]);
+    assert.ok(Array.isArray(catalog) && catalog.length > 10);
+    const { COMMANDS, pushCategoryOf } = require('../src/command-registry');
+    const shipped = COMMANDS.find((command) => command.id === 'chuck.facts');
+    const chuck = catalog.find((command) => command.id === 'chuck.facts');
+    assert.equal(chuck.title, shipped.title);
+    assert.equal(chuck.pushCategory, pushCategoryOf(shipped));
+    // Readiness probes are the slow part and the grid does not use them.
+    assert.equal(chuck.hasContent, true);
+
     const css = await request(base + '/admin/styles.css');
     assert.equal(css.status, 200);
     assert.match(css.headers['content-type'], /css/);
@@ -1146,6 +1163,32 @@ test('amazing facts push delivers a board-fit fact and settings can add one', as
   }
 });
 
+test('world geography facts push delivers a board-fit fact and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/world-geography-facts/facts?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.facts.length > 0);
+
+    const pushed = await postJson(base, '/api/push/world-geography-facts');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'geo.facts');
+    assert.match(String(pushed.body.fact?.text || ''), /./);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'geo.facts');
+
+    const added = await postJson(base, '/api/world-geography-facts/facts', {
+      text: 'Signal Bridge can flip world geography facts onto a Vestaboard without an API key.',
+      category: 'trivia',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('conversation starters push delivers a prompt and settings can add one', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1708,6 +1751,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="settings-view-tabs"/);
   assert.match(html, /id="settings-search"/);
   assert.match(html, /id="settings-search-clear"/);
+  assert.match(html, /id="settings-kind-filter"/);
+  assert.match(html, /Applies to/);
   for (const view of ['global', 'accounts', 'youtube', 'games', 'news', 'travel', 'media']) {
     assert.match(html, new RegExp(`data-settings-view="${view}"`));
     assert.match(html, new RegExp(`data-settings-group="${view}"`));
@@ -1720,8 +1765,11 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-learn-japanese-push"/);
   assert.match(js, /\/api\/learn-japanese\/settings/);
   assert.match(js, /\/api\/push\/learn-japanese/);
-  assert.match(html, /styles\.css\?v=signal139/);
-  assert.match(html, /app\.js\?v=signal139/);
+  assert.match(html, /styles\.css\?v=signal155/);
+  assert.match(html, /app\.js\?v=signal155/);
+  assert.doesNotMatch(html, /document\.write/);
+  assert.match(js, /function confirmCorpusRemove\(/);
+  assert.match(js, /data-cn-remove/);
   assert.match(js, /tabId === 'settings'[\s\S]*applySettingsFilter\(currentSettingsView\(\)\)/);
   assert.match(html, /id="vb-form-quiet-remind"/);
   assert.match(html, /id="btn-vb-quiet-hours-push"/);
@@ -1736,6 +1784,28 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-amazing-facts-manage"/);
   assert.match(html, /id="btn-amazing-facts-push"/);
   assert.match(html, /id="amazing-facts-manage-sheet"/);
+  // Topic pool lives on the settings card, not buried in Manage facts.
+  assert.match(html, /id="amazing-facts-pool-panel"/);
+  assert.match(html, /id="amazing-facts-pool-categories"/);
+  assert.match(html, /id="btn-amazing-facts-pool-all"/);
+  assert.doesNotMatch(html, /id="btn-amazing-facts-save-pool"/);
+  assert.doesNotMatch(html, /id="btn-amazing-facts-clear-pool"/);
+  // Manage sheet no longer hosts the pool chips.
+  const afSheet = html.slice(
+    html.indexOf('id="amazing-facts-manage-sheet"'),
+    html.indexOf('id="world-geography-facts-manage-sheet"'),
+  );
+  assert.doesNotMatch(afSheet, /amazing-facts-pool-categories/);
+  assert.doesNotMatch(afSheet, /Push pool/);
+  assert.match(js, /function amazingFactsPoolIsAll/);
+  assert.match(js, /function readAmazingFactsPoolCategories/);
+  assert.match(js, /queueAmazingFactsPoolSave/);
+  assert.match(css, /\.af-pool-panel/);
+  assert.match(css, /\.amazing-facts-settings-card \.af-pool-chips/);
+  assert.match(html, /id="world-geography-facts-settings-card"/);
+  assert.match(html, /id="btn-world-geography-facts-manage"/);
+  assert.match(html, /id="btn-world-geography-facts-push"/);
+  assert.match(html, /id="world-geography-facts-manage-sheet"/);
   assert.match(html, /id="conversation-starters-settings-card"/);
   assert.match(html, /id="btn-conversation-starters-manage"/);
   assert.match(html, /id="btn-conversation-starters-push"/);
@@ -1770,7 +1840,14 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/chuck-norris/);
   assert.match(js, /\/api\/amazing-facts\/facts/);
   assert.match(js, /\/api\/push\/amazing-facts/);
+  assert.match(js, /\/api\/world-geography-facts\/facts/);
+  assert.match(js, /\/api\/push\/world-geography-facts/);
   assert.match(js, /\/api\/conversation-starters\/prompts/);
+  // Displays refresh must not wipe Push skeletons before /api/commands lands
+  // (that blanked Home and flashed Share).
+  assert.match(js, /else if \(!allPushCommands\.length\) \{\s*return;/);
+  assert.match(js, /btn\.hidden = !loading && count === 0 && !on/);
+  assert.match(css, /\.display-kind-filter\s*\{[^}]*margin:\s*0/s);
   assert.match(js, /\/api\/stoic-quotes\/quotes/);
   assert.match(js, /\/api\/on-this-day\/events/);
   assert.match(js, /\/api\/push\/on-this-day/);
@@ -1790,6 +1867,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/weather-alerts/);
   assert.match(css, /\.conversation-starters-settings-card/);
   assert.match(css, /\.amazing-facts-settings-card/);
+  assert.match(css, /\.world-geography-facts-settings-card/);
   assert.match(css, /\.stoic-quotes-settings-card/);
   assert.match(css, /\.on-this-day-settings-card/);
   assert.match(css, /\.baking-inspiration-settings-card/);
@@ -1801,13 +1879,17 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.weather-alerts-settings-card/);
   assert.match(js, /function showSettingsView/);
   assert.match(js, /function applySettingsFilter/);
+  assert.match(js, /function setKindFilter/);
+  assert.match(js, /SETTINGS_CARD_KINDS/);
   assert.match(js, /SETTINGS_VIEW_KEY/);
   assert.match(js, /SETTINGS_SEARCH_KEY/);
+  assert.match(js, /KIND_FILTER_KEY/);
   assert.match(js, /settings-hit-count/);
   assert.match(js, /uiStorageRemove\(SETTINGS_SEARCH_KEY\)/);
   assert.match(css, /\.settings-view-tabs\b/);
   assert.match(css, /\.settings-hit-count\b/);
   assert.match(css, /\.settings-search-row\b/);
+  assert.match(css, /\.display-kind-filter\b/);
 });
 
 test('Plex settings save on an explicit button, not while typing the URL', () => {
@@ -1913,16 +1995,20 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   assert.match(html, /data-tab="scheduler"/);
   assert.match(html, /id="tab-scheduler"/);
   for (const id of [
-    'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'btn-sched-add',
+    'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'sched-add-command-search',
+    'sched-add-command-list', 'btn-sched-add',
     'sched-setup-card', 'sched-rule-search', 'sched-rule-search-clear', 'sched-rule-meta', 'sched-rule-empty',
     'sched-view-schedule', 'sched-view-activity', 'sched-view-simulation', 'sched-view-settings',
     'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
     'sched-simulation', 'sched-simulation-working', 'sched-simulation-status', 'sched-simulation-results',
     'sched-stats', 'sched-timeline', 'sched-show-skips', 'sched-inspector',
     'sched-rule-stats', 'sched-heatmap',
+    'page-jump', 'btn-jump-top', 'btn-jump-bottom',
   ]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
+  assert.match(html, /tab-sticky-head/);
+  assert.match(html, /Type to find an event/);
   assert.match(html, /data-sched-view="schedule"/);
   assert.match(html, /data-sched-view="simulation"/);
   assert.match(html, /data-sched-view="settings"/);
@@ -1931,7 +2017,23 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   assert.match(js, /sched-rule-group/);
   assert.match(js, /focusSchedRule/);
   assert.match(js, /signal\.schedRuleSearch/);
+  assert.match(js, /function updateStickyOffsets/);
+  assert.match(js, /function updatePageJump/);
+  assert.match(js, /function updateSchedSetupCompact/);
+  assert.match(js, /function bindSchedCommandPicker/);
+  // Compact mode used a single scroll threshold; collapsing the Add row then
+  // yanked scrollY back under it and the page jumped to the top in a loop.
+  assert.match(js, /const leaveAt = 16/);
+  assert.match(js, /function restoreSchedScroll/);
+  // Add-a-rule must start blank — defaulting to catalog[0] forced erasing
+  // "Tesla Dashboard" before every other search.
+  assert.match(js, /setSchedAddCommand\(current \|\| null\)/);
+  assert.doesNotMatch(js, /schedCommandCatalog\[0\]/);
+  assert.match(js, /is-compact/);
   assert.match(css, /\.sched-setup-card/);
+  assert.match(css, /\.tab-sticky-head/);
+  assert.match(css, /\.page-jump\b/);
+  assert.match(css, /\.sched-setup-card\.is-compact/);
   assert.match(css, /\.sched-rule\.is-new/);
 
   for (const route of [
@@ -2021,7 +2123,8 @@ test('control page Quick Push includes Guest Snaps and companion tiles', () => {
   assert.doesNotMatch(html, /id="btn-push-indoor-temperature"/);
 
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
-  assert.match(js, /apiGet\('\/api\/commands'\)/);
+  assert.match(js, /apiGet\('\/api\/commands'/);
+  assert.match(js, /function bootAdminChrome\(/);
   assert.match(js, /function renderPushGrid\(/);
 
   const pushable = COMMANDS.filter((command) => command.pushable).map((c) => c.id);
@@ -2046,6 +2149,11 @@ test('the Push page files its tiles behind searchable category tabs', () => {
   assert.match(html, /id="push-search"/);
   assert.match(html, /id="push-search-clear"/);
   assert.match(html, /id="push-search-empty"/);
+  assert.match(html, /id="push-kind-filter"/);
+  assert.match(html, /data-kind-filter="all"/);
+  assert.match(html, /data-kind-filter="vestaboard"/);
+  assert.match(html, /data-kind-filter="full"/);
+  assert.match(html, /data-display-kinds="full"/);
   for (const view of PUSH_CATEGORIES.map((entry) => entry.id)) {
     assert.match(html, new RegExp(`data-push-view="${view}"`));
     assert.match(html, new RegExp(`data-push-group="${view}"`));
@@ -2057,18 +2165,23 @@ test('the Push page files its tiles behind searchable category tabs', () => {
 
   assert.match(js, /function applyPushFilter/);
   assert.match(js, /function showPushView/);
+  assert.match(js, /function setKindFilter/);
+  assert.match(js, /function commandMatchesKindFilter/);
+  assert.match(js, /KIND_FILTER_KEY/);
   assert.match(js, /push-share-pane/);
   assert.match(js, /pushViewSession/);
   assert.match(js, /applyPushFilter\(PUSH_VIEW_ORDER\[0\]\)/);
   assert.match(js, /push-hit-count/);
   // Tiles answer to their service and command id as well as their printed copy.
   assert.match(js, /data-search-terms=/);
+  assert.match(js, /data-display-kinds=/);
   // The renderer hands visibility to the filter instead of hiding rows itself.
   assert.doesNotMatch(js, /row\.hidden = mine\.length === 0/);
 
   assert.match(css, /\.push-view-tabs\b/);
   assert.match(css, /\.push-hit-count\b/);
   assert.match(css, /\.push-search-row\b/);
+  assert.match(css, /\.display-kind-filter\b/);
   assert.match(css, /#tab-push \[data-push-group\]\[hidden\]/);
 });
 
@@ -2972,11 +3085,277 @@ test('admin QR photo picker queues multiple files', () => {
   assert.match(js, /photos,/);
 });
 
+test('Settings search matches a card by its section heading, and headings follow their card', () => {
+  // "starter" missed Conversation Starters and "world" missed World Currency
+  // Rates: those words are only in the heading, which is a sibling of the card
+  // rather than part of it, so the haystack never saw them.
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+
+  assert.match(js, /function settingsSectionLabel\(/);
+  assert.match(js, /matchesSearch\(el, query, extra = ''\)/);
+  assert.match(js, /matchesSearch\(card, query, heading\?\.textContent \|\| ''\)/);
+  // A heading is shown for its own card, not for any hit anywhere in the pane.
+  assert.match(js, /shownHeadings\.add\(heading\)/);
+  assert.match(js, /shownHeadings\.has\(el\)/);
+
+  // Every settings card is introduced by a heading in the same pane, which is
+  // what makes the heading safe to search and to hide alongside the card.
+  const grid = html.slice(html.indexOf('id="settings-card-grid"'));
+  const blocks = [...grid.matchAll(
+    /<div class="section-label" data-settings-group="([a-z]+)">([^<]+)<\/div>\s*<div class="card[^"]*" id="([a-z0-9-]+)" data-settings-group="([a-z]+)"/g,
+  )];
+  const headingFor = new Map(blocks.map((m) => [m[3], { text: m[2], group: m[1], cardGroup: m[4] }]));
+  for (const [id, entry] of headingFor) {
+    assert.equal(entry.group, entry.cardGroup, `${id} heading sits in the same pane as its card`);
+  }
+
+  // The two the user could not find.
+  assert.match(headingFor.get('conversation-starters-settings-card').text, /Starters/i);
+  assert.match(headingFor.get('currency-rates-settings-card').text, /^World Currency Rates$/i);
+});
+
+test('the admin currency preview uses the same columns as the board', () => {
+  // The Settings preview draws the frame by hand, so it drifts from the real
+  // formatter unless both are changed together.
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const feeds = fs.readFileSync(path.join(__dirname, '../src/vestaboard/formatters/feeds.js'), 'utf8');
+
+  assert.match(feeds, /const FX_RATE_COL = 7;/);
+  assert.match(feeds, /const FX_CHANGE_HEADER = '\+\/-%';/);
+
+  // Preview header: `$` at column 7, `+/-%` right-aligned to column 20.
+  const header = js.match(/const header = `\$\{' '\.repeat\((\d+)\)\}\$\$\{' '\.repeat\((\d+)\)\}\+\/-%`/);
+  assert.ok(header, 'preview builds its header from explicit column padding');
+  assert.equal(Number(header[1]), 7);
+  assert.equal(Number(header[1]) + 1 + Number(header[2]), 17);
+
+  // Preview rows: code(3) + gap(4) + rate(7) + change(7) + chip = 22.
+  assert.match(js, /String\(sample\.change\)\.padStart\(7, ' '\)\.slice\(-7\)/);
+  assert.match(js, /`\$\{symbol\} {4}\$\{rate\}\$\{change\}#`/);
+  // Samples carry no space after the sign, same as formatChangePercent.
+  assert.doesNotMatch(js, /change: '[+-] \d/);
+});
+
+test('every corpus manage sheet shares one layout, preview column and scrollbar', () => {
+  // Seven sheets (facts, quotes, prompts, ideas) had drifted apart: an
+  // unlabelled preview sitting above the input beside it, the whole sheet
+  // scrolling so search and paging left the screen, and the OS scrollbar in
+  // some places against the styled one everywhere else.
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  const sheets = [
+    'chuck-norris', 'amazing-facts', 'world-geography-facts',
+    'conversation-starters', 'stoic-quotes', 'baking-inspiration',
+  ];
+  for (const name of sheets) {
+    assert.match(html, new RegExp(`id="${name}-manage-sheet"`));
+    // The preview is a labelled column, so its top lines up with the textarea
+    // next to it instead of with that textarea's label.
+    assert.match(html, new RegExp(
+      `<div class="cn-preview-col">\\s*<span class="field-label">Board preview</span>\\s*`
+      + `<div class="cn-board-preview[^"]*" id="${name}-preview"`,
+    ), `${name} preview sits in a labelled column`);
+  }
+  // On This Day already labels its preview in a settings column.
+  assert.match(html, /id="on-this-day-manage-sheet"/);
+
+  // Only the list scrolls; the head, compose block and pager stay put.
+  assert.match(css, /\.cn-manage-sheet \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*overflow: hidden;/);
+  assert.match(css, /\.cn-manage-sheet > \.cn-fact-list \{[^}]*overflow-y: auto;/);
+  assert.match(css, /\.cn-preview-col \{/);
+
+  // Manage dialogs grow the board past the 200px settings-card thumbnail —
+  // the postage-stamp preview in Chuck Norris (and the other corpus sheets)
+  // was unreadable.
+  assert.match(css, /\.cn-manage-sheet \.cn-board-preview \{[^}]*max-width: 320px;/);
+  assert.match(css, /\.cn-manage-sheet \.cn-preview-row span \{[^}]*font-size: clamp\(0\.42rem/);
+  assert.match(css, /@media \(min-width: 820px\) \{\s*\.cn-manage-sheet \.cn-compose \{[^}]*minmax\(260px, 320px\)/);
+
+  // One scrollbar treatment for the whole admin.
+  assert.match(css, /\*\{?[\s\S]{0,120}scrollbar-width: thin;/);
+  assert.match(css, /\*::-webkit-scrollbar \{/);
+});
+
+test('admin chrome boots ahead of the panel wiring and survives a throw in it', () => {
+  // A single exception in the thousands of lines of panel wiring used to
+  // strand the page: header stuck on "connecting…", empty Push grid, dead
+  // Log out button, nothing said about why.
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+
+  const bootIndex = js.indexOf('window.setTimeout(bootAdminChrome, 0)');
+  const logoutIndex = js.indexOf("$('btn-admin-logout')");
+  const pollerIndex = js.indexOf('async function pollStatus(');
+  assert.ok(bootIndex > 0, 'boot is queued as a macrotask, not only called inline');
+  assert.ok(logoutIndex > 0 && logoutIndex < bootIndex, 'Log out is bound before the boot');
+  assert.ok(bootIndex < pollerIndex, 'the boot is queued above the panel wiring');
+
+  // startPolling() runs from the boot, so its state cannot sit in a temporal
+  // dead zone down beside the poller.
+  const declIndex = js.indexOf('const POLL_MS = 5000;');
+  assert.ok(declIndex > 0 && declIndex < bootIndex);
+
+  assert.match(js, /function inlinePushCommands\(/);
+  assert.match(js, /getElementById\('push-catalog'\)/);
+  assert.match(js, /function reportBootFailure\(/);
+  assert.match(js, /addEventListener\('unhandledrejection'/);
+  assert.match(css, /\.boot-error \{/);
+
+  // The banner only speaks up while the page is still being built; the flag is
+  // cleared on the last line, so a throw anywhere above leaves it set.
+  assert.match(js, /bootWindowOpen = false;\s*\}\)\(\);\s*$/);
+
+  // The old name is gone from every call site — one stale call was itself a
+  // ReferenceError that took out the tail of the init.
+  assert.doesNotMatch(js, /startAdminChrome/);
+});
+
 test('admin login page and logout control exist', () => {
   const login = fs.readFileSync(path.join(__dirname, '../src/web/admin/login.html'), 'utf8');
   const admin = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(login, /\/api\/admin\/login/);
   assert.match(admin, /id="btn-admin-logout"/);
+});
+
+/**
+ * Enough of a browser for `admin/app.js` to bind itself against. Elements are
+ * inert stubs and every lookup succeeds, so the only thing that can fail is the
+ * script's own top-level code — which is exactly what we want to catch.
+ */
+function stubDom() {
+  const noop = () => {};
+  const style = { setProperty: noop, removeProperty: noop, getPropertyValue: () => '' };
+  const byId = new Map();
+
+  const makeEl = (tag = 'div') => ({
+    tagName: String(tag).toUpperCase(),
+    style,
+    dataset: {},
+    classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
+    children: [],
+    options: [],
+    files: [],
+    hidden: false,
+    checked: false,
+    disabled: false,
+    selectedIndex: -1,
+    value: '',
+    src: '',
+    href: '',
+    type: '',
+    placeholder: '',
+    textContent: '',
+    innerHTML: '',
+    offsetHeight: 0,
+    offsetWidth: 0,
+    scrollHeight: 0,
+    scrollTop: 0,
+    clientHeight: 0,
+    previousElementSibling: null,
+    nextElementSibling: null,
+    parentElement: null,
+    addEventListener: noop,
+    removeEventListener: noop,
+    appendChild: (child) => child,
+    removeChild: (child) => child,
+    insertBefore: (node) => node,
+    remove: noop,
+    setAttribute: noop,
+    getAttribute: () => null,
+    removeAttribute: noop,
+    querySelector: () => makeEl(),
+    querySelectorAll: () => [],
+    closest: () => null,
+    focus: noop,
+    blur: noop,
+    click: noop,
+    scrollTo: noop,
+  });
+
+  const document = {
+    documentElement: makeEl('html'),
+    head: makeEl('head'),
+    body: makeEl('body'),
+    scrollingElement: makeEl('html'),
+    baseURI: 'https://bridge.test/admin/',
+    hidden: false,
+    createElement: (tag) => makeEl(tag),
+    getElementById: (id) => {
+      if (!byId.has(id)) byId.set(id, makeEl());
+      return byId.get(id);
+    },
+    querySelector: () => makeEl(),
+    querySelectorAll: () => [],
+    addEventListener: noop,
+    removeEventListener: noop,
+  };
+
+  const storage = { getItem: () => null, setItem: noop, removeItem: noop, clear: noop };
+
+  const sandbox = {
+    console: { log: noop, warn: noop, error: noop, info: noop },
+    document,
+    localStorage: storage,
+    sessionStorage: storage,
+    location: {
+      pathname: '/admin/',
+      search: '',
+      href: 'https://bridge.test/admin/',
+      origin: 'https://bridge.test',
+      protocol: 'https:',
+      hostname: 'bridge.test',
+      reload: noop,
+    },
+    navigator: { userAgent: 'node', maxTouchPoints: 0, clipboard: { writeText: async () => {} } },
+    // Never resolves: this test is about binding, not about request handling.
+    fetch: () => new Promise(() => {}),
+    setTimeout: () => 0,
+    clearTimeout: noop,
+    setInterval: () => 0,
+    clearInterval: noop,
+    requestAnimationFrame: () => 0,
+    cancelAnimationFrame: noop,
+    performance: { now: () => 0 },
+    matchMedia: () => ({ matches: false, addEventListener: noop, addListener: noop }),
+    EventSource: function EventSource() { return { addEventListener: noop, close: noop }; },
+    Image: function Image() { return makeEl('img'); },
+    FileReader: function FileReader() { return { readAsDataURL: noop, addEventListener: noop }; },
+    AbortController: globalThis.AbortController,
+    URLSearchParams: globalThis.URLSearchParams,
+    URL: globalThis.URL,
+    FormData: globalThis.FormData,
+    Blob: globalThis.Blob,
+    HTMLElement: function HTMLElement() {},
+    Element: function Element() {},
+    Node: function Node() {},
+    jsQR: () => null,
+    scrollTo: noop,
+    scrollY: 0,
+    innerWidth: 1280,
+    innerHeight: 900,
+    addEventListener: noop,
+    removeEventListener: noop,
+  };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  return sandbox;
+}
+
+test('admin app.js runs top to bottom, not just parses', () => {
+  // Twice now a single bad identifier at the top level (`windowStickyOffsets()`
+  // for `updateStickyOffsets()`) threw on load and took the whole admin with
+  // it: header stuck on "connecting…", no tiles, dead Log out. Parsing the file
+  // never caught it, so run it.
+  const { Script, createContext } = require('node:vm');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const sandbox = stubDom();
+  createContext(sandbox);
+  assert.doesNotThrow(
+    () => new Script(js, { filename: 'app.js' }).runInContext(sandbox),
+    'admin/app.js must bind cleanly — a throw here strands the whole page',
+  );
 });
 
 test('admin app.js parses and tab bar keeps remote/control between push and scheduler', () => {

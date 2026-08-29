@@ -4,6 +4,12 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // Declared up here, not beside the poller, so `startPolling()` can run from
+  // the bootstrap below without tripping over a temporal dead zone.
+  const POLL_MS = 5000;
+  let statusTimer = null;
+  let lastStatus = null;
+
   // ------------------------------------------- Modal / sheet dismiss (Escape + backdrop)
   const sheetDismissRegistry = new Map();
 
@@ -96,20 +102,139 @@
     return data || {};
   }
 
-  async function apiGet(route) {
-    const response = await fetch(appUrl(route), {
-      cache: 'no-store',
-      credentials: 'same-origin',
-    });
-    if (response.status === 401) {
-      redirectToAdminLogin();
-      throw new Error('Admin login required');
+  async function apiGet(route, options = {}) {
+    const timeoutMs = Number(options.timeoutMs) || 0;
+    const controller = timeoutMs > 0 ? new AbortController() : null;
+    const timer = controller
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : 0;
+    try {
+      const response = await fetch(appUrl(route), {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        signal: controller?.signal,
+      });
+      if (response.status === 401) {
+        redirectToAdminLogin();
+        throw new Error('Admin login required');
+      }
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+      }
+      return response.json();
+    } finally {
+      if (timer) window.clearTimeout(timer);
     }
-    if (!response.ok) {
-      throw new Error(`Request failed (${response.status})`);
-    }
-    return response.json();
   }
+
+  // ------------------------------------------------- Critical chrome boot
+
+  // Everything past this point is panel wiring — thousands of lines of it —
+  // and one throw anywhere in it used to strand the whole page: header stuck
+  // on "connecting…", Push grid stuck on skeletons, Log out button dead. The
+  // three things the admin is unusable without are booted here instead, each
+  // guarded on its own, and the boot is queued as a macrotask so it still runs
+  // after a synchronous failure further down this file.
+
+  function guard(what, fn) {
+    try {
+      return fn();
+    } catch (error) {
+      console.error(`admin: ${what} failed`, error);
+      reportBootFailure(`${what}: ${error?.message || error}`);
+      return undefined;
+    }
+  }
+
+  let bootFailureShown = false;
+  // Closed on the last line of this file. While it is open an escaping error
+  // means the page is half-built; after that, errors are ordinary runtime
+  // problems that the toasts already report.
+  let bootWindowOpen = true;
+
+  /**
+   * A silent white screen is the one failure mode we cannot debug from a
+   * screenshot, so anything that escapes gets said out loud.
+   */
+  function reportBootFailure(detail) {
+    if (bootFailureShown || !bootWindowOpen) return;
+    bootFailureShown = true;
+    try {
+      const banner = document.createElement('div');
+      banner.className = 'boot-error';
+      banner.setAttribute('role', 'alert');
+      banner.textContent = `Part of the admin failed to start — ${detail}`;
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'boot-error-close';
+      close.setAttribute('aria-label', 'Dismiss');
+      close.textContent = '×';
+      close.addEventListener('click', () => banner.remove());
+      banner.appendChild(close);
+      document.body.appendChild(banner);
+    } catch {
+      // Nothing left to do — the console message above is the record.
+    }
+  }
+
+  window.addEventListener('error', (event) => {
+    reportBootFailure(event?.message || 'script error');
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    reportBootFailure(event?.reason?.message || 'request failed');
+  });
+
+  /**
+   * Push tiles are static data (title, icon, category), so the bridge inlines
+   * the catalog into the page instead of making the grid wait on
+   * `/api/commands` — that endpoint probes every provider for readiness and
+   * was routinely the slowest thing on the page.
+   */
+  function inlinePushCommands() {
+    const node = document.getElementById('push-catalog');
+    if (!node) return null;
+    try {
+      const parsed = JSON.parse(node.textContent || 'null');
+      return Array.isArray(parsed) && parsed.length ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  let chromeBooted = false;
+
+  function bootAdminChrome() {
+    if (chromeBooted) return;
+    chromeBooted = true;
+    guard('status poll', () => startPolling());
+    const catalog = guard('push catalog', () => inlinePushCommands());
+    if (catalog) {
+      guard('push grid', () => renderPushGrid(catalog));
+    } else {
+      // Older shell, or the catalog never got substituted — fall back.
+      guard('push grid', () => loadPushGrid());
+    }
+  }
+
+  // Bound here rather than with the rest of the session code near the bottom:
+  // being unable to sign out of a half-loaded page is its own trap.
+  $('btn-admin-logout')?.addEventListener('click', async () => {
+    guard('logout cleanup', () => {
+      uiStorageRemove(SETTINGS_VIEW_KEY);
+      uiStorageRemove(SETTINGS_SEARCH_KEY);
+      uiStorageRemove(PUSH_VIEW_LEGACY_KEY);
+      pushViewSession = PUSH_VIEW_ORDER[0];
+    });
+    try {
+      await apiPost('/api/admin/logout', {});
+    } catch {
+      // still leave the UI even if the network call failed
+    }
+    location.href = '/admin/login.html';
+  });
+
+  // Queued, not called: this has to survive a throw in the wiring below.
+  window.setTimeout(bootAdminChrome, 0);
 
   function selectedTargetId() {
     const value = $('display-select')?.value;
@@ -499,6 +624,7 @@
   function activateTab(tabId) {
     // Lets a tab widen the content column — the Vestaboard needs more room
     // than a stack of settings cards.
+    const previousTab = document.body.dataset.tab || '';
     document.body.dataset.tab = tabId;
     document.querySelectorAll('.tab-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.tab === tabId);
@@ -516,6 +642,13 @@
     window.scrollTo(0, 0);
     document.scrollingElement?.scrollTo?.(0, 0);
     updateControlLockUi();
+    if (typeof updateStickyOffsets === 'function') updateStickyOffsets();
+    if (typeof updatePageJump === 'function') updatePageJump();
+    if (typeof updateSchedSetupCompact === 'function') updateSchedSetupCompact();
+    if (previousTab === 'board' && tabId !== 'board'
+      && typeof vbOnBoardTabLeave === 'function') {
+      vbOnBoardTabLeave();
+    }
     if (tabId === 'credits') {
       initCreditsUi();
       startCreditsEvents();
@@ -529,16 +662,90 @@
       // paints News/Media cards until a later pane click re-applies it.
       applySettingsFilter(currentSettingsView());
     } else if (tabId === 'board') {
-      vbUnlockAudio();
-      if (vbSoundOn && !vbHeardSample && !vbReducedMotion()) {
-        vbHeardSample = true;
-        vbPlayCascade();
-      }
+      // Unlock audio on the gesture that opened the tab — never play a
+      // sample cascade here. Hearing the flip without seeing flaps is worse
+      // than a quiet first visit (Sound on still demos the sample).
+      if (typeof vbUnlockAudio === 'function') vbUnlockAudio();
+      if (typeof vbOnBoardTabEnter === 'function') vbOnBoardTabEnter();
       loadVestaboardSim().then(() => startVestaboardSimEvents());
     } else if (tabId === 'flightplan') {
       loadFlightplanTrips({ force: false });
     }
   }
+
+  // Sticky tab heads sit under the measured sticky chrome (header + display).
+  function updateStickyOffsets() {
+    const chrome = document.querySelector('.sticky-chrome');
+    const schedHead = $('sched-head');
+    document.documentElement.style.setProperty(
+      '--sticky-chrome-h',
+      `${chrome?.offsetHeight || 0}px`,
+    );
+    document.documentElement.style.setProperty(
+      '--sched-head-h',
+      `${schedHead && !schedHead.closest('.tab-panel')?.hidden ? schedHead.offsetHeight : 0}px`,
+    );
+  }
+
+  function pageScrollEl() {
+    return document.scrollingElement || document.documentElement;
+  }
+
+  function updatePageJump() {
+    const wrap = $('page-jump');
+    const topBtn = $('btn-jump-top');
+    const bottomBtn = $('btn-jump-bottom');
+    if (!wrap || !topBtn || !bottomBtn) return;
+    const tab = document.body.dataset.tab || '';
+    const longTabs = new Set(['push', 'settings', 'scheduler']);
+    const scroller = pageScrollEl();
+    const maxScroll = Math.max(0, scroller.scrollHeight - window.innerHeight);
+    const y = window.scrollY || scroller.scrollTop || 0;
+    const show = longTabs.has(tab) && maxScroll > 160;
+    wrap.hidden = !show;
+    if (!show) return;
+    topBtn.disabled = y < 48;
+    bottomBtn.disabled = y > maxScroll - 48;
+  }
+
+  function updateSchedSetupCompact() {
+    const card = $('sched-setup-card');
+    const scheduleView = $('sched-view-schedule');
+    if (!card) return;
+    const onSchedule = document.body.dataset.tab === 'scheduler'
+      && scheduleView
+      && !scheduleView.hidden;
+    if (!onSchedule) {
+      card.classList.remove('is-compact');
+      return;
+    }
+    // Hiding the Add row shrinks the sticky card. Without hysteresis that
+    // height change pulls scrollY back under the enter threshold, which
+    // expands the card again — and the page jumps to the top in a loop.
+    const y = window.scrollY || pageScrollEl().scrollTop || 0;
+    const compact = card.classList.contains('is-compact');
+    const enterAt = 72;
+    const leaveAt = 16;
+    card.classList.toggle('is-compact', compact ? y > leaveAt : y > enterAt);
+  }
+
+  window.addEventListener('resize', () => {
+    updateStickyOffsets();
+    updatePageJump();
+  }, { passive: true });
+  window.addEventListener('scroll', () => {
+    updatePageJump();
+    updateSchedSetupCompact();
+  }, { passive: true });
+
+  $('btn-jump-top')?.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  $('btn-jump-bottom')?.addEventListener('click', () => {
+    const scroller = pageScrollEl();
+    window.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+  });
+  updatePageJump();
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -556,6 +763,10 @@
   document.querySelectorAll('.tab-panel').forEach((panel) => {
     panel.hidden = !panel.classList.contains('active');
   });
+  document.body.dataset.tab = document.querySelector('.tab-btn.active')?.dataset?.tab || 'push';
+  updateStickyOffsets();
+  updatePageJump();
+  updateSchedSetupCompact();
 
   // ------------------------------------------------ Pane search (shared)
 
@@ -606,10 +817,107 @@
     return bits.join(' ').toLowerCase().replace(/\s+/g, ' ');
   }
 
-  function matchesSearch(el, query) {
+  function matchesSearch(el, query, extra = '') {
     if (!query) return true;
-    const haystack = searchHaystack(el);
+    const haystack = `${searchHaystack(el)} ${String(extra).toLowerCase()}`;
     return query.split(' ').every((term) => term && haystack.includes(term));
+  }
+
+  // Catalog filter shared by Push + Settings: which display *type* the listed
+  // operations apply to. Independent of the header target picker (which still
+  // decides where a push is sent).
+  const KIND_FILTER_KEY = 'signal.displayKindFilter';
+  const KIND_FILTER_ORDER = ['all', 'vestaboard', 'full'];
+  const KIND_FILTERS = new Set(KIND_FILTER_ORDER);
+
+  /** Settings cards → which surfaces they configure. Default is both. */
+  const SETTINGS_CARD_KINDS = Object.freeze({
+    'locale-settings-card': ['full', 'vestaboard'],
+    'weather-alerts-settings-card': ['vestaboard'],
+    'world-population-settings-card': ['vestaboard'],
+    'youtube-settings-card': ['full'],
+    'upside-news-settings-card': ['full', 'vestaboard'],
+    'learn-japanese-settings-card': ['vestaboard'],
+    'chuck-norris-settings-card': ['vestaboard'],
+    'amazing-facts-settings-card': ['vestaboard'],
+    'world-geography-facts-settings-card': ['vestaboard'],
+    'conversation-starters-settings-card': ['vestaboard'],
+    'stoic-quotes-settings-card': ['vestaboard'],
+    'on-this-day-settings-card': ['vestaboard'],
+    'baking-inspiration-settings-card': ['vestaboard'],
+    'stock-market-settings-card': ['vestaboard'],
+    'currency-rates-settings-card': ['vestaboard'],
+    'wiki-ck-settings-card': ['full', 'vestaboard'],
+    'starlink-tracker-settings-card': ['vestaboard'],
+    'iss-tracker-settings-card': ['vestaboard'],
+    'overhead-settings-card': ['full', 'vestaboard'],
+    'flightplan-settings-card': ['full', 'vestaboard'],
+    'autodarts-settings-card': ['full', 'vestaboard'],
+    'huupe-settings-card': ['full', 'vestaboard'],
+    'trivia-settings-card': ['full', 'vestaboard'],
+    'plex-settings-card': ['vestaboard'],
+    'credits-settings-card': ['full', 'vestaboard'],
+  });
+
+  function parseKindList(value) {
+    return String(value || '')
+      .split(/[\s,|]+/)
+      .map((part) => part.trim().toLowerCase())
+      .filter((part) => part === 'full' || part === 'vestaboard');
+  }
+
+  function currentKindFilter() {
+    const saved = uiStorageGet(KIND_FILTER_KEY, 'all');
+    return KIND_FILTERS.has(saved) ? saved : 'all';
+  }
+
+  function syncKindFilterButtons(filter) {
+    document.querySelectorAll('.display-kind-filter').forEach((group) => {
+      group.querySelectorAll('[data-kind-filter]').forEach((btn) => {
+        const on = btn.dataset.kindFilter === filter;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    });
+  }
+
+  function setKindFilter(next, { persist = true } = {}) {
+    const filter = KIND_FILTERS.has(next) ? next : 'all';
+    if (persist) uiStorageSet(KIND_FILTER_KEY, filter);
+    syncKindFilterButtons(filter);
+    if (typeof applySettingsFilter === 'function') applySettingsFilter();
+    if (typeof renderPushGrid === 'function') renderPushGrid();
+    else if (typeof applyPushFilter === 'function') applyPushFilter();
+    return filter;
+  }
+
+  function kindsMatchFilter(kinds, filter = currentKindFilter()) {
+    if (!filter || filter === 'all') return true;
+    const list = Array.isArray(kinds) && kinds.length ? kinds : ['full', 'vestaboard'];
+    return list.includes(filter);
+  }
+
+  function settingsCardKinds(card) {
+    if (!(card instanceof HTMLElement)) return ['full', 'vestaboard'];
+    const fromAttr = parseKindList(card.dataset.displayKinds);
+    if (fromAttr.length) return fromAttr;
+    if (card.id && SETTINGS_CARD_KINDS[card.id]) {
+      return [...SETTINGS_CARD_KINDS[card.id]];
+    }
+    if (card.classList.contains('slideshow-settings-card')) return ['full'];
+    if (card.classList.contains('vb-settings-card')) return ['vestaboard'];
+    if (card.dataset.settingsGroup === 'accounts') return ['full', 'vestaboard'];
+    return ['full', 'vestaboard'];
+  }
+
+  function elementMatchesKindFilter(el, filter = currentKindFilter()) {
+    if (!el) return true;
+    if (el.classList?.contains('card') && el.dataset?.settingsGroup != null) {
+      return kindsMatchFilter(settingsCardKinds(el), filter);
+    }
+    const fromAttr = parseKindList(el.dataset?.displayKinds);
+    if (fromAttr.length) return kindsMatchFilter(fromAttr, filter);
+    return true;
   }
 
   // ---------------------------------------------------------- Settings panes
@@ -625,25 +933,48 @@
     return SETTINGS_VIEWS.has(view) ? view : 'global';
   }
 
+  /**
+   * A card's heading lives in a sibling `.section-label`, not inside the card,
+   * so searching its own text alone missed the words a user actually reaches
+   * for: "starter" never found Conversation Starters (the card says "Let's
+   * talk"), and "world" never found World Currency Rates.
+   */
+  function settingsSectionLabel(card) {
+    let node = card.previousElementSibling;
+    while (node) {
+      if (node.classList.contains('section-label')) return node;
+      // Ran into the card above without passing a heading — this one has none.
+      if (node.classList.contains('card')) return null;
+      node = node.previousElementSibling;
+    }
+    return null;
+  }
+
   function applySettingsFilter(preferredView = null) {
     const searchInput = $('settings-search');
     const clearBtn = $('settings-search-clear');
     const empty = $('settings-search-empty');
     const raw = searchInput?.value || '';
     const query = normalizeSearchQuery(raw);
+    const kindFilter = currentKindFilter();
+    syncKindFilterButtons(kindFilter);
     if (clearBtn) clearBtn.hidden = !String(raw).trim();
 
     const counts = Object.fromEntries(SETTINGS_VIEW_ORDER.map((view) => [view, 0]));
     const cards = [...document.querySelectorAll('#settings-card-grid .card[data-settings-group]')];
+    const headings = new Map();
     for (const card of cards) {
       const group = card.dataset.settingsGroup;
-      const match = matchesSearch(card, query);
+      const heading = settingsSectionLabel(card);
+      if (heading) headings.set(card, heading);
+      const match = matchesSearch(card, query, heading?.textContent || '')
+        && elementMatchesKindFilter(card, kindFilter);
       card.dataset.settingsMatch = match ? '1' : '0';
       if (match && SETTINGS_VIEWS.has(group)) counts[group] += 1;
     }
 
     let view = SETTINGS_VIEWS.has(preferredView) ? preferredView : currentSettingsView();
-    if (query && counts[view] === 0) {
+    if ((query || kindFilter !== 'all') && counts[view] === 0) {
       view = SETTINGS_VIEW_ORDER.find((name) => counts[name] > 0) || view;
     }
 
@@ -653,30 +984,50 @@
       const on = name === view;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
-      btn.hidden = Boolean(query) && count === 0;
+      btn.hidden = (Boolean(query) || kindFilter !== 'all') && count === 0;
       const badge = btn.querySelector('.settings-hit-count');
       if (badge) {
         badge.textContent = String(count);
-        badge.hidden = !query;
+        badge.hidden = !query && kindFilter === 'all';
       }
     });
 
+    // A heading follows the one card it introduces. Keying it off the pane
+    // instead left a wall of headings above a single result.
+    const shownHeadings = new Set();
+    for (const [card, heading] of headings) {
+      if (card.dataset.settingsGroup === view && card.dataset.settingsMatch === '1') {
+        shownHeadings.add(heading);
+      }
+    }
     document.querySelectorAll('#settings-card-grid [data-settings-group]').forEach((el) => {
       const group = el.dataset.settingsGroup;
       if (el.classList.contains('card')) {
-        const match = !query || el.dataset.settingsMatch === '1';
-        el.hidden = group !== view || !match;
+        el.hidden = group !== view || el.dataset.settingsMatch !== '1';
         return;
       }
-      // Section labels only earn a place when their pane still has a visible card.
-      el.hidden = group !== view || (Boolean(query) && counts[group] === 0);
+      el.hidden = el.classList.contains('section-label')
+        ? !shownHeadings.has(el)
+        : group !== view || counts[group] === 0;
     });
 
     const total = SETTINGS_VIEW_ORDER.reduce((sum, name) => sum + counts[name], 0);
-    if (empty) empty.hidden = !(query && total === 0);
+    if (empty) {
+      const nothing = total === 0;
+      empty.hidden = !nothing;
+      if (nothing) {
+        empty.textContent = query
+          ? 'No settings match that search.'
+          : kindFilter === 'vestaboard'
+            ? 'No Vestaboard settings in this section.'
+            : kindFilter === 'full'
+              ? 'No software-display settings in this section.'
+              : 'No settings match that filter.';
+      }
+    }
 
     uiStorageSet(SETTINGS_VIEW_KEY, view);
-    return { view, counts, query, total };
+    return { view, counts, query, total, kindFilter };
   }
 
   function showSettingsView(view) {
@@ -741,6 +1092,8 @@
     const empty = $('push-search-empty');
     const raw = searchInput?.value || '';
     const query = normalizeSearchQuery(raw);
+    const kindFilter = currentKindFilter();
+    syncKindFilterButtons(kindFilter);
     if (clearBtn) clearBtn.hidden = !String(raw).trim();
 
     // Until /api/commands answers, the rows hold skeletons and every count is
@@ -753,7 +1106,7 @@
       const group = row.dataset.pushCategory;
       let hits = 0;
       row.querySelectorAll('.push-card[data-command-id]').forEach((tile) => {
-        const match = matchesSearch(tile, query);
+        const match = matchesSearch(tile, query) && elementMatchesKindFilter(tile, kindFilter);
         tile.hidden = !match;
         if (match) hits += 1;
       });
@@ -763,16 +1116,21 @@
 
     grid.querySelectorAll('[data-push-item]').forEach((item) => {
       const group = item.closest('[data-push-group]')?.dataset?.pushGroup;
-      const match = matchesSearch(item, query);
+      const match = matchesSearch(item, query) && elementMatchesKindFilter(item, kindFilter);
       item.dataset.pushMatch = match ? '1' : '0';
       if (match && PUSH_VIEWS.has(group)) counts[group] += 1;
     });
 
     let view = PUSH_VIEWS.has(preferredView) ? preferredView : pushViewSession;
-    // Only step aside for an active search — an empty Home pane (e.g. a board
-    // that hides Alexa tiles) must not jump to Share on load.
-    if (query && !loading && counts[view] === 0) {
-      view = PUSH_VIEW_ORDER.find((name) => counts[name] > 0) || view;
+    // Only step aside for an active search/filter — an empty Home pane (e.g. a
+    // board that hides Alexa tiles) must not jump to Share on load. Never auto
+    // jump while skeletons are still up, or onto Share as a fallback.
+    if ((query || kindFilter !== 'all') && !loading && counts[view] === 0) {
+      const next = PUSH_VIEW_ORDER.find((name) => name !== 'share' && counts[name] > 0)
+        || (counts.share > 0 ? 'share' : null);
+      if (next) {
+        view = next;
+      }
     }
 
     document.querySelectorAll('#push-view-tabs .segmented-btn').forEach((btn) => {
@@ -781,13 +1139,13 @@
       const on = name === view;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
-      // An empty pane is worth hiding even without a search: picking a
-      // Vestaboard empties whole categories the board cannot show.
-      btn.hidden = !loading && count === 0;
+      // Keep the active tab visible even at 0 hits so Home does not vanish
+      // while commands are still loading / filtered empty.
+      btn.hidden = !loading && count === 0 && !on;
       const badge = btn.querySelector('.push-hit-count');
       if (badge) {
         badge.textContent = String(count);
-        badge.hidden = !query;
+        badge.hidden = !query && kindFilter === 'all';
       }
     });
 
@@ -804,6 +1162,13 @@
         if (tileSection) {
           tileSection.hidden = Boolean(row) && !loading && Number(row.dataset.pushHits || 0) === 0;
         }
+        // Hide the whole Share pane when every hand-built column and tile is out.
+        const items = [...block.querySelectorAll('[data-push-item]')];
+        const itemVisible = items.some((item) => item.dataset.pushMatch === '1');
+        const tilesVisible = Number(row?.dataset?.pushHits || 0) > 0;
+        if (!loading && !itemVisible && !tilesVisible) {
+          block.hidden = true;
+        }
         return;
       }
       const row = block.querySelector('[data-push-category]');
@@ -819,18 +1184,24 @@
     const total = PUSH_VIEW_ORDER.reduce((sum, name) => sum + counts[name], 0);
     if (empty) {
       // With every tab hidden the page is otherwise blank, so say which of the
-      // two reasons emptied it — the search, or the display that is selected.
+      // reasons emptied it — the search, the kind filter, or the display target.
       const nothing = !loading && total === 0;
       empty.hidden = !nothing;
       if (nothing) {
-        empty.textContent = query
-          ? 'Nothing to push matches that search.'
-          : 'Nothing here can be sent to the display you picked.';
+        if (query) {
+          empty.textContent = 'Nothing to push matches that search.';
+        } else if (kindFilter === 'vestaboard') {
+          empty.textContent = 'Nothing here applies to Vestaboard.';
+        } else if (kindFilter === 'full') {
+          empty.textContent = 'Nothing here applies to software displays.';
+        } else {
+          empty.textContent = 'Nothing here can be sent to the display you picked.';
+        }
       }
     }
 
     pushViewSession = view;
-    return { view, counts, query, total };
+    return { view, counts, query, total, kindFilter };
   }
 
   function showPushView(view) {
@@ -856,15 +1227,22 @@
     input?.focus();
   });
 
+  document.querySelectorAll('.display-kind-filter').forEach((group) => {
+    group.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-kind-filter]');
+      if (!(btn instanceof HTMLElement) || !group.contains(btn)) return;
+      setKindFilter(btn.dataset.kindFilter);
+    });
+  });
+
+  // Restore the shared Applies-to filter (default All Displays).
+  syncKindFilterButtons(currentKindFilter());
+
   // Push is the landing tab and always opens on Home. The sub-tab survives
   // bottom-nav hops within one page load; search is never restored.
   applyPushFilter(PUSH_VIEW_ORDER[0]);
 
   // ---------------------------------------------------------- Status poller
-
-  const POLL_MS = 5000;
-  let statusTimer = null;
-  let lastStatus = null;
 
   function pillState(pill, cls, text) {
     pill.className = `status-pill ${cls}`.trim();
@@ -1063,7 +1441,7 @@
 
   async function pollStatus() {
     try {
-      renderStatus(await apiGet('/api/status'));
+      renderStatus(await apiGet('/api/status', { timeoutMs: 8000 }));
     } catch {
       renderOffline();
     }
@@ -1167,12 +1545,25 @@
     return kinds.includes(kind);
   }
 
+  function commandMatchesKindFilter(command) {
+    const kinds = Array.isArray(command.kinds) && command.kinds.length
+      ? command.kinds
+      : ['full'];
+    return kindsMatchFilter(kinds);
+  }
+
   function renderPushGrid(commands) {
+    // Displays refresh can call this before /api/commands answers. Keep the
+    // skeleton placeholders — wiping them blanks Home and flashes Share.
     if (commands) {
       allPushCommands = commands;
+    } else if (!allPushCommands.length) {
+      return;
     }
     pushCommands = allPushCommands.filter(
-      (command) => command.pushable && commandSupportsSelectedKind(command),
+      (command) => command.pushable
+        && commandSupportsSelectedKind(command)
+        && commandMatchesKindFilter(command),
     );
     document.querySelectorAll('[data-push-category]').forEach((row) => {
       const category = String(row.dataset.pushCategory || '').trim();
@@ -1184,8 +1575,12 @@
         // The service name and the command id are searchable even though the
         // tile never prints them, so "flightplan" finds Trip Board.
         const terms = [command.title, command.subtitle, command.group, command.id].join(' ');
+        const kinds = Array.isArray(command.kinds) && command.kinds.length
+          ? command.kinds
+          : ['full'];
         return `<button type="button" class="push-card${extraClass}"`
           + ` id="${pushCardElementId(command.id)}" data-command-id="${escapeHtml(command.id)}"`
+          + ` data-display-kinds="${escapeHtml(kinds.join(' '))}"`
           + ` data-search-terms="${escapeHtml(terms)}">`
           + `<span class="push-icon${iconClass}">${pushIconSvg(command.icon)}</span>`
           + `<span class="push-card-title">${escapeHtml(command.title)}</span>`
@@ -1195,18 +1590,25 @@
       row.removeAttribute('aria-busy');
     });
     // Visibility of rows, headings and tabs belongs to the filter alone.
-    applyPushFilter();
+    // Always re-assert Home on the first successful command paint so an empty
+    // pre-load pass cannot leave Share looking selected.
+    applyPushFilter(pushViewSession || PUSH_VIEW_ORDER[0]);
   }
 
   async function loadPushGrid() {
     try {
-      const { commands } = await apiGet('/api/commands');
+      const { commands } = await apiGet('/api/commands', { timeoutMs: 20000 });
       renderPushGrid(commands);
     } catch (error) {
-      // A failed load leaves the rows empty rather than showing dead tiles.
+      // A failed load leaves the skeletons rather than showing a blank Share flash.
       console.warn('Could not load push commands', error);
     }
   }
+
+  // Fast path: every binding the boot needs exists by now, so run it inline
+  // rather than waiting for the queued attempt above. bootAdminChrome() is
+  // idempotent, so whichever call lands first wins.
+  bootAdminChrome();
 
   // ------------------------------------------------------------- Push actions
 
@@ -2667,6 +3069,11 @@
     const searchInput = $('sched-rule-search');
     if (!host) return;
 
+    // Display refreshes and saves rebuild this list; keep the window where
+    // the admin left it so a filter + scroll is not yanked back to the top.
+    const scroller = pageScrollEl();
+    const savedY = window.scrollY || scroller.scrollTop || 0;
+
     const rawSearch = searchInput?.value || '';
     const query = normalizeSchedQuery(rawSearch);
     if (clearBtn) clearBtn.hidden = !String(rawSearch).trim();
@@ -2694,6 +3101,7 @@
         empty.hidden = false;
         empty.textContent = `No rules match “${rawSearch.trim()}”.`;
       }
+      restoreSchedScroll(savedY);
       return;
     }
     if (empty) empty.hidden = true;
@@ -2719,7 +3127,20 @@
       const id = schedFocusRuleId;
       schedFocusRuleId = null;
       requestAnimationFrame(() => focusSchedRule(id));
+    } else {
+      restoreSchedScroll(savedY);
     }
+  }
+
+  function restoreSchedScroll(y) {
+    const top = Math.max(0, Number(y) || 0);
+    if (!top) return;
+    const apply = () => {
+      window.scrollTo(0, top);
+      pageScrollEl().scrollTop = top;
+    };
+    apply();
+    requestAnimationFrame(apply);
   }
 
   function schedCommandById(commandId) {
@@ -3012,19 +3433,147 @@
     }
   }
 
-  function renderSchedCommandPicker() {
-    const select = $('sched-add-command');
-    if (!select) return;
-    const groups = new Map();
-    for (const command of schedCommands.filter((entry) => entry.schedulable)) {
-      if (!groups.has(command.group)) groups.set(command.group, []);
-      groups.get(command.group).push(command);
+  let schedCommandCatalog = [];
+  let schedCommandActiveIndex = -1;
+
+  function setSchedAddCommand(command) {
+    const hidden = $('sched-add-command');
+    const search = $('sched-add-command-search');
+    if (hidden) hidden.value = command?.id || '';
+    if (search) {
+      search.value = command ? command.title : '';
+      search.dataset.selectedId = command?.id || '';
     }
-    select.innerHTML = [...groups.entries()].map(([group, commands]) => (
-      `<optgroup label="${escapeHtml(group)}">${commands.map((command) => (
-        `<option value="${escapeHtml(command.id)}">${escapeHtml(command.title)}</option>`
-      )).join('')}</optgroup>`
+    hideSchedCommandList();
+  }
+
+  function hideSchedCommandList() {
+    const list = $('sched-add-command-list');
+    const search = $('sched-add-command-search');
+    if (list) list.hidden = true;
+    if (search) search.setAttribute('aria-expanded', 'false');
+    schedCommandActiveIndex = -1;
+  }
+
+  function filterSchedCommandCatalog(query) {
+    const q = normalizeSchedQuery(query);
+    if (!q) return schedCommandCatalog.slice();
+    const terms = q.split(' ').filter(Boolean);
+    return schedCommandCatalog.filter((entry) => (
+      terms.every((term) => entry.haystack.includes(term))
+    ));
+  }
+
+  function renderSchedCommandList(items) {
+    const list = $('sched-add-command-list');
+    const search = $('sched-add-command-search');
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = '<div class="typeahead-empty">No matching events</div>';
+      list.hidden = false;
+      if (search) search.setAttribute('aria-expanded', 'true');
+      schedCommandActiveIndex = -1;
+      return;
+    }
+    const shown = items.slice(0, 50);
+    list.innerHTML = shown.map((entry, index) => (
+      `<button type="button" class="typeahead-item${index === 0 ? ' is-active' : ''}"`
+      + ` role="option" data-command-id="${escapeHtml(entry.id)}" data-index="${index}">`
+      + `<span class="typeahead-item-title">${escapeHtml(entry.title)}</span>`
+      + `<span class="typeahead-item-group">${escapeHtml(entry.group)}</span>`
+      + '</button>'
     )).join('');
+    list.hidden = false;
+    if (search) search.setAttribute('aria-expanded', 'true');
+    schedCommandActiveIndex = 0;
+    list.querySelectorAll('[data-command-id]').forEach((btn) => {
+      btn.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        const id = btn.dataset.commandId;
+        const command = schedCommandCatalog.find((entry) => entry.id === id);
+        if (command) setSchedAddCommand(command);
+      });
+    });
+  }
+
+  function highlightSchedCommandItem(index) {
+    const list = $('sched-add-command-list');
+    if (!list || list.hidden) return;
+    const items = [...list.querySelectorAll('[data-command-id]')];
+    if (!items.length) return;
+    schedCommandActiveIndex = Math.max(0, Math.min(items.length - 1, index));
+    items.forEach((item, i) => {
+      item.classList.toggle('is-active', i === schedCommandActiveIndex);
+    });
+    items[schedCommandActiveIndex]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function renderSchedCommandPicker() {
+    schedCommandCatalog = schedCommands
+      .filter((entry) => entry.schedulable)
+      .map((command) => ({
+        id: command.id,
+        title: command.title,
+        group: command.group || 'Other',
+        haystack: [command.title, command.subtitle, command.group, command.id]
+          .join(' ')
+          .toLowerCase()
+          .replace(/\s+/g, ' '),
+      }));
+    const hidden = $('sched-add-command');
+    const search = $('sched-add-command-search');
+    // Keep a previous pick if it is still schedulable; otherwise leave the
+    // field blank so "Add a rule" is a search box, not Tesla Dashboard.
+    const previousId = hidden?.value || search?.dataset.selectedId || '';
+    const current = previousId
+      ? schedCommandCatalog.find((entry) => entry.id === previousId)
+      : null;
+    setSchedAddCommand(current || null);
+  }
+
+  function bindSchedCommandPicker() {
+    const search = $('sched-add-command-search');
+    const list = $('sched-add-command-list');
+    if (!search || search.dataset.bound === '1') return;
+    search.dataset.bound = '1';
+
+    search.addEventListener('focus', () => {
+      renderSchedCommandList(filterSchedCommandCatalog(search.value));
+    });
+    search.addEventListener('input', () => {
+      // Typing means the previous pick may no longer match — keep hidden id
+      // only while the text still equals that title.
+      const selected = schedCommandCatalog.find((entry) => entry.id === search.dataset.selectedId);
+      if (!selected || search.value.trim() !== selected.title) {
+        const hidden = $('sched-add-command');
+        if (hidden) hidden.value = '';
+        search.dataset.selectedId = '';
+      }
+      renderSchedCommandList(filterSchedCommandCatalog(search.value));
+    });
+    search.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (list?.hidden) renderSchedCommandList(filterSchedCommandCatalog(search.value));
+        highlightSchedCommandItem(schedCommandActiveIndex + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        highlightSchedCommandItem(schedCommandActiveIndex - 1);
+      } else if (event.key === 'Enter') {
+        const active = list?.querySelector('.typeahead-item.is-active[data-command-id]');
+        if (active && !list.hidden) {
+          event.preventDefault();
+          const command = schedCommandCatalog.find((entry) => entry.id === active.dataset.commandId);
+          if (command) setSchedAddCommand(command);
+        }
+      } else if (event.key === 'Escape') {
+        hideSchedCommandList();
+        search.blur();
+      }
+    });
+    search.addEventListener('blur', () => {
+      setTimeout(() => hideSchedCommandList(), 150);
+    });
   }
 
   // ---------------------------------------------------- activity view
@@ -3394,6 +3943,9 @@
         $('sched-view-activity').hidden = view !== 'activity';
         $('sched-view-simulation').hidden = view !== 'simulation';
         $('sched-view-settings').hidden = view !== 'settings';
+        updateStickyOffsets();
+        updateSchedSetupCompact();
+        updatePageJump();
         if (view === 'activity') await loadSchedActivity();
         return;
       }
@@ -3436,7 +3988,11 @@
 
     $('btn-sched-add')?.addEventListener('click', async () => {
       const commandId = $('sched-add-command')?.value;
-      if (!commandId) return;
+      if (!commandId) {
+        toast('Pick an event type to schedule', 'bad');
+        $('sched-add-command-search')?.focus();
+        return;
+      }
       try {
         const result = await apiFetch(`${SCHED_ROUTE}/rules`, {
           method: 'POST',
@@ -3589,8 +4145,12 @@
         renderSchedSettings(settings.settings);
         schedCommands = commands.commands || [];
         renderSchedCommandPicker();
+        bindSchedCommandPicker();
         await loadSchedRules();
         await refreshSchedStatus();
+        updateStickyOffsets();
+        updatePageJump();
+        updateSchedSetupCompact();
       } catch {
         // Scheduler unavailable on this bridge — leave the tab in its empty state.
       }
@@ -5216,6 +5776,25 @@
     return lines;
   }
 
+  function confirmCorpusRemove(kind, preview) {
+    const snippet = String(preview || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+    const label = kind || 'item';
+    return window.confirm(
+      snippet
+        ? `Remove this ${label}?\n\n${snippet}\n\nThis cannot be undone.`
+        : `Remove this ${label}? This cannot be undone.`,
+    );
+  }
+
+  function corpusManageActions({ hidden, custom, saveAttr, hideAttr, removeAttr }) {
+    const hide = custom
+      ? ''
+      : `<button type="button" class="btn btn-outline btn-sm" ${hideAttr}>${hidden ? 'Restore' : 'Hide'}</button>`;
+    return `<button type="button" class="btn btn-outline btn-sm" ${saveAttr}>Save</button>`
+      + hide
+      + `<button type="button" class="btn btn-danger btn-sm" ${removeAttr}>Remove</button>`;
+  }
+
   function chuckNorrisCountsLine(data = {}) {
     const hidden = Number(data.hiddenCount || 0);
     const custom = Number(data.customCount || 0);
@@ -5277,8 +5856,13 @@
             <div class="cn-fact-meta">
               <span class="hint">${fact.custom ? 'Yours' : 'Shipped'} · ${fact.rows || 0} rows</span>
               <div class="cn-fact-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-cn-save>Save</button>
-                <button type="button" class="btn btn-outline btn-sm" data-cn-hide>${fact.hidden ? 'Restore' : (fact.custom ? 'Remove' : 'Hide')}</button>
+                ${corpusManageActions({
+                  hidden: fact.hidden,
+                  custom: fact.custom,
+                  saveAttr: 'data-cn-save',
+                  hideAttr: 'data-cn-hide',
+                  removeAttr: 'data-cn-remove',
+                })}
               </div>
             </div>
           </article>
@@ -5400,10 +5984,16 @@
       if (event.target.closest('[data-cn-save]')) {
         await apiPost('/api/chuck-norris/facts', { id, text });
         toast('Fact saved', 'good');
+      } else if (event.target.closest('[data-cn-remove]')) {
+        if (!confirmCorpusRemove('fact', text)) {
+          return;
+        }
+        await apiPost('/api/chuck-norris/facts', { id, remove: true });
+        toast('Fact removed', 'good');
       } else if (event.target.closest('[data-cn-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/chuck-norris/facts', { id, hidden: !restore });
-        toast(restore ? 'Fact restored' : (article.classList.contains('is-custom') ? 'Fact removed' : 'Fact hidden'), 'good');
+        toast(restore ? 'Fact restored' : 'Fact hidden', 'good');
       } else {
         return;
       }
@@ -5420,7 +6010,9 @@
   const AF_PAGE_SIZE = 12;
   let amazingFactsPage = 1;
   let amazingFactsTimer = 0;
+  let amazingFactsPoolTimer = 0;
   let amazingFactsCategoryOptions = [];
+  let amazingFactsPoolSaving = false;
 
   function labelAmazingCategory(id) {
     return String(id || '')
@@ -5430,10 +6022,64 @@
       .join(' ') || 'Trivia';
   }
 
+  /**
+   * Empty categories on the server means "every topic". The UI mirrors that by
+   * checking every box — "Use all" used to clear the checks, which looked like
+   * "use none".
+   */
+  function amazingFactsPoolIsAll(selectedPool = [], options = amazingFactsCategoryOptions) {
+    return !Array.isArray(selectedPool) || selectedPool.length === 0
+      || (options.length > 0 && selectedPool.length >= options.length);
+  }
+
+  function amazingFactsPoolLabel(data = {}) {
+    const options = data.categoryOptions || amazingFactsCategoryOptions || [];
+    const pool = Array.isArray(data.categories) ? data.categories : [];
+    if (amazingFactsPoolIsAll(pool, options)) return 'All topics';
+    if (pool.length === 1) return labelAmazingCategory(pool[0]);
+    if (pool.length <= 3) return pool.map(labelAmazingCategory).join(', ');
+    return `${pool.length} of ${options.length || pool.length} topics`;
+  }
+
+  function readAmazingFactsPoolCategories() {
+    const pool = $('amazing-facts-pool-categories');
+    if (!pool) return [];
+    const boxes = [...pool.querySelectorAll('input[type="checkbox"]')];
+    if (!boxes.length) return [];
+    const checked = boxes.filter((el) => el.checked).map((el) => el.value).filter(Boolean);
+    // All checked (or none left) → empty list = unrestricted draw.
+    if (!checked.length || checked.length === boxes.length) return [];
+    return checked;
+  }
+
+  function syncAmazingFactsPoolChipStyles() {
+    const pool = $('amazing-facts-pool-categories');
+    if (!pool) return;
+    pool.querySelectorAll('.af-pool-chip').forEach((chip) => {
+      const on = Boolean(chip.querySelector('input[type="checkbox"]')?.checked);
+      chip.classList.toggle('is-on', on);
+    });
+  }
+
+  function updateAmazingFactsPoolSummary(data = null) {
+    const summary = $('amazing-facts-pool-summary');
+    if (!summary) return;
+    if (data) {
+      summary.textContent = amazingFactsPoolLabel(data);
+      return;
+    }
+    const categories = readAmazingFactsPoolCategories();
+    summary.textContent = amazingFactsPoolLabel({
+      categories,
+      categoryOptions: amazingFactsCategoryOptions,
+    });
+  }
+
   function fillAmazingCategorySelects(options = [], selectedPool = []) {
     amazingFactsCategoryOptions = options;
     const browse = $('amazing-facts-browse-category');
     const pool = $('amazing-facts-pool-categories');
+    const useAll = amazingFactsPoolIsAll(selectedPool, options);
     const selected = new Set((selectedPool || []).map(String));
     if (browse) {
       const current = browse.value || '';
@@ -5444,10 +6090,19 @@
       browse.value = current;
     }
     if (pool) {
-      pool.innerHTML = options.map((row) => (
-        `<option value="${escapeHtml(row.id)}"${selected.has(row.id) ? ' selected' : ''}>${escapeHtml(labelAmazingCategory(row.id))} (${row.count || 0})</option>`
-      )).join('');
+      pool.innerHTML = options.map((row) => {
+        const on = useAll || selected.has(row.id);
+        return `<label class="af-pool-chip${on ? ' is-on' : ''}">`
+          + `<input type="checkbox" value="${escapeHtml(row.id)}"${on ? ' checked' : ''}>`
+          + `<span>${escapeHtml(labelAmazingCategory(row.id))}</span>`
+          + `<span class="af-pool-chip-count">${row.count || 0}</span>`
+          + `</label>`;
+      }).join('');
     }
+    updateAmazingFactsPoolSummary({
+      categories: useAll ? [] : [...selected],
+      categoryOptions: options,
+    });
   }
 
   function renderAmazingFactsPreview(text) {
@@ -5455,9 +6110,11 @@
     if (!host) {
       return;
     }
-    const lines = ['AMAZING FACT', ...wrapPreview(text, 22).slice(0, 5)];
-    while (lines.length < 6) {
-      lines.push('');
+    const body = wrapPreview(text, 22).slice(0, 5);
+    const padTop = Math.floor((5 - body.length) / 2);
+    const lines = ['AMAZING FACT'];
+    for (let i = 0; i < 5; i += 1) {
+      lines.push(body[i - padTop] || '');
     }
     host.innerHTML = lines.map((line) => {
       const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
@@ -5475,9 +6132,8 @@
   function amazingFactsCountsLine(data = {}) {
     const hidden = Number(data.hiddenCount || 0);
     const custom = Number(data.customCount || 0);
-    const pool = Array.isArray(data.categories) ? data.categories.length : 0;
     return `${data.available || 0} facts ready`
-      + (pool ? ` · pool: ${pool} categor${pool === 1 ? 'y' : 'ies'}` : '')
+      + ` · ${amazingFactsPoolLabel(data).toLowerCase()}`
       + (custom ? ` · ${custom} added here` : '')
       + (hidden ? ` · ${hidden} hidden` : '');
   }
@@ -5520,8 +6176,13 @@
             <div class="cn-fact-meta">
               <span class="hint">${fact.custom ? 'Yours' : 'Shipped'} · ${escapeHtml(labelAmazingCategory(fact.category))} · ${fact.rows || 0} rows</span>
               <div class="cn-fact-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-af-save>Save</button>
-                <button type="button" class="btn btn-outline btn-sm" data-af-hide>${fact.hidden ? 'Restore' : (fact.custom ? 'Remove' : 'Hide')}</button>
+                ${corpusManageActions({
+                  hidden: fact.hidden,
+                  custom: fact.custom,
+                  saveAttr: 'data-af-save',
+                  hideAttr: 'data-af-hide',
+                  removeAttr: 'data-af-remove',
+                })}
               </div>
             </div>
           </article>
@@ -5543,9 +6204,47 @@
     try {
       const data = await apiGet('/api/amazing-facts/facts?page=1&pageSize=1');
       renderAmazingFactsCard(data);
+      const attribution = $('amazing-facts-attribution');
+      if (attribution) {
+        attribution.textContent = data.attribution
+          ? `${data.attribution}${data.license ? ` (${data.license})` : ''}`
+          : '';
+      }
+      fillAmazingCategorySelects(data.categoryOptions || [], data.categories || []);
     } catch {
       renderAmazingFactsCard({});
     }
+  }
+
+  async function saveAmazingFactsPool({ quiet = false } = {}) {
+    if (amazingFactsPoolSaving) return;
+    amazingFactsPoolSaving = true;
+    const categories = readAmazingFactsPoolCategories();
+    try {
+      const data = await apiPost('/api/amazing-facts/facts', { categories });
+      fillAmazingCategorySelects(data.categoryOptions || amazingFactsCategoryOptions, data.categories || []);
+      renderAmazingFactsCard(data);
+      if (!quiet) {
+        toast(
+          amazingFactsPoolIsAll(data.categories || [], data.categoryOptions || [])
+            ? 'Random push uses every topic'
+            : `Random push uses ${amazingFactsPoolLabel(data).toLowerCase()}`,
+          'good',
+        );
+      }
+    } catch (error) {
+      toast(error.message || 'Could not save topics', 'bad');
+      await loadAmazingFactsStatus();
+    } finally {
+      amazingFactsPoolSaving = false;
+    }
+  }
+
+  function queueAmazingFactsPoolSave() {
+    syncAmazingFactsPoolChipStyles();
+    updateAmazingFactsPoolSummary();
+    window.clearTimeout(amazingFactsPoolTimer);
+    amazingFactsPoolTimer = window.setTimeout(() => saveAmazingFactsPool({ quiet: true }), 350);
   }
 
   async function loadAmazingFacts(page = amazingFactsPage) {
@@ -5619,28 +6318,18 @@
     }
   });
 
-  $('btn-amazing-facts-save-pool')?.addEventListener('click', async () => {
+  $('btn-amazing-facts-pool-all')?.addEventListener('click', async () => {
     const pool = $('amazing-facts-pool-categories');
-    const categories = pool
-      ? [...pool.selectedOptions].map((option) => option.value).filter(Boolean)
-      : [];
-    try {
-      await apiPost('/api/amazing-facts/facts', { categories });
-      toast(categories.length ? 'Push pool saved' : 'Push pool uses every category', 'good');
-      await loadAmazingFacts(1);
-    } catch (error) {
-      toast(error.message || 'Could not save push pool', 'bad');
-    }
+    pool?.querySelectorAll('input[type="checkbox"]').forEach((el) => { el.checked = true; });
+    syncAmazingFactsPoolChipStyles();
+    updateAmazingFactsPoolSummary();
+    window.clearTimeout(amazingFactsPoolTimer);
+    await saveAmazingFactsPool();
   });
 
-  $('btn-amazing-facts-clear-pool')?.addEventListener('click', async () => {
-    try {
-      await apiPost('/api/amazing-facts/facts', { categories: [] });
-      toast('Push pool uses every category', 'good');
-      await loadAmazingFacts(amazingFactsPage);
-    } catch (error) {
-      toast(error.message || 'Could not clear push pool', 'bad');
-    }
+  $('amazing-facts-pool-categories')?.addEventListener('change', (event) => {
+    if (!(event.target instanceof HTMLInputElement) || event.target.type !== 'checkbox') return;
+    queueAmazingFactsPoolSave();
   });
 
   $('amazing-facts-new')?.addEventListener('input', () => {
@@ -5663,13 +6352,19 @@
     const id = article.getAttribute('data-af-id');
     const text = article.querySelector('.cn-fact-text')?.value || '';
     try {
-      if (event.target.matches('[data-af-save]')) {
+      if (event.target.closest('[data-af-save]')) {
         await apiPost('/api/amazing-facts/facts', { id, text });
         toast('Fact saved', 'good');
-      } else if (event.target.matches('[data-af-hide]')) {
+      } else if (event.target.closest('[data-af-remove]')) {
+        if (!confirmCorpusRemove('fact', text)) {
+          return;
+        }
+        await apiPost('/api/amazing-facts/facts', { id, remove: true });
+        toast('Fact removed', 'good');
+      } else if (event.target.closest('[data-af-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/amazing-facts/facts', { id, hidden: !restore });
-        toast(restore ? 'Fact restored' : (article.classList.contains('is-custom') ? 'Fact removed' : 'Fact hidden'), 'good');
+        toast(restore ? 'Fact restored' : 'Fact hidden', 'good');
       } else {
         return;
       }
@@ -5680,6 +6375,282 @@
   });
 
   loadAmazingFactsStatus();
+
+  // ------------------------------------------- Settings → World Geography Facts
+
+  const WG_PAGE_SIZE = 12;
+  let worldGeographyFactsPage = 1;
+  let worldGeographyFactsTimer = 0;
+  let worldGeographyFactsCategoryOptions = [];
+
+  function labelWorldGeographyCategory(id) {
+    return String(id || '')
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ') || 'Trivia';
+  }
+
+  function fillWorldGeographyCategorySelects(options = [], selectedPool = []) {
+    worldGeographyFactsCategoryOptions = options;
+    const browse = $('world-geography-facts-browse-category');
+    const pool = $('world-geography-facts-pool-categories');
+    const selected = new Set((selectedPool || []).map(String));
+    if (browse) {
+      const current = browse.value || '';
+      browse.innerHTML = '<option value="">All categories</option>'
+        + options.map((row) => (
+          `<option value="${escapeHtml(row.id)}">${escapeHtml(labelWorldGeographyCategory(row.id))} (${row.count || 0})</option>`
+        )).join('');
+      browse.value = current;
+    }
+    if (pool) {
+      pool.innerHTML = options.map((row) => (
+        `<option value="${escapeHtml(row.id)}"${selected.has(row.id) ? ' selected' : ''}>${escapeHtml(labelWorldGeographyCategory(row.id))} (${row.count || 0})</option>`
+      )).join('');
+    }
+  }
+
+  function renderWorldGeographyFactsPreview(text) {
+    const host = $('world-geography-facts-preview');
+    if (!host) {
+      return;
+    }
+    const lines = ['WORLD GEOGRAPHY', ...wrapPreview(text, 22).slice(0, 5)];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('world-geography-facts-fit-hint');
+    if (hint) {
+      const rows = wrapPreview(text, 22).length;
+      hint.textContent = text
+        ? (rows <= 5 ? `Fits in ${rows} row${rows === 1 ? '' : 's'}` : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function worldGeographyFactsCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    const pool = Array.isArray(data.categories) ? data.categories.length : 0;
+    return `${data.available || 0} facts ready`
+      + (pool ? ` · pool: ${pool} categor${pool === 1 ? 'y' : 'ies'}` : '')
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderWorldGeographyFactsCard(data = {}) {
+    const pill = $('world-geography-facts-status-pill');
+    const detail = $('world-geography-facts-status-detail');
+    const summary = $('world-geography-facts-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${worldGeographyFactsCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local world geography facts for the Vestaboard. No API key — manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? worldGeographyFactsCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderWorldGeographyFactsSettings(data = {}) {
+    renderWorldGeographyFactsCard(data);
+    const attribution = $('world-geography-facts-attribution');
+    if (attribution) {
+      attribution.textContent = data.attribution
+        ? `${data.attribution}${data.license ? ` (${data.license})` : ''}`
+        : '';
+    }
+    fillWorldGeographyCategorySelects(
+      data.categoryOptions || worldGeographyFactsCategoryOptions,
+      data.categories || [],
+    );
+    const list = $('world-geography-facts-fact-list');
+    if (list) {
+      const facts = data.facts || [];
+      if (!facts.length) {
+        list.innerHTML = '<p class="hint">No facts match that search.</p>';
+      } else {
+        list.innerHTML = facts.map((fact) => `
+          <article class="cn-fact${fact.hidden ? ' is-hidden' : ''}${fact.custom ? ' is-custom' : ''}" data-wg-id="${escapeHtml(fact.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(fact.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${fact.custom ? 'Yours' : 'Shipped'} · ${escapeHtml(labelWorldGeographyCategory(fact.category))} · ${fact.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: fact.hidden,
+                  custom: fact.custom,
+                  saveAttr: 'data-wg-save',
+                  hideAttr: 'data-wg-hide',
+                  removeAttr: 'data-wg-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('world-geography-facts-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    worldGeographyFactsPage = data.page || 1;
+    const prev = $('btn-world-geography-facts-prev');
+    const next = $('btn-world-geography-facts-next');
+    if (prev) prev.disabled = worldGeographyFactsPage <= 1;
+    if (next) next.disabled = worldGeographyFactsPage >= (data.pages || 1);
+  }
+
+  async function loadWorldGeographyFactsStatus() {
+    try {
+      const data = await apiGet('/api/world-geography-facts/facts?page=1&pageSize=1');
+      renderWorldGeographyFactsCard(data);
+    } catch {
+      renderWorldGeographyFactsCard({});
+    }
+  }
+
+  async function loadWorldGeographyFacts(page = worldGeographyFactsPage) {
+    const query = $('world-geography-facts-search')?.value || '';
+    const hidden = Boolean($('world-geography-facts-show-hidden')?.checked);
+    const category = $('world-geography-facts-browse-category')?.value || '';
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(WG_PAGE_SIZE),
+    });
+    if (query) params.set('q', query);
+    if (hidden) params.set('hidden', '1');
+    if (category) params.set('category', category);
+    try {
+      const data = await apiGet(`/api/world-geography-facts/facts?${params}`);
+      renderWorldGeographyFactsSettings(data);
+    } catch (error) {
+      toast(error.message || 'Could not load World Geography Facts', 'bad');
+    }
+  }
+
+  function openWorldGeographyFactsManageSheet() {
+    const sheet = $('world-geography-facts-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    renderWorldGeographyFactsPreview($('world-geography-facts-new')?.value || '');
+    loadWorldGeographyFacts(1);
+  }
+
+  function closeWorldGeographyFactsManageSheet() {
+    const sheet = $('world-geography-facts-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadWorldGeographyFactsStatus();
+  }
+
+  $('btn-world-geography-facts-manage')?.addEventListener('click', () => openWorldGeographyFactsManageSheet());
+  $('btn-world-geography-facts-manage-close')?.addEventListener('click', () => closeWorldGeographyFactsManageSheet());
+  registerSheetDismiss('world-geography-facts-manage-sheet', () => closeWorldGeographyFactsManageSheet());
+
+  $('btn-world-geography-facts-add')?.addEventListener('click', async () => {
+    const input = $('world-geography-facts-new');
+    try {
+      await apiPost('/api/world-geography-facts/facts', {
+        text: input?.value || '',
+        category: $('world-geography-facts-browse-category')?.value || 'custom',
+      });
+      if (input) input.value = '';
+      renderWorldGeographyFactsPreview('');
+      toast('Fact added', 'good');
+      await loadWorldGeographyFacts(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that fact', 'bad');
+    }
+  });
+
+  $('btn-world-geography-facts-push')?.addEventListener('click', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await apiPost('/api/push/world-geography-facts', withTarget());
+      toast(result.fact?.text ? 'Pushed a geography fact' : 'Pushed World Geography Facts', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not push World Geography Facts', 'bad');
+    }
+  });
+
+  $('btn-world-geography-facts-save-pool')?.addEventListener('click', async () => {
+    const pool = $('world-geography-facts-pool-categories');
+    const categories = pool
+      ? [...pool.selectedOptions].map((option) => option.value).filter(Boolean)
+      : [];
+    try {
+      await apiPost('/api/world-geography-facts/facts', { categories });
+      toast(categories.length ? 'Push pool saved' : 'Using all categories', 'good');
+      await loadWorldGeographyFactsStatus();
+    } catch (error) {
+      toast(error.message || 'Could not save pool', 'bad');
+    }
+  });
+
+  $('btn-world-geography-facts-clear-pool')?.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/world-geography-facts/facts', { categories: [] });
+      toast('Using all categories', 'good');
+      await loadWorldGeographyFacts(worldGeographyFactsPage);
+    } catch (error) {
+      toast(error.message || 'Could not clear pool', 'bad');
+    }
+  });
+
+  $('world-geography-facts-new')?.addEventListener('input', () => {
+    renderWorldGeographyFactsPreview($('world-geography-facts-new')?.value || '');
+  });
+  $('world-geography-facts-search')?.addEventListener('input', () => {
+    window.clearTimeout(worldGeographyFactsTimer);
+    worldGeographyFactsTimer = window.setTimeout(() => loadWorldGeographyFacts(1), 250);
+  });
+  $('world-geography-facts-browse-category')?.addEventListener('change', () => loadWorldGeographyFacts(1));
+  $('world-geography-facts-show-hidden')?.addEventListener('change', () => loadWorldGeographyFacts(1));
+  $('btn-world-geography-facts-prev')?.addEventListener('click', () => loadWorldGeographyFacts(worldGeographyFactsPage - 1));
+  $('btn-world-geography-facts-next')?.addEventListener('click', () => loadWorldGeographyFacts(worldGeographyFactsPage + 1));
+
+  $('world-geography-facts-fact-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-wg-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-wg-id');
+    const text = article.querySelector('.cn-fact-text')?.value || '';
+    try {
+      if (event.target.closest('[data-wg-save]')) {
+        await apiPost('/api/world-geography-facts/facts', { id, text });
+        toast('Fact saved', 'good');
+      } else if (event.target.closest('[data-wg-remove]')) {
+        if (!confirmCorpusRemove('fact', text)) {
+          return;
+        }
+        await apiPost('/api/world-geography-facts/facts', { id, remove: true });
+        toast('Fact removed', 'good');
+      } else if (event.target.closest('[data-wg-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/world-geography-facts/facts', { id, hidden: !restore });
+        toast(restore ? 'Fact restored' : 'Fact hidden', 'good');
+      } else {
+        return;
+      }
+      await loadWorldGeographyFacts(worldGeographyFactsPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that fact', 'bad');
+    }
+  });
+
+  loadWorldGeographyFactsStatus();
 
   // ------------------------------------------- Settings → Conversation Starters
 
@@ -5750,8 +6721,13 @@
             <div class="cn-fact-meta">
               <span class="hint">${prompt.custom ? 'Yours' : 'Shipped'} · ${prompt.rows || 0} rows</span>
               <div class="cn-fact-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-cs-save>Save</button>
-                <button type="button" class="btn btn-outline btn-sm" data-cs-hide>${prompt.hidden ? 'Restore' : (prompt.custom ? 'Remove' : 'Hide')}</button>
+                ${corpusManageActions({
+                  hidden: prompt.hidden,
+                  custom: prompt.custom,
+                  saveAttr: 'data-cs-save',
+                  hideAttr: 'data-cs-hide',
+                  removeAttr: 'data-cs-remove',
+                })}
               </div>
             </div>
           </article>
@@ -5873,10 +6849,16 @@
       if (event.target.closest('[data-cs-save]')) {
         await apiPost('/api/conversation-starters/prompts', { id, text });
         toast('Prompt saved', 'good');
+      } else if (event.target.closest('[data-cs-remove]')) {
+        if (!confirmCorpusRemove('prompt', text)) {
+          return;
+        }
+        await apiPost('/api/conversation-starters/prompts', { id, remove: true });
+        toast('Prompt removed', 'good');
       } else if (event.target.closest('[data-cs-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/conversation-starters/prompts', { id, hidden: !restore });
-        toast(restore ? 'Prompt restored' : (article.classList.contains('is-custom') ? 'Prompt removed' : 'Prompt hidden'), 'good');
+        toast(restore ? 'Prompt restored' : 'Prompt hidden', 'good');
       } else {
         return;
       }
@@ -5963,8 +6945,13 @@
             <div class="cn-fact-meta">
               <span class="hint">${quote.custom ? 'Yours' : 'Shipped'} · ${quote.rows || 0} rows</span>
               <div class="cn-fact-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-sq-save>Save</button>
-                <button type="button" class="btn btn-outline btn-sm" data-sq-hide>${quote.hidden ? 'Restore' : (quote.custom ? 'Remove' : 'Hide')}</button>
+                ${corpusManageActions({
+                  hidden: quote.hidden,
+                  custom: quote.custom,
+                  saveAttr: 'data-sq-save',
+                  hideAttr: 'data-sq-hide',
+                  removeAttr: 'data-sq-remove',
+                })}
               </div>
             </div>
           </article>
@@ -6098,10 +7085,16 @@
       if (event.target.closest('[data-sq-save]')) {
         await apiPost('/api/stoic-quotes/quotes', { id, text, author });
         toast('Quote saved', 'good');
+      } else if (event.target.closest('[data-sq-remove]')) {
+        if (!confirmCorpusRemove('quote', text)) {
+          return;
+        }
+        await apiPost('/api/stoic-quotes/quotes', { id, remove: true });
+        toast('Quote removed', 'good');
       } else if (event.target.closest('[data-sq-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/stoic-quotes/quotes', { id, hidden: !restore });
-        toast(restore ? 'Quote restored' : (article.classList.contains('is-custom') ? 'Quote removed' : 'Quote hidden'), 'good');
+        toast(restore ? 'Quote restored' : 'Quote hidden', 'good');
       } else {
         return;
       }
@@ -6256,8 +7249,13 @@
             <div class="cn-fact-meta">
               <span class="hint">${event.custom ? 'Yours' : 'Shipped'} · ${escapeHtml(label)} · ${event.rows || 0} rows</span>
               <div class="cn-fact-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-otd-save>Save</button>
-                <button type="button" class="btn btn-outline btn-sm" data-otd-hide>${event.hidden ? 'Restore' : (event.custom ? 'Remove' : 'Hide')}</button>
+                ${corpusManageActions({
+                  hidden: event.hidden,
+                  custom: event.custom,
+                  saveAttr: 'data-otd-save',
+                  hideAttr: 'data-otd-hide',
+                  removeAttr: 'data-otd-remove',
+                })}
               </div>
             </div>
           </article>`;
@@ -6407,13 +7405,19 @@
     const text = article.querySelector('.cn-fact-text')?.value || '';
     const year = article.querySelector('[data-otd-year]')?.value;
     try {
-      if (event.target.matches('[data-otd-save]')) {
+      if (event.target.closest('[data-otd-save]')) {
         await apiPost('/api/on-this-day/events', { id, text, year });
         toast('Fact saved', 'good');
-      } else if (event.target.matches('[data-otd-hide]')) {
+      } else if (event.target.closest('[data-otd-remove]')) {
+        if (!confirmCorpusRemove('fact', text)) {
+          return;
+        }
+        await apiPost('/api/on-this-day/events', { id, remove: true });
+        toast('Fact removed', 'good');
+      } else if (event.target.closest('[data-otd-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/on-this-day/events', { id, hidden: !restore });
-        toast(restore ? 'Fact restored' : (article.classList.contains('is-custom') ? 'Fact removed' : 'Fact hidden'), 'good');
+        toast(restore ? 'Fact restored' : 'Fact hidden', 'good');
       } else {
         return;
       }
@@ -6515,8 +7519,13 @@
             <div class="cn-fact-meta">
               <span class="hint">${idea.custom ? 'Yours' : 'Shipped'} · ${(idea.ingredients || []).length} ingredients</span>
               <div class="cn-fact-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-bake-save>Save</button>
-                <button type="button" class="btn btn-outline btn-sm" data-bake-hide>${idea.hidden ? 'Restore' : (idea.custom ? 'Remove' : 'Hide')}</button>
+                ${corpusManageActions({
+                  hidden: idea.hidden,
+                  custom: idea.custom,
+                  saveAttr: 'data-bake-save',
+                  hideAttr: 'data-bake-hide',
+                  removeAttr: 'data-bake-remove',
+                })}
               </div>
             </div>
           </article>
@@ -6640,10 +7649,16 @@
       if (event.target.closest('[data-bake-save]')) {
         await apiPost('/api/baking-inspiration/ideas', { id, title, ingredients });
         toast('Idea saved', 'good');
+      } else if (event.target.closest('[data-bake-remove]')) {
+        if (!confirmCorpusRemove('idea', title || ingredients)) {
+          return;
+        }
+        await apiPost('/api/baking-inspiration/ideas', { id, remove: true });
+        toast('Idea removed', 'good');
       } else if (event.target.closest('[data-bake-hide]')) {
         const restore = article.classList.contains('is-hidden');
         await apiPost('/api/baking-inspiration/ideas', { id, hidden: !restore });
-        toast(restore ? 'Idea restored' : (article.classList.contains('is-custom') ? 'Idea removed' : 'Idea hidden'), 'good');
+        toast(restore ? 'Idea restored' : 'Idea hidden', 'good');
       } else {
         return;
       }
@@ -6830,22 +7845,24 @@
     const list = resolveCurrencyRatesQuotes(quotes).slice(0, 4);
     const baseCode = String(base || 'USD').toUpperCase().slice(0, 3);
     const samples = [
-      { rate: '0.915', change: '- 0.09%', dir: 'down' },
-      { rate: '0.767', change: '+ 0.20%', dir: 'up' },
-      { rate: '151.2', change: '+ 0.12%', dir: 'up' },
-      { rate: '1.385', change: '- 0.32%', dir: 'down' },
+      { rate: '0.915', change: '-0.09%', dir: 'down' },
+      { rate: '0.767', change: '+0.20%', dir: 'up' },
+      { rate: '151.2', change: '+0.12%', dir: 'up' },
+      { rate: '1.385', change: '-0.32%', dir: 'down' },
     ];
     const titleText = `${baseCode} CONVERSIONS`;
     const titlePad = Math.max(0, 22 - titleText.length);
     const titleLeft = Math.floor(titlePad / 2);
     const title = `${' '.repeat(titleLeft)}${titleText}${' '.repeat(titlePad - titleLeft)}`.slice(0, 22);
-    const header = '       $    + / - %  ';
+    // Mirrors fxColumnHeaderRow / fxQuoteRow: `$` at column 7 over the rates,
+    // `+/-%` right-aligned to the change column so its `+` lands on the point.
+    const header = `${' '.repeat(7)}$${' '.repeat(9)}+/-%`;
     const dataLines = list.map((code, index) => {
       const sample = samples[index % samples.length];
       const symbol = String(code || '').toUpperCase().slice(0, 3).padEnd(3, ' ');
       const rate = String(sample.rate).padEnd(7, ' ').slice(0, 7);
-      const change = String(sample.change).padStart(9, ' ').slice(-9);
-      return `${symbol}  ${rate}${change}#`.padEnd(22, ' ').slice(0, 22);
+      const change = String(sample.change).padStart(7, ' ').slice(-7);
+      return `${symbol}    ${rate}${change}#`.padEnd(22, ' ').slice(0, 22);
     });
     const lines = [title, header, ...dataLines];
     while (lines.length < 6) lines.push('');
@@ -6970,13 +7987,13 @@
     const host = $('starlink-tracker-preview');
     if (!host) return;
     const lines = [
-      'STARLINK',
+      'STARLINK TRACKER',
       '',
       'TONIGHT 9:42PM',
       'NW HIGH 52DEG',
     ];
     if (settings.showWeather !== false) lines.push('CLEAR SKY');
-    if (settings.showVisibility !== false) lines.push('GOOD');
+    if (settings.showVisibility !== false) lines.push('GOOD VISIBILITY');
     while (lines.length < 6) lines.push('');
     host.innerHTML = lines.slice(0, 6).map((line) => (
       `<div class="cn-board-row">${escapeHtml(String(line).padEnd(22).slice(0, 22))}</div>`
@@ -7101,20 +8118,45 @@
     const host = $('iss-tracker-preview');
     if (!host) return;
     const unit = settings.distanceUnit === 'km' ? 'KM' : 'MI';
-    const speed = settings.distanceUnit === 'km' ? '27600 KM/H' : '17150 MPH';
-    const alt = settings.distanceUnit === 'km' ? '420 KM UP' : '260 MI UP';
+    const speed = settings.distanceUnit === 'km' ? 'GOING 27,600 KM/H' : 'GOING 17,130 MPH';
+    const alt = settings.distanceUnit === 'km' ? '@  420 KM HIGH' : '@  262 MI HIGH';
+    const away = hasLocation ? `3,917 ${unit} AWAY @` : 'SET HOUSE PIN';
+    const coords = settings.showCoordinates !== false ? '1.45° S,  33.56° W' : '';
+    const center = (text, width = 22) => {
+      const body = String(text || '').slice(0, width);
+      const pad = Math.max(0, width - body.length);
+      const left = Math.floor(pad / 2);
+      return `${' '.repeat(left)}${body}${' '.repeat(pad - left)}`;
+    };
+    // Title/time sit inside the white L ornaments (chips on corners).
+    const titleInner = center('ISS SPACE ORBIT', 18);
+    const timeInner = center('09:20 AM', 20);
     const lines = [
-      'ISS',
-      '',
-      hasLocation ? `842 ${unit} NE` : 'SET HOUSE PIN',
+      `  ${titleInner}  `.slice(0, 22),
+      ` ${timeInner} `.slice(0, 22),
+      center(away),
+      center(coords),
+      center(settings.showAltitude !== false ? alt : ''),
+      center(speed),
     ];
-    if (settings.showCoordinates !== false) lines.push('41.2N 112.0W');
-    if (settings.showAltitude !== false) lines.push(alt);
-    if (lines.length < 5) lines.splice(3, 0, speed);
-    while (lines.length < 6) lines.push('');
-    host.innerHTML = lines.slice(0, 6).map((line) => (
-      `<div class="cn-board-row">${escapeHtml(String(line).padEnd(22).slice(0, 22))}</div>`
-    )).join('');
+    host.innerHTML = lines.slice(0, 6).map((line, rowIndex) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      if (rowIndex === 0) {
+        cells[0] = '■';
+        cells[1] = '■';
+        cells[20] = '■';
+        cells[21] = '■';
+      } else if (rowIndex === 1) {
+        cells[0] = '■';
+        cells[21] = '■';
+      }
+      return `<div class="cn-preview-row">${cells.map((ch, col) => {
+        const isChip = (rowIndex === 0 && (col === 0 || col === 1 || col === 20 || col === 21))
+          || (rowIndex === 1 && (col === 0 || col === 21));
+        const cls = isChip ? ' is-chip-white' : '';
+        return `<span class="${cls.trim()}">${escapeHtml(ch === ' ' || ch === '■' ? '' : ch)}</span>`;
+      }).join('')}</div>`;
+    }).join('');
   }
 
   function renderIssTrackerSettings(data = {}) {
@@ -7122,7 +8164,6 @@
     setIssUnit(settings.distanceUnit);
     setChecked('iss-tracker-show-coords', settings.showCoordinates !== false);
     setChecked('iss-tracker-show-altitude', settings.showAltitude !== false);
-    setChecked('iss-tracker-show-visibility', settings.showVisibility !== false);
     const pill = $('iss-tracker-status-pill');
     const detail = $('iss-tracker-status-detail');
     const location = $('iss-tracker-location');
@@ -7133,14 +8174,14 @@
     }
     if (detail) {
       detail.textContent = hasLocation
-        ? 'Live position and speed relative to the house pin. Free — no API key.'
-        : 'Set a city or ZIP under Location to show distance and bearing from home.';
+        ? 'Marketplace ISS SPACE ORBIT board — away, coords, altitude, speed. Free — no API key.'
+        : 'Set a city or ZIP under Location to show how far the station is from home.';
     }
     if (location) {
       const loc = data.location || {};
       location.textContent = hasLocation
         ? `House pin: ${loc.label || loc.city || 'Home'} (${Number(loc.latitude).toFixed(2)}, ${Number(loc.longitude).toFixed(2)})`
-        : 'Uses the house pin under Settings → Global → Location for distance and bearing.';
+        : 'Uses the house pin under Settings → Global → Location for the AWAY distance.';
     }
     renderIssTrackerPreview(settings, hasLocation);
   }
@@ -7162,18 +8203,16 @@
       distanceUnit: issUnit(),
       showCoordinates: Boolean($('iss-tracker-show-coords')?.checked),
       showAltitude: Boolean($('iss-tracker-show-altitude')?.checked),
-      showVisibility: Boolean($('iss-tracker-show-visibility')?.checked),
     }, true);
   });
 
-  ['iss-tracker-show-coords', 'iss-tracker-show-altitude', 'iss-tracker-show-visibility']
+  ['iss-tracker-show-coords', 'iss-tracker-show-altitude']
     .forEach((id) => {
       $(id)?.addEventListener('change', () => {
         renderIssTrackerPreview({
           distanceUnit: issUnit(),
           showCoordinates: Boolean($('iss-tracker-show-coords')?.checked),
           showAltitude: Boolean($('iss-tracker-show-altitude')?.checked),
-          showVisibility: Boolean($('iss-tracker-show-visibility')?.checked),
         }, true);
       });
     });
@@ -7186,7 +8225,6 @@
         distanceUnit: issUnit(),
         showCoordinates: Boolean($('iss-tracker-show-coords')?.checked),
         showAltitude: Boolean($('iss-tracker-show-altitude')?.checked),
-        showVisibility: Boolean($('iss-tracker-show-visibility')?.checked),
       });
       renderIssTrackerSettings(result);
       toast('ISS tracker settings saved', 'good');
@@ -11323,20 +12361,8 @@
     if (!creditsSettingsLoaded) loadCreditsSettings();
   }
 
-  // -------------------------------------------------------------- Admin session
-
-  $('btn-admin-logout')?.addEventListener('click', async () => {
-    uiStorageRemove(SETTINGS_VIEW_KEY);
-    uiStorageRemove(SETTINGS_SEARCH_KEY);
-    uiStorageRemove(PUSH_VIEW_LEGACY_KEY);
-    pushViewSession = PUSH_VIEW_ORDER[0];
-    try {
-      await apiPost('/api/admin/logout', {});
-    } catch {
-      // still leave the UI even if the network call failed
-    }
-    location.href = '/admin/login.html';
-  });
+  // Admin session: Log out is bound at the top of this file, beside the rest
+  // of the chrome boot, so it works even if the wiring above it threw.
 
   // -------------------------------------------------------------- Start up
 
@@ -11707,9 +12733,15 @@
   let vbAudioCtx = null;
   let vbAudioMaster = null;
   let vbClickBuffers = [];
-  let vbHeardSample = false;
   let vbFlipSample = null;
   let vbFlipSampleReady = false;
+  // Flips that arrived while the board tab was hidden — replay with sound
+  // the next time the admin is actually looking at the flaps.
+  let vbPendingReplay = null;
+
+  function vbBoardWatching() {
+    return document.body.dataset.tab === 'board' && !document.hidden;
+  }
 
   function vbLoadFlipSample() {
     if (vbFlipSample) {
@@ -11808,7 +12840,10 @@
   }
 
   function vbPlayClick() {
-    if (!vbSoundOn || vbReducedMotion() || document.hidden) {
+    // Clicks only while the flaps are on screen — a hidden board tab still
+    // has document.hidden === false, which is how a flip used to rattle
+    // against Push / Settings with nothing to look at.
+    if (!vbSoundOn || vbReducedMotion() || !vbBoardWatching()) {
       return;
     }
     const ctx = vbAudioCtx;
@@ -11838,7 +12873,7 @@
   }
 
   function vbPlayCascade() {
-    if (!vbSoundOn || vbReducedMotion() || document.hidden) {
+    if (!vbSoundOn || vbReducedMotion() || !vbBoardWatching()) {
       return;
     }
     const sample = vbLoadFlipSample();
@@ -12039,6 +13074,52 @@
     }, startDelay);
   }
 
+  function vbSnapToCurrent() {
+    if (!vbTiles || !vbCurrent) {
+      return;
+    }
+    vbStopCascade();
+    for (let index = 0; index < VB_TILES; index += 1) {
+      const tile = vbTiles[index];
+      if (!tile) continue;
+      vbStopTile(index);
+      const code = vbCurrent[index] ?? 0;
+      vbShown[index] = code;
+      vbPaintTile(tile, code);
+    }
+  }
+
+  function vbOnBoardTabLeave() {
+    // Finish in-flight flaps so we do not resume a half-spin later.
+    vbSnapToCurrent();
+  }
+
+  function vbOnBoardTabEnter() {
+    // A flip that landed while we were elsewhere is still worth seeing —
+    // roll committed targets back to what is painted, then walk forward so
+    // sound and flaps stay paired.
+    const pending = vbPendingReplay;
+    vbPendingReplay = null;
+    if (!pending?.layout) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      if (!vbBoardWatching()) return;
+      if (vbShown && vbCurrent) {
+        for (let index = 0; index < VB_TILES; index += 1) {
+          vbCurrent[index] = vbShown[index] ?? 0;
+        }
+      }
+      vbApplyLayout(pending.layout, true, pending.strategy);
+    });
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      vbSnapToCurrent();
+    }
+  });
+
   function vbApplyLayout(layout, animate, strategy) {
     vbEnsureGrid();
     if (!Array.isArray(layout) || !vbTiles) {
@@ -12049,6 +13130,23 @@
       for (const code of row) {
         flat.push(Number(code) || 0);
       }
+    }
+
+    // Flaps on a `display: none` panel never paint; playing the cascade then
+    // is how you heard a flip with nothing moving. Keep the painted board on
+    // the last frame the admin saw and replay when they come back.
+    const watching = vbBoardWatching();
+    if (animate && !watching) {
+      let changing = 0;
+      for (let index = 0; index < VB_TILES; index += 1) {
+        const code = flat[index] ?? 0;
+        if ((vbCurrent[index] ?? 0) !== code) changing += 1;
+        vbCurrent[index] = code;
+      }
+      if (changing) {
+        vbPendingReplay = { layout, strategy: strategy || 'column' };
+      }
+      return;
     }
 
     let starting = 0;
@@ -12080,6 +13178,7 @@
       vbRunFlips(index, vbDrumSteps(vbShown[index], code), vbFlipDelay(index, strategy));
     }
     if (starting) {
+      vbPendingReplay = null;
       vbPlayCascade();
     }
   }
@@ -12320,7 +13419,8 @@
     vbSyncSoundButton();
     vbUnlockAudio();
     if (vbSoundOn) {
-      vbHeardSample = true;
+      // Explicit gesture on the board tab — sample the cascade so muted
+      // browsers prove audio works. Not played on mere tab entry.
       vbPlayCascade();
     } else {
       vbStopCascade();
@@ -13041,12 +14141,16 @@
 
   initSheetDismiss();
 
-  loadPushGrid();
+  // The chrome (status poll, Push tiles) is already up — it boots near the top
+  // of this file so it does not depend on any of the wiring in between.
   refreshDisplays({ quiet: true });
   startDisplayEvents();
-  startPolling();
   applySteamReturnTab();
   loadVestaboardSim().then(() => startVestaboardSimEvents());
   // Fallback poll if EventSource is blocked or drops (SSE is primary).
   setInterval(() => refreshDisplays({ quiet: true }), 60000);
+
+  // Reached only when every binding above survived, so from here on an error
+  // is a runtime problem for a toast to report, not a broken page.
+  bootWindowOpen = false;
 })();

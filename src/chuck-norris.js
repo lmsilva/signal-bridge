@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const SHIPPED = require('./chuck-norris-facts.json');
 const { cleanText, createChuckNorrisSettings } = require('./chuck-norris-settings');
+const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap } = require('./vestaboard/encoder');
 
 const TYPE = 'chuck.facts';
@@ -34,23 +35,25 @@ function newCustomId() {
   return `custom-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
 }
 
-function resolveFacts(settings = {}) {
+function resolveFacts(settings = {}, { computeRows = true } = {}) {
   const hidden = new Set(settings.hiddenIds || []);
+  const removed = new Set(settings.removedIds || []);
   const overrides = settings.overrides || {};
   const rows = [];
 
   for (const fact of loadShipped()) {
     const id = String(fact.id || '').trim();
-    if (!id) {
+    if (!id || removed.has(id)) {
       continue;
     }
     const text = cleanText(overrides[id] != null ? overrides[id] : fact.text);
+    const overridden = overrides[id] != null;
     rows.push({
       id,
       text,
       custom: false,
       hidden: hidden.has(id),
-      rows: factRows(text).length,
+      rows: computeRows || overridden ? factRows(text).length : (text ? 1 : 0),
     });
   }
 
@@ -65,7 +68,7 @@ function resolveFacts(settings = {}) {
       text,
       custom: true,
       hidden: false,
-      rows: factRows(text).length,
+      rows: computeRows ? factRows(text).length : (fitsBoard(text) ? 1 : 0),
     });
   }
 
@@ -73,7 +76,12 @@ function resolveFacts(settings = {}) {
 }
 
 function matchingFacts(settings = {}) {
-  return resolveFacts(settings).filter((fact) => !fact.hidden && fact.text && fact.rows > 0);
+  return resolveFacts(settings, { computeRows: false })
+    .filter((fact) => !fact.hidden && fact.text && fact.rows > 0);
+}
+
+function countAvailable(settings = {}) {
+  return matchingFacts(settings).length;
 }
 
 function pickFact(settings = {}, { random = Math.random } = {}) {
@@ -105,7 +113,7 @@ function buildChuckNorrisPayload(fact, { asOf } = {}) {
 
 function listFacts(settings = {}, { query = '', hidden = false, page = 1, pageSize = 20 } = {}) {
   const needle = String(query || '').trim().toLowerCase();
-  let rows = resolveFacts(settings);
+  let rows = resolveFacts(settings, { computeRows: false });
   if (!hidden) {
     rows = rows.filter((fact) => !fact.hidden);
   }
@@ -118,13 +126,17 @@ function listFacts(settings = {}, { query = '', hidden = false, page = 1, pageSi
   const pages = Math.max(1, Math.ceil(total / size));
   const current = Math.min(pages, Math.max(1, Number(page) || 1));
   const start = (current - 1) * size;
+  const facts = rows.slice(start, start + size).map((fact) => ({
+    ...fact,
+    rows: factRows(fact.text).length,
+  }));
   return {
     query: needle,
     page: current,
     pageSize: size,
     pages,
     total,
-    facts: rows.slice(start, start + size),
+    facts,
   };
 }
 
@@ -133,9 +145,8 @@ function createChuckNorris(config, log) {
 
   function snapshot(extra = {}) {
     const settings = settingsApi.get();
-    const all = resolveFacts(settings);
     return {
-      available: all.filter((fact) => !fact.hidden && fact.rows > 0).length,
+      available: countAvailable(settings),
       total: loadShipped().length + settings.custom.length,
       customCount: settings.custom.length,
       hiddenCount: settings.hiddenIds.length,
@@ -147,7 +158,11 @@ function createChuckNorris(config, log) {
     getSettings: () => settingsApi.get(),
     statusSnapshot(query) {
       const settings = settingsApi.get();
-      return snapshot(listFacts(settings, query));
+      if (query && (query.page != null || query.pageSize != null || query.query
+        || query.q || query.hidden)) {
+        return snapshot(listFacts(settings, query));
+      }
+      return snapshot();
     },
     addFact(text) {
       const next = cleanText(text);
@@ -159,7 +174,7 @@ function createChuckNorris(config, log) {
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updateFact(id, { text, hidden } = {}) {
+    updateFact(id, { text, hidden, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing fact id' };
@@ -167,6 +182,14 @@ function createChuckNorris(config, log) {
       const settings = settingsApi.get();
       const customIndex = settings.custom.findIndex((row) => row.id === key);
       const shipped = loadShipped().some((row) => row.id === key);
+      if (remove) {
+        const result = applyCorpusRemove(settings, key, { isShipped: shipped });
+        if (!result.ok) {
+          return { ok: false, error: 'Unknown fact' };
+        }
+        settingsApi.update(result.patch);
+        return { ok: true, ...this.statusSnapshot() };
+      }
 
       if (customIndex >= 0) {
         const custom = [...settings.custom];

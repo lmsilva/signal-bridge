@@ -16,13 +16,65 @@
   --danger-ink: #450a0a;
   --radius: 16px;
   --tab-h: 62px;
+  /* Measured at runtime from .sticky-chrome / .sched-head. */
+  --sticky-chrome-h: 0px;
+  --sched-head-h: 0px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* One scrollbar for the whole admin. Sheets, lists and panes used to mix the
+   styled thin bar with whatever the OS draws, which read as unfinished. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 163, 196, 0.4) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(143, 163, 196, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 163, 196, 0.55);
+  background-clip: padding-box;
+}
+
 /* Author `display` rules (e.g. .sheet-backdrop { display: flex }) override the
    UA [hidden] stylesheet — keep the HTML hidden attribute working. */
 [hidden] { display: none !important; }
+
+/* Shown only when part of app.js fails to start. Silence was the worst part
+   of that failure: the page just sat on "connecting…" with no explanation. */
+.boot-error {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--tab-h) + 12px);
+  z-index: 9999;
+  padding: 12px 40px 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--danger);
+  background: #2a1414;
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.boot-error-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+}
 
 html, body {
   margin: 0;
@@ -1623,20 +1675,82 @@ textarea.field-input.text-input-area {
   margin: 0 0 14px;
 }
 
+.tab-sticky-head {
+  position: sticky;
+  top: var(--sticky-chrome-h);
+  z-index: 5;
+  background: var(--bg);
+  padding: 4px 0 10px;
+  margin-left: -2px;
+  margin-right: -2px;
+  padding-left: 2px;
+  padding-right: 2px;
+  border-bottom: 1px solid rgba(38, 52, 80, 0.55);
+  box-shadow: 0 8px 16px -12px rgba(0, 0, 0, 0.55);
+}
+
 .settings-search-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .settings-search {
-  flex: 1 1 auto;
+  flex: 1 1 12rem;
   min-width: 0;
   margin: 0;
 }
 
 .settings-search .field-input {
   width: 100%;
+}
+
+.display-kind-filter-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.display-kind-filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #94a3b8);
+  white-space: nowrap;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+}
+
+.display-kind-filter {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  /* Inline in the search row — do not keep the form-stack margin from .segmented */
+  margin: 0;
+  align-self: center;
+}
+
+.display-kind-filter .segmented-btn {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .display-kind-filter-wrap {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+  .display-kind-filter {
+    flex: 1 1 auto;
+  }
+  .display-kind-filter .segmented-btn {
+    flex: 1 1 auto;
+  }
 }
 
 .settings-view-tabs {
@@ -1699,10 +1813,11 @@ textarea.field-input.text-input-area {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .push-search {
-  flex: 1 1 auto;
+  flex: 1 1 12rem;
   min-width: 0;
   margin: 0;
 }
@@ -1747,6 +1862,7 @@ textarea.field-input.text-input-area {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  margin: 0 0 12px;
 }
 
 .sched-view-tabs {
@@ -1776,9 +1892,22 @@ textarea.field-input.text-input-area {
 
 .sched-setup-card {
   position: sticky;
-  top: 0;
-  z-index: 3;
+  top: calc(var(--sticky-chrome-h) + var(--sched-head-h));
+  z-index: 4;
   margin-bottom: 12px;
+  transition: padding 0.15s ease;
+}
+
+.sched-setup-card.is-compact .sched-add-row {
+  display: none;
+}
+
+.sched-setup-card.is-compact .sched-search-label {
+  margin-bottom: 4px;
+}
+
+.sched-setup-card.is-compact #sched-rule-meta {
+  display: none;
 }
 
 .sched-search-label {
@@ -1790,6 +1919,10 @@ textarea.field-input.text-input-area {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.sched-setup-card.is-compact .sched-search-row {
+  margin-bottom: 0;
 }
 
 .sched-search {
@@ -1813,6 +1946,56 @@ textarea.field-input.text-input-area {
   min-width: 0;
 }
 
+.sched-command-picker {
+  position: relative;
+}
+
+.sched-command-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 6;
+  max-height: min(280px, 40vh);
+  overflow-y: auto;
+  margin-top: 0;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev-2, var(--bg-elev));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.sched-command-list .typeahead-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: transparent;
+}
+
+.sched-command-list .typeahead-item:hover,
+.sched-command-list .typeahead-item.is-active {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.sched-command-list .typeahead-item-title {
+  font-weight: 700;
+}
+
+.sched-command-list .typeahead-item-group {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.sched-command-list .typeahead-empty {
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
 .sched-add-row #btn-sched-add {
   flex: 0 0 auto;
   white-space: nowrap;
@@ -1820,6 +2003,41 @@ textarea.field-input.text-input-area {
 
 #sched-rule-meta {
   margin: 10px 0 0;
+}
+
+/* Floating jump controls for long Push / Settings / Scheduler panes. */
+.page-jump {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 14px);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-jump-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(22, 33, 59, 0.94);
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.page-jump-btn:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: var(--accent);
+}
+
+.page-jump-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .sched-rule-group {
@@ -2668,6 +2886,7 @@ textarea.field-input.text-input-area {
   #tab-settings .flightplan-settings-card,
   #tab-settings .chuck-norris-settings-card,
   #tab-settings .amazing-facts-settings-card,
+  #tab-settings .world-geography-facts-settings-card,
   #tab-settings .conversation-starters-settings-card,
   #tab-settings .stoic-quotes-settings-card,
   #tab-settings .on-this-day-settings-card,
@@ -3557,6 +3776,7 @@ textarea.field-input.text-input-area {
 
 @media (min-width: 640px) and (orientation: landscape) {
   #tab-settings .credits-settings-card { grid-column: 1 / -1; }
+}
 
 .cn-compose {
   display: grid;
@@ -3604,6 +3824,8 @@ textarea.field-input.text-input-area {
   min-width: 0;
   box-sizing: border-box;
   justify-self: end;
+  overflow: hidden;
+  container-type: inline-size;
 }
 .cn-board-preview-violet {
   border-color: #3a2a4a;
@@ -3618,6 +3840,13 @@ textarea.field-input.text-input-area {
 .cn-board-preview-stoic .cn-preview-row span {
   background: #1a1a1a;
   color: #e8e8e8;
+}
+.cn-board-preview-amazing {
+  border-color: #4a3a10;
+}
+.cn-board-preview-amazing .cn-preview-row:first-child span {
+  background: #e6c04a;
+  color: #1a1408;
 }
 .cn-board-preview-bake {
   border-color: #4a4010;
@@ -3637,7 +3866,7 @@ textarea.field-input.text-input-area {
   place-items: center;
   background: #1c140a;
   color: #f4c56a;
-  font-size: clamp(0.35rem, 1.6vw, 0.5rem);
+  font-size: clamp(0.28rem, 4cqw, 0.45rem);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
@@ -3662,20 +3891,196 @@ textarea.field-input.text-input-area {
   flex-wrap: wrap;
   margin-top: 12px;
 }
+/* The seven corpus managers (facts, quotes, prompts, ideas) share this shell.
+   Scrolling the whole sheet carried the search box and the pager off-screen,
+   so the head, compose block and pager are pinned and only the list moves. */
 .cn-manage-sheet {
-  max-width: min(720px, calc(100vw - 24px));
-  max-height: min(88vh, 900px);
-  overflow: auto;
+  max-width: min(920px, calc(100vw - 24px));
+  max-height: min(88dvh, 900px);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cn-manage-sheet > * {
+  flex: 0 0 auto;
+}
+.cn-manage-sheet > .cn-fact-list {
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow-y: auto;
+  padding: 2px 6px 2px 2px;
+  margin: 0 -2px;
+}
+.cn-manage-sheet > .cn-pager {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+/* Manage dialogs need a readable board, not a postage stamp — settings cards
+   keep the smaller thumbnail; only the sheet compose column grows. */
+.cn-manage-sheet .cn-compose {
+  gap: 16px 20px;
+}
+@media (min-width: 820px) {
+  .cn-manage-sheet .cn-compose {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    align-items: start;
+  }
+}
+.cn-manage-sheet .cn-board-preview {
+  max-width: 320px;
+  padding: 8px;
+  gap: 3px;
+  border-radius: 12px;
+}
+.cn-manage-sheet .cn-preview-row {
+  gap: 1.5px;
+}
+.cn-manage-sheet .cn-preview-row span {
+  font-size: clamp(0.42rem, 4.4cqw, 0.72rem);
+}
+.cn-preview-col {
+  display: grid;
+  gap: 6px;
+  justify-self: end;
+  min-width: 0;
   width: 100%;
 }
-.cn-manage-sheet .cn-fact-list {
-  max-height: none;
+.cn-preview-col .field-label {
+  text-align: right;
+}
+.cn-manage-sheet .cn-preview-col .cn-board-preview {
+  justify-self: stretch;
+  width: 100%;
+  max-width: none;
 }
 @media (max-width: 819px) {
+  .cn-preview-col {
+    justify-self: start;
+  }
+  .cn-preview-col .field-label {
+    text-align: left;
+  }
   .cn-board-preview {
     justify-self: start;
     max-width: 180px;
   }
+  .cn-manage-sheet .cn-board-preview,
+  .cn-manage-sheet .cn-preview-col .cn-board-preview {
+    max-width: min(320px, 100%);
+    width: 100%;
+  }
+}
+.af-pool-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 0 8px;
+}
+.af-pool-copy {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.af-pool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.af-pool-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.af-pool-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+.af-pool-panel > summary::-webkit-details-marker { display: none; }
+.af-pool-panel > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 120ms ease;
+}
+.af-pool-panel[open] > summary::before { transform: rotate(90deg); }
+.af-pool-panel[open] > summary { color: var(--text); }
+.af-pool-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-pool-panel-summary {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.af-pool-panel-hint {
+  margin: 10px 0 6px;
+}
+.af-pool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+/* Settings card has the width — let every topic show instead of a tiny scroll box. */
+.amazing-facts-settings-card .af-pool-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 6px 10px;
+  max-height: none;
+  overflow: visible;
+}
+.af-pool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line, #3a3428);
+  background: var(--bg-elev-2, #1a1814);
+  font-size: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+}
+.amazing-facts-settings-card .af-pool-chip {
+  width: 100%;
+}
+.af-pool-chip.is-on {
+  border-color: rgba(95, 208, 255, 0.45);
+  background: rgba(95, 208, 255, 0.08);
+}
+.af-pool-chip input {
+  margin: 0;
+  flex: none;
+}
+.af-pool-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-pool-chip .af-pool-chip-count {
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+.af-browse-select {
+  flex: 0 1 200px;
 }
 .cn-toolbar {
   display: flex;
@@ -3689,16 +4094,25 @@ textarea.field-input.text-input-area {
 }
 .cn-fact-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  align-content: start;
 }
 .cn-fact {
+  display: grid;
+  gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--bg-elev-2);
 }
+/* Rows are for scanning, not for drafting — the tall compose box up top is
+   where long text gets written. */
+.cn-manage-sheet .cn-fact-text {
+  min-height: 52px;
+}
 .cn-fact.is-hidden {
   opacity: 0.62;
+  border-style: dashed;
 }
 .cn-fact.is-custom {
   border-color: rgba(244, 197, 106, 0.35);
@@ -3707,8 +4121,8 @@ textarea.field-input.text-input-area {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 8px 10px;
+  flex-wrap: wrap;
 }
 .cn-fact-actions {
   display: flex;

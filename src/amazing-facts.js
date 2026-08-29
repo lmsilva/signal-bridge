@@ -12,6 +12,7 @@ const {
   cleanCategory,
   createAmazingFactsSettings,
 } = require('./amazing-facts-settings');
+const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap } = require('./vestaboard/encoder');
 
 const TYPE = 'amazing.facts';
@@ -56,24 +57,28 @@ function newCustomId() {
   return `custom-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
 }
 
-function resolveFacts(settings = {}) {
+function resolveFacts(settings = {}, { computeRows = true } = {}) {
   const hidden = new Set(settings.hiddenIds || []);
+  const removed = new Set(settings.removedIds || []);
   const overrides = settings.overrides || {};
   const rows = [];
 
   for (const fact of loadShipped()) {
     const id = String(fact.id || '').trim();
-    if (!id) {
+    if (!id || removed.has(id)) {
       continue;
     }
     const text = cleanText(overrides[id] != null ? overrides[id] : fact.text);
+    const overridden = overrides[id] != null;
     rows.push({
       id,
       text,
       category: cleanCategory(fact.category) || 'trivia',
       custom: false,
       hidden: hidden.has(id),
-      rows: factRows(text).length,
+      // Shipped corpus is pre-fit at build time; only wrap when listing or when
+      // house text may have changed length.
+      rows: computeRows || overridden ? factRows(text).length : (text ? 1 : 0),
       source: fact.source || 'shipped',
     });
   }
@@ -90,7 +95,7 @@ function resolveFacts(settings = {}) {
       category: cleanCategory(fact.category) || 'custom',
       custom: true,
       hidden: false,
-      rows: factRows(text).length,
+      rows: computeRows ? factRows(text).length : (fitsBoard(text) ? 1 : 0),
       source: 'custom',
     });
   }
@@ -100,7 +105,7 @@ function resolveFacts(settings = {}) {
 
 function matchingFacts(settings = {}) {
   const allowed = new Set((settings.categories || []).map(cleanCategory).filter(Boolean));
-  return resolveFacts(settings).filter((fact) => {
+  return resolveFacts(settings, { computeRows: false }).filter((fact) => {
     if (fact.hidden || !fact.text || fact.rows <= 0) {
       return false;
     }
@@ -109,6 +114,11 @@ function matchingFacts(settings = {}) {
     }
     return true;
   });
+}
+
+/** Cheap ready-count for /api/commands hasContent — no Vestaboard wrap pass. */
+function countAvailable(settings = {}) {
+  return matchingFacts(settings).length;
 }
 
 function pickFact(settings = {}, { random = Math.random } = {}) {
@@ -148,7 +158,7 @@ function listFacts(settings = {}, {
 } = {}) {
   const needle = String(query || '').trim().toLowerCase();
   const categoryFilter = cleanCategory(category);
-  let rows = resolveFacts(settings);
+  let rows = resolveFacts(settings, { computeRows: false });
   if (!hidden) {
     rows = rows.filter((fact) => !fact.hidden);
   }
@@ -165,6 +175,10 @@ function listFacts(settings = {}, {
   const pages = Math.max(1, Math.ceil(total / size));
   const current = Math.min(pages, Math.max(1, Number(page) || 1));
   const start = (current - 1) * size;
+  const facts = rows.slice(start, start + size).map((fact) => ({
+    ...fact,
+    rows: factRows(fact.text).length,
+  }));
   return {
     query: needle,
     category: categoryFilter,
@@ -172,7 +186,7 @@ function listFacts(settings = {}, {
     pageSize: size,
     pages,
     total,
-    facts: rows.slice(start, start + size),
+    facts,
   };
 }
 
@@ -181,10 +195,8 @@ function createAmazingFacts(config, log) {
 
   function snapshot(extra = {}) {
     const settings = settingsApi.get();
-    const all = resolveFacts(settings);
-    const available = matchingFacts(settings).length;
     return {
-      available,
+      available: countAvailable(settings),
       total: loadShipped().length + settings.custom.length,
       customCount: settings.custom.length,
       hiddenCount: settings.hiddenIds.length,
@@ -200,7 +212,13 @@ function createAmazingFacts(config, log) {
     getSettings: () => settingsApi.get(),
     statusSnapshot(query) {
       const settings = settingsApi.get();
-      return snapshot(listFacts(settings, query));
+      // /api/commands only needs `available`. Skip the paginated wrap pass unless
+      // the admin asked for a fact list.
+      if (query && (query.page != null || query.pageSize != null || query.query
+        || query.q || query.category || query.hidden)) {
+        return snapshot(listFacts(settings, query));
+      }
+      return snapshot();
     },
     updateFilters({ categories } = {}) {
       settingsApi.update({
@@ -225,7 +243,7 @@ function createAmazingFacts(config, log) {
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updateFact(id, { text, hidden, category } = {}) {
+    updateFact(id, { text, hidden, category, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing fact id' };
@@ -233,6 +251,14 @@ function createAmazingFacts(config, log) {
       const settings = settingsApi.get();
       const customIndex = settings.custom.findIndex((row) => row.id === key);
       const shipped = loadShipped().some((row) => row.id === key);
+      if (remove) {
+        const result = applyCorpusRemove(settings, key, { isShipped: shipped });
+        if (!result.ok) {
+          return { ok: false, error: 'Unknown fact' };
+        }
+        settingsApi.update(result.patch);
+        return { ok: true, ...this.statusSnapshot() };
+      }
 
       if (customIndex >= 0) {
         const custom = [...settings.custom];
@@ -313,6 +339,7 @@ module.exports = {
   fitsBoard,
   resolveFacts,
   matchingFacts,
+  countAvailable,
   pickFact,
   listFacts,
   buildAmazingFactsPayload,

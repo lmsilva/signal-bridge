@@ -14,6 +14,7 @@ const {
   cleanDay,
   createOnThisDaySettings,
 } = require('./on-this-day-settings');
+const { applyCorpusRemove } = require('./corpus-remove');
 const { fold, wrap } = require('./vestaboard/encoder');
 
 const TYPE = 'history.day';
@@ -82,16 +83,25 @@ function withinYearRange(year, settings = {}) {
   return true;
 }
 
-function resolveEvents(settings = {}) {
+function resolveEvents(settings = {}, { computeRows = true, month, day } = {}) {
   const hidden = new Set(settings.hiddenIds || []);
+  const removed = new Set(settings.removedIds || []);
   const overrides = settings.overrides || {};
+  const wantMonth = cleanMonth(month);
+  const wantDay = cleanDay(day, wantMonth || 1);
   const rows = [];
 
   for (const event of loadShipped()) {
     const id = String(event.id || '').trim();
-    const month = cleanMonth(event.month);
-    const day = cleanDay(event.day, month || 1);
-    if (!id || !month || !day) {
+    const eventMonth = cleanMonth(event.month);
+    const eventDay = cleanDay(event.day, eventMonth || 1);
+    if (!id || removed.has(id) || !eventMonth || !eventDay) {
+      continue;
+    }
+    if (wantMonth != null && eventMonth !== wantMonth) {
+      continue;
+    }
+    if (wantDay != null && eventDay !== wantDay) {
       continue;
     }
     const patch = overrides[id] || {};
@@ -100,32 +110,40 @@ function resolveEvents(settings = {}) {
     if (year == null) {
       continue;
     }
+    const overridden = patch.text != null;
     rows.push({
       id,
-      month,
-      day,
+      month: eventMonth,
+      day: eventDay,
       year,
       text,
       custom: false,
       hidden: hidden.has(id),
-      rows: eventRows(text).length,
+      // Shipped corpus is pre-fit; only wrap house edits or when listing a page.
+      rows: computeRows || overridden ? eventRows(text).length : (text ? 1 : 0),
       source: event.source || 'shipped',
     });
   }
 
   for (const event of settings.custom || []) {
     const id = String(event.id || '').trim();
-    const month = cleanMonth(event.month);
-    const day = cleanDay(event.day, month || 1);
+    const eventMonth = cleanMonth(event.month);
+    const eventDay = cleanDay(event.day, eventMonth || 1);
     const year = cleanYear(event.year);
     const text = cleanText(event.text);
-    if (!id || !month || !day || year == null || !text) {
+    if (!id || !eventMonth || !eventDay || year == null || !text) {
+      continue;
+    }
+    if (wantMonth != null && eventMonth !== wantMonth) {
+      continue;
+    }
+    if (wantDay != null && eventDay !== wantDay) {
       continue;
     }
     rows.push({
       id,
-      month,
-      day,
+      month: eventMonth,
+      day: eventDay,
       year,
       text,
       custom: true,
@@ -139,17 +157,24 @@ function resolveEvents(settings = {}) {
 }
 
 function matchingEvents(settings = {}, { month, day } = {}) {
-  const m = cleanMonth(month);
-  const d = cleanDay(day, m || 1);
-  return resolveEvents(settings).filter((event) => (
+  return resolveEvents(settings, { month, day }).filter((event) => (
     !event.hidden
     && event.text
     && event.rows > 0
     && event.rows <= BODY_ROWS
     && withinYearRange(event.year, settings)
-    && (m == null || event.month === m)
-    && (d == null || event.day === d)
   ));
+}
+
+/** Cheap ready-count for /api/commands hasContent — no full-corpus wrap. */
+function countAvailable(settings = {}, { month, day } = {}) {
+  return resolveEvents(settings, { computeRows: false, month, day }).filter((event) => (
+    !event.hidden
+    && event.text
+    && event.rows > 0
+    && event.rows <= BODY_ROWS
+    && withinYearRange(event.year, settings)
+  )).length;
 }
 
 function pickEvent(settings = {}, { month, day, random = Math.random } = {}) {
@@ -198,15 +223,9 @@ function listEvents(settings = {}, {
   const needle = String(query || '').trim().toLowerCase();
   const m = cleanMonth(month);
   const d = cleanDay(day, m || 1);
-  let rows = resolveEvents(settings);
+  let rows = resolveEvents(settings, { computeRows: false, month: m, day: d });
   if (!hidden) {
     rows = rows.filter((event) => !event.hidden);
-  }
-  if (m != null) {
-    rows = rows.filter((event) => event.month === m);
-  }
-  if (d != null) {
-    rows = rows.filter((event) => event.day === d);
   }
   if (needle) {
     rows = rows.filter((event) => event.text.toLowerCase().includes(needle)
@@ -228,7 +247,10 @@ function listEvents(settings = {}, {
     total,
     month: m,
     day: d,
-    events: rows.slice(start, start + size),
+    events: rows.slice(start, start + size).map((event) => ({
+      ...event,
+      rows: eventRows(event.text).length,
+    })),
   };
 }
 
@@ -266,21 +288,11 @@ function createOnThisDay(config, log, { getLocaleSettings } = {}) {
   function snapshot(extra = {}) {
     const settings = settingsApi.get();
     const today = todayParts();
-    const all = resolveEvents(settings);
-    const boardReady = all.filter((event) => (
-      !event.hidden
-      && event.text
-      && event.rows > 0
-      && event.rows <= BODY_ROWS
-      && withinYearRange(event.year, settings)
-    ));
-    const todayReady = boardReady.filter((event) => (
-      event.month === today.month && event.day === today.day
-    ));
+    const todayReady = countAvailable(settings, today);
     return {
-      available: todayReady.length,
-      todayAvailable: todayReady.length,
-      totalAvailable: boardReady.length,
+      available: todayReady,
+      todayAvailable: todayReady,
+      totalAvailable: countAvailable(settings),
       total: loadShipped().length + settings.custom.length,
       customCount: settings.custom.length,
       hiddenCount: settings.hiddenIds.length,
@@ -302,7 +314,11 @@ function createOnThisDay(config, log, { getLocaleSettings } = {}) {
     getSettings: () => settingsApi.get(),
     statusSnapshot(query) {
       const settings = settingsApi.get();
-      return snapshot(listEvents(settings, query));
+      if (query && (query.page != null || query.pageSize != null || query.query
+        || query.q || query.hidden || query.month != null || query.day != null)) {
+        return snapshot(listEvents(settings, query));
+      }
+      return snapshot();
     },
     updateFilters({ minYear, maxYear } = {}) {
       settingsApi.update({
@@ -339,7 +355,7 @@ function createOnThisDay(config, log, { getLocaleSettings } = {}) {
       settingsApi.update({ custom });
       return { ok: true, ...this.statusSnapshot() };
     },
-    updateEvent(id, { text, year, month, day, hidden } = {}) {
+    updateEvent(id, { text, year, month, day, hidden, remove } = {}) {
       const key = String(id || '').trim();
       if (!key) {
         return { ok: false, error: 'Missing event id' };
@@ -347,6 +363,14 @@ function createOnThisDay(config, log, { getLocaleSettings } = {}) {
       const settings = settingsApi.get();
       const customIndex = settings.custom.findIndex((row) => row.id === key);
       const shipped = loadShipped().some((row) => row.id === key);
+      if (remove) {
+        const result = applyCorpusRemove(settings, key, { isShipped: shipped });
+        if (!result.ok) {
+          return { ok: false, error: 'Unknown event' };
+        }
+        settingsApi.update(result.patch);
+        return { ok: true, ...this.statusSnapshot() };
+      }
 
       if (customIndex >= 0) {
         const custom = [...settings.custom];
@@ -443,6 +467,7 @@ module.exports = {
   formatYear,
   formatDateLine,
   matchingEvents,
+  countAvailable,
   pickEvent,
   buildOnThisDayPayload,
   listEvents,

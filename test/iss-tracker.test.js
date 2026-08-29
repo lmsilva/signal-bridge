@@ -10,12 +10,15 @@ const {
   bearingDegrees,
   compassLabel,
   formatCoord,
-  formatSpeed,
-  formatAltitude,
+  formatAway,
+  formatGoing,
+  formatHigh,
+  formatIssClock,
   buildIssTrackPayload,
   createIssTracker,
 } = require('../src/iss-tracker');
 const { issTrackFrames } = require('../src/vestaboard/formatters/feeds');
+const { decodeCodes, CHIPS } = require('../src/vestaboard/encoder');
 
 test('haversine and compass helpers are sane', () => {
   const km = haversineKm(40.41, -111.85, 41.41, -111.85);
@@ -25,11 +28,12 @@ test('haversine and compass helpers are sane', () => {
   assert.equal(compassLabel(bearingDegrees(0, 0, 0, 10)), 'E');
 });
 
-test('format helpers honour miles vs km', () => {
-  assert.match(formatSpeed(27600, 'miles'), /MPH/);
-  assert.match(formatSpeed(27600, 'km'), /KM\/H/);
-  assert.match(formatAltitude(420, 'miles'), /MI UP/);
-  assert.equal(formatCoord(41.234, -112.4), '41.2N 112.4W');
+test('format helpers match the marketplace ISS board', () => {
+  assert.match(formatGoing(27600, 'miles'), /^GOING [\d,]+ MPH$/);
+  assert.match(formatHigh(420, 'miles'), /^@  [\d,]+ MI HIGH$/);
+  assert.equal(formatCoord(-1.45, -33.56), '1.45° S,  33.56° W');
+  assert.match(formatAway(6305, 'miles'), /MI AWAY @$/);
+  assert.match(formatIssClock('2026-08-29T15:20:00.000Z', 'America/Denver'), /09:20 AM/);
 });
 
 test('buildIssTrackPayload is a vestaboard iss.track card relative to home', () => {
@@ -43,19 +47,29 @@ test('buildIssTrackPayload is a vestaboard iss.track card relative to home', () 
       source: 'wheretheiss',
       timestamp: Date.now(),
     },
-    locale: { latitude: 40.41, longitude: -111.85, city: 'Lehi' },
+    locale: { latitude: 40.41, longitude: -111.85, city: 'Lehi', timeZone: 'America/Denver' },
     settings: { distanceUnit: 'miles', showAltitude: true, showCoordinates: true, showVisibility: true },
   });
   assert.equal(payload.type, TYPE);
   assert.equal(payload.hasHome, true);
-  assert.ok(payload.relativeLabel);
-  assert.ok(payload.speedLabel);
+  assert.match(payload.awayLabel, /AWAY @$/);
+  assert.match(payload.speedLabel, /^GOING /);
+  assert.match(payload.altitudeLabel, /HIGH$/);
+  assert.match(payload.coordLabel, /°/);
+  assert.ok(payload.timeLabel);
   assert.equal(payload.visibilityLabel, 'DAYLIGHT');
 
   const frames = issTrackFrames(payload);
   assert.equal(frames.length, 1);
   assert.equal(frames[0].source, 'iss.track');
   assert.equal(frames[0].rows.length, 6);
+  assert.match(decodeCodes(frames[0].rows[0]), /ISS SPACE ORBIT/);
+  assert.equal(frames[0].rows[0][0], CHIPS.white);
+  assert.equal(frames[0].rows[0][1], CHIPS.white);
+  assert.equal(frames[0].rows[1][0], CHIPS.white);
+  assert.equal(frames[0].rows[1][21], CHIPS.white);
+  assert.match(decodeCodes(frames[0].rows[2]), /AWAY/);
+  assert.match(decodeCodes(frames[0].rows[5]), /GOING/);
 });
 
 test('issTrackFrames refuse missing coordinates', () => {
@@ -94,6 +108,7 @@ test('createIssTracker fetches WTIA and builds a payload', async () => {
   assert.equal(payload.source, 'wheretheiss');
   assert.equal(payload.visibilityLabel, 'ECLIPSED');
   assert.ok(payload.hasHome);
+  assert.match(payload.awayLabel, /AWAY @$/);
 });
 
 test('createIssTracker falls back to Open Notify', async () => {

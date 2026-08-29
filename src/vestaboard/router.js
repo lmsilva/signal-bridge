@@ -65,6 +65,7 @@ const COMMAND_TO_TYPE = {
   'signal.quiet-hours': 'quiet-hours.reminder',
   'chuck.facts': 'chuck.facts',
   'amazing.facts': 'amazing.facts',
+  'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',
   'stoic.quotes': 'stoic.quotes',
   'history.day': 'history.day',
