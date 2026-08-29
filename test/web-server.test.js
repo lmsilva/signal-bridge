@@ -1095,6 +1095,31 @@ test('learn japanese push delivers a romaji word to the Vestaboard', async () =>
   }
 });
 
+test('chuck norris push delivers a board-fit fact and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/chuck-norris/facts?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.facts.length > 0);
+
+    const pushed = await postJson(base, '/api/push/chuck-norris');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'chuck.facts');
+    assert.match(pushed.body.fact.text, /Chuck Norris/i);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'chuck.facts');
+
+    const added = await postJson(base, '/api/chuck-norris/facts', {
+      text: 'Chuck Norris can unit test the bridge.',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('quiet hours reminder push delivers a random night card to the Vestaboard', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1223,10 +1248,13 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/locale\/settings/);
   assert.match(html, /id="learn-japanese-settings-card"/);
   assert.match(js, /\/api\/learn-japanese\/settings/);
-  assert.match(html, /styles\.css\?v=signal118/);
-  assert.match(html, /app\.js\?v=signal118/);
+  assert.match(html, /styles\.css\?v=signal120/);
+  assert.match(html, /app\.js\?v=signal120/);
+  assert.match(js, /tabId === 'settings'[\s\S]*applySettingsFilter\(currentSettingsView\(\)\)/);
   assert.match(html, /id="vb-form-quiet-remind"/);
+  assert.match(html, /id="chuck-norris-settings-card"/);
   assert.match(js, /quiet-hours/);
+  assert.match(js, /\/api\/chuck-norris\/facts/);
   assert.match(js, /function showSettingsView/);
   assert.match(js, /function applySettingsFilter/);
   assert.match(js, /SETTINGS_VIEW_KEY/);

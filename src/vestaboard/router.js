@@ -62,6 +62,7 @@ const COMMAND_TO_TYPE = {
   'weather.weekly': 'weather.weekly',
   'japanese.learn': 'japanese.learn',
   'signal.quiet-hours': 'quiet-hours.reminder',
+  'chuck.facts': 'chuck.facts',
 };
 
 function typeOf(payload, commandId) {

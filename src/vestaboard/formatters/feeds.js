@@ -1,5 +1,5 @@
 // Feeds family of board frames (03 §D): YouTube, The Upside, Wiki, Overhead,
-// trivia, Flight Plan, Learn Japanese, and Quiet Hours Reminder.
+// trivia, Flight Plan, Learn Japanese, Quiet Hours Reminder, and Chuck Norris.
 //
 // Trivia is the only formatter that refuses work. A question that cannot fit
 // a single frame is skipped rather than paged, because a multi-frame question
@@ -619,6 +619,51 @@ function quietHoursReminderFrames(payload = {}) {
   )];
 }
 
+function norrisChipRow(text) {
+  const row = blankRow(COLS);
+  row[0] = chipCode('orange');
+  row[1] = chipCode('orange');
+  row[COLS - 2] = chipCode('orange');
+  row[COLS - 1] = chipCode('orange');
+  if (text) {
+    centered(fold(text), { from: 2, width: 18, row });
+  }
+  return row;
+}
+
+/**
+ * Chuck Norris Fun Facts (marketplace night-card): orange title chips,
+ * left-aligned joke, one frame when it fits, a second page if a custom
+ * fact runs long.
+ */
+function chuckNorrisFrames(payload = {}) {
+  const text = fold(payload.fact?.text || payload.text || '');
+  if (!text) {
+    return [];
+  }
+  const lines = wrap(text, COLS);
+  if (!lines.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < lines.length; index += 5) {
+    const chunk = lines.slice(index, index + 5);
+    const body = [0, 1, 2, 3, 4].map((rowIndex) => {
+      const row = blankRow(COLS);
+      if (chunk[rowIndex]) {
+        placeText(row, chunk[rowIndex], 0);
+      }
+      return row;
+    });
+    frames.push(snapshotFrame(
+      assertValidLayout([norrisChipRow('CHUCK NORRIS'), ...body], 'chuck norris'),
+      'Chuck Norris',
+      'chuck.facts',
+    ));
+  }
+  return frames;
+}
+
 const FORMATTERS = {
   'youtube.now-playing': youtubeFrames,
   'upside-news.round': upsideFrames,
@@ -628,6 +673,7 @@ const FORMATTERS = {
   'flightplan.flight': flightPlanBoardFrames,
   'japanese.learn': learnJapaneseFrames,
   'quiet-hours.reminder': quietHoursReminderFrames,
+  'chuck.facts': chuckNorrisFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -646,6 +692,7 @@ module.exports = {
   flightPlanBoardFrames,
   learnJapaneseFrames,
   quietHoursReminderFrames,
+  chuckNorrisFrames,
   triviaGate,
   youtubeStatsLine,
 };

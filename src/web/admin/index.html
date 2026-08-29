@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal118">
+  <link rel="stylesheet" href="styles.css?v=signal120">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -141,7 +141,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="3" aria-busy="true"></div>
+               data-skeleton-count="4" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="travel">
@@ -1044,6 +1044,42 @@
               <p class="hint" id="learn-japanese-pool-hint">Loading…</p>
               <p class="hint">White and red chips follow the Japanese flag. Push or schedule it from the News pane — Vestaboard only.</p>
             </div>
+          </div>
+        </div>
+
+
+        <div class="section-label" data-settings-group="news">Chuck Norris Fun Facts</div>
+        <div class="card chuck-norris-settings-card" id="chuck-norris-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Roundhouse facts</div>
+            <span class="status-pill" id="chuck-norris-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="chuck-norris-status-detail">
+            A local list of Chuck Norris facts that fit the board. Hide the duds, edit a line, or add your own.
+          </p>
+          <div class="cn-compose">
+            <div class="cn-compose-form">
+              <label class="field-label" for="chuck-norris-new">New fact</label>
+              <textarea class="field-input cn-fact-input" id="chuck-norris-new" rows="3" maxlength="220" placeholder="Chuck Norris can…"></textarea>
+              <div class="cn-compose-actions">
+                <button type="button" class="btn btn-accent" id="btn-chuck-norris-add">Add fact</button>
+                <span class="hint" id="chuck-norris-fit-hint"></span>
+              </div>
+            </div>
+            <div class="cn-board-preview" id="chuck-norris-preview" aria-hidden="true"></div>
+          </div>
+          <div class="cn-toolbar">
+            <input type="search" class="field-input" id="chuck-norris-search" placeholder="Search facts" autocomplete="off">
+            <label class="trivia-check">
+              <input type="checkbox" id="chuck-norris-show-hidden">
+              <span>Show hidden</span>
+            </label>
+          </div>
+          <div class="cn-fact-list" id="chuck-norris-fact-list"></div>
+          <div class="cn-pager">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-chuck-norris-prev">Previous</button>
+            <span class="hint" id="chuck-norris-page-label"></span>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-chuck-norris-next">Next</button>
           </div>
         </div>
 
@@ -2192,6 +2228,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal118"></script>
+  <script src="app.js?v=signal120"></script>
 </body>
 </html>
