@@ -79,6 +79,7 @@ const BOARD_COMMAND_IDS = new Set([
   'weather.weekly',
   'japanese.learn',
   'signal.quiet-hours',
+  'chuck.facts',
 ]);
 
 function kindsOf(command) {
@@ -623,6 +624,20 @@ const COMMANDS = [
     kinds: ['vestaboard'],
   },
   {
+    id: 'chuck.facts',
+    title: 'Chuck Norris Fun Facts',
+    subtitle: 'A roundhouse fact on the board',
+    group: 'Knowledge',
+    route: '/api/push/chuck-norris',
+    icon: 'chuck',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 20,
+    kinds: ['vestaboard'],
+  },
+  {
     id: 'overhead.show',
     title: 'Overhead',
     subtitle: 'Nearby aircraft on the scope',
@@ -790,6 +805,7 @@ function createCommandRegistry(deps = {}) {
     getPlexStatus = null,
     getLocaleSettings = null,
     getLearnJapaneseStatus = null,
+    getChuckNorrisStatus = null,
     getPhotoCount = null,
     getNotificationsCacheStatus = null,
     log = null,
@@ -882,6 +898,7 @@ function createCommandRegistry(deps = {}) {
     'plex.now-playing': () => Boolean(call(getPlexStatus)?.hasContent),
     'weather.weekly': () => hasLocation(call(getLocaleSettings) || {}),
     'japanese.learn': () => Number(call(getLearnJapaneseStatus)?.available || 0) > 0,
+    'chuck.facts': () => Number(call(getChuckNorrisStatus)?.available || 0) > 0,
     'signal.slideshow': () => Number(call(getPhotoCount) || 0) > 0,
     'alexa.notifications': () => Boolean(call(getNotificationsCacheStatus)?.hasContent),
   };

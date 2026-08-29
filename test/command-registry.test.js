@@ -196,6 +196,8 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('japanese.learn', 'full'), false);
   assert.equal(supportsKind('signal.quiet-hours', 'vestaboard'), true);
   assert.equal(supportsKind('signal.quiet-hours', 'full'), false);
+  assert.equal(supportsKind('chuck.facts', 'vestaboard'), true);
+  assert.equal(supportsKind('chuck.facts', 'full'), false);
 });
 
 test('every board-capable command has a Vestaboard formatter', () => {
@@ -289,6 +291,24 @@ test('japanese.learn is Vestaboard-only and needs a matching word', () => {
 
   const ready = createCommandRegistry({ getLearnJapaneseStatus: () => ({ available: 80 }) });
   assert.equal(ready.hasContent('japanese.learn'), true);
+});
+
+test('chuck.facts is Vestaboard-only and needs a ready fact', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'chuck.facts');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/chuck-norris');
+  assert.equal(command.defaultDurationSeconds, 20);
+
+  const empty = createCommandRegistry({ getChuckNorrisStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('chuck.facts'), false);
+
+  const ready = createCommandRegistry({ getChuckNorrisStatus: () => ({ available: 80 }) });
+  assert.equal(ready.hasContent('chuck.facts'), true);
 });
 
 test('signal.quiet-hours is Vestaboard-only and always has content', () => {

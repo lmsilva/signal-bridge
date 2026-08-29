@@ -2664,6 +2664,7 @@ textarea.field-input.text-input-area {
   #tab-settings .wiki-ck-settings-card,
   #tab-settings .overhead-settings-card,
   #tab-settings .flightplan-settings-card,
+  #tab-settings .chuck-norris-settings-card,
   #tab-settings .locale-settings-card,
   #tab-settings .credits-settings-card,
   #tab-settings .plex-settings-card,
@@ -3544,6 +3545,99 @@ textarea.field-input.text-input-area {
 
 @media (min-width: 640px) and (orientation: landscape) {
   #tab-settings .credits-settings-card { grid-column: 1 / -1; }
+
+.cn-compose {
+  display: grid;
+  gap: 14px;
+  margin: 14px 0 16px;
+}
+@media (min-width: 820px) {
+  .cn-compose {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    align-items: start;
+  }
+}
+.cn-fact-input,
+.cn-fact-text {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  font: inherit;
+}
+.cn-compose-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.cn-board-preview {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #141414;
+  border: 1px solid #3a2a12;
+}
+.cn-preview-row {
+  display: grid;
+  grid-template-columns: repeat(22, 1fr);
+  gap: 2px;
+}
+.cn-preview-row span {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  background: #1c140a;
+  color: #f4c56a;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.cn-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.cn-toolbar .field-input {
+  flex: 1 1 220px;
+}
+.cn-fact-list {
+  display: grid;
+  gap: 10px;
+}
+.cn-fact {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev-2);
+}
+.cn-fact.is-hidden {
+  opacity: 0.62;
+}
+.cn-fact.is-custom {
+  border-color: rgba(244, 197, 106, 0.35);
+}
+.cn-fact-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.cn-fact-actions {
+  display: flex;
+  gap: 8px;
+}
+.cn-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
 }
 
 @media (min-width: 860px) {

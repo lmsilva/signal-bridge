@@ -524,6 +524,10 @@
       initCreditsUi();
       loadCreditsSettings();
       loadFlightplanSettings();
+      // The boot-time filter runs while this panel is `display: none`.
+      // Chrome then forgets [hidden] on the grid children, so Global
+      // paints News/Media cards until a later pane click re-applies it.
+      applySettingsFilter(currentSettingsView());
     } else if (tabId === 'board') {
       vbUnlockAudio();
       if (vbSoundOn && !vbHeardSample && !vbReducedMotion()) {
@@ -1106,6 +1110,7 @@
     news: '<path d="M4 5.5h12.5A2.5 2.5 0 0 1 19 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M8 9h6M8 12h6M8 15h3.5"/><path d="M19 10.5h1.5A1.5 1.5 0 0 1 22 12v5.5A1.5 1.5 0 0 1 20.5 19H19"/>',
     wiki: '<path d="M5 4.5h8a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2v-13Z"/><path d="M9 4.5V3h6v1.5"/><path d="M8 10h6M8 13.5h4"/>',
     japanese: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/>',
+    chuck: '<circle cx="12" cy="8.5" r="3.2"/><path d="M7 20c.6-3.2 2.6-5 5-5s4.4 1.8 5 5"/><path d="M5 10.5c2-.8 4-.8 7-.8s5 0 7 .8"/><path d="M8.2 13.2 6.5 15M15.8 13.2 17.5 15"/>',
     'quiet-hours': '<path d="M14.5 4.5A7.5 7.5 0 1 0 19.5 16 6.2 6.2 0 0 1 14.5 4.5Z"/><path d="M16.2 6.2 17 4.4M18.4 8.8l1.6-.6M19.2 12l1.8.2"/>',
     sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
@@ -4846,6 +4851,182 @@
   });
 
   loadLearnJapaneseSettings();
+
+  // ------------------------------------------- Settings → Chuck Norris
+
+  const CN_PAGE_SIZE = 12;
+  let chuckNorrisPage = 1;
+  let chuckNorrisTimer = 0;
+
+  function foldPreview(text) {
+    return String(text || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9 !@#$()+\-=;:'"%,./?°]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function wrapPreview(text, width) {
+    const words = foldPreview(text).split(' ').filter(Boolean);
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (next.length <= width) {
+        line = next;
+        continue;
+      }
+      if (line) {
+        lines.push(line);
+      }
+      line = word.length <= width ? word : word.slice(0, width);
+    }
+    if (line) {
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  function renderChuckNorrisPreview(text) {
+    const host = $('chuck-norris-preview');
+    if (!host) {
+      return;
+    }
+    const lines = ['CHUCK NORRIS', ...wrapPreview(text, 22).slice(0, 5)];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    host.innerHTML = lines.map((line) => {
+      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
+      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
+    }).join('');
+    const hint = $('chuck-norris-fit-hint');
+    if (hint) {
+      const rows = wrapPreview(text, 22).length;
+      hint.textContent = text
+        ? (rows <= 5 ? `Fits in ${rows} row${rows === 1 ? '' : 's'}` : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function renderChuckNorrisSettings(data = {}) {
+    const pill = $('chuck-norris-status-pill');
+    const detail = $('chuck-norris-status-detail');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      const hidden = Number(data.hiddenCount || 0);
+      const custom = Number(data.customCount || 0);
+      detail.textContent = `${data.available || 0} facts ready`
+        + (custom ? ` · ${custom} added here` : '')
+        + (hidden ? ` · ${hidden} hidden` : '');
+    }
+    const list = $('chuck-norris-fact-list');
+    if (list) {
+      const facts = data.facts || [];
+      if (!facts.length) {
+        list.innerHTML = '<p class="hint">No facts match that search.</p>';
+      } else {
+        list.innerHTML = facts.map((fact) => `
+          <article class="cn-fact${fact.hidden ? ' is-hidden' : ''}${fact.custom ? ' is-custom' : ''}" data-cn-id="${escapeHtml(fact.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(fact.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${fact.custom ? 'Yours' : 'Shipped'} · ${fact.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-cn-save>Save</button>
+                <button type="button" class="btn btn-outline btn-sm" data-cn-hide>${fact.hidden ? 'Restore' : (fact.custom ? 'Remove' : 'Hide')}</button>
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('chuck-norris-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    chuckNorrisPage = data.page || 1;
+    const prev = $('btn-chuck-norris-prev');
+    const next = $('btn-chuck-norris-next');
+    if (prev) prev.disabled = chuckNorrisPage <= 1;
+    if (next) next.disabled = chuckNorrisPage >= (data.pages || 1);
+  }
+
+  async function loadChuckNorrisFacts(page = chuckNorrisPage) {
+    const query = $('chuck-norris-search')?.value || '';
+    const hidden = Boolean($('chuck-norris-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(CN_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      const data = await apiGet(`/api/chuck-norris/facts?${params}`);
+      renderChuckNorrisSettings(data);
+    } catch {
+      renderChuckNorrisSettings({});
+    }
+  }
+
+  $('btn-chuck-norris-add')?.addEventListener('click', async () => {
+    const input = $('chuck-norris-new');
+    const text = input?.value || '';
+    try {
+      await apiPost('/api/chuck-norris/facts', { text });
+      if (input) input.value = '';
+      renderChuckNorrisPreview('');
+      toast('Fact added', 'good');
+      await loadChuckNorrisFacts(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that fact', 'bad');
+    }
+  });
+
+  $('chuck-norris-new')?.addEventListener('input', (event) => {
+    renderChuckNorrisPreview(event.target.value);
+  });
+
+  $('chuck-norris-search')?.addEventListener('input', () => {
+    window.clearTimeout(chuckNorrisTimer);
+    chuckNorrisTimer = window.setTimeout(() => {
+      loadChuckNorrisFacts(1);
+    }, 250);
+  });
+
+  $('chuck-norris-show-hidden')?.addEventListener('change', () => loadChuckNorrisFacts(1));
+  $('btn-chuck-norris-prev')?.addEventListener('click', () => loadChuckNorrisFacts(chuckNorrisPage - 1));
+  $('btn-chuck-norris-next')?.addEventListener('click', () => loadChuckNorrisFacts(chuckNorrisPage + 1));
+
+  $('chuck-norris-fact-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-cn-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-cn-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    try {
+      if (event.target.closest('[data-cn-save]')) {
+        await apiPost('/api/chuck-norris/facts', { id, text });
+        toast('Fact saved', 'good');
+      } else if (event.target.closest('[data-cn-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/chuck-norris/facts', { id, hidden: !restore });
+        toast(restore ? 'Fact restored' : 'Fact hidden', 'good');
+      } else {
+        return;
+      }
+      await loadChuckNorrisFacts(chuckNorrisPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that fact', 'bad');
+    }
+  });
+
+  renderChuckNorrisPreview('');
+  loadChuckNorrisFacts(1);
 
   // ------------------------------------------- Settings → Overhead
 

@@ -125,6 +125,7 @@ const { extractWeatherLocation } = require('./weather-location');
 const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { buildWeeklyWeatherPayload } = require('./weekly-weather');
 const { createLearnJapanese } = require('./learn-japanese');
+const { createChuckNorris } = require('./chuck-norris');
 const { createQuietHoursReminder } = require('./quiet-hours-reminder');
 
 const DEFAULT_PORT = 47810;
@@ -418,6 +419,7 @@ function createWebServer({
   const slideshowSettings = createSlideshowSettings(config, log);
   const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
   const learnJapanese = createLearnJapanese(config, log);
+  const chuckNorris = createChuckNorris(config, log);
   const quietHoursReminder = createQuietHoursReminder({
     persistPath: config.quietHoursReminderPath
       || path.join(config.ROOT || path.resolve(__dirname, '..'), 'data', 'quiet-hours-reminder.json'),
@@ -494,6 +496,7 @@ function createWebServer({
       || null,
     getLocaleSettings: () => localeSettings.get(),
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
+    getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
     getPhotoCount: () => qrImageCache.list().length,
     getNotificationsCacheStatus: () => ({
       hasContent: hasCachedNotification(loadNotificationsCache(config)),
@@ -1982,6 +1985,58 @@ function createWebServer({
     sendJson(res, 200, { ok: true, ...learnJapanese.statusSnapshot(), settings });
   }
 
+  function handleChuckNorrisFactsGet(query, res) {
+    sendJson(res, 200, { ok: true, ...chuckNorris.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleChuckNorrisFactPost(body, res) {
+    const result = chuckNorris.addFact(body?.text);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleChuckNorrisFactPut(body, res) {
+    const result = chuckNorris.updateFact(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleChuckNorrisPush(body, res) {
+    const payload = chuckNorris.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Chuck Norris facts are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Chuck Norris fun fact', { targetId, id: payload.fact.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      fact: payload.fact,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleLearnJapanesePush(body, res) {
     const payload = learnJapanese.nextPayload();
     if (!payload) {
@@ -2383,6 +2438,8 @@ function createWebServer({
           await handleWeeklyWeatherPush(body, res); break;
         case 'japanese.learn':
           handleLearnJapanesePush(body, res); break;
+        case 'chuck.facts':
+          handleChuckNorrisPush(body, res); break;
         case 'signal.quiet-hours':
           handleQuietHoursReminderPush(body, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
@@ -5429,6 +5486,11 @@ function createWebServer({
           handleLearnJapaneseSettingsGet(res);
           return;
         }
+        if (pathname === '/api/chuck-norris/facts') {
+          if (!requireAdminSession(req, res)) return;
+          handleChuckNorrisFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
         if (pathname.startsWith('/api/flightplan/')) {
           if (!requireAdminSession(req, res)) return;
           await handleFlightplanApi('GET', pathname, null, res, reqUrl.searchParams);
@@ -5934,6 +5996,16 @@ function createWebServer({
             return;
           case '/api/push/learn-japanese':
             handleLearnJapanesePush(body, res);
+            return;
+          case '/api/push/chuck-norris':
+            handleChuckNorrisPush(body, res);
+            return;
+          case '/api/chuck-norris/facts':
+            if (body?.id) {
+              handleChuckNorrisFactPut(body, res);
+            } else {
+              handleChuckNorrisFactPost(body, res);
+            }
             return;
           case '/api/push/quiet-hours-reminder':
             handleQuietHoursReminderPush(body, res);
