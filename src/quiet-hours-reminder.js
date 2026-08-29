@@ -1,10 +1,8 @@
-// Quiet Hours Reminder — marketplace-style night cards for the Vestaboard.
-//
-// The official channel posts a card when the house goes quiet. Three of the
-// layouts follow that look (crescent moon, SHHH, star field); the rest are
-// house extras. Every push picks a random variant and skips the last one
-// when it can. The watcher fires on the false→true quiet-hours edge for each
-// board, and is exempt so the queue does not drop the card at 22:00.
+// Quiet Hours Reminder — night cards for the Vestaboard when the house goes
+// quiet. Moon / SHHH / stars are the night-sky set; zzz / dreams / late /
+// until are house extras. Every push picks a random variant and skips the
+// last one when it can. The watcher fires on the false→true quiet-hours edge
+// for each board, and is exempt so the queue does not drop the card at 22:00.
 
 const fs = require('fs');
 const path = require('path');
@@ -19,20 +17,26 @@ const TYPE = 'quiet-hours.reminder';
 const CATCH_WINDOW_MINUTES = 10;
 const WATCH_TICK_MS = 15_000;
 
-/** Marketplace-style night cards, plus a few extras. */
+/**
+ * Night cards for quiet hours.
+ *
+ * Moon uses a solid yellow disc (reads as a moon from across the room — the
+ * old crescent looked like a letter C). SHHH stays violet-cornered but writes
+ * the hush as `SHHH...`. ZZZ is a single centered stack above TIME TO REST.
+ */
 const DRAWINGS = {
   moon: [
-    '    yyy               ',
-    '   y   y     QUIET    ',
-    '  y                   ',
-    '  y                   ',
-    '   y   y     HOURS    ',
-    '    yyy            w  ',
+    '  yyyy                ',
+    ' yyyyyy               ',
+    ' yyyyyy    QUIET      ',
+    ' yyyyyy    HOURS      ',
+    '  yyyy                ',
+    '                      ',
   ],
   shhh: [
     'vv                  vv',
     '                      ',
-    '       S H H H        ',
+    '       SHHH...        ',
     '                      ',
     '     QUIET HOURS      ',
     'vv                  vv',
@@ -46,11 +50,11 @@ const DRAWINGS = {
     '                      ',
   ],
   zzz: [
-    '                 Z    ',
-    '              Z       ',
-    '           ZZZ        ',
+    '                      ',
+    '         ZZZ          ',
     '                      ',
     '     TIME TO REST     ',
+    '                      ',
     '                      ',
   ],
   dreams: [

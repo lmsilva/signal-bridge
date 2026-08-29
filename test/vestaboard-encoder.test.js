@@ -116,6 +116,31 @@ test('wrapping fills each line greedily', () => {
   assert.deepEqual(wrap('aaa bbb ccc', 11), ['AAA BBB CCC']);
 });
 
+test('wrapping pulls short orphan words onto the next line', () => {
+  // Without orphan awareness this became:
+  //   CHUCK NORRIS CAN DO AN
+  //   INSTRUMENTAL A
+  //   CAPELLA.
+  assert.deepEqual(
+    wrap('Chuck Norris can do an instrumental a capella.', 22),
+    [
+      'CHUCK NORRIS CAN DO',
+      'AN INSTRUMENTAL',
+      'A CAPELLA.',
+    ],
+  );
+
+  // A lonely article at the end of a line moves with the next word.
+  assert.deepEqual(
+    wrap('instrumental a capella.', 22),
+    ['INSTRUMENTAL', 'A CAPELLA.'],
+  );
+
+  // Longer trailing words still wrap greedily.
+  assert.deepEqual(wrap('aaa bbbb ccc', 8), ['AAA BBBB', 'CCC']);
+  assert.deepEqual(wrap('aaa bbb ccc', 7), ['AAA BBB', 'CCC']);
+});
+
 test('a word too long for the line splits with a trailing hyphen', () => {
   const lines = wrap('SUPERCALIFRAGILISTIC', 10);
   assert.deepEqual(lines, ['SUPERCALI-', 'FRAGILIST-', 'IC']);

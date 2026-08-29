@@ -232,6 +232,24 @@ test('existing rules load as target full so boards stay quiet', () => {
   assert.equal(normaliseRule({ commandId: 'alexa.weather', target: 'sim' }).target, 'sim');
 });
 
+test('Vestaboard-only commands default onto the boards', () => {
+  const stoic = normaliseRule(
+    { commandId: 'stoic.quotes' },
+    { command: { id: 'stoic.quotes', title: 'Stoic Quotes', kinds: ['vestaboard'] } },
+  );
+  assert.equal(stoic.target, 'vestaboard');
+  const world = normaliseRule(
+    { commandId: 'world.population' },
+    { command: { id: 'world.population', title: 'World Population', kinds: ['vestaboard'] } },
+  );
+  assert.equal(world.target, 'vestaboard');
+  // An explicit full target is still honoured in storage (Air now coerces delivery).
+  assert.equal(normaliseRule(
+    { commandId: 'stoic.quotes', target: 'full' },
+    { command: { id: 'stoic.quotes', kinds: ['vestaboard'] } },
+  ).target, 'full');
+});
+
 test('a vestaboard-targeted rule airs even while the overlay is busy', async () => {
   const { scheduler, clock, aired } = build({
     busy: () => true,

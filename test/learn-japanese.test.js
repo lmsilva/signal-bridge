@@ -106,11 +106,26 @@ test('Learn Japanese matches the hinomaru marketplace card', () => {
   assertLayout(frames[0].rows, [
     'ww  LEARN JAPANESE  rr',
     '                      ',
-    '        TABERU        ',
-    '         VERB         ',
-    '        TO EAT        ',
-    'ww        N5        rr',
+    '     WORD: TABERU     ',
+    '        (VERB)        ',
+    '    MEANS: TO EAT     ',
+    'ww  DIFFICULTY: N5  rr',
   ], 'learn japanese taberu');
+});
+
+test('Learn Japanese leans left and labels short glosses', () => {
+  const frames = learnJapaneseFrames({
+    type: 'japanese.learn',
+    word: { romaji: 'neko', english: 'cat', pos: 'noun', level: 'N5' },
+  });
+  assertLayout(frames[0].rows, [
+    'ww  LEARN JAPANESE  rr',
+    '                      ',
+    '      WORD: NEKO      ',
+    '        (NOUN)        ',
+    '      MEANS: CAT      ',
+    'ww  DIFFICULTY: N5  rr',
+  ], 'learn japanese neko');
 });
 
 test('a long English gloss wraps and keeps the flag footer', () => {
@@ -126,11 +141,31 @@ test('a long English gloss wraps and keeps the flag footer', () => {
   assertLayout(frames[0].rows, [
     'ww  LEARN JAPANESE  rr',
     '                      ',
-    '    GASORINSUTANDO    ',
-    '         NOUN         ',
-    '    PETROL STATION    ',
-    'ww        N4        rr',
+    ' WORD: GASORINSUTANDO ',
+    '        (NOUN)        ',
+    'MEANS: PETROL STATION ',
+    'ww  DIFFICULTY: N4  rr',
   ], 'learn japanese long noun');
+});
+
+test('a wrapping gloss drops the MEANS label and keeps Difficulty', () => {
+  const frames = learnJapaneseFrames({
+    type: 'japanese.learn',
+    word: {
+      romaji: 'aisukuriimu',
+      english: 'ice cream dessert treat',
+      pos: 'noun',
+      level: 'N4',
+    },
+  });
+  assert.equal(frames.length, 1);
+  const drawing = formatLayout(frames[0].rows).split('\n');
+  assert.match(drawing[0], /LEARN JAPANESE/);
+  assert.match(drawing[1], /WORD: AISUKURIIMU/);
+  assert.match(drawing[2], /\(NOUN\)/);
+  assert.equal(drawing[3].includes('MEANS:'), false);
+  assert.equal(drawing[4].includes('MEANS:'), false);
+  assert.match(drawing[5], /DIFFICULTY: N4/);
 });
 
 test('learn japanese with no word renders nothing', () => {

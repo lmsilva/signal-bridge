@@ -2663,9 +2663,21 @@ textarea.field-input.text-input-area {
   #tab-settings .upside-news-settings-card,
   #tab-settings .wiki-ck-settings-card,
   #tab-settings .overhead-settings-card,
+  #tab-settings .iss-tracker-settings-card,
+  #tab-settings .starlink-tracker-settings-card,
   #tab-settings .flightplan-settings-card,
   #tab-settings .chuck-norris-settings-card,
+  #tab-settings .amazing-facts-settings-card,
+  #tab-settings .conversation-starters-settings-card,
+  #tab-settings .stoic-quotes-settings-card,
+  #tab-settings .on-this-day-settings-card,
+  #tab-settings .baking-inspiration-settings-card,
+  #tab-settings .stock-market-settings-card,
+  #tab-settings .currency-rates-settings-card,
+  #tab-settings .learn-japanese-settings-card,
   #tab-settings .locale-settings-card,
+  #tab-settings .weather-alerts-settings-card,
+  #tab-settings .world-population-settings-card,
   #tab-settings .credits-settings-card,
   #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card {
@@ -3550,12 +3562,16 @@ textarea.field-input.text-input-area {
   display: grid;
   gap: 14px;
   margin: 14px 0 16px;
+  min-width: 0;
 }
 @media (min-width: 820px) {
   .cn-compose {
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) minmax(140px, 200px);
     align-items: start;
   }
+}
+.cn-compose-sheet {
+  margin-top: 0;
 }
 .cn-fact-input,
 .cn-fact-text {
@@ -3564,24 +3580,56 @@ textarea.field-input.text-input-area {
   resize: vertical;
   font: inherit;
 }
+.cn-fact-author {
+  width: 100%;
+  margin-top: 8px;
+  font: inherit;
+}
 .cn-compose-actions {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 10px;
+  flex-wrap: wrap;
 }
 .cn-board-preview {
   display: grid;
-  gap: 3px;
-  padding: 8px;
+  gap: 2px;
+  padding: 6px;
   border-radius: 10px;
   background: #141414;
   border: 1px solid #3a2a12;
+  width: 100%;
+  max-width: 200px;
+  min-width: 0;
+  box-sizing: border-box;
+  justify-self: end;
+}
+.cn-board-preview-violet {
+  border-color: #3a2a4a;
+}
+.cn-board-preview-violet .cn-preview-row span {
+  background: #16101c;
+  color: #d4b8f0;
+}
+.cn-board-preview-stoic {
+  border-color: #3a3a3a;
+}
+.cn-board-preview-stoic .cn-preview-row span {
+  background: #1a1a1a;
+  color: #e8e8e8;
+}
+.cn-board-preview-bake {
+  border-color: #4a4010;
+}
+.cn-board-preview-bake .cn-preview-row span {
+  background: #1a1808;
+  color: #f0e080;
 }
 .cn-preview-row {
   display: grid;
-  grid-template-columns: repeat(22, 1fr);
-  gap: 2px;
+  grid-template-columns: repeat(22, minmax(0, 1fr));
+  gap: 1px;
 }
 .cn-preview-row span {
   aspect-ratio: 1;
@@ -3589,10 +3637,45 @@ textarea.field-input.text-input-area {
   place-items: center;
   background: #1c140a;
   color: #f4c56a;
-  font-size: 0.55rem;
+  font-size: clamp(0.35rem, 1.6vw, 0.5rem);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
+  overflow: hidden;
+}
+.cn-preview-row span.is-chip-white {
+  background: #f2f2f2;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-green {
+  background: #22a24b;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-red {
+  background: #e03c31;
+  color: transparent;
+}
+.chuck-norris-actions,
+.cn-settings-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.cn-manage-sheet {
+  max-width: min(720px, calc(100vw - 24px));
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  width: 100%;
+}
+.cn-manage-sheet .cn-fact-list {
+  max-height: none;
+}
+@media (max-width: 819px) {
+  .cn-board-preview {
+    justify-self: start;
+    max-width: 180px;
+  }
 }
 .cn-toolbar {
   display: flex;
@@ -3871,6 +3954,7 @@ textarea.field-input.text-input-area {
   border-radius: 12px;
 }
 .vb-board-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vb-board-remind { display: flex; margin-top: 10px; }
 .vb-board-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .vb-board-actions .btn.confirming { border-color: var(--danger); color: var(--danger); }
 

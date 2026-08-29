@@ -31,6 +31,13 @@ test('sanitiseSettings keeps city, ZIP, coords and clamps the unit', () => {
   assert.equal(settings.longitude, -111.85);
   assert.equal(settings.temperatureUnit, 'C');
   assert.equal(settings.timeZone, 'America/Denver');
+  assert.equal(settings.currencyCode, 'USD');
+});
+
+test('sanitiseSettings keeps a house currency code and maps RMB to CNY', () => {
+  const settings = sanitiseSettings({ currencyCode: 'rmb' });
+  assert.equal(settings.currencyCode, 'CNY');
+  assert.equal(sanitiseSettings({ currencyCode: ' eur ' }).currencyCode, 'EUR');
 });
 
 test('sanitiseSettings drops non-finite coords and defaults the unit to F', () => {

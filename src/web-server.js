@@ -126,6 +126,17 @@ const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { buildWeeklyWeatherPayload } = require('./weekly-weather');
 const { createLearnJapanese } = require('./learn-japanese');
 const { createChuckNorris } = require('./chuck-norris');
+const { createAmazingFacts } = require('./amazing-facts');
+const { createConversationStarters } = require('./conversation-starters');
+const { createStoicQuotes } = require('./stoic-quotes');
+const { createOnThisDay } = require('./on-this-day');
+const { createBakingInspiration } = require('./baking-inspiration');
+const { createWorldPopulation } = require('./world-population');
+const { createWeatherAlerts } = require('./weather-alerts');
+const { createStockMarket } = require('./stock-market');
+const { createCurrencyRates } = require('./currency-rates');
+const { createIssTracker } = require('./iss-tracker');
+const { createStarlinkTracker } = require('./starlink-tracker');
 const { createQuietHoursReminder } = require('./quiet-hours-reminder');
 
 const DEFAULT_PORT = 47810;
@@ -420,6 +431,19 @@ function createWebServer({
   const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
   const learnJapanese = createLearnJapanese(config, log);
   const chuckNorris = createChuckNorris(config, log);
+  const amazingFacts = createAmazingFacts(config, log);
+  const conversationStarters = createConversationStarters(config, log);
+  const stoicQuotes = createStoicQuotes(config, log);
+  const onThisDay = createOnThisDay(config, log, {
+    getLocaleSettings: () => localeSettings.get(),
+  });
+  const bakingInspiration = createBakingInspiration(config, log);
+  const worldPopulation = createWorldPopulation(config, log);
+  const weatherAlerts = createWeatherAlerts(config, log);
+  const stockMarket = createStockMarket(config, log);
+  const currencyRates = createCurrencyRates(config, log);
+  const issTracker = createIssTracker(config, log);
+  const starlinkTracker = createStarlinkTracker(config, log);
   const quietHoursReminder = createQuietHoursReminder({
     persistPath: config.quietHoursReminderPath
       || path.join(config.ROOT || path.resolve(__dirname, '..'), 'data', 'quiet-hours-reminder.json'),
@@ -497,6 +521,13 @@ function createWebServer({
     getLocaleSettings: () => localeSettings.get(),
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
+    getAmazingFactsStatus: () => amazingFacts.statusSnapshot(),
+    getConversationStartersStatus: () => conversationStarters.statusSnapshot(),
+    getStoicQuotesStatus: () => stoicQuotes.statusSnapshot(),
+    getOnThisDayStatus: () => onThisDay.statusSnapshot(),
+    getBakingInspirationStatus: () => bakingInspiration.statusSnapshot(),
+    getStockMarketStatus: () => stockMarket.statusSnapshot(),
+    getCurrencyRatesStatus: () => currencyRates.statusSnapshot(localeSettings.get()),
     getPhotoCount: () => qrImageCache.list().length,
     getNotificationsCacheStatus: () => ({
       hasContent: hasCachedNotification(loadNotificationsCache(config)),
@@ -1895,7 +1926,16 @@ function createWebServer({
     const city = String(body?.city ?? localeSettings.get().city ?? '').trim();
     const postalCode = String(body?.postalCode ?? localeSettings.get().postalCode ?? '').trim();
     const temperatureUnit = body?.temperatureUnit;
+    const currencyCode = body?.currencyCode;
     if (!city && !postalCode) {
+      if (localeSettings.hasLocation() && (temperatureUnit || currencyCode != null)) {
+        const settings = localeSettings.update({
+          ...(temperatureUnit ? { temperatureUnit } : {}),
+          ...(currencyCode != null ? { currencyCode } : {}),
+        });
+        sendJson(res, 200, { ok: true, settings });
+        return;
+      }
       sendJson(res, 400, { ok: false, error: 'Enter a city or ZIP code' });
       return;
     }
@@ -1908,6 +1948,7 @@ function createWebServer({
       const settings = localeSettings.update({
         ...resolved,
         ...(temperatureUnit ? { temperatureUnit } : {}),
+        ...(currencyCode != null ? { currencyCode } : {}),
       });
       sendJson(res, 200, { ok: true, settings });
     } catch (error) {
@@ -1973,6 +2014,363 @@ function createWebServer({
     });
   }
 
+  function handleWeatherAlertsSettingsGet(res) {
+    const locale = localeSettings.get();
+    sendJson(res, 200, {
+      ok: true,
+      ...weatherAlerts.statusSnapshot(),
+      hasLocation: localeSettings.hasLocation(),
+      location: {
+        city: locale.city || '',
+        label: locale.label || '',
+        country: locale.country || '',
+        latitude: locale.latitude,
+        longitude: locale.longitude,
+        timeZone: locale.timeZone || '',
+      },
+    });
+  }
+
+  function handleWeatherAlertsSettingsPut(body, res) {
+    if (body?.reset) {
+      weatherAlerts.resetSettings();
+      handleWeatherAlertsSettingsGet(res);
+      return;
+    }
+    weatherAlerts.updateSettings({
+      minSeverity: body?.minSeverity,
+      includeWatches: body?.includeWatches,
+      includeAdvisories: body?.includeAdvisories,
+      maxAlerts: body?.maxAlerts,
+    });
+    handleWeatherAlertsSettingsGet(res);
+  }
+
+  async function handleWeatherAlertsPush(body, res) {
+    const locale = localeSettings.get();
+    if (!localeSettings.hasLocation()) {
+      sendJson(res, 400, { ok: false, error: 'Set the house location under Settings → Global' });
+      return;
+    }
+    let payload = null;
+    try {
+      payload = await weatherAlerts.nextPayload({ locale });
+    } catch (error) {
+      log.warn?.('Weather alerts fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'Weather alerts are unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, { ok: false, error: 'Weather alerts are unavailable' });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Weather alerts', {
+      targetId,
+      mode: payload.mode,
+      count: payload.alerts?.length || 0,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      mode: payload.mode,
+      alerts: payload.alerts,
+      location: payload.location,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleStockMarketSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...stockMarket.statusSnapshot() });
+  }
+
+  function handleStockMarketSettingsPut(body, res) {
+    if (body?.reset) {
+      stockMarket.resetSettings();
+      handleStockMarketSettingsGet(res);
+      return;
+    }
+    stockMarket.updateSettings({
+      tickers: body?.tickers,
+      changeMode: body?.changeMode,
+      provider: body?.provider,
+      finnhubApiKey: body?.finnhubApiKey,
+      clearFinnhubApiKey: body?.clearFinnhubApiKey,
+    });
+    handleStockMarketSettingsGet(res);
+  }
+
+  async function handleStockMarketPush(body, res) {
+    let payload = null;
+    try {
+      payload = await stockMarket.nextPayload();
+    } catch (error) {
+      log.warn?.('Stock market fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'Stock quotes are unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, {
+        ok: false,
+        error: 'No stock quotes returned — check tickers under Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Stock market', {
+      targetId,
+      count: payload.quotes?.length || 0,
+      errors: payload.errors?.length || 0,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      quotes: payload.quotes,
+      errors: payload.errors,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleCurrencyRatesSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...currencyRates.statusSnapshot(localeSettings.get()) });
+  }
+
+  function handleCurrencyRatesSettingsPut(body, res) {
+    if (body?.reset) {
+      currencyRates.resetSettings();
+      handleCurrencyRatesSettingsGet(res);
+      return;
+    }
+    currencyRates.updateSettings({
+      quotes: body?.quotes,
+    });
+    handleCurrencyRatesSettingsGet(res);
+  }
+
+  async function handleCurrencyRatesPush(body, res) {
+    let payload = null;
+    const base = localeSettings.get().currencyCode || 'USD';
+    try {
+      payload = await currencyRates.nextPayload({ base });
+    } catch (error) {
+      log.warn?.('Currency rates fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'Currency rates are unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, {
+        ok: false,
+        error: 'No currency quotes returned — check the list under Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Currency rates', {
+      targetId,
+      base: payload.base,
+      count: payload.quotes?.length || 0,
+      source: payload.source,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      base: payload.base,
+      quotes: payload.quotes,
+      source: payload.source,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleIssTrackerSettingsGet(res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...issTracker.statusSnapshot(localeSettings.get()),
+      location: {
+        city: localeSettings.get().city || '',
+        label: localeSettings.get().label || '',
+        latitude: localeSettings.get().latitude,
+        longitude: localeSettings.get().longitude,
+      },
+    });
+  }
+
+  function handleIssTrackerSettingsPut(body, res) {
+    if (body?.reset) {
+      issTracker.resetSettings();
+      handleIssTrackerSettingsGet(res);
+      return;
+    }
+    issTracker.updateSettings({
+      distanceUnit: body?.distanceUnit,
+      showAltitude: body?.showAltitude,
+      showCoordinates: body?.showCoordinates,
+      showVisibility: body?.showVisibility,
+    });
+    handleIssTrackerSettingsGet(res);
+  }
+
+  async function handleIssTrackerPush(body, res) {
+    let payload = null;
+    try {
+      payload = await issTracker.nextPayload({ locale: localeSettings.get() });
+    } catch (error) {
+      log.warn?.('ISS tracker fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'ISS position is unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, { ok: false, error: 'ISS position is unavailable' });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('ISS tracker', {
+      targetId,
+      source: payload.source,
+      relative: payload.relativeLabel || null,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      relativeLabel: payload.relativeLabel,
+      speedLabel: payload.speedLabel,
+      altitudeLabel: payload.altitudeLabel,
+      source: payload.source,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleStarlinkTrackerSettingsGet(res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...starlinkTracker.statusSnapshot(localeSettings.get()),
+      location: {
+        city: localeSettings.get().city || '',
+        label: localeSettings.get().label || '',
+        latitude: localeSettings.get().latitude,
+        longitude: localeSettings.get().longitude,
+        timeZone: localeSettings.get().timeZone || '',
+      },
+    });
+  }
+
+  function handleStarlinkTrackerSettingsPut(body, res) {
+    if (body?.reset) {
+      starlinkTracker.resetSettings();
+      handleStarlinkTrackerSettingsGet(res);
+      return;
+    }
+    starlinkTracker.updateSettings({
+      hoursAhead: body?.hoursAhead,
+      minElevation: body?.minElevation,
+      sampleSize: body?.sampleSize,
+      preferVisible: body?.preferVisible,
+      showWeather: body?.showWeather,
+      showVisibility: body?.showVisibility,
+    });
+    handleStarlinkTrackerSettingsGet(res);
+  }
+
+  async function handleStarlinkTrackerPush(body, res) {
+    if (!localeSettings.hasLocation()) {
+      sendJson(res, 400, { ok: false, error: 'Set the house location under Settings → Global' });
+      return;
+    }
+    let payload = null;
+    try {
+      payload = await starlinkTracker.nextPayload({
+        locale: localeSettings.get(),
+        weatherFetch: fetchWeatherForecast,
+      });
+    } catch (error) {
+      log.warn?.('Starlink tracker fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'Starlink passes are unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, { ok: false, error: 'Starlink passes are unavailable' });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Starlink tracker', {
+      targetId,
+      when: payload.whenLabel,
+      direction: payload.direction,
+      mode: payload.mode || 'pass',
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      whenLabel: payload.whenLabel,
+      directionLabel: payload.directionLabel,
+      weatherLabel: payload.weatherLabel,
+      visibilityBoard: payload.visibilityBoard,
+      mode: payload.mode || 'pass',
+      source: payload.source,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleLearnJapaneseSettingsGet(res) {
     sendJson(res, 200, { ok: true, ...learnJapanese.statusSnapshot() });
   }
@@ -2033,6 +2431,354 @@ function createWebServer({
       type: payload.type,
       targetId,
       fact: payload.fact,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleAmazingFactsGet(query, res) {
+    sendJson(res, 200, { ok: true, ...amazingFacts.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+      category: query?.category,
+    }) });
+  }
+
+  function handleAmazingFactPost(body, res) {
+    if (body?.categories != null || body?.filters) {
+      const result = amazingFacts.updateFilters({
+        categories: body?.categories,
+      });
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+    const result = amazingFacts.addFact(body?.text, body?.category);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleAmazingFactPut(body, res) {
+    const result = amazingFacts.updateFact(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+      category: body?.category,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleAmazingFactsPush(body, res) {
+    const payload = amazingFacts.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Amazing Facts are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Amazing fact', { targetId, id: payload.fact.id, category: payload.fact.category });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      fact: payload.fact,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleConversationStartersGet(query, res) {
+    sendJson(res, 200, { ok: true, ...conversationStarters.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleConversationStarterPost(body, res) {
+    const result = conversationStarters.addPrompt(body?.text);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleConversationStarterPut(body, res) {
+    const result = conversationStarters.updatePrompt(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleConversationStartersPush(body, res) {
+    const payload = conversationStarters.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No conversation starters are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Conversation starter', { targetId, id: payload.prompt.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      prompt: payload.prompt,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleStoicQuotesGet(query, res) {
+    sendJson(res, 200, { ok: true, ...stoicQuotes.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleStoicQuotePost(body, res) {
+    const result = stoicQuotes.addQuote(body?.text, body?.author);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleStoicQuotePut(body, res) {
+    const result = stoicQuotes.updateQuote(body?.id, {
+      text: body?.text,
+      author: body?.author,
+      hidden: body?.hidden,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleStoicQuotesPush(body, res) {
+    const payload = stoicQuotes.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Stoic quotes are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Stoic quote', { targetId, id: payload.quote.id, author: payload.quote.author });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      quote: payload.quote,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleOnThisDayGet(query, res) {
+    sendJson(res, 200, { ok: true, ...onThisDay.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+      month: query?.month,
+      day: query?.day,
+    }) });
+  }
+
+  function handleOnThisDayPost(body, res) {
+    if (body?.filters || body?.minYear !== undefined || body?.maxYear !== undefined) {
+      const result = onThisDay.updateFilters({
+        minYear: body?.minYear,
+        maxYear: body?.maxYear,
+      });
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+    const result = onThisDay.addEvent({
+      month: body?.month,
+      day: body?.day,
+      year: body?.year,
+      text: body?.text,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleOnThisDayPut(body, res) {
+    const result = onThisDay.updateEvent(body?.id, {
+      text: body?.text,
+      year: body?.year,
+      month: body?.month,
+      day: body?.day,
+      hidden: body?.hidden,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleOnThisDayPush(body, res) {
+    const payload = onThisDay.nextPayload({
+      month: body?.month,
+      day: body?.day,
+    });
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No On This Day events for that date — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('On This Day', {
+      targetId,
+      id: payload.event.id,
+      year: payload.event.year,
+      date: payload.event.dateLine,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      event: payload.event,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleBakingInspirationGet(query, res) {
+    sendJson(res, 200, { ok: true, ...bakingInspiration.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleBakingInspirationPost(body, res) {
+    const result = bakingInspiration.addIdea(body?.title, body?.ingredients);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleBakingInspirationPut(body, res) {
+    const result = bakingInspiration.updateIdea(body?.id, {
+      title: body?.title,
+      ingredients: body?.ingredients,
+      hidden: body?.hidden,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleBakingInspirationPush(body, res) {
+    const payload = bakingInspiration.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No baking ideas are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Baking inspiration', {
+      targetId,
+      id: payload.idea.id,
+      title: payload.idea.title,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      idea: payload.idea,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleWorldPopulationSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...worldPopulation.statusSnapshot() });
+  }
+
+  function handleWorldPopulationSettingsPut(body, res) {
+    if (body?.reset) {
+      const settings = worldPopulation.resetSettings();
+      sendJson(res, 200, { ok: true, ...worldPopulation.statusSnapshot(), settings });
+      return;
+    }
+    const settings = worldPopulation.updateSettings({
+      basePopulation: body?.basePopulation,
+      baseAt: body?.baseAt,
+      birthsPerYear: body?.birthsPerYear,
+      deathsPerYear: body?.deathsPerYear,
+      sourceLabel: body?.sourceLabel,
+    });
+    sendJson(res, 200, { ok: true, ...worldPopulation.statusSnapshot(), settings });
+  }
+
+  function handleWorldPopulationPush(body, res) {
+    const payload = worldPopulation.nextPayload();
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('World population', {
+      targetId,
+      total: payload.population?.total,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      population: payload.population,
+      asOf: payload.asOf,
       vestaboard: delivery?.vestaboard || null,
     });
   }
@@ -2358,6 +3104,7 @@ function createWebServer({
   async function airCommand(commandId, params = {}, {
     device = 'Scheduler',
     targetId = 'full',
+    manual = false,
   } = {}) {
     const command = commandRegistry.get(commandId);
     if (!command) {
@@ -2375,16 +3122,26 @@ function createWebServer({
       },
       setHeader() {},
     };
-    const deliveryId = normaliseSchedulerTarget(targetId);
+    let deliveryId = normaliseSchedulerTarget(targetId);
+    // Vestaboard-only skills have nothing to show on a Windows overlay. Rules
+    // created before boards defaulted to `full`; Air now / ticks must still
+    // reach the flaps rather than "succeeding" into the void.
+    const kinds = Array.isArray(command.kinds) ? command.kinds : null;
+    const boardOnly = kinds?.length === 1 && kinds[0] === 'vestaboard';
+    if (boardOnly && (deliveryId === 'full' || deliveryId === 'all')) {
+      deliveryId = 'vestaboard';
+    }
     const body = {
       ...(command.body || {}),
       ...params,
       device,
       targetId: deliveryId,
-      triggeredBy: 'scheduler',
+      // Air now is a human press — same path as the Push tile (explicit, no
+      // scheduler rotation gap / quiet-hours drop). Automated ticks stay soft.
+      triggeredBy: manual ? 'manual' : 'scheduler',
     };
 
-    schedulerAir = { source: 'scheduler', targetId: deliveryId };
+    schedulerAir = { source: manual ? 'manual' : 'scheduler', targetId: deliveryId };
     try {
       switch (commandId) {
         case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
@@ -2436,10 +3193,32 @@ function createWebServer({
           await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res); break;
         case 'weather.weekly':
           await handleWeeklyWeatherPush(body, res); break;
+        case 'weather.alerts':
+          await handleWeatherAlertsPush(body, res); break;
+        case 'stocks.market':
+          await handleStockMarketPush(body, res); break;
+        case 'fx.rates':
+          await handleCurrencyRatesPush(body, res); break;
+        case 'iss.track':
+          await handleIssTrackerPush(body, res); break;
+        case 'starlink.track':
+          await handleStarlinkTrackerPush(body, res); break;
         case 'japanese.learn':
           handleLearnJapanesePush(body, res); break;
         case 'chuck.facts':
           handleChuckNorrisPush(body, res); break;
+        case 'amazing.facts':
+          handleAmazingFactsPush(body, res); break;
+        case 'talk.starters':
+          handleConversationStartersPush(body, res); break;
+        case 'stoic.quotes':
+          handleStoicQuotesPush(body, res); break;
+        case 'history.day':
+          handleOnThisDayPush(body, res); break;
+        case 'bake.inspire':
+          handleBakingInspirationPush(body, res); break;
+        case 'world.population':
+          handleWorldPopulationPush(body, res); break;
         case 'signal.quiet-hours':
           handleQuietHoursReminderPush(body, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
@@ -2477,9 +3256,10 @@ function createWebServer({
       const entry = displayRegistry?.get?.(id);
       return Boolean(entry && (entry.kind === 'vestaboard' || entry.static));
     },
-    air: (rule) => airCommand(rule.commandId, rule.params, {
-      device: 'Scheduler',
+    air: (rule, _command, options = {}) => airCommand(rule.commandId, rule.params, {
+      device: options.manual ? 'Air now' : 'Scheduler',
       targetId: rule.target,
+      manual: Boolean(options.manual),
     }),
   });
 
@@ -5481,6 +6261,31 @@ function createWebServer({
           handleLocaleSettingsGet(res);
           return;
         }
+        if (pathname === '/api/weather-alerts/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWeatherAlertsSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/stock-market/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleStockMarketSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/currency-rates/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleCurrencyRatesSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/iss-tracker/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleIssTrackerSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/starlink-tracker/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleStarlinkTrackerSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/learn-japanese/settings') {
           if (!requireAdminSession(req, res)) return;
           handleLearnJapaneseSettingsGet(res);
@@ -5489,6 +6294,36 @@ function createWebServer({
         if (pathname === '/api/chuck-norris/facts') {
           if (!requireAdminSession(req, res)) return;
           handleChuckNorrisFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/amazing-facts/facts') {
+          if (!requireAdminSession(req, res)) return;
+          handleAmazingFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/conversation-starters/prompts') {
+          if (!requireAdminSession(req, res)) return;
+          handleConversationStartersGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/stoic-quotes/quotes') {
+          if (!requireAdminSession(req, res)) return;
+          handleStoicQuotesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/on-this-day/events') {
+          if (!requireAdminSession(req, res)) return;
+          handleOnThisDayGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/baking-inspiration/ideas') {
+          if (!requireAdminSession(req, res)) return;
+          handleBakingInspirationGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/world-population/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWorldPopulationSettingsGet(res);
           return;
         }
         if (pathname.startsWith('/api/flightplan/')) {
@@ -5994,6 +6829,36 @@ function createWebServer({
           case '/api/push/weekly-weather':
             await handleWeeklyWeatherPush(body, res);
             return;
+          case '/api/push/weather-alerts':
+            await handleWeatherAlertsPush(body, res);
+            return;
+          case '/api/weather-alerts/settings':
+            handleWeatherAlertsSettingsPut(body, res);
+            return;
+          case '/api/push/stock-market':
+            await handleStockMarketPush(body, res);
+            return;
+          case '/api/stock-market/settings':
+            handleStockMarketSettingsPut(body, res);
+            return;
+          case '/api/push/currency-rates':
+            await handleCurrencyRatesPush(body, res);
+            return;
+          case '/api/currency-rates/settings':
+            handleCurrencyRatesSettingsPut(body, res);
+            return;
+          case '/api/push/iss-tracker':
+            await handleIssTrackerPush(body, res);
+            return;
+          case '/api/iss-tracker/settings':
+            handleIssTrackerSettingsPut(body, res);
+            return;
+          case '/api/push/starlink-tracker':
+            await handleStarlinkTrackerPush(body, res);
+            return;
+          case '/api/starlink-tracker/settings':
+            handleStarlinkTrackerSettingsPut(body, res);
+            return;
           case '/api/push/learn-japanese':
             handleLearnJapanesePush(body, res);
             return;
@@ -6006,6 +6871,62 @@ function createWebServer({
             } else {
               handleChuckNorrisFactPost(body, res);
             }
+            return;
+          case '/api/push/amazing-facts':
+            handleAmazingFactsPush(body, res);
+            return;
+          case '/api/amazing-facts/facts':
+            if (body?.id) {
+              handleAmazingFactPut(body, res);
+            } else {
+              handleAmazingFactPost(body, res);
+            }
+            return;
+          case '/api/push/conversation-starters':
+            handleConversationStartersPush(body, res);
+            return;
+          case '/api/conversation-starters/prompts':
+            if (body?.id) {
+              handleConversationStarterPut(body, res);
+            } else {
+              handleConversationStarterPost(body, res);
+            }
+            return;
+          case '/api/push/stoic-quotes':
+            handleStoicQuotesPush(body, res);
+            return;
+          case '/api/stoic-quotes/quotes':
+            if (body?.id) {
+              handleStoicQuotePut(body, res);
+            } else {
+              handleStoicQuotePost(body, res);
+            }
+            return;
+          case '/api/push/on-this-day':
+            handleOnThisDayPush(body, res);
+            return;
+          case '/api/on-this-day/events':
+            if (body?.id) {
+              handleOnThisDayPut(body, res);
+            } else {
+              handleOnThisDayPost(body, res);
+            }
+            return;
+          case '/api/push/baking-inspiration':
+            handleBakingInspirationPush(body, res);
+            return;
+          case '/api/baking-inspiration/ideas':
+            if (body?.id) {
+              handleBakingInspirationPut(body, res);
+            } else {
+              handleBakingInspirationPost(body, res);
+            }
+            return;
+          case '/api/push/world-population':
+            handleWorldPopulationPush(body, res);
+            return;
+          case '/api/world-population/settings':
+            handleWorldPopulationSettingsPut(body, res);
             return;
           case '/api/push/quiet-hours-reminder':
             handleQuietHoursReminderPush(body, res);

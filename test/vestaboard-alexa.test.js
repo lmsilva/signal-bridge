@@ -136,8 +136,8 @@ test('a three line broadcast names the room on the last row', () => {
   assertLayout(frames[0].rows, [
     'vvvvvvvvvvvvvvvvvvvvvv',
     "v 'I LOVE YOU DADDY  v",
-    'v TAKE CARE OF MY    v',
-    "v TEDDY BEAR'        v",
+    'v TAKE CARE OF       v',
+    "v MY TEDDY BEAR'     v",
     'v MASTER BATH ECHO   v',
     'vvvvvvvvvvvvvvvvvvvvvv',
   ], 'broadcast (three lines)');
@@ -167,8 +167,8 @@ test('a long broadcast pages, and the first page flags the continuation', () => 
     'vvvvvvvvvvvvvvvvvvvvvv',
     'v COME TO THE MOVIE  v',
     'v THEATER AND BRING  v',
-    'v THE EXTRA GAME BY  v',
-    'v THAT YOU HAVE      v',
+    'v THE EXTRA GAME     v',
+    'v BY THAT YOU HAVE   v',
     'vvvvvvvvvvvvvvvvvvvvvv',
   ], 'broadcast page 2');
 });
@@ -496,8 +496,8 @@ test('a fired reminder wraps its label between the header and the room', () => {
   assertLayout(frames[0].rows, [
     'wwwwwwwwwwwwwwwwwwwwww',
     'w  REMINDER:         w',
-    'w  CHECK ON CORN IN  w',
-    'w  SMOKER            w',
+    'w  CHECK ON CORN     w',
+    'w  IN SMOKER         w',
     'w  KITCHEN ECHO      w',
     'wwwwwwwwwwwwwwwwwwwwww',
   ], 'reminder');
@@ -913,6 +913,7 @@ test('every Alexa payload type the bridge sends has a formatter', () => {
     'time.query',
     'timer.snapshot',
     'vivint-alarm.query',
+    'weather.alerts',
     'weather.query',
     'weather.weekly',
   ]);

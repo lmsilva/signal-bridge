@@ -60,9 +60,20 @@ const COMMAND_TO_TYPE = {
   'flightplan.next': 'flightplan.flight',
   'flightplan.board': 'flightplan.flight',
   'weather.weekly': 'weather.weekly',
+  'weather.alerts': 'weather.alerts',
   'japanese.learn': 'japanese.learn',
   'signal.quiet-hours': 'quiet-hours.reminder',
   'chuck.facts': 'chuck.facts',
+  'amazing.facts': 'amazing.facts',
+  'talk.starters': 'talk.starters',
+  'stoic.quotes': 'stoic.quotes',
+  'history.day': 'history.day',
+  'bake.inspire': 'bake.inspire',
+  'world.population': 'world.population',
+  'stocks.market': 'stocks.market',
+  'fx.rates': 'fx.rates',
+  'iss.track': 'iss.track',
+  'starlink.track': 'starlink.track',
 };
 
 function typeOf(payload, commandId) {

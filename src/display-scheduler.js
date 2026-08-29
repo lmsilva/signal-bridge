@@ -23,6 +23,7 @@ const path = require('path');
 const {
   createRuleStore, scoreRule, expectedPerDay, gapProfile, normaliseTarget, resolveCommandId,
 } = require('./scheduler-rules');
+const { kindsOf, COMMANDS } = require('./command-registry');
 const {
   createActivityLog, localDateKey, localParts, withinWindow,
 } = require('./scheduler-activity');
@@ -294,7 +295,16 @@ function createDisplayScheduler(deps = {}) {
   }
 
   function isBoardOnlyRule(rule) {
-    const target = normaliseTarget(rule?.target);
+    const command = commandRegistry?.get?.(rule?.commandId)
+      || COMMANDS.find((entry) => entry.id === rule?.commandId)
+      || null;
+    const kinds = kindsOf(command);
+    // A Vestaboard-only command never occupies the Windows overlay, even when
+    // an older rule still says target=full (Air now / ticks coerce delivery).
+    if (kinds.length === 1 && kinds[0] === 'vestaboard') {
+      return true;
+    }
+    const target = normaliseTarget(rule?.target, { command });
     if (target === 'vestaboard') {
       return true;
     }

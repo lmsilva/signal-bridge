@@ -1,0 +1,180 @@
+/**
+ * Stoic Quotes — house edits on top of the shipped corpus.
+ *
+ * Quotes live in `stoic-quotes-quotes.json`. This file only remembers hidden
+ * shipped ids, text/author overrides, custom additions, and the recent-id
+ * window so a scheduled rotation does not repeat itself.
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const RECENT_CAP = 80;
+const TEXT_MAX = 220;
+const AUTHOR_MAX = 40;
+
+const FALLBACK = {
+  recentIds: [],
+  hiddenIds: [],
+  overrides: {},
+  custom: [],
+};
+
+function cleanId(value) {
+  return String(value || '').trim();
+}
+
+function cleanText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, TEXT_MAX);
+}
+
+function cleanAuthor(value) {
+  return String(value || '')
+    .replace(/^[-–—]\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, AUTHOR_MAX);
+}
+
+function uniqueIds(list) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(list) ? list : []) {
+    const id = cleanId(raw);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function sanitiseCustom(list) {
+  const out = [];
+  const seen = new Set();
+  for (const row of Array.isArray(list) ? list : []) {
+    const id = cleanId(row?.id) || `custom-${out.length + 1}`;
+    const text = cleanText(row?.text);
+    const author = cleanAuthor(row?.author) || 'Unknown';
+    if (!text || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    out.push({ id, text, author });
+  }
+  return out;
+}
+
+function sanitiseOverrides(value) {
+  const out = {};
+  if (!value || typeof value !== 'object') {
+    return out;
+  }
+  for (const [id, entry] of Object.entries(value)) {
+    const key = cleanId(id);
+    if (!key) {
+      continue;
+    }
+    if (typeof entry === 'string') {
+      const text = cleanText(entry);
+      if (text) {
+        out[key] = { text };
+      }
+      continue;
+    }
+    const text = entry?.text != null ? cleanText(entry.text) : null;
+    const author = entry?.author != null ? cleanAuthor(entry.author) : null;
+    if (!text && !author) {
+      continue;
+    }
+    out[key] = {};
+    if (text) {
+      out[key].text = text;
+    }
+    if (author) {
+      out[key].author = author;
+    }
+  }
+  return out;
+}
+
+function sanitiseSettings(raw = {}, base = FALLBACK) {
+  const incoming = raw || {};
+  const recentSource = Array.isArray(incoming.recentIds) ? incoming.recentIds : base.recentIds;
+  return {
+    recentIds: uniqueIds(recentSource).slice(-RECENT_CAP),
+    hiddenIds: uniqueIds(incoming.hiddenIds != null ? incoming.hiddenIds : base.hiddenIds),
+    overrides: sanitiseOverrides(incoming.overrides != null ? incoming.overrides : base.overrides),
+    custom: sanitiseCustom(incoming.custom != null ? incoming.custom : base.custom),
+  };
+}
+
+function createStoicQuotesSettings(config = {}, log = console) {
+  const settingsPath = config.stoicQuotesSettingsPath
+    || path.resolve(config.ROOT || path.resolve(__dirname, '..'), 'data', 'stoic-quotes-settings.json');
+  let current = { ...FALLBACK, overrides: {}, custom: [], hiddenIds: [], recentIds: [] };
+
+  function load() {
+    try {
+      if (!fs.existsSync(settingsPath)) {
+        current = sanitiseSettings({}, FALLBACK);
+        return current;
+      }
+      current = sanitiseSettings(JSON.parse(fs.readFileSync(settingsPath, 'utf8')), FALLBACK);
+    } catch (error) {
+      log?.warn?.('Could not read Stoic Quotes settings', error?.message || error);
+      current = sanitiseSettings({}, FALLBACK);
+    }
+    return current;
+  }
+
+  function save() {
+    try {
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      fs.writeFileSync(settingsPath, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
+    } catch (error) {
+      log?.warn?.('Could not save Stoic Quotes settings', error?.message || error);
+    }
+  }
+
+  load();
+
+  return {
+    get: () => ({
+      recentIds: [...current.recentIds],
+      hiddenIds: [...current.hiddenIds],
+      overrides: { ...current.overrides },
+      custom: current.custom.map((row) => ({ ...row })),
+    }),
+    update(patch = {}) {
+      current = sanitiseSettings({ ...current, ...patch }, current);
+      save();
+      return this.get();
+    },
+    remember(id) {
+      const next = cleanId(id);
+      if (!next) {
+        return this.get();
+      }
+      const recentIds = current.recentIds.filter((item) => item !== next);
+      recentIds.push(next);
+      current = sanitiseSettings({ ...current, recentIds }, current);
+      save();
+      return this.get();
+    },
+    reload: load,
+    path: settingsPath,
+  };
+}
+
+module.exports = {
+  RECENT_CAP,
+  TEXT_MAX,
+  AUTHOR_MAX,
+  FALLBACK,
+  cleanText,
+  cleanAuthor,
+  sanitiseSettings,
+  createStoicQuotesSettings,
+};
