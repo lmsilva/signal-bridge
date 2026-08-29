@@ -612,13 +612,13 @@
 
   const SETTINGS_VIEW_KEY = 'signal.settingsView';
   const SETTINGS_SEARCH_KEY = 'signal.settingsSearch';
-  const SETTINGS_VIEW_ORDER = ['accounts', 'youtube', 'games', 'news', 'travel', 'media'];
+  const SETTINGS_VIEW_ORDER = ['global', 'accounts', 'youtube', 'games', 'news', 'travel', 'media'];
   const SETTINGS_VIEWS = new Set(SETTINGS_VIEW_ORDER);
 
   function currentSettingsView() {
     const active = document.querySelector('#settings-view-tabs .segmented-btn.active');
     const view = active?.dataset?.settingsView;
-    return SETTINGS_VIEWS.has(view) ? view : 'accounts';
+    return SETTINGS_VIEWS.has(view) ? view : 'global';
   }
 
   function applySettingsFilter(preferredView = null) {
@@ -708,7 +708,7 @@
   // Restore the last pane + search before the Settings tab is opened, so
   // non-matching cards are never flashed as a long scrolling page.
   (() => {
-    const savedView = uiStorageGet(SETTINGS_VIEW_KEY, 'accounts');
+    const savedView = uiStorageGet(SETTINGS_VIEW_KEY, 'global');
     const savedSearch = uiStorageGet(SETTINGS_SEARCH_KEY, '');
     const input = $('settings-search');
     if (input) input.value = savedSearch;
@@ -1105,6 +1105,8 @@
     trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.2 2.5c-.5.2-.7.6-.7 1.1v.5"/><path d="M12 16.6v.4"/>',
     news: '<path d="M4 5.5h12.5A2.5 2.5 0 0 1 19 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M8 9h6M8 12h6M8 15h3.5"/><path d="M19 10.5h1.5A1.5 1.5 0 0 1 22 12v5.5A1.5 1.5 0 0 1 20.5 19H19"/>',
     wiki: '<path d="M5 4.5h8a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2v-13Z"/><path d="M9 4.5V3h6v1.5"/><path d="M8 10h6M8 13.5h4"/>',
+    japanese: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/>',
+    'quiet-hours': '<path d="M14.5 4.5A7.5 7.5 0 1 0 19.5 16 6.2 6.2 0 0 1 14.5 4.5Z"/><path d="M16.2 6.2 17 4.4M18.4 8.8l1.6-.6M19.2 12l1.8.2"/>',
     sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
     steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
@@ -4692,6 +4694,159 @@
     loadPlexSettings();
   }
 
+  // ------------------------------------------- Settings → Global / Location
+
+  function localeUnit() {
+    const active = document.querySelector('#locale-unit .segmented-btn.active');
+    return active?.dataset?.localeUnit === 'C' ? 'C' : 'F';
+  }
+
+  function setLocaleUnit(unit) {
+    const want = unit === 'C' ? 'C' : 'F';
+    document.querySelectorAll('#locale-unit .segmented-btn').forEach((btn) => {
+      const on = btn.dataset.localeUnit === want;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function renderLocaleSettings(settings = {}) {
+    const city = $('locale-city');
+    const zip = $('locale-zip');
+    if (city && document.activeElement !== city) city.value = settings.city || '';
+    if (zip && document.activeElement !== zip) zip.value = settings.postalCode || '';
+    setLocaleUnit(settings.temperatureUnit);
+    const pill = $('locale-status-pill');
+    const detail = $('locale-status-detail');
+    const resolved = $('locale-resolved');
+    const hasCoords = Number.isFinite(Number(settings.latitude))
+      && Number.isFinite(Number(settings.longitude));
+    if (pill) {
+      pill.textContent = hasCoords ? 'Set' : 'Not set';
+      pill.className = `status-pill ${hasCoords ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = hasCoords
+        ? `${settings.label || settings.city || 'Home'} · ${settings.timeZone || ''}`
+        : 'One pin for Weekly Weather, outdoor forecast, Overhead, routes, and board clocks.';
+    }
+    if (resolved) {
+      if (!hasCoords) {
+        resolved.textContent = 'Save a city or ZIP to pin the house here.';
+      } else {
+        const lat = Number(settings.latitude).toFixed(4);
+        const lon = Number(settings.longitude).toFixed(4);
+        resolved.textContent = `${settings.label || 'Home'}\n${lat}, ${lon}\n${settings.timeZone || ''} · °${settings.temperatureUnit || 'F'}`;
+        resolved.style.whiteSpace = 'pre-line';
+      }
+    }
+  }
+
+  async function loadLocaleSettings() {
+    try {
+      const data = await apiGet('/api/locale/settings');
+      renderLocaleSettings(data.settings || data.locale || {});
+    } catch {
+      renderLocaleSettings({});
+    }
+  }
+
+  $('locale-unit')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-locale-unit]');
+    if (!btn) return;
+    setLocaleUnit(btn.dataset.localeUnit);
+  });
+
+  $('btn-locale-save')?.addEventListener('click', async () => {
+    const button = $('btn-locale-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/locale/settings', {
+        city: $('locale-city')?.value || '',
+        postalCode: $('locale-zip')?.value || '',
+        temperatureUnit: localeUnit(),
+      });
+      renderLocaleSettings(result.settings || {});
+      toast('House location saved', 'ok');
+      loadOverheadSettings();
+    } catch (error) {
+      toast(error.message || 'Could not save location', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  loadLocaleSettings();
+
+  // ------------------------------------------- Settings → Learn Japanese
+
+  function collectLearnJapaneseList(attr) {
+    return [...document.querySelectorAll(`[${attr}]:checked`)].map((input) => input.getAttribute(attr));
+  }
+
+  function setLearnJapaneseList(attr, values) {
+    const want = new Set(values || []);
+    document.querySelectorAll(`[${attr}]`).forEach((input) => {
+      input.checked = want.has(input.getAttribute(attr));
+    });
+  }
+
+  function renderLearnJapaneseSettings(status = {}) {
+    const settings = status.settings || {};
+    setLearnJapaneseList('data-learn-japanese-level', settings.levels || ['N5', 'N4']);
+    setLearnJapaneseList('data-learn-japanese-pos', settings.partsOfSpeech || []);
+    const pill = $('learn-japanese-status-pill');
+    const detail = $('learn-japanese-status-detail');
+    const hint = $('learn-japanese-pool-hint');
+    const available = Number(status.available || 0);
+    const total = Number(status.total || 0);
+    if (pill) {
+      pill.textContent = available > 0 ? `${available} words` : 'Empty';
+      pill.className = `status-pill ${available > 0 ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = available > 0
+        ? `${available} of ${total} shipped words match these filters.`
+        : 'Turn a level or part of speech back on — the pool is empty.';
+    }
+    if (hint) {
+      hint.textContent = total
+        ? `Shipped lexicon: ${total} JLPT N5/N4 words (OpenJLPT / JMDict).`
+        : 'Lexicon missing.';
+    }
+  }
+
+  async function loadLearnJapaneseSettings() {
+    try {
+      const data = await apiGet('/api/learn-japanese/settings');
+      renderLearnJapaneseSettings(data);
+    } catch {
+      renderLearnJapaneseSettings({});
+    }
+  }
+
+  async function saveLearnJapaneseSettings() {
+    try {
+      const result = await apiPost('/api/learn-japanese/settings', {
+        levels: collectLearnJapaneseList('data-learn-japanese-level'),
+        partsOfSpeech: collectLearnJapaneseList('data-learn-japanese-pos'),
+      });
+      renderLearnJapaneseSettings(result);
+    } catch (error) {
+      toast(error.message || 'Could not save Learn Japanese settings', 'bad');
+      await loadLearnJapaneseSettings();
+    }
+  }
+
+  $('learn-japanese-settings-card')?.addEventListener('change', (event) => {
+    if (!event.target.closest('[data-learn-japanese-level], [data-learn-japanese-pos]')) {
+      return;
+    }
+    saveLearnJapaneseSettings();
+  });
+
+  loadLearnJapaneseSettings();
+
   // ------------------------------------------- Settings → Overhead
 
   function renderOverheadSettings(status) {
@@ -4723,7 +4878,7 @@
       if (status.home?.latitude != null) {
         homeLoc.textContent = `Location: ${status.home.name || 'Home'} (${Number(status.home.latitude).toFixed(4)}, ${Number(status.home.longitude).toFixed(4)})`;
       } else {
-        homeLoc.textContent = 'Location: not set — configure voiceEvents.defaultLocation (same as weather).';
+        homeLoc.textContent = 'Location: not set — save a city or ZIP under Settings → Global.';
       }
     }
     const aircraftHint = $('overhead-aircraft-hint');
@@ -4744,7 +4899,7 @@
     }
     if (detail) {
       detail.textContent = !status.hasHome
-        ? 'Set voiceEvents.defaultLocation in config — Overhead uses the same coordinates as weather.'
+        ? 'Save a city or ZIP under Settings → Global — Overhead uses the same pin as weather.'
         : (status.hasContent
           ? `${status.aircraftInRange || 0} aircraft within ${settings.radiusNm || 40} nm`
           : 'No aircraft in range right now — manual push still shows clear skies.');
@@ -8939,6 +9094,7 @@
     $('vb-form-quiet-start').value = board?.quietHours?.start || '22:00';
     $('vb-form-quiet-end').value = board?.quietHours?.end || '07:00';
     $('vb-form-quiet-enabled').checked = board?.quietHours?.enabled !== false;
+    $('vb-form-quiet-remind').checked = board?.quietHours?.remindOnStart !== false;
     form.hidden = false;
     $('btn-vb-add').hidden = true;
     $('vb-form-name').focus();
@@ -9029,6 +9185,7 @@
         start: $('vb-form-quiet-start').value || '22:00',
         end: $('vb-form-quiet-end').value || '07:00',
         enabled: $('vb-form-quiet-enabled').checked,
+        remindOnStart: $('vb-form-quiet-remind').checked,
       },
     };
     const key = $('vb-form-key').value.trim();
@@ -9732,6 +9889,7 @@
   document.querySelector('.tab-btn[data-tab="settings"]')?.addEventListener('click', () => {
     loadOverheadSettings();
     loadFlightplanSettings();
+    loadLocaleSettings();
   });
 
   // ---------------------------------------------------------- Flight Plan

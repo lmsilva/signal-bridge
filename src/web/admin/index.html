@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal115">
+  <link rel="stylesheet" href="styles.css?v=signal118">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -120,7 +120,7 @@
         <div class="push-block" data-push-group="home">
           <div class="section-label">Around the house</div>
           <div class="card-row card-row-quad" id="push-row-home" data-push-category="home"
-               data-skeleton-count="6" aria-busy="true"></div>
+               data-skeleton-count="8" aria-busy="true"></div>
         </div>
 
         <!-- Steam / PSN / YouTube / Autodarts / Huupe are one auto-mode tile
@@ -141,7 +141,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="2" aria-busy="true"></div>
+               data-skeleton-count="3" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="travel">
@@ -698,7 +698,11 @@
           <button type="button" class="btn btn-outline btn-sm" id="settings-search-clear" hidden>Clear</button>
         </div>
         <div class="segmented settings-view-tabs" id="settings-view-tabs" role="tablist" aria-label="Settings sections">
-          <button type="button" class="segmented-btn active" data-settings-view="accounts" role="tab" aria-selected="true">
+          <button type="button" class="segmented-btn active" data-settings-view="global" role="tab" aria-selected="true">
+            <span class="settings-view-label">Global</span>
+            <span class="settings-hit-count" hidden>0</span>
+          </button>
+          <button type="button" class="segmented-btn" data-settings-view="accounts" role="tab" aria-selected="false">
             <span class="settings-view-label">Accounts</span>
             <span class="settings-hit-count" hidden>0</span>
           </button>
@@ -727,6 +731,35 @@
       </div>
 
       <div class="card-grid" id="settings-card-grid">
+        <div class="section-label" data-settings-group="global">House</div>
+        <div class="card locale-settings-card" id="locale-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Location</div>
+            <span class="status-pill" id="locale-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="locale-status-detail">
+            One pin for Weekly Weather, outdoor forecast, Overhead, routes, and board clocks.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="locale-city">City</label>
+              <input type="text" id="locale-city" class="field-input" placeholder="Lehi, UT" spellcheck="false" autocomplete="off">
+              <label class="field-label field-label-spaced" for="locale-zip">ZIP code</label>
+              <input type="text" id="locale-zip" class="field-input" placeholder="84043" spellcheck="false" autocomplete="off" inputmode="numeric">
+              <label class="field-label field-label-spaced">Temperature</label>
+              <div class="segmented" id="locale-unit" role="group" aria-label="Temperature unit">
+                <button type="button" class="segmented-btn active" data-locale-unit="F">°F</button>
+                <button type="button" class="segmented-btn" data-locale-unit="C">°C</button>
+              </div>
+              <button type="button" class="btn btn-accent btn-block" id="btn-locale-save" style="margin-top:14px">Save location</button>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Resolved</label>
+              <p class="hint" id="locale-resolved">Save a city or ZIP to pin the house here.</p>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="accounts">Sign-in</div>
 
         <div class="card" data-settings-group="accounts">
@@ -977,6 +1010,43 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="news">Learn Japanese</div>
+        <div class="card learn-japanese-settings-card" id="learn-japanese-settings-card" data-settings-group="news">
+          <div class="auth-head">
+            <div class="auth-name">Word of the flip</div>
+            <span class="status-pill" id="learn-japanese-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="learn-japanese-status-detail">
+            A random JLPT word in romaji — Vestaboard cannot show kana, so every entry is romanized.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">JLPT levels</label>
+              <div class="trivia-check-row" id="learn-japanese-levels">
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-level="N5" checked><span>N5</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-level="N4" checked><span>N4</span></label>
+              </div>
+              <label class="field-label field-label-spaced">Parts of speech</label>
+              <div class="trivia-check-row" id="learn-japanese-pos">
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="noun" checked><span>Noun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="verb" checked><span>Verb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="adj" checked><span>Adjective</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="adverb" checked><span>Adverb</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="phrase" checked><span>Phrase</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="particle" checked><span>Particle</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="pronoun" checked><span>Pronoun</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="counter" checked><span>Counter</span></label>
+                <label class="trivia-check"><input type="checkbox" data-learn-japanese-pos="other" checked><span>Other</span></label>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Pool</label>
+              <p class="hint" id="learn-japanese-pool-hint">Loading…</p>
+              <p class="hint">White and red chips follow the Japanese flag. Push or schedule it from the News pane — Vestaboard only.</p>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="news">Wikipedia Common Knowledge</div>
         <div class="card wiki-ck-settings-card" id="wiki-ck-settings-card" data-settings-group="news">
           <div class="auth-head">
@@ -1061,7 +1131,7 @@
           </div>
           <p class="auth-detail" id="overhead-status-detail">Loading…</p>
 
-          <p class="hint" id="overhead-home-hint">Home location comes from weather settings (<code>voiceEvents.defaultLocation</code> in config).</p>
+          <p class="hint" id="overhead-home-hint">Home location comes from Settings → Global.</p>
           <p class="hint" id="overhead-home-location">Location: —</p>
 
           <div class="settings-columns settings-columns-3 upside-news-columns">
@@ -1684,6 +1754,10 @@
               <input type="checkbox" id="vb-form-quiet-enabled" checked>
               <span>Go quiet overnight (alarm and timer fires still come through)</span>
             </label>
+            <label class="trivia-check">
+              <input type="checkbox" id="vb-form-quiet-remind" checked>
+              <span>Flip a Quiet Hours Reminder when quiet hours start</span>
+            </label>
 
             <div class="vb-form-actions">
               <button type="submit" class="btn btn-accent">Save board</button>
@@ -2118,6 +2192,6 @@
       document.write('<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"><\/script>');
     }
   </script>
-  <script src="app.js?v=signal115"></script>
+  <script src="app.js?v=signal118"></script>
 </body>
 </html>

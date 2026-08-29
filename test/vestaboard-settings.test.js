@@ -56,7 +56,12 @@ test('a half-filled board comes back with everything a queue needs', () => {
   assert.equal(board.rateWindowSeconds, 15);
   assert.equal(board.minRotationGapSeconds, 600);
   assert.equal(board.enabled, true);
-  assert.deepEqual(board.quietHours, { start: '22:00', end: '07:00', enabled: true });
+  assert.deepEqual(board.quietHours, {
+    start: '22:00',
+    end: '07:00',
+    enabled: true,
+    remindOnStart: true,
+  });
   assert.equal(board.events, 'all');
 
   assert.equal(normaliseBoard({ name: 'no id' }), null);

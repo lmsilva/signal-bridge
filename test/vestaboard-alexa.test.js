@@ -914,6 +914,7 @@ test('every Alexa payload type the bridge sends has a formatter', () => {
     'timer.snapshot',
     'vivint-alarm.query',
     'weather.query',
+    'weather.weekly',
   ]);
 });
 

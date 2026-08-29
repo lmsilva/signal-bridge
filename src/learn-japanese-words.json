@@ -1,0 +1,8700 @@
+{
+  "source": "OpenJLPT / JMDict (https://github.com/evanclan/OpenJLPT)",
+  "generatedAt": "2026-08-29",
+  "words": [
+    {
+      "id": "a-ah-n4",
+      "romaji": "a",
+      "english": "Ah",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "aa-like-that-n4",
+      "romaji": "aa",
+      "english": "like that",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "abiru-to-bathe-n5",
+      "romaji": "abiru",
+      "english": "to bathe",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "abunai-dangerous-n5",
+      "romaji": "abunai",
+      "english": "dangerous",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "achchi-over-there-n5",
+      "romaji": "achchi",
+      "english": "over there",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "achira-there-n5",
+      "romaji": "achira",
+      "english": "there",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "afurika-africa-n4",
+      "romaji": "afurika",
+      "english": "Africa",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "agaru-to-rise-n4",
+      "romaji": "agaru",
+      "english": "to rise",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ageru-to-give-n4",
+      "romaji": "ageru",
+      "english": "to give",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ageru-to-give-n5",
+      "romaji": "ageru",
+      "english": "to give",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "aida-a-space-n4",
+      "romaji": "aida",
+      "english": "a space",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "aisatsusuru-to-greet-n4",
+      "romaji": "aisatsusuru",
+      "english": "to greet",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "aji-flavour-n4",
+      "romaji": "aji",
+      "english": "flavour",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ajia-asia-n4",
+      "romaji": "ajia",
+      "english": "Asia",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "aka-red-n5",
+      "romaji": "aka",
+      "english": "red",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "akachan-infant-n4",
+      "romaji": "akachan",
+      "english": "infant",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "akai-red-n5",
+      "romaji": "akai",
+      "english": "red",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "akanbou-baby-n4",
+      "romaji": "akanbou",
+      "english": "baby",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "akarui-bright-n5",
+      "romaji": "akarui",
+      "english": "bright",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "akeru-to-open-n5",
+      "romaji": "akeru",
+      "english": "to open",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "aki-autumn-n5",
+      "romaji": "aki",
+      "english": "autumn",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "aku-to-open-n4",
+      "romaji": "aku",
+      "english": "to open",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "aku-to-open-n5",
+      "romaji": "aku",
+      "english": "to open",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "akusesarii-accessory-n4",
+      "romaji": "akusesarii",
+      "english": "accessory",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "amai-sweet-n5",
+      "romaji": "amai",
+      "english": "sweet",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "amari-not-very-n5",
+      "romaji": "amari",
+      "english": "not very",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "ame-candy-n5",
+      "romaji": "ame",
+      "english": "candy",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ame-rain-n5",
+      "romaji": "ame",
+      "english": "rain",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "amerika-america-n4",
+      "romaji": "amerika",
+      "english": "America",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "anata-you-n5",
+      "romaji": "anata",
+      "english": "you",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "anaunsaa-announcer-n4",
+      "romaji": "anaunsaa",
+      "english": "announcer",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "anna-such-n4",
+      "romaji": "anna",
+      "english": "such",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "annaisuru-to-guide-n4",
+      "romaji": "annaisuru",
+      "english": "to guide",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ano-that-over-there-n5",
+      "romaji": "ano",
+      "english": "that over there",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "anshin-relief-n4",
+      "romaji": "anshin",
+      "english": "relief",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "anzen-safety-n4",
+      "romaji": "anzen",
+      "english": "safety",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ao-blue-n5",
+      "romaji": "ao",
+      "english": "blue",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "aoi-blue-n5",
+      "romaji": "aoi",
+      "english": "blue",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "apaato-apartment-n5",
+      "romaji": "apaato",
+      "english": "apartment",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "arau-to-wash-n5",
+      "romaji": "arau",
+      "english": "to wash",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "are-that-n5",
+      "romaji": "are",
+      "english": "that",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "aru-to-be-n5",
+      "romaji": "aru",
+      "english": "to be",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "arubaito-part-time-job-n4",
+      "romaji": "arubaito",
+      "english": "part-time job",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "arukooru-alcohol-n4",
+      "romaji": "arukooru",
+      "english": "alcohol",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "aruku-to-walk-n5",
+      "romaji": "aruku",
+      "english": "to walk",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "asa-morning-n5",
+      "romaji": "asa",
+      "english": "morning",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "asagohan-breakfast-n5",
+      "romaji": "asagohan",
+      "english": "breakfast",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "asai-shallow-n4",
+      "romaji": "asai",
+      "english": "shallow",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "asatte-day-after-tomorrow-n5",
+      "romaji": "asatte",
+      "english": "day after tomorrow",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ashi-foot-n5",
+      "romaji": "ashi",
+      "english": "foot",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ashita-tomorrow-n5",
+      "romaji": "ashita",
+      "english": "tomorrow",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "asobi-play-n4",
+      "romaji": "asobi",
+      "english": "play",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "asobu-to-play-n5",
+      "romaji": "asobu",
+      "english": "to play",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "asoko-over-there-n5",
+      "romaji": "asoko",
+      "english": "over there",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "asu-tomorrow-n4",
+      "romaji": "asu",
+      "english": "tomorrow",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "atama-head-n5",
+      "romaji": "atama",
+      "english": "head",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "atarashii-new-n5",
+      "romaji": "atarashii",
+      "english": "new",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "atatakai-warm-n5",
+      "romaji": "atatakai",
+      "english": "warm",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "ato-afterwards-n5",
+      "romaji": "ato",
+      "english": "afterwards",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "atsui-kind-n5",
+      "romaji": "atsui",
+      "english": "kind",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "atsui-hot-n5",
+      "romaji": "atsui",
+      "english": "hot",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "atsui-hot-to-the-touch-n5",
+      "romaji": "atsui",
+      "english": "hot to the touch",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "atsumaru-to-gather-n4",
+      "romaji": "atsumaru",
+      "english": "to gather",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "atsumeru-to-collect-something-n4",
+      "romaji": "atsumeru",
+      "english": "to collect something",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "au-to-match-n4",
+      "romaji": "au",
+      "english": "to match",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "au-to-meet-n5",
+      "romaji": "au",
+      "english": "to meet",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "ayamaru-to-apologize-n4",
+      "romaji": "ayamaru",
+      "english": "to apologize",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "baai-situation-n4",
+      "romaji": "baai",
+      "english": "situation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bai-double-n4",
+      "romaji": "bai",
+      "english": "double",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ban-evening-n5",
+      "romaji": "ban",
+      "english": "evening",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "bangohan-evening-meal-n5",
+      "romaji": "bangohan",
+      "english": "evening meal",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "bangou-number-n5",
+      "romaji": "bangou",
+      "english": "number",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "bangumi-television-or-radio-program-n4",
+      "romaji": "bangumi",
+      "english": "television or radio program",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "basho-location-n4",
+      "romaji": "basho",
+      "english": "location",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "basu-bus-n5",
+      "romaji": "basu",
+      "english": "bus",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "bataa-butter-n5",
+      "romaji": "bataa",
+      "english": "butter",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "beddo-bed-n5",
+      "romaji": "beddo",
+      "english": "bed",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "benkyousuru-to-study-n5",
+      "romaji": "benkyousuru",
+      "english": "to study",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "benri-useful-n5",
+      "romaji": "benri",
+      "english": "useful",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "beru-bell-n4",
+      "romaji": "beru",
+      "english": "bell",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "betsu-different-n4",
+      "romaji": "betsu",
+      "english": "different",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bijutsukan-art-gallery-n4",
+      "romaji": "bijutsukan",
+      "english": "art gallery",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bikkurisuru-to-be-surprised-n4",
+      "romaji": "bikkurisuru",
+      "english": "to be surprised",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "biru-building-or-bill-n4",
+      "romaji": "biru",
+      "english": "building or bill",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "boku-i-n4",
+      "romaji": "boku",
+      "english": "I",
+      "pos": "pronoun",
+      "level": "N4"
+    },
+    {
+      "id": "boorupen-ball-point-pen-n5",
+      "romaji": "boorupen",
+      "english": "ball-point pen",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "botan-button-n5",
+      "romaji": "botan",
+      "english": "button",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "boueki-trade-n4",
+      "romaji": "boueki",
+      "english": "trade",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "boushi-hat-n5",
+      "romaji": "boushi",
+      "english": "hat",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "buchou-head-of-a-section-n4",
+      "romaji": "buchou",
+      "english": "head of a section",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "budou-grapes-n4",
+      "romaji": "budou",
+      "english": "grapes",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bungaku-literature-n4",
+      "romaji": "bungaku",
+      "english": "literature",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bunka-culture-n4",
+      "romaji": "bunka",
+      "english": "culture",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bunpou-grammar-n4",
+      "romaji": "bunpou",
+      "english": "grammar",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "bunshou-sentence-n5",
+      "romaji": "bunshou",
+      "english": "sentence",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "butaniku-pork-n5",
+      "romaji": "butaniku",
+      "english": "pork",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "byouin-hospital-n5",
+      "romaji": "byouin",
+      "english": "hospital",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "byouki-illness-n5",
+      "romaji": "byouki",
+      "english": "illness",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chairo-brown-n5",
+      "romaji": "chairo",
+      "english": "brown",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chan-suffix-for-familiar-female-person-n4",
+      "romaji": "chan",
+      "english": "suffix for familiar female person",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chawan-rice-bowl-n5",
+      "romaji": "chawan",
+      "english": "rice bowl",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chi-blood-n4",
+      "romaji": "chi",
+      "english": "blood",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chiekkusuru-to-check-n4",
+      "romaji": "chiekkusuru",
+      "english": "to check",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "chigau-to-differ-n5",
+      "romaji": "chigau",
+      "english": "to differ",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "chiisai-little-n5",
+      "romaji": "chiisai",
+      "english": "little",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "chiisana-little-n5",
+      "romaji": "chiisana",
+      "english": "little",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chikai-near-n5",
+      "romaji": "chikai",
+      "english": "near",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "chikaku-near-n5",
+      "romaji": "chikaku",
+      "english": "near",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chikara-strength-n4",
+      "romaji": "chikara",
+      "english": "strength",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chikatetsu-underground-train-n5",
+      "romaji": "chikatetsu",
+      "english": "underground train",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chiri-geography-n4",
+      "romaji": "chiri",
+      "english": "geography",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chittomo-not-at-all-n4",
+      "romaji": "chittomo",
+      "english": "not at all",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chizu-map-n5",
+      "romaji": "chizu",
+      "english": "map",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "chotto-somewhat-n5",
+      "romaji": "chotto",
+      "english": "somewhat",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "choudo-exactly-n5",
+      "romaji": "choudo",
+      "english": "exactly",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "chuugakkou-junior-high-school-n4",
+      "romaji": "chuugakkou",
+      "english": "junior high school",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chuui-caution-n4",
+      "romaji": "chuui",
+      "english": "caution",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chuusha-injection-n4",
+      "romaji": "chuusha",
+      "english": "injection",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "chuushajou-parking-lot-n4",
+      "romaji": "chuushajou",
+      "english": "parking lot",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "daibu-greatly-n4",
+      "romaji": "daibu",
+      "english": "greatly",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "daidokoro-kitchen-n5",
+      "romaji": "daidokoro",
+      "english": "kitchen",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "daigaku-university-n5",
+      "romaji": "daigaku",
+      "english": "university",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "daigakusei-university-student-n4",
+      "romaji": "daigakusei",
+      "english": "university student",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "daiji-important-n4",
+      "romaji": "daiji",
+      "english": "important",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "daijoubu-all-right-n5",
+      "romaji": "daijoubu",
+      "english": "all right",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "daisuki-to-be-very-likeable-n5",
+      "romaji": "daisuki",
+      "english": "to be very likeable",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "daitai-generally-n4",
+      "romaji": "daitai",
+      "english": "generally",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "dakara-so-n4",
+      "romaji": "dakara",
+      "english": "so",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "dame-no-good-n4",
+      "romaji": "dame",
+      "english": "no good",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "danbou-heating-n4",
+      "romaji": "danbou",
+      "english": "heating",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "dandan-gradually-n5",
+      "romaji": "dandan",
+      "english": "gradually",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "dansei-male-n4",
+      "romaji": "dansei",
+      "english": "male",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "dare-who-n5",
+      "romaji": "dare",
+      "english": "who",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "dasu-to-put-out-n5",
+      "romaji": "dasu",
+      "english": "to put out",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "deguchi-exit-n5",
+      "romaji": "deguchi",
+      "english": "exit",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "dekakeru-to-go-out-n5",
+      "romaji": "dekakeru",
+      "english": "to go out",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "dekiru-to-be-able-to-n5",
+      "romaji": "dekiru",
+      "english": "to be able to",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "dekirudake-as-much-as-possible-n4",
+      "romaji": "dekirudake",
+      "english": "as much as possible",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "demo-but-n5",
+      "romaji": "demo",
+      "english": "but",
+      "pos": "particle",
+      "level": "N5"
+    },
+    {
+      "id": "denki-electricity-n5",
+      "romaji": "denki",
+      "english": "electricity",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "denpou-telegram-n4",
+      "romaji": "denpou",
+      "english": "telegram",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "densha-electric-train-n5",
+      "romaji": "densha",
+      "english": "electric train",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "dentou-electric-light-n4",
+      "romaji": "dentou",
+      "english": "electric light",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "denwa-telephone-n5",
+      "romaji": "denwa",
+      "english": "telephone",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "depaato-department-store-n5",
+      "romaji": "depaato",
+      "english": "department store",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "deru-to-appear-n5",
+      "romaji": "deru",
+      "english": "to appear",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "dewa-with-that-n5",
+      "romaji": "dewa",
+      "english": "with that...",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "doa-western-style-door-n5",
+      "romaji": "doa",
+      "english": "Western style door",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "dochchi-which-n5",
+      "romaji": "dochchi",
+      "english": "which",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "dochira-which-of-two-n5",
+      "romaji": "dochira",
+      "english": "which of two",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "doko-where-n5",
+      "romaji": "doko",
+      "english": "where",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "donata-who-n5",
+      "romaji": "donata",
+      "english": "who",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "dondon-more-and-more-n4",
+      "romaji": "dondon",
+      "english": "more and more",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "dono-which-n5",
+      "romaji": "dono",
+      "english": "which",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "dore-which-n5",
+      "romaji": "dore",
+      "english": "which",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "dorobou-thief-n4",
+      "romaji": "dorobou",
+      "english": "thief",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "dou-how-n5",
+      "romaji": "dou",
+      "english": "how",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "doubutsu-animal-n5",
+      "romaji": "doubutsu",
+      "english": "animal",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "doubutsuen-zoo-n4",
+      "romaji": "doubutsuen",
+      "english": "zoo",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "dougu-tool-n4",
+      "romaji": "dougu",
+      "english": "tool",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "doumo-thanks-n5",
+      "romaji": "doumo",
+      "english": "thanks",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "doushite-for-what-reason-n5",
+      "romaji": "doushite",
+      "english": "for what reason",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "douzo-please-n5",
+      "romaji": "douzo",
+      "english": "please",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "doyoubi-saturday-n5",
+      "romaji": "doyoubi",
+      "english": "Saturday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "e-picture-n5",
+      "romaji": "e",
+      "english": "picture",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "eda-branch-n4",
+      "romaji": "eda",
+      "english": "branch",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ee-yes-n5",
+      "romaji": "ee",
+      "english": "yes",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "eiga-movie-n5",
+      "romaji": "eiga",
+      "english": "movie",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "eigakan-cinema-n5",
+      "romaji": "eigakan",
+      "english": "cinema",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "eigo-english-language-n5",
+      "romaji": "eigo",
+      "english": "English language",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "eki-station-n5",
+      "romaji": "eki",
+      "english": "station",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "enpitsu-pencil-n5",
+      "romaji": "enpitsu",
+      "english": "pencil",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "enryosuru-to-be-reserved-n4",
+      "romaji": "enryosuru",
+      "english": "to be reserved",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "erabu-to-choose-n4",
+      "romaji": "erabu",
+      "english": "to choose",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "erebeetaa-elevator-n5",
+      "romaji": "erebeetaa",
+      "english": "elevator",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "esukareetaa-escalator-n4",
+      "romaji": "esukareetaa",
+      "english": "escalator",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "fuakkusu-fax-n4",
+      "romaji": "fuakkusu",
+      "english": "fax",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "fuben-inconvenience-n4",
+      "romaji": "fuben",
+      "english": "inconvenience",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "fueru-to-increase-n4",
+      "romaji": "fueru",
+      "english": "to increase",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "fuirumu-roll-of-film-n5",
+      "romaji": "fuirumu",
+      "english": "roll of film",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "fukai-deep-n4",
+      "romaji": "fukai",
+      "english": "deep",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "fuku-to-blow-n5",
+      "romaji": "fuku",
+      "english": "to blow",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "fuku-clothes-n5",
+      "romaji": "fuku",
+      "english": "clothes",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "fukushuu-revision-n4",
+      "romaji": "fukushuu",
+      "english": "revision",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "fukuzatsu-complexity-n4",
+      "romaji": "fukuzatsu",
+      "english": "complexity",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "fumu-to-step-on-n4",
+      "romaji": "fumu",
+      "english": "to step on",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "fune-ship-n4",
+      "romaji": "fune",
+      "english": "ship",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "fuooku-fork-n5",
+      "romaji": "fuooku",
+      "english": "fork",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "furidasu-to-start-to-rain-n4",
+      "romaji": "furidasu",
+      "english": "to start to rain",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "furo-bath-n5",
+      "romaji": "furo",
+      "english": "bath",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "furu-to-fall-n5",
+      "romaji": "furu",
+      "english": "to fall",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "furui-old-n5",
+      "romaji": "furui",
+      "english": "old",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "futari-two-people-n5",
+      "romaji": "futari",
+      "english": "two people",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "futatsu-two-n5",
+      "romaji": "futatsu",
+      "english": "two",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "futoi-fat-n5",
+      "romaji": "futoi",
+      "english": "fat",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "futon-japanese-bedding-n4",
+      "romaji": "futon",
+      "english": "Japanese bedding",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "futoru-to-become-fat-n4",
+      "romaji": "futoru",
+      "english": "to become fat",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "futsuka-two-days-n5",
+      "romaji": "futsuka",
+      "english": "two days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "futsuu-usually-n4",
+      "romaji": "futsuu",
+      "english": "usually",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "fuutou-envelope-n5",
+      "romaji": "fuutou",
+      "english": "envelope",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "fuyu-winter-n5",
+      "romaji": "fuyu",
+      "english": "winter",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gaikoku-foreign-country-n5",
+      "romaji": "gaikoku",
+      "english": "foreign country",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gaikokujin-foreigner-n5",
+      "romaji": "gaikokujin",
+      "english": "foreigner",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gakkou-school-n5",
+      "romaji": "gakkou",
+      "english": "school",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gakusei-student-n5",
+      "romaji": "gakusei",
+      "english": "student",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "garasu-a-glass-pane-n4",
+      "romaji": "garasu",
+      "english": "a glass pane",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "gasorin-petrol-n4",
+      "romaji": "gasorin",
+      "english": "petrol",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "gasorinsutando-petrol-station-n4",
+      "romaji": "gasorinsutando",
+      "english": "petrol station",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "gasu-petrol-n4",
+      "romaji": "gasu",
+      "english": "petrol",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "gen-in-cause-n4",
+      "romaji": "gen'in",
+      "english": "cause",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "genkan-entry-hall-n5",
+      "romaji": "genkan",
+      "english": "entry hall",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "genki-health-n5",
+      "romaji": "genki",
+      "english": "health",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "geshuku-lodging-n4",
+      "romaji": "geshuku",
+      "english": "lodging",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "getsuyoubi-monday-n5",
+      "romaji": "getsuyoubi",
+      "english": "Monday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gijutsu-art-n4",
+      "romaji": "gijutsu",
+      "english": "art",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ginkou-bank-n5",
+      "romaji": "ginkou",
+      "english": "bank",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gitaa-guitar-n5",
+      "romaji": "gitaa",
+      "english": "guitar",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "go-five-n5",
+      "romaji": "go",
+      "english": "five",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gochisou-a-feast-n4",
+      "romaji": "gochisou",
+      "english": "a feast",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "gogo-afternoon-n5",
+      "romaji": "gogo",
+      "english": "afternoon",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gohan-cooked-rice-n5",
+      "romaji": "gohan",
+      "english": "cooked rice",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gomi-rubbish-n4",
+      "romaji": "gomi",
+      "english": "rubbish",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "gozen-morning-n5",
+      "romaji": "gozen",
+      "english": "morning",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gozonji-knowing-n4",
+      "romaji": "gozonji",
+      "english": "knowing",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "guai-condition-n4",
+      "romaji": "guai",
+      "english": "condition",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "guramu-gram-n5",
+      "romaji": "guramu",
+      "english": "gram",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gyuuniku-beef-n5",
+      "romaji": "gyuuniku",
+      "english": "beef",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "gyuunyuu-milk-n5",
+      "romaji": "gyuunyuu",
+      "english": "milk",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hachi-eight-n5",
+      "romaji": "hachi",
+      "english": "eight",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hagaki-postcard-n5",
+      "romaji": "hagaki",
+      "english": "postcard",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hai-yes-n5",
+      "romaji": "hai",
+      "english": "yes",
+      "pos": "counter",
+      "level": "N5"
+    },
+    {
+      "id": "hairu-to-enter-n5",
+      "romaji": "hairu",
+      "english": "to enter",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "haisha-dentist-n4",
+      "romaji": "haisha",
+      "english": "dentist",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "haizara-ashtray-n5",
+      "romaji": "haizara",
+      "english": "ashtray",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hajimaru-to-begin-n5",
+      "romaji": "hajimaru",
+      "english": "to begin",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hajime-beginning-n5",
+      "romaji": "hajime",
+      "english": "beginning",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hajimeru-to-begin-n4",
+      "romaji": "hajimeru",
+      "english": "to begin",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hajimete-for-the-first-time-n5",
+      "romaji": "hajimete",
+      "english": "for the first time",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hakkiri-clearly-n4",
+      "romaji": "hakkiri",
+      "english": "clearly",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "hako-box-n5",
+      "romaji": "hako",
+      "english": "box",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hakobu-to-transport-n4",
+      "romaji": "hakobu",
+      "english": "to transport",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "haku-to-wear-n5",
+      "romaji": "haku",
+      "english": "to wear",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "han-half-n5",
+      "romaji": "han",
+      "english": "half",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hana-flower-n5",
+      "romaji": "hana",
+      "english": "flower",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hana-nose-n5",
+      "romaji": "hana",
+      "english": "nose",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hanami-cherry-blossom-viewing-n4",
+      "romaji": "hanami",
+      "english": "cherry-blossom viewing",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hanashi-talk-n5",
+      "romaji": "hanashi",
+      "english": "talk",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hanasu-to-speak-n5",
+      "romaji": "hanasu",
+      "english": "to speak",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hanbun-half-minute-n5",
+      "romaji": "hanbun",
+      "english": "half minute",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "handobaggu-handbag-n4",
+      "romaji": "handobaggu",
+      "english": "handbag",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hankachi-handkerchief-n5",
+      "romaji": "hankachi",
+      "english": "handkerchief",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hantai-opposition-n4",
+      "romaji": "hantai",
+      "english": "opposition",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "harau-to-pay-n4",
+      "romaji": "harau",
+      "english": "to pay",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hare-clear-weather-n5",
+      "romaji": "hare",
+      "english": "clear weather",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hareru-to-be-sunny-n5",
+      "romaji": "hareru",
+      "english": "to be sunny",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "haru-spring-n5",
+      "romaji": "haru",
+      "english": "spring",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "haru-to-stick-n5",
+      "romaji": "haru",
+      "english": "to stick",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hashi-chopsticks-n5",
+      "romaji": "hashi",
+      "english": "chopsticks",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hashi-bridge-n5",
+      "romaji": "hashi",
+      "english": "bridge",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hashiru-to-run-n5",
+      "romaji": "hashiru",
+      "english": "to run",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hatachi-20-years-old-n5",
+      "romaji": "hatachi",
+      "english": "20 years old",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hataraku-to-work-n5",
+      "romaji": "hataraku",
+      "english": "to work",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hatsuka-twenty-days-n5",
+      "romaji": "hatsuka",
+      "english": "twenty days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hatsuon-pronunciation-n4",
+      "romaji": "hatsuon",
+      "english": "pronunciation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hayai-early-n5",
+      "romaji": "hayai",
+      "english": "early",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "hayai-quick-n5",
+      "romaji": "hayai",
+      "english": "quick",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "hayashi-woods-n4",
+      "romaji": "hayashi",
+      "english": "woods",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hazu-it-should-be-so-n4",
+      "romaji": "hazu",
+      "english": "it should be so",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hazukashii-embarrassed-n4",
+      "romaji": "hazukashii",
+      "english": "embarrassed",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hen-strange-n4",
+      "romaji": "hen",
+      "english": "strange",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "hen-area-n5",
+      "romaji": "hen",
+      "english": "area",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "henji-reply-n4",
+      "romaji": "henji",
+      "english": "reply",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "heta-unskillful-n5",
+      "romaji": "heta",
+      "english": "unskillful",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "heya-room-n5",
+      "romaji": "heya",
+      "english": "room",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hi-fire-n4",
+      "romaji": "hi",
+      "english": "fire",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hi-day-n4",
+      "romaji": "hi",
+      "english": "day",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hidari-left-hand-side-n5",
+      "romaji": "hidari",
+      "english": "left hand side",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hidoi-awful-n4",
+      "romaji": "hidoi",
+      "english": "awful",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hieru-to-grow-cold-n4",
+      "romaji": "hieru",
+      "english": "to grow cold",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "higashi-east-n5",
+      "romaji": "higashi",
+      "english": "east",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hige-beard-n4",
+      "romaji": "hige",
+      "english": "beard",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hijouni-extremely-n4",
+      "romaji": "hijouni",
+      "english": "extremely",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "hikari-light-n4",
+      "romaji": "hikari",
+      "english": "light",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hikaru-to-shine-n4",
+      "romaji": "hikaru",
+      "english": "to shine",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hikidashi-drawer-n4",
+      "romaji": "hikidashi",
+      "english": "drawer",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hikidasu-to-withdraw-n4",
+      "romaji": "hikidasu",
+      "english": "to withdraw",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hikkosu-to-move-house-n4",
+      "romaji": "hikkosu",
+      "english": "to move house",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hikoujou-airport-n4",
+      "romaji": "hikoujou",
+      "english": "airport",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hikouki-aeroplane-n5",
+      "romaji": "hikouki",
+      "english": "aeroplane",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hiku-to-pull-n5",
+      "romaji": "hiku",
+      "english": "to pull",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hiku-to-play-an-instrument-with-strings-n5",
+      "romaji": "hiku",
+      "english": "to play an instrument with strings",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "hikui-short-n5",
+      "romaji": "hikui",
+      "english": "short",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "hima-free-time-n5",
+      "romaji": "hima",
+      "english": "free time",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "hiraku-to-open-an-event-n4",
+      "romaji": "hiraku",
+      "english": "to open an event",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hiroi-spacious-n5",
+      "romaji": "hiroi",
+      "english": "spacious",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "hirou-to-pick-up-n4",
+      "romaji": "hirou",
+      "english": "to pick up",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hiru-noon-n5",
+      "romaji": "hiru",
+      "english": "noon",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hirugohan-midday-meal-n5",
+      "romaji": "hirugohan",
+      "english": "midday meal",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hiruma-daytime-n4",
+      "romaji": "hiruma",
+      "english": "daytime",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hiruyasumi-noon-break-n4",
+      "romaji": "hiruyasumi",
+      "english": "noon break",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hisashiburi-after-a-long-time-n4",
+      "romaji": "hisashiburi",
+      "english": "after a long time",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hito-person-n5",
+      "romaji": "hito",
+      "english": "person",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hitori-one-person-n5",
+      "romaji": "hitori",
+      "english": "one person",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hitotsu-one-n5",
+      "romaji": "hitotsu",
+      "english": "one",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hitotsuki-one-month-n5",
+      "romaji": "hitotsuki",
+      "english": "one month",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hitsuyou-necessary-n4",
+      "romaji": "hitsuyou",
+      "english": "necessary",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hodo-extent-n4",
+      "romaji": "hodo",
+      "english": "extent",
+      "pos": "particle",
+      "level": "N4"
+    },
+    {
+      "id": "hoka-other-n5",
+      "romaji": "hoka",
+      "english": "other",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "homeru-to-praise-n4",
+      "romaji": "homeru",
+      "english": "to praise",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hon-book-n5",
+      "romaji": "hon",
+      "english": "book",
+      "pos": "counter",
+      "level": "N5"
+    },
+    {
+      "id": "hon-yaku-translation-n4",
+      "romaji": "hon'yaku",
+      "english": "translation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hondana-bookshelves-n5",
+      "romaji": "hondana",
+      "english": "bookshelves",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hontou-truth-n5",
+      "romaji": "hontou",
+      "english": "truth",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hoshi-star-n4",
+      "romaji": "hoshi",
+      "english": "star",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "hoshii-want-n5",
+      "romaji": "hoshii",
+      "english": "want",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hosoi-thin-n5",
+      "romaji": "hosoi",
+      "english": "thin",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hoteru-hotel-n5",
+      "romaji": "hoteru",
+      "english": "hotel",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "hotondo-mostly-n4",
+      "romaji": "hotondo",
+      "english": "mostly",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "houritsu-law-n4",
+      "romaji": "houritsu",
+      "english": "law",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "housousuru-to-broadcast-n4",
+      "romaji": "housousuru",
+      "english": "to broadcast",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "hyaku-hundred-n5",
+      "romaji": "hyaku",
+      "english": "hundred",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ichi-one-n5",
+      "romaji": "ichi",
+      "english": "one",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ichiban-best-n5",
+      "romaji": "ichiban",
+      "english": "best",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ichido-once-n4",
+      "romaji": "ichido",
+      "english": "once",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ie-house-n5",
+      "romaji": "ie",
+      "english": "house",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "igai-with-the-exception-of-n4",
+      "romaji": "igai",
+      "english": "with the exception of",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "igaku-medical-science-n4",
+      "romaji": "igaku",
+      "english": "medical science",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "iie-no-n5",
+      "romaji": "iie",
+      "english": "no",
+      "pos": "phrase",
+      "level": "N5"
+    },
+    {
+      "id": "ijimeru-to-tease-n4",
+      "romaji": "ijimeru",
+      "english": "to tease",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ijou-more-than-n4",
+      "romaji": "ijou",
+      "english": "more than",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ika-less-than-n4",
+      "romaji": "ika",
+      "english": "less than",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ikaga-how-n5",
+      "romaji": "ikaga",
+      "english": "how",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "ike-pond-n5",
+      "romaji": "ike",
+      "english": "pond",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "iken-opinion-n4",
+      "romaji": "iken",
+      "english": "opinion",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ikiru-to-live-n4",
+      "romaji": "ikiru",
+      "english": "to live",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "iku-to-go-n5",
+      "romaji": "iku",
+      "english": "to go",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "ikura-how-much-n5",
+      "romaji": "ikura",
+      "english": "how much?",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ikutsu-how-many-n5",
+      "romaji": "ikutsu",
+      "english": "how many?",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ima-now-n5",
+      "romaji": "ima",
+      "english": "now",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "imi-meaning-n5",
+      "romaji": "imi",
+      "english": "meaning",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "inai-within-n4",
+      "romaji": "inai",
+      "english": "within",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "inaka-countryside-n4",
+      "romaji": "inaka",
+      "english": "countryside",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "inoru-to-pray-n4",
+      "romaji": "inoru",
+      "english": "to pray",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "inu-dog-n5",
+      "romaji": "inu",
+      "english": "dog",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ippai-full-n4",
+      "romaji": "ippai",
+      "english": "full",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ireru-to-put-in-n5",
+      "romaji": "ireru",
+      "english": "to put in",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "iriguchi-entrance-n5",
+      "romaji": "iriguchi",
+      "english": "entrance",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "iro-colour-n5",
+      "romaji": "iro",
+      "english": "colour",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "iroiro-various-n5",
+      "romaji": "iroiro",
+      "english": "various",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "iru-to-be-n5",
+      "romaji": "iru",
+      "english": "to be",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "iru-to-need-n5",
+      "romaji": "iru",
+      "english": "to need",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "isha-medical-doctor-n5",
+      "romaji": "isha",
+      "english": "medical doctor",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ishi-stone-n4",
+      "romaji": "ishi",
+      "english": "stone",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ishsho-together-n5",
+      "romaji": "ishsho",
+      "english": "together",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ishshoukenmei-with-utmost-effort-n4",
+      "romaji": "ishshoukenmei",
+      "english": "with utmost effort",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "isogashii-busy-n5",
+      "romaji": "isogashii",
+      "english": "busy",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "isogu-to-hurry-n4",
+      "romaji": "isogu",
+      "english": "to hurry",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "isu-chair-n5",
+      "romaji": "isu",
+      "english": "chair",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "itai-painful-n5",
+      "romaji": "itai",
+      "english": "painful",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "ito-thread-n4",
+      "romaji": "ito",
+      "english": "thread",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "itsu-when-n5",
+      "romaji": "itsu",
+      "english": "when",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "itsuka-five-days-n5",
+      "romaji": "itsuka",
+      "english": "five days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "itsumo-always-n5",
+      "romaji": "itsumo",
+      "english": "always",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "itsutsu-five-n5",
+      "romaji": "itsutsu",
+      "english": "five",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "iu-to-say-n5",
+      "romaji": "iu",
+      "english": "to say",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "iya-unpleasant-n5",
+      "romaji": "iya",
+      "english": "unpleasant",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jama-hindrance-n4",
+      "romaji": "jama",
+      "english": "hindrance",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jamu-jam-n4",
+      "romaji": "jamu",
+      "english": "jam",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ji-character-n4",
+      "romaji": "ji",
+      "english": "character",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jibiki-dictionary-n5",
+      "romaji": "jibiki",
+      "english": "dictionary",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jibun-oneself-n5",
+      "romaji": "jibun",
+      "english": "oneself",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jidai-era-n4",
+      "romaji": "jidai",
+      "english": "era",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jidousha-automobile-n5",
+      "romaji": "jidousha",
+      "english": "automobile",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jikan-time-n5",
+      "romaji": "jikan",
+      "english": "time",
+      "pos": "counter",
+      "level": "N5"
+    },
+    {
+      "id": "jiko-accident-n4",
+      "romaji": "jiko",
+      "english": "accident",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jimusho-office-n4",
+      "romaji": "jimusho",
+      "english": "office",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jinja-shinto-shrine-n4",
+      "romaji": "jinja",
+      "english": "Shinto shrine",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jinkou-population-n4",
+      "romaji": "jinkou",
+      "english": "population",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jishin-earthquake-n4",
+      "romaji": "jishin",
+      "english": "earthquake",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jisho-dictionary-n5",
+      "romaji": "jisho",
+      "english": "dictionary",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jiten-dictionary-n4",
+      "romaji": "jiten",
+      "english": "dictionary",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "jitensha-bicycle-n5",
+      "romaji": "jitensha",
+      "english": "bicycle",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jiyuu-freedom-n4",
+      "romaji": "jiyuu",
+      "english": "freedom",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "josei-woman-n4",
+      "romaji": "josei",
+      "english": "woman",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "joubu-strong-n5",
+      "romaji": "joubu",
+      "english": "strong",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "jouzu-skillful-n5",
+      "romaji": "jouzu",
+      "english": "skillful",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "jugyou-lesson-n5",
+      "romaji": "jugyou",
+      "english": "lesson",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "junbisuru-to-prepare-n4",
+      "romaji": "junbisuru",
+      "english": "to prepare",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "juubun-enough-n4",
+      "romaji": "juubun",
+      "english": "enough",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "juudou-judo-n4",
+      "romaji": "juudou",
+      "english": "judo",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "juusho-an-address-n4",
+      "romaji": "juusho",
+      "english": "an address",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaaten-curtain-n4",
+      "romaji": "kaaten",
+      "english": "curtain",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaban-bag-n5",
+      "romaji": "kaban",
+      "english": "bag",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kabe-wall-n4",
+      "romaji": "kabe",
+      "english": "wall",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kabin-a-vase-n5",
+      "romaji": "kabin",
+      "english": "a vase",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kachou-section-manager-n4",
+      "romaji": "kachou",
+      "english": "section manager",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kado-a-corner-n5",
+      "romaji": "kado",
+      "english": "a corner",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kaeri-return-n4",
+      "romaji": "kaeri",
+      "english": "return",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaeru-to-change-n4",
+      "romaji": "kaeru",
+      "english": "to change",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kaeru-to-go-back-n5",
+      "romaji": "kaeru",
+      "english": "to go back",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kaesu-to-return-something-n5",
+      "romaji": "kaesu",
+      "english": "to return something",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kagaku-science-n4",
+      "romaji": "kagaku",
+      "english": "science",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kagami-mirror-n4",
+      "romaji": "kagami",
+      "english": "mirror",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kagi-key-n5",
+      "romaji": "kagi",
+      "english": "key",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kaidan-stairs-n5",
+      "romaji": "kaidan",
+      "english": "stairs",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kaigan-coast-n4",
+      "romaji": "kaigan",
+      "english": "coast",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaigi-meeting-n4",
+      "romaji": "kaigi",
+      "english": "meeting",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaigishitsu-meeting-room-n4",
+      "romaji": "kaigishitsu",
+      "english": "meeting room",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaijou-assembly-hall-or-meeting-place-n4",
+      "romaji": "kaijou",
+      "english": "assembly hall or meeting place",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaimono-shopping-n5",
+      "romaji": "kaimono",
+      "english": "shopping",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kaisha-company-n5",
+      "romaji": "kaisha",
+      "english": "company",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kaiwa-conversation-n4",
+      "romaji": "kaiwa",
+      "english": "conversation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaji-fire-n4",
+      "romaji": "kaji",
+      "english": "fire",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kakaru-to-take-time-or-money-n5",
+      "romaji": "kakaru",
+      "english": "to take time or money",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kakeru-to-hang-something-n4",
+      "romaji": "kakeru",
+      "english": "to hang something",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kakeru-to-call-by-phone-n5",
+      "romaji": "kakeru",
+      "english": "to call by phone",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kakkou-appearance-n4",
+      "romaji": "kakkou",
+      "english": "appearance",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kaku-to-write-n5",
+      "romaji": "kaku",
+      "english": "to write",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kamau-to-mind-n4",
+      "romaji": "kamau",
+      "english": "to mind",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kamera-camera-n5",
+      "romaji": "kamera",
+      "english": "camera",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kami-hair-n4",
+      "romaji": "kami",
+      "english": "hair",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kami-paper-n5",
+      "romaji": "kami",
+      "english": "paper",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kamu-to-bite-n4",
+      "romaji": "kamu",
+      "english": "to bite",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kanai-housewife-n4",
+      "romaji": "kanai",
+      "english": "housewife",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kanarazu-certainly-n4",
+      "romaji": "kanarazu",
+      "english": "certainly",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "kanashii-sad-n4",
+      "romaji": "kanashii",
+      "english": "sad",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "kangaeru-to-consider-n4",
+      "romaji": "kangaeru",
+      "english": "to consider",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kangofu-female-nurse-n4",
+      "romaji": "kangofu",
+      "english": "female nurse",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kanji-chinese-character-n5",
+      "romaji": "kanji",
+      "english": "Chinese character",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kankei-relationship-n4",
+      "romaji": "kankei",
+      "english": "relationship",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kanojo-she-n4",
+      "romaji": "kanojo",
+      "english": "she",
+      "pos": "pronoun",
+      "level": "N4"
+    },
+    {
+      "id": "kantan-simple-n4",
+      "romaji": "kantan",
+      "english": "simple",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "kappu-cup-n5",
+      "romaji": "kappu",
+      "english": "cup",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "karada-body-n5",
+      "romaji": "karada",
+      "english": "body",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "karai-spicy-n5",
+      "romaji": "karai",
+      "english": "spicy",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kare-he-n4",
+      "romaji": "kare",
+      "english": "he",
+      "pos": "pronoun",
+      "level": "N4"
+    },
+    {
+      "id": "karee-curry-n5",
+      "romaji": "karee",
+      "english": "curry",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "karendaa-calendar-n5",
+      "romaji": "karendaa",
+      "english": "calendar",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "karera-they-n4",
+      "romaji": "karera",
+      "english": "they",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kariru-to-borrow-n5",
+      "romaji": "kariru",
+      "english": "to borrow",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "karui-light-n5",
+      "romaji": "karui",
+      "english": "light",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kasa-umbrella-n5",
+      "romaji": "kasa",
+      "english": "umbrella",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kasu-to-lend-n5",
+      "romaji": "kasu",
+      "english": "to lend",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kata-person-n5",
+      "romaji": "kata",
+      "english": "person",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "katachi-shape-n4",
+      "romaji": "katachi",
+      "english": "shape",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "katai-hard-n4",
+      "romaji": "katai",
+      "english": "hard",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "katazukeru-to-tidy-up-n4",
+      "romaji": "katazukeru",
+      "english": "to tidy up",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "katei-household-n5",
+      "romaji": "katei",
+      "english": "household",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "katsu-to-win-n4",
+      "romaji": "katsu",
+      "english": "to win",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kau-to-buy-n5",
+      "romaji": "kau",
+      "english": "to buy",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kawa-river-n5",
+      "romaji": "kawa",
+      "english": "river",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kawaii-cute-n5",
+      "romaji": "kawaii",
+      "english": "cute",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kawaku-to-get-dry-n4",
+      "romaji": "kawaku",
+      "english": "to get dry",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kawari-substitute-n4",
+      "romaji": "kawari",
+      "english": "substitute",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kawaru-to-change-n4",
+      "romaji": "kawaru",
+      "english": "to change",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kayou-to-commute-n4",
+      "romaji": "kayou",
+      "english": "to commute",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kayoubi-tuesday-n5",
+      "romaji": "kayoubi",
+      "english": "Tuesday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kazaru-to-decorate-n4",
+      "romaji": "kazaru",
+      "english": "to decorate",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kaze-wind-n5",
+      "romaji": "kaze",
+      "english": "wind",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kaze-a-cold-n5",
+      "romaji": "kaze",
+      "english": "a cold",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kazoku-family-n5",
+      "romaji": "kazoku",
+      "english": "family",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "ke-hair-or-fur-n4",
+      "romaji": "ke",
+      "english": "hair or fur",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "keeki-cake-n4",
+      "romaji": "keeki",
+      "english": "cake",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kegasuru-to-injure-n4",
+      "romaji": "kegasuru",
+      "english": "to injure",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "keikakusuru-to-plan-n4",
+      "romaji": "keikakusuru",
+      "english": "to plan",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "keikan-policeman-n5",
+      "romaji": "keikan",
+      "english": "policeman",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "keikensuru-to-experience-n4",
+      "romaji": "keikensuru",
+      "english": "to experience",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "keisatsu-police-n4",
+      "romaji": "keisatsu",
+      "english": "police",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "keizai-finance-n4",
+      "romaji": "keizai",
+      "english": "finance",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kekkon-marriage-n5",
+      "romaji": "kekkon",
+      "english": "marriage",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kekkou-splendid-n5",
+      "romaji": "kekkou",
+      "english": "splendid",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "kenbutsu-sightseeing-n4",
+      "romaji": "kenbutsu",
+      "english": "sightseeing",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kenkasuru-to-quarrel-n4",
+      "romaji": "kenkasuru",
+      "english": "to quarrel",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kenkyuu-research-n4",
+      "romaji": "kenkyuu",
+      "english": "research",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kenkyuushitsu-study-room-n4",
+      "romaji": "kenkyuushitsu",
+      "english": "study room",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kesa-this-morning-n5",
+      "romaji": "kesa",
+      "english": "this morning",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "keshigomu-eraser-n4",
+      "romaji": "keshigomu",
+      "english": "eraser",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "keshiki-scene-n4",
+      "romaji": "keshiki",
+      "english": "scene",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "keshshite-never-n4",
+      "romaji": "keshshite",
+      "english": "never",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kesu-to-erase-n5",
+      "romaji": "kesu",
+      "english": "to erase",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "ki-spirit-n4",
+      "romaji": "ki",
+      "english": "spirit",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ki-tree-n5",
+      "romaji": "ki",
+      "english": "tree",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kibishii-strict-n4",
+      "romaji": "kibishii",
+      "english": "strict",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kibun-mood-n4",
+      "romaji": "kibun",
+      "english": "mood",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kieru-to-disappear-n5",
+      "romaji": "kieru",
+      "english": "to disappear",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kiiro-yellow-n5",
+      "romaji": "kiiro",
+      "english": "yellow",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kiiroi-yellow-n5",
+      "romaji": "kiiroi",
+      "english": "yellow",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kikai-opportunity-n4",
+      "romaji": "kikai",
+      "english": "opportunity",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kiken-danger-n4",
+      "romaji": "kiken",
+      "english": "danger",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kikoeru-to-be-heard-n4",
+      "romaji": "kikoeru",
+      "english": "to be heard",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kiku-to-hear-n5",
+      "romaji": "kiku",
+      "english": "to hear",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kimaru-to-be-decided-n4",
+      "romaji": "kimaru",
+      "english": "to be decided",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kimeru-to-decide-n4",
+      "romaji": "kimeru",
+      "english": "to decide",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kimochi-feeling-n4",
+      "romaji": "kimochi",
+      "english": "feeling",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kimono-kimono-n4",
+      "romaji": "kimono",
+      "english": "kimono",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kin-youbi-friday-n5",
+      "romaji": "kin'youbi",
+      "english": "Friday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kinjo-neighbourhood-n4",
+      "romaji": "kinjo",
+      "english": "neighbourhood",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kinou-yesterday-n5",
+      "romaji": "kinou",
+      "english": "yesterday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kinu-silk-n4",
+      "romaji": "kinu",
+      "english": "silk",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kippu-ticket-n5",
+      "romaji": "kippu",
+      "english": "ticket",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kirai-hate-n5",
+      "romaji": "kirai",
+      "english": "hate",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kirei-pretty-n5",
+      "romaji": "kirei",
+      "english": "pretty",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kiru-to-cut-n5",
+      "romaji": "kiru",
+      "english": "to cut",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kiru-to-put-on-from-the-shoulders-down-n5",
+      "romaji": "kiru",
+      "english": "to put on from the shoulders down",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kisetsu-season-n4",
+      "romaji": "kisetsu",
+      "english": "season",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kisha-steam-train-n4",
+      "romaji": "kisha",
+      "english": "steam train",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kisoku-regulations-n4",
+      "romaji": "kisoku",
+      "english": "regulations",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kissaten-coffee-lounge-n5",
+      "romaji": "kissaten",
+      "english": "coffee lounge",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kita-north-n5",
+      "romaji": "kita",
+      "english": "north",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kitanai-dirty-n5",
+      "romaji": "kitanai",
+      "english": "dirty",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kitte-postage-stamp-n5",
+      "romaji": "kitte",
+      "english": "postage stamp",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kitto-surely-n4",
+      "romaji": "kitto",
+      "english": "surely",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "ko-child-n4",
+      "romaji": "ko",
+      "english": "child",
+      "pos": "counter",
+      "level": "N4"
+    },
+    {
+      "id": "kochchi-this-person-or-way-n5",
+      "romaji": "kochchi",
+      "english": "this person or way",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kochira-this-person-or-way-n5",
+      "romaji": "kochira",
+      "english": "this person or way",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "kodomo-child-n5",
+      "romaji": "kodomo",
+      "english": "child",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "koe-voice-n5",
+      "romaji": "koe",
+      "english": "voice",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "koko-here-n5",
+      "romaji": "koko",
+      "english": "here",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "kokonoka-nine-days-n5",
+      "romaji": "kokonoka",
+      "english": "nine days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kokonotsu-nine-n5",
+      "romaji": "kokonotsu",
+      "english": "nine",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kokoro-core-n4",
+      "romaji": "kokoro",
+      "english": "core",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kokusai-international-n4",
+      "romaji": "kokusai",
+      "english": "international",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "komakai-small-n4",
+      "romaji": "komakai",
+      "english": "small",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "komaru-to-be-worried-n5",
+      "romaji": "komaru",
+      "english": "to be worried",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kome-uncooked-rice-n4",
+      "romaji": "kome",
+      "english": "uncooked rice",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "komu-to-be-crowded-n4",
+      "romaji": "komu",
+      "english": "to be crowded",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kon-ya-tonight-n4",
+      "romaji": "kon'ya",
+      "english": "tonight",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "konban-this-evening-n5",
+      "romaji": "konban",
+      "english": "this evening",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kondo-now-n4",
+      "romaji": "kondo",
+      "english": "now",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kongetsu-this-month-n5",
+      "romaji": "kongetsu",
+      "english": "this month",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "konna-such-n5",
+      "romaji": "konna",
+      "english": "such",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kono-this-n5",
+      "romaji": "kono",
+      "english": "this",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "konoaida-the-other-day-n4",
+      "romaji": "konoaida",
+      "english": "the other day",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "konogoro-these-days-n4",
+      "romaji": "konogoro",
+      "english": "these days",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "konsaato-concert-n4",
+      "romaji": "konsaato",
+      "english": "concert",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "konshuu-this-week-n5",
+      "romaji": "konshuu",
+      "english": "this week",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "koohii-coffee-n5",
+      "romaji": "koohii",
+      "english": "coffee",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kooto-coat-n5",
+      "romaji": "kooto",
+      "english": "coat",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kopiisuru-to-copy-n5",
+      "romaji": "kopiisuru",
+      "english": "to copy",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "koppu-a-glass-n5",
+      "romaji": "koppu",
+      "english": "a glass",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kore-this-n5",
+      "romaji": "kore",
+      "english": "this",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "korekara-after-this-n4",
+      "romaji": "korekara",
+      "english": "after this",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koshousuru-to-break-down-n4",
+      "romaji": "koshousuru",
+      "english": "to break-down",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kotae-response-n4",
+      "romaji": "kotae",
+      "english": "response",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kotaeru-to-answer-n5",
+      "romaji": "kotaeru",
+      "english": "to answer",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "koto-thing-n4",
+      "romaji": "koto",
+      "english": "thing",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kotoba-word-n5",
+      "romaji": "kotoba",
+      "english": "word",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kotori-small-bird-n4",
+      "romaji": "kotori",
+      "english": "small bird",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kotoshi-this-year-n5",
+      "romaji": "kotoshi",
+      "english": "this year",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kou-this-way-n4",
+      "romaji": "kou",
+      "english": "this way",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kouban-police-box-n5",
+      "romaji": "kouban",
+      "english": "police box",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "koucha-black-tea-n5",
+      "romaji": "koucha",
+      "english": "black tea",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kouchou-headmaster-n4",
+      "romaji": "kouchou",
+      "english": "headmaster",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koudou-auditorium-n4",
+      "romaji": "koudou",
+      "english": "auditorium",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kouen-park-n5",
+      "romaji": "kouen",
+      "english": "park",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kougai-outskirts-n4",
+      "romaji": "kougai",
+      "english": "outskirts",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kougi-lecture-n4",
+      "romaji": "kougi",
+      "english": "lecture",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kougyou-the-manufacturing-industry-n4",
+      "romaji": "kougyou",
+      "english": "the manufacturing industry",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koujou-factory-n4",
+      "romaji": "koujou",
+      "english": "factory",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koukou-high-school-n4",
+      "romaji": "koukou",
+      "english": "high school",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koukousei-high-school-student-n4",
+      "romaji": "koukousei",
+      "english": "high school student",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koumuin-government-worker-n4",
+      "romaji": "koumuin",
+      "english": "government worker",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kousaten-intersection-n5",
+      "romaji": "kousaten",
+      "english": "intersection",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "koutougakkou-high-school-n4",
+      "romaji": "koutougakkou",
+      "english": "high school",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "koutsuu-traffic-n4",
+      "romaji": "koutsuu",
+      "english": "traffic",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kowai-frightening-n4",
+      "romaji": "kowai",
+      "english": "frightening",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kowareru-to-be-broken-n4",
+      "romaji": "kowareru",
+      "english": "to be broken",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kowasu-to-break-n4",
+      "romaji": "kowasu",
+      "english": "to break",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kubi-neck-n4",
+      "romaji": "kubi",
+      "english": "neck",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kuchi-mouth-n5",
+      "romaji": "kuchi",
+      "english": "mouth",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kudamono-fruit-n5",
+      "romaji": "kudamono",
+      "english": "fruit",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kudasai-please-n5",
+      "romaji": "kudasai",
+      "english": "please",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kumo-cloud-n4",
+      "romaji": "kumo",
+      "english": "cloud",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kumori-cloudy-weather-n5",
+      "romaji": "kumori",
+      "english": "cloudy weather",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kumoru-to-become-cloudy-n5",
+      "romaji": "kumoru",
+      "english": "to become cloudy",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kuni-country-n5",
+      "romaji": "kuni",
+      "english": "country",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kuraberu-to-compare-n4",
+      "romaji": "kuraberu",
+      "english": "to compare",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kurai-gloomy-n5",
+      "romaji": "kurai",
+      "english": "gloomy",
+      "pos": "particle",
+      "level": "N5"
+    },
+    {
+      "id": "kurasu-class-n5",
+      "romaji": "kurasu",
+      "english": "class",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kureru-to-give-n4",
+      "romaji": "kureru",
+      "english": "to give",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kureru-to-get-dark-n4",
+      "romaji": "kureru",
+      "english": "to get dark",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "kuro-black-n5",
+      "romaji": "kuro",
+      "english": "black",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kuroi-black-n5",
+      "romaji": "kuroi",
+      "english": "black",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "kuru-to-come-n5",
+      "romaji": "kuru",
+      "english": "to come",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "kuruma-car-n5",
+      "romaji": "kuruma",
+      "english": "car",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kusa-grass-n4",
+      "romaji": "kusa",
+      "english": "grass",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kusuri-medicine-n5",
+      "romaji": "kusuri",
+      "english": "medicine",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kutsu-shoes-n5",
+      "romaji": "kutsu",
+      "english": "shoes",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kutsushita-socks-n5",
+      "romaji": "kutsushita",
+      "english": "socks",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kuuki-air-n4",
+      "romaji": "kuuki",
+      "english": "air",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kuukou-airport-n4",
+      "romaji": "kuukou",
+      "english": "airport",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyaku-guest-n4",
+      "romaji": "kyaku",
+      "english": "guest",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyonen-last-year-n5",
+      "romaji": "kyonen",
+      "english": "last year",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kyou-today-n5",
+      "romaji": "kyou",
+      "english": "today",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kyouiku-education-n4",
+      "romaji": "kyouiku",
+      "english": "education",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyoukai-church-n4",
+      "romaji": "kyoukai",
+      "english": "church",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyoumi-an-interest-n4",
+      "romaji": "kyoumi",
+      "english": "an interest",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyoushitsu-classroom-n5",
+      "romaji": "kyoushitsu",
+      "english": "classroom",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "kyousou-competition-n4",
+      "romaji": "kyousou",
+      "english": "competition",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyuu-urgent-n4",
+      "romaji": "kyuu",
+      "english": "urgent",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "kyuukou-speedy-n4",
+      "romaji": "kyuukou",
+      "english": "speedy",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "machchi-match-n5",
+      "romaji": "machchi",
+      "english": "match",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "machi-town-n5",
+      "romaji": "machi",
+      "english": "town",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "machigaeru-to-make-a-mistake-n4",
+      "romaji": "machigaeru",
+      "english": "to make a mistake",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mada-yet-n5",
+      "romaji": "mada",
+      "english": "yet",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "mado-window-n5",
+      "romaji": "mado",
+      "english": "window",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mae-before-n5",
+      "romaji": "mae",
+      "english": "before",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "magaru-to-turn-n5",
+      "romaji": "magaru",
+      "english": "to turn",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "maiasa-every-morning-n5",
+      "romaji": "maiasa",
+      "english": "every morning",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "maiban-every-night-n5",
+      "romaji": "maiban",
+      "english": "every night",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mainichi-every-day-n5",
+      "romaji": "mainichi",
+      "english": "every day",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "maishuu-every-week-n5",
+      "romaji": "maishuu",
+      "english": "every week",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "majime-serious-n4",
+      "romaji": "majime",
+      "english": "serious",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "makeru-to-lose-n4",
+      "romaji": "makeru",
+      "english": "to lose",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "man-ten-thousand-n5",
+      "romaji": "man",
+      "english": "ten thousand",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "manga-comic-n4",
+      "romaji": "manga",
+      "english": "comic",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "maniau-to-be-in-time-for-n4",
+      "romaji": "maniau",
+      "english": "to be in time for",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mannaka-middle-n4",
+      "romaji": "mannaka",
+      "english": "middle",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mannenhitsu-fountain-pen-n5",
+      "romaji": "mannenhitsu",
+      "english": "fountain pen",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "marui-round-n5",
+      "romaji": "marui",
+      "english": "round",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "massugu-straight-ahead-n5",
+      "romaji": "massugu",
+      "english": "straight ahead",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mata-again-n5",
+      "romaji": "mata",
+      "english": "again",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "matawa-or-n4",
+      "romaji": "matawa",
+      "english": "or",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "matsu-to-wait-n5",
+      "romaji": "matsu",
+      "english": "to wait",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "mawari-surroundings-n4",
+      "romaji": "mawari",
+      "english": "surroundings",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mawaru-to-go-around-n4",
+      "romaji": "mawaru",
+      "english": "to go around",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mazu-first-of-all-n4",
+      "romaji": "mazu",
+      "english": "first of all",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "mazui-unpleasant-n5",
+      "romaji": "mazui",
+      "english": "unpleasant",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "me-eye-n5",
+      "romaji": "me",
+      "english": "eye",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "meetoru-metre-n5",
+      "romaji": "meetoru",
+      "english": "metre",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "megane-glasses-n5",
+      "romaji": "megane",
+      "english": "glasses",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mezurashii-rare-n4",
+      "romaji": "mezurashii",
+      "english": "rare",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "michi-street-n5",
+      "romaji": "michi",
+      "english": "street",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "midori-green-n5",
+      "romaji": "midori",
+      "english": "green",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mieru-to-be-in-sight-n4",
+      "romaji": "mieru",
+      "english": "to be in sight",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "migaku-to-brush-teeth-n5",
+      "romaji": "migaku",
+      "english": "to brush teeth",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "migi-right-side-n5",
+      "romaji": "migi",
+      "english": "right side",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mijikai-short-n5",
+      "romaji": "mijikai",
+      "english": "short",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "mikka-three-days-n5",
+      "romaji": "mikka",
+      "english": "three days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mimi-ear-n5",
+      "romaji": "mimi",
+      "english": "ear",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mina-everybody-n4",
+      "romaji": "mina",
+      "english": "everybody",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "minami-south-n5",
+      "romaji": "minami",
+      "english": "south",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "minasan-everyone-n5",
+      "romaji": "minasan",
+      "english": "everyone",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "minato-harbour-n4",
+      "romaji": "minato",
+      "english": "harbour",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "minna-everyone-n5",
+      "romaji": "minna",
+      "english": "everyone",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "miru-to-see-n5",
+      "romaji": "miru",
+      "english": "to see",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "mise-shop-n5",
+      "romaji": "mise",
+      "english": "shop",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "miseru-to-show-n5",
+      "romaji": "miseru",
+      "english": "to show",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "miso-bean-paste-n4",
+      "romaji": "miso",
+      "english": "bean paste",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mitstsu-three-n5",
+      "romaji": "mitstsu",
+      "english": "three",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mitsukaru-to-be-discovered-n4",
+      "romaji": "mitsukaru",
+      "english": "to be discovered",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mitsukeru-to-discover-n4",
+      "romaji": "mitsukeru",
+      "english": "to discover",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mizu-water-n5",
+      "romaji": "mizu",
+      "english": "water",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mizuumi-lake-n4",
+      "romaji": "mizuumi",
+      "english": "lake",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mochiron-of-course-n4",
+      "romaji": "mochiron",
+      "english": "of course",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "modoru-to-turn-back-n4",
+      "romaji": "modoru",
+      "english": "to turn back",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mokuyoubi-thursday-n5",
+      "romaji": "mokuyoubi",
+      "english": "Thursday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "momen-cotton-n4",
+      "romaji": "momen",
+      "english": "cotton",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mon-gate-n5",
+      "romaji": "mon",
+      "english": "gate",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mondai-problem-n5",
+      "romaji": "mondai",
+      "english": "problem",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mono-thing-n5",
+      "romaji": "mono",
+      "english": "thing",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "morau-to-receive-n4",
+      "romaji": "morau",
+      "english": "to receive",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mori-forest-n4",
+      "romaji": "mori",
+      "english": "forest",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "moshi-if-n4",
+      "romaji": "moshi",
+      "english": "if",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "motsu-to-hold-n5",
+      "romaji": "motsu",
+      "english": "to hold",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "motto-more-n5",
+      "romaji": "motto",
+      "english": "more",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "mottomo-extremely-n4",
+      "romaji": "mottomo",
+      "english": "extremely",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "mou-already-n5",
+      "romaji": "mou",
+      "english": "already",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "mouichido-again-n5",
+      "romaji": "mouichido",
+      "english": "again",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mousugu-soon-n4",
+      "romaji": "mousugu",
+      "english": "soon",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "muika-six-days-n5",
+      "romaji": "muika",
+      "english": "six days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mukaeru-to-go-out-to-meet-n4",
+      "romaji": "mukaeru",
+      "english": "to go out to meet",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mukashi-olden-days-n4",
+      "romaji": "mukashi",
+      "english": "olden days",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mukau-to-face-n4",
+      "romaji": "mukau",
+      "english": "to face",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "mukou-over-there-n5",
+      "romaji": "mukou",
+      "english": "over there",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "mura-village-n5",
+      "romaji": "mura",
+      "english": "village",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "muri-impossible-n4",
+      "romaji": "muri",
+      "english": "impossible",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mushi-insect-n4",
+      "romaji": "mushi",
+      "english": "insect",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "mutstsu-six-n5",
+      "romaji": "mutstsu",
+      "english": "six",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "muzukashii-difficult-n5",
+      "romaji": "muzukashii",
+      "english": "difficult",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "nado-et-cetera-n5",
+      "romaji": "nado",
+      "english": "et cetera",
+      "pos": "particle",
+      "level": "N5"
+    },
+    {
+      "id": "nagai-long-n5",
+      "romaji": "nagai",
+      "english": "long",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "nageru-to-throw-or-cast-away-n4",
+      "romaji": "nageru",
+      "english": "to throw or cast away",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naifu-knife-n5",
+      "romaji": "naifu",
+      "english": "knife",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "naka-middle-n5",
+      "romaji": "naka",
+      "english": "middle",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nakanaka-considerably-n4",
+      "romaji": "nakanaka",
+      "english": "considerably",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "naku-to-weep-n4",
+      "romaji": "naku",
+      "english": "to weep",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naku-animal-noise-to-chirp-n5",
+      "romaji": "naku",
+      "english": "animal noise. to chirp",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nakunaru-to-die-n4",
+      "romaji": "nakunaru",
+      "english": "to die",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nakunaru-to-disappear-n4",
+      "romaji": "nakunaru",
+      "english": "to disappear",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nakusu-to-lose-something-n5",
+      "romaji": "nakusu",
+      "english": "to lose something",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "namae-name-n5",
+      "romaji": "namae",
+      "english": "name",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nanatsu-seven-n5",
+      "romaji": "nanatsu",
+      "english": "seven",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nanoka-seven-days-n5",
+      "romaji": "nanoka",
+      "english": "seven days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "naoru-to-be-cured-n4",
+      "romaji": "naoru",
+      "english": "to be cured",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naoru-to-be-fixed-n4",
+      "romaji": "naoru",
+      "english": "to be fixed",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naosu-to-fix-n4",
+      "romaji": "naosu",
+      "english": "to fix",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naraberu-to-line-up-n5",
+      "romaji": "naraberu",
+      "english": "to line up",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "narabu-to-line-up-n5",
+      "romaji": "narabu",
+      "english": "to line up",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "narau-to-learn-n5",
+      "romaji": "narau",
+      "english": "to learn",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "nareru-to-grow-accustomed-to-n4",
+      "romaji": "nareru",
+      "english": "to grow accustomed to",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naru-to-sound-n4",
+      "romaji": "naru",
+      "english": "to sound",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "naru-to-become-n5",
+      "romaji": "naru",
+      "english": "to become",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "narubeku-as-much-as-possible-n4",
+      "romaji": "narubeku",
+      "english": "as much as possible",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "naruhodo-now-i-understand-n4",
+      "romaji": "naruhodo",
+      "english": "now I understand",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "natsu-summer-n5",
+      "romaji": "natsu",
+      "english": "summer",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "natsuyasumi-summer-holiday-n5",
+      "romaji": "natsuyasumi",
+      "english": "summer holiday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "naze-why-n5",
+      "romaji": "naze",
+      "english": "why",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "nebou-sleeping-in-late-n4",
+      "romaji": "nebou",
+      "english": "sleeping in late",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "nedan-price-n4",
+      "romaji": "nedan",
+      "english": "price",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "neko-cat-n5",
+      "romaji": "neko",
+      "english": "cat",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nekutai-tie-n5",
+      "romaji": "nekutai",
+      "english": "tie",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nemui-sleepy-n4",
+      "romaji": "nemui",
+      "english": "sleepy",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "nemuru-to-sleep-n4",
+      "romaji": "nemuru",
+      "english": "to sleep",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "neru-to-go-to-bed-n5",
+      "romaji": "neru",
+      "english": "to go to bed",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "neshshin-enthusiasm-n4",
+      "romaji": "neshshin",
+      "english": "enthusiasm",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "netsu-fever-n4",
+      "romaji": "netsu",
+      "english": "fever",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ni-two-n5",
+      "romaji": "ni",
+      "english": "two",
+      "pos": "particle",
+      "level": "N5"
+    },
+    {
+      "id": "nichiyoubi-sunday-n5",
+      "romaji": "nichiyoubi",
+      "english": "Sunday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nigai-bitter-n4",
+      "romaji": "nigai",
+      "english": "bitter",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "nigeru-to-escape-n4",
+      "romaji": "nigeru",
+      "english": "to escape",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nigiyaka-bustling-n5",
+      "romaji": "nigiyaka",
+      "english": "bustling",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nikaidate-two-storied-n4",
+      "romaji": "nikaidate",
+      "english": "two storied",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "nikki-journal-n4",
+      "romaji": "nikki",
+      "english": "journal",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "niku-meat-n5",
+      "romaji": "niku",
+      "english": "meat",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nimotsu-luggage-n5",
+      "romaji": "nimotsu",
+      "english": "luggage",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ningyou-doll-n4",
+      "romaji": "ningyou",
+      "english": "doll",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "nioi-a-smell-n4",
+      "romaji": "nioi",
+      "english": "a smell",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "niru-to-be-similar-n4",
+      "romaji": "niru",
+      "english": "to be similar",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nishi-west-n5",
+      "romaji": "nishi",
+      "english": "west",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "niwa-garden-n5",
+      "romaji": "niwa",
+      "english": "garden",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "noboru-to-climb-n5",
+      "romaji": "noboru",
+      "english": "to climb",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "nodo-throat-n4",
+      "romaji": "nodo",
+      "english": "throat",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "nokoru-to-remain-n4",
+      "romaji": "nokoru",
+      "english": "to remain",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nomimono-a-drink-n5",
+      "romaji": "nomimono",
+      "english": "a drink",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nomu-to-drink-n5",
+      "romaji": "nomu",
+      "english": "to drink",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "nooto-notebook-n5",
+      "romaji": "nooto",
+      "english": "notebook",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "norikaeru-to-change-between-buses-or-trains-n4",
+      "romaji": "norikaeru",
+      "english": "to change between buses or trains",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "norimono-vehicle-n4",
+      "romaji": "norimono",
+      "english": "vehicle",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "noru-to-get-on-n5",
+      "romaji": "noru",
+      "english": "to get on",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "nugu-to-take-off-clothes-n5",
+      "romaji": "nugu",
+      "english": "to take off clothes",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "nureru-to-get-wet-n4",
+      "romaji": "nureru",
+      "english": "to get wet",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nuru-to-paint-n4",
+      "romaji": "nuru",
+      "english": "to paint",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nurui-luke-warm-n5",
+      "romaji": "nurui",
+      "english": "luke warm",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "nusumu-to-steal-n4",
+      "romaji": "nusumu",
+      "english": "to steal",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nyuugakusuru-to-enter-school-or-university-n4",
+      "romaji": "nyuugakusuru",
+      "english": "to enter school or university",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nyuuinsuru-to-hospitalise-n4",
+      "romaji": "nyuuinsuru",
+      "english": "to hospitalise",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "nyuusu-news-n5",
+      "romaji": "nyuusu",
+      "english": "news",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "obaasan-grandmother-n5",
+      "romaji": "obaasan",
+      "english": "grandmother",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "obasan-aunt-n5",
+      "romaji": "obasan",
+      "english": "aunt",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "obentou-boxed-lunch-n5",
+      "romaji": "obentou",
+      "english": "boxed lunch",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "oboeru-to-remember-n5",
+      "romaji": "oboeru",
+      "english": "to remember",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "ocha-green-tea-n5",
+      "romaji": "ocha",
+      "english": "green tea",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ochiru-to-fall-or-drop-n4",
+      "romaji": "ochiru",
+      "english": "to fall or drop",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "odori-a-dance-n4",
+      "romaji": "odori",
+      "english": "a dance",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "odoroku-to-be-surprised-n4",
+      "romaji": "odoroku",
+      "english": "to be surprised",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "odoru-to-dance-n4",
+      "romaji": "odoru",
+      "english": "to dance",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ofuro-bath-n5",
+      "romaji": "ofuro",
+      "english": "bath",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "oishii-delicious-n5",
+      "romaji": "oishii",
+      "english": "delicious",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "oiwai-congratulation-n4",
+      "romaji": "oiwai",
+      "english": "congratulation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ojiisan-grandfather-n5",
+      "romaji": "ojiisan",
+      "english": "grandfather",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ojousan-young-lady-n4",
+      "romaji": "ojousan",
+      "english": "young lady",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "okage-owing-to-n4",
+      "romaji": "okage",
+      "english": "owing to",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "okane-money-n5",
+      "romaji": "okane",
+      "english": "money",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "okashi-sweets-n5",
+      "romaji": "okashi",
+      "english": "sweets",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "okashii-strange-or-funny-n4",
+      "romaji": "okashii",
+      "english": "strange or funny",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "okiru-to-get-up-n5",
+      "romaji": "okiru",
+      "english": "to get up",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "okonau-to-do-n4",
+      "romaji": "okonau",
+      "english": "to do",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "okoru-to-get-angry-n4",
+      "romaji": "okoru",
+      "english": "to get angry",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "okosu-to-wake-n4",
+      "romaji": "okosu",
+      "english": "to wake",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "oku-one-hundred-million-n4",
+      "romaji": "oku",
+      "english": "one hundred million",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "oku-to-put-n5",
+      "romaji": "oku",
+      "english": "to put",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "okujou-rooftop-n4",
+      "romaji": "okujou",
+      "english": "rooftop",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "okureru-to-be-late-n4",
+      "romaji": "okureru",
+      "english": "to be late",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "okurimono-gift-n4",
+      "romaji": "okurimono",
+      "english": "gift",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "okuru-to-send-n4",
+      "romaji": "okuru",
+      "english": "to send",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "omatsuri-festival-n4",
+      "romaji": "omatsuri",
+      "english": "festival",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "omawarisan-friendly-term-for-policeman-n5",
+      "romaji": "omawarisan",
+      "english": "friendly term for policeman",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "omimai-calling-on-someone-who-is-ill-n4",
+      "romaji": "omimai",
+      "english": "calling on someone who is ill",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "omiyage-souvenir-n4",
+      "romaji": "omiyage",
+      "english": "souvenir",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "omocha-toy-n4",
+      "romaji": "omocha",
+      "english": "toy",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "omoi-heavy-n5",
+      "romaji": "omoi",
+      "english": "heavy",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "omoidasu-to-remember-n4",
+      "romaji": "omoidasu",
+      "english": "to remember",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "omoshiroi-interesting-n5",
+      "romaji": "omoshiroi",
+      "english": "interesting",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "omote-the-front-n4",
+      "romaji": "omote",
+      "english": "the front",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "omou-to-think-n4",
+      "romaji": "omou",
+      "english": "to think",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "onaji-same-n5",
+      "romaji": "onaji",
+      "english": "same",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "onaka-stomach-n5",
+      "romaji": "onaka",
+      "english": "stomach",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ongaku-music-n5",
+      "romaji": "ongaku",
+      "english": "music",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "onna-woman-n5",
+      "romaji": "onna",
+      "english": "woman",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "onnanoko-girl-n5",
+      "romaji": "onnanoko",
+      "english": "girl",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ooi-many-n5",
+      "romaji": "ooi",
+      "english": "many",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "ookii-big-n5",
+      "romaji": "ookii",
+      "english": "big",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "ookina-big-n5",
+      "romaji": "ookina",
+      "english": "big",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ootobai-motorcycle-n4",
+      "romaji": "ootobai",
+      "english": "motorcycle",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "oozei-great-number-of-people-n5",
+      "romaji": "oozei",
+      "english": "great number of people",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "orei-expression-of-gratitude-n4",
+      "romaji": "orei",
+      "english": "expression of gratitude",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "oreru-to-break-or-be-folded-n4",
+      "romaji": "oreru",
+      "english": "to break or be folded",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "oriru-to-get-off-n4",
+      "romaji": "oriru",
+      "english": "to get off",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "oriru-to-get-off-n5",
+      "romaji": "oriru",
+      "english": "to get off",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "oru-to-break-or-to-fold-n4",
+      "romaji": "oru",
+      "english": "to break or to fold",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "osake-alcohol-n5",
+      "romaji": "osake",
+      "english": "alcohol",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "osara-plate-n5",
+      "romaji": "osara",
+      "english": "plate",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "oshieru-to-teach-n5",
+      "romaji": "oshieru",
+      "english": "to teach",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "oshiire-closet-n4",
+      "romaji": "oshiire",
+      "english": "closet",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "osoi-late-n5",
+      "romaji": "osoi",
+      "english": "late",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "osu-to-push-n5",
+      "romaji": "osu",
+      "english": "to push",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "otearai-bathroom-n5",
+      "romaji": "otearai",
+      "english": "bathroom",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "oto-sound-n4",
+      "romaji": "oto",
+      "english": "sound",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "otoko-man-n5",
+      "romaji": "otoko",
+      "english": "man",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "otokonoko-boy-n5",
+      "romaji": "otokonoko",
+      "english": "boy",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "otona-adult-n5",
+      "romaji": "otona",
+      "english": "adult",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "otosu-to-drop-n4",
+      "romaji": "otosu",
+      "english": "to drop",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ototoi-day-before-yesterday-n5",
+      "romaji": "ototoi",
+      "english": "day before yesterday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ototoshi-year-before-last-n5",
+      "romaji": "ototoshi",
+      "english": "year before last",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "otouto-younger-brother-n5",
+      "romaji": "otouto",
+      "english": "younger brother",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "otsuri-change-from-purchase-n4",
+      "romaji": "otsuri",
+      "english": "change from purchase",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "otto-husband-n4",
+      "romaji": "otto",
+      "english": "husband",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "owari-the-end-n4",
+      "romaji": "owari",
+      "english": "the end",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "owaru-to-finish-n5",
+      "romaji": "owaru",
+      "english": "to finish",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "oya-parents-n4",
+      "romaji": "oya",
+      "english": "parents",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "oyogikata-way-of-swimming-n4",
+      "romaji": "oyogikata",
+      "english": "way of swimming",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "oyogu-to-swim-n5",
+      "romaji": "oyogu",
+      "english": "to swim",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "paateii-party-n5",
+      "romaji": "paateii",
+      "english": "party",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "paato-part-time-n4",
+      "romaji": "paato",
+      "english": "part time",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "pan-bread-n5",
+      "romaji": "pan",
+      "english": "bread",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "pasokon-personal-computer-n4",
+      "romaji": "pasokon",
+      "english": "personal computer",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "peeji-page-n5",
+      "romaji": "peeji",
+      "english": "page",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "pen-pen-n5",
+      "romaji": "pen",
+      "english": "pen",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "petto-pet-n5",
+      "romaji": "petto",
+      "english": "pet",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "piano-piano-n4",
+      "romaji": "piano",
+      "english": "piano",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "poketto-pocket-n5",
+      "romaji": "poketto",
+      "english": "pocket",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "posuto-post-n5",
+      "romaji": "posuto",
+      "english": "post",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "purezento-present-n4",
+      "romaji": "purezento",
+      "english": "present",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "puuru-swimming-pool-n5",
+      "romaji": "puuru",
+      "english": "swimming pool",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "raigetsu-next-month-n5",
+      "romaji": "raigetsu",
+      "english": "next month",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "rainen-next-year-n5",
+      "romaji": "rainen",
+      "english": "next year",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "raishuu-next-week-n5",
+      "romaji": "raishuu",
+      "english": "next week",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "rajio-radio-n5",
+      "romaji": "rajio",
+      "english": "radio",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "rei-zero-n5",
+      "romaji": "rei",
+      "english": "zero",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "reibou-air-conditioning-n4",
+      "romaji": "reibou",
+      "english": "air conditioning",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "reizouko-refrigerator-n5",
+      "romaji": "reizouko",
+      "english": "refrigerator",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "reji-register-n4",
+      "romaji": "reji",
+      "english": "register",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "rekishi-history-n4",
+      "romaji": "rekishi",
+      "english": "history",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "rekoodo-record-n5",
+      "romaji": "rekoodo",
+      "english": "record",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "renraku-contact-n4",
+      "romaji": "renraku",
+      "english": "contact",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "renshuusuru-to-practice-n5",
+      "romaji": "renshuusuru",
+      "english": "to practice",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "resutoran-restaurant-n5",
+      "romaji": "resutoran",
+      "english": "restaurant",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "rippa-splendid-n5",
+      "romaji": "rippa",
+      "english": "splendid",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "riyou-utilization-n4",
+      "romaji": "riyou",
+      "english": "utilization",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "riyuu-reason-n4",
+      "romaji": "riyuu",
+      "english": "reason",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "roku-six-n5",
+      "romaji": "roku",
+      "english": "six",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "rouka-corridor-n5",
+      "romaji": "rouka",
+      "english": "corridor",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "rusu-absence-n4",
+      "romaji": "rusu",
+      "english": "absence",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ryokan-japanese-hotel-n4",
+      "romaji": "ryokan",
+      "english": "Japanese hotel",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ryokou-travel-n5",
+      "romaji": "ryokou",
+      "english": "travel",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ryouhou-both-sides-n4",
+      "romaji": "ryouhou",
+      "english": "both sides",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ryouri-cuisine-n5",
+      "romaji": "ryouri",
+      "english": "cuisine",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ryoushin-both-parents-n5",
+      "romaji": "ryoushin",
+      "english": "both parents",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ryuugakusei-overseas-student-n5",
+      "romaji": "ryuugakusei",
+      "english": "overseas student",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "saa-well-n5",
+      "romaji": "saa",
+      "english": "well…",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sabishii-lonely-n4",
+      "romaji": "sabishii",
+      "english": "lonely",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "sagaru-to-get-down-n4",
+      "romaji": "sagaru",
+      "english": "to get down",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sagasu-to-look-for-n4",
+      "romaji": "sagasu",
+      "english": "to look for",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sageru-to-hang-n4",
+      "romaji": "sageru",
+      "english": "to hang",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "saifu-wallet-n5",
+      "romaji": "saifu",
+      "english": "wallet",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "saigo-last-n4",
+      "romaji": "saigo",
+      "english": "last",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "saikin-latest-n4",
+      "romaji": "saikin",
+      "english": "latest",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "saisho-beginning-n4",
+      "romaji": "saisho",
+      "english": "beginning",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "saka-slope-n4",
+      "romaji": "saka",
+      "english": "slope",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sakan-popularity-n4",
+      "romaji": "sakan",
+      "english": "popularity",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sakana-fish-n5",
+      "romaji": "sakana",
+      "english": "fish",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "saki-the-future-n5",
+      "romaji": "saki",
+      "english": "the future",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sakki-some-time-ago-n4",
+      "romaji": "sakki",
+      "english": "some time ago",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "saku-to-bloom-n5",
+      "romaji": "saku",
+      "english": "to bloom",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "sakubun-composition-n5",
+      "romaji": "sakubun",
+      "english": "composition",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "samui-cold-n5",
+      "romaji": "samui",
+      "english": "cold",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "san-three-n5",
+      "romaji": "san",
+      "english": "three",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sandaru-sandal-n4",
+      "romaji": "sandaru",
+      "english": "sandal",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sandoichchi-sandwich-n4",
+      "romaji": "sandoichchi",
+      "english": "sandwich",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sangyou-industry-n4",
+      "romaji": "sangyou",
+      "english": "industry",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sanposuru-to-stroll-n5",
+      "romaji": "sanposuru",
+      "english": "to stroll",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "sarada-salad-n4",
+      "romaji": "sarada",
+      "english": "salad",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "saraigetsu-the-month-after-next-n4",
+      "romaji": "saraigetsu",
+      "english": "the month after next",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sarainen-year-after-next-n5",
+      "romaji": "sarainen",
+      "english": "year after next",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "saraishuu-the-week-after-next-n4",
+      "romaji": "saraishuu",
+      "english": "the week after next",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sasu-to-stretch-out-hands-n5",
+      "romaji": "sasu",
+      "english": "to stretch out hands",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "satou-sugar-n5",
+      "romaji": "satou",
+      "english": "sugar",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sawagu-to-make-noise-n4",
+      "romaji": "sawagu",
+      "english": "to make noise",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sawaru-to-touch-n4",
+      "romaji": "sawaru",
+      "english": "to touch",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "se-height-n5",
+      "romaji": "se",
+      "english": "height",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sebiro-business-suit-n5",
+      "romaji": "sebiro",
+      "english": "business suit",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "seetaa-sweater-n5",
+      "romaji": "seetaa",
+      "english": "sweater",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "seiji-politics-n4",
+      "romaji": "seiji",
+      "english": "politics",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "seikatsusuru-to-live-n4",
+      "romaji": "seikatsusuru",
+      "english": "to live",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "seisansuru-to-produce-n4",
+      "romaji": "seisansuru",
+      "english": "to produce",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "seito-pupil-n5",
+      "romaji": "seito",
+      "english": "pupil",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "seiyou-western-countries-n4",
+      "romaji": "seiyou",
+      "english": "western countries",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sekai-the-world-n4",
+      "romaji": "sekai",
+      "english": "the world",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "seki-seat-n4",
+      "romaji": "seki",
+      "english": "seat",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sekken-economy-n5",
+      "romaji": "sekken",
+      "english": "economy",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "semai-narrow-n5",
+      "romaji": "semai",
+      "english": "narrow",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "sen-line-n4",
+      "romaji": "sen",
+      "english": "line",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sen-thousand-n5",
+      "romaji": "sen",
+      "english": "thousand",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "senaka-back-of-the-body-n4",
+      "romaji": "senaka",
+      "english": "back of the body",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sengetsu-last-month-n5",
+      "romaji": "sengetsu",
+      "english": "last month",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "senpai-senior-n4",
+      "romaji": "senpai",
+      "english": "senior",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sensei-teacher-n5",
+      "romaji": "sensei",
+      "english": "teacher",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "senshuu-last-week-n5",
+      "romaji": "senshuu",
+      "english": "last week",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sensou-war-n4",
+      "romaji": "sensou",
+      "english": "war",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sentaku-washing-n5",
+      "romaji": "sentaku",
+      "english": "washing",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "setsumei-explanation-n4",
+      "romaji": "setsumei",
+      "english": "explanation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sewasuru-to-look-after-n4",
+      "romaji": "sewasuru",
+      "english": "to look after",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shachou-company-president-n4",
+      "romaji": "shachou",
+      "english": "company president",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shakai-society-n4",
+      "romaji": "shakai",
+      "english": "society",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shashin-photograph-n5",
+      "romaji": "shashin",
+      "english": "photograph",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shatsu-shirt-n5",
+      "romaji": "shatsu",
+      "english": "shirt",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shawaa-shower-n5",
+      "romaji": "shawaa",
+      "english": "shower",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shi-city-n4",
+      "romaji": "shi",
+      "english": "city",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shiai-match-n4",
+      "romaji": "shiai",
+      "english": "match",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shibaraku-little-while-n4",
+      "romaji": "shibaraku",
+      "english": "little while",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shigoto-job-n5",
+      "romaji": "shigoto",
+      "english": "job",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shikaru-a-particular-n4",
+      "romaji": "shikaru",
+      "english": "a particular",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shikashi-however-n5",
+      "romaji": "shikashi",
+      "english": "however",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shikata-method-n4",
+      "romaji": "shikata",
+      "english": "method",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shiken-examination-n4",
+      "romaji": "shiken",
+      "english": "examination",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shikkari-firmly-n4",
+      "romaji": "shikkari",
+      "english": "firmly",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "shima-island-n4",
+      "romaji": "shima",
+      "english": "island",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shimaru-to-close-n5",
+      "romaji": "shimaru",
+      "english": "to close",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "shimeru-to-tie-n5",
+      "romaji": "shimeru",
+      "english": "to tie",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "shimeru-to-close-something-n5",
+      "romaji": "shimeru",
+      "english": "to close something",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "shimin-citizen-n4",
+      "romaji": "shimin",
+      "english": "citizen",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shinamono-goods-n4",
+      "romaji": "shinamono",
+      "english": "goods",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shinbun-newspaper-n5",
+      "romaji": "shinbun",
+      "english": "newspaper",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shinbunsha-newspaper-company-n4",
+      "romaji": "shinbunsha",
+      "english": "newspaper company",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shinpaisuru-to-worry-n4",
+      "romaji": "shinpaisuru",
+      "english": "to worry",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shinsetsu-kindness-n4",
+      "romaji": "shinsetsu",
+      "english": "kindness",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "shinu-to-die-n5",
+      "romaji": "shinu",
+      "english": "to die",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "shio-salt-n5",
+      "romaji": "shio",
+      "english": "salt",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shippai-failure-n4",
+      "romaji": "shippai",
+      "english": "failure",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shiraberu-to-investigate-n4",
+      "romaji": "shiraberu",
+      "english": "to investigate",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shiraseru-to-notify-n4",
+      "romaji": "shiraseru",
+      "english": "to notify",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shiro-white-n5",
+      "romaji": "shiro",
+      "english": "white",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shiroi-white-n5",
+      "romaji": "shiroi",
+      "english": "white",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "shiru-to-know-n5",
+      "romaji": "shiru",
+      "english": "to know",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "shita-below-n5",
+      "romaji": "shita",
+      "english": "below",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shitagi-underwear-n4",
+      "romaji": "shitagi",
+      "english": "underwear",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shitakusuru-to-prepare-n4",
+      "romaji": "shitakusuru",
+      "english": "to prepare",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shitsumon-question-n5",
+      "romaji": "shitsumon",
+      "english": "question",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shizuka-quiet-n5",
+      "romaji": "shizuka",
+      "english": "quiet",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "shokudou-dining-hall-n5",
+      "romaji": "shokudou",
+      "english": "dining hall",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shokujisuru-to-have-a-meal-n4",
+      "romaji": "shokujisuru",
+      "english": "to have a meal",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shokuryouhin-groceries-n4",
+      "romaji": "shokuryouhin",
+      "english": "groceries",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shouchisuru-to-consent-n4",
+      "romaji": "shouchisuru",
+      "english": "to consent",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shougakkou-elementary-school-n4",
+      "romaji": "shougakkou",
+      "english": "elementary school",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shoukai-introduction-n4",
+      "romaji": "shoukai",
+      "english": "introduction",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shourai-future-n4",
+      "romaji": "shourai",
+      "english": "future",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shousetsu-novel-n4",
+      "romaji": "shousetsu",
+      "english": "novel",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shoutaisuru-to-invite-n4",
+      "romaji": "shoutaisuru",
+      "english": "to invite",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shouyu-soy-sauce-n5",
+      "romaji": "shouyu",
+      "english": "soy sauce",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shukudai-homework-n5",
+      "romaji": "shukudai",
+      "english": "homework",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "shumi-hobby-n4",
+      "romaji": "shumi",
+      "english": "hobby",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "shuppatsusuru-to-depart-n4",
+      "romaji": "shuppatsusuru",
+      "english": "to depart",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shussekisuru-to-attend-n4",
+      "romaji": "shussekisuru",
+      "english": "to attend",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "shuukan-custom-n4",
+      "romaji": "shuukan",
+      "english": "custom",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "soba-near-n5",
+      "romaji": "soba",
+      "english": "near",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sobo-grandmother-n4",
+      "romaji": "sobo",
+      "english": "grandmother",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sochchi-over-there-n5",
+      "romaji": "sochchi",
+      "english": "over there",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sochira-over-there-n5",
+      "romaji": "sochira",
+      "english": "over there",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "sodateru-to-rear-n4",
+      "romaji": "sodateru",
+      "english": "to rear",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sofu-grandfather-n4",
+      "romaji": "sofu",
+      "english": "grandfather",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sofuto-soft-n4",
+      "romaji": "sofuto",
+      "english": "soft",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "soko-that-place-n5",
+      "romaji": "soko",
+      "english": "that place",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "sonna-that-sort-of-n4",
+      "romaji": "sonna",
+      "english": "that sort of",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sonnani-so-much-n4",
+      "romaji": "sonnani",
+      "english": "so much",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sono-that-n5",
+      "romaji": "sono",
+      "english": "that",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "sora-sky-n5",
+      "romaji": "sora",
+      "english": "sky",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sore-that-n5",
+      "romaji": "sore",
+      "english": "that",
+      "pos": "pronoun",
+      "level": "N5"
+    },
+    {
+      "id": "sorede-because-of-that-n4",
+      "romaji": "sorede",
+      "english": "because of that",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "soredeha-in-that-situation-n5",
+      "romaji": "soredeha",
+      "english": "in that situation",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sorehodo-to-that-extent-n4",
+      "romaji": "sorehodo",
+      "english": "to that extent",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sorekara-after-that-n5",
+      "romaji": "sorekara",
+      "english": "after that",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "soreni-moreover-n4",
+      "romaji": "soreni",
+      "english": "moreover",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sorosoro-gradually-n4",
+      "romaji": "sorosoro",
+      "english": "gradually",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "soto-outside-n5",
+      "romaji": "soto",
+      "english": "outside",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sotsugyou-graduation-n4",
+      "romaji": "sotsugyou",
+      "english": "graduation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sou-really-n4",
+      "romaji": "sou",
+      "english": "really",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "soudansuru-to-discuss-n4",
+      "romaji": "soudansuru",
+      "english": "to discuss",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "soujisuru-to-clean-n5",
+      "romaji": "soujisuru",
+      "english": "to clean",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "subarashii-wonderful-n4",
+      "romaji": "subarashii",
+      "english": "wonderful",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suberu-to-slide-n4",
+      "romaji": "suberu",
+      "english": "to slide",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sugiru-to-exceed-n4",
+      "romaji": "sugiru",
+      "english": "to exceed",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sugoi-terrific-n4",
+      "romaji": "sugoi",
+      "english": "terrific",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suguni-instantly-n5",
+      "romaji": "suguni",
+      "english": "instantly",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "suidou-water-supply-n4",
+      "romaji": "suidou",
+      "english": "water supply",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suiei-swimming-n4",
+      "romaji": "suiei",
+      "english": "swimming",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suiyoubi-wednesday-n5",
+      "romaji": "suiyoubi",
+      "english": "Wednesday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sukaato-skirt-n5",
+      "romaji": "sukaato",
+      "english": "skirt",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "suki-likeable-n5",
+      "romaji": "suki",
+      "english": "likeable",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "sukkari-completely-n4",
+      "romaji": "sukkari",
+      "english": "completely",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "sukoshi-few-n5",
+      "romaji": "sukoshi",
+      "english": "few",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "suku-to-become-empty-n4",
+      "romaji": "suku",
+      "english": "to become empty",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sukunai-a-few-n5",
+      "romaji": "sukunai",
+      "english": "a few",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "sukuriin-screen-n4",
+      "romaji": "sukuriin",
+      "english": "screen",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sumi-corner-n4",
+      "romaji": "sumi",
+      "english": "corner",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sumu-to-finish-n4",
+      "romaji": "sumu",
+      "english": "to finish",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sumu-to-live-in-n5",
+      "romaji": "sumu",
+      "english": "to live in",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "suna-sand-n4",
+      "romaji": "suna",
+      "english": "sand",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "supootsu-sport-n5",
+      "romaji": "supootsu",
+      "english": "sport",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "supuun-spoon-n5",
+      "romaji": "supuun",
+      "english": "spoon",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "suri-pickpocket-n4",
+      "romaji": "suri",
+      "english": "pickpocket",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "surippa-slippers-n5",
+      "romaji": "surippa",
+      "english": "slippers",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "suru-to-do-n5",
+      "romaji": "suru",
+      "english": "to do",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "suruto-then-n4",
+      "romaji": "suruto",
+      "english": "then",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "susumu-to-make-progress-n4",
+      "romaji": "susumu",
+      "english": "to make progress",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "suteeki-steak-n4",
+      "romaji": "suteeki",
+      "english": "steak",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "sutereo-stereo-n4",
+      "romaji": "sutereo",
+      "english": "stereo",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suteru-to-throw-away-n4",
+      "romaji": "suteru",
+      "english": "to throw away",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "sutoobu-heater-n5",
+      "romaji": "sutoobu",
+      "english": "heater",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "sutto-straight-n4",
+      "romaji": "sutto",
+      "english": "straight",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suu-to-smoke-n5",
+      "romaji": "suu",
+      "english": "to smoke",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "suugaku-mathematics-n4",
+      "romaji": "suugaku",
+      "english": "mathematics",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suutsu-suit-n4",
+      "romaji": "suutsu",
+      "english": "suit",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suutsukeesu-suitcase-n4",
+      "romaji": "suutsukeesu",
+      "english": "suitcase",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "suwaru-to-sit-n5",
+      "romaji": "suwaru",
+      "english": "to sit",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "suzushii-refreshing-n5",
+      "romaji": "suzushii",
+      "english": "refreshing",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "tabako-tobacco-n5",
+      "romaji": "tabako",
+      "english": "tobacco",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tabemono-food-n5",
+      "romaji": "tabemono",
+      "english": "food",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "taberu-to-eat-n5",
+      "romaji": "taberu",
+      "english": "to eat",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tabun-probably-n5",
+      "romaji": "tabun",
+      "english": "probably",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "tadashii-correct-n4",
+      "romaji": "tadashii",
+      "english": "correct",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "taifuu-typhoon-n4",
+      "romaji": "taifuu",
+      "english": "typhoon",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "taihen-very-n5",
+      "romaji": "taihen",
+      "english": "very",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "taiinsuru-to-leave-hospital-n4",
+      "romaji": "taiinsuru",
+      "english": "to leave hospital",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "taipu-type-n4",
+      "romaji": "taipu",
+      "english": "type",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "taisetsu-important-n5",
+      "romaji": "taisetsu",
+      "english": "important",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "taishikan-embassy-n5",
+      "romaji": "taishikan",
+      "english": "embassy",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "taitei-usually-n4",
+      "romaji": "taitei",
+      "english": "usually",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "takai-tall-n5",
+      "romaji": "takai",
+      "english": "tall",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "takusan-many-n5",
+      "romaji": "takusan",
+      "english": "many",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "takushii-taxi-n5",
+      "romaji": "takushii",
+      "english": "taxi",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tamago-egg-n5",
+      "romaji": "tamago",
+      "english": "egg",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tamani-occasionally-n4",
+      "romaji": "tamani",
+      "english": "occasionally",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "tame-in-order-to-n4",
+      "romaji": "tame",
+      "english": "in order to",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tana-shelves-n4",
+      "romaji": "tana",
+      "english": "shelves",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tanjoubi-birthday-n5",
+      "romaji": "tanjoubi",
+      "english": "birthday",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tanomu-to-ask-n5",
+      "romaji": "tanomu",
+      "english": "to ask",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tanoshii-enjoyable-n5",
+      "romaji": "tanoshii",
+      "english": "enjoyable",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "tanoshimi-joy-n4",
+      "romaji": "tanoshimi",
+      "english": "joy",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tanoshimu-to-enjoy-oneself-n4",
+      "romaji": "tanoshimu",
+      "english": "to enjoy oneself",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "taoreru-to-break-down-n4",
+      "romaji": "taoreru",
+      "english": "to break down",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tariru-to-be-enough-n4",
+      "romaji": "tariru",
+      "english": "to be enough",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tashika-definite-n4",
+      "romaji": "tashika",
+      "english": "definite",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tasu-to-add-a-number-n4",
+      "romaji": "tasu",
+      "english": "to add a number",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tatami-japanese-straw-mat-n4",
+      "romaji": "tatami",
+      "english": "Japanese straw mat",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tate-length-n5",
+      "romaji": "tate",
+      "english": "length",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tatemono-building-n5",
+      "romaji": "tatemono",
+      "english": "building",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tateru-to-build-n4",
+      "romaji": "tateru",
+      "english": "to build",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tateru-to-stand-something-up-n4",
+      "romaji": "tateru",
+      "english": "to stand something up",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tatoeba-for-example-n4",
+      "romaji": "tatoeba",
+      "english": "for example",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "tatsu-to-stand-n5",
+      "romaji": "tatsu",
+      "english": "to stand",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tazuneru-to-ask-n4",
+      "romaji": "tazuneru",
+      "english": "to ask",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tazuneru-to-visit-n4",
+      "romaji": "tazuneru",
+      "english": "to visit",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "te-hand-n5",
+      "romaji": "te",
+      "english": "hand",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tebukuro-glove-n4",
+      "romaji": "tebukuro",
+      "english": "glove",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "teeburu-table-n5",
+      "romaji": "teeburu",
+      "english": "table",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "teepu-tape-n5",
+      "romaji": "teepu",
+      "english": "tape",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "teepurekoodaa-tape-recorder-n5",
+      "romaji": "teepurekoodaa",
+      "english": "tape recorder",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tegami-letter-n5",
+      "romaji": "tegami",
+      "english": "letter",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "teinei-polite-n4",
+      "romaji": "teinei",
+      "english": "polite",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tekisuto-text-n4",
+      "romaji": "tekisuto",
+      "english": "text",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tekitou-suitability-n4",
+      "romaji": "tekitou",
+      "english": "suitability",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ten-point-n4",
+      "romaji": "ten",
+      "english": "point",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ten-in-shop-assistant-n4",
+      "romaji": "ten'in",
+      "english": "shop assistant",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tenisu-tennis-n4",
+      "romaji": "tenisu",
+      "english": "tennis",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tenki-weather-n5",
+      "romaji": "tenki",
+      "english": "weather",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tenkiyohou-weather-forecast-n4",
+      "romaji": "tenkiyohou",
+      "english": "weather forecast",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tenrankai-exhibition-n4",
+      "romaji": "tenrankai",
+      "english": "exhibition",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tera-temple-n4",
+      "romaji": "tera",
+      "english": "temple",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "terebi-television-n5",
+      "romaji": "terebi",
+      "english": "television",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tesuto-test-n5",
+      "romaji": "tesuto",
+      "english": "test",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tetsudau-to-assist-n4",
+      "romaji": "tetsudau",
+      "english": "to assist",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "to-metropolitan-n4",
+      "romaji": "to",
+      "english": "metropolitan",
+      "pos": "particle",
+      "level": "N4"
+    },
+    {
+      "id": "to-japanese-style-door-n5",
+      "romaji": "to",
+      "english": "Japanese style door",
+      "pos": "particle",
+      "level": "N5"
+    },
+    {
+      "id": "tobu-to-fly-n5",
+      "romaji": "tobu",
+      "english": "to fly",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tochuu-on-the-way-n4",
+      "romaji": "tochuu",
+      "english": "on the way",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "todokeru-to-reach-n4",
+      "romaji": "todokeru",
+      "english": "to reach",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "toire-toilet-n5",
+      "romaji": "toire",
+      "english": "toilet",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tokei-watch-n5",
+      "romaji": "tokei",
+      "english": "watch",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tokidoki-sometimes-n5",
+      "romaji": "tokidoki",
+      "english": "sometimes",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "tokoro-place-n5",
+      "romaji": "tokoro",
+      "english": "place",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tokoya-barber-n4",
+      "romaji": "tokoya",
+      "english": "barber",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tokubetsu-special-n4",
+      "romaji": "tokubetsu",
+      "english": "special",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tokuni-particularly-n4",
+      "romaji": "tokuni",
+      "english": "particularly",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "tokykyuu-limited-express-train-n4",
+      "romaji": "tokykyuu",
+      "english": "limited express train",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tomaru-to-lodge-at-n4",
+      "romaji": "tomaru",
+      "english": "to lodge at",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tomaru-to-come-to-a-halt-n5",
+      "romaji": "tomaru",
+      "english": "to come to a halt",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tomeru-to-stop-something-n4",
+      "romaji": "tomeru",
+      "english": "to stop something",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tomodachi-friend-n5",
+      "romaji": "tomodachi",
+      "english": "friend",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tonari-next-door-to-n5",
+      "romaji": "tonari",
+      "english": "next door to",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tooi-far-n5",
+      "romaji": "tooi",
+      "english": "far",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "tooka-ten-days-n5",
+      "romaji": "tooka",
+      "english": "ten days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tooku-distant-n4",
+      "romaji": "tooku",
+      "english": "distant",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tooru-to-go-through-n4",
+      "romaji": "tooru",
+      "english": "to go through",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tori-bird-n5",
+      "romaji": "tori",
+      "english": "bird",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "torikaeru-to-exchange-n4",
+      "romaji": "torikaeru",
+      "english": "to exchange",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "toriniku-chicken-meat-n5",
+      "romaji": "toriniku",
+      "english": "chicken meat",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "toru-to-take-a-photo-or-record-a-film-n5",
+      "romaji": "toru",
+      "english": "to take a photo or record a film",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "toru-to-take-something-n5",
+      "romaji": "toru",
+      "english": "to take something",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "toshi-year-n5",
+      "romaji": "toshi",
+      "english": "year",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "toshokan-library-n5",
+      "romaji": "toshokan",
+      "english": "library",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "totemo-very-n5",
+      "romaji": "totemo",
+      "english": "very",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "toutou-finally-n4",
+      "romaji": "toutou",
+      "english": "finally",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "tsugi-next-n5",
+      "romaji": "tsugi",
+      "english": "next",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tsugou-circumstances-n4",
+      "romaji": "tsugou",
+      "english": "circumstances",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tsukamaeru-to-seize-n4",
+      "romaji": "tsukamaeru",
+      "english": "to seize",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsukareru-to-get-tired-n5",
+      "romaji": "tsukareru",
+      "english": "to get tired",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tsukau-to-use-n5",
+      "romaji": "tsukau",
+      "english": "to use",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tsukeru-to-soak-n4",
+      "romaji": "tsukeru",
+      "english": "to soak",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsukeru-to-turn-on-n5",
+      "romaji": "tsukeru",
+      "english": "to turn on",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tsuki-moon-n4",
+      "romaji": "tsuki",
+      "english": "moon",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tsuku-to-be-attached-n4",
+      "romaji": "tsuku",
+      "english": "to be attached",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsuku-to-arrive-at-n5",
+      "romaji": "tsuku",
+      "english": "to arrive at",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tsukue-desk-n5",
+      "romaji": "tsukue",
+      "english": "desk",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "tsukuru-to-make-n5",
+      "romaji": "tsukuru",
+      "english": "to make",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tsumaranai-boring-n5",
+      "romaji": "tsumaranai",
+      "english": "boring",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "tsumetai-cold-to-the-touch-n5",
+      "romaji": "tsumetai",
+      "english": "cold to the touch",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "tsumori-intention-n4",
+      "romaji": "tsumori",
+      "english": "intention",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "tsureru-to-lead-n4",
+      "romaji": "tsureru",
+      "english": "to lead",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsuru-to-fish-n4",
+      "romaji": "tsuru",
+      "english": "to fish",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsutaeru-to-report-n4",
+      "romaji": "tsutaeru",
+      "english": "to report",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsutomeru-to-work-for-someone-n5",
+      "romaji": "tsutomeru",
+      "english": "to work for someone",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "tsutsumu-to-wrap-n4",
+      "romaji": "tsutsumu",
+      "english": "to wrap",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsuyoi-powerful-n5",
+      "romaji": "tsuyoi",
+      "english": "powerful",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "tsuzukeru-to-continue-n4",
+      "romaji": "tsuzukeru",
+      "english": "to continue",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "tsuzuku-to-be-continued-n4",
+      "romaji": "tsuzuku",
+      "english": "to be continued",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "uchi-within-n4",
+      "romaji": "uchi",
+      "english": "within",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ude-arm-n4",
+      "romaji": "ude",
+      "english": "arm",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ue-on-top-of-n5",
+      "romaji": "ue",
+      "english": "on top of",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ueru-to-plant-n4",
+      "romaji": "ueru",
+      "english": "to plant",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ugoku-to-move-n4",
+      "romaji": "ugoku",
+      "english": "to move",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ukagau-to-visit-n4",
+      "romaji": "ukagau",
+      "english": "to visit",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ukeru-to-take-a-lesson-or-test-n4",
+      "romaji": "ukeru",
+      "english": "to take a lesson or test",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "uketsuke-receipt-n4",
+      "romaji": "uketsuke",
+      "english": "receipt",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "umai-delicious-n4",
+      "romaji": "umai",
+      "english": "delicious",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "umareru-to-be-born-n5",
+      "romaji": "umareru",
+      "english": "to be born",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "umi-sea-n5",
+      "romaji": "umi",
+      "english": "sea",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "undousuru-to-exercise-n4",
+      "romaji": "undousuru",
+      "english": "to exercise",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "untenshu-driver-n4",
+      "romaji": "untenshu",
+      "english": "driver",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "untensuru-to-drive-n4",
+      "romaji": "untensuru",
+      "english": "to drive",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "ura-reverse-side-n4",
+      "romaji": "ura",
+      "english": "reverse side",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "ureshii-glad-n4",
+      "romaji": "ureshii",
+      "english": "glad",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "uriba-place-where-things-are-sold-n4",
+      "romaji": "uriba",
+      "english": "place where things are sold",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "uru-to-sell-n5",
+      "romaji": "uru",
+      "english": "to sell",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "urusai-noisy-n5",
+      "romaji": "urusai",
+      "english": "noisy",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "ushiro-behind-n5",
+      "romaji": "ushiro",
+      "english": "behind",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "uso-a-lie-n4",
+      "romaji": "uso",
+      "english": "a lie",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "usui-thin-n5",
+      "romaji": "usui",
+      "english": "thin",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "uta-song-n5",
+      "romaji": "uta",
+      "english": "song",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "utau-to-sing-n5",
+      "romaji": "utau",
+      "english": "to sing",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "utsu-to-hit-n4",
+      "romaji": "utsu",
+      "english": "to hit",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "utsukushii-beautiful-n4",
+      "romaji": "utsukushii",
+      "english": "beautiful",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "utsuru-to-move-house-or-transfer-n4",
+      "romaji": "utsuru",
+      "english": "to move house or transfer",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "utsusu-to-copy-or-photograph-n4",
+      "romaji": "utsusu",
+      "english": "to copy or photograph",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "uwagi-jacket-n5",
+      "romaji": "uwagi",
+      "english": "jacket",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "wa-leaf-n4",
+      "romaji": "wa",
+      "english": "leaf",
+      "pos": "particle",
+      "level": "N4"
+    },
+    {
+      "id": "wa-tooth-n5",
+      "romaji": "wa",
+      "english": "tooth",
+      "pos": "particle",
+      "level": "N5"
+    },
+    {
+      "id": "waapuro-word-processor-n4",
+      "romaji": "waapuro",
+      "english": "word processor",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "waishatsu-business-shirt-n5",
+      "romaji": "waishatsu",
+      "english": "business shirt",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "wakai-young-n5",
+      "romaji": "wakai",
+      "english": "young",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "wakareru-to-separate-n4",
+      "romaji": "wakareru",
+      "english": "to separate",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "wakaru-to-be-understood-n5",
+      "romaji": "wakaru",
+      "english": "to be understood",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "wakasu-to-boil-n4",
+      "romaji": "wakasu",
+      "english": "to boil",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "wake-meaning-n4",
+      "romaji": "wake",
+      "english": "meaning",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "waku-to-boil-n4",
+      "romaji": "waku",
+      "english": "to boil",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "warau-to-laugh-n4",
+      "romaji": "warau",
+      "english": "to laugh",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "wareru-to-break-n4",
+      "romaji": "wareru",
+      "english": "to break",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "wariai-rate-n4",
+      "romaji": "wariai",
+      "english": "rate",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "warui-bad-n5",
+      "romaji": "warui",
+      "english": "bad",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "wasuremono-lost-article-n4",
+      "romaji": "wasuremono",
+      "english": "lost article",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "wasureru-to-forget-n5",
+      "romaji": "wasureru",
+      "english": "to forget",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "wataru-to-go-across-n5",
+      "romaji": "wataru",
+      "english": "to go across",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "watasu-to-hand-over-n5",
+      "romaji": "watasu",
+      "english": "to hand over",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "yakeru-to-burn-n4",
+      "romaji": "yakeru",
+      "english": "to burn",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yaku-to-bake-n4",
+      "romaji": "yaku",
+      "english": "to bake",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yakunitatsu-to-be-helpful-n4",
+      "romaji": "yakunitatsu",
+      "english": "to be helpful",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yakusoku-promise-n4",
+      "romaji": "yakusoku",
+      "english": "promise",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yama-mountain-n5",
+      "romaji": "yama",
+      "english": "mountain",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yamu-to-stop-n4",
+      "romaji": "yamu",
+      "english": "to stop",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yaoya-greengrocer-n5",
+      "romaji": "yaoya",
+      "english": "greengrocer",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yaru-to-do-n5",
+      "romaji": "yaru",
+      "english": "to do",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "yasai-vegetable-n5",
+      "romaji": "yasai",
+      "english": "vegetable",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yasashii-kind-n4",
+      "romaji": "yasashii",
+      "english": "kind",
+      "pos": "adj",
+      "level": "N4"
+    },
+    {
+      "id": "yasashii-easy-n5",
+      "romaji": "yasashii",
+      "english": "easy",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "yaseru-to-become-thin-n4",
+      "romaji": "yaseru",
+      "english": "to become thin",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yasui-cheap-n5",
+      "romaji": "yasui",
+      "english": "cheap",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "yasumi-rest-n5",
+      "romaji": "yasumi",
+      "english": "rest",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yasumu-to-rest-n5",
+      "romaji": "yasumu",
+      "english": "to rest",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "yatstsu-eight-n5",
+      "romaji": "yatstsu",
+      "english": "eight",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yatto-at-last-n4",
+      "romaji": "yatto",
+      "english": "at last",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "yawarakai-soft-n4",
+      "romaji": "yawarakai",
+      "english": "soft",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yobu-to-call-out-n5",
+      "romaji": "yobu",
+      "english": "to call out",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "yogoreru-to-get-dirty-n4",
+      "romaji": "yogoreru",
+      "english": "to get dirty",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yokka-four-days-n5",
+      "romaji": "yokka",
+      "english": "four days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yoko-beside-n5",
+      "romaji": "yoko",
+      "english": "beside",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yoku-often-n5",
+      "romaji": "yoku",
+      "english": "often",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "yomu-to-read-n5",
+      "romaji": "yomu",
+      "english": "to read",
+      "pos": "verb",
+      "level": "N5"
+    },
+    {
+      "id": "yorokobu-to-be-delighted-n4",
+      "romaji": "yorokobu",
+      "english": "to be delighted",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yoru-to-visit-n4",
+      "romaji": "yoru",
+      "english": "to visit",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yoru-evening-n5",
+      "romaji": "yoru",
+      "english": "evening",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yoshuu-preparation-for-a-lesson-n4",
+      "romaji": "yoshuu",
+      "english": "preparation for a lesson",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yotei-arrangement-n4",
+      "romaji": "yotei",
+      "english": "arrangement",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yotstsu-four-n5",
+      "romaji": "yotstsu",
+      "english": "four",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "you-use-n4",
+      "romaji": "you",
+      "english": "use",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "youfuku-western-style-clothes-n5",
+      "romaji": "youfuku",
+      "english": "western-style clothes",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "youi-preparation-n4",
+      "romaji": "youi",
+      "english": "preparation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "youji-things-to-do-n4",
+      "romaji": "youji",
+      "english": "things to do",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "youka-eight-days-n5",
+      "romaji": "youka",
+      "english": "eight days",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yowai-weak-n5",
+      "romaji": "yowai",
+      "english": "weak",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "yoyaku-reservation-n4",
+      "romaji": "yoyaku",
+      "english": "reservation",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yu-hot-water-n4",
+      "romaji": "yu",
+      "english": "hot water",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yubi-finger-n4",
+      "romaji": "yubi",
+      "english": "finger",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yubiwa-finger-ring-n4",
+      "romaji": "yubiwa",
+      "english": "finger ring",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yuki-snow-n5",
+      "romaji": "yuki",
+      "english": "snow",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yukkurito-slowly-n5",
+      "romaji": "yukkurito",
+      "english": "slowly",
+      "pos": "adverb",
+      "level": "N5"
+    },
+    {
+      "id": "yume-dream-n4",
+      "romaji": "yume",
+      "english": "dream",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "yunyuusuru-to-import-n4",
+      "romaji": "yunyuusuru",
+      "english": "to import",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yureru-to-shake-n4",
+      "romaji": "yureru",
+      "english": "to shake",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yushutsusuru-to-export-n4",
+      "romaji": "yushutsusuru",
+      "english": "to export",
+      "pos": "verb",
+      "level": "N4"
+    },
+    {
+      "id": "yuube-last-night-n5",
+      "romaji": "yuube",
+      "english": "last night",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yuubinkyoku-post-office-n5",
+      "romaji": "yuubinkyoku",
+      "english": "post office",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yuugata-evening-n5",
+      "romaji": "yuugata",
+      "english": "evening",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yuuhan-dinner-n5",
+      "romaji": "yuuhan",
+      "english": "dinner",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "yuumei-famous-n5",
+      "romaji": "yuumei",
+      "english": "famous",
+      "pos": "adj",
+      "level": "N5"
+    },
+    {
+      "id": "zannen-disappointment-n4",
+      "romaji": "zannen",
+      "english": "disappointment",
+      "pos": "noun",
+      "level": "N4"
+    },
+    {
+      "id": "zashshi-magazine-n5",
+      "romaji": "zashshi",
+      "english": "magazine",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "zehi-without-fail-n4",
+      "romaji": "zehi",
+      "english": "without fail",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "zenbu-all-n5",
+      "romaji": "zenbu",
+      "english": "all",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "zenzen-not-entirely-n4",
+      "romaji": "zenzen",
+      "english": "not entirely",
+      "pos": "adverb",
+      "level": "N4"
+    },
+    {
+      "id": "zero-zero-n5",
+      "romaji": "zero",
+      "english": "zero",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "zubon-trousers-n5",
+      "romaji": "zubon",
+      "english": "trousers",
+      "pos": "noun",
+      "level": "N5"
+    },
+    {
+      "id": "zuibun-extremely-n4",
+      "romaji": "zuibun",
+      "english": "extremely",
+      "pos": "adverb",
+      "level": "N4"
+    }
+  ]
+}

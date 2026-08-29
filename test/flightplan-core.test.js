@@ -217,6 +217,8 @@ test('material delay threshold respected in status vocabulary', () => {
     },
   }, { materialDelayMinutes: 15 });
   assert.match(status.displayLine, /DELAYED 20 MIN/);
+  assert.equal(status.headline, 'DELAYED 20 MIN');
+  assert.equal(status.gateLine, '');
 });
 
 test('flightPlanBoardFrames builds a valid Vestaboard layout for a trip board', () => {
@@ -232,7 +234,10 @@ test('flightPlanBoardFrames builds a valid Vestaboard layout for a trip board', 
       number: 'DL167',
       origin: { iata: 'SEA' },
       destination: { iata: 'HND' },
-      scheduled: { departure: '2027-06-24T13:45:00-07:00' },
+      scheduled: {
+        departure: '2027-06-24T13:45:00-07:00',
+        arrival: '2027-06-25T16:00:00+09:00',
+      },
       state: 'upcoming',
     }],
   }, { timeZone: 'America/Denver', now: new Date('2026-08-26T18:00:00Z') });
@@ -240,20 +245,35 @@ test('flightPlanBoardFrames builds a valid Vestaboard layout for a trip board', 
   assertValidLayout(frames[0].rows, 'flight plan board');
   assert.ok(frames[0].dwellSeconds >= 15);
   const text = frames[0].rows.map((row) => decodeCodes(row)).join('\n');
-  assert.match(text, /DEP\s+FLIGHT/);
-  assert.match(text, /1345/);
+  assert.match(text, /JAPAN 2027/);
+  assert.match(text, /DL 167/);
+  assert.match(text, /SEA -/);
   assert.match(text, /HND/);
+  assert.match(text, /1:45P/);
+  assert.match(text, /4:00P/);
+  assert.match(text, /ON TIME/);
   assert.match(text, /AS OF/);
   assert.match(text, /12:00/); // 18:00Z → noon MDT
   assert.match(text, /D-\d+/);
+  assert.doesNotMatch(text, /DEP\s+FLIGHT/);
 });
 
 test('board flight number is zero-padded', () => {
   assert.equal(formatBoardFlightNumber('DL', '167'), 'DL0167');
 });
 
+test('tracker flight number is readable', () => {
+  const { formatTrackerFlightNumber } = require('../src/flightplan-status');
+  assert.equal(formatTrackerFlightNumber('DL', '167'), 'DL 167');
+  assert.equal(formatTrackerFlightNumber('DL', 'DL167'), 'DL 167');
+});
+
 test('formatBoardTime keeps airport-local wall clock from ISO offset', () => {
-  const { formatBoardTime } = require('../src/flightplan-status');
+  const { formatBoardTime, formatTrackerClock } = require('../src/flightplan-status');
   assert.equal(formatBoardTime('2027-06-24T13:45:00-07:00'), '1345');
   assert.equal(formatBoardTime('2027-06-24T19:00:00'), '1900');
+  assert.equal(formatTrackerClock('2027-06-24T13:45:00-07:00'), '1:45P');
+  assert.equal(formatTrackerClock('2027-06-24T19:00:00'), '7:00P');
+  assert.equal(formatTrackerClock('2027-06-24T00:05:00'), '12:05A');
+  assert.equal(formatTrackerClock('2027-06-24T12:00:00'), '12:00P');
 });

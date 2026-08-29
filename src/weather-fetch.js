@@ -161,9 +161,111 @@ function formatGeocodeHit(hit) {
   }
   return {
     resolvedName: [hit.name, hit.admin1, hit.country_code].filter(Boolean).join(', '),
+    city: hit.name || '',
+    region: hit.admin1 || '',
     latitude: hit.latitude,
     longitude: hit.longitude,
     timezone: hit.timezone,
+  };
+}
+
+const ZIPPOPOTAM_URL = 'https://api.zippopotam.us';
+
+function normaliseUsZip(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{5})(?:-\d{4})?$/);
+  return match ? match[1] : '';
+}
+
+/**
+ * US ZIP via Zippopotam (no key). Falls back to Open-Meteo name search so a
+ * typed "84043" still resolves if Zippopotam is unreachable.
+ */
+async function geocodePostalCode(code, { timeoutMs = GEOCODE_FETCH_TIMEOUT_MS } = {}) {
+  const zip = normaliseUsZip(code);
+  const raw = String(code || '').trim();
+  if (zip) {
+    try {
+      const data = await fetchJson(`${ZIPPOPOTAM_URL}/us/${zip}`, { timeoutMs });
+      const place = data?.places?.[0];
+      if (place) {
+        return {
+          resolvedName: [place['place name'], place['state abbreviation']].filter(Boolean).join(', '),
+          city: place['place name'] || '',
+          region: place['state abbreviation'] || '',
+          postalCode: zip,
+          latitude: Number(place.latitude),
+          longitude: Number(place.longitude),
+          timezone: null,
+        };
+      }
+    } catch {
+      // Fall through to Open-Meteo.
+    }
+  }
+  if (!raw) {
+    return null;
+  }
+  const hit = await geocodeLocation(raw, { timeoutMs });
+  if (!hit) {
+    return null;
+  }
+  return { ...hit, postalCode: zip || raw };
+}
+
+/** IANA zone for a lat/lon. Open-Meteo `timezone=auto` is the house clock. */
+async function lookupTimeZone(latitude, longitude, { timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = {}) {
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    current: 'temperature_2m',
+    timezone: 'auto',
+  });
+  try {
+    const data = await fetchJson(`${FORECAST_URL}?${params.toString()}`, { timeoutMs });
+    return data?.timezone || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the Global Settings form: ZIP for coordinates when it is a US
+ * 5-digit code, city for the display name, Open-Meteo for the IANA zone.
+ */
+async function resolveHouseLocale({ city = '', postalCode = '' } = {}) {
+  const zip = String(postalCode || '').trim();
+  const cityName = String(city || '').trim();
+  if (!zip && !cityName) {
+    return null;
+  }
+
+  const fromZip = zip ? await geocodePostalCode(zip) : null;
+  const fromCity = cityName ? await geocodeLocation(cityName) : null;
+  const hit = fromZip || fromCity;
+  if (!hit || !Number.isFinite(Number(hit.latitude)) || !Number.isFinite(Number(hit.longitude))) {
+    return null;
+  }
+
+  const timeZone = hit.timezone || await lookupTimeZone(hit.latitude, hit.longitude);
+  const label = cityName && fromCity?.resolvedName
+    ? fromCity.resolvedName
+    : (hit.resolvedName || cityName || zip);
+
+  return {
+    city: fromCity?.city || fromZip?.city || cityName,
+    region: fromZip?.region || fromCity?.region || '',
+    postalCode: fromZip?.postalCode || normaliseUsZip(zip) || zip,
+    latitude: Number(hit.latitude),
+    longitude: Number(hit.longitude),
+    timeZone: timeZone || 'America/Denver',
+    label,
+    country: 'US',
   };
 }
 
@@ -392,6 +494,9 @@ async function fetchWeatherForecast(location) {
 module.exports = {
   fetchWeatherForecast,
   geocodeLocation,
+  geocodePostalCode,
+  lookupTimeZone,
+  resolveHouseLocale,
   parseGeocodeQuery,
   pickGeocodeHit,
   resolveLocation,

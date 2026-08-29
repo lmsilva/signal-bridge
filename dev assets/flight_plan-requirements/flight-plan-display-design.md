@@ -1,4 +1,4 @@
-# Flight Plan — display design (rev 2)
+# Flight Plan — display design (rev 4)
 
 Companion to `flight-plan-requirements.md`. That document says what the feature
 does. This one says what it looks like.
@@ -64,8 +64,8 @@ not "your" flight:
 ### Identity and status
 
 - Flight number: 26px, weight 500, `ACCENT`. Airline code and number
-  separated by a space — `DL 167`, never `DL167`. The board does the
-  opposite; see §4.
+  separated by a space — `DL 167`, never `DL167`. The Vestaboard tracker
+  card uses the same readable form; see §4.
 - Route: 20px, `INK`, with a real arrow character.
 - Status: 14px, one line, dot-separated. The colour comes from §3.
 
@@ -148,80 +148,83 @@ A delay under `materialDelayMinutes` still reads `ON TIME`. The panel and
 the change detector must agree on that threshold, or the wall will say
 one thing and the push another.
 
+The Vestaboard tracker splits that line: `headline` is the status without
+the gate (`ON TIME`, `DELAYED 25 MIN`, `IN FLIGHT`), and `gateLine` is
+`GATE B14` / `BAG BELT 7` on the row beneath. `boardCode` remains for the
+full-display itinerary chips.
+
 ---
 
-## 4. Vestaboard — the grid
+## 4. Vestaboard — the tracker card
 
 Six rows, twenty-two columns. `badgeFrame` in `frames.js` gives a badge
 row plus four body rows, with body columns running from `BODY_FROM` to
-`BODY_TO` — twenty usable characters. Column 1 and column 22 stay empty.
+`BODY_TO` — twenty usable characters.
 
-That empty right column is where the status chip goes, so **the chip is
-free**. It costs no character.
-
-### Flight row format
-
-Twenty characters, fixed columns:
+The board is not a dense FIDS table. It follows Vestaboard's Flight
+Tracker channel: **one flight per frame**, the trip name on the badge,
+origin and destination as the heroes, both clocks, a full-word status,
+and the gate when it still fits beside the status.
 
 ```
-col:  2..5   6   7..12   13   14..16   17   18..21
-      HHMM   ␣   AA1234  ␣    XXX      ␣    SSSS
-      1015       DL0167       NRT           +25
+JAPAN 2027
+DL 167               TODAY
+SEA -            HND
+1:45P          4:40P
+ON TIME         GATE B14
+AS OF            12:00
 ```
-
-- Time is 24-hour with no colon. A board has no room for punctuation.
-- Flight number is padded to six characters with a zero — `DL0167`, not
-  `DL 167`. The full display does the opposite, and that is deliberate:
-  a board wants a fixed grid, a screen wants readability.
-- The third column is the **destination** on a departures board and the
-  **origin** on an arrivals board. That is what real boards do, and it is
-  driven by the trip kind.
-- Status is right-aligned in the last four columns, using the board codes
-  from §3.
-
-### Chips
-
-Column 22, one per flight row, using the existing `chipCode` helper:
-
-| State | Chip |
-|---|---|
-| On time, boarding | green |
-| Late | orange |
-| Departed, in the air | blue |
-| Landed | white |
-| Cancelled, diverted | red |
-
-The alert frame (§5) puts a red chip in column 1 and column 22 of the
-badge row, so a disruption is visible before a single word is read.
 
 ### Badge row
 
-Trip name on the left, abbreviated to fit, and the countdown on the
-right: `D-12` for twelve days out, `TODAY` on the day, `NOW` once a
-flight is active.
+Trip name (`JAPAN 2027`). Long names drop `TRIP` / `VACATION` / `VISIT`
+/ `HOLIDAY` before they are cut to 16 characters. With no trip name,
+Next Flight reads `NEXT FLIGHT` and Trip Board reads `TRIP BOARD`.
+
+Corner chips take the status colour from §3 (green on time, orange
+late, blue in the air, white landed, red cancelled / diverted / alert).
+The chip is free — it costs no character.
+
+### Body rows
+
+1. **Flight** — airline+number on the left (`DL 167`). Countdown on the
+   right: `D-12` twelve days out, `TODAY` on the day, `NOW` once the
+   flight is active, `UPDATE` on an auto-push. When a trip board pages,
+   the counter joins the countdown (`TODAY 1/2`) if it still fits in
+   20 characters.
+2. **Route** — origin IATA on the left, destination on the right, a
+   hyphen in between (`SEA -` … `HND`). Vestaboard has no `>` flap.
+3. **Clocks** — departure under origin, arrival under destination.
+   12-hour with an `A`/`P` suffix (`1:45P`, `10:15A`), using the
+   airport-local wall clock embedded in the stamp so a UTC Docker host
+   cannot rewrite 13:45-07:00 into 20:45. Estimated / revised / actual
+   beats scheduled when AeroDataBox has a newer time.
+4. **Status** — the `headline` from §3, not the four-character board
+   code: `ON TIME`, `DELAYED 25 MIN`, `BOARDING`, `DEPARTED`,
+   `IN FLIGHT`, `LANDED`, `CANCELLED`. Gate (`GATE B14`, `TERM S`,
+   `BAG BELT 7`) sits on the right of this row when both fit; otherwise
+   the headline wins and the gate is omitted.
 
 ### Footer row
 
-`SIGNAL BRIDGE` on the left and the "as of" time on the right, in the
-same dimmed treatment other frames use. Same reasoning as the full
-display footer.
+`AS OF` on the left and the house-timezone clock on the right.
 
 ---
 
-## 5. Vestaboard — the three frames
+## 5. Vestaboard — Next Flight, Trip Board, and alerts
 
-### Departures frame
+### Next Flight (`flightplan.next`)
 
-Badge row, then up to four flight rows, next flight first, then the
-footer. More than four flights means a second frame. Paging is allowed
-here, unlike most board content, because a departure board that pages is
-what a real one does.
+One tracker card for the upcoming (or in-the-air) flight. Same shape
+whether the push is manual or a scheduler tick.
 
-### Arrivals frame
+### Trip Board (`flightplan.board`)
 
-Same shape, origin instead of destination. When a belt is assigned, the
-row beneath the flight carries `BAG BELT 7  GATE C12` instead of a second
-flight — belt information is what someone waiting at home actually needs.
+The same tracker card, one frame per remaining leg, up to four. A
+departure board that pages is what a real one does; cramming three
+flights onto one 20-character grid is not. Landed legs stay in the
+payload so a trip mid-journey still reads as a trip; they render as
+their own `LANDED` cards when they are in the first four.
 
 ### Change alert frame
 

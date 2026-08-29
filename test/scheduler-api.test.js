@@ -17,6 +17,7 @@ const httpMod = require('node:http');
 
 const { createWebServer } = require('../src/web-server');
 const { createDisplayBusy } = require('../src/display-busy');
+const { saveWeatherCache } = require('../src/weather-cache');
 
 const TEST_ADMIN_PASSWORD = 'scheduler-admin-secret';
 const TINY_PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -87,6 +88,13 @@ async function startServer({ busy = createDisplayBusy(), configOverrides = {} } 
       authStatusPath: path.join(dataDir, 'tesla-auth-status.json'),
     },
   };
+  saveWeatherCache(config, {
+    location: { latitude: 40.41, longitude: -111.85, name: 'Lehi' },
+    weather: {
+      current: { temperatureF: 72, condition: 'sunny' },
+      next7Days: [{ date: '2026-08-28', highF: 80, lowF: 55, condition: 'sunny' }],
+    },
+  });
   const webServer = createWebServer({
     config,
     log: { info() {}, warn() {}, error() {}, debug() {} },
@@ -220,23 +228,21 @@ test('missing rules 404 rather than silently succeeding', async () => {
 });
 
 test('air-now fires the real push handler and records an airing', async () => {
-  const { webServer, api, recorded } = await startServer();
+  const { webServer, api, sent } = await startServer();
   try {
     const created = await api(`${ROUTE}/rules`, {
       method: 'POST',
       body: { commandId: 'alexa.weather', intervalSeconds: 7200, probability: 0 },
     });
-    const before = recorded.length;
+    const before = sent.length;
     const fired = await api(`${ROUTE}/rules/${created.body.rule.id}/air`, { method: 'POST' });
     assert.equal(fired.status, 202);
     assert.equal(fired.body.event.outcome, 'aired');
     // The point of routing through the registry: a scheduled airing takes the
     // exact same path a human pressing the tile would.
-    assert.ok(recorded.length > before);
-    assert.equal(recorded.at(-1).kind, 'weather');
-    assert.equal(recorded.at(-1).trigger, 'weather-query');
-    assert.equal(recorded.at(-1).targetId, 'full');
-    assert.equal(recorded.at(-1).triggeredBy, 'scheduler');
+    assert.ok(sent.length > before);
+    assert.equal(sent.at(-1).type, 'weather.query');
+    assert.equal(sent.at(-1).weather.current.temperatureF, 72);
     assert.equal(fired.body.event.target, 'full');
 
     const activity = await api(`${ROUTE}/activity`);
@@ -400,7 +406,7 @@ test('a manual push holds the scheduler off for a full global gap', async () => 
 
 test('the tick skips while the display is busy and resumes when it frees up', async () => {
   const busy = createDisplayBusy();
-  const { webServer, api, recorded } = await startServer({ busy });
+  const { webServer, api, sent } = await startServer({ busy });
   try {
     await api(`${ROUTE}/settings`, {
       method: 'PUT',
@@ -416,10 +422,11 @@ test('the tick skips while the display is busy and resumes when it frees up', as
     assert.equal((await webServer.scheduler.tick()).reason, 'blocked-display');
 
     busy.release();
-    const before = recorded.length;
+    const before = sent.length;
     const result = await webServer.scheduler.tick();
     assert.ok(result.aired, 'the scheduler takes the display once it is free');
-    assert.ok(recorded.length > before);
+    assert.ok(sent.length > before);
+    assert.equal(sent.at(-1).type, 'weather.query');
   } finally {
     webServer.stop();
   }
