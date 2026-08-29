@@ -2893,10 +2893,13 @@ textarea.field-input.text-input-area {
   #tab-settings .baking-inspiration-settings-card,
   #tab-settings .stock-market-settings-card,
   #tab-settings .currency-rates-settings-card,
+  #tab-settings .plex-top10-settings-card,
   #tab-settings .learn-japanese-settings-card,
+  #tab-settings .learn-language-settings-card,
   #tab-settings .locale-settings-card,
   #tab-settings .weather-alerts-settings-card,
   #tab-settings .world-population-settings-card,
+  #tab-settings .calendar-clock-settings-card,
   #tab-settings .credits-settings-card,
   #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card {
@@ -3882,6 +3885,22 @@ textarea.field-input.text-input-area {
 }
 .cn-preview-row span.is-chip-red {
   background: #e03c31;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-orange {
+  background: #f07a1a;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-yellow {
+  background: #f5c518;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-blue {
+  background: #2a6de0;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-violet {
+  background: #7b3fd4;
   color: transparent;
 }
 .chuck-norris-actions,

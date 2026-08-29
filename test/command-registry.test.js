@@ -194,6 +194,12 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('weather.weekly', 'full'), false);
   assert.equal(supportsKind('japanese.learn', 'vestaboard'), true);
   assert.equal(supportsKind('japanese.learn', 'full'), false);
+  assert.equal(supportsKind('portuguese.learn', 'vestaboard'), true);
+  assert.equal(supportsKind('spanish.learn', 'vestaboard'), true);
+  assert.equal(supportsKind('french.learn', 'vestaboard'), true);
+  assert.equal(supportsKind('german.learn', 'vestaboard'), true);
+  assert.equal(supportsKind('italian.learn', 'vestaboard'), true);
+  assert.equal(supportsKind('italian.learn', 'full'), false);
   assert.equal(supportsKind('signal.quiet-hours', 'vestaboard'), true);
   assert.equal(supportsKind('signal.quiet-hours', 'full'), false);
   assert.equal(supportsKind('chuck.facts', 'vestaboard'), true);
@@ -210,6 +216,8 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('history.day', 'full'), false);
   assert.equal(supportsKind('world.population', 'vestaboard'), true);
   assert.equal(supportsKind('world.population', 'full'), false);
+  assert.equal(supportsKind('calendar.clock', 'vestaboard'), true);
+  assert.equal(supportsKind('calendar.clock', 'full'), false);
   assert.equal(supportsKind('bake.inspire', 'vestaboard'), true);
   assert.equal(supportsKind('bake.inspire', 'full'), false);
   assert.equal(supportsKind('weather.alerts', 'vestaboard'), true);
@@ -418,7 +426,7 @@ test('japanese.learn is Vestaboard-only and needs a matching word', () => {
   assert.ok(command.schedulable);
   assert.equal(command.supportsContentCheck, true);
   assert.deepEqual(kindsOf(command), ['vestaboard']);
-  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(pushCategoryOf(command), 'language');
   assert.equal(command.route, '/api/push/learn-japanese');
   assert.equal(command.defaultDurationSeconds, 20);
 
@@ -427,6 +435,32 @@ test('japanese.learn is Vestaboard-only and needs a matching word', () => {
 
   const ready = createCommandRegistry({ getLearnJapaneseStatus: () => ({ available: 80 }) });
   assert.equal(ready.hasContent('japanese.learn'), true);
+});
+
+test('european learn-language commands stay Vestaboard-only under Language', () => {
+  for (const id of [
+    'portuguese.learn', 'spanish.learn', 'french.learn', 'german.learn', 'italian.learn',
+  ]) {
+    const command = COMMANDS.find((entry) => entry.id === id);
+    assert.ok(command, id);
+    assert.ok(command.pushable);
+    assert.ok(command.schedulable);
+    assert.equal(command.supportsContentCheck, true);
+    assert.deepEqual(kindsOf(command), ['vestaboard']);
+    assert.equal(pushCategoryOf(command), 'language');
+    assert.equal(command.group, 'Language');
+    assert.equal(command.defaultDurationSeconds, 20);
+
+    const empty = createCommandRegistry({
+      getLearnLanguageStatus: () => ({ available: 0 }),
+    });
+    assert.equal(empty.hasContent(id), false);
+
+    const ready = createCommandRegistry({
+      getLearnLanguageStatus: () => ({ available: 80 }),
+    });
+    assert.equal(ready.hasContent(id), true);
+  }
 });
 
 test('chuck.facts is Vestaboard-only and needs a ready fact', () => {
@@ -535,6 +569,21 @@ test('history.day is Vestaboard-only and needs a ready On This Day fact', () => 
 
   const ready = createCommandRegistry({ getOnThisDayStatus: () => ({ available: 12 }) });
   assert.equal(ready.hasContent('history.day'), true);
+});
+
+test('calendar.clock is Vestaboard-only home and always has content', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'calendar.clock');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, false);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'home');
+  assert.equal(command.route, '/api/push/calendar-clock');
+  assert.equal(command.defaultDurationSeconds, 60);
+
+  const registry = createCommandRegistry({});
+  assert.equal(registry.hasContent('calendar.clock'), true);
 });
 
 test('world.population is Vestaboard-only and always has content', () => {

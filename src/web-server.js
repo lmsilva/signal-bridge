@@ -72,6 +72,7 @@ const { createCommandRegistry } = require('./command-registry');
 const {
   savePlexToken,
   defaultCredentialsPath,
+  resolvePlexToken,
 } = require('./plex-credentials');
 const {
   loadNotificationsCache,
@@ -125,6 +126,7 @@ const { extractWeatherLocation } = require('./weather-location');
 const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
 const { buildWeeklyWeatherPayload } = require('./weekly-weather');
 const { createLearnJapanese } = require('./learn-japanese');
+const { createLearnLanguages, languageOf } = require('./learn-language');
 const { createChuckNorris } = require('./chuck-norris');
 const { createAmazingFacts } = require('./amazing-facts');
 const { createWorldGeographyFacts } = require('./world-geography-facts');
@@ -133,6 +135,8 @@ const { createStoicQuotes } = require('./stoic-quotes');
 const { createOnThisDay } = require('./on-this-day');
 const { createBakingInspiration } = require('./baking-inspiration');
 const { createWorldPopulation } = require('./world-population');
+const { createCalendarClock } = require('./calendar-clock');
+const { createPlexTop10 } = require('./plex-top10');
 const { createWeatherAlerts } = require('./weather-alerts');
 const { createStockMarket } = require('./stock-market');
 const { createCurrencyRates } = require('./currency-rates');
@@ -435,6 +439,7 @@ function createWebServer({
   const slideshowSettings = createSlideshowSettings(config, log);
   const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
   const learnJapanese = createLearnJapanese(config, log);
+  const learnLanguages = createLearnLanguages(config, log);
   const chuckNorris = createChuckNorris(config, log);
   const amazingFacts = createAmazingFacts(config, log);
   const worldGeographyFacts = createWorldGeographyFacts(config, log);
@@ -445,6 +450,18 @@ function createWebServer({
   });
   const bakingInspiration = createBakingInspiration(config, log);
   const worldPopulation = createWorldPopulation(config, log);
+  const calendarClock = createCalendarClock(config, log);
+  const plexTop10 = createPlexTop10(config, log, {
+    // The Feature Presentation service already owns the server URL and the
+    // encrypted token; Top 10 borrows both rather than reading them twice.
+    resolvePlex: () => {
+      const settings = plexService()?.settings?.get?.() || {};
+      const { token } = resolvePlexToken({
+        credentialsPath: config.plexCredentialsPath || defaultCredentialsPath(config.ROOT),
+      });
+      return { serverUrl: settings.serverUrl || '', token };
+    },
+  });
   const weatherAlerts = createWeatherAlerts(config, log);
   const stockMarket = createStockMarket(config, log);
   const currencyRates = createCurrencyRates(config, log);
@@ -524,8 +541,10 @@ function createWebServer({
     getPlexStatus: () => getPlexStatus?.()
       || plexService()?.statusSnapshot?.()
       || null,
+    getPlexTop10Status: () => plexTop10.statusSnapshot(),
     getLocaleSettings: () => localeSettings.get(),
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
+    getLearnLanguageStatus: (commandId) => learnLanguages[commandId]?.statusSnapshot() || null,
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
     getAmazingFactsStatus: () => amazingFacts.statusSnapshot(),
     getWorldGeographyFactsStatus: () => worldGeographyFacts.statusSnapshot(),
@@ -2390,6 +2409,72 @@ function createWebServer({
     sendJson(res, 200, { ok: true, ...learnJapanese.statusSnapshot(), settings });
   }
 
+  function learnLanguageService(commandOrLang) {
+    const spec = languageOf(commandOrLang);
+    return spec ? learnLanguages[spec.commandId] : null;
+  }
+
+  function handleLearnLanguageSettingsGet(languageId, res) {
+    const service = learnLanguageService(languageId);
+    if (!service) {
+      sendJson(res, 404, { ok: false, error: 'Unknown language' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleLearnLanguageSettingsPut(languageId, body, res) {
+    const service = learnLanguageService(languageId);
+    if (!service) {
+      sendJson(res, 404, { ok: false, error: 'Unknown language' });
+      return;
+    }
+    const settings = service.updateSettings({
+      levels: body?.levels,
+      partsOfSpeech: body?.partsOfSpeech,
+    });
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot(), settings });
+  }
+
+  function handleLearnLanguagePush(languageId, body, res) {
+    const service = learnLanguageService(languageId);
+    if (!service) {
+      sendJson(res, 404, { ok: false, error: 'Unknown language' });
+      return;
+    }
+    const payload = service.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: `No ${service.spec.title.replace(/^Learn /, '')} words match the current filters — open Settings → Language`,
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info(service.spec.title, {
+      targetId,
+      word: payload.word.word,
+      pos: payload.word.pos,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      word: payload.word,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleChuckNorrisFactsGet(query, res) {
     sendJson(res, 200, { ok: true, ...chuckNorris.statusSnapshot({
       query: query?.q || query?.query,
@@ -2858,12 +2943,141 @@ function createWebServer({
     });
   }
 
+  function handleCalendarClockSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...calendarClock.statusSnapshot() });
+  }
+
+  function handleCalendarClockSettingsPut(body, res) {
+    if (body?.reset) {
+      const settings = calendarClock.resetSettings();
+      sendJson(res, 200, { ok: true, ...calendarClock.statusSnapshot(), settings });
+      return;
+    }
+    const settings = calendarClock.updateSettings({
+      weekStartsOn: body?.weekStartsOn,
+    });
+    sendJson(res, 200, { ok: true, ...calendarClock.statusSnapshot(), settings });
+  }
+
+  function handleCalendarClockPush(body, res) {
+    const payload = calendarClock.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'Calendar Clock could not read the house clock',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Calendar Clock', {
+      targetId,
+      date: `${payload.monthName} ${payload.day}`,
+      time: payload.timeLabel,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      weekdayName: payload.weekdayName,
+      monthName: payload.monthName,
+      day: payload.day,
+      timeLabel: payload.timeLabel,
+      showHeader: payload.showHeader,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  async function handlePlexTop10SettingsGet(res) {
+    let genres = [];
+    try {
+      genres = await plexTop10.listGenres();
+    } catch (error) {
+      log.warn?.('Could not list Plex genres', error?.message || error);
+    }
+    sendJson(res, 200, { ok: true, ...plexTop10.statusSnapshot(), genres });
+  }
+
+  async function handlePlexTop10SettingsPut(body, res) {
+    if (body?.reset) {
+      plexTop10.resetSettings();
+      await handlePlexTop10SettingsGet(res);
+      return;
+    }
+    const patch = {};
+    if (body?.source !== undefined) patch.source = body.source;
+    if (body?.genres !== undefined) patch.genres = body.genres;
+    if (body?.librarySectionKey !== undefined) patch.librarySectionKey = body.librarySectionKey;
+    if (body?.cacheMinutes !== undefined) patch.cacheMinutes = body.cacheMinutes;
+    plexTop10.updateSettings(patch);
+    await handlePlexTop10SettingsGet(res);
+  }
+
+  async function handlePlexTop10Push(body, res) {
+    let payload = null;
+    try {
+      payload = await plexTop10.nextPayload({ refresh: body?.refresh === true });
+    } catch (error) {
+      sendJson(res, error?.status === 401 ? 409 : 502, {
+        ok: false,
+        error: error?.message || 'Plex Top 10 could not reach Plex',
+      });
+      return;
+    }
+    if (!payload) {
+      const { source } = plexTop10.getSettings();
+      sendJson(res, 409, {
+        ok: false,
+        error: source === 'global'
+          ? 'Plex Discover returned no movies for these genres — open Settings → Media'
+          : 'No watched movies match these genres — open Settings → Media',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Plex Top 10 Movies', {
+      targetId,
+      source: payload.source,
+      movies: payload.movies.length,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      source: payload.source,
+      sourceLabel: payload.sourceLabel,
+      genres: payload.genres,
+      genresApplied: payload.genresApplied,
+      movies: payload.movies,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleLearnJapanesePush(body, res) {
     const payload = learnJapanese.nextPayload();
     if (!payload) {
       sendJson(res, 409, {
         ok: false,
-        error: 'No Japanese words match the current filters — open Settings → News',
+        error: 'No Japanese words match the current filters — open Settings → Language',
       });
       return;
     }
@@ -3266,6 +3480,8 @@ function createWebServer({
           await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
         case 'plex.now-playing':
           await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res); break;
+        case 'plex.top10':
+          await handlePlexTop10Push(body, res); break;
         case 'weather.weekly':
           await handleWeeklyWeatherPush(body, res); break;
         case 'weather.alerts':
@@ -3280,6 +3496,16 @@ function createWebServer({
           await handleStarlinkTrackerPush(body, res); break;
         case 'japanese.learn':
           handleLearnJapanesePush(body, res); break;
+        case 'portuguese.learn':
+          handleLearnLanguagePush('portuguese', body, res); break;
+        case 'spanish.learn':
+          handleLearnLanguagePush('spanish', body, res); break;
+        case 'french.learn':
+          handleLearnLanguagePush('french', body, res); break;
+        case 'german.learn':
+          handleLearnLanguagePush('german', body, res); break;
+        case 'italian.learn':
+          handleLearnLanguagePush('italian', body, res); break;
         case 'chuck.facts':
           handleChuckNorrisPush(body, res); break;
         case 'amazing.facts':
@@ -3296,6 +3522,8 @@ function createWebServer({
           handleBakingInspirationPush(body, res); break;
         case 'world.population':
           handleWorldPopulationPush(body, res); break;
+        case 'calendar.clock':
+          handleCalendarClockPush(body, res); break;
         case 'signal.quiet-hours':
           handleQuietHoursReminderPush(body, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
@@ -6354,6 +6582,11 @@ function createWebServer({
           handlePlexSettingsGet(res);
           return;
         }
+        if (pathname === '/api/plex-top10/settings') {
+          if (!requireAdminSession(req, res)) return;
+          await handlePlexTop10SettingsGet(res);
+          return;
+        }
         if (pathname === '/api/locale/settings') {
           if (!requireAdminSession(req, res)) return;
           handleLocaleSettingsGet(res);
@@ -6388,6 +6621,14 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           handleLearnJapaneseSettingsGet(res);
           return;
+        }
+        {
+          const learnSettings = pathname.match(/^\/api\/learn-(portuguese|spanish|french|german|italian)\/settings$/);
+          if (learnSettings) {
+            if (!requireAdminSession(req, res)) return;
+            handleLearnLanguageSettingsGet(learnSettings[1], res);
+            return;
+          }
         }
         if (pathname === '/api/chuck-norris/facts') {
           if (!requireAdminSession(req, res)) return;
@@ -6427,6 +6668,11 @@ function createWebServer({
         if (pathname === '/api/world-population/settings') {
           if (!requireAdminSession(req, res)) return;
           handleWorldPopulationSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/calendar-clock/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleCalendarClockSettingsGet(res);
           return;
         }
         if (pathname.startsWith('/api/flightplan/')) {
@@ -6607,6 +6853,12 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
           handlePlexSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/plex-top10/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handlePlexTop10SettingsPut(body, res);
           return;
         }
         const isScheduler = pathname.startsWith('/api/display-scheduler/');
@@ -6914,6 +7166,12 @@ function createWebServer({
           case '/api/push/plex-now-playing':
             await handlePlexNowPlayingPush(body, res);
             return;
+          case '/api/push/plex-top10':
+            await handlePlexTop10Push(body, res);
+            return;
+          case '/api/plex-top10/settings':
+            await handlePlexTop10SettingsPut(body, res);
+            return;
           case '/api/plex/settings':
             handlePlexSettingsPut(body, res);
             return;
@@ -6964,6 +7222,21 @@ function createWebServer({
             return;
           case '/api/push/learn-japanese':
             handleLearnJapanesePush(body, res);
+            return;
+          case '/api/push/learn-portuguese':
+            handleLearnLanguagePush('portuguese', body, res);
+            return;
+          case '/api/push/learn-spanish':
+            handleLearnLanguagePush('spanish', body, res);
+            return;
+          case '/api/push/learn-french':
+            handleLearnLanguagePush('french', body, res);
+            return;
+          case '/api/push/learn-german':
+            handleLearnLanguagePush('german', body, res);
+            return;
+          case '/api/push/learn-italian':
+            handleLearnLanguagePush('italian', body, res);
             return;
           case '/api/push/chuck-norris':
             handleChuckNorrisPush(body, res);
@@ -7041,11 +7314,32 @@ function createWebServer({
           case '/api/world-population/settings':
             handleWorldPopulationSettingsPut(body, res);
             return;
+          case '/api/push/calendar-clock':
+            handleCalendarClockPush(body, res);
+            return;
+          case '/api/calendar-clock/settings':
+            handleCalendarClockSettingsPut(body, res);
+            return;
           case '/api/push/quiet-hours-reminder':
             handleQuietHoursReminderPush(body, res);
             return;
           case '/api/learn-japanese/settings':
             handleLearnJapaneseSettingsPut(body, res);
+            return;
+          case '/api/learn-portuguese/settings':
+            handleLearnLanguageSettingsPut('portuguese', body, res);
+            return;
+          case '/api/learn-spanish/settings':
+            handleLearnLanguageSettingsPut('spanish', body, res);
+            return;
+          case '/api/learn-french/settings':
+            handleLearnLanguageSettingsPut('french', body, res);
+            return;
+          case '/api/learn-german/settings':
+            handleLearnLanguageSettingsPut('german', body, res);
+            return;
+          case '/api/learn-italian/settings':
+            handleLearnLanguageSettingsPut('italian', body, res);
             return;
           case '/api/push/trivia':
             handleTriviaPush(body, res);
