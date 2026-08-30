@@ -44,7 +44,7 @@ test('each European language ships an A1/A2 lexicon', () => {
   assert.deepEqual(languageIds(), ['portuguese', 'spanish', 'french', 'german', 'italian']);
   for (const id of languageIds()) {
     const words = loadLexicon(id);
-    assert.ok(words.length > 250, `${id} should ship a real word list`);
+    assert.ok(words.length > 1000, `${id} should ship a Japanese-sized word list`);
     const levels = new Set(words.map((word) => word.level));
     assert.equal(levels.has('A1'), true, `${id} needs A1`);
     assert.equal(levels.has('A2'), true, `${id} needs A2`);

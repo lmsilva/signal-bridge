@@ -37,6 +37,8 @@ const GUESTBOOK_NAME = 'guestbook';
 const GUESTBOOK_PATH = '/guestbook/';
 const GUESTSNAPS_NAME = 'guestsnaps';
 const GUESTSNAPS_PATH = '/';
+const GAMES_NAME = 'games';
+const GAMES_PATH = '/games/';
 const DEFAULT_HEALTH_MS = 24 * 60 * 60 * 1000;
 
 function nowIso(nowFn) {
@@ -206,10 +208,13 @@ function createShortlinks(config = {}, log = console, options = {}) {
     }
   }
 
-  function token() {
+  let activeScope = '';
+
+  function token(name = activeScope) {
     return resolveTinyurlToken({
       env: options.env || process.env,
       credentialsPath,
+      scope: name,
     });
   }
 
@@ -494,6 +499,7 @@ function createShortlinks(config = {}, log = console, options = {}) {
   }
 
   async function repair(name, reason) {
+    activeScope = String(name || '').trim();
     const current = sanitiseLink(state.links[name], name);
     if (current.alias) {
       await archiveAlias(current.alias);
@@ -517,6 +523,7 @@ function createShortlinks(config = {}, log = console, options = {}) {
   }
 
   async function check(name, { repairOnFail = true } = {}) {
+    activeScope = String(name || '').trim();
     load();
     const current = sanitiseLink(state.links[name], name);
     if (!current.alias) {
@@ -553,6 +560,7 @@ function createShortlinks(config = {}, log = console, options = {}) {
     if (!key) {
       throw new Error('Short-link name is required');
     }
+    activeScope = key;
     const destPath = targetPath == null || targetPath === ''
       ? GUESTBOOK_PATH
       : String(targetPath);
@@ -714,6 +722,8 @@ function createShortlinks(config = {}, log = console, options = {}) {
     GUESTBOOK_PATH,
     GUESTSNAPS_NAME,
     GUESTSNAPS_PATH,
+    GAMES_NAME,
+    GAMES_PATH,
   };
 }
 
@@ -726,6 +736,8 @@ module.exports = {
   GUESTBOOK_PATH,
   GUESTSNAPS_NAME,
   GUESTSNAPS_PATH,
+  GAMES_NAME,
+  GAMES_PATH,
   DEFAULT_HEALTH_MS,
   urlsMatch,
   isAliasTakenError,

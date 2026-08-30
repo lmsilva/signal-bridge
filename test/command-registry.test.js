@@ -202,6 +202,10 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('italian.learn', 'full'), false);
   assert.equal(supportsKind('signal.quiet-hours', 'vestaboard'), true);
   assert.equal(supportsKind('signal.quiet-hours', 'full'), false);
+  assert.equal(supportsKind('scramble.invite', 'vestaboard'), true);
+  assert.equal(supportsKind('scramble.invite', 'full'), false);
+  assert.equal(supportsKind('word.riddles', 'vestaboard'), true);
+  assert.equal(supportsKind('word.riddles', 'full'), false);
   assert.equal(supportsKind('chuck.facts', 'vestaboard'), true);
   assert.equal(supportsKind('chuck.facts', 'full'), false);
   assert.equal(supportsKind('amazing.facts', 'vestaboard'), true);
@@ -463,6 +467,45 @@ test('european learn-language commands stay Vestaboard-only under Language', () 
     });
     assert.equal(ready.hasContent(id), true);
   }
+});
+
+test('scramble.invite is Vestaboard-only and needs a short link', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'scramble.invite');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'games');
+  assert.equal(command.route, '/api/push/word-scramble');
+
+  const empty = createCommandRegistry({ getScrambleInviteStatus: () => ({ inviteReady: false }) });
+  assert.equal(empty.hasContent('scramble.invite'), false);
+  const ready = createCommandRegistry({ getScrambleInviteStatus: () => ({ inviteReady: true }) });
+  assert.equal(ready.hasContent('scramble.invite'), true);
+});
+
+test('word.riddles is Vestaboard-only and needs a ready riddle', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'word.riddles');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.equal(command.variableDuration, true);
+  assert.equal(command.defaultDurationSeconds, null);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'games');
+  assert.equal(command.route, '/api/push/word-riddles');
+
+  const empty = createCommandRegistry({ getWordRiddlesStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('word.riddles'), false);
+
+  const ready = createCommandRegistry({
+    getWordRiddlesStatus: () => ({ available: 80, revealDelaySeconds: 30, showIntro: true }),
+  });
+  assert.equal(ready.hasContent('word.riddles'), true);
+  assert.equal(ready.estimateDuration('word.riddles'), 58);
+  assert.equal(ready.estimateDuration('word.riddles', { revealDelaySeconds: 45, showIntro: false }), 65);
 });
 
 test('chuck.facts is Vestaboard-only and needs a ready fact', () => {

@@ -87,6 +87,8 @@ const BOARD_COMMAND_IDS = new Set([
   'italian.learn',
   'signal.quiet-hours',
   'chuck.facts',
+  'word.riddles',
+  'scramble.invite',
   'amazing.facts',
   'geo.facts',
   'talk.starters',
@@ -733,6 +735,43 @@ const COMMANDS = [
     kinds: ['vestaboard'],
   },
   {
+    id: 'scramble.invite',
+    title: 'Word Scramble',
+    subtitle: 'Invite phones to a Boggle round',
+    group: 'Games',
+    route: '/api/push/word-scramble',
+    icon: 'scramble',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 60,
+    kinds: ['vestaboard'],
+  },
+  {
+    id: 'word.riddles',
+    title: 'Word Riddles',
+    subtitle: 'A riddle, then the reveal',
+    group: 'Trivia',
+    route: '/api/push/word-riddles',
+    icon: 'riddle',
+    pushable: true,
+    schedulable: true,
+    params: [
+      {
+        key: 'revealDelaySeconds',
+        label: 'Seconds before the answer',
+        type: 'number',
+        min: 10,
+        max: 180,
+      },
+    ],
+    supportsContentCheck: true,
+    variableDuration: true,
+    defaultDurationSeconds: null,
+    kinds: ['vestaboard'],
+  },
+  {
     id: 'chuck.facts',
     title: 'Chuck Norris Fun Facts',
     subtitle: 'A roundhouse fact on the board',
@@ -1147,6 +1186,8 @@ function createCommandRegistry(deps = {}) {
     getLearnJapaneseStatus = null,
     getLearnLanguageStatus = null,
     getChuckNorrisStatus = null,
+    getWordRiddlesStatus = null,
+    getScrambleInviteStatus = null,
     getAmazingFactsStatus = null,
     getWorldGeographyFactsStatus = null,
     getConversationStartersStatus = null,
@@ -1262,6 +1303,8 @@ function createCommandRegistry(deps = {}) {
     'german.learn': () => Number(call(() => getLearnLanguageStatus?.('german.learn'))?.available || 0) > 0,
     'italian.learn': () => Number(call(() => getLearnLanguageStatus?.('italian.learn'))?.available || 0) > 0,
     'chuck.facts': () => Number(call(getChuckNorrisStatus)?.available || 0) > 0,
+    'word.riddles': () => Number(call(getWordRiddlesStatus)?.available || 0) > 0,
+    'scramble.invite': () => Boolean(call(getScrambleInviteStatus)?.inviteReady),
     'amazing.facts': () => Number(call(getAmazingFactsStatus)?.available || 0) > 0,
     'geo.facts': () => Number(call(getWorldGeographyFactsStatus)?.available || 0) > 0,
     'talk.starters': () => Number(call(getConversationStartersStatus)?.available || 0) > 0,
@@ -1277,6 +1320,16 @@ function createCommandRegistry(deps = {}) {
 
   /** id → (params) => seconds. Only needed for variableDuration commands. */
   const durationEstimators = {
+    'word.riddles': (params) => {
+      const status = call(getWordRiddlesStatus) || {};
+      const showIntro = params?.showIntro != null
+        ? params.showIntro !== false
+        : status.showIntro !== false;
+      const delay = Number(params?.revealDelaySeconds ?? status.revealDelaySeconds);
+      const reveal = Number.isFinite(delay) && delay > 0 ? delay : 30;
+      const clamped = Math.min(180, Math.max(10, Math.round(reveal)));
+      return (showIntro ? 8 : 0) + clamped + 20;
+    },
     'trivia.show': (params) => {
       const status = call(getTriviaStatus) || {};
       const settings = status.settings || {};

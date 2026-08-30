@@ -20,26 +20,26 @@ const WATCH_TICK_MS = 15_000;
 /**
  * Night cards for quiet hours.
  *
- * Moon uses a solid yellow disc (reads as a moon from across the room — the
- * old crescent looked like a letter C). SHHH stays violet-cornered but writes
- * the hush as `SHHH...`. ZZZ is a single centered stack above TIME TO REST.
+ * `moon` is the palm-and-sunset board (QUIET / HOURS on the left). `shhh` is
+ * the rainbow-corner "QUIET HOURS HAVE / BEEN ACTIVATED" card. `zzz` is three
+ * staggered block-letter Zs climbing toward the top-right.
  */
 const DRAWINGS = {
   moon: [
-    '  yyyy                ',
-    ' yyyyyy               ',
-    ' yyyyyy    QUIET      ',
-    ' yyyyyy    HOURS      ',
-    '  yyyy                ',
-    '                      ',
+    '           gg  ggg    ',
+    '   QUIET  g go g g g  ',
+    '    HOURS  g oo g g   ',
+    '              oo      ',
+    '          yyyyyyooyy  ',
+    'bbbbbbbbbbyyyyyyyyyybb',
   ],
   shhh: [
-    'vv                  vv',
+    'roygbv                ',
     '                      ',
-    '       SHHH...        ',
+    '   QUIET HOURS HAVE   ',
+    '    BEEN ACTIVATED    ',
     '                      ',
-    '     QUIET HOURS      ',
-    'vv                  vv',
+    '                vbgyor',
   ],
   stars: [
     'y   w        y    w   ',
@@ -50,12 +50,12 @@ const DRAWINGS = {
     '                      ',
   ],
   zzz: [
-    '                      ',
-    '         ZZZ          ',
-    '                      ',
-    '     TIME TO REST     ',
-    '                      ',
-    '                      ',
+    '                 bbbb ',
+    '         bbbb      b  ',
+    ' bbbb      b      b   ',
+    '   b      b      bbbb ',
+    '  b      bbbb         ',
+    ' bbbb                 ',
   ],
   dreams: [
     'y  w              w  y',
@@ -106,19 +106,23 @@ function formatQuietEnd(hhmm) {
   return `UNTIL ${hour}:${pad2(minute)}${meridiem}`;
 }
 
-function chipEdgeRow() {
-  return parseLayout('vv                  vv\n'.repeat(6), { label: 'edge' })[0];
+function rainbowLeadRow() {
+  return parseLayout('roygbv                \n'.repeat(6), { label: 'rainbow-lead' })[0];
+}
+
+function rainbowTrailRow() {
+  return parseLayout('                vbgyor\n'.repeat(6), { label: 'rainbow-trail' })[0];
 }
 
 function untilRows(payload = {}) {
   const until = fold(formatQuietEnd(payload.window?.end) || 'GOOD NIGHT');
   return assertValidLayout([
-    chipEdgeRow(),
+    rainbowLeadRow(),
     blankRow(COLS),
     centered(fold('QUIET HOURS'), { from: 0, width: COLS }),
     centered(until, { from: 0, width: COLS }),
     blankRow(COLS),
-    chipEdgeRow(),
+    rainbowTrailRow(),
   ], 'quiet hours until');
 }
 

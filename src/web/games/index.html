@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0B1730">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Games">
+  <title>Word Scramble</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="games.css?v=1">
+</head>
+<body>
+  <header class="gm-header">
+    <img class="gm-logo" src="/logo.png" width="36" height="36" alt="">
+    <div>
+      <h1 id="gm-title">Word Scramble</h1>
+      <p id="gm-subtitle">Join with the code on the board</p>
+    </div>
+  </header>
+
+  <main class="gm-main" id="gm-join">
+    <label class="gm-label" for="gm-code">Game code</label>
+    <input id="gm-code" class="gm-input" type="text" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="SLNG">
+    <label class="gm-label" for="gm-name">First name</label>
+    <input id="gm-name" class="gm-input" type="text" maxlength="10" autocomplete="given-name" autocapitalize="words" spellcheck="false">
+    <p class="gm-status" id="gm-join-status" role="status"></p>
+    <button type="button" class="gm-send" id="btn-gm-join">Join</button>
+  </main>
+
+  <main class="gm-main" id="gm-play" hidden>
+    <p class="gm-phase" id="gm-phase">Waiting</p>
+    <p class="gm-timer" id="gm-timer"></p>
+    <div class="gm-grid" id="gm-grid" hidden></div>
+    <form id="gm-word-form" hidden>
+      <label class="gm-label" for="gm-word">Word</label>
+      <input id="gm-word" class="gm-input" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false">
+      <button type="submit" class="gm-send">Submit</button>
+    </form>
+    <p class="gm-status" id="gm-play-status" role="status"></p>
+    <p class="gm-score" id="gm-score"></p>
+    <ol class="gm-roster" id="gm-roster"></ol>
+    <ol class="gm-board" id="gm-scores"></ol>
+    <button type="button" class="gm-secondary" id="btn-gm-leave">Leave</button>
+  </main>
+
+  <script src="games.js?v=1"></script>
+  <script src="scramble.js?v=1"></script>
+</body>
+</html>

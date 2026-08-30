@@ -151,6 +151,7 @@ async function startTestServer(options = {}) {
       || ((device) => alarmPolls.push(device)),
     guestSnapsAuth: options.guestSnapsAuth || null,
     vestaboardHub: options.vestaboardHub || null,
+    gameSessions: options.gameSessions || null,
     trivia: options.trivia || null,
     youtubeNowPlaying: options.youtubeNowPlaying || null,
     rollCredits: options.rollCredits || null,
@@ -214,6 +215,8 @@ test('resolveStaticPath blocks path traversal', () => {
   assert.equal(resolveStaticPath(root, '/admin/login'), path.join(root, 'admin', 'login.html'));
   assert.equal(resolveStaticPath(root, '/guestbook'), path.join(root, 'guestbook', 'index.html'));
   assert.equal(resolveStaticPath(root, '/guestbook/'), path.join(root, 'guestbook', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/games'), path.join(root, 'games', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/games/'), path.join(root, 'games', 'index.html'));
 });
 
 test('computeWebBasePath preserves reverse-proxy mount directories', () => {
@@ -1156,6 +1159,42 @@ test('learn spanish push delivers a shipped word and keeps japanese.learn separa
   }
 });
 
+test('word riddles push delivers a riddle then settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/word-riddles/riddles?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.riddles.length > 0);
+    assert.ok(listed.body.revealDelaySeconds >= 10);
+
+    const pushed = await postJson(base, '/api/push/word-riddles');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'word.riddles');
+    assert.ok(pushed.body.riddle.riddle);
+    assert.ok(pushed.body.riddle.answer);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'word.riddles');
+
+    const saved = await postJson(base, '/api/word-riddles/settings', {
+      revealDelaySeconds: 45,
+      showIntro: false,
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.revealDelaySeconds, 45);
+    assert.equal(saved.body.showIntro, false);
+
+    const added = await postJson(base, '/api/word-riddles/riddles', {
+      riddle: 'What has keys but cannot open locks?',
+      answer: 'A piano',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('chuck norris push delivers a board-fit fact and settings can add one', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1407,6 +1446,7 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.deepEqual(empty.body.events, []);
     assert.equal(empty.body.upcoming, 0);
     assert.equal(empty.body.settings.pushSelection, 'next');
+    assert.equal(empty.body.boardPreview, null);
 
     // Nothing to count down to must be a refusal, not a blank board.
     const refused = await postJson(base, '/api/push/red-letter');
@@ -1427,6 +1467,8 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.equal(id, 'amanda-visits-1127');
     assert.equal(added.body.upcoming, 1);
     assert.equal(added.body.events[0].next.date, '2099-11-27');
+    assert.equal(added.body.boardPreview.event.name, 'Amanda visits');
+    assert.equal(added.body.boardPreview.card, 'countdown');
 
     const edited = await send('PUT', `/api/date-book/events/${id}`, { recurring: true, message: 'See you soon', time: '18:00' });
     assert.equal(edited.status, 200);
@@ -1486,6 +1528,15 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.equal(settings.status, 200);
     assert.equal(settings.body.settings.pushSelection, 'random');
     assert.equal(settings.body.settings.showTime, false);
+
+    // One control at a time, the way the Settings card posts. The other
+    // selection (and showTime) must stay put.
+    const onlySchedule = await postJson(base, '/api/red-letter/settings', {
+      scheduleSelection: 'random',
+    });
+    assert.equal(onlySchedule.body.settings.pushSelection, 'random');
+    assert.equal(onlySchedule.body.settings.scheduleSelection, 'random');
+    assert.equal(onlySchedule.body.settings.showTime, false);
 
     const holiday = await postJson(base, '/api/date-book/events', {
       name: 'Thanksgiving',
@@ -1732,6 +1783,100 @@ test('guest book token is 409 when TINYURL_API_TOKEN is in the environment', asy
     webServer.stop();
     if (prev == null) delete process.env.TINYURL_API_TOKEN;
     else process.env.TINYURL_API_TOKEN = prev;
+  }
+});
+
+test('guest snaps token is 409 when TINYURL_API_TOKEN is in the environment', async () => {
+  const prev = process.env.TINYURL_API_TOKEN;
+  process.env.TINYURL_API_TOKEN = 'env-token-value';
+  const { webServer, base } = await startTestServer();
+  try {
+    const got = await getJson(base, '/api/guest-snaps/settings');
+    assert.equal(got.status, 200);
+    assert.equal(got.body.credentials.envBlocksOverwrite, true);
+
+    const blocked = await postJson(base, '/api/guest-snaps/settings', {
+      apiToken: 'session-token',
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.source, 'env');
+  } finally {
+    webServer.stop();
+    if (prev == null) delete process.env.TINYURL_API_TOKEN;
+    else process.env.TINYURL_API_TOKEN = prev;
+  }
+});
+
+test('global TinyURL settings are 409 when TINYURL_API_TOKEN is in the environment', async () => {
+  const prev = process.env.TINYURL_API_TOKEN;
+  process.env.TINYURL_API_TOKEN = 'env-token-value';
+  const { webServer, base } = await startTestServer();
+  try {
+    const blocked = await postJson(base, '/api/tinyurl/settings', {
+      apiToken: 'session-token',
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.source, 'env');
+  } finally {
+    webServer.stop();
+    if (prev == null) delete process.env.TINYURL_API_TOKEN;
+    else process.env.TINYURL_API_TOKEN = prev;
+  }
+});
+
+test('public games APIs work without an admin session and the push route does not', async () => {
+  const { webServer, base } = await startTestServer({ autoLogin: false });
+  try {
+    const missing = await request(`${base}/api/games/session?code=XXXX`);
+    assert.equal(missing.status, 404);
+
+    const created = await request(`${base}/api/push/word-scramble`, {
+      method: 'POST',
+      body: {},
+    });
+    assert.equal(created.status, 401);
+
+    const join = await request(`${base}/api/games/join`, {
+      method: 'POST',
+      body: { code: 'XXXX', name: 'Luis' },
+    });
+    assert.equal(join.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('games page and a live session join without an admin session', async () => {
+  const realRoot = path.join(__dirname, '../src/web');
+  const { webServer, base, cookie } = await startTestServer({
+    webRoot: realRoot,
+  });
+  try {
+    const page = await request(`${base}/games/`);
+    assert.equal(page.status, 200);
+    assert.match(page.text, /Word Scramble/);
+    assert.match(page.text, /games\.css\?v=/);
+    assert.match(page.text, /games\.js\?v=/);
+    assert.match(page.text, /scramble\.js\?v=/);
+
+    const pushed = await postJson(base, '/api/push/word-scramble', {}, cookie);
+    assert.equal(pushed.status, 200);
+    const code = pushed.body.session?.code;
+    assert.match(String(code || ''), /^[A-HJ-NP-Z]{4}$/);
+
+    const resolved = await request(`${base}/api/games/session?code=${code}`);
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.session.code, code);
+
+    const joined = await request(`${base}/api/games/join`, {
+      method: 'POST',
+      body: { code, name: 'Luis' },
+    });
+    assert.equal(joined.status, 200);
+    assert.equal(joined.body.player.name, 'Luis');
+    assert.match(String(joined.headers['set-cookie'] || ''), /signal_games=/);
+  } finally {
+    webServer.stop();
   }
 });
 
@@ -2286,6 +2431,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
       `${card} must span both columns`,
     );
   }
+  // Headings sit on the cards unless they get the same air as Push's
+  // `.push-block` gap (GAME NIGHT → tiles).
+  assert.match(css, /#tab-settings \.section-label \{[^}]*margin: 16px 4px 12px;/);
+
   assert.match(html, />Plex Configuration</);
   // Their contents run as columns, so the extra width is actually used.
   assert.match(html, /class="settings-columns settings-columns-3"/);
@@ -2363,10 +2512,22 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal187/);
-  assert.match(html, /app\.js\?v=signal187/);
+  assert.match(html, /styles\.css\?v=signal194/);
+  assert.match(html, /settings-filter\.js\?v=signal194/);
+  assert.match(html, /app\.js\?v=signal194/);
+  assert.match(html, /id="tinyurl-settings-card"/);
+  assert.match(html, /id="word-scramble-settings-card"/);
+  assert.match(html, /id="word-scramble-sessions-sheet"/);
+  assert.match(html, /id="guest-book-clear-override"/);
+  assert.match(html, /id="guest-snaps-clear-override"/);
+  assert.match(js, /\/api\/tinyurl\/settings/);
+  assert.match(js, /\/api\/word-scramble\/settings/);
+  assert.match(js, /\/api\/game-sessions\/end/);
+  assert.match(js, /word-scramble-end-sheet/);
+  assert.doesNotMatch(js, /openWordScrambleEnd[\s\S]*window\.confirm/);
   assert.match(html, /id="btn-ring-login"/);
   assert.match(html, /id="ring-2fa-block"/);
+  assert.match(html, /id="ring-show-time"/);
   assert.match(js, /function dateBookPreviewEvent\(/);
   assert.match(js, /setHours\(24, 0, 0, 0\)/);
   assert.match(js, /dateBookPreviewEvent\(draft\)/);
@@ -2423,6 +2584,11 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /vbSetRemindOnStart/);
   assert.match(js, /\/api\/push\/quiet-hours-reminder/);
   assert.match(css, /\.learn-japanese-settings-card/);
+  assert.match(html, /id="word-riddles-settings-card"/);
+  assert.match(html, /id="btn-word-riddles-manage"/);
+  assert.match(html, /id="btn-word-riddles-push"/);
+  assert.match(html, /id="word-riddles-manage-sheet"/);
+  assert.match(html, /id="word-riddles-reveal-delay"/);
   assert.match(html, /id="chuck-norris-settings-card"/);
   assert.match(html, /id="btn-chuck-norris-manage"/);
   assert.match(html, /id="btn-chuck-norris-push"/);
@@ -2682,6 +2848,10 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   // yanked scrollY back under it and the page jumped to the top in a loop.
   assert.match(js, /const leaveAt = 16/);
   assert.match(js, /function restoreSchedScroll/);
+  assert.match(js, /const tabScrollY = Object\.create\(null\)/);
+  assert.match(js, /function rememberTabScroll/);
+  assert.match(js, /function restoreTabScroll/);
+  assert.match(js, /activateTab\('push', \{ scroll: 'top' \}\)/);
   // Add-a-rule must start blank — defaulting to catalog[0] forced erasing
   // "Tesla Dashboard" before every other search.
   assert.match(js, /setSchedAddCommand\(current \|\| null\)/);
@@ -2742,7 +2912,7 @@ test('admin home logo goes to Push; Steam return opens Settings', () => {
 
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
   assert.match(js, /btn-app-home/);
-  assert.match(js, /activateTab\('push'\)/);
+  assert.match(js, /activateTab\('push', \{ scroll: 'top' \}\)/);
   assert.match(js, /function applySteamReturnTab\(/);
   assert.match(js, /params\.get\('steam'\)/);
   assert.match(js, /activateTab\('settings'\)/);
@@ -3818,6 +3988,13 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
   }
   // On This Day already labels its preview in a settings column.
   assert.match(html, /id="on-this-day-manage-sheet"/);
+  // Word Riddles puts Intro / Riddle / Answer on the same row as the label
+  // so the board lines up with the riddle textarea instead of sitting lower.
+  assert.match(html, /id="word-riddles-manage-sheet"/);
+  assert.match(html, /class="cn-preview-head"/);
+  assert.match(html, /id="word-riddles-preview-phase"/);
+  assert.match(css, /\.cn-preview-head \{/);
+  assert.match(css, /align-items: stretch;/);
 
   // Only the list scrolls; the head, compose block and pager stay put.
   assert.match(css, /\.cn-manage-sheet \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*overflow: hidden;/);
@@ -3875,6 +4052,9 @@ test('admin login page and logout control exist', () => {
   assert.match(login, /\/api\/admin\/login/);
   assert.match(login, /id="guest-book-quicklink"/);
   assert.match(login, /\/guestbook\//);
+  assert.match(login, /class="login-note-links"/);
+  assert.match(login, />Photo booth</);
+  assert.match(login, />Guest book</);
   assert.match(admin, /id="btn-admin-logout"/);
 });
 

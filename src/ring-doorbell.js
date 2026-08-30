@@ -18,6 +18,7 @@ const {
   assertValidLayout,
 } = require('./vestaboard/encoder');
 const { centered } = require('./vestaboard/frames');
+const { clockLabel, houseTimeZone } = require('./vestaboard/clock');
 const { createRingSettings, DEFAULT_SETTINGS } = require('./ring-settings');
 const {
   defaultCredentialsPath,
@@ -64,28 +65,38 @@ function paintBellBody(row) {
 /**
  * 6×22 doorbell alert card.
  *
- * One message line:
- *   solid red rail
- *   yellow bell + red sides
- *   yellow bell body + red sides
- *   title
- *   message
- *   solid red rail
+ * Without time:
+ *   solid red rail · bell · title · message · solid red rail
+ *   (two message lines drop the top bell row)
  *
- * Two message lines drop the top bell row so the copy still fits.
+ * With time (`showTime`):
+ *   solid red rail · bell · title · message · clock · solid red rail
+ *   Long messages wrap to one line so the clock keeps a row; if both
+ *   message lines are needed, the bell shrinks to a single body row.
  */
 function ringDoorbellRows({
   title = DEFAULT_SETTINGS.title,
   message = DEFAULT_SETTINGS.message,
+  showTime = DEFAULT_SETTINGS.showTime,
+  asOf = new Date(),
+  timeZone = null,
 } = {}) {
   const titleText = truncate(
     fold(title) || fold(DEFAULT_SETTINGS.title),
     18,
   );
+  const includeTime = Boolean(showTime);
+  const timeText = includeTime
+    ? truncate(clockLabel(asOf, { timeZone }) || '', 18)
+    : '';
+
+  // With a clock row we prefer a single message line so the bell can stay.
+  const messageWidth = 18;
+  const maxMessageLines = includeTime ? 2 : 2;
   const messageLines = wrap(
     fold(message) || fold(DEFAULT_SETTINGS.message),
-    18,
-  ).slice(0, 2);
+    messageWidth,
+  ).slice(0, maxMessageLines);
   while (messageLines.length < 2) {
     messageLines.push('');
   }
@@ -93,24 +104,54 @@ function ringDoorbellRows({
   const titleRow = sideChipRow();
   centered(titleText, { from: 2, width: 18, row: titleRow });
 
-  if (messageLines[1]) {
-    const m1 = sideChipRow();
-    centered(messageLines[0], { from: 2, width: 18, row: m1 });
-    const m2 = sideChipRow();
-    centered(messageLines[1], { from: 2, width: 18, row: m2 });
+  function messageRowFor(text) {
+    const row = sideChipRow();
+    if (text) {
+      centered(text, { from: 2, width: 18, row });
+    }
+    return row;
+  }
+
+  function timeRow() {
+    const row = sideChipRow();
+    if (timeText) {
+      centered(timeText, { from: 2, width: 18, row });
+    }
+    return row;
+  }
+
+  if (includeTime) {
+    // Prefer: rail · bell · title · message · time · rail
+    if (!messageLines[1]) {
+      return assertValidLayout([
+        edgeRow(),
+        paintBellBody(sideChipRow()),
+        titleRow,
+        messageRowFor(messageLines[0]),
+        timeRow(),
+        edgeRow(),
+      ], 'ring doorbell');
+    }
+    // Two message lines + time: drop the bell so everything still fits.
     return assertValidLayout([
       edgeRow(),
-      paintBellBody(sideChipRow()),
       titleRow,
-      m1,
-      m2,
+      messageRowFor(messageLines[0]),
+      messageRowFor(messageLines[1]),
+      timeRow(),
       edgeRow(),
     ], 'ring doorbell');
   }
 
-  const messageRow = sideChipRow();
-  if (messageLines[0]) {
-    centered(messageLines[0], { from: 2, width: 18, row: messageRow });
+  if (messageLines[1]) {
+    return assertValidLayout([
+      edgeRow(),
+      paintBellBody(sideChipRow()),
+      titleRow,
+      messageRowFor(messageLines[0]),
+      messageRowFor(messageLines[1]),
+      edgeRow(),
+    ], 'ring doorbell');
   }
 
   return assertValidLayout([
@@ -118,7 +159,7 @@ function ringDoorbellRows({
     paintBellTop(sideChipRow()),
     paintBellBody(sideChipRow()),
     titleRow,
-    messageRow,
+    messageRowFor(messageLines[0]),
     edgeRow(),
   ], 'ring doorbell');
 }
@@ -126,22 +167,34 @@ function ringDoorbellRows({
 function buildRingDoorbellPayload({
   title,
   message,
+  showTime = DEFAULT_SETTINGS.showTime,
   deviceName = '',
   kind = 'ding',
   cameraId = '',
   asOf = new Date(),
+  timeZone = null,
 } = {}) {
   const at = asOf instanceof Date ? asOf : new Date(asOf);
-  const rows = ringDoorbellRows({ title, message });
+  const when = Number.isNaN(at.getTime()) ? new Date() : at;
+  const includeTime = Boolean(showTime);
+  const rows = ringDoorbellRows({
+    title,
+    message,
+    showTime: includeTime,
+    asOf: when,
+    timeZone,
+  });
   return {
     type: TYPE,
     kind: kind === 'motion' ? 'motion' : 'ding',
     title: String(title != null ? title : DEFAULT_SETTINGS.title),
     message: String(message != null ? message : DEFAULT_SETTINGS.message),
+    showTime: includeTime,
+    timeLabel: includeTime ? (clockLabel(when, { timeZone }) || '') : '',
     deviceName: String(deviceName || '').trim(),
     cameraId: String(cameraId || '').trim(),
     rows,
-    asOf: Number.isNaN(at.getTime()) ? new Date().toISOString() : at.toISOString(),
+    asOf: when.toISOString(),
   };
 }
 
@@ -160,9 +213,21 @@ function createRingDoorbellService({
   RingApi: RingApiOption = null,
   RingRestClient: RingRestClientOption = null,
   settingsStore = null,
+  getTimeZone = null,
 } = {}) {
   const settings = settingsStore || createRingSettings(config, log);
   const credentialsPath = credentialsPathOf(config);
+
+  function resolveTimeZone() {
+    if (typeof getTimeZone === 'function') {
+      try {
+        return getTimeZone() || null;
+      } catch {
+        return null;
+      }
+    }
+    return houseTimeZone(config) || null;
+  }
 
   let api = null;
   let subscriptions = [];
@@ -362,9 +427,12 @@ function createRingDoorbellService({
     const payload = buildRingDoorbellPayload({
       title: cfg.title,
       message: cfg.message,
+      showTime: cfg.showTime,
       deviceName: camera?.name || '',
       kind,
       cameraId,
+      asOf: new Date(),
+      timeZone: resolveTimeZone(),
     });
     status.lastEventAt = payload.asOf;
     status.lastEventKind = kind;
@@ -509,8 +577,11 @@ function createRingDoorbellService({
     return buildRingDoorbellPayload({
       title: overrides.title != null ? overrides.title : cfg.title,
       message: overrides.message != null ? overrides.message : cfg.message,
+      showTime: overrides.showTime != null ? overrides.showTime : cfg.showTime,
       deviceName: overrides.deviceName || 'Front Door',
       kind: overrides.kind || 'ding',
+      asOf: overrides.asOf || new Date(),
+      timeZone: overrides.timeZone != null ? overrides.timeZone : resolveTimeZone(),
     });
   }
 

@@ -458,7 +458,14 @@ function createRedLetterSettings(config = {}, log = console) {
   return {
     get: () => ({ ...current }),
     update(patch = {}) {
-      current = sanitiseSettings({ ...current, ...patch }, DEFAULT_SETTINGS);
+      // The admin saves one control at a time. Spreading `undefined` over
+      // current would wipe the other selection (and showTime) back to default,
+      // so Push Now and On a schedule could never both be "random".
+      const incoming = {};
+      for (const [key, value] of Object.entries(patch || {})) {
+        if (value !== undefined) incoming[key] = value;
+      }
+      current = sanitiseSettings(incoming, current);
       save();
       return this.get();
     },

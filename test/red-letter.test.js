@@ -247,7 +247,7 @@ test('Thanksgiving is the last Thursday of November and Labor Day is the first M
   assert.equal(oneOff.expired, true, 'a one-off weekday date that already passed is gone');
 });
 
-test('selection skips what is disabled or gone and always prefers today', () => {
+test('selection skips what is disabled or gone; next prefers today, random does not', () => {
   const events = [
     { id: 'a', name: 'Gone', date: '2020-01-01' },
     { id: 'b', name: 'Off', date: '2026-09-01', enabled: false },
@@ -264,8 +264,9 @@ test('selection skips what is disabled or gone and always prefers today', () => 
   );
 
   assert.equal(pickEvent(events, { ...options, mode: 'next' }).id, 'e');
-  // Random must still hand back today's event rather than a countdown.
-  assert.equal(pickEvent(events, { ...options, mode: 'random', random: () => 0.99 }).id, 'e');
+  // Random draws from every upcoming event, so it can skip today's card.
+  assert.equal(pickEvent(events, { ...options, mode: 'random', random: () => 0.99 }).id, 'c');
+  assert.equal(pickEvent(events, { ...options, mode: 'random', random: () => 0 }).id, 'e');
 
   const noneToday = events.filter((event) => event.id !== 'e');
   assert.equal(pickEvent(noneToday, { ...options, mode: 'next' }).id, 'd');
@@ -543,6 +544,34 @@ test('a forced countdown preview on today looks a year ahead instead of showing 
   assert.equal(once.card, 'day-of');
 });
 
+test('a one-field settings save does not reset the other selection', () => {
+  const config = bookConfig('partial-settings');
+  const dateBook = createDateBook(config, quiet);
+  const redLetter = createRedLetter(config, quiet, { dateBook });
+
+  redLetter.updateSettings({ pushSelection: 'random', scheduleSelection: 'random', showTime: false });
+  assert.deepEqual(redLetter.getSettings(), {
+    pushSelection: 'random',
+    scheduleSelection: 'random',
+    showTime: false,
+  });
+
+  // Same shape the admin sends when you tap Push Now → "The next one".
+  redLetter.updateSettings({ pushSelection: 'next', scheduleSelection: undefined, showTime: undefined });
+  assert.deepEqual(redLetter.getSettings(), {
+    pushSelection: 'next',
+    scheduleSelection: 'random',
+    showTime: false,
+  });
+
+  redLetter.updateSettings({ scheduleSelection: 'next' });
+  assert.deepEqual(redLetter.getSettings(), {
+    pushSelection: 'next',
+    scheduleSelection: 'next',
+    showTime: false,
+  });
+});
+
 test('the service honours push and schedule selections separately', () => {
   const config = bookConfig('service');
   const dateBook = createDateBook(config, quiet);
@@ -584,6 +613,17 @@ test('the service honours push and schedule selections separately', () => {
     asOf: NOON,
   });
   assert.equal(inline.dayOf.event.name, 'Draft');
+
+  dateBook.add({ name: 'Today', date: '2026-08-29', message: 'Happy birthday' });
+  redLetter.updateSettings({ pushSelection: 'next' });
+  const nextToday = redLetter.nextPayload({ asOf: NOON, trigger: 'push' });
+  assert.equal(nextToday.event.name, 'Today');
+  assert.equal(nextToday.card, 'day-of');
+
+  redLetter.updateSettings({ pushSelection: 'random' });
+  const randomLater = redLetter.nextPayload({ asOf: NOON, trigger: 'push', random: () => 0.99 });
+  assert.equal(randomLater.event.name, 'Later');
+  assert.equal(randomLater.card, 'countdown');
 });
 
 test('the designer types the same flaps the encoder does', () => {

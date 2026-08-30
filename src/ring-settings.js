@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   message: 'Someone is at your front door',
   pushOnDing: true,
   pushOnMotion: false,
+  showTime: true,
   quietHoursExempt: true,
   cameraIds: [],
 });
@@ -63,6 +64,9 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
     pushOnMotion: incoming.pushOnMotion != null
       ? Boolean(incoming.pushOnMotion)
       : Boolean(base.pushOnMotion),
+    showTime: incoming.showTime != null
+      ? Boolean(incoming.showTime)
+      : Boolean(base.showTime),
     quietHoursExempt: incoming.quietHoursExempt != null
       ? Boolean(incoming.quietHoursExempt)
       : Boolean(base.quietHoursExempt),
