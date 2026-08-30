@@ -690,6 +690,7 @@ function buildGuestPhotoboothPayload(event, config, settings) {
         stepLabel: '2',
         heading: 'Open Guest Snaps',
         hint: 'Already on Wi‑Fi? Scan here',
+        ...(settings?.shortLabel ? { shortLabel: String(settings.shortLabel) } : {}),
       },
     },
   };

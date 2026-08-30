@@ -10,14 +10,15 @@
   <title>Guest Book</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="guestbook.css?v=1">
+  <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
+  <link rel="stylesheet" href="guestbook.css?v=7">
 </head>
 <body>
   <header class="gb-header">
     <img class="gb-logo" src="/logo.png" width="36" height="36" alt="">
     <div>
       <h1>Guest Book</h1>
-      <p id="gb-subtitle">Tap a flap, then type below</p>
+      <p id="gb-subtitle">Select a flap, then type</p>
     </div>
   </header>
 
@@ -34,7 +35,10 @@
 
   <main class="gb-main" id="gb-compose" hidden>
     <div class="gb-board-wrap">
-      <div class="cn-board-preview gb-preview" id="gb-preview" role="grid" aria-label="Board"></div>
+      <div class="vb-bezel preview-bezel gb-bezel">
+        <div class="vb-grid gb-preview" id="gb-preview" role="grid" aria-label="Board" tabindex="0"></div>
+        <div class="vb-wordmark">VESTABOARD</div>
+      </div>
     </div>
     <label class="gb-label" for="gb-keys">Your message</label>
     <input id="gb-keys" class="gb-input gb-keys-field" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type a letter — it goes on the selected flap">
@@ -53,6 +57,8 @@
     <div class="gb-align-row">
       <button type="button" class="gb-chip-btn" id="btn-gb-undo">Undo</button>
       <button type="button" class="gb-chip-btn" id="btn-gb-clear">Clear</button>
+      <button type="button" class="gb-chip-btn" id="btn-gb-clear-footer" hidden>Clear footer</button>
+      <button type="button" class="gb-chip-btn" id="btn-gb-restore-footer" hidden>Restore footer</button>
     </div>
 
     <label class="gb-label" for="gb-name">Your name <span class="gb-optional">(optional — The Book only)</span></label>
@@ -64,21 +70,24 @@
   </main>
 
   <main class="gb-main" id="gb-done" hidden>
-    <div class="cn-board-preview gb-preview" id="gb-done-preview" aria-hidden="true"></div>
-    <p class="gb-status is-good" id="gb-done-message">Your message is up.</p>
-    <p class="gb-hint">It stays until the next thing lands on the board.</p>
+    <div class="vb-bezel preview-bezel gb-bezel" aria-hidden="true">
+      <div class="vb-grid gb-preview" id="gb-done-preview"></div>
+      <div class="vb-wordmark">VESTABOARD</div>
+    </div>
+    <p class="gb-status is-good" id="gb-done-message">Your message has been pushed and will be displayed if outside quiet hours.</p>
+    <p class="gb-hint" id="gb-done-hint" hidden></p>
     <button type="button" class="gb-secondary" id="btn-gb-another">Write another</button>
   </main>
 
   <main class="gb-main" id="gb-cooldown" hidden>
-    <p class="gb-status" id="gb-cooldown-message">Please wait before sending another.</p>
+    <h1 class="gb-cooldown-title" id="gb-cooldown-message">Rate Limit Reached</h1>
     <p class="gb-cooldown-clock" id="gb-cooldown-clock" aria-live="polite">0:00</p>
-    <p class="gb-hint">You can send again when this reaches zero.</p>
+    <p class="gb-hint">You can send again when the timer reaches zero.</p>
     <button type="button" class="gb-secondary" id="btn-gb-cooldown-back">Back to the board</button>
   </main>
 
   <footer class="gb-footer">Messages appear on the house Vestaboard. Keep it kind.</footer>
-  <script src="/flap-grid.js?v=1"></script>
-  <script src="guestbook.js?v=1"></script>
+  <script src="/flap-grid.js?v=2"></script>
+  <script src="guestbook.js?v=6"></script>
 </body>
 </html>

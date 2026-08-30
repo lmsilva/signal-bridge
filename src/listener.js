@@ -52,8 +52,10 @@ const {
 } = require('./udp-payload');
 const {
   resolveGuestPhotoboothSettings,
+  resolveBoothPushUrl,
   photosToSlideshowEntries,
 } = require('./guest-photobooth');
+const { GUESTSNAPS_NAME } = require('./shortlinks');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createSlideshowSettings } = require('./slideshow-settings');
@@ -168,6 +170,7 @@ const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
 function createListener({
   config, log, guestSnapsAuth = null, vestaboardHub = null, localeSettings = null,
+  shortlinks = null,
 } = {}) {
   const alexa = new Alexa();
   // Shared with the web server when index.js injects one; otherwise local.
@@ -1639,8 +1642,12 @@ function createListener({
         event = { ...event, targetId: '*' };
       }
       const pinInfo = snapsAuth.getPinForDisplay();
+      const shortlink = shortlinks?.status?.(GUESTSNAPS_NAME) || null;
+      const boothPush = resolveBoothPushUrl(settings, shortlink);
       payload = buildGuestPhotoboothPayload(event, config, {
         ...settings,
+        boothUrl: boothPush.boothUrl,
+        shortLabel: boothPush.shortLabel,
         ...(pinInfo ? {
           accessPin: pinInfo.accessPin,
           accessPinHint: pinInfo.accessPinHint,
@@ -1657,8 +1664,9 @@ function createListener({
       lastCaptureAt = Date.now();
       log.info(`Voice event sent (guest-photobooth) for ${event.device}`, {
         query: event.query,
-        ssid: settings.ssid,
-        boothUrl: settings.boothUrl,
+        boothUrl: boothPush.boothUrl,
+        usedShortLink: boothPush.usedShortLink,
+        type: payload.type,
       });
       return voiceFanout;
     } else if (event.kind === 'photo-slideshow') {

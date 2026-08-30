@@ -12,6 +12,7 @@ const {
   layoutRows,
   rowsToText,
   footerRows,
+  footerRowsInPlace,
   stampInviteFooter,
   inviteScreenRows,
   blankBoard,
@@ -138,7 +139,12 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     const enabled = settings.enabled !== false;
     const paused = Boolean(settings.paused);
     const shortLabel = shortlink.flapLabel || shortlink.display || '';
-    const inviteFooter = settings.inviteFooter !== false && Boolean(shortLabel);
+    const footerMode = settings.inviteFooter === 'always'
+      ? 'always'
+      : settings.inviteFooter === 'off'
+        ? 'off'
+        : 'whenRoom';
+    const inviteOn = footerMode !== 'off' && Boolean(shortLabel);
     return {
       enabled,
       paused,
@@ -147,9 +153,10 @@ function createGuestBook(config = {}, log = console, deps = {}) {
       whoCanSend: settings.whoCanSend || 'anyone',
       charsetHint: CHARSET_HINT,
       shortLabel,
-      inviteFooter,
-      editableRows: inviteFooter ? 4 : 6,
-      footerRows: inviteFooter ? stampInviteFooter(blankBoard(), shortLabel) : null,
+      inviteFooter: inviteOn,
+      inviteFooterMode: inviteOn ? footerMode : 'off',
+      editableRows: (inviteOn && footerMode === 'always') ? 4 : 6,
+      footerRows: inviteOn ? stampInviteFooter(blankBoard(), shortLabel) : null,
       inviteReady: Boolean(shortLabel),
       hasPassword: Boolean(settings.passwordHash),
     };
@@ -265,7 +272,7 @@ function createGuestBook(config = {}, log = console, deps = {}) {
       const settings = getSettings();
       const shortlink = getShortlink() || {};
       const label = shortlink.flapLabel || shortlink.display || '';
-      const lockFooter = settings.inviteFooter !== false && Boolean(label);
+      const lockFooter = settings.inviteFooter === 'always' && Boolean(label);
       return layoutRows(body.rows, { editableRows: lockFooter ? 4 : 6 });
     }
     return layoutMessage({
@@ -296,12 +303,24 @@ function createGuestBook(config = {}, log = console, deps = {}) {
   function boardFramesFor(guestRows, source) {
     const settings = getSettings();
     const label = currentShortLabel();
-    if (settings.inviteFooter === false || !label || !Array.isArray(guestRows)) {
+    const mode = settings.inviteFooter === 'always'
+      ? 'always'
+      : settings.inviteFooter === 'off'
+        ? 'off'
+        : 'whenRoom';
+    if (mode === 'off' || !label || !Array.isArray(guestRows)) {
       return { rows: guestRows, footerRows: null };
     }
-    if (source === 'design') {
+    if (mode === 'always') {
       return {
         rows: stampInviteFooter(guestRows, label) || guestRows,
+        footerRows: null,
+      };
+    }
+    // whenRoom — only stamp when the guest left room for the invite.
+    if (source === 'design') {
+      return {
+        rows: footerRowsInPlace(guestRows, label) || guestRows,
         footerRows: null,
       };
     }
@@ -365,7 +384,7 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     const wake = Boolean(settings.guestsMayWake);
     const waiting = Boolean(settings.approval);
     let status = 'shown';
-    let guestMessage = 'Your message is up.';
+    let guestMessage = 'Your message has been pushed and will be displayed if outside quiet hours.';
     let vestaboard = null;
 
     if (waiting) {
@@ -400,8 +419,7 @@ function createGuestBook(config = {}, log = console, deps = {}) {
       name: String(body.name || '').trim() || 'Anonymous',
       source,
       status,
-      ip: redactIp(ip),
-      ipRaw: ip,
+      ip,
       rows: guestRows,
       footerRows: null,
       text: painted ? rowsToText(guestRows) : String(body.text || body.message || ''),
@@ -427,17 +445,32 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     };
   }
 
-  function list({ limit = 50 } = {}) {
-    return book.entries.slice(0, Math.min(200, Number(limit) || 50)).map((entry) => ({
+  function list({ limit = 50, offset = 0, status } = {}) {
+    const filter = String(status || '').trim().toLowerCase();
+    const filtered = (filter === 'waiting' || filter === 'released')
+      ? book.entries.filter((entry) => entry.status === filter)
+      : book.entries;
+    const start = Math.max(0, Number(offset) || 0);
+    const size = Math.min(200, Math.max(1, Number(limit) || 50));
+    return filtered.slice(start, start + size).map((entry) => ({
       id: entry.id,
       at: entry.at,
       name: entry.name,
       source: entry.source,
       status: entry.status,
-      ip: entry.ip || '',
+      releasedAt: entry.releasedAt || '',
+      ip: entry.ipRaw || entry.ip || '',
       rows: entry.rows,
       previewRows: previewRowsFor(entry),
     }));
+  }
+
+  function count({ status } = {}) {
+    const filter = String(status || '').trim().toLowerCase();
+    if (filter === 'waiting' || filter === 'released') {
+      return book.entries.filter((entry) => entry.status === filter).length;
+    }
+    return book.entries.length;
   }
 
   function invitePayload() {
@@ -460,31 +493,144 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     };
   }
 
-  function replay(id) {
-    const entry = book.entries.find((row) => row.id === id);
-    if (!entry) {
-      return { ok: false, error: 'Unknown entry' };
+  function entryTimeMs(entry) {
+    const parsed = Date.parse(entry?.at || '');
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function entriesByIdsOldestFirst(idOrIds) {
+    const wanted = new Set(
+      (Array.isArray(idOrIds) ? idOrIds : [idOrIds])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean),
+    );
+    if (!wanted.size) {
+      return [];
     }
+    return book.entries
+      .filter((entry) => wanted.has(entry.id))
+      .sort((a, b) => entryTimeMs(a) - entryTimeMs(b) || String(a.id).localeCompare(String(b.id)));
+  }
+
+  function pushEntryToBoard(entry, queueOpts = {}) {
     const board = boardFramesFor(entry.rows, entry.source);
-    const vestaboard = pushToBoard({
+    return pushToBoard({
       type: 'guest.book',
       rows: board.rows,
       footerRows: board.footerRows,
       name: entry.name,
-    }, { quietHoursExempt: true, explicit: true });
-    entry.status = 'shown';
+    }, {
+      quietHoursExempt: true,
+      explicit: true,
+      ...queueOpts,
+    });
+  }
+
+  function replay(id) {
+    const entry = book.entries.find((row) => row.id === String(id || '').trim());
+    if (!entry) {
+      return { ok: false, error: 'Unknown entry' };
+    }
+    if (entry.status === 'waiting') {
+      return { ok: false, error: 'Release this message before replaying it' };
+    }
+    const vestaboard = pushEntryToBoard(entry);
+    if (entry.status !== 'released') {
+      entry.status = 'shown';
+    }
     save();
     return { ok: true, vestaboard, entry: { id: entry.id, status: entry.status } };
   }
 
-  function remove(id) {
+  /** Host approval: push a waiting message to the board and mark it released. */
+  function release(id) {
+    const entry = book.entries.find((row) => row.id === String(id || '').trim());
+    if (!entry) {
+      return { ok: false, error: 'Unknown entry' };
+    }
+    if (entry.status !== 'waiting') {
+      return { ok: false, error: 'That message is not waiting for approval' };
+    }
+    const vestaboard = pushEntryToBoard(entry);
+    entry.status = 'released';
+    entry.releasedAt = new Date(nowFn()).toISOString();
+    save();
+    return {
+      ok: true,
+      vestaboard,
+      entry: { id: entry.id, status: entry.status, releasedAt: entry.releasedAt },
+    };
+  }
+
+  /**
+   * Release several waiting messages older → newer. The first jump the line and
+   * clear earlier guest.book pages; the rest append so the board plays in order.
+   */
+  function releaseMany(idOrIds) {
+    const ordered = entriesByIdsOldestFirst(idOrIds);
+    if (!ordered.length) {
+      return { ok: false, error: 'Unknown entry' };
+    }
+    if (ordered.some((entry) => entry.status !== 'waiting')) {
+      return { ok: false, error: 'Only waiting messages can be released' };
+    }
+    const released = [];
+    const nowIso = new Date(nowFn()).toISOString();
+    ordered.forEach((entry, index) => {
+      pushEntryToBoard(entry, {
+        breakHold: index === 0,
+        replaceSource: index === 0 ? 'guest.book' : false,
+      });
+      entry.status = 'released';
+      entry.releasedAt = nowIso;
+      released.push({ id: entry.id, status: entry.status, releasedAt: entry.releasedAt });
+    });
+    save();
+    return { ok: true, released: released.length, entries: released };
+  }
+
+  /**
+   * Push several non-waiting messages older → newer onto the board queue.
+   * Waiting messages are skipped (release them first).
+   */
+  function replayMany(idOrIds) {
+    const ordered = entriesByIdsOldestFirst(idOrIds)
+      .filter((entry) => entry.status !== 'waiting');
+    if (!ordered.length) {
+      return { ok: false, error: 'Nothing to push — release waiting messages first' };
+    }
+    const pushed = [];
+    ordered.forEach((entry, index) => {
+      pushEntryToBoard(entry, {
+        breakHold: index === 0,
+        replaceSource: index === 0 ? 'guest.book' : false,
+      });
+      if (entry.status !== 'released') {
+        entry.status = 'shown';
+      }
+      pushed.push({ id: entry.id, status: entry.status });
+    });
+    save();
+    return { ok: true, pushed: pushed.length, entries: pushed };
+  }
+
+  function remove(idOrIds) {
+    const wanted = new Set(
+      (Array.isArray(idOrIds) ? idOrIds : [idOrIds])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean),
+    );
+    if (!wanted.size) {
+      return { ok: false, error: 'Nothing to delete' };
+    }
     const before = book.entries.length;
-    book.entries = book.entries.filter((row) => row.id !== id);
-    if (book.entries.length === before) {
+    book.entries = book.entries.filter((row) => !wanted.has(row.id));
+    const deleted = before - book.entries.length;
+    if (!deleted) {
       return { ok: false, error: 'Unknown entry' };
     }
     save();
-    return { ok: true };
+    return { ok: true, deleted };
   }
 
   function flushHeld() {
@@ -538,8 +684,12 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     unlock,
     sessionFromRequest,
     list,
+    count,
     invitePayload,
     replay,
+    replayMany,
+    release,
+    releaseMany,
     remove,
     flushHeld,
     currentCode,

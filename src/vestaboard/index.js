@@ -280,6 +280,7 @@ function createVestaboardHub({
       scheduler: Boolean(options.scheduler),
       breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
+      replaceSource: options.replaceSource,
       ctx,
       now,
       submit,
