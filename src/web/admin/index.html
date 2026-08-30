@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal158">
+  <link rel="stylesheet" href="styles.css?v=signal159">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -132,7 +132,7 @@
         <div class="push-block" data-push-group="home">
           <div class="section-label">Around the house</div>
           <div class="card-row card-row-quad" id="push-row-home" data-push-category="home"
-               data-skeleton-count="9" aria-busy="true"></div>
+               data-skeleton-count="11" aria-busy="true"></div>
         </div>
 
         <!-- Steam / PSN / YouTube / Autodarts / Huupe are one auto-mode tile
@@ -893,6 +893,46 @@
             <div class="settings-col">
               <label class="field-label">Board preview</label>
               <div class="cn-preview" id="calendar-clock-preview" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="global">Red Letter</div>
+        <div class="card red-letter-settings-card" id="red-letter-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Red Letter</div>
+            <span class="status-pill" id="red-letter-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="red-letter-status-detail">
+            Counts down to the dates you keep in the Date Book, and shows the event's own message on the day itself.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Push Now shows</label>
+              <div class="segmented" id="red-letter-push-selection" role="group" aria-label="What a manual push shows">
+                <button type="button" class="segmented-btn active" data-red-letter-push="next" aria-pressed="true">The next one</button>
+                <button type="button" class="segmented-btn" data-red-letter-push="random" aria-pressed="false">A random one</button>
+              </div>
+              <label class="field-label field-label-spaced">On a schedule, show</label>
+              <div class="segmented" id="red-letter-schedule-selection" role="group" aria-label="What a scheduled slot shows">
+                <button type="button" class="segmented-btn active" data-red-letter-schedule="next" aria-pressed="true">The next one</button>
+                <button type="button" class="segmented-btn" data-red-letter-schedule="random" aria-pressed="false">A random one</button>
+              </div>
+              <label class="trivia-check" style="margin-top:14px">
+                <input type="checkbox" id="red-letter-show-time" checked>
+                <span>Count hours and minutes too</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-date-book-manage">Open Date Book</button>
+                <button type="button" class="btn btn-outline" id="btn-red-letter-push">Push Now</button>
+              </div>
+              <p class="hint" id="red-letter-hint" style="margin-top:12px">
+                An event happening today always beats a countdown, whichever mode is picked.
+              </p>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Next on the board</label>
+              <div class="cn-board-preview cn-board-preview-red" id="red-letter-preview" aria-hidden="true"></div>
             </div>
           </div>
         </div>
@@ -2920,6 +2960,106 @@
     </div>
   </div>
 
+  <!-- Date Book — the Red Letter event list -->
+  <div class="sheet-backdrop" id="date-book-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet date-book-sheet" role="dialog" aria-modal="true" aria-labelledby="date-book-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="date-book-title">Date Book</div>
+        <button type="button" class="credits-sheet-close" id="btn-date-book-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="date-book-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="date-book-name">Event</label>
+          <input type="text" class="field-input" id="date-book-name" maxlength="60" placeholder="Wedding anniversary" autocomplete="off">
+          <label class="field-label field-label-spaced" for="date-book-message">Message for the day itself</label>
+          <textarea class="field-input cn-fact-input" id="date-book-message" rows="3" maxlength="240" placeholder="Love you always &amp; forever, Christina"></textarea>
+          <div class="date-book-when">
+            <div class="date-book-when-field">
+              <label class="field-label" for="date-book-date">Date</label>
+              <input type="date" class="field-input" id="date-book-date">
+            </div>
+            <label class="trivia-check">
+              <input type="checkbox" id="date-book-recurring">
+              <span>Every year</span>
+            </label>
+          </div>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-date-book-add">Add event</button>
+            <span class="hint" id="date-book-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="cn-board-preview cn-board-preview-red" id="date-book-preview" aria-hidden="true"></div>
+          <div class="segmented date-book-preview-tabs" id="date-book-preview-tabs" role="group" aria-label="Which card to preview">
+            <button type="button" class="segmented-btn active" data-date-book-preview="countdown" aria-pressed="true">Countdown</button>
+            <button type="button" class="segmented-btn" data-date-book-preview="dayOf" aria-pressed="false">Day of</button>
+          </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="date-book-search" placeholder="Search events" autocomplete="off">
+      </div>
+      <div class="cn-fact-list" id="date-book-list"></div>
+    </div>
+  </div>
+
+  <!-- Red Letter layout designer — paint a day-of card flap by flap -->
+  <div class="sheet-backdrop" id="red-letter-designer-sheet" hidden>
+    <div class="sheet cn-manage-sheet rl-designer-sheet" role="dialog" aria-modal="true" aria-labelledby="red-letter-designer-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="red-letter-designer-title">Design the day-of card</div>
+        <button type="button" class="credits-sheet-close" id="btn-red-letter-designer-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="red-letter-designer-subtitle">…</p>
+
+      <div class="rl-tools" id="red-letter-tools" role="toolbar" aria-label="Drawing tools">
+        <button type="button" class="rl-tool rl-tool-chip is-chip-red is-active" data-rl-tool="chip" data-rl-chip="red" title="Red chip" aria-label="Red chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-orange" data-rl-tool="chip" data-rl-chip="orange" title="Orange chip" aria-label="Orange chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-yellow" data-rl-tool="chip" data-rl-chip="yellow" title="Yellow chip" aria-label="Yellow chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-green" data-rl-tool="chip" data-rl-chip="green" title="Green chip" aria-label="Green chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-blue" data-rl-tool="chip" data-rl-chip="blue" title="Blue chip" aria-label="Blue chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-violet" data-rl-tool="chip" data-rl-chip="violet" title="Violet chip" aria-label="Violet chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-white" data-rl-tool="chip" data-rl-chip="white" title="White chip" aria-label="White chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-black" data-rl-tool="chip" data-rl-chip="black" title="Black chip" aria-label="Black chip"></button>
+        <button type="button" class="rl-tool rl-tool-chip is-chip-filled" data-rl-tool="chip" data-rl-chip="filled" title="Filled chip" aria-label="Filled chip"></button>
+        <span class="rl-tool-sep" aria-hidden="true"></span>
+        <button type="button" class="rl-tool rl-tool-wide" data-rl-tool="message" title="Mark where the message flows">Message</button>
+        <button type="button" class="rl-tool rl-tool-wide" data-rl-tool="erase" title="Clear flaps">Erase</button>
+      </div>
+
+      <p class="hint rl-designer-hint">
+        Drag to paint. Click any flap and type to put letters on it. Flaps marked
+        <span class="rl-inline-slot">Message</span> are where the event's message rewraps itself, so the artwork keeps working when the words change.
+      </p>
+
+      <div class="rl-designer-columns">
+        <div class="rl-designer-col">
+          <span class="field-label">Your design</span>
+          <div class="rl-designer" id="red-letter-grid" tabindex="0" role="application" aria-label="Vestaboard layout editor"></div>
+          <div class="rl-preset-row">
+            <span class="hint">Start from</span>
+            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="heart">Heart</button>
+            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="confetti">Confetti</button>
+            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="border">Border</button>
+            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="blank">Blank</button>
+          </div>
+        </div>
+        <div class="rl-designer-col">
+          <span class="field-label">On the board</span>
+          <div class="cn-board-preview cn-board-preview-red" id="red-letter-designer-preview" aria-hidden="true"></div>
+          <p class="hint" id="red-letter-designer-warning"></p>
+        </div>
+      </div>
+
+      <div class="cn-pager rl-designer-actions">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-clear">Remove artwork</button>
+        <button type="button" class="btn btn-accent btn-sm" id="btn-red-letter-designer-save">Save design</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Roll Credits add sheet -->
   <div class="sheet-backdrop" id="credits-add-sheet" hidden>
     <div class="sheet credits-sheet">
@@ -3194,6 +3334,6 @@
        grid is static data, so it must not wait on /api/commands. -->
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
-  <script src="app.js?v=signal158"></script>
+  <script src="app.js?v=signal159"></script>
 </body>
 </html>

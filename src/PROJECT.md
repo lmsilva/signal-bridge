@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-29 (Plex Top 10 Movies board)
+**Last updated:** 2026-08-29 (Red Letter + Date Book)
 
 ---
 
@@ -160,6 +160,8 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/baking-inspiration-ideas.json` | Shipped baking ideas (~1800 board-fit, five ingredients or less). Rebuild with `tools/build-baking-inspiration.js` |
 | `src/world-population.js` | **World Population Tracker** — estimate Earth's headcount from a UN-style baseline + annual births/deaths (no network). Builds `world.population`. Settings in `data/world-population-settings.json` (Settings → Global) |
 | `src/calendar-clock.js` | **Calendar Clock** — marketplace monthly calendar + house clock (no network). Seven chip columns, `SMTWTFS`/`MTWTFSS` only when the month fits in five week-rows, per-month colour with a contrasting today chip. Builds `calendar.clock`. Settings in `data/calendar-clock-settings.json` (week start; Settings → Global) |
+| `src/date-book.js` | **Date Book** — the house event list in `data/date-book.json`. One-off or yearly-recurring dates, civil-date maths in the house zone (`zonedMidnightMs`), next-occurrence + expiry, and `pickEvent` for next/random. No board code |
+| `src/red-letter.js` | **Red Letter** — Date Book events on the flaps. Hourglass countdown card (wide fallback when the name will not fit beside it), confetti/full-bleed day-of card, and painted layouts where `-1` cells are message-flow slots the message rewraps into. Settings in `data/red-letter-settings.json`. Builds `red-letter.card` |
 | `tools/build-stoic-quotes.js` | Fetch open Stoic dumps and keep quotes that fit 4×22 under `STOIC` plus an author line |
 | `src/learn-japanese-settings.js` | Filters + recent ids in `data/learn-japanese-settings.json` (JLPT N5/N4, parts of speech). Settings → Language |
 | `src/learn-japanese-words.json` | Shipped JLPT N5+N4 romaji lexicon (~1240 words) converted from OpenJLPT / JMDict. Rebuild with `tools/build-learn-japanese-words.js` |
@@ -454,6 +456,8 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `vestaboardSimulator.rateWindowSeconds` | How long the board refuses a second flip (default **15**, matching hardware). Lower it to run end-to-end tests fast — the queue and the endpoint read the same value |
 | `vestaboardSimulator.stateFile` | Board key + current face (default `data/vestaboard-simulator.json`) |
 | `data/vestaboard-settings.json` | The board list (not a config key — written from the Settings tab). Keys inside it are encrypted with `data/secret.key`; a board may name a `tokenEnv` instead, which wins |
+| `data/date-book.json` | **Date Book** events: `{ id, name, message, date, recurring, enabled, layout }`. `layout.cells` is a 6×22 code grid where `-1` marks a message-flow flap. Written only by the admin |
+| `data/red-letter-settings.json` | **Red Letter**: `pushSelection` / `scheduleSelection` (`next` / `random`) and `showTime` |
 | `data/plex-top10-settings.json` | **Plex Top 10 Movies**: `source` (`library` / `global`), `genres[]` (empty = all), `librarySectionKey` (empty = first movie section), `cacheMinutes`. Reuses the Feature Presentation server URL and token; written only by the admin |
 | `plex.*` / `data/plex-settings.json` | **Feature Presentation** (Vestaboard only). Seeded from `config.plex` (`enabled`, `serverUrl`, `monitoredPlayers[]`, `mediaTypes`, poll/stop-grace, `pushOnStop`, `quietHoursExempt`, `showCriticScore`). Token is `PLEX_TOKEN` or encrypted `data/plex-credentials.json` — never in `config.json`. State in `data/plex-now-playing.json`. Never UDP, never a full-display formatter |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
@@ -673,6 +677,11 @@ Public APIs: `GET /api/displays` (+ events SSE), `GET /api/guest/session`, `POST
 | `POST /api/push/world-population` | Vestaboard World Population Tracker (`world.population`). Target coerced to a board |
 | `GET` / `POST /api/calendar-clock/settings` | Calendar Clock week start (`sunday` / `monday`). `POST { reset: true }` restores Sunday |
 | `POST /api/push/calendar-clock` | Vestaboard Calendar Clock (`calendar.clock`). Target coerced to a board |
+| `GET` / `POST` / `PUT /api/red-letter/settings` | Red Letter push vs schedule selection (`next` / `random`) and `showTime`. Also returns the Date Book with each event's next occurrence. `{ reset: true }` restores defaults |
+| `GET` / `POST /api/date-book/events` | List / add Date Book events (`name`, `message`, `date`, `recurring`). **400** without a name and a `YYYY-MM-DD` date |
+| `PUT` / `DELETE /api/date-book/events/:id` | Patch one event (including `layout` — `{ cells }` to save artwork, `null` to remove it) or delete it. **404** for an unknown id |
+| `POST /api/date-book/preview` | Both cards for `{ eventId }` or an unsaved `{ event }` — `{ countdown, dayOf }`, each with server-built `rows`. The admin previews and the designer render these, so the sheet cannot drift from the board |
+| `POST /api/push/red-letter` | Vestaboard Red Letter (`redletter.show` → `red-letter.card`). Target coerced to a board. **409** when nothing in the Date Book is still ahead |
 | `GET|POST|PUT /api/plex-top10/settings` | Plex Top 10 source / genres / cache minutes, plus the library's genre list for the picker. `{ reset: true }` restores defaults |
 | `POST /api/push/plex-top10` | Vestaboard Plex Top 10 Movies (`plex.top10`). Target coerced to a board. **409** with no token or when nothing matches the genres; **502** when Plex is unreachable |
 | `POST /api/push/air-quality` | Synthetic `air-quality` event (`show indoor air quality`) → multi-monitor indoor AQ overlay |
@@ -724,6 +733,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-29: **Red Letter + Date Book** — a Vestaboard countdown to the dates the house cares about (`redletter.show` → `red-letter.card`, Vestaboard only, Push + schedule, Home pane). **Date Book** (`src/date-book.js`, sheet behind Settings → Global → Red Letter) keeps one-off and yearly-recurring events with a name, a day-of message and optional artwork; a one-off drops out once it passes, a yearly one rolls forward, and a leap-day anniversary is observed on the 28th in a common year. The countdown card is an hourglass beside `COUNTDOWN / TO <NAME> / n DAYS / n HOURS / n MINUTES`, falling back to a full-width card when the name will not fit rather than cutting it. On the day itself the event's own message airs instead — house confetti card, or a layout painted in the **designer**: a 6×22 grid you drag chips onto and type letters into, where flaps marked *Message* are where the text rewraps, so the artwork survives a reworded message. Presets for heart / confetti / border. Push and scheduled slots each choose **next** or **random** independently; an event happening today always outranks a countdown. Every preview (settings card, Date Book sheet, designer) renders rows built by the bridge, so nothing can drift from the board. Cache-bust `?v=signal159`. Tests: `red-letter`, `command-registry`, `web-server`. Also bumped the Home push skeleton count, which had been left at 9 when Calendar Clock landed.
 - 2026-08-29: **Plex Top 10 Movies** — the marketplace Netflix Top 10 card, rebuilt in Plex yellow (`plex.top10`, Vestaboard only, Push + schedule, Media pane). Ten movies over two frames of five; titles are cut at a word so `The Super Mario Galaxy Movie` reads as `THE SUPER MARIO`. Settings → Media picks the chart — **my library** (the house server sorted by play count, unwatched dropped) or **across the world** (Plex Discover's chart hubs) — and any genres, where nothing ticked means all of them. It borrows Feature Presentation's server URL and token, so there is no second place to paste one, and caches for `cacheMinutes` (default 180) rather than hitting Plex on every scheduler tick. Cache-bust `?v=signal158`. Tests: `plex-top10`, `command-registry`, `web-server`.
 - 2026-08-29: **Language category + five CEFR boards** — Push and Settings gain a **Language** pane. Learn Japanese moves there but keeps command id `japanese.learn` (existing scheduler rules still fire). Portuguese, Spanish, French, German, and Italian are the same word card with a shipped A1/A2 list and flag chips. Cache-bust `?v=signal157`. Tests: `learn-language`, `command-registry`, `web-server`.
 - 2026-08-29: **Calendar Clock** — Vestaboard-only push + schedule (`calendar.clock`) matching the marketplace monthly calendar: 7-col chips, `SMTWTFS` only when the month fits in five week-rows, a colour per month with a contrasting today square, and weekday / `MONTH  D` / 12h clock on the right. Settings → Global picks Sunday or Monday week start. Cache-bust `?v=signal156`. Tests: `calendar-clock`, `command-registry`, `web-server`.

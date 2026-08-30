@@ -836,6 +836,7 @@
     'weather-alerts-settings-card': ['vestaboard'],
     'world-population-settings-card': ['vestaboard'],
     'calendar-clock-settings-card': ['vestaboard'],
+    'red-letter-settings-card': ['vestaboard'],
     'youtube-settings-card': ['full'],
     'upside-news-settings-card': ['full', 'vestaboard'],
     'learn-japanese-settings-card': ['vestaboard'],
@@ -5791,6 +5792,655 @@
     if (view !== 'global' && view !== 'all') return;
     loadCalendarClockSettings();
   }, 15000);
+
+  // -------------------------------- Settings → Red Letter and the Date Book
+
+  // Flap codes, in board order: blank, A-Z, 1-9, 0, then punctuation. The gaps
+  // are codes the board reserves and never renders, so they read as blanks.
+  const FLAP_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$() - +&=;: \'"%,.  /? \u00b0';
+  const FLAP_CODE_BY_CHAR = (() => {
+    const map = new Map();
+    for (let code = 0; code < FLAP_CHARS.length; code += 1) {
+      const char = FLAP_CHARS[code];
+      if (char !== ' ' && !map.has(char)) {
+        map.set(char, code);
+      }
+    }
+    map.set(' ', 0);
+    return map;
+  })();
+  const FLAP_CHIPS = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white', 'black', 'filled'];
+  const FLAP_CHIP_BY_CODE = new Map(FLAP_CHIPS.map((name, index) => [63 + index, name]));
+  const RL_MESSAGE_CELL = -1;
+  const RL_ROWS = 6;
+  const RL_COLS = 22;
+
+  function blankDesignerCells() {
+    return Array.from({ length: RL_ROWS }, () => new Array(RL_COLS).fill(0));
+  }
+
+  /**
+   * Draw a 6x22 code grid into a `.cn-board-preview` host. `slots` renders the
+   * message cells as outlines instead of blanks, which only the editor wants.
+   */
+  function renderFlapGrid(host, rows, { slots = false, caret = null } = {}) {
+    if (!host) return;
+    const grid = Array.isArray(rows) && rows.length ? rows : blankDesignerCells();
+    host.innerHTML = grid.map((row, rowIndex) => {
+      const cells = Array.from({ length: RL_COLS }, (_, col) => {
+        const code = Number(row?.[col] ?? 0);
+        const chip = FLAP_CHIP_BY_CODE.get(code);
+        const isSlot = code === RL_MESSAGE_CELL;
+        const classes = [
+          chip ? `is-chip-${chip}` : '',
+          slots && isSlot ? 'is-slot' : '',
+          caret && caret.row === rowIndex && caret.col === col ? 'is-caret' : '',
+        ].filter(Boolean).join(' ');
+        const char = chip || isSlot ? '' : (FLAP_CHARS[code] || ' ');
+        const attrs = slots ? ` data-rl-row="${rowIndex}" data-rl-col="${col}"` : '';
+        return `<span class="${classes}"${attrs}>${escapeHtml(char === ' ' ? '' : char)}</span>`;
+      }).join('');
+      return `<div class="cn-preview-row">${cells}</div>`;
+    }).join('');
+  }
+
+  let redLetterState = { settings: {}, events: [], nextUp: null };
+  let dateBookPreviewCard = 'countdown';
+  let dateBookSelectedId = '';
+  let dateBookSearch = '';
+
+  function setSegmented(hostId, attr, value) {
+    document.querySelectorAll(`#${hostId} [${attr}]`).forEach((button) => {
+      const on = button.getAttribute(attr) === value;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function dateBookDayLabel(next = {}) {
+    const days = Number(next.daysAway);
+    if (!Number.isFinite(days)) return '';
+    if (days === 0) return 'today';
+    if (days === 1) return 'tomorrow';
+    if (days < 0) return 'passed';
+    return `in ${days} days`;
+  }
+
+  function renderRedLetterCard(data = {}) {
+    const settings = data.settings || {};
+    setSegmented('red-letter-push-selection', 'data-red-letter-push', settings.pushSelection || 'next');
+    setSegmented('red-letter-schedule-selection', 'data-red-letter-schedule', settings.scheduleSelection || 'next');
+    const showTime = $('red-letter-show-time');
+    if (showTime) showTime.checked = settings.showTime !== false;
+
+    const pill = $('red-letter-status-pill');
+    const detail = $('red-letter-status-detail');
+    const total = Number(data.total || 0);
+    const upcoming = Number(data.upcoming || 0);
+    if (pill) {
+      pill.textContent = total ? `${upcoming} upcoming` : 'Empty';
+      pill.className = `status-pill ${upcoming ? 'is-ok' : ''}`;
+    }
+    if (detail) {
+      if (!total) {
+        detail.textContent = 'Nothing in the Date Book yet. Add a birthday, an anniversary or a visit and the board will count down to it.';
+      } else if (data.nextUp) {
+        const today = Number(data.today || 0);
+        detail.textContent = today
+          ? `${today} event${today === 1 ? '' : 's'} today — the board shows the message, not a countdown.`
+          : `Next up: ${data.nextUp.name} ${dateBookDayLabel(data.nextUp)} (${data.nextUp.date}).`;
+      } else {
+        detail.textContent = `${total} event${total === 1 ? '' : 's'} on file, none of them still ahead.`;
+      }
+    }
+  }
+
+  async function refreshRedLetterPreview() {
+    const host = $('red-letter-preview');
+    if (!host) return;
+    const nextId = redLetterState.nextUp?.id;
+    if (!nextId) {
+      renderFlapGrid(host, blankDesignerCells());
+      return;
+    }
+    try {
+      const data = await apiPost('/api/date-book/preview', { eventId: nextId });
+      const card = data.countdown?.card === 'day-of' ? data.dayOf : data.countdown;
+      renderFlapGrid(host, card?.rows);
+    } catch {
+      renderFlapGrid(host, blankDesignerCells());
+    }
+  }
+
+  function applyRedLetterState(data = {}) {
+    redLetterState = {
+      settings: data.settings || {},
+      events: Array.isArray(data.events) ? data.events : redLetterState.events,
+      nextUp: data.nextUp || null,
+    };
+    renderRedLetterCard(data);
+    renderDateBookList();
+    refreshRedLetterPreview();
+  }
+
+  async function loadRedLetter() {
+    try {
+      applyRedLetterState(await apiGet('/api/red-letter/settings'));
+    } catch {
+      renderRedLetterCard({});
+    }
+  }
+
+  async function saveRedLetterSettings(patch) {
+    try {
+      applyRedLetterState(await apiPost('/api/red-letter/settings', patch));
+    } catch (error) {
+      toast(error?.message || 'Could not save Red Letter settings', 'bad');
+      loadRedLetter();
+    }
+  }
+
+  $('red-letter-push-selection')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-red-letter-push]');
+    if (button) saveRedLetterSettings({ pushSelection: button.dataset.redLetterPush });
+  });
+
+  $('red-letter-schedule-selection')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-red-letter-schedule]');
+    if (button) saveRedLetterSettings({ scheduleSelection: button.dataset.redLetterSchedule });
+  });
+
+  $('red-letter-show-time')?.addEventListener('change', (event) => {
+    saveRedLetterSettings({ showTime: event.currentTarget.checked });
+  });
+
+  $('btn-red-letter-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/red-letter', withTarget());
+      toast(result.card === 'day-of'
+        ? `${result.event?.name}: today's message is on the board`
+        : `Counting down to ${result.event?.name}`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Red Letter', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------------- Date Book manager
+
+  function dateBookVisibleEvents() {
+    const needle = dateBookSearch.trim().toLowerCase();
+    if (!needle) return redLetterState.events;
+    return redLetterState.events.filter((event) => (
+      `${event.name} ${event.message || ''} ${event.date}`.toLowerCase().includes(needle)
+    ));
+  }
+
+  function renderDateBookList() {
+    const list = $('date-book-list');
+    const summary = $('date-book-summary');
+    if (summary) {
+      const total = redLetterState.events.length;
+      summary.textContent = total
+        ? `${total} event${total === 1 ? '' : 's'}. One-off dates drop off the board once they pass; yearly ones roll forward on their own.`
+        : 'Nothing here yet. Add the dates you want counted down to.';
+    }
+    if (!list) return;
+
+    const events = dateBookVisibleEvents();
+    if (!events.length) {
+      list.innerHTML = `<p class="hint">${redLetterState.events.length ? 'No events match that search.' : 'No events yet.'}</p>`;
+      return;
+    }
+    list.innerHTML = events.map((event) => {
+      const next = event.next || {};
+      const badges = [
+        next.isToday ? '<span class="date-book-badge is-today">Today</span>' : '',
+        event.recurring ? '<span class="date-book-badge is-yearly">Yearly</span>' : '',
+        event.layout ? '<span class="date-book-badge is-art">Artwork</span>' : '',
+        next.expired ? '<span class="date-book-badge">Passed</span>' : '',
+      ].filter(Boolean).join('');
+      return `
+        <article class="cn-fact${event.enabled === false ? ' is-hidden' : ''}" data-date-book-id="${escapeHtml(event.id)}">
+          <div class="date-book-row-head">
+            <span class="date-book-row-name">${escapeHtml(event.name)}</span>
+            ${badges}
+            <span class="date-book-row-when">${escapeHtml(next.date || event.date)}${next.expired ? '' : ` · ${dateBookDayLabel(next)}`}</span>
+          </div>
+          <textarea class="field-input cn-fact-text" rows="2" maxlength="240" data-date-book-message
+            placeholder="Message for the day itself">${escapeHtml(event.message || '')}</textarea>
+          <div class="cn-fact-meta">
+            <label class="trivia-check">
+              <input type="checkbox" data-date-book-recurring ${event.recurring ? 'checked' : ''}>
+              <span>Every year</span>
+            </label>
+            <div class="cn-fact-actions">
+              <button type="button" class="btn btn-outline btn-sm" data-date-book-action="preview">Preview</button>
+              <button type="button" class="btn btn-outline btn-sm" data-date-book-action="design">Design</button>
+              <button type="button" class="btn btn-outline btn-sm" data-date-book-action="save">Save</button>
+              <button type="button" class="btn btn-outline btn-sm" data-date-book-action="toggle">${event.enabled === false ? 'Enable' : 'Pause'}</button>
+              <button type="button" class="btn btn-danger btn-sm" data-date-book-action="remove">Delete</button>
+            </div>
+          </div>
+        </article>`;
+    }).join('');
+  }
+
+  function dateBookDraft() {
+    return {
+      name: $('date-book-name')?.value || '',
+      message: $('date-book-message')?.value || '',
+      date: $('date-book-date')?.value || '',
+      recurring: Boolean($('date-book-recurring')?.checked),
+    };
+  }
+
+  let dateBookPreviewTimer = 0;
+
+  /**
+   * Previews come from the bridge rather than a second copy of the layout
+   * code in the browser, so what the sheet shows is what the board will flip.
+   */
+  async function refreshDateBookPreview() {
+    const host = $('date-book-preview');
+    const hint = $('date-book-fit-hint');
+    if (!host) return;
+    const body = dateBookSelectedId
+      ? { eventId: dateBookSelectedId }
+      : { event: dateBookDraft() };
+    const draft = body.event;
+    if (draft && (!draft.name.trim() || !draft.date)) {
+      renderFlapGrid(host, blankDesignerCells());
+      if (hint) hint.textContent = draft.name.trim() || draft.date ? 'Needs a name and a date' : '';
+      return;
+    }
+    try {
+      const data = await apiPost('/api/date-book/preview', body);
+      const card = dateBookPreviewCard === 'dayOf' ? data.dayOf : data.countdown;
+      renderFlapGrid(host, card?.rows);
+      if (hint) {
+        hint.textContent = card?.overflow
+          ? 'The message is longer than the artwork has room for'
+          : '';
+      }
+    } catch (error) {
+      renderFlapGrid(host, blankDesignerCells());
+      if (hint) hint.textContent = error?.message || '';
+    }
+  }
+
+  function queueDateBookPreview() {
+    window.clearTimeout(dateBookPreviewTimer);
+    dateBookPreviewTimer = window.setTimeout(refreshDateBookPreview, 200);
+  }
+
+  function openDateBookSheet() {
+    const sheet = $('date-book-manage-sheet');
+    if (!sheet) return;
+    sheet.hidden = false;
+    dateBookSelectedId = '';
+    loadRedLetter().then(refreshDateBookPreview);
+  }
+
+  function closeDateBookSheet() {
+    const sheet = $('date-book-manage-sheet');
+    if (sheet) sheet.hidden = true;
+    loadRedLetter();
+  }
+
+  $('btn-date-book-manage')?.addEventListener('click', openDateBookSheet);
+  $('btn-date-book-close')?.addEventListener('click', closeDateBookSheet);
+  registerSheetDismiss('date-book-manage-sheet', () => closeDateBookSheet());
+
+  ['date-book-name', 'date-book-message', 'date-book-date'].forEach((id) => {
+    $(id)?.addEventListener('input', () => {
+      dateBookSelectedId = '';
+      queueDateBookPreview();
+    });
+  });
+  $('date-book-recurring')?.addEventListener('change', () => {
+    dateBookSelectedId = '';
+    queueDateBookPreview();
+  });
+
+  $('date-book-preview-tabs')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-date-book-preview]');
+    if (!button) return;
+    dateBookPreviewCard = button.dataset.dateBookPreview;
+    setSegmented('date-book-preview-tabs', 'data-date-book-preview', dateBookPreviewCard);
+    refreshDateBookPreview();
+  });
+
+  $('date-book-search')?.addEventListener('input', (event) => {
+    dateBookSearch = event.currentTarget.value || '';
+    renderDateBookList();
+  });
+
+  $('btn-date-book-add')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const created = await apiPost('/api/date-book/events', dateBookDraft());
+      ['date-book-name', 'date-book-message'].forEach((id) => {
+        const field = $(id);
+        if (field) field.value = '';
+      });
+      const recurring = $('date-book-recurring');
+      if (recurring) recurring.checked = false;
+      applyRedLetterState(created);
+      dateBookSelectedId = created.event?.id || '';
+      refreshDateBookPreview();
+      toast(`${created.event?.name} added to the Date Book`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not add that event', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('date-book-list')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-date-book-action]');
+    const row = event.target.closest('[data-date-book-id]');
+    if (!button || !row) return;
+    const id = row.dataset.dateBookId;
+    const stored = redLetterState.events.find((entry) => entry.id === id);
+    const action = button.dataset.dateBookAction;
+
+    if (action === 'preview') {
+      dateBookSelectedId = id;
+      refreshDateBookPreview();
+      return;
+    }
+    if (action === 'design') {
+      openRedLetterDesigner(id);
+      return;
+    }
+
+    button.disabled = true;
+    try {
+      if (action === 'remove') {
+        applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(id)}`), { method: 'DELETE' }));
+        toast('Event deleted', 'good');
+      } else {
+        const patch = action === 'toggle'
+          ? { enabled: stored?.enabled === false }
+          : {
+            message: row.querySelector('[data-date-book-message]')?.value || '',
+            recurring: Boolean(row.querySelector('[data-date-book-recurring]')?.checked),
+          };
+        applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(id)}`), {
+          method: 'PUT', body: patch,
+        }));
+        if (action === 'save') toast('Event saved', 'good');
+      }
+    } catch (error) {
+      toast(error?.message || 'Could not update that event', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  // ------------------------------------------------ Red Letter designer
+
+  // `.` blank, `#` a message flap, anything else a chip letter.
+  const RL_PRESETS = {
+    blank: [
+      '......................',
+      '......................',
+      '......................',
+      '......................',
+      '......................',
+      '......................',
+    ],
+    heart: [
+      '..rrr..rrr............',
+      'rrwrrrrrrr.###########',
+      'rrrrrrrrrr.###########',
+      '.rrrrrrrr..###########',
+      '..rrrrrr...###########',
+      '....rr................',
+    ],
+    confetti: [
+      'rvwrvwrvwrvwrvwrvwrvwr',
+      '######################',
+      '######################',
+      '######################',
+      '######################',
+      'wrvwrvwrvwrvwrvwrvwrvw',
+    ],
+    border: [
+      'rrrrrrrrrrrrrrrrrrrrrr',
+      'r####################r',
+      'r####################r',
+      'r####################r',
+      'r####################r',
+      'rrrrrrrrrrrrrrrrrrrrrr',
+    ],
+  };
+
+  const RL_CHIP_LETTERS = {
+    r: 'red', o: 'orange', y: 'yellow', g: 'green', b: 'blue', v: 'violet', w: 'white', k: 'black', f: 'filled',
+  };
+
+  function presetCells(name) {
+    const lines = RL_PRESETS[name] || RL_PRESETS.blank;
+    return Array.from({ length: RL_ROWS }, (_, row) => (
+      Array.from({ length: RL_COLS }, (_, col) => {
+        const letter = lines[row]?.[col] || '.';
+        if (letter === '#') return RL_MESSAGE_CELL;
+        const chip = RL_CHIP_LETTERS[letter];
+        return chip ? 63 + FLAP_CHIPS.indexOf(chip) : 0;
+      })
+    ));
+  }
+
+  let designerEventId = '';
+  let designerCells = blankDesignerCells();
+  let designerTool = { kind: 'chip', chip: 'red' };
+  let designerCaret = null;
+  let designerPainting = false;
+  let designerPreviewTimer = 0;
+
+  function designerCodeForTool() {
+    if (designerTool.kind === 'message') return RL_MESSAGE_CELL;
+    if (designerTool.kind === 'erase') return 0;
+    return 63 + Math.max(0, FLAP_CHIPS.indexOf(designerTool.chip));
+  }
+
+  function renderDesignerGrid() {
+    renderFlapGrid($('red-letter-grid'), designerCells, { slots: true, caret: designerCaret });
+  }
+
+  async function refreshDesignerPreview() {
+    const host = $('red-letter-designer-preview');
+    const warning = $('red-letter-designer-warning');
+    const event = redLetterState.events.find((entry) => entry.id === designerEventId);
+    if (!host || !event) return;
+    try {
+      const data = await apiPost('/api/date-book/preview', {
+        event: { ...event, layout: { cells: designerCells } },
+      });
+      renderFlapGrid(host, data.dayOf?.rows);
+      if (warning) {
+        if (data.dayOf?.overflow) {
+          warning.textContent = 'The message runs past the flaps you marked — mark more, or shorten it.';
+        } else if (!data.dayOf?.custom) {
+          warning.textContent = 'Nothing painted yet, so the board falls back to the house confetti card.';
+        } else {
+          warning.textContent = '';
+        }
+      }
+    } catch (error) {
+      if (warning) warning.textContent = error?.message || '';
+    }
+  }
+
+  function queueDesignerPreview() {
+    window.clearTimeout(designerPreviewTimer);
+    designerPreviewTimer = window.setTimeout(refreshDesignerPreview, 160);
+  }
+
+  function paintDesignerCell(row, col, { moveCaret = true } = {}) {
+    if (!designerCells[row] || col < 0 || col >= RL_COLS) return;
+    designerCells[row][col] = designerCodeForTool();
+    if (moveCaret) designerCaret = { row, col };
+    renderDesignerGrid();
+    queueDesignerPreview();
+  }
+
+  function designerCellFromPoint(x, y) {
+    const target = document.elementFromPoint(x, y);
+    const cell = target?.closest?.('[data-rl-row]');
+    if (!cell) return null;
+    return { row: Number(cell.dataset.rlRow), col: Number(cell.dataset.rlCol) };
+  }
+
+  function openRedLetterDesigner(eventId) {
+    const sheet = $('red-letter-designer-sheet');
+    const event = redLetterState.events.find((entry) => entry.id === eventId);
+    if (!sheet || !event) return;
+    designerEventId = eventId;
+    designerCaret = null;
+    designerCells = event.layout?.cells?.length
+      ? presetFromSaved(event.layout.cells)
+      : presetCells('heart');
+    const subtitle = $('red-letter-designer-subtitle');
+    if (subtitle) {
+      subtitle.textContent = `${event.name} — ${event.message || 'no message yet'}`;
+    }
+    sheet.hidden = false;
+    renderDesignerGrid();
+    refreshDesignerPreview();
+  }
+
+  function presetFromSaved(cells) {
+    return Array.from({ length: RL_ROWS }, (_, row) => (
+      Array.from({ length: RL_COLS }, (_, col) => {
+        const code = Number(cells?.[row]?.[col]);
+        if (code === RL_MESSAGE_CELL) return RL_MESSAGE_CELL;
+        return Number.isFinite(code) && code >= 0 && code <= 71 ? code : 0;
+      })
+    ));
+  }
+
+  function closeRedLetterDesigner() {
+    const sheet = $('red-letter-designer-sheet');
+    if (sheet) sheet.hidden = true;
+    designerEventId = '';
+  }
+
+  $('btn-red-letter-designer-close')?.addEventListener('click', closeRedLetterDesigner);
+  registerSheetDismiss('red-letter-designer-sheet', () => closeRedLetterDesigner());
+
+  $('red-letter-tools')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-rl-tool]');
+    if (!button) return;
+    designerTool = { kind: button.dataset.rlTool, chip: button.dataset.rlChip || 'red' };
+    document.querySelectorAll('#red-letter-tools [data-rl-tool]').forEach((entry) => {
+      entry.classList.toggle('is-active', entry === button);
+    });
+  });
+
+  const designerGrid = $('red-letter-grid');
+  designerGrid?.addEventListener('pointerdown', (event) => {
+    const cell = event.target.closest('[data-rl-row]');
+    if (!cell) return;
+    event.preventDefault();
+    designerGrid.focus();
+    designerPainting = true;
+    designerGrid.setPointerCapture?.(event.pointerId);
+    paintDesignerCell(Number(cell.dataset.rlRow), Number(cell.dataset.rlCol));
+  });
+
+  // Pointer capture means enter/leave stop firing mid-drag, so the cell under
+  // the finger is looked up by coordinate instead. Touch needs it either way.
+  designerGrid?.addEventListener('pointermove', (event) => {
+    if (!designerPainting) return;
+    const at = designerCellFromPoint(event.clientX, event.clientY);
+    if (at) paintDesignerCell(at.row, at.col, { moveCaret: false });
+  });
+
+  ['pointerup', 'pointercancel'].forEach((name) => {
+    designerGrid?.addEventListener(name, () => { designerPainting = false; });
+  });
+
+  designerGrid?.addEventListener('keydown', (event) => {
+    if (!designerCaret) return;
+    const { row, col } = designerCaret;
+    const move = (nextRow, nextCol) => {
+      designerCaret = {
+        row: Math.min(RL_ROWS - 1, Math.max(0, nextRow)),
+        col: Math.min(RL_COLS - 1, Math.max(0, nextCol)),
+      };
+      renderDesignerGrid();
+    };
+
+    if (event.key === 'ArrowLeft') { event.preventDefault(); move(row, col - 1); return; }
+    if (event.key === 'ArrowRight') { event.preventDefault(); move(row, col + 1); return; }
+    if (event.key === 'ArrowUp') { event.preventDefault(); move(row - 1, col); return; }
+    if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); move(row + 1, 0); return; }
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      const back = Math.max(0, col - 1);
+      designerCells[row][back] = 0;
+      designerCaret = { row, col: back };
+      renderDesignerGrid();
+      queueDesignerPreview();
+      return;
+    }
+    if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
+    const code = FLAP_CODE_BY_CHAR.get(event.key.toUpperCase());
+    if (code === undefined) return;
+    event.preventDefault();
+    designerCells[row][col] = code;
+    designerCaret = { row, col: Math.min(RL_COLS - 1, col + 1) };
+    renderDesignerGrid();
+    queueDesignerPreview();
+  });
+
+  document.querySelectorAll('[data-rl-preset]').forEach((button) => {
+    button.addEventListener('click', () => {
+      designerCells = presetCells(button.dataset.rlPreset);
+      designerCaret = null;
+      renderDesignerGrid();
+      refreshDesignerPreview();
+    });
+  });
+
+  $('btn-red-letter-designer-clear')?.addEventListener('click', async () => {
+    if (!designerEventId) return;
+    try {
+      applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(designerEventId)}`), {
+        method: 'PUT', body: { layout: null },
+      }));
+      closeRedLetterDesigner();
+      toast('Artwork removed — back to the house card', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not remove the artwork', 'bad');
+    }
+  });
+
+  $('btn-red-letter-designer-save')?.addEventListener('click', async (event) => {
+    if (!designerEventId) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(designerEventId)}`), {
+        method: 'PUT', body: { layout: { cells: designerCells } },
+      }));
+      closeRedLetterDesigner();
+      toast('Design saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save the design', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadRedLetter();
 
   // ------------------------------------------- Settings → Learn Japanese
 

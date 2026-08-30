@@ -78,6 +78,7 @@ const COMMAND_TO_TYPE = {
   'bake.inspire': 'bake.inspire',
   'world.population': 'world.population',
   'calendar.clock': 'calendar.clock',
+  'redletter.show': 'red-letter.card',
   'stocks.market': 'stocks.market',
   'fx.rates': 'fx.rates',
   'iss.track': 'iss.track',
