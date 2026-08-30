@@ -49,6 +49,7 @@ const { languageOf, posLabel: europeanPosLabel } = require('../../learn-language
 const { layoutFor } = require('../../quiet-hours-reminder');
 const { formatPopulation, formatRate } = require('../../world-population');
 const { calendarClockRows } = require('../../calendar-clock');
+const { redLetterRows } = require('../../red-letter');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
@@ -1046,6 +1047,24 @@ function calendarClockFrames(payload = {}) {
   )];
 }
 
+/**
+ * Red Letter: a Date Book countdown, or the event's own day-of card.
+ *
+ * The rows are built in `red-letter.js` because the same six rows feed the
+ * admin preview and the designer; this only checks them and wraps a frame.
+ */
+function redLetterFrames(payload = {}) {
+  const rows = redLetterRows(payload);
+  if (!rows) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'red letter'),
+    payload.card === 'day-of' ? 'Red Letter Day' : 'Red Letter Countdown',
+    'red-letter.card',
+  )];
+}
+
 function worldPopChipRow(text) {
   const row = blankRow(COLS);
   row[0] = chipCode('green');
@@ -1496,6 +1515,7 @@ const FORMATTERS = {
   'bake.inspire': bakingInspirationFrames,
   'world.population': worldPopulationFrames,
   'calendar.clock': calendarClockFrames,
+  'red-letter.card': redLetterFrames,
   'stocks.market': stockMarketFrames,
   'fx.rates': currencyRatesFrames,
   'plex.top10': plexTop10Frames,
@@ -1529,6 +1549,7 @@ module.exports = {
   bakingInspirationFrames,
   worldPopulationFrames,
   calendarClockFrames,
+  redLetterFrames,
   stockMarketFrames,
   currencyRatesFrames,
   plexTop10Frames,

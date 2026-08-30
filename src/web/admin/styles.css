@@ -2900,6 +2900,7 @@ textarea.field-input.text-input-area {
   #tab-settings .weather-alerts-settings-card,
   #tab-settings .world-population-settings-card,
   #tab-settings .calendar-clock-settings-card,
+  #tab-settings .red-letter-settings-card,
   #tab-settings .credits-settings-card,
   #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card {
@@ -3851,6 +3852,13 @@ textarea.field-input.text-input-area {
   background: #e6c04a;
   color: #1a1408;
 }
+.cn-board-preview-red {
+  border-color: #4a1c18;
+}
+.cn-board-preview-red .cn-preview-row span {
+  background: #1a1a1a;
+  color: #e8e8e8;
+}
 .cn-board-preview-bake {
   border-color: #4a4010;
 }
@@ -3903,6 +3911,143 @@ textarea.field-input.text-input-area {
   background: #7b3fd4;
   color: transparent;
 }
+/* These two match the simulator's flap colours exactly (`.vb-tile[data-chip]`)
+   — the designer is where someone picks a chip, so it must not flatter one. */
+.cn-preview-row span.is-chip-black {
+  background: #101013;
+  color: transparent;
+}
+.cn-preview-row span.is-chip-filled {
+  background: #6e6e6e;
+  color: transparent;
+}
+
+/* ---------------------------------------------- Red Letter layout designer */
+
+/* The Date Book manager and the designer both run wider than a corpus sheet:
+   a 22-column board at a tappable flap size needs the room. */
+.date-book-sheet,
+.rl-designer-sheet {
+  max-width: min(1040px, calc(100vw - 24px));
+}
+.date-book-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 18px;
+  margin-top: 14px;
+}
+.date-book-when-field { flex: 1 1 180px; min-width: 0; }
+.date-book-preview-tabs { margin-bottom: 8px; }
+.date-book-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 10px;
+  flex-wrap: wrap;
+}
+.date-book-row-name { font-weight: 700; }
+.date-book-row-when { color: var(--text-dim); font-size: 0.82rem; }
+.date-book-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+}
+.date-book-badge.is-today { border-color: #e03c31; color: #ff8177; }
+.date-book-badge.is-yearly { border-color: rgba(244, 197, 106, 0.4); color: var(--accent); }
+.date-book-badge.is-art { border-color: rgba(123, 63, 212, 0.5); color: #b98cf0; }
+
+.rl-designer-columns {
+  display: grid;
+  gap: 16px 20px;
+  margin: 4px 0 14px;
+  min-width: 0;
+}
+@media (min-width: 860px) {
+  .rl-designer-columns { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: start; }
+}
+.rl-designer-col { display: grid; gap: 8px; min-width: 0; align-content: start; }
+
+.rl-designer {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #141414;
+  border: 1px solid #4a1c18;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  container-type: inline-size;
+  touch-action: none;
+  cursor: crosshair;
+  outline: none;
+}
+.rl-designer:focus-visible { border-color: var(--accent); }
+.rl-designer .cn-preview-row { gap: 2px; }
+.rl-designer .cn-preview-row span {
+  background: #1a1a1a;
+  color: #e8e8e8;
+  font-size: clamp(0.4rem, 3.1cqw, 0.85rem);
+  border-radius: 2px;
+}
+/* A message flap is empty artwork with a job, so it reads as an outline
+   rather than a colour that could be mistaken for a chip. */
+.rl-designer .cn-preview-row span.is-slot {
+  background: rgba(224, 60, 49, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(224, 60, 49, 0.55);
+  color: transparent;
+}
+.rl-designer .cn-preview-row span.is-caret {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.rl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.rl-tool {
+  appearance: none;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rl-tool-wide { padding: 0 12px; }
+.rl-tool.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(244, 197, 106, 0.28); color: var(--text); }
+.rl-tool-chip.is-chip-red { background: #e03c31; }
+.rl-tool-chip.is-chip-orange { background: #f07a1a; }
+.rl-tool-chip.is-chip-yellow { background: #f5c518; }
+.rl-tool-chip.is-chip-green { background: #22a24b; }
+.rl-tool-chip.is-chip-blue { background: #2a6de0; }
+.rl-tool-chip.is-chip-violet { background: #7b3fd4; }
+.rl-tool-chip.is-chip-white { background: #f2f2f2; }
+.rl-tool-chip.is-chip-black { background: #101013; }
+.rl-tool-chip.is-chip-filled { background: #6e6e6e; }
+.rl-tool-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+
+.rl-inline-slot {
+  border-radius: 4px;
+  padding: 0 5px;
+  background: rgba(224, 60, 49, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(224, 60, 49, 0.55);
+  color: #ff9d95;
+  font-weight: 700;
+}
+.rl-designer-hint { margin: 0 0 10px; }
+.rl-preset-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rl-designer-actions { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.rl-designer-sheet .cn-board-preview,
+.date-book-sheet .cn-preview-col .cn-board-preview { max-width: none; width: 100%; }
 .chuck-norris-actions,
 .cn-settings-actions {
   display: flex;

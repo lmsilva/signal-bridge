@@ -95,6 +95,7 @@ const BOARD_COMMAND_IDS = new Set([
   'bake.inspire',
   'world.population',
   'calendar.clock',
+  'redletter.show',
   'stocks.market',
   'fx.rates',
   'iss.track',
@@ -857,6 +858,21 @@ const COMMANDS = [
     kinds: ['vestaboard'],
   },
   {
+    id: 'redletter.show',
+    title: 'Red Letter',
+    subtitle: 'Countdown to the next date in the Date Book',
+    group: 'Alexa',
+    pushCategory: 'home',
+    route: '/api/push/red-letter',
+    icon: 'calendar',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 45,
+    kinds: ['vestaboard'],
+  },
+  {
     id: 'stocks.market',
     title: 'Stock Market',
     subtitle: 'Up to 10 tickers on the board',
@@ -1093,6 +1109,7 @@ function createCommandRegistry(deps = {}) {
     getFlightplanStatus = null,
     getPlexStatus = null,
     getPlexTop10Status = null,
+    getRedLetterStatus = null,
     getLocaleSettings = null,
     getLearnJapaneseStatus = null,
     getLearnLanguageStatus = null,
@@ -1198,6 +1215,9 @@ function createCommandRegistry(deps = {}) {
     // Plex answers when the board airs; the probe only asks whether a token
     // is on file, so the scheduler does not hit the network on every tick.
     'plex.top10': () => Boolean(call(getPlexTop10Status)?.linked),
+    // An empty Date Book, or one where every one-off has passed, has nothing
+    // to count down to — skip the slot rather than air a blank card.
+    'redletter.show': () => Number(call(getRedLetterStatus)?.upcoming || 0) > 0,
     'weather.weekly': () => hasLocation(call(getLocaleSettings) || {}),
     'weather.alerts': () => hasLocation(call(getLocaleSettings) || {}),
     'japanese.learn': () => Number(call(getLearnJapaneseStatus)?.available || 0) > 0,

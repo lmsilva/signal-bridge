@@ -1376,6 +1376,150 @@ test('admin Settings has a Plex Top 10 card under Media with a genre picker', ()
   assert.match(html, /id="push-row-media"[^>]*data-push-category="media"[\s\S]{0,120}data-skeleton-count="5"/);
 });
 
+test('the Date Book is a CRUD collection and Red Letter will not push an empty one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  const cookie = baseCookies.get(base) || null;
+  const send = (method, route, body) => request(`${base}${route}`, { method, body, cookie });
+  try {
+    const empty = await getJson(base, '/api/red-letter/settings');
+    assert.equal(empty.status, 200);
+    assert.deepEqual(empty.body.events, []);
+    assert.equal(empty.body.upcoming, 0);
+    assert.equal(empty.body.settings.pushSelection, 'next');
+
+    // Nothing to count down to must be a refusal, not a blank board.
+    const refused = await postJson(base, '/api/push/red-letter');
+    assert.equal(refused.status, 409);
+    assert.equal(sent.length, 0);
+
+    const bad = await postJson(base, '/api/date-book/events', { name: 'No date' });
+    assert.equal(bad.status, 400);
+    assert.match(String(bad.body.error || ''), /name and a YYYY-MM-DD date/);
+
+    const added = await postJson(base, '/api/date-book/events', {
+      name: 'Amanda visits',
+      date: '2099-11-27',
+      message: 'Welcome home, Amanda',
+    });
+    assert.equal(added.status, 200);
+    const id = added.body.event.id;
+    assert.equal(id, 'amanda-visits-1127');
+    assert.equal(added.body.upcoming, 1);
+    assert.equal(added.body.events[0].next.date, '2099-11-27');
+
+    const edited = await send('PUT', `/api/date-book/events/${id}`, { recurring: true, message: 'See you soon' });
+    assert.equal(edited.status, 200);
+    assert.equal(edited.body.event.recurring, true);
+    assert.equal(edited.body.event.message, 'See you soon');
+    assert.equal(edited.body.event.name, 'Amanda visits', 'a patch keeps the fields it did not mention');
+
+    const missing = await send('PUT', '/api/date-book/events/nope', { message: 'x' });
+    assert.equal(missing.status, 404);
+
+    // Both previews come from the bridge so the sheet cannot drift from the board.
+    const preview = await postJson(base, '/api/date-book/preview', { eventId: id });
+    assert.equal(preview.status, 200);
+    assert.equal(preview.body.countdown.card, 'countdown');
+    assert.equal(preview.body.dayOf.card, 'day-of');
+    assert.equal(preview.body.countdown.rows.length, 6);
+    assert.equal(preview.body.countdown.rows[0].length, 22);
+
+    const draft = await postJson(base, '/api/date-book/preview', {
+      event: { name: 'Unsaved', date: '2099-01-02', message: 'Draft message' },
+    });
+    assert.equal(draft.status, 200);
+    assert.equal(draft.body.dayOf.event.name, 'Unsaved');
+    assert.equal((await postJson(base, '/api/date-book/preview', {})).status, 400);
+
+    const pushed = await postJson(base, '/api/push/red-letter');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.card, 'countdown');
+    assert.equal(pushed.body.event.name, 'Amanda visits');
+
+    // Artwork rides on the event, and clearing it falls back to the house card.
+    const cells = Array.from({ length: 6 }, (_, row) => (
+      Array.from({ length: 22 }, (_, col) => {
+        if (row === 0) return 63;
+        return col >= 12 ? -1 : 0;
+      })
+    ));
+    const painted = await send('PUT', `/api/date-book/events/${id}`, { layout: { cells } });
+    assert.equal(painted.status, 200);
+    assert.equal(painted.body.event.layout.cells.length, 6);
+    assert.equal(
+      (await postJson(base, '/api/date-book/preview', { eventId: id })).body.dayOf.custom,
+      true,
+    );
+    await send('PUT', `/api/date-book/events/${id}`, { layout: null });
+    assert.equal(
+      (await postJson(base, '/api/date-book/preview', { eventId: id })).body.dayOf.custom,
+      false,
+    );
+
+    const settings = await postJson(base, '/api/red-letter/settings', {
+      pushSelection: 'random',
+      scheduleSelection: 'next',
+      showTime: false,
+    });
+    assert.equal(settings.status, 200);
+    assert.equal(settings.body.settings.pushSelection, 'random');
+    assert.equal(settings.body.settings.showTime, false);
+
+    const removed = await send('DELETE', `/api/date-book/events/${id}`);
+    assert.equal(removed.status, 200);
+    assert.deepEqual(removed.body.events, []);
+    assert.equal((await send('DELETE', `/api/date-book/events/${id}`)).status, 404);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('admin Settings has a Red Letter card, a Date Book sheet and the layout designer', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+
+  assert.match(html, /id="red-letter-settings-card"[^>]*data-settings-group="global"/);
+  assert.match(html, /data-red-letter-push="next"/);
+  assert.match(html, /data-red-letter-push="random"/);
+  assert.match(html, /data-red-letter-schedule="next"/);
+  assert.match(html, /data-red-letter-schedule="random"/);
+
+  // The Date Book sheet: compose form, both previews, and the event list.
+  assert.match(html, /id="date-book-manage-sheet"[\s\S]{0,400}class="sheet cn-manage-sheet date-book-sheet"/);
+  assert.match(html, /id="date-book-name"/);
+  assert.match(html, /id="date-book-message"/);
+  assert.match(html, /id="date-book-date"/);
+  assert.match(html, /id="date-book-recurring"/);
+  assert.match(html, /data-date-book-preview="countdown"/);
+  assert.match(html, /data-date-book-preview="dayOf"/);
+  assert.match(html, /id="date-book-list"/);
+
+  // The designer: a paint palette, a message tool, the grid and the presets.
+  assert.match(html, /id="red-letter-designer-sheet"/);
+  assert.match(html, /id="red-letter-grid"[^>]*tabindex="0"/);
+  assert.match(html, /data-rl-tool="message"/);
+  assert.match(html, /data-rl-tool="erase"/);
+  for (const chip of ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white', 'black', 'filled']) {
+    assert.match(html, new RegExp(`data-rl-chip="${chip}"`), `the palette needs a ${chip} chip`);
+  }
+  // The two chips this feature added must be the simulator's flap colours, not
+  // a third set of hexes — the designer is where someone picks a chip.
+  const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
+  assert.match(css, /\.cn-preview-row span\.is-chip-black \{\s*background: #101013;/);
+  assert.match(css, /\.cn-preview-row span\.is-chip-filled \{\s*background: #6e6e6e;/);
+  for (const preset of ['heart', 'confetti', 'border', 'blank']) {
+    assert.match(html, new RegExp(`data-rl-preset="${preset}"`));
+  }
+
+  assert.match(js, /\/api\/red-letter\/settings/);
+  assert.match(js, /\/api\/push\/red-letter/);
+  assert.match(js, /\/api\/date-book\/events/);
+  assert.match(js, /\/api\/date-book\/preview/);
+  assert.match(js, /'red-letter-settings-card': \['vestaboard'\]/);
+  // Previews render server-built rows rather than a second copy of the layout code.
+  assert.match(js, /function renderFlapGrid\(/);
+});
+
 test('world population push delivers an estimate and settings can retune the model', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1877,8 +2021,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/learn-japanese/);
   assert.match(js, /\/api\/learn-\$\{language\}\/settings/);
   assert.match(js, /\/api\/push\/learn-\$\{language\}/);
-  assert.match(html, /styles\.css\?v=signal158/);
-  assert.match(html, /app\.js\?v=signal158/);
+  assert.match(html, /styles\.css\?v=signal159/);
+  assert.match(html, /app\.js\?v=signal159/);
   assert.doesNotMatch(html, /document\.write/);
   assert.match(js, /function confirmCorpusRemove\(/);
   assert.match(js, /data-cn-remove/);
@@ -3270,6 +3414,7 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
   const sheets = [
     'chuck-norris', 'amazing-facts', 'world-geography-facts',
     'conversation-starters', 'stoic-quotes', 'baking-inspiration',
+    'date-book',
   ];
   for (const name of sheets) {
     assert.match(html, new RegExp(`id="${name}-manage-sheet"`));

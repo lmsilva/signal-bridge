@@ -136,6 +136,8 @@ const { createOnThisDay } = require('./on-this-day');
 const { createBakingInspiration } = require('./baking-inspiration');
 const { createWorldPopulation } = require('./world-population');
 const { createCalendarClock } = require('./calendar-clock');
+const { createDateBook } = require('./date-book');
+const { createRedLetter } = require('./red-letter');
 const { createPlexTop10 } = require('./plex-top10');
 const { createWeatherAlerts } = require('./weather-alerts');
 const { createStockMarket } = require('./stock-market');
@@ -451,6 +453,8 @@ function createWebServer({
   const bakingInspiration = createBakingInspiration(config, log);
   const worldPopulation = createWorldPopulation(config, log);
   const calendarClock = createCalendarClock(config, log);
+  const dateBook = createDateBook(config, log);
+  const redLetter = createRedLetter(config, log, { dateBook });
   const plexTop10 = createPlexTop10(config, log, {
     // The Feature Presentation service already owns the server URL and the
     // encrypted token; Top 10 borrows both rather than reading them twice.
@@ -542,6 +546,7 @@ function createWebServer({
       || plexService()?.statusSnapshot?.()
       || null,
     getPlexTop10Status: () => plexTop10.statusSnapshot(),
+    getRedLetterStatus: () => redLetter.statusSnapshot(),
     getLocaleSettings: () => localeSettings.get(),
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getLearnLanguageStatus: (commandId) => learnLanguages[commandId]?.statusSnapshot() || null,
@@ -2997,6 +3002,135 @@ function createWebServer({
     });
   }
 
+  function redLetterState() {
+    return {
+      ...redLetter.statusSnapshot(),
+      events: dateBook.withNext(),
+    };
+  }
+
+  function handleRedLetterSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...redLetterState() });
+  }
+
+  function handleRedLetterSettingsPut(body, res) {
+    const settings = body?.reset
+      ? redLetter.resetSettings()
+      : redLetter.updateSettings({
+        pushSelection: body?.pushSelection,
+        scheduleSelection: body?.scheduleSelection,
+        showTime: body?.showTime,
+      });
+    sendJson(res, 200, { ok: true, ...redLetterState(), settings });
+  }
+
+  /**
+   * Date Book CRUD. The collection is small and entirely user-owned, so it
+   * gets REST shapes (PUT/DELETE on an id) rather than the shipped+custom
+   * corpus dance the fact decks use.
+   */
+  function handleDateBookApi(method, pathname, body, res) {
+    try {
+      routeDateBook(method, pathname, body, res);
+    } catch (error) {
+      // A half-filled form is the caller's problem, not a server fault.
+      sendJson(res, 400, { ok: false, error: error?.message || 'Could not save the event' });
+    }
+  }
+
+  function routeDateBook(method, pathname, body, res) {
+    const tail = pathname.slice('/api/date-book/'.length);
+
+    if (tail === 'events') {
+      if (method === 'GET') {
+        sendJson(res, 200, { ok: true, ...redLetterState() });
+        return;
+      }
+      if (method === 'POST') {
+        const event = dateBook.add(body || {});
+        log.info('Date Book event added', { id: event.id, date: event.date });
+        sendJson(res, 200, { ok: true, event, ...redLetterState() });
+        return;
+      }
+    }
+
+    const idMatch = /^events\/([^/]+)$/.exec(tail);
+    if (idMatch) {
+      const id = decodeURIComponent(idMatch[1]);
+      if (method === 'PUT') {
+        if (!dateBook.get(id)) {
+          sendJson(res, 404, { ok: false, error: 'Unknown event' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, event: dateBook.update(id, body || {}), ...redLetterState() });
+        return;
+      }
+      if (method === 'DELETE') {
+        if (!dateBook.remove(id)) {
+          sendJson(res, 404, { ok: false, error: 'Unknown event' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, removed: id, ...redLetterState() });
+        return;
+      }
+    }
+
+    // The designer previews unsaved edits, so an inline event beats an id.
+    if (tail === 'preview' && method === 'POST') {
+      const inline = body?.event && typeof body.event === 'object' ? body.event : null;
+      const preview = redLetter.preview({
+        event: inline,
+        eventId: String(body?.eventId || '').trim(),
+      });
+      if (!preview) {
+        sendJson(res, 400, { ok: false, error: 'Give the preview an event with a name and a date' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...preview });
+      return;
+    }
+
+    sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+  }
+
+  function handleRedLetterPush(body, res) {
+    const scheduled = body?.triggeredBy === 'scheduler';
+    const payload = redLetter.nextPayload({
+      trigger: scheduled ? 'schedule' : 'push',
+      eventId: String(body?.eventId || '').trim(),
+    });
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'The Date Book has nothing to count down to',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = scheduled
+      ? { source: 'scheduler', explicit: false }
+      : { explicit: true };
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Red Letter', {
+      targetId,
+      card: payload.card,
+      event: payload.event.name,
+      daysAway: payload.occurrence.daysAway,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      card: payload.card,
+      custom: payload.custom,
+      event: payload.event,
+      occurrence: payload.occurrence,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   async function handlePlexTop10SettingsGet(res) {
     let genres = [];
     try {
@@ -3524,6 +3658,8 @@ function createWebServer({
           handleWorldPopulationPush(body, res); break;
         case 'calendar.clock':
           handleCalendarClockPush(body, res); break;
+        case 'redletter.show':
+          handleRedLetterPush(body, res); break;
         case 'signal.quiet-hours':
           handleQuietHoursReminderPush(body, res); break;
         case 'trivia.show': handleTriviaPush(body, res); break;
@@ -6675,6 +6811,16 @@ function createWebServer({
           handleCalendarClockSettingsGet(res);
           return;
         }
+        if (pathname === '/api/red-letter/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleRedLetterSettingsGet(res);
+          return;
+        }
+        if (pathname.startsWith('/api/date-book/')) {
+          if (!requireAdminSession(req, res)) return;
+          handleDateBookApi('GET', pathname, null, res);
+          return;
+        }
         if (pathname.startsWith('/api/flightplan/')) {
           if (!requireAdminSession(req, res)) return;
           await handleFlightplanApi('GET', pathname, null, res, reqUrl.searchParams);
@@ -6859,6 +7005,18 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
           await handlePlexTop10SettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/red-letter/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          handleRedLetterSettingsPut(body, res);
+          return;
+        }
+        if (pathname.startsWith('/api/date-book/')) {
+          if (!requireAdminSession(req, res)) return;
+          const body = req.method === 'PUT' ? await readJsonBody(req, MAX_BODY_BYTES) : {};
+          handleDateBookApi(req.method, pathname, body, res);
           return;
         }
         const isScheduler = pathname.startsWith('/api/display-scheduler/');
@@ -7319,6 +7477,16 @@ function createWebServer({
             return;
           case '/api/calendar-clock/settings':
             handleCalendarClockSettingsPut(body, res);
+            return;
+          case '/api/push/red-letter':
+            handleRedLetterPush(body, res);
+            return;
+          case '/api/red-letter/settings':
+            handleRedLetterSettingsPut(body, res);
+            return;
+          case '/api/date-book/events':
+          case '/api/date-book/preview':
+            handleDateBookApi('POST', pathname, body, res);
             return;
           case '/api/push/quiet-hours-reminder':
             handleQuietHoursReminderPush(body, res);
