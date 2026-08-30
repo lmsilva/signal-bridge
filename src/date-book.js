@@ -430,8 +430,11 @@ function upcomingEvents(events = [], options = {}) {
 }
 
 /**
- * Which event to put on the board. `random` never repeats what is already
- * happening today — a day-of card outranks a countdown, always.
+ * Which event to put on the board.
+ *
+ * `next` prefers a day-of card when something is happening today, otherwise
+ * the soonest countdown. `random` draws from every upcoming event — including
+ * later countdowns — so it is not the same as `next` when today has a date.
  */
 function pickEvent(events = [], {
   mode = 'next',
@@ -442,16 +445,11 @@ function pickEvent(events = [], {
   if (!upcoming.length) {
     return null;
   }
-  const today = upcoming.filter((event) => event.next.isToday);
-  if (today.length) {
-    return mode === 'random'
-      ? today[Math.min(today.length - 1, Math.floor(random() * today.length))]
-      : today[0];
+  if (mode === 'random') {
+    return upcoming[Math.min(upcoming.length - 1, Math.floor(random() * upcoming.length))];
   }
-  if (mode !== 'random') {
-    return upcoming[0];
-  }
-  return upcoming[Math.min(upcoming.length - 1, Math.floor(random() * upcoming.length))];
+  const today = upcoming.find((event) => event.next.isToday);
+  return today || upcoming[0];
 }
 
 // ------------------------------------------------------------------- store

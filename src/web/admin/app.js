@@ -622,10 +622,53 @@
 
   // ------------------------------------------------------------------- Tabs
 
-  function activateTab(tabId) {
+  // Push / Settings / Scheduler are long pages. Remember where the admin
+  // was so a hop to another tab and back does not yank them to the top.
+  const tabScrollY = Object.create(null);
+
+  function currentPageScroll() {
+    return window.scrollY || pageScrollEl().scrollTop || 0;
+  }
+
+  function currentSchedView() {
+    const active = document.querySelector('#sched-view-tabs .segmented-btn.active');
+    return active?.dataset?.schedView || 'schedule';
+  }
+
+  function rememberTabScroll(tab, view) {
+    if (!tab) return;
+    const y = currentPageScroll();
+    tabScrollY[tab] = y;
+    if (view) tabScrollY[`${tab}:${view}`] = y;
+  }
+
+  function restoreTabScroll(tab, view, { top = false } = {}) {
+    const key = !top && view ? `${tab}:${view}` : tab;
+    const y = top ? 0 : Math.max(0, Number(tabScrollY[key] ?? tabScrollY[tab] ?? 0) || 0);
+    const apply = () => {
+      window.scrollTo(0, y);
+      pageScrollEl().scrollTop = y;
+    };
+    apply();
+    requestAnimationFrame(apply);
+  }
+
+  function activateTab(tabId, { scroll = 'restore' } = {}) {
     // Lets a tab widen the content column — the Vestaboard needs more room
     // than a stack of settings cards.
     const previousTab = document.body.dataset.tab || '';
+    const switching = previousTab !== tabId;
+    if (switching && previousTab) {
+      if (previousTab === 'settings' && typeof currentSettingsView === 'function') {
+        rememberTabScroll('settings', currentSettingsView());
+      } else if (previousTab === 'push' && typeof pushViewSession !== 'undefined') {
+        rememberTabScroll('push', pushViewSession);
+      } else if (previousTab === 'scheduler') {
+        rememberTabScroll('scheduler', currentSchedView());
+      } else {
+        rememberTabScroll(previousTab);
+      }
+    }
     document.body.dataset.tab = tabId;
     document.querySelectorAll('.tab-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.tab === tabId);
@@ -640,12 +683,7 @@
     if (typeof closeLightbox === 'function') {
       closeLightbox();
     }
-    window.scrollTo(0, 0);
-    document.scrollingElement?.scrollTo?.(0, 0);
     updateControlLockUi();
-    if (typeof updateStickyOffsets === 'function') updateStickyOffsets();
-    if (typeof updatePageJump === 'function') updatePageJump();
-    if (typeof updateSchedSetupCompact === 'function') updateSchedSetupCompact();
     if (previousTab === 'board' && tabId !== 'board'
       && typeof vbOnBoardTabLeave === 'function') {
       vbOnBoardTabLeave();
@@ -672,6 +710,20 @@
     } else if (tabId === 'flightplan') {
       loadFlightplanTrips({ force: false });
     }
+    if (typeof updateStickyOffsets === 'function') updateStickyOffsets();
+    if (switching) {
+      if (tabId === 'settings' && typeof currentSettingsView === 'function') {
+        restoreTabScroll('settings', currentSettingsView(), { top: scroll === 'top' });
+      } else if (tabId === 'push') {
+        restoreTabScroll('push', pushViewSession, { top: scroll === 'top' });
+      } else if (tabId === 'scheduler') {
+        restoreTabScroll('scheduler', currentSchedView(), { top: scroll === 'top' });
+      } else {
+        restoreTabScroll(tabId, null, { top: scroll === 'top' });
+      }
+    }
+    if (typeof updatePageJump === 'function') updatePageJump();
+    if (typeof updateSchedSetupCompact === 'function') updateSchedSetupCompact();
   }
 
   // Sticky tab heads sit under the measured sticky chrome (header + display).
@@ -756,7 +808,7 @@
 
   // Logo / title → Push landing pane from any tab.
   $('btn-app-home')?.addEventListener('click', () => {
-    activateTab('push');
+    activateTab('push', { scroll: 'top' });
     showPushView('home');
   });
 
@@ -799,7 +851,9 @@
   }
 
   function normalizeSearchQuery(value) {
-    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return (globalThis.SignalSettingsFilter || {
+      normalizeSearchQuery: (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' '),
+    }).normalizeSearchQuery(value);
   }
 
   /**
@@ -821,6 +875,8 @@
   function matchesSearch(el, query, extra = '') {
     if (!query) return true;
     const haystack = `${searchHaystack(el)} ${String(extra).toLowerCase()}`;
+    const filter = globalThis.SignalSettingsFilter;
+    if (filter?.matchesSearchQuery) return filter.matchesSearchQuery(haystack, query);
     return query.split(' ').every((term) => term && haystack.includes(term));
   }
 
@@ -835,6 +891,7 @@
   const SETTINGS_CARD_KINDS = Object.freeze({
     'locale-settings-card': ['full', 'vestaboard'],
     'public-url-settings-card': ['full', 'vestaboard'],
+    'tinyurl-settings-card': ['full', 'vestaboard'],
     'guest-snaps-settings-card': ['full', 'vestaboard'],
     'guest-book-settings-card': ['vestaboard'],
     'ring-doorbell-settings-card': ['vestaboard'],
@@ -868,8 +925,11 @@
     'autodarts-settings-card': ['full', 'vestaboard'],
     'huupe-settings-card': ['full', 'vestaboard'],
     'trivia-settings-card': ['full', 'vestaboard'],
+    'word-scramble-settings-card': ['vestaboard'],
+    'word-riddles-settings-card': ['vestaboard'],
     'plex-settings-card': ['vestaboard'],
     'credits-settings-card': ['full', 'vestaboard'],
+    'vb-settings-card': ['vestaboard'],
   });
 
   function parseKindList(value) {
@@ -953,6 +1013,8 @@
    * talk"), and "world" never found World Currency Rates.
    */
   function settingsSectionLabel(card) {
+    const nested = [...(card.children || [])].find((el) => el.classList.contains('section-label'));
+    if (nested) return nested;
     let node = card.previousElementSibling;
     while (node) {
       if (node.classList.contains('section-label')) return node;
@@ -986,10 +1048,20 @@
       if (match && SETTINGS_VIEWS.has(group)) counts[group] += 1;
     }
 
-    let view = SETTINGS_VIEWS.has(preferredView) ? preferredView : currentSettingsView();
-    if ((query || kindFilter !== 'all') && counts[view] === 0) {
-      view = SETTINGS_VIEW_ORDER.find((name) => counts[name] > 0) || view;
-    }
+    const decided = (globalThis.SignalSettingsFilter?.decideSettingsFilter || ((opts) => {
+      let view = SETTINGS_VIEWS.has(opts.preferredView) ? opts.preferredView : currentSettingsView();
+      if ((opts.query || opts.kindFilter !== 'all') && (opts.counts[view] || 0) === 0) {
+        view = SETTINGS_VIEW_ORDER.find((name) => (opts.counts[name] || 0) > 0) || view;
+      }
+      return { view, total: SETTINGS_VIEW_ORDER.reduce((sum, name) => sum + (opts.counts[name] || 0), 0) };
+    }))({
+      counts,
+      query,
+      kindFilter,
+      activeView: currentSettingsView(),
+      preferredView,
+    });
+    const view = decided.view;
 
     document.querySelectorAll('#settings-view-tabs .segmented-btn').forEach((btn) => {
       const name = btn.dataset.settingsView;
@@ -997,7 +1069,9 @@
       const on = name === view;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
-      btn.hidden = (Boolean(query) || kindFilter !== 'all') && count === 0;
+      // Zero-hit tabs stay clickable. Hiding them (and ignoring [hidden]
+      // clicks) is what made Global / Accounts / YouTube look dead.
+      btn.hidden = false;
       const badge = btn.querySelector('.settings-hit-count');
       if (badge) {
         badge.textContent = String(count);
@@ -1026,7 +1100,9 @@
 
     const total = SETTINGS_VIEW_ORDER.reduce((sum, name) => sum + counts[name], 0);
     if (empty) {
-      const nothing = total === 0;
+      // A pane click during a search can land on zero hits without the
+      // catalog itself being empty — still tell the user why the grid is blank.
+      const nothing = (counts[view] || 0) === 0;
       empty.hidden = !nothing;
       if (nothing) {
         empty.textContent = query
@@ -1058,8 +1134,12 @@
     const btn = event.target.closest('[data-settings-view]');
     if (!(btn instanceof HTMLElement)) return;
     if (!btn.closest('#settings-view-tabs')) return;
-    if (btn.hidden) return;
-    showSettingsView(btn.dataset.settingsView);
+    const next = btn.dataset.settingsView;
+    const previous = currentSettingsView();
+    if (next === previous) return;
+    rememberTabScroll('settings', previous);
+    showSettingsView(next);
+    restoreTabScroll('settings', next);
   });
 
   $('settings-search')?.addEventListener('input', (event) => {
@@ -1226,7 +1306,12 @@
     if (!(btn instanceof HTMLElement)) return;
     if (!btn.closest('#push-view-tabs')) return;
     if (btn.hidden) return;
-    showPushView(btn.dataset.pushView);
+    const next = btn.dataset.pushView;
+    const previous = pushViewSession;
+    if (next === previous) return;
+    rememberTabScroll('push', previous);
+    showPushView(next);
+    restoreTabScroll('push', next);
   });
 
   $('push-search')?.addEventListener('input', () => {
@@ -1499,6 +1584,8 @@
     alarm: '<path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/><path d="M12 3v1"/>',
     notification: '<path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 2 6H4c.5-1 2-2.5 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/><path d="M12 3v1"/>',
     trivia: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.2 2.5c-.5.2-.7.6-.7 1.1v.5"/><path d="M12 16.6v.4"/>',
+    riddle: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9.2 9.6a2.6 2.6 0 1 1 3.4 2.4c-.6.4-1 .9-1 1.7"/><circle cx="12" cy="16.2" r=".7" fill="currentColor" stroke="none"/>',
+    scramble: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h2v2H8zM11 8h2v2h-2zM14 8h2v2h-2zM8 11h2v2H8zM11 11h2v2h-2zM14 11h2v2h-2zM8 14h2v2H8zM11 14h2v2h-2zM14 14h2v2h-2z"/>',
     news: '<path d="M4 5.5h12.5A2.5 2.5 0 0 1 19 8v11H6.5A2.5 2.5 0 0 1 4 16.5v-11Z"/><path d="M8 9h6M8 12h6M8 15h3.5"/><path d="M19 10.5h1.5A1.5 1.5 0 0 1 22 12v5.5A1.5 1.5 0 0 1 20.5 19H19"/>',
     wiki: '<path d="M5 4.5h8a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2v-13Z"/><path d="M9 4.5V3h6v1.5"/><path d="M8 10h6M8 13.5h4"/>',
     japanese: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/>',
@@ -3955,6 +4042,8 @@
       const viewBtn = target.closest('[data-sched-view]');
       if (viewBtn) {
         const view = viewBtn.dataset.schedView;
+        const previous = currentSchedView();
+        if (view !== previous) rememberTabScroll('scheduler', previous);
         document.querySelectorAll('#sched-view-tabs .segmented-btn').forEach((btn) => {
           btn.classList.toggle('active', btn === viewBtn);
         });
@@ -3963,6 +4052,7 @@
         $('sched-view-simulation').hidden = view !== 'simulation';
         $('sched-view-settings').hidden = view !== 'settings';
         updateStickyOffsets();
+        if (view !== previous) restoreTabScroll('scheduler', view);
         updateSchedSetupCompact();
         updatePageJump();
         if (view === 'activity') await loadSchedActivity();
@@ -5460,6 +5550,66 @@
 
   loadPublicUrlSettings();
 
+  // ------------------------------------------- Settings → TinyURL
+
+  function renderTinyurlSettings(data = {}) {
+    const creds = data.credentials || {};
+    const token = $('tinyurl-token');
+    if (token && document.activeElement !== token) {
+      token.value = '';
+      token.placeholder = creds.hasToken
+        ? (creds.tokenHint ? `Saved (…${creds.tokenHint})` : 'Token saved')
+        : 'Paste token, or set TINYURL_API_TOKEN in .env';
+    }
+    const hint = $('tinyurl-token-hint');
+    if (hint) {
+      if (creds.envBlocksOverwrite) {
+        hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasToken) {
+        hint.textContent = creds.tokenHint
+          ? `Global token saved (…${creds.tokenHint}). Paste a new one to replace it.`
+          : 'Global token saved. Paste a new one to replace it.';
+      } else {
+        hint.textContent = 'Write-only. Stored encrypted. TINYURL_API_TOKEN in .env wins if set.';
+      }
+    }
+    const clear = $('tinyurl-clear-token');
+    if (clear) clear.checked = false;
+    const pill = $('tinyurl-status-pill');
+    if (pill) {
+      pill.textContent = creds.hasToken ? 'Saved' : 'Not set';
+      pill.className = `status-pill ${creds.hasToken ? 'is-ok' : 'is-warn'}`;
+    }
+  }
+
+  async function loadTinyurlSettings() {
+    try {
+      renderTinyurlSettings(await apiGet('/api/tinyurl/settings'));
+    } catch {
+      renderTinyurlSettings({});
+    }
+  }
+
+  $('btn-tinyurl-save')?.addEventListener('click', async () => {
+    const button = $('btn-tinyurl-save');
+    if (button) button.disabled = true;
+    try {
+      const body = {};
+      const token = String($('tinyurl-token')?.value || '').trim();
+      if (token) body.apiToken = token;
+      if ($('tinyurl-clear-token')?.checked) body.clearToken = true;
+      renderTinyurlSettings(await apiPost('/api/tinyurl/settings', body));
+      if ($('tinyurl-token')) $('tinyurl-token').value = '';
+      toast('TinyURL token saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not save TinyURL token', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  loadTinyurlSettings();
+
   // ------------------------------------------- Settings → Guest Snaps
 
   function renderGuestSnapsSettings(data = {}) {
@@ -5481,14 +5631,22 @@
     if (hint) {
       if (creds.envBlocksOverwrite) {
         hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasOverride) {
+        hint.textContent = creds.tokenHint
+          ? `Override saved (…${creds.tokenHint}). Paste a new one to replace it.`
+          : 'Override saved. Paste a new one to replace it.';
+      } else if (creds.usingGlobal && creds.hasToken) {
+        hint.textContent = 'Using the global token. Paste one here only if this feature needs its own.';
       } else if (creds.hasToken) {
         hint.textContent = creds.tokenHint
-          ? `Shared token saved (…${creds.tokenHint}). Paste a new one to replace it.`
-          : 'Shared token saved. Paste a new one to replace it.';
+          ? `Token saved (…${creds.tokenHint}).`
+          : 'Token saved.';
       } else {
-        hint.textContent = 'Shared with Guest Book. Write-only. TINYURL_API_TOKEN in .env wins if set.';
+        hint.textContent = 'Optional. Uses the global TinyURL token unless you paste one here.';
       }
     }
+    const clearOverride = $('guest-snaps-clear-override');
+    if (clearOverride) clearOverride.checked = false;
 
     const health = link.health || (link.alias ? 'unknown' : 'missing');
     const pill = $('guest-snaps-status-pill');
@@ -5552,6 +5710,7 @@
       };
       const token = String($('guest-snaps-token')?.value || '').trim();
       if (token) body.apiToken = token;
+      if ($('guest-snaps-clear-override')?.checked) body.clearOverride = true;
       const result = await apiPost('/api/guest-snaps/settings', body);
       renderGuestSnapsSettings(result);
       if ($('guest-snaps-token')) $('guest-snaps-token').value = '';
@@ -5663,14 +5822,22 @@
     if (hint) {
       if (creds.envBlocksOverwrite) {
         hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasOverride) {
+        hint.textContent = creds.tokenHint
+          ? `Override saved (…${creds.tokenHint}). Paste a new one to replace it.`
+          : 'Override saved. Paste a new one to replace it.';
+      } else if (creds.usingGlobal && creds.hasToken) {
+        hint.textContent = 'Using the global token. Paste one here only if this feature needs its own.';
       } else if (creds.hasToken) {
         hint.textContent = creds.tokenHint
           ? `Token saved (…${creds.tokenHint}). Paste a new one to replace it.`
           : 'Token saved. Paste a new one to replace it.';
       } else {
-        hint.textContent = 'Write-only. Stored encrypted. TINYURL_API_TOKEN in .env wins if set.';
+        hint.textContent = 'Optional. Uses the global TinyURL token unless you paste one here.';
       }
     }
+    const clearOverride = $('guest-book-clear-override');
+    if (clearOverride) clearOverride.checked = false;
 
     const health = link.health || (link.alias ? 'unknown' : 'missing');
     const pill = $('guest-book-status-pill');
@@ -5744,6 +5911,7 @@
       if (password) body.password = password;
       const token = String($('guest-book-token')?.value || '').trim();
       if (token) body.apiToken = token;
+      if ($('guest-book-clear-override')?.checked) body.clearOverride = true;
       const result = await apiPost('/api/guest-book/settings', body);
       renderGuestBookSettings(result);
       if ($('guest-book-token')) $('guest-book-token').value = '';
@@ -5821,6 +5989,7 @@
     setChecked('ring-enabled', data.enabled !== false);
     setChecked('ring-push-ding', data.pushOnDing !== false);
     setChecked('ring-push-motion', Boolean(data.pushOnMotion));
+    setChecked('ring-show-time', data.showTime !== false);
     setChecked('ring-quiet-exempt', data.quietHoursExempt !== false);
     const title = $('ring-title');
     if (title && document.activeElement !== title) {
@@ -5892,6 +6061,7 @@
       const data = await apiPost('/api/ring/preview', {
         title: $('ring-title')?.value || '',
         message: $('ring-message')?.value || '',
+        showTime: Boolean($('ring-show-time')?.checked),
       });
       if (Array.isArray(data.rows)) {
         renderVbGrid(host, data.rows);
@@ -5930,6 +6100,7 @@
       message: $('ring-message')?.value || '',
       pushOnDing: Boolean($('ring-push-ding')?.checked),
       pushOnMotion: Boolean($('ring-push-motion')?.checked),
+      showTime: Boolean($('ring-show-time')?.checked),
       quietHoursExempt: Boolean($('ring-quiet-exempt')?.checked),
     };
   }
@@ -5937,6 +6108,7 @@
   ['ring-title', 'ring-message'].forEach((id) => {
     $(id)?.addEventListener('input', scheduleRingPreview);
   });
+  $('ring-show-time')?.addEventListener('change', scheduleRingPreview);
 
   $('btn-ring-save')?.addEventListener('click', async () => {
     const button = $('btn-ring-save');
@@ -5973,6 +6145,7 @@
       await apiPost('/api/push/ring-doorbell', withTarget({
         title: $('ring-title')?.value || '',
         message: $('ring-message')?.value || '',
+        showTime: Boolean($('ring-show-time')?.checked),
       }));
       toast('Ring preview pushed', 'ok');
     } catch (error) {
@@ -6982,7 +7155,7 @@
     renderVbGrid(host, rows);
   }
 
-  let redLetterState = { settings: {}, events: [], nextUp: null };
+  let redLetterState = { settings: {}, events: [], nextUp: null, boardPreview: null };
   let dateBookPreviewCard = 'countdown';
   let dateBookSelectedId = '';
   let dateBookSearch = '';
@@ -7104,35 +7277,37 @@
       pill.textContent = total ? `${upcoming} upcoming` : 'Empty';
       pill.className = `status-pill ${upcoming ? 'is-ok' : ''}`;
     }
+    const label = $('red-letter-preview-label');
+    if (label) {
+      label.textContent = settings.pushSelection === 'random' ? 'A random pick' : 'The next one';
+    }
     if (detail) {
+      const today = Number(data.today || 0);
+      const pushRandom = settings.pushSelection === 'random';
       if (!total) {
         detail.textContent = 'Nothing in the Date Book yet. Add a birthday, an anniversary or a visit and the board will count down to it.';
-      } else if (data.nextUp) {
-        const today = Number(data.today || 0);
-        detail.textContent = today
-          ? `${today} event${today === 1 ? '' : 's'} today — the board shows the message, not a countdown.`
-          : `Next up: ${data.nextUp.name} ${dateBookDayLabel(data.nextUp)} (${data.nextUp.date}).`;
-      } else {
+      } else if (!data.nextUp) {
         detail.textContent = `${total} event${total === 1 ? '' : 's'} on file, none of them still ahead.`;
+      } else if (pushRandom) {
+        detail.textContent = today
+          ? `${today} event${today === 1 ? '' : 's'} today. Push Now picks at random from ${upcoming} upcoming.`
+          : `${upcoming} upcoming. Push Now picks one at random.`;
+      } else if (today) {
+        detail.textContent = `${today} event${today === 1 ? '' : 's'} today — the board shows the message, not a countdown.`;
+      } else {
+        detail.textContent = `Next up: ${data.nextUp.name} ${dateBookDayLabel(data.nextUp)} (${data.nextUp.date}).`;
       }
     }
   }
 
-  async function refreshRedLetterPreview() {
+  function paintRedLetterPreview(preview) {
     const host = $('red-letter-preview');
     if (!host) return;
-    const nextId = redLetterState.nextUp?.id;
-    if (!nextId) {
+    if (!preview?.rows) {
       renderVbGrid(host, blankDesignerCells());
       return;
     }
-    try {
-      const data = await apiPost('/api/date-book/preview', { eventId: nextId });
-      const card = data.countdown?.card === 'day-of' ? data.dayOf : data.countdown;
-      renderVbGrid(host, card?.rows);
-    } catch {
-      renderVbGrid(host, blankDesignerCells());
-    }
+    renderVbGrid(host, preview.rows);
   }
 
   function applyRedLetterState(data = {}) {
@@ -7140,10 +7315,11 @@
       settings: data.settings || {},
       events: Array.isArray(data.events) ? data.events : redLetterState.events,
       nextUp: data.nextUp || null,
+      boardPreview: data.boardPreview !== undefined ? data.boardPreview : redLetterState.boardPreview,
     };
     renderRedLetterCard(data);
     renderDateBookList();
-    refreshRedLetterPreview();
+    paintRedLetterPreview(redLetterState.boardPreview);
   }
 
   async function loadRedLetter() {
@@ -9718,6 +9894,601 @@
   });
 
   loadStoicQuotesStatus();
+
+  // ------------------------------------ Settings → Word Riddles
+
+  const WR_PAGE_SIZE = 12;
+  const WR_GREEN = 66;
+  const WR_BLUE = 67;
+  let wordRiddlesPage = 1;
+  let wordRiddlesTimer = 0;
+  let wordRiddlesPreviewPhase = 'riddle';
+
+  function wrExpandLine(line, width) {
+    const words = String(line || '').split(' ').filter(Boolean);
+    if (words.length < 2) return line;
+    let extra = width - words.join(' ').length;
+    if (extra <= 0) return words.join(' ');
+    let out = words[0];
+    for (let i = 1; i < words.length; i += 1) {
+      const add = extra > 0 ? 1 : 0;
+      extra -= add;
+      out += ` ${' '.repeat(add)}${words[i]}`;
+    }
+    return out;
+  }
+
+  function wrRiddleLines(text) {
+    const lines = wrapPreview(text, 22);
+    if (!lines.length || lines.length > 4) return lines.slice(0, 4);
+    return lines.map((line) => wrExpandLine(line, 22));
+  }
+
+  function wrAnswerLines(text) {
+    const folded = foldPreview(text || '');
+    if (!folded) return [];
+    if (!folded.includes(' ') && folded.length >= 2 && folded.length <= 11) {
+      return [folded.split('').join(' ')];
+    }
+    return wrapPreview(folded, 22).slice(0, 2);
+  }
+
+  function wrPadBlock(lines, slots, align) {
+    const chunk = (lines || []).slice(0, slots);
+    const padTop = Math.floor((slots - chunk.length) / 2);
+    const max = chunk.reduce((n, line) => Math.max(n, String(line || '').length), 0);
+    const inset = Math.max(0, Math.floor((22 - max) / 2));
+    const out = Array.from({ length: slots }, () => '');
+    chunk.forEach((line, i) => {
+      const start = align === 'center'
+        ? Math.floor((22 - String(line || '').length) / 2)
+        : inset;
+      out[padTop + i] = `${' '.repeat(Math.max(0, start))}${line}`;
+    });
+    return out;
+  }
+
+  function wrCenter(text) {
+    const line = String(text || '');
+    const start = Math.floor((22 - line.length) / 2);
+    return `${' '.repeat(Math.max(0, start))}${line}`;
+  }
+
+  function renderWordRiddlesPreview(riddle, answer) {
+    const host = $('word-riddles-preview');
+    if (!host) return;
+    const phase = wordRiddlesPreviewPhase;
+    if (phase === 'intro') {
+      paintPreviewLines(host, ['', '', 'RIDDLE ME', 'THIS...', '', ''], (row, col) => {
+        if (row === 0) return col < 11 ? WR_GREEN : WR_BLUE;
+        if (row === 5) return col < 11 ? WR_BLUE : WR_GREEN;
+        return null;
+      });
+    } else if (phase === 'answer') {
+      const lines = [
+        ...wrPadBlock(wrAnswerLines(answer), 5, 'center'),
+        wrCenter('VESTABOARD'),
+      ];
+      paintPreviewLines(host, lines);
+    } else {
+      const lines = [
+        ...wrPadBlock(wrRiddleLines(riddle), 4, 'block'),
+        '',
+        wrCenter('VESTABOARD'),
+      ];
+      paintPreviewLines(host, lines);
+    }
+    const hint = $('word-riddles-fit-hint');
+    if (hint) {
+      const qRows = wrRiddleLines(riddle).length;
+      const aRows = wrAnswerLines(answer).length;
+      if (!riddle && !answer) {
+        hint.textContent = '';
+      } else if (qRows > 0 && qRows <= 4 && aRows > 0 && aRows <= 2) {
+        hint.textContent = `Fits · riddle ${qRows} row${qRows === 1 ? '' : 's'}`;
+      } else {
+        hint.textContent = 'Too long for the board';
+      }
+    }
+  }
+
+  function refreshWordRiddlesPreview() {
+    renderWordRiddlesPreview(
+      $('word-riddles-new')?.value || '',
+      $('word-riddles-answer')?.value || '',
+    );
+  }
+
+  function wordRiddlesCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} riddles ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function setWordRiddlesSlider(value) {
+    const slider = $('word-riddles-reveal-delay');
+    const label = $('word-riddles-reveal-delay-value');
+    if (slider) {
+      slider.value = String(value);
+      slider.setAttribute('aria-valuenow', String(value));
+    }
+    if (label) label.textContent = `${value}s`;
+  }
+
+  function renderWordRiddlesCard(data = {}) {
+    const pill = $('word-riddles-status-pill');
+    const detail = $('word-riddles-status-detail');
+    const summary = $('word-riddles-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail && data.available != null) {
+      detail.textContent = `${wordRiddlesCountsLine(data)}. Pick the delay between the riddle and the reveal, then manage the list or push a random one.`;
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? wordRiddlesCountsLine(data) : 'Loading…';
+    }
+    if (data.revealDelaySeconds != null) {
+      setWordRiddlesSlider(data.revealDelaySeconds);
+    }
+    if (data.showIntro != null) {
+      const box = $('word-riddles-show-intro');
+      if (box) box.checked = data.showIntro !== false;
+    }
+  }
+
+  function renderWordRiddlesSettings(data = {}) {
+    renderWordRiddlesCard(data);
+    const list = $('word-riddles-riddle-list');
+    if (list) {
+      const riddles = data.riddles || [];
+      if (!riddles.length) {
+        list.innerHTML = '<p class="hint">No riddles match that search.</p>';
+      } else {
+        list.innerHTML = riddles.map((item) => `
+          <article class="cn-fact${item.hidden ? ' is-hidden' : ''}${item.custom ? ' is-custom' : ''}" data-wr-id="${escapeHtml(item.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(item.riddle)}</textarea>
+            <input type="text" class="field-input cn-fact-author" maxlength="80" value="${escapeHtml(item.answer || '')}" placeholder="Answer">
+            <div class="cn-fact-meta">
+              <span class="hint">${item.custom ? 'Yours' : 'Shipped'} · ${item.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: item.hidden,
+                  custom: item.custom,
+                  saveAttr: 'data-wr-save',
+                  hideAttr: 'data-wr-hide',
+                  removeAttr: 'data-wr-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('word-riddles-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    wordRiddlesPage = data.page || 1;
+    const prev = $('btn-word-riddles-prev');
+    const next = $('btn-word-riddles-next');
+    if (prev) prev.disabled = wordRiddlesPage <= 1;
+    if (next) next.disabled = wordRiddlesPage >= (data.pages || 1);
+  }
+
+  async function loadWordRiddlesStatus() {
+    try {
+      const data = await apiGet('/api/word-riddles/riddles?page=1&pageSize=1');
+      renderWordRiddlesCard(data);
+    } catch {
+      renderWordRiddlesCard({});
+    }
+  }
+
+  async function loadWordRiddles(page = wordRiddlesPage) {
+    const query = $('word-riddles-search')?.value || '';
+    const hidden = Boolean($('word-riddles-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(WR_PAGE_SIZE),
+      });
+      if (hidden) params.set('hidden', '1');
+      const data = await apiGet(`/api/word-riddles/riddles?${params}`);
+      renderWordRiddlesSettings(data);
+    } catch {
+      renderWordRiddlesSettings({});
+    }
+  }
+
+  async function saveWordRiddlesPlayback() {
+    const delay = Number($('word-riddles-reveal-delay')?.value || 30);
+    const showIntro = Boolean($('word-riddles-show-intro')?.checked);
+    setWordRiddlesSlider(delay);
+    try {
+      const data = await apiPost('/api/word-riddles/settings', {
+        revealDelaySeconds: delay,
+        showIntro,
+      });
+      renderWordRiddlesCard(data);
+    } catch (error) {
+      toast(error.message || 'Could not save Word Riddles settings', 'bad');
+    }
+  }
+
+  function openWordRiddlesManageSheet() {
+    const sheet = $('word-riddles-manage-sheet');
+    if (!sheet) return;
+    sheet.hidden = false;
+    refreshWordRiddlesPreview();
+    loadWordRiddles(1);
+  }
+
+  function closeWordRiddlesManageSheet() {
+    const sheet = $('word-riddles-manage-sheet');
+    if (sheet) sheet.hidden = true;
+    loadWordRiddlesStatus();
+  }
+
+  $('btn-word-riddles-manage')?.addEventListener('click', () => openWordRiddlesManageSheet());
+  $('btn-word-riddles-manage-close')?.addEventListener('click', () => closeWordRiddlesManageSheet());
+  registerSheetDismiss('word-riddles-manage-sheet', () => closeWordRiddlesManageSheet());
+
+  $('btn-word-riddles-add')?.addEventListener('click', async () => {
+    const input = $('word-riddles-new');
+    const answer = $('word-riddles-answer');
+    try {
+      await apiPost('/api/word-riddles/riddles', {
+        riddle: input?.value || '',
+        answer: answer?.value || '',
+      });
+      if (input) input.value = '';
+      if (answer) answer.value = '';
+      refreshWordRiddlesPreview();
+      toast('Riddle added', 'good');
+      await loadWordRiddles(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that riddle', 'bad');
+    }
+  });
+
+  $('btn-word-riddles-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/word-riddles', withTarget());
+      const preview = String(result.riddle?.riddle || 'Word riddle').slice(0, 48);
+      toast(preview, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Word Riddles', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('word-riddles-new')?.addEventListener('input', refreshWordRiddlesPreview);
+  $('word-riddles-answer')?.addEventListener('input', refreshWordRiddlesPreview);
+  $('word-riddles-preview-phase')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-wr-phase]');
+    if (!btn) return;
+    wordRiddlesPreviewPhase = btn.getAttribute('data-wr-phase') || 'riddle';
+    document.querySelectorAll('#word-riddles-preview-phase [data-wr-phase]').forEach((el) => {
+      el.classList.toggle('active', el === btn);
+    });
+    refreshWordRiddlesPreview();
+  });
+
+  $('word-riddles-reveal-delay')?.addEventListener('input', (event) => {
+    setWordRiddlesSlider(Number(event.currentTarget.value || 30));
+  });
+  $('word-riddles-reveal-delay')?.addEventListener('change', () => saveWordRiddlesPlayback());
+  $('word-riddles-show-intro')?.addEventListener('change', () => saveWordRiddlesPlayback());
+
+  $('word-riddles-search')?.addEventListener('input', () => {
+    window.clearTimeout(wordRiddlesTimer);
+    wordRiddlesTimer = window.setTimeout(() => {
+      loadWordRiddles(1);
+    }, 250);
+  });
+
+  $('word-riddles-show-hidden')?.addEventListener('change', () => loadWordRiddles(1));
+  $('btn-word-riddles-prev')?.addEventListener('click', () => loadWordRiddles(wordRiddlesPage - 1));
+  $('btn-word-riddles-next')?.addEventListener('click', () => loadWordRiddles(wordRiddlesPage + 1));
+
+  $('word-riddles-riddle-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-wr-id]');
+    if (!article) return;
+    const id = article.getAttribute('data-wr-id');
+    const riddle = article.querySelector('.cn-fact-text')?.value;
+    const answer = article.querySelector('.cn-fact-author')?.value;
+    try {
+      if (event.target.closest('[data-wr-save]')) {
+        await apiPost('/api/word-riddles/riddles', { id, riddle, answer });
+        toast('Riddle saved', 'good');
+      } else if (event.target.closest('[data-wr-remove]')) {
+        if (!confirmCorpusRemove('riddle', riddle)) return;
+        await apiPost('/api/word-riddles/riddles', { id, remove: true });
+        toast('Riddle removed', 'good');
+      } else if (event.target.closest('[data-wr-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/word-riddles/riddles', { id, hidden: !restore });
+        toast(restore ? 'Riddle restored' : 'Riddle hidden', 'good');
+      } else {
+        return;
+      }
+      await loadWordRiddles(wordRiddlesPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that riddle', 'bad');
+    }
+  });
+
+  loadWordRiddlesStatus();
+
+  // ------------------------------------------- Settings → Word Scramble
+
+  const WS_HISTORY_PAGE = 10;
+  let wordScrambleHistOffset = 0;
+  let wordScrambleHistTotal = 0;
+  let wordScramblePoll = null;
+  let wordScrambleEndId = '';
+
+  function renderWordScrambleSettings(data = {}) {
+    const settings = data.settings || {};
+    const creds = data.credentials || {};
+    const link = data.shortlink || {};
+    const setNum = (id, value) => {
+      const el = $(id);
+      if (el && document.activeElement !== el) el.value = String(value);
+    };
+    setNum('word-scramble-lobby', settings.lobbySeconds ?? 45);
+    setNum('word-scramble-round', settings.roundSeconds ?? 180);
+    setNum('word-scramble-intermission', settings.intermissionSeconds ?? 20);
+    setNum('word-scramble-rounds', settings.rounds ?? 3);
+    const dup = $('word-scramble-dup');
+    if (dup && document.activeElement !== dup) {
+      dup.value = settings.duplicateRule === 'cancel' ? 'cancel' : 'everyone';
+    }
+    const alias = $('word-scramble-alias');
+    if (alias && document.activeElement !== alias) {
+      alias.value = settings.preferredAlias || 'WITTYGAME';
+    }
+    const token = $('word-scramble-token');
+    if (token && document.activeElement !== token) {
+      token.value = '';
+      token.placeholder = creds.hasOverride
+        ? (creds.tokenHint ? `Override (…${creds.tokenHint})` : 'Override saved')
+        : 'Optional — leave blank to use the global token';
+    }
+    const hint = $('word-scramble-token-hint');
+    if (hint) {
+      if (creds.envBlocksOverwrite) {
+        hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasOverride) {
+        hint.textContent = creds.tokenHint
+          ? `Override saved (…${creds.tokenHint}).`
+          : 'Override saved.';
+      } else if (creds.usingGlobal && creds.hasToken) {
+        hint.textContent = 'Using the global token.';
+      } else {
+        hint.textContent = 'Optional. Uses the global TinyURL token unless you paste one here.';
+      }
+    }
+    const clear = $('word-scramble-clear-override');
+    if (clear) clear.checked = false;
+
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const pill = $('word-scramble-status-pill');
+    const detail = $('word-scramble-status-detail');
+    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    if (pill) {
+      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
+      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = link.alert?.message
+        || (link.display
+          ? `Short link ${link.display}`
+          : 'Invite phones to a 4×4 Word Scramble. The board holds the grid; the timer stays on the phone.');
+    }
+    const dot = $('word-scramble-dot');
+    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    if ($('word-scramble-shortlink-label')) {
+      $('word-scramble-shortlink-label').textContent = link.display || 'No short link yet.';
+    }
+    if ($('word-scramble-shortlink-check')) {
+      $('word-scramble-shortlink-check').textContent = formatShortlinkCheck(link);
+    }
+    if ($('word-scramble-target-hint')) {
+      $('word-scramble-target-hint').textContent = data.targetUrl
+        ? `Target ${data.targetUrl}`
+        : 'Set a Public base URL (HTTPS) first.';
+    }
+  }
+
+  async function loadWordScrambleSettings() {
+    try {
+      renderWordScrambleSettings(await apiGet('/api/word-scramble/settings'));
+    } catch {
+      renderWordScrambleSettings({});
+    }
+  }
+
+  $('btn-word-scramble-save')?.addEventListener('click', async () => {
+    const button = $('btn-word-scramble-save');
+    if (button) button.disabled = true;
+    try {
+      const body = {
+        lobbySeconds: Number($('word-scramble-lobby')?.value),
+        roundSeconds: Number($('word-scramble-round')?.value),
+        intermissionSeconds: Number($('word-scramble-intermission')?.value),
+        rounds: Number($('word-scramble-rounds')?.value),
+        duplicateRule: $('word-scramble-dup')?.value,
+        preferredAlias: $('word-scramble-alias')?.value || '',
+      };
+      const token = String($('word-scramble-token')?.value || '').trim();
+      if (token) body.apiToken = token;
+      if ($('word-scramble-clear-override')?.checked) body.clearOverride = true;
+      renderWordScrambleSettings(await apiPost('/api/word-scramble/settings', body));
+      if ($('word-scramble-token')) $('word-scramble-token').value = '';
+      toast('Word Scramble settings saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not save Word Scramble settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-word-scramble-push')?.addEventListener('click', async () => {
+    try {
+      const result = await apiPost('/api/push/word-scramble', {});
+      toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not push invite', 'bad');
+    }
+  });
+
+  function setWordScrambleTab(tab) {
+    const active = tab === 'active';
+    $('word-scramble-tab-active')?.classList.toggle('active', active);
+    $('word-scramble-tab-history')?.classList.toggle('active', !active);
+    if ($('word-scramble-active-panel')) $('word-scramble-active-panel').hidden = !active;
+    if ($('word-scramble-history-panel')) $('word-scramble-history-panel').hidden = active;
+  }
+
+  async function loadWordScrambleActive() {
+    const list = $('word-scramble-active-list');
+    if (!list) return;
+    try {
+      const data = await apiGet('/api/game-sessions');
+      const sessions = data.sessions || [];
+      list.innerHTML = '';
+      if (!sessions.length) {
+        list.innerHTML = '<p class="hint">No live sessions.</p>';
+        return;
+      }
+      for (const session of sessions) {
+        const row = document.createElement('article');
+        row.className = 'cn-fact';
+        row.innerHTML = `<div class="cn-fact-meta"><strong>${escapeHtml(session.code)}</strong>`
+          + ` · ${escapeHtml(session.phase)} · ${session.playerCount || 0} players`
+          + ` · ${session.elapsedSeconds || 0}s</div>`
+          + `<button type="button" class="btn btn-outline btn-sm" data-ws-end="${escapeHtml(session.sessionId)}">End</button>`;
+        list.appendChild(row);
+      }
+    } catch (error) {
+      list.innerHTML = `<p class="hint">${escapeHtml(error.message || 'Could not load sessions')}</p>`;
+    }
+  }
+
+  async function loadWordScrambleHistory(offset = wordScrambleHistOffset) {
+    const list = $('word-scramble-history-list');
+    if (!list) return;
+    try {
+      const data = await apiGet(`/api/game-sessions/history?offset=${offset}&limit=${WS_HISTORY_PAGE}`);
+      wordScrambleHistOffset = data.offset || 0;
+      wordScrambleHistTotal = data.total || 0;
+      list.innerHTML = '';
+      const rows = data.rows || [];
+      if (!rows.length) {
+        list.innerHTML = '<p class="hint">No archived games yet.</p>';
+      }
+      for (const row of rows) {
+        const article = document.createElement('article');
+        article.className = 'cn-fact';
+        const when = String(row.endedAt || row.startedAt || '').slice(0, 16).replace('T', ' ');
+        const winner = row.winner?.name || '—';
+        const word = row.topWord?.word || '—';
+        article.innerHTML = `<div class="cn-fact-meta">${escapeHtml(when)} · ${row.players?.length || 0} players`
+          + ` · ${row.rounds || 0} rounds · ${escapeHtml(winner)} · ${escapeHtml(word)}`
+          + `${row.abandoned ? ' · abandoned' : ''}</div>`;
+        list.appendChild(article);
+      }
+      const label = $('word-scramble-hist-page');
+      if (label) {
+        const page = Math.floor(wordScrambleHistOffset / WS_HISTORY_PAGE) + 1;
+        const pages = Math.max(1, Math.ceil(wordScrambleHistTotal / WS_HISTORY_PAGE));
+        label.textContent = `${page} / ${pages}`;
+      }
+    } catch (error) {
+      list.innerHTML = `<p class="hint">${escapeHtml(error.message || 'Could not load history')}</p>`;
+    }
+  }
+
+  function openWordScrambleSessions() {
+    const sheet = $('word-scramble-sessions-sheet');
+    if (!sheet) return;
+    sheet.hidden = false;
+    setWordScrambleTab('active');
+    loadWordScrambleActive();
+    loadWordScrambleHistory(0);
+    if (wordScramblePoll) clearInterval(wordScramblePoll);
+    wordScramblePoll = setInterval(() => {
+      if ($('word-scramble-sessions-sheet')?.hidden) return;
+      if (!$('word-scramble-active-panel')?.hidden) loadWordScrambleActive();
+    }, 5000);
+  }
+
+  function closeWordScrambleSessions() {
+    const sheet = $('word-scramble-sessions-sheet');
+    if (sheet) sheet.hidden = true;
+    if (wordScramblePoll) {
+      clearInterval(wordScramblePoll);
+      wordScramblePoll = null;
+    }
+  }
+
+  function openWordScrambleEnd(sessionId) {
+    wordScrambleEndId = sessionId;
+    const sheet = $('word-scramble-end-sheet');
+    if (sheet) sheet.hidden = false;
+  }
+
+  function closeWordScrambleEnd() {
+    wordScrambleEndId = '';
+    const sheet = $('word-scramble-end-sheet');
+    if (sheet) sheet.hidden = true;
+  }
+
+  $('btn-word-scramble-sessions')?.addEventListener('click', () => openWordScrambleSessions());
+  $('btn-word-scramble-sessions-close')?.addEventListener('click', () => closeWordScrambleSessions());
+  registerSheetDismiss('word-scramble-sessions-sheet', () => closeWordScrambleSessions());
+  $('word-scramble-sessions-tabs')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-ws-tab]');
+    if (!btn) return;
+    setWordScrambleTab(btn.getAttribute('data-ws-tab'));
+  });
+  $('word-scramble-active-list')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-ws-end]');
+    if (btn) openWordScrambleEnd(btn.getAttribute('data-ws-end'));
+  });
+  $('btn-word-scramble-hist-prev')?.addEventListener('click', () => {
+    loadWordScrambleHistory(Math.max(0, wordScrambleHistOffset - WS_HISTORY_PAGE));
+  });
+  $('btn-word-scramble-hist-next')?.addEventListener('click', () => {
+    if (wordScrambleHistOffset + WS_HISTORY_PAGE < wordScrambleHistTotal) {
+      loadWordScrambleHistory(wordScrambleHistOffset + WS_HISTORY_PAGE);
+    }
+  });
+  $('word-scramble-end-cancel')?.addEventListener('click', () => closeWordScrambleEnd());
+  $('word-scramble-end-confirm')?.addEventListener('click', async () => {
+    const id = wordScrambleEndId;
+    closeWordScrambleEnd();
+    if (!id) return;
+    try {
+      await apiPost('/api/game-sessions/end', { sessionId: id });
+      toast('Session ended', 'ok');
+      loadWordScrambleActive();
+      loadWordScrambleHistory(wordScrambleHistOffset);
+    } catch (error) {
+      toast(error.message || 'Could not end session', 'bad');
+    }
+  });
+  registerSheetDismiss('word-scramble-end-sheet', () => closeWordScrambleEnd());
+
+  loadWordScrambleSettings();
 
   // ------------------------------------ Settings → On This Day in History
 

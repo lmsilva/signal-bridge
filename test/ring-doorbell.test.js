@@ -35,6 +35,7 @@ test('default Ring settings keep the doorbell copy', () => {
   assert.equal(DEFAULT_SETTINGS.message, 'Someone is at your front door');
   assert.equal(DEFAULT_SETTINGS.pushOnDing, true);
   assert.equal(DEFAULT_SETTINGS.pushOnMotion, false);
+  assert.equal(DEFAULT_SETTINGS.showTime, true);
 });
 
 test('sanitiseSettings clamps title and message', () => {
@@ -49,7 +50,7 @@ test('sanitiseSettings clamps title and message', () => {
 });
 
 test('ringDoorbellRows paints a red frame with a yellow bell and title', () => {
-  const rows = ringDoorbellRows();
+  const rows = ringDoorbellRows({ showTime: false });
   assert.equal(rows.length, 6);
   assert.equal(rows[0].every((code) => code === CHIPS.red), true);
   assert.equal(rows[5].every((code) => code === CHIPS.red), true);
@@ -61,19 +62,52 @@ test('ringDoorbellRows paints a red frame with a yellow bell and title', () => {
 });
 
 test('a short message keeps the two-row bell motif', () => {
-  const rows = ringDoorbellRows({ title: 'Ring Door Bell', message: 'Ding' });
+  const rows = ringDoorbellRows({ title: 'Ring Door Bell', message: 'Ding', showTime: false });
   assert.match(rowText(rows[3]), /RING DOOR BELL/);
   assert.match(rowText(rows[4]), /DING/);
   assert.ok(rows[1].includes(CHIPS.yellow));
   assert.ok(rows[2].includes(CHIPS.yellow));
 });
 
+test('showTime adds a clock row and keeps a compact bell', () => {
+  const when = new Date('2026-08-30T16:42:00-06:00');
+  const rows = ringDoorbellRows({
+    title: 'Ring Door Bell',
+    message: 'Ding',
+    showTime: true,
+    asOf: when,
+    timeZone: 'America/Denver',
+  });
+  const joined = rows.map(rowText).join('\n');
+  assert.match(joined, /RING DOOR BELL/);
+  assert.match(joined, /DING/);
+  assert.match(joined, /4:42PM/);
+  assert.ok(rows[1].includes(CHIPS.yellow));
+});
+
+test('showTime with a long message drops the bell so the clock still fits', () => {
+  const when = new Date('2026-08-30T09:05:00-06:00');
+  const rows = ringDoorbellRows({
+    showTime: true,
+    asOf: when,
+    timeZone: 'America/Denver',
+  });
+  const joined = rows.map(rowText).join('\n');
+  assert.match(joined, /RING DOOR BELL/);
+  assert.match(joined, /SOMEONE IS AT YOUR/);
+  assert.match(joined, /FRONT DOOR/);
+  assert.match(joined, /9:05AM/);
+  assert.equal(joined.includes('y'), false);
+});
+
 test('buildRingDoorbellPayload feeds the alert formatter', () => {
   const payload = buildRingDoorbellPayload({
     title: 'Front Gate',
     message: 'Visitor waiting',
+    showTime: false,
   });
   assert.equal(payload.type, TYPE);
+  assert.equal(payload.showTime, false);
   const frames = ringDoorbellFrames(payload);
   assert.equal(frames.length, 1);
   assert.equal(frames[0].priority, 'alert');

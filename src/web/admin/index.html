@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal187">
+  <link rel="stylesheet" href="styles.css?v=signal194">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -142,7 +142,7 @@
         <div class="push-block" data-push-group="games">
           <div class="section-label">Game night</div>
           <div class="card-row card-row-quad" id="push-row-games" data-push-category="games"
-               data-skeleton-count="10" aria-busy="true"></div>
+               data-skeleton-count="12" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="media">
@@ -842,6 +842,33 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="global">TinyURL</div>
+        <div class="card tinyurl-settings-card" id="tinyurl-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Short-link token</div>
+            <span class="status-pill" id="tinyurl-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="tinyurl-status-detail">
+            One TinyURL API token for Guest Book, Guest Snaps, and Games. Features may store an optional override.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="tinyurl-token">TinyURL API token</label>
+              <input type="password" id="tinyurl-token" class="field-input" placeholder="Paste token, or set TINYURL_API_TOKEN in .env" autocomplete="new-password" spellcheck="false">
+              <p class="hint" id="tinyurl-token-hint">Write-only. Stored encrypted. TINYURL_API_TOKEN in .env wins if set.</p>
+              <label class="trivia-check">
+                <input type="checkbox" id="tinyurl-clear-token">
+                <span>Clear saved token</span>
+              </label>
+              <button type="button" class="btn btn-accent btn-block" id="btn-tinyurl-save" style="margin-top:14px">Save token</button>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Used by</label>
+              <p class="hint">Guest Book, Guest Snaps, and Word Scramble. A feature override only replaces this token for that short link.</p>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="global">Weather</div>
         <div class="card weather-alerts-settings-card" id="weather-alerts-settings-card" data-settings-group="global">
           <div class="auth-head">
@@ -953,11 +980,11 @@
                 <button type="button" class="btn btn-outline" id="btn-red-letter-push">Push Now</button>
               </div>
               <p class="hint" id="red-letter-hint" style="margin-top:12px">
-                An event happening today always beats a countdown, whichever mode is picked.
+                The next one prefers a day-of message when something is happening today. A random pick can be any upcoming event.
               </p>
             </div>
             <div class="settings-col red-letter-preview-col">
-              <label class="field-label">Next on the board</label>
+              <label class="field-label" id="red-letter-preview-label">On the board</label>
               <div class="vb-bezel rl-settings-bezel" aria-hidden="true">
                 <div class="vb-grid" id="red-letter-preview"></div>
                 <div class="vb-wordmark">VESTABOARD</div>
@@ -977,9 +1004,13 @@
           </p>
           <div class="settings-columns">
             <div class="settings-col">
-              <label class="field-label" for="guest-snaps-token">TinyURL API token</label>
-              <input type="password" id="guest-snaps-token" class="field-input" placeholder="Paste token, or set TINYURL_API_TOKEN in .env" autocomplete="new-password" spellcheck="false">
-              <p class="hint" id="guest-snaps-token-hint">Shared with Guest Book. Write-only. TINYURL_API_TOKEN in .env wins if set.</p>
+              <label class="field-label" for="guest-snaps-token">TinyURL token override</label>
+              <input type="password" id="guest-snaps-token" class="field-input" placeholder="Optional — leave blank to use the global token" autocomplete="new-password" spellcheck="false">
+              <p class="hint" id="guest-snaps-token-hint">Optional. Uses the global TinyURL token unless you paste one here.</p>
+              <label class="trivia-check">
+                <input type="checkbox" id="guest-snaps-clear-override">
+                <span>Clear override</span>
+              </label>
               <label class="field-label field-label-spaced" for="guest-snaps-alias">Preferred alias</label>
               <input type="text" id="guest-snaps-alias" class="field-input" placeholder="WITTYSNAP" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
               <p class="hint">5–10 letters or digits. Must differ from the Guest Book alias.</p>
@@ -1040,9 +1071,13 @@
                 <input type="checkbox" id="guest-book-approval">
                 <span>Hold messages for approval</span>
               </label>
-              <label class="field-label field-label-spaced" for="guest-book-token">TinyURL API token</label>
-              <input type="password" id="guest-book-token" class="field-input" placeholder="Paste token, or set TINYURL_API_TOKEN in .env" autocomplete="new-password" spellcheck="false">
-              <p class="hint" id="guest-book-token-hint">Write-only. Stored encrypted. TINYURL_API_TOKEN in .env wins if set.</p>
+              <label class="field-label field-label-spaced" for="guest-book-token">TinyURL token override</label>
+              <input type="password" id="guest-book-token" class="field-input" placeholder="Optional — leave blank to use the global token" autocomplete="new-password" spellcheck="false">
+              <p class="hint" id="guest-book-token-hint">Optional. Uses the global TinyURL token unless you paste one here.</p>
+              <label class="trivia-check">
+                <input type="checkbox" id="guest-book-clear-override">
+                <span>Clear override</span>
+              </label>
               <label class="field-label field-label-spaced" for="guest-book-alias">Preferred alias</label>
               <input type="text" id="guest-book-alias" class="field-input" placeholder="WITTYBOARD" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
               <p class="hint">5–10 letters or digits. Printed as TINYURL.COM/ALIAS on the invite row.</p>
@@ -1076,8 +1111,6 @@
               <textarea id="guest-book-blocked-words" class="field-input" rows="3" placeholder="one word per line"></textarea>
             </div>
           </div>
-        </div>
-
         </div>
 
         <div class="section-label" data-settings-group="global">Ring Doorbell</div>
@@ -1133,6 +1166,10 @@
               <label class="trivia-check">
                 <input type="checkbox" id="ring-push-motion">
                 <span>Push on motion</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="ring-show-time" checked>
+                <span>Show the time on the board</span>
               </label>
               <label class="trivia-check">
                 <input type="checkbox" id="ring-quiet-exempt" checked>
@@ -2406,6 +2443,81 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="games">Word Scramble</div>
+        <div class="card word-scramble-settings-card" id="word-scramble-settings-card" data-settings-group="games">
+          <div class="auth-head">
+            <div class="auth-name">Boggle on the board</div>
+            <span class="status-pill" id="word-scramble-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="word-scramble-status-detail">
+            Invite phones to a 4×4 Word Scramble. The board holds the grid; the timer and live score stay on the phone.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="word-scramble-lobby">Lobby seconds</label>
+              <input type="number" id="word-scramble-lobby" class="field-input" min="10" max="180" value="45">
+              <label class="field-label field-label-spaced" for="word-scramble-round">Round seconds</label>
+              <input type="number" id="word-scramble-round" class="field-input" min="30" max="600" value="180">
+              <label class="field-label field-label-spaced" for="word-scramble-intermission">Intermission seconds</label>
+              <input type="number" id="word-scramble-intermission" class="field-input" min="5" max="120" value="20">
+              <label class="field-label field-label-spaced" for="word-scramble-rounds">Rounds</label>
+              <input type="number" id="word-scramble-rounds" class="field-input" min="1" max="8" value="3">
+              <label class="field-label field-label-spaced" for="word-scramble-dup">Duplicate words</label>
+              <select id="word-scramble-dup" class="field-input">
+                <option value="everyone">Everyone scores</option>
+                <option value="cancel">Cancel if two find it</option>
+              </select>
+              <label class="field-label field-label-spaced" for="word-scramble-alias">Preferred alias</label>
+              <input type="text" id="word-scramble-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+              <label class="field-label field-label-spaced" for="word-scramble-token">TinyURL token override</label>
+              <input type="password" id="word-scramble-token" class="field-input" placeholder="Optional — leave blank to use the global token" autocomplete="new-password" spellcheck="false">
+              <p class="hint" id="word-scramble-token-hint">Optional. Uses the global TinyURL token unless you paste one here.</p>
+              <label class="trivia-check">
+                <input type="checkbox" id="word-scramble-clear-override">
+                <span>Clear override</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-word-scramble-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-word-scramble-push">Push invite</button>
+                <button type="button" class="btn btn-outline" id="btn-word-scramble-sessions">Sessions</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Short link</label>
+              <div class="gb-shortlink-status" id="word-scramble-shortlink">
+                <span class="gb-dot" id="word-scramble-dot" aria-hidden="true"></span>
+                <p class="hint" id="word-scramble-shortlink-label">No short link yet.</p>
+                <p class="hint" id="word-scramble-shortlink-check">Last check —</p>
+              </div>
+              <p class="hint field-label-spaced" id="word-scramble-target-hint">Target —</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="games">Word Riddles</div>
+        <div class="card word-riddles-settings-card" id="word-riddles-settings-card" data-settings-group="games">
+          <div class="auth-head">
+            <div class="auth-name">Riddle me this</div>
+            <span class="status-pill" id="word-riddles-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="word-riddles-status-detail">
+            Local word riddles for the Vestaboard. Pick the delay between the riddle and the reveal, manage the list, or push a random one.
+          </p>
+          <label class="field-label" for="word-riddles-reveal-delay">Reveal delay</label>
+          <div class="slider-row">
+            <input type="range" id="word-riddles-reveal-delay" min="10" max="180" step="5" value="30" aria-label="Seconds between riddle and answer">
+            <span class="slider-value" id="word-riddles-reveal-delay-value">30s</span>
+          </div>
+          <label class="trivia-check">
+            <input type="checkbox" id="word-riddles-show-intro" checked>
+            <span>Show the green and blue intro card</span>
+          </label>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-word-riddles-manage">Manage riddles</button>
+            <button type="button" class="btn btn-accent" id="btn-word-riddles-push">Push Random</button>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="games">Trivia</div>
         <div class="card trivia-settings-card" id="trivia-settings-card" data-settings-group="games">
           <div class="auth-head">
@@ -2668,8 +2780,8 @@
           </div>
         </div>
 
-        <div class="card vb-settings-card" data-settings-group="media">
-          <div class="section-label" data-settings-group="media">Vestaboards</div>
+        <div class="section-label" data-settings-group="media">Vestaboards</div>
+        <div class="card vb-settings-card" id="vb-settings-card" data-settings-group="media" data-search-terms="quiet hours reminder overnight vestaboard board split-flap">
           <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network.</p>
 
           <div class="vb-board-list" id="vb-board-list">
@@ -3055,6 +3167,56 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-conversation-starters-prev">Previous</button>
         <span class="hint" id="conversation-starters-page-label"></span>
         <button type="button" class="btn btn-outline btn-sm" id="btn-conversation-starters-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Word Riddles manager -->
+  <div class="sheet-backdrop" id="word-riddles-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="word-riddles-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="word-riddles-manage-title">Manage Word Riddles</div>
+        <button type="button" class="credits-sheet-close" id="btn-word-riddles-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="word-riddles-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="word-riddles-new">New riddle</label>
+          <textarea class="field-input cn-fact-input" id="word-riddles-new" rows="3" maxlength="220" placeholder="I am an odd number. Take away a letter and I become even. What number am I?"></textarea>
+          <label class="field-label field-label-spaced" for="word-riddles-answer">Answer</label>
+          <input type="text" class="field-input" id="word-riddles-answer" maxlength="80" placeholder="Seven" autocomplete="off">
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-word-riddles-add">Add riddle</button>
+            <span class="hint" id="word-riddles-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <div class="cn-preview-head">
+            <span class="field-label">Board preview</span>
+            <div class="segmented" id="word-riddles-preview-phase" role="group" aria-label="Preview frame">
+              <button type="button" class="segmented-btn" data-wr-phase="intro">Intro</button>
+              <button type="button" class="segmented-btn active" data-wr-phase="riddle">Riddle</button>
+              <button type="button" class="segmented-btn" data-wr-phase="answer">Answer</button>
+            </div>
+          </div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="word-riddles-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="word-riddles-search" placeholder="Search riddles or answers" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="word-riddles-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="word-riddles-riddle-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-word-riddles-prev">Previous</button>
+        <span class="hint" id="word-riddles-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-word-riddles-next">Next</button>
       </div>
     </div>
   </div>
@@ -3728,6 +3890,42 @@
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
   <script src="/flap-grid.js?v=2"></script>
-  <script src="app.js?v=signal187"></script>
+  <div class="sheet-backdrop" id="word-scramble-sessions-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="word-scramble-sessions-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="word-scramble-sessions-title">Word Scramble sessions</div>
+        <button type="button" class="credits-sheet-close" id="btn-word-scramble-sessions-close" aria-label="Close">×</button>
+      </div>
+      <div class="segmented" id="word-scramble-sessions-tabs" role="tablist" aria-label="Session lists">
+        <button type="button" class="segmented-btn active" data-ws-tab="active" id="word-scramble-tab-active">Active</button>
+        <button type="button" class="segmented-btn" data-ws-tab="history" id="word-scramble-tab-history">History</button>
+      </div>
+      <div id="word-scramble-active-panel">
+        <div class="cn-fact-list" id="word-scramble-active-list"></div>
+      </div>
+      <div id="word-scramble-history-panel" hidden>
+        <div class="cn-fact-list" id="word-scramble-history-list"></div>
+        <div class="cn-pager">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-word-scramble-hist-prev">Previous</button>
+          <span class="hint" id="word-scramble-hist-page">—</span>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-word-scramble-hist-next">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="word-scramble-end-sheet" hidden>
+    <div class="sheet sheet-confirm" role="dialog" aria-modal="true" aria-labelledby="word-scramble-end-title">
+      <div class="sheet-title" id="word-scramble-end-title">End this session?</div>
+      <p class="sheet-subtext">Players will be disconnected and the game is archived as abandoned.</p>
+      <div class="sheet-actions sheet-actions-confirm">
+        <button type="button" class="btn btn-outline" id="word-scramble-end-cancel">Cancel</button>
+        <button type="button" class="btn btn-danger" id="word-scramble-end-confirm">End session</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="settings-filter.js?v=signal194"></script>
+  <script src="app.js?v=signal194"></script>
 </body>
 </html>

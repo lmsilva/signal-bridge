@@ -1988,6 +1988,17 @@ textarea.field-input.text-input-area {
   display: none !important;
 }
 
+/* Push groups a heading with its tiles in a 12px flex gap (see .push-block).
+   Settings headings are siblings of the cards in the same grid, so that 12px
+   is the only air they get and they sit on the card. Match the Push gap
+   plus a little more so a full-width card does not feel glued to the title. */
+#tab-settings .section-label {
+  margin: 16px 4px 12px;
+}
+#tab-settings .card-grid > .section-label:first-child {
+  margin-top: 0;
+}
+
 /* ---------- Push sub-nav ---------- */
 
 /* Same head as Settings — search on top, the category tabs under it — so the
@@ -3091,6 +3102,7 @@ textarea.field-input.text-input-area {
   #tab-settings .learn-language-settings-card,
   #tab-settings .locale-settings-card,
   #tab-settings .public-url-settings-card,
+  #tab-settings .tinyurl-settings-card,
   #tab-settings .guest-snaps-settings-card,
   #tab-settings .guest-book-settings-card,
   #tab-settings .ring-doorbell-settings-card,
@@ -3099,6 +3111,7 @@ textarea.field-input.text-input-area {
   #tab-settings .calendar-clock-settings-card,
   #tab-settings .red-letter-settings-card,
   #tab-settings .credits-settings-card,
+  #tab-settings .word-scramble-settings-card,
   #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card {
     grid-column: 1 / -1;
@@ -4474,12 +4487,23 @@ textarea.field-input.text-input-area {
    keep the smaller thumbnail; only the sheet compose column grows. */
 .cn-manage-sheet .cn-compose {
   gap: 16px 20px;
+  margin-bottom: 8px;
 }
 @media (min-width: 820px) {
   .cn-manage-sheet .cn-compose {
     grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
-    align-items: start;
+    align-items: stretch;
   }
+}
+/* The board is taller than a short form. Stretch the form and grow the
+   textarea so the Add button sits on the same baseline as the bezel. */
+.cn-manage-sheet .cn-compose-form {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cn-manage-sheet .cn-compose-form .cn-fact-input {
+  flex: 1 1 auto;
 }
 .cn-manage-sheet .cn-board-preview,
 .cn-manage-sheet .vb-bezel.preview-bezel {
@@ -4494,12 +4518,38 @@ textarea.field-input.text-input-area {
 .cn-preview-col {
   display: grid;
   gap: 6px;
+  align-content: start;
   justify-self: end;
   min-width: 0;
   width: 100%;
 }
 .cn-preview-col .field-label {
   text-align: right;
+}
+.cn-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 10px;
+  min-width: 0;
+}
+.cn-preview-head .field-label {
+  margin-bottom: 0;
+  text-align: left;
+  flex: 0 0 auto;
+}
+.cn-preview-head .segmented,
+.cn-preview-col .segmented {
+  margin-bottom: 0;
+}
+.cn-preview-head .segmented {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cn-preview-head .segmented-btn {
+  padding: 7px 4px;
+  font-size: 0.78rem;
 }
 .cn-manage-sheet .cn-preview-col .cn-board-preview,
 .cn-manage-sheet .cn-preview-col .vb-bezel.preview-bezel {

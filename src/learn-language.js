@@ -103,7 +103,7 @@ function slug(value) {
     || 'word';
 }
 
-function loadLexicon(languageId) {
+function loadConceptLexicon(languageId) {
   const spec = languageOf(languageId);
   const formIndex = FORM_INDEX[spec?.id];
   if (formIndex == null || !Array.isArray(CONCEPTS)) {
@@ -131,6 +131,23 @@ function loadLexicon(languageId) {
     });
   }
   return words;
+}
+
+function loadShippedLexicon(languageId) {
+  const spec = languageOf(languageId);
+  if (!spec) {
+    return null;
+  }
+  try {
+    const packed = require(`./learn-${spec.id}-words.json`);
+    return Array.isArray(packed?.words) && packed.words.length ? packed.words : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadLexicon(languageId) {
+  return loadShippedLexicon(languageId) || loadConceptLexicon(languageId);
 }
 
 function matchingWords(languageId, settings = {}) {
@@ -232,6 +249,7 @@ module.exports = {
   languageIds,
   languageOf,
   loadLexicon,
+  loadConceptLexicon,
   matchingWords,
   pickWord,
   buildLearnLanguagePayload,

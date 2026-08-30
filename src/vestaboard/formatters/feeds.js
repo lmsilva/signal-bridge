@@ -2,7 +2,7 @@
 // trivia, Flight Plan, Learn Japanese and the European Learn {Language}
 // boards, Quiet Hours Reminder, Chuck Norris,
 // Amazing Facts, Conversation Starters, Stoic Quotes, On This Day, Baking
-// Inspiration, World Population Tracker, and Calendar Clock.
+// Inspiration, Word Riddles, World Population Tracker, and Calendar Clock.
 //
 // Trivia is the only formatter that refuses work. A question that cannot fit
 // a single frame is skipped rather than paged, because a multi-frame question
@@ -34,6 +34,15 @@ const {
   badgeFrame,
   centered,
 } = require('../frames');
+
+const {
+  introRows,
+  riddleRows,
+  answerRows,
+  INTRO_DWELL_SECONDS,
+  ANSWER_DWELL_SECONDS,
+} = require('../../word-riddles');
+const { clampRevealDelay } = require('../../word-riddles-settings');
 
 const {
   formatTrackerClock,
@@ -722,6 +731,48 @@ function norrisChipRow(text) {
  * left-aligned joke, one frame when it fits, a second page if a custom
  * fact runs long.
  */
+/**
+ * Word Riddles (marketplace Entertainment): green/blue intro, airy
+ * left-aligned riddle with a VESTABOARD footer, then a letter-spaced answer.
+ */
+function wordRiddlesFrames(payload = {}) {
+  const riddle = payload.riddle?.riddle || payload.riddleText || '';
+  const answer = payload.riddle?.answer || payload.answer || '';
+  const riddleLayout = riddleRows(riddle);
+  const answerLayout = answerRows(answer);
+  if (!riddleLayout.length || !answerLayout.length) {
+    return [];
+  }
+  const frames = [];
+  if (payload.showIntro !== false) {
+    const intro = snapshotFrame(
+      assertValidLayout(introRows(), 'word riddles intro'),
+      'Word Riddles',
+      'word.riddles',
+      { base: INTRO_DWELL_SECONDS },
+    );
+    intro.dwellSeconds = INTRO_DWELL_SECONDS;
+    frames.push(intro);
+  }
+  const riddleFrame = snapshotFrame(
+    assertValidLayout(riddleLayout, 'word riddle'),
+    'Word Riddle',
+    'word.riddles',
+    { base: 15 },
+  );
+  riddleFrame.dwellSeconds = clampRevealDelay(payload.revealDelaySeconds);
+  frames.push(riddleFrame);
+  const answerFrame = snapshotFrame(
+    assertValidLayout(answerLayout, 'word riddle answer'),
+    'Word Riddle answer',
+    'word.riddles',
+    { base: ANSWER_DWELL_SECONDS },
+  );
+  answerFrame.dwellSeconds = ANSWER_DWELL_SECONDS;
+  frames.push(answerFrame);
+  return frames;
+}
+
 function chuckNorrisFrames(payload = {}) {
   const text = fold(payload.fact?.text || payload.text || '');
   if (!text) {
@@ -1507,6 +1558,7 @@ const FORMATTERS = {
   'italian.learn': learnLanguageFrames,
   'quiet-hours.reminder': quietHoursReminderFrames,
   'chuck.facts': chuckNorrisFrames,
+  'word.riddles': wordRiddlesFrames,
   'amazing.facts': amazingFactsFrames,
   'geo.facts': worldGeographyFactsFrames,
   'talk.starters': conversationStartersFrames,
@@ -1541,6 +1593,7 @@ module.exports = {
   learnLanguageFrames,
   quietHoursReminderFrames,
   chuckNorrisFrames,
+  wordRiddlesFrames,
   amazingFactsFrames,
   worldGeographyFactsFrames,
   conversationStartersFrames,

@@ -2342,6 +2342,7 @@ function createListener({
           config,
           log,
           sendUdpPayload,
+          getTimeZone: () => houseLocale.get()?.timeZone || null,
         });
         ringDoorbell.start();
 

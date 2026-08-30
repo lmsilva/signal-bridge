@@ -12,6 +12,7 @@ const gaming = require('./formatters/gaming');
 const feeds = require('./formatters/feeds');
 const signal = require('./formatters/signal');
 const cinema = require('./formatters/cinema');
+const games = require('./formatters/games');
 
 const FORMATTERS = {
   ...alexa.FORMATTERS,
@@ -20,6 +21,7 @@ const FORMATTERS = {
   ...feeds.FORMATTERS,
   ...signal.FORMATTERS,
   ...cinema.FORMATTERS,
+  ...games.FORMATTERS,
 };
 
 /**
@@ -70,6 +72,8 @@ const COMMAND_TO_TYPE = {
   'italian.learn': 'italian.learn',
   'signal.quiet-hours': 'quiet-hours.reminder',
   'chuck.facts': 'chuck.facts',
+  'word.riddles': 'word.riddles',
+  'scramble.invite': 'word.scramble',
   'amazing.facts': 'amazing.facts',
   'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',

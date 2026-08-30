@@ -126,13 +126,17 @@ const { createLocaleSettings } = require('./locale-settings');
 const { createPublicUrlSettings, publicUrl, isUsableShortLinkOrigin } = require('./public-url');
 const { createGuestBookSettings, sanitiseAlias, publicSettings } = require('./guest-book-settings');
 const { createGuestBook, guestClientIp } = require('./guest-book');
-const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH, GUESTSNAPS_NAME, GUESTSNAPS_PATH } = require('./shortlinks');
+const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH, GUESTSNAPS_NAME, GUESTSNAPS_PATH, GAMES_NAME, GAMES_PATH } = require('./shortlinks');
 const { houseTimeZone } = require('./vestaboard/clock');
 const {
   defaultCredentialsPath: defaultTinyurlCredentialsPath,
   saveTinyurlToken,
+  clearTinyurlToken,
   credentialsStatus: tinyurlCredentialsStatus,
 } = require('./tinyurl-credentials');
+const { createGameSettings } = require('./games/settings');
+const { createGameArchive } = require('./games/archive');
+const { createGameSessions, parseCookie: parseGamesCookie, cookieHeader: gamesCookieHeader } = require('./games/sessions');
 const { fetchWeatherForecast, resolveHouseLocale } = require('./weather-fetch');
 const { extractWeatherLocation } = require('./weather-location');
 const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
@@ -140,6 +144,7 @@ const { buildWeeklyWeatherPayload } = require('./weekly-weather');
 const { createLearnJapanese } = require('./learn-japanese');
 const { createLearnLanguages, languageOf } = require('./learn-language');
 const { createChuckNorris } = require('./chuck-norris');
+const { createWordRiddles } = require('./word-riddles');
 const { createAmazingFacts } = require('./amazing-facts');
 const { createWorldGeographyFacts } = require('./world-geography-facts');
 const { createConversationStarters } = require('./conversation-starters');
@@ -259,6 +264,8 @@ function resolveStaticPath(webRoot, urlPathname) {
     pathname = '/admin/login.html';
   } else if (pathname === '/guestbook' || pathname === '/guestbook/') {
     pathname = '/guestbook/index.html';
+  } else if (pathname === '/games' || pathname === '/games/') {
+    pathname = '/games/index.html';
   }
   const resolved = path.normalize(path.join(webRoot, pathname));
   if (resolved !== webRoot && !resolved.startsWith(webRoot + path.sep)) {
@@ -413,6 +420,7 @@ function createWebServer({
   guestBookSettings: guestBookSettingsInjected = null,
   guestBook: guestBookInjected = null,
   guestSnapsSettings: guestSnapsSettingsInjected = null,
+  gameSessions: gameSessionsInjected = null,
   shortlinks: shortlinksInjected = null,
   shortlinksFetch = null,
   shortlinksHealthIntervalMs = undefined,
@@ -495,9 +503,23 @@ function createWebServer({
     },
   });
   guestBook.start?.();
+  const gameSettings = createGameSettings(config, log);
+  const gameArchive = createGameArchive(config, log);
+  const gameSessions = gameSessionsInjected || createGameSessions(config, log, {
+    gameSettings,
+    archive: gameArchive,
+    getShortlink: (name) => shortlinks.status(name || GAMES_NAME),
+    pushBoard: (payload, options = {}) => {
+      if (!vestaboardHub?.pushEvent) {
+        return { boards: [] };
+      }
+      return vestaboardHub.pushEvent(payload, options);
+    },
+  });
   const learnJapanese = createLearnJapanese(config, log);
   const learnLanguages = createLearnLanguages(config, log);
   const chuckNorris = createChuckNorris(config, log);
+  const wordRiddles = createWordRiddles(config, log);
   const amazingFacts = createAmazingFacts(config, log);
   const worldGeographyFacts = createWorldGeographyFacts(config, log);
   const conversationStarters = createConversationStarters(config, log);
@@ -532,6 +554,7 @@ function createWebServer({
       config,
       log,
       sendUdpPayload,
+      getTimeZone: () => localeSettings.get()?.timeZone || null,
     }));
   // Live ding/motion subscription is owned by the listener; the web server
   // only needs the same instance for Settings / preview / Push.
@@ -619,6 +642,10 @@ function createWebServer({
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getLearnLanguageStatus: (commandId) => learnLanguages[commandId]?.statusSnapshot() || null,
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
+    getWordRiddlesStatus: () => wordRiddles.statusSnapshot(),
+    getScrambleInviteStatus: () => ({
+      inviteReady: Boolean(shortlinks.status(GAMES_NAME)?.alias),
+    }),
     getAmazingFactsStatus: () => amazingFacts.statusSnapshot(),
     getWorldGeographyFactsStatus: () => worldGeographyFacts.statusSnapshot(),
     getConversationStartersStatus: () => conversationStarters.statusSnapshot(),
@@ -2116,7 +2143,7 @@ function createWebServer({
     sendJson(res, 200, {
       ok: true,
       settings: publicSettings(settings),
-      credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'guestbook' }),
       shortlink: shortlinks.status(GUESTBOOK_NAME),
       targetPath: GUESTBOOK_PATH,
       targetUrl: publicUrl(GUESTBOOK_PATH, config),
@@ -2132,7 +2159,8 @@ function createWebServer({
       || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
       const token = String(body.apiToken || body.token || '').trim();
       if (token) {
-        if (String(process.env.TINYURL_API_TOKEN || '').trim()) {
+        if (String(process.env.TINYURL_API_TOKEN || '').trim()
+          || String(process.env.TINYURL_API_TOKEN_GUESTBOOK || '').trim()) {
           sendJson(res, 409, {
             ok: false,
             error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
@@ -2141,12 +2169,15 @@ function createWebServer({
           return;
         }
         try {
-          saveTinyurlToken(credPath, token);
+          saveTinyurlToken(credPath, token, { scope: 'guestbook' });
         } catch (error) {
           sendJson(res, 400, { ok: false, error: error?.message || String(error) });
           return;
         }
       }
+    }
+    if (body?.clearOverride || body?.clearToken) {
+      clearTinyurlToken(credPath, { scope: 'guestbook' });
     }
 
     let settings = guestBookSettings.get();
@@ -2189,7 +2220,7 @@ function createWebServer({
     sendJson(res, 200, {
       ok: true,
       settings: publicSettings(settings),
-      credentials: tinyurlCredentialsStatus(credPath),
+      credentials: tinyurlCredentialsStatus(credPath, { scope: 'guestbook' }),
       shortlink,
       targetPath: GUESTBOOK_PATH,
       targetUrl: publicUrl(GUESTBOOK_PATH, config),
@@ -2216,7 +2247,7 @@ function createWebServer({
       sendJson(res, 200, {
         ok: true,
         settings: publicSettings(settings),
-        credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+        credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'guestbook' }),
         shortlink,
         targetPath: GUESTBOOK_PATH,
         targetUrl: publicUrl(GUESTBOOK_PATH, config),
@@ -2231,7 +2262,7 @@ function createWebServer({
     sendJson(res, 200, {
       ok: true,
       settings,
-      credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'guestsnaps' }),
       shortlink: shortlinks.status(GUESTSNAPS_NAME),
       targetPath: GUESTSNAPS_PATH,
       targetUrl: publicUrl(GUESTSNAPS_PATH, config),
@@ -2247,7 +2278,8 @@ function createWebServer({
       || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
       const token = String(body.apiToken || body.token || '').trim();
       if (token) {
-        if (String(process.env.TINYURL_API_TOKEN || '').trim()) {
+        if (String(process.env.TINYURL_API_TOKEN || '').trim()
+          || String(process.env.TINYURL_API_TOKEN_GUESTSNAPS || '').trim()) {
           sendJson(res, 409, {
             ok: false,
             error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
@@ -2256,12 +2288,15 @@ function createWebServer({
           return;
         }
         try {
-          saveTinyurlToken(credPath, token);
+          saveTinyurlToken(credPath, token, { scope: 'guestsnaps' });
         } catch (error) {
           sendJson(res, 400, { ok: false, error: error?.message || String(error) });
           return;
         }
       }
+    }
+    if (body?.clearOverride || body?.clearToken) {
+      clearTinyurlToken(credPath, { scope: 'guestsnaps' });
     }
 
     const patch = {};
@@ -2289,7 +2324,7 @@ function createWebServer({
     sendJson(res, 200, {
       ok: true,
       settings,
-      credentials: tinyurlCredentialsStatus(credPath),
+      credentials: tinyurlCredentialsStatus(credPath, { scope: 'guestsnaps' }),
       shortlink,
       targetPath: GUESTSNAPS_PATH,
       targetUrl: publicUrl(GUESTSNAPS_PATH, config),
@@ -2316,7 +2351,7 @@ function createWebServer({
       sendJson(res, 200, {
         ok: true,
         settings,
-        credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+        credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'guestsnaps' }),
         shortlink,
         targetPath: GUESTSNAPS_PATH,
         targetUrl: publicUrl(GUESTSNAPS_PATH, config),
@@ -2324,6 +2359,244 @@ function createWebServer({
     } catch (error) {
       sendJson(res, 400, { ok: false, error: error?.message || String(error) });
     }
+  }
+
+  function handleTinyurlSettingsGet(res) {
+    sendJson(res, 200, {
+      ok: true,
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  function handleTinyurlSettingsPut(body, res) {
+    const credPath = tinyurlCredPath();
+    if (String(process.env.TINYURL_API_TOKEN || '').trim()) {
+      if (body?.clearToken || String(body?.apiToken || body?.token || '').trim()) {
+        sendJson(res, 409, {
+          ok: false,
+          error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
+          source: 'env',
+        });
+        return;
+      }
+    }
+    if (body?.clearToken) {
+      clearTinyurlToken(credPath);
+    }
+    const token = String(body?.apiToken || body?.token || '').trim();
+    if (token) {
+      try {
+        saveTinyurlToken(credPath, token);
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+        return;
+      }
+    }
+    sendJson(res, 200, {
+      ok: true,
+      credentials: tinyurlCredentialsStatus(credPath),
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  function scrambleSettingsPayload() {
+    const settings = gameSettings.get('scramble');
+    return {
+      ok: true,
+      settings,
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'games' }),
+      shortlink: shortlinks.status(GAMES_NAME),
+      targetPath: GAMES_PATH,
+      targetUrl: publicUrl(GAMES_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
+      ...publicUrlEnvNote(),
+    };
+  }
+
+  function handleWordScrambleSettingsGet(res) {
+    sendJson(res, 200, scrambleSettingsPayload());
+  }
+
+  async function handleWordScrambleSettingsPut(body, res) {
+    const credPath = tinyurlCredPath();
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'apiToken')
+      || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
+      const token = String(body.apiToken || body.token || '').trim();
+      if (token) {
+        if (String(process.env.TINYURL_API_TOKEN || '').trim()
+          || String(process.env.TINYURL_API_TOKEN_GAMES || '').trim()) {
+          sendJson(res, 409, {
+            ok: false,
+            error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
+            source: 'env',
+          });
+          return;
+        }
+        try {
+          saveTinyurlToken(credPath, token, { scope: 'games' });
+        } catch (error) {
+          sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+          return;
+        }
+      }
+    }
+    if (body?.clearOverride || body?.clearToken) {
+      clearTinyurlToken(credPath, { scope: 'games' });
+    }
+    const patch = {};
+    for (const key of [
+      'lobbySeconds', 'roundSeconds', 'intermissionSeconds', 'rounds',
+      'inviteTtlMinutes', 'idleTimeoutSeconds', 'maxPlayers', 'minSolutions',
+      'duplicateRule',
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+        patch[key] = body[key];
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'preferredAlias')) {
+      patch.preferredAlias = body.preferredAlias;
+    }
+    if (Object.keys(patch).length) {
+      gameSettings.update('scramble', patch);
+    }
+    const settings = gameSettings.get('scramble');
+    let shortlink = shortlinks.status(GAMES_NAME);
+    if (settings.preferredAlias) {
+      try {
+        await shortlinks.ensure(GAMES_NAME, GAMES_PATH, {
+          preferredAlias: settings.preferredAlias,
+        });
+        shortlink = shortlinks.status(GAMES_NAME);
+      } catch (error) {
+        log.warn?.('Word Scramble short link failed', error?.message || error);
+      }
+    }
+    sendJson(res, 200, { ...scrambleSettingsPayload(), shortlink });
+  }
+
+  async function handleWordScramblePush(body, res) {
+    try {
+      const settings = gameSettings.get('scramble');
+      if (settings.preferredAlias) {
+        try {
+          await shortlinks.ensure(GAMES_NAME, GAMES_PATH, {
+            preferredAlias: settings.preferredAlias,
+          });
+        } catch (error) {
+          log.warn?.('Word Scramble invite short link failed', error?.message || error);
+        }
+      }
+      const session = gameSessions.create({ gameType: 'scramble' });
+      log.info('Word Scramble invite', { code: session.code });
+      sendJson(res, 200, { ok: true, type: 'word.scramble', session });
+    } catch (error) {
+      sendJson(res, 409, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleGameSessionsGet(res) {
+    sendJson(res, 200, { ok: true, sessions: gameSessions.listActive() });
+  }
+
+  function handleGameSessionsHistory(query, res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...gameSessions.history({
+        offset: query?.offset,
+        limit: query?.limit || query?.pageSize,
+      }),
+    });
+  }
+
+  function handleGameSessionsEnd(body, res) {
+    const result = gameSessions.end(body?.sessionId || body?.id);
+    sendJson(res, result.ok ? 200 : 404, result);
+  }
+
+  function handleGamesSessionGet(query, res) {
+    const session = gameSessions.getByCode(query?.code);
+    if (!session) {
+      sendJson(res, 404, { ok: false, error: 'No game uses that code' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, session: gameSessions.publicSession(session) });
+  }
+
+  function handleGamesJoin(body, req, res) {
+    const seated = parseGamesCookie(req.headers.cookie);
+    const result = gameSessions.join({
+      code: body?.code,
+      name: body?.name,
+      playerId: seated.playerId,
+    });
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    const data = JSON.stringify({
+      ok: true,
+      player: result.player,
+      session: result.session,
+    });
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': gamesCookieHeader(result.cookie),
+    });
+    res.end(data);
+  }
+
+  function handleGamesSubmit(body, req, res) {
+    const seated = parseGamesCookie(req.headers.cookie);
+    const result = gameSessions.submit({
+      sessionId: seated.sessionId || body?.sessionId,
+      playerId: seated.playerId,
+      action: body?.action || 'word',
+      payload: body?.payload || {},
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleGamesLeave(req, res) {
+    const seated = parseGamesCookie(req.headers.cookie);
+    const result = gameSessions.leave({
+      sessionId: seated.sessionId,
+      playerId: seated.playerId,
+    });
+    sendJson(res, 200, result);
+  }
+
+  function handleGamesEvents(req, reqUrl, res) {
+    const sessionId = String(reqUrl.searchParams.get('sessionId') || '').trim();
+    const session = gameSessions.getById(sessionId);
+    if (!session) {
+      sendJson(res, 404, { ok: false, error: 'Session not found' });
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    });
+    res.write(': connected\n\n');
+    res.write(`event: session\ndata: ${JSON.stringify({
+      reason: 'hello',
+      session: gameSessions.publicSession(session),
+    })}\n\n`);
+    const unsubscribe = gameSessions.subscribe(sessionId, res);
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+    if (typeof heartbeat.unref === 'function') heartbeat.unref();
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
   }
 
   function handleGuestbookStatus(res) {
@@ -2479,6 +2752,7 @@ function createWebServer({
         message: body?.message,
         pushOnDing: body?.pushOnDing,
         pushOnMotion: body?.pushOnMotion,
+        showTime: body?.showTime,
         quietHoursExempt: body?.quietHoursExempt,
         cameraIds: body?.cameraIds,
       });
@@ -2495,6 +2769,7 @@ function createWebServer({
     const payload = service.previewPayload({
       title: body?.title,
       message: body?.message,
+      showTime: body?.showTime,
       kind: body?.kind,
     });
     sendJson(res, 200, { ok: true, payload, rows: payload.rows });
@@ -2604,6 +2879,7 @@ function createWebServer({
     const payload = service.nextPayload({
       title: body?.title,
       message: body?.message,
+      showTime: body?.showTime,
       kind: body?.kind || 'ding',
     });
     const targetId = plexTargetId(body);
@@ -3121,6 +3397,73 @@ function createWebServer({
       type: payload.type,
       targetId,
       word: payload.word,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleWordRiddlesGet(query, res) {
+    sendJson(res, 200, { ok: true, ...wordRiddles.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleWordRiddlePost(body, res) {
+    const result = wordRiddles.addRiddle(body?.riddle, body?.answer);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWordRiddlePut(body, res) {
+    const result = wordRiddles.updateRiddle(body?.id, {
+      riddle: body?.riddle,
+      answer: body?.answer,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWordRiddlesSettingsPut(body, res) {
+    const result = wordRiddles.updateSettings({
+      revealDelaySeconds: body?.revealDelaySeconds,
+      showIntro: body?.showIntro,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWordRiddlesPush(body, res) {
+    const payload = wordRiddles.nextPayload({
+      revealDelaySeconds: body?.revealDelaySeconds,
+      showIntro: body?.showIntro,
+    });
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Word Riddles are left — open Settings → Game night',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Word riddle', { targetId, id: payload.riddle.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      riddle: payload.riddle,
+      revealDelaySeconds: payload.revealDelaySeconds,
+      showIntro: payload.showIntro,
       vestaboard: delivery?.vestaboard || null,
     });
   }
@@ -3651,6 +3994,8 @@ function createWebServer({
     return {
       ...redLetter.statusSnapshot(),
       events: dateBook.withNext(),
+      // Same pick Push Now uses, so the settings bezel is not stuck on nextUp.
+      boardPreview: redLetter.nextPayload({ trigger: 'push' }),
     };
   }
 
@@ -3662,9 +4007,12 @@ function createWebServer({
     const settings = body?.reset
       ? redLetter.resetSettings()
       : redLetter.updateSettings({
-        pushSelection: body?.pushSelection,
-        scheduleSelection: body?.scheduleSelection,
-        showTime: body?.showTime,
+        ...(body && Object.prototype.hasOwnProperty.call(body, 'pushSelection')
+          ? { pushSelection: body.pushSelection } : {}),
+        ...(body && Object.prototype.hasOwnProperty.call(body, 'scheduleSelection')
+          ? { scheduleSelection: body.scheduleSelection } : {}),
+        ...(body && Object.prototype.hasOwnProperty.call(body, 'showTime')
+          ? { showTime: body.showTime } : {}),
       });
     sendJson(res, 200, { ok: true, ...redLetterState(), settings });
   }
@@ -4292,6 +4640,10 @@ function createWebServer({
           handleLearnLanguagePush('german', body, res); break;
         case 'italian.learn':
           handleLearnLanguagePush('italian', body, res); break;
+        case 'scramble.invite':
+          await handleWordScramblePush(body, res); break;
+        case 'word.riddles':
+          handleWordRiddlesPush(body, res); break;
         case 'chuck.facts':
           handleChuckNorrisPush(body, res); break;
         case 'amazing.facts':
@@ -7014,6 +7366,9 @@ function createWebServer({
       const vBoothCss = assetVersionBeside(filePath, 'booth.css');
       const vGuestJs = assetVersionBeside(filePath, 'guestbook.js');
       const vGuestCss = assetVersionBeside(filePath, 'guestbook.css');
+      const vGamesJs = assetVersionBeside(filePath, 'games.js');
+      const vGamesCss = assetVersionBeside(filePath, 'games.css');
+      const vScrambleJs = assetVersionBeside(filePath, 'scramble.js');
       let vFlap = String(Date.now());
       let vBezel = String(Date.now());
       try {
@@ -7033,6 +7388,9 @@ function createWebServer({
         .replace(/(src="(?:\.\/)?booth\.js)(?:\?[^"]*)?(")/, `$1?v=${vBoothJs}$2`)
         .replace(/(href="(?:\.\/)?guestbook\.css)(?:\?[^"]*)?(")/, `$1?v=${vGuestCss}$2`)
         .replace(/(src="(?:\.\/)?guestbook\.js)(?:\?[^"]*)?(")/, `$1?v=${vGuestJs}$2`)
+        .replace(/(href="(?:\.\/)?games\.css)(?:\?[^"]*)?(")/, `$1?v=${vGamesCss}$2`)
+        .replace(/(src="(?:\.\/)?games\.js)(?:\?[^"]*)?(")/, `$1?v=${vGamesJs}$2`)
+        .replace(/(src="(?:\.\/)?scramble\.js)(?:\?[^"]*)?(")/, `$1?v=${vScrambleJs}$2`)
         .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`)
         .replace(/(href="(?:\/)?vestaboard-bezel\.css)(?:\?[^"]*)?(")/, `href="/vestaboard-bezel.css?v=${vBezel}"`);
       html = inlinePushCatalog(html);
@@ -7271,6 +7629,14 @@ function createWebServer({
           handleGuestbookStatus(res);
           return;
         }
+        if (pathname === '/api/games/session') {
+          handleGamesSessionGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/games/events') {
+          handleGamesEvents(req, reqUrl, res);
+          return;
+        }
         if (pathname === '/api/displays') {
           handleDisplaysList(res);
           return;
@@ -7414,6 +7780,26 @@ function createWebServer({
           handlePublicUrlSettingsGet(res);
           return;
         }
+        if (pathname === '/api/tinyurl/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleTinyurlSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/word-scramble/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWordScrambleSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/game-sessions') {
+          if (!requireAdminSession(req, res)) return;
+          handleGameSessionsGet(res);
+          return;
+        }
+        if (pathname === '/api/game-sessions/history') {
+          if (!requireAdminSession(req, res)) return;
+          handleGameSessionsHistory(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
         if (pathname === '/api/guest-book/settings') {
           if (!requireAdminSession(req, res)) return;
           handleGuestBookSettingsGet(res);
@@ -7471,6 +7857,16 @@ function createWebServer({
             handleLearnLanguageSettingsGet(learnSettings[1], res);
             return;
           }
+        }
+        if (pathname === '/api/word-riddles/riddles') {
+          if (!requireAdminSession(req, res)) return;
+          handleWordRiddlesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/word-riddles/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWordRiddlesGet({}, res);
+          return;
         }
         if (pathname === '/api/chuck-norris/facts') {
           if (!requireAdminSession(req, res)) return;
@@ -7725,6 +8121,18 @@ function createWebServer({
           await handlePublicUrlSettingsPut(body, res);
           return;
         }
+        if (pathname === '/api/tinyurl/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          handleTinyurlSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/word-scramble/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handleWordScrambleSettingsPut(body, res);
+          return;
+        }
         if (pathname === '/api/guest-book/settings' && req.method === 'PUT') {
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
@@ -7839,6 +8247,18 @@ function createWebServer({
         }
         if (pathname === '/api/guestbook/send') {
           handleGuestbookSend(body, req, res);
+          return;
+        }
+        if (pathname === '/api/games/join') {
+          handleGamesJoin(body, req, res);
+          return;
+        }
+        if (pathname === '/api/games/submit') {
+          handleGamesSubmit(body, req, res);
+          return;
+        }
+        if (pathname === '/api/games/leave') {
+          handleGamesLeave(req, res);
           return;
         }
         if (pathname === '/api/qr/image-upload') {
@@ -8090,6 +8510,18 @@ function createWebServer({
           case '/api/public-url/settings':
             await handlePublicUrlSettingsPut(body, res);
             return;
+          case '/api/tinyurl/settings':
+            handleTinyurlSettingsPut(body, res);
+            return;
+          case '/api/word-scramble/settings':
+            await handleWordScrambleSettingsPut(body, res);
+            return;
+          case '/api/game-sessions/end':
+            handleGameSessionsEnd(body, res);
+            return;
+          case '/api/push/word-scramble':
+            await handleWordScramblePush(body, res);
+            return;
           case '/api/guest-book/settings':
             await handleGuestBookSettingsPut(body, res);
             return;
@@ -8188,6 +8620,19 @@ function createWebServer({
             return;
           case '/api/push/learn-italian':
             handleLearnLanguagePush('italian', body, res);
+            return;
+          case '/api/push/word-riddles':
+            handleWordRiddlesPush(body, res);
+            return;
+          case '/api/word-riddles/riddles':
+            if (body?.id) {
+              handleWordRiddlePut(body, res);
+            } else {
+              handleWordRiddlePost(body, res);
+            }
+            return;
+          case '/api/word-riddles/settings':
+            handleWordRiddlesSettingsPut(body, res);
             return;
           case '/api/push/chuck-norris':
             handleChuckNorrisPush(body, res);
@@ -8479,6 +8924,7 @@ function createWebServer({
 
   function stop() {
     guestBook.stop?.();
+    gameSessions.stop?.();
     shortlinks.stop?.();
     scheduler.stop();
     rollCreditsInstance.close?.();

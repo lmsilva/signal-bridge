@@ -560,6 +560,22 @@ test('holdSeconds keeps the next snapshot off the board until the hold ends', as
   assert.equal(h.transport.posts.length, 2);
 });
 
+test('a Word Scramble hold parks a scheduler snapshot but not an explicit push', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{
+    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    dwellSeconds: 15,
+    holdSeconds: 180,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  h.queue.submit([frame('AIR NOW', 3)], { explicit: true, breakHold: true });
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 3);
+});
+
 test('an explicit snapshot may post after the rate window during a guest hold', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);

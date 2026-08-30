@@ -1,0 +1,2882 @@
+{
+  "source": "crawsome/riddles (Unlicense), nkilm/riddles-api (MIT), public-domain classics",
+  "builtAt": "2026-08-30T16:52:46.248Z",
+  "count": 575,
+  "riddles": [
+    {
+      "id": "wr-75e5a7c976",
+      "riddle": "{ I GO UP AND DOWN.... BUT NEVER MOVE. WHO AM I?",
+      "answer": "STAIRS"
+    },
+    {
+      "id": "wr-4ef862b10a",
+      "riddle": "{ People walk on me day and night. I never sleep...... Who am I?",
+      "answer": "A sidewalk"
+    },
+    {
+      "id": "wr-418908a512",
+      "riddle": "A beggar's brother died, but the man who died had no brother. How could this be?",
+      "answer": "The beggar was a woman"
+    },
+    {
+      "id": "wr-06a19bb801",
+      "riddle": "A box without hinges, lock or key, yet golden treasure lies within.",
+      "answer": "egg"
+    },
+    {
+      "id": "wr-14b7ce4bda",
+      "riddle": "A dragons tooth in a mortals hand, I kill, I maim, I divide the land.",
+      "answer": "sword"
+    },
+    {
+      "id": "wr-398c74a8f1",
+      "riddle": "A father's child, a mother's child, yet no one's son. Who am I?",
+      "answer": "I'm their daughter"
+    },
+    {
+      "id": "wr-6ecf5ed8bb",
+      "riddle": "A father's child, a mother's child, yet no one's son. Who am I?",
+      "answer": "The daughter"
+    },
+    {
+      "id": "wr-f96b5e814c",
+      "riddle": "A father's child, a mother's child, yet no one's son. Who am I.",
+      "answer": "I'm their daughter"
+    },
+    {
+      "id": "wr-f73133c680",
+      "riddle": "A hill full, a hole full, yet you cannot catch a bowl full.",
+      "answer": "mist"
+    },
+    {
+      "id": "wr-1465568afd",
+      "riddle": "A house full, a yard full, a chimney full, no one can get a spoonful.",
+      "answer": "smoke"
+    },
+    {
+      "id": "wr-bb27b826f7",
+      "riddle": "A hundred feet in the air, but it's back is on the ground. What is it?",
+      "answer": "A centipede flipped over"
+    },
+    {
+      "id": "wr-6a933f3b72",
+      "riddle": "A leathery snake, with a stinging bite. I'll stay coiled up, unless I must fight.",
+      "answer": "whip"
+    },
+    {
+      "id": "wr-e5f3816ddf",
+      "riddle": "A little house full of meat, no door to go in and eat.",
+      "answer": "nut"
+    },
+    {
+      "id": "wr-2bd29ba536",
+      "riddle": "A man but an animal, a horn with two hands. What am I?",
+      "answer": "A Minotaur"
+    },
+    {
+      "id": "wr-0471a5cf59",
+      "riddle": "A man was born in 1898 He is still alive now at the age 33 How is this possible ?",
+      "answer": "he was born in room 1898 in the hospital"
+    },
+    {
+      "id": "wr-9179ba2853",
+      "riddle": "A nut cracker up in a tree.",
+      "answer": "squirrel"
+    },
+    {
+      "id": "wr-1992bdf0e6",
+      "riddle": "A skin have I, more eyes than one. I can be very nice when I am done.",
+      "answer": "potato"
+    },
+    {
+      "id": "wr-549812afe7",
+      "riddle": "A tiny bead, like fragile glass, strung along a cord of grass.",
+      "answer": "dew"
+    },
+    {
+      "id": "wr-1c136a1e0e",
+      "riddle": "A word I know, six letters it contains. Subtract just one and twelve remains.",
+      "answer": "dozens"
+    },
+    {
+      "id": "wr-89c2d8a370",
+      "riddle": "Almost everyone needs it, asks for it, gives it. But almost nobody takes it.",
+      "answer": "advice"
+    },
+    {
+      "id": "wr-080ddc5a64",
+      "riddle": "Although my cow is dead, I still beat her What a racket she makes.",
+      "answer": "drum"
+    },
+    {
+      "id": "wr-241931497e",
+      "riddle": "As light as a feather, but you can’t hold it for ten minutes.",
+      "answer": "breath"
+    },
+    {
+      "id": "wr-4eb67c875a",
+      "riddle": "As round as an apple. As deep as a cup. All the king's horses can't pull it up.",
+      "answer": "well"
+    },
+    {
+      "id": "wr-e2b54a470b",
+      "riddle": "At night I come without being fetched. By day I am lost without being stolen.",
+      "answer": "stars"
+    },
+    {
+      "id": "wr-e8831593d2",
+      "riddle": "Big as a biscuit, deep as a cup, even a river can't fill it up. What is it?",
+      "answer": "A kitchen strainer"
+    },
+    {
+      "id": "wr-d747d8d670",
+      "riddle": "Blend a teapot shot so the pearlies won’t rot!",
+      "answer": "toothpaste"
+    },
+    {
+      "id": "wr-2609a26551",
+      "riddle": "Break it and it is better, immediately set and harder to break again.",
+      "answer": "record"
+    },
+    {
+      "id": "wr-6ed75b9cf7",
+      "riddle": "Bright as diamonds, Loud as thunder, Never still, A thing of wonder.",
+      "answer": "waterfall"
+    },
+    {
+      "id": "wr-518012f08a",
+      "riddle": "Captain is to Private as Master is to",
+      "answer": "Slave"
+    },
+    {
+      "id": "wr-53f7a214a7",
+      "riddle": "Come up and let us go. Go down and here we stay.",
+      "answer": "anchor"
+    },
+    {
+      "id": "wr-257df01602",
+      "riddle": "David's father has three sons : Snap, Krackel, and _____ ?",
+      "answer": "David. (remember it's Davids father)"
+    },
+    {
+      "id": "wr-cfa81ad13f",
+      "riddle": "Determine what letter should replace the ? at the end: M M L J A R C C G E P C ?",
+      "answer": "T"
+    },
+    {
+      "id": "wr-31c9ee6168",
+      "riddle": "Different lights do make me strange, thus into different sizes I will change.",
+      "answer": "pupil"
+    },
+    {
+      "id": "wr-99afa87af0",
+      "riddle": "Face with a tree, skin like the sea. A great beast I am. Yet vermin frightens me.",
+      "answer": "elephant"
+    },
+    {
+      "id": "wr-c675ba7c56",
+      "riddle": "Feed me and I live, give me drink and I die.",
+      "answer": "fire"
+    },
+    {
+      "id": "wr-2b823eaf8f",
+      "riddle": "Flat as a leaf, round as a ring. Has two eyes, can't see a thing.",
+      "answer": "button"
+    },
+    {
+      "id": "wr-59bfa37af5",
+      "riddle": "Forward I am heavy, backward I am not. What am I?",
+      "answer": "Ton"
+    },
+    {
+      "id": "wr-bb4e235bc4",
+      "riddle": "Forward I’m heavy, but backwards I’m not.",
+      "answer": "ton"
+    },
+    {
+      "id": "wr-664bec0f57",
+      "riddle": "Gets rid of bad ones, short and tall. Tightens when used, one size fits all.",
+      "answer": "noose"
+    },
+    {
+      "id": "wr-e090a75c69",
+      "riddle": "Give it food and it will live, give it water and it will die.",
+      "answer": "fire"
+    },
+    {
+      "id": "wr-dafc57eafb",
+      "riddle": "Glittering points that downward thrust. Sparkling spears that never rust.",
+      "answer": "icicle"
+    },
+    {
+      "id": "wr-d6f7c84a8c",
+      "riddle": "Goes over all the hills and hollows. Bites hard, but never swallows.",
+      "answer": "frost"
+    },
+    {
+      "id": "wr-d7a6691968",
+      "riddle": "Hard to catch, easy to hold. Can't be seen, unless it's cold.",
+      "answer": "breath"
+    },
+    {
+      "id": "wr-96b850cc43",
+      "riddle": "He has married many women but has never married.",
+      "answer": "priest"
+    },
+    {
+      "id": "wr-5cacf6e3cb",
+      "riddle": "He has married many women, but has never been married. Who is he?",
+      "answer": "A preacher"
+    },
+    {
+      "id": "wr-c5986b0d77",
+      "riddle": "Hold the tail, while I fish for you.",
+      "answer": "net"
+    },
+    {
+      "id": "wr-47c5ffd25b",
+      "riddle": "How Far Can You Walk into the woods?",
+      "answer": "HalfWay"
+    },
+    {
+      "id": "wr-7f60d90432",
+      "riddle": "How far will a blind dog walk into a forest?",
+      "answer": "halfway"
+    },
+    {
+      "id": "wr-483019d661",
+      "riddle": "how many animals did moses take on the arc with him?",
+      "answer": "none. noah went on the arc not moses"
+    },
+    {
+      "id": "wr-302944f25f",
+      "riddle": "How many months have 28 days?",
+      "answer": "All of them"
+    },
+    {
+      "id": "wr-253befbc90",
+      "riddle": "How many of each type of animal did Moses take on the Ark?",
+      "answer": "None, it was Noah"
+    },
+    {
+      "id": "wr-9de44110e6",
+      "riddle": "How many three cent stamps are in a dozen?",
+      "answer": "A dozen, although you probably said four"
+    },
+    {
+      "id": "wr-0cd54a49e8",
+      "riddle": "I am a box that holds keys without locks, yet they can unlock your soul.",
+      "answer": "piano"
+    },
+    {
+      "id": "wr-350fa459c5",
+      "riddle": "I am a box that holds keys without locks, yet they can unlock your soul. What am I?",
+      "answer": "A Piano"
+    },
+    {
+      "id": "wr-65d243a985",
+      "riddle": "I am a fathers child and a mothers child, yet I am not a son. Who am I?",
+      "answer": "I am their daughter"
+    },
+    {
+      "id": "wr-b1e7d3a280",
+      "riddle": "I am a tree, but I am very small... Who am I?",
+      "answer": "grass"
+    },
+    {
+      "id": "wr-65ebdf7a5e",
+      "riddle": "I am always hungry, I must always be fed, The finger I lick Will soon turn red.",
+      "answer": "I am Fire"
+    },
+    {
+      "id": "wr-fa33ca7b71",
+      "riddle": "I am always hungry, I must always be fed. The finger I lick will soon turn red.",
+      "answer": "fire"
+    },
+    {
+      "id": "wr-f1cfbfe2e5",
+      "riddle": "I am an odd number. Take away a letter and I become even. What number am I?",
+      "answer": "Seven"
+    },
+    {
+      "id": "wr-78bdf560ab",
+      "riddle": "I am not alive, but I grow; I don’t have lungs, but I need air; What am I?",
+      "answer": "A fire"
+    },
+    {
+      "id": "wr-346cc2c2c7",
+      "riddle": "I am only useful When I am full, Yet I am always Full of holes.",
+      "answer": "I am a Sponge"
+    },
+    {
+      "id": "wr-dd5d2f9a10",
+      "riddle": "I am six letters. When you take one away I am twelve. What am I?",
+      "answer": "The word Dozens"
+    },
+    {
+      "id": "wr-4249fc41cb",
+      "riddle": "I am so simple that I can only point. Yet I guide men all over the world.",
+      "answer": "compass"
+    },
+    {
+      "id": "wr-47acde0ec8",
+      "riddle": "I am that which is hunted, and this panes me. Do you dig, Stone? What am I?",
+      "answer": "Quarry"
+    },
+    {
+      "id": "wr-66bb1bc7b4",
+      "riddle": "I am the red tongue of the earth, that buries cities.",
+      "answer": "lava"
+    },
+    {
+      "id": "wr-fb239e63df",
+      "riddle": "I am the shortest complete sentence in the English language. What am I?",
+      "answer": "What am I? I am"
+    },
+    {
+      "id": "wr-48e0516028",
+      "riddle": "I am the yellow hem of the sea's blue skirt.",
+      "answer": "beach"
+    },
+    {
+      "id": "wr-c6c7e19c49",
+      "riddle": "I am thin, tall and I cannot walk but I have a tilted head . What am I!?",
+      "answer": "The number 1"
+    },
+    {
+      "id": "wr-5e54a6e53f",
+      "riddle": "I bind it and it walks. I loose it and it stops.",
+      "answer": "sandal"
+    },
+    {
+      "id": "wr-f340a3a630",
+      "riddle": "I bubble and laugh and spit water in your face. I am no lady, and I don't wear lace.",
+      "answer": "fountain"
+    },
+    {
+      "id": "wr-40dc6b7dbd",
+      "riddle": "I build up castles. I tear down mountains. I make some men blind. I help others to see.",
+      "answer": "sand"
+    },
+    {
+      "id": "wr-9084eb8abf",
+      "riddle": "I can be cracked, I can be made. I can be told, I can be played.",
+      "answer": "joke"
+    },
+    {
+      "id": "wr-cd851890fb",
+      "riddle": "I can be cracked, I can be made. I can be told, I can be played. What am I?",
+      "answer": "A Joke!"
+    },
+    {
+      "id": "wr-49caac4b96",
+      "riddle": "I can be written, I can be spoken, I can be exposed, I can be broken.",
+      "answer": "news"
+    },
+    {
+      "id": "wr-03c795b7b1",
+      "riddle": "I can go up and down without moving.",
+      "answer": "A staircase"
+    },
+    {
+      "id": "wr-84107f186b",
+      "riddle": "I can run but not walk. Wherever I go, thought follows close behind.",
+      "answer": "nose"
+    },
+    {
+      "id": "wr-0190453c0a",
+      "riddle": "I crawl on the earth. And rise on a pillar.",
+      "answer": "shadow"
+    },
+    {
+      "id": "wr-bf5df77bd2",
+      "riddle": "I drive men mad for love of me. Easily beaten, never free.",
+      "answer": "gold"
+    },
+    {
+      "id": "wr-7f7562fd48",
+      "riddle": "I give milk and have a horn but I'm not a cow? What am I?",
+      "answer": "I carry milk A milk truck"
+    },
+    {
+      "id": "wr-91b516947b",
+      "riddle": "I have a neck but no head. I have a body but no arm. I have a bottom but no leg.",
+      "answer": "bottle"
+    },
+    {
+      "id": "wr-02a10689b8",
+      "riddle": "I have four legs but no tail. Usually I am heard only at night.",
+      "answer": "frog"
+    },
+    {
+      "id": "wr-508569c6e9",
+      "riddle": "I have no ears but I am told. What am I?",
+      "answer": "A story"
+    },
+    {
+      "id": "wr-cc138b7017",
+      "riddle": "I have no eyes but I can shed tears. What am I?",
+      "answer": "A cloud"
+    },
+    {
+      "id": "wr-a78411d072",
+      "riddle": "I have no feet but I can dance. What am I?",
+      "answer": "A flame"
+    },
+    {
+      "id": "wr-6a248ffcb4",
+      "riddle": "I have no hands but I can wave. What am I?",
+      "answer": "A flag"
+    },
+    {
+      "id": "wr-f38fabef20",
+      "riddle": "I have no legs but I can run. What am I?",
+      "answer": "A nose"
+    },
+    {
+      "id": "wr-2df4a17e1c",
+      "riddle": "I have no legs or arms but I still eat with a fork everyday, What am I?",
+      "answer": "a snake"
+    },
+    {
+      "id": "wr-527032d09a",
+      "riddle": "I have no life, but I can die. What am I?",
+      "answer": "A battery"
+    },
+    {
+      "id": "wr-14d244ac5a",
+      "riddle": "I have no lungs but I need air. What am I?",
+      "answer": "A fire"
+    },
+    {
+      "id": "wr-64f3260372",
+      "riddle": "I have no mouth but I can whisper. What am I?",
+      "answer": "The wind"
+    },
+    {
+      "id": "wr-925afddb23",
+      "riddle": "I have no voice but I can tell you stories. What am I?",
+      "answer": "A book"
+    },
+    {
+      "id": "wr-28f75e89bb",
+      "riddle": "I have no wings but I can fly. What am I?",
+      "answer": "Time"
+    },
+    {
+      "id": "wr-c8067479ae",
+      "riddle": "I hide but my head is outside.",
+      "answer": "nail"
+    },
+    {
+      "id": "wr-b57e421773",
+      "riddle": "I killed one fourth of mankind. Who am I?",
+      "answer": "Cain (who killed Abel)"
+    },
+    {
+      "id": "wr-67f0076c47",
+      "riddle": "I know a word of letters three. Add two, and fewer there will be!",
+      "answer": "few"
+    },
+    {
+      "id": "wr-8434b2bf28",
+      "riddle": "I know a word of letters three. Add two, and fewer there will be.",
+      "answer": "The word “Few“"
+    },
+    {
+      "id": "wr-ab947ef2b7",
+      "riddle": "I look at you, you look at me, I raise my right, you raise your left.",
+      "answer": "mirror"
+    },
+    {
+      "id": "wr-9f7acfff0f",
+      "riddle": "I move without wings, Between silken string, I leave as you find, My substance behind.",
+      "answer": "spider"
+    },
+    {
+      "id": "wr-77710e97bf",
+      "riddle": "I pass before the sun, but make no shadow.",
+      "answer": "wind"
+    },
+    {
+      "id": "wr-3bc0ed511b",
+      "riddle": "I run around the city, but I never move.",
+      "answer": "wall"
+    },
+    {
+      "id": "wr-3841c50580",
+      "riddle": "I sleep by day, I fly by night. I have no feathers to aid my flight.",
+      "answer": "bat"
+    },
+    {
+      "id": "wr-89f820e274",
+      "riddle": "I wear a red robe, with staff in hand, and a stone in my throat.",
+      "answer": "cherry"
+    },
+    {
+      "id": "wr-29defb7f74",
+      "riddle": "I'm a god, a planet, and measurer of heat. Who am I?",
+      "answer": "Mercury"
+    },
+    {
+      "id": "wr-19020a610b",
+      "riddle": "I'm a god. I'm a planet. I measure heat.",
+      "answer": "mercury"
+    },
+    {
+      "id": "wr-dc90b856f2",
+      "riddle": "I'm as big as an elephant, but lighter than a feather. What am I?",
+      "answer": "The Wind"
+    },
+    {
+      "id": "wr-f7c565efae",
+      "riddle": "I'm full of holes, yet I'm full of water.",
+      "answer": "sponge"
+    },
+    {
+      "id": "wr-e8b1e2e20d",
+      "riddle": "I'm tall when I'm young and short when I'm old. What am I?",
+      "answer": "A candle"
+    },
+    {
+      "id": "wr-45cab2908d",
+      "riddle": "I'm the source of all emotion, but I'm caged in a white prison.",
+      "answer": "heart"
+    },
+    {
+      "id": "wr-d1357ca3cf",
+      "riddle": "I'm white, I'm round, but not always around. Sometimes you see me, sometimes you don't.",
+      "answer": "moon"
+    },
+    {
+      "id": "wr-ac4c956f93",
+      "riddle": "If a fire hydrant has H2O inside, what does it have on the outside?",
+      "answer": "K9P (you'll get it eventually)"
+    },
+    {
+      "id": "wr-14845b1ce9",
+      "riddle": "If a rooster laid a brown egg and a white egg, what kind of chicks would hatch?",
+      "answer": "Roosters don't lay eggs"
+    },
+    {
+      "id": "wr-966c7aaf3d",
+      "riddle": "If life gets tough, what do you have that you can always count on?",
+      "answer": "Your fingers!"
+    },
+    {
+      "id": "wr-cea2217de8",
+      "riddle": "If you are a velophile, what is it that you love?",
+      "answer": "bicycle"
+    },
+    {
+      "id": "wr-2cc2675721",
+      "riddle": "If you drop a yellow hat in the Red Sea, what does it become?",
+      "answer": "Wet, duh!"
+    },
+    {
+      "id": "wr-2307e50807",
+      "riddle": "If you drop me I'm sure to crack, but smile at me and I'll smile back. What am I?",
+      "answer": "A mirror"
+    },
+    {
+      "id": "wr-8164c0439e",
+      "riddle": "If you have it, you want to share it. If you share it, you don't have it.",
+      "answer": "secret"
+    },
+    {
+      "id": "wr-de7f6c81be",
+      "riddle": "If you have three oranges and you take away two, how many will you have?",
+      "answer": "Two. The two you took"
+    },
+    {
+      "id": "wr-5b1ccafd17",
+      "riddle": "if you stack thousands of pizza pies on top of eachother what would you get?",
+      "answer": "the leaning tower of pizza"
+    },
+    {
+      "id": "wr-ece2b05d55",
+      "riddle": "im a container with the inside golden than cant be opened unless im broken!!!",
+      "answer": "an egg"
+    },
+    {
+      "id": "wr-3312888eb8",
+      "riddle": "In the NBA, how many men are on the basketball court for each team?",
+      "answer": "Five....I'll bet you guessed 10"
+    },
+    {
+      "id": "wr-da98ea36a9",
+      "riddle": "In the night a mountain, in the morning a meadow.",
+      "answer": "bed"
+    },
+    {
+      "id": "wr-abc98f7844",
+      "riddle": "Iron on a mammal. Mammal on your feet.",
+      "answer": "shoe"
+    },
+    {
+      "id": "wr-a0e1a40dee",
+      "riddle": "Iron roof, glass walls, burns and burns and never falls.",
+      "answer": "lantern"
+    },
+    {
+      "id": "wr-e450353bb0",
+      "riddle": "It's in your hand though you can not feel it. Only you and time can reveal it.",
+      "answer": "fate"
+    },
+    {
+      "id": "wr-96d923079e",
+      "riddle": "Lighter than what I am made of, More of me is hidden Than is seen.",
+      "answer": "iceberg"
+    },
+    {
+      "id": "wr-02c0f70b55",
+      "riddle": "Lighter than what I am made of. More of me is hidden than seen.",
+      "answer": "I'm an Iceberg"
+    },
+    {
+      "id": "wr-4631bf8121",
+      "riddle": "Long and slinky like a trout, never sings till it's guts come out.",
+      "answer": "gun"
+    },
+    {
+      "id": "wr-17a3af8b6e",
+      "riddle": "Long and think, red within, with a nail at the end.",
+      "answer": "finger"
+    },
+    {
+      "id": "wr-a468424a19",
+      "riddle": "Look into my face and I'm everybody. Scratch my back and I'm nobody.",
+      "answer": "mirror"
+    },
+    {
+      "id": "wr-9635e422aa",
+      "riddle": "Mountains will crumble and temples will fall. And no man can survive its endless call.",
+      "answer": "time"
+    },
+    {
+      "id": "wr-8a71829f22",
+      "riddle": "My teeth are sharp, my back is straight, to cut things up it is my fate.",
+      "answer": "saw"
+    },
+    {
+      "id": "wr-4a07d77485",
+      "riddle": "No matter how little or how much you use me, you change me every month.",
+      "answer": "calendar"
+    },
+    {
+      "id": "wr-70eb17e0f5",
+      "riddle": "No sooner spoken than broken. What is it?",
+      "answer": "Silence"
+    },
+    {
+      "id": "wr-14e5e2021a",
+      "riddle": "Of no use to one, Bliss to two. Men lie for it. The baby’s right,",
+      "answer": "kiss"
+    },
+    {
+      "id": "wr-00b3f45475",
+      "riddle": "Only two backbones and thousands of ribs.",
+      "answer": "railroad"
+    },
+    {
+      "id": "wr-8f10341218",
+      "riddle": "Power enough to smash ships and crush roofs. Yet it still must fear the sun.",
+      "answer": "ice"
+    },
+    {
+      "id": "wr-409082d1a7",
+      "riddle": "Pregnant every time you see her, yet she never will give birth.",
+      "answer": "moon"
+    },
+    {
+      "id": "wr-6e30f341fe",
+      "riddle": "Runs smoother than any rhyme, loves to fall but cannot climb!",
+      "answer": "water"
+    },
+    {
+      "id": "wr-83cf0fc1ba",
+      "riddle": "Scythe of darkness, Shadow’s light. Guiding eye of thirteenth sight.",
+      "answer": "moon"
+    },
+    {
+      "id": "wr-4af64517cb",
+      "riddle": "Some say we are red, some say we are green. Some play us, some spray us. What are we?",
+      "answer": "Pepper"
+    },
+    {
+      "id": "wr-c5699ca7eb",
+      "riddle": "Take off my skin, I won't cry, but you will.",
+      "answer": "onion"
+    },
+    {
+      "id": "wr-1b24037f83",
+      "riddle": "Take one out and scratch my head, I am now black but once was red.",
+      "answer": "match"
+    },
+    {
+      "id": "wr-4e4572eac0",
+      "riddle": "Take one out and scratch my head, I am now black but once was red.What am I ?",
+      "answer": "You strike it A Match"
+    },
+    {
+      "id": "wr-94de0bc5d3",
+      "riddle": "Tall in the morning, short at noon, gone at night. But I'll be back soon.",
+      "answer": "shadow"
+    },
+    {
+      "id": "wr-320fc21980",
+      "riddle": "The answer I give is yes, but what I mean is no. What was the question?",
+      "answer": "Do you mind?"
+    },
+    {
+      "id": "wr-847c514be8",
+      "riddle": "The eight of us move forth and back. To protect our king from the foes attack.",
+      "answer": "pawns"
+    },
+    {
+      "id": "wr-0839966421",
+      "riddle": "The more of it there is, the less you see.",
+      "answer": "darkness"
+    },
+    {
+      "id": "wr-78380bc5e3",
+      "riddle": "The more there is the less you see. What is it?",
+      "answer": "What time is it . Darkness"
+    },
+    {
+      "id": "wr-3fbcd4ebbd",
+      "riddle": "The more you take, the more you leave behind.",
+      "answer": "steps"
+    },
+    {
+      "id": "wr-58974f7459",
+      "riddle": "The more you take, the more you leave behind. What am I?",
+      "answer": "Footsteps"
+    },
+    {
+      "id": "wr-c6a9c3258c",
+      "riddle": "The more you take, the more you leave behind. What are they?",
+      "answer": "Footprints"
+    },
+    {
+      "id": "wr-d8b1a58b68",
+      "riddle": "The rich need it The poor have it If you eat it you will die Who am I",
+      "answer": "NOTHING"
+    },
+    {
+      "id": "wr-f35924742b",
+      "riddle": "The sharp slim blade, that cuts the wind.",
+      "answer": "grass"
+    },
+    {
+      "id": "wr-1cbe4816ec",
+      "riddle": "The strangest creature you'll ever find has two eyes in front and a hundred behind.",
+      "answer": "peacock"
+    },
+    {
+      "id": "wr-60bb71a307",
+      "riddle": "The strangest creature you'll ever find: Two eyes in front and many many more behind.",
+      "answer": "A Peacock"
+    },
+    {
+      "id": "wr-1391bd0859",
+      "riddle": "This is as light as a feather, Yet no man can hold it for long. What is it?",
+      "answer": "Your Breath"
+    },
+    {
+      "id": "wr-893b4aa9db",
+      "riddle": "Three little letters. A paradox to some. The worse that it is, the better it becomes.",
+      "answer": "pun"
+    },
+    {
+      "id": "wr-b5eccb02c3",
+      "riddle": "Twigs and spheres and poles and plates. Join and bind to reason make.",
+      "answer": "skeleton"
+    },
+    {
+      "id": "wr-3a99e4229b",
+      "riddle": "Two words, my answer is only two words. To keep me, you must give me.",
+      "answer": "“Your word“"
+    },
+    {
+      "id": "wr-60387a493e",
+      "riddle": "Until I am measured I am not known, Yet how you miss me when I have flown.",
+      "answer": "time"
+    },
+    {
+      "id": "wr-b744aeb382",
+      "riddle": "Until I am measured, I am not known. Yet how you miss me, When I have flown.",
+      "answer": "I am Time"
+    },
+    {
+      "id": "wr-90b18bd009",
+      "riddle": "Up on high I wave away but not a word can I say.",
+      "answer": "flag"
+    },
+    {
+      "id": "wr-0d24b52c1a",
+      "riddle": "Weight in my belly, Trees on my back. Nails in my ribs, Feet I do lack.",
+      "answer": "I am a ship"
+    },
+    {
+      "id": "wr-859bf9bf13",
+      "riddle": "What always goes to bed with his shoes on?",
+      "answer": "horse"
+    },
+    {
+      "id": "wr-7c5e7efe2f",
+      "riddle": "What always goes to bed with shoes on?",
+      "answer": "A Horse"
+    },
+    {
+      "id": "wr-62f59c1468",
+      "riddle": "What always runs but never walks?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-356f1d749e",
+      "riddle": "What an fill a room but takes up no space?",
+      "answer": "light"
+    },
+    {
+      "id": "wr-267d8c9d8b",
+      "riddle": "What asks but never answers?",
+      "answer": "owl"
+    },
+    {
+      "id": "wr-293e2963fa",
+      "riddle": "What begins and has no end? What is the ending of all that begins?",
+      "answer": "death"
+    },
+    {
+      "id": "wr-d890454ecc",
+      "riddle": "What begins with an E, ends with an E, but only has one letter?",
+      "answer": "An envelope"
+    },
+    {
+      "id": "wr-d0f5b8dc9d",
+      "riddle": "What belongs to you but is used more by others?",
+      "answer": "Your name"
+    },
+    {
+      "id": "wr-c7831869ec",
+      "riddle": "What building has the most stories?",
+      "answer": "A library"
+    },
+    {
+      "id": "wr-debb735466",
+      "riddle": "What building has the most stories?",
+      "answer": "library"
+    },
+    {
+      "id": "wr-6157165bac",
+      "riddle": "What can be heard and caught but never seen?",
+      "answer": "A Remark"
+    },
+    {
+      "id": "wr-ed8d430d0b",
+      "riddle": "What can be heard and caught but never seen?",
+      "answer": "remark"
+    },
+    {
+      "id": "wr-81ab981306",
+      "riddle": "What can be heard but not seen?",
+      "answer": "An echo"
+    },
+    {
+      "id": "wr-30249a6138",
+      "riddle": "What can be swallowed, But can also swallow you?",
+      "answer": "pride"
+    },
+    {
+      "id": "wr-e1b8f9d259",
+      "riddle": "What can burn the eyes, sting the mouth, yet be consumed?",
+      "answer": "salt"
+    },
+    {
+      "id": "wr-662b2b3e0f",
+      "riddle": "What can fill a room but takes up no space?",
+      "answer": "Light"
+    },
+    {
+      "id": "wr-da6f2f10aa",
+      "riddle": "What can go up a chimney down, but cannot go down a chimney up?",
+      "answer": "An umbrella"
+    },
+    {
+      "id": "wr-0607c94616",
+      "riddle": "What can go up and come down without moving?",
+      "answer": "The temperature"
+    },
+    {
+      "id": "wr-4e6ef55b00",
+      "riddle": "What can touch someone once and last them a life time?",
+      "answer": "love"
+    },
+    {
+      "id": "wr-5030adfded",
+      "riddle": "What can travel around the world while staying in a corner?",
+      "answer": "A stamp"
+    },
+    {
+      "id": "wr-4f0e7800e9",
+      "riddle": "What can you break, even if you never pick it up or touch it?",
+      "answer": "A promise"
+    },
+    {
+      "id": "wr-938c3d5ac9",
+      "riddle": "What can you catch but not throw?",
+      "answer": "A cold"
+    },
+    {
+      "id": "wr-f26ebd1fbd",
+      "riddle": "What can you catch but not throw?",
+      "answer": "cold"
+    },
+    {
+      "id": "wr-e5472b2622",
+      "riddle": "What can you hold in your left hand but not in your right?",
+      "answer": "Your elbow"
+    },
+    {
+      "id": "wr-5b96f6f3e0",
+      "riddle": "What can you hold in your left hand but not in your right?",
+      "answer": "Your right elbow"
+    },
+    {
+      "id": "wr-a0dd28bff8",
+      "riddle": "What can you hold without touching it?",
+      "answer": "A conversation"
+    },
+    {
+      "id": "wr-77c4a5eb53",
+      "riddle": "What can you keep after giving it to someone?",
+      "answer": "Your word"
+    },
+    {
+      "id": "wr-a9071035c0",
+      "riddle": "What can you put in a barrel to make it lighter?",
+      "answer": "hole"
+    },
+    {
+      "id": "wr-a2693f3f54",
+      "riddle": "What can you put in a bucket to make it lighter?",
+      "answer": "A hole"
+    },
+    {
+      "id": "wr-f2ecc23775",
+      "riddle": "What can you see but not touch?",
+      "answer": "The stars"
+    },
+    {
+      "id": "wr-6eea36f703",
+      "riddle": "What comes at the end of time?",
+      "answer": "The letter E"
+    },
+    {
+      "id": "wr-9b08fb6bc4",
+      "riddle": "What comes once in a minute, twice in a moment, but never in a thousand years?",
+      "answer": "The letter M"
+    },
+    {
+      "id": "wr-8a239c33bd",
+      "riddle": "What demands an answer, but asks no question?",
+      "answer": "Ring Ring A Telephone"
+    },
+    {
+      "id": "wr-7a74a878a6",
+      "riddle": "What disappears as soon as you say its name?",
+      "answer": "Silence"
+    },
+    {
+      "id": "wr-ff651058d0",
+      "riddle": "What do you call a bear with no teeth?",
+      "answer": "A gummy bear"
+    },
+    {
+      "id": "wr-db68a0f898",
+      "riddle": "What do you call a snowman in July?",
+      "answer": "A puddle"
+    },
+    {
+      "id": "wr-c8685e90ca",
+      "riddle": "What do you call cheese that isn't yours?",
+      "answer": "Nacho cheese"
+    },
+    {
+      "id": "wr-6ed2a4115e",
+      "riddle": "What do you fill with empty hands?",
+      "answer": "gloves"
+    },
+    {
+      "id": "wr-825ed9f9a6",
+      "riddle": "What do you get when you cross a snowman and a dog?",
+      "answer": "Frostbite"
+    },
+    {
+      "id": "wr-f7aa9c697e",
+      "riddle": "What do you serve that you can't eat?",
+      "answer": "A tennis ball"
+    },
+    {
+      "id": "wr-03296e912f",
+      "riddle": "What do you throw out to use and take in when you're done?",
+      "answer": "anchor"
+    },
+    {
+      "id": "wr-e99778c5df",
+      "riddle": "What do you use to hoe a row, slay a foe, and wring with woe?",
+      "answer": "hands"
+    },
+    {
+      "id": "wr-67aeac23a1",
+      "riddle": "What do you use to hoe a row, slay a foe, and wring with woe?",
+      "answer": "Your hands"
+    },
+    {
+      "id": "wr-923fb60900",
+      "riddle": "What does no man want, yet no man want to lose?",
+      "answer": "work"
+    },
+    {
+      "id": "wr-69f7f8b570",
+      "riddle": "What English word has three consecutive double letters?",
+      "answer": "Bookkeeper"
+    },
+    {
+      "id": "wr-ebc38b141a",
+      "riddle": "What falls but doesn't break, and what breaks but doesn't fall?",
+      "answer": "Night and Day"
+    },
+    {
+      "id": "wr-cd3b7dcd6f",
+      "riddle": "What fastens two people yet touches only one?",
+      "answer": "A wedding ring"
+    },
+    {
+      "id": "wr-3fee736948",
+      "riddle": "What five-letter word becomes shorter when you add two letters to it?",
+      "answer": "Short"
+    },
+    {
+      "id": "wr-ec2de1581a",
+      "riddle": "What five-letter word becomes shorter when you add two more letters?",
+      "answer": "short"
+    },
+    {
+      "id": "wr-e106e1eaa7",
+      "riddle": "What flies forever, Rests never?",
+      "answer": "wind"
+    },
+    {
+      "id": "wr-1184a9b90b",
+      "riddle": "What gets bigger the more you take away from it?",
+      "answer": "hole"
+    },
+    {
+      "id": "wr-aa6f2ce487",
+      "riddle": "What gets bigger the more you take away?",
+      "answer": "A hole"
+    },
+    {
+      "id": "wr-0a70ab8f4a",
+      "riddle": "What gets cut but never bleeds and grows back?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-9fd35b9d3c",
+      "riddle": "What gets wetter as it dries?",
+      "answer": "towel"
+    },
+    {
+      "id": "wr-8d36e0c01d",
+      "riddle": "What gets wetter the more it dries?",
+      "answer": "A towel"
+    },
+    {
+      "id": "wr-4244d0fdf1",
+      "riddle": "What gets whiter the dirtier that it gets?",
+      "answer": "A chalkboard"
+    },
+    {
+      "id": "wr-70110b048d",
+      "riddle": "What goes around the world and stays in a corner?",
+      "answer": "Mail A stamp"
+    },
+    {
+      "id": "wr-ee1fe5c597",
+      "riddle": "What goes around the world and stays in a corner?",
+      "answer": "stamp"
+    },
+    {
+      "id": "wr-1c0872a508",
+      "riddle": "What goes further the slower it goes?",
+      "answer": "money"
+    },
+    {
+      "id": "wr-11ad8456eb",
+      "riddle": "What goes in the water black and comes out red?",
+      "answer": "lobster"
+    },
+    {
+      "id": "wr-d9ed2a9d9a",
+      "riddle": "What goes in the water red, and comes out black?",
+      "answer": "iron"
+    },
+    {
+      "id": "wr-1ca2b128b5",
+      "riddle": "What goes into the water black and comes out red?",
+      "answer": "A lobster"
+    },
+    {
+      "id": "wr-3eb2fb7403",
+      "riddle": "What goes into the water red and comes out black?",
+      "answer": "A red-hot poker"
+    },
+    {
+      "id": "wr-1400adbb28",
+      "riddle": "What goes through a door but never goes in. And never comes out?",
+      "answer": "keyhole"
+    },
+    {
+      "id": "wr-19d46f56d4",
+      "riddle": "What goes through cities and fields but never moves?",
+      "answer": "A road"
+    },
+    {
+      "id": "wr-8768563013",
+      "riddle": "What goes up and never comes down?",
+      "answer": "Your Age"
+    },
+    {
+      "id": "wr-1015f512f8",
+      "riddle": "What goes up but never comes down?",
+      "answer": "age"
+    },
+    {
+      "id": "wr-d9c8caa126",
+      "riddle": "What goes up but never comes down?",
+      "answer": "Your age"
+    },
+    {
+      "id": "wr-eafd37f9b0",
+      "riddle": "What goes up when the rain comes down?",
+      "answer": "An umbrella"
+    },
+    {
+      "id": "wr-fedfaa2502",
+      "riddle": "What goes up when the rain comes down?",
+      "answer": "umbrella"
+    },
+    {
+      "id": "wr-85b072ce07",
+      "riddle": "What has 13 hearts but no other organs?",
+      "answer": "A deck of cards"
+    },
+    {
+      "id": "wr-3608857fcb",
+      "riddle": "What has 13 hearts but none beat?",
+      "answer": "cards"
+    },
+    {
+      "id": "wr-792ee1c81d",
+      "riddle": "What has 365 spots but never moves?",
+      "answer": "A calendar"
+    },
+    {
+      "id": "wr-e08feb7db6",
+      "riddle": "What has 64 squares and two colors?",
+      "answer": "A chessboard"
+    },
+    {
+      "id": "wr-94e85a904c",
+      "riddle": "What has 88 keys but can't open a single door?",
+      "answer": "A piano"
+    },
+    {
+      "id": "wr-c72371a55a",
+      "riddle": "What has 88 of me and makes music?",
+      "answer": "Keys"
+    },
+    {
+      "id": "wr-3f5dd21479",
+      "riddle": "What has a bang but is not a gun?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-b4d66721bb",
+      "riddle": "What has a bank but no money?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-d2786a5569",
+      "riddle": "What has a bark but no bite and grows in a yard?",
+      "answer": "A tree"
+    },
+    {
+      "id": "wr-08f02c59aa",
+      "riddle": "What has a bark but no bite?",
+      "answer": "A tree"
+    },
+    {
+      "id": "wr-f3e3701920",
+      "riddle": "What has a bed but never sleeps?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-d55a7310e6",
+      "riddle": "What has a bill but is not a duck?",
+      "answer": "A cap"
+    },
+    {
+      "id": "wr-eed5876f85",
+      "riddle": "What has a bite but is not a snack?",
+      "answer": "A tooth"
+    },
+    {
+      "id": "wr-5e5fc9f0d6",
+      "riddle": "What has a board but is not wood you walk on?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-1c9d6f636e",
+      "riddle": "What has a bottom at the top?",
+      "answer": "Your legs"
+    },
+    {
+      "id": "wr-6188b8e8ac",
+      "riddle": "What has a braid but is not bread?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-9859684f3c",
+      "riddle": "What has a brow but cannot frown?",
+      "answer": "An eye"
+    },
+    {
+      "id": "wr-97bd624669",
+      "riddle": "What has a brush that is not for painting walls?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-1e354ff390",
+      "riddle": "What has a bun that is not bread?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-b7396745cc",
+      "riddle": "What has a cap but no head?",
+      "answer": "A bottle"
+    },
+    {
+      "id": "wr-f25023e5a0",
+      "riddle": "What has a castle that never has a moat?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-1287f2ec31",
+      "riddle": "What has a cavity that is not a cave?",
+      "answer": "A tooth"
+    },
+    {
+      "id": "wr-207338ee48",
+      "riddle": "What has a check but is not a bank?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-2fa106c8e9",
+      "riddle": "What has a clip that is not a movie?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-1e70f73c7e",
+      "riddle": "What has a comb but does not brush hair?",
+      "answer": "A rooster"
+    },
+    {
+      "id": "wr-0832e49399",
+      "riddle": "What has a comb that is not a rooster?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-e17d7f34e7",
+      "riddle": "What has a compass rose but no thorns?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-15ad8b308d",
+      "riddle": "What has a core but is not an apple?",
+      "answer": "The earth"
+    },
+    {
+      "id": "wr-75373a42fe",
+      "riddle": "What has a crown that is not for a king?",
+      "answer": "A tooth"
+    },
+    {
+      "id": "wr-23b5636da9",
+      "riddle": "What has a crust but is not bread?",
+      "answer": "The earth"
+    },
+    {
+      "id": "wr-9012e5cab6",
+      "riddle": "What has a curl but is not a ribbon alone?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-292174d87c",
+      "riddle": "What has a deck but is not a porch?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-b0b3a6c1db",
+      "riddle": "What has a dentist but is not a person?",
+      "answer": "A smile"
+    },
+    {
+      "id": "wr-fb9b4910e3",
+      "riddle": "What has a face and two hands but no arms or legs?",
+      "answer": "A clock"
+    },
+    {
+      "id": "wr-7a29345b23",
+      "riddle": "What has a face but no eyes?",
+      "answer": "A clock"
+    },
+    {
+      "id": "wr-513a109b9d",
+      "riddle": "What has a filling that is not a pie?",
+      "answer": "A tooth"
+    },
+    {
+      "id": "wr-085376a58e",
+      "riddle": "What has a foot but no legs?",
+      "answer": "A snail"
+    },
+    {
+      "id": "wr-c1e2620cce",
+      "riddle": "What has a fringe but is not a lamp?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-a993b67485",
+      "riddle": "What has a gap that is not a store?",
+      "answer": "Teeth"
+    },
+    {
+      "id": "wr-788cab3c56",
+      "riddle": "What has a golden head and a golden tail but no body?",
+      "answer": "A gold coin"
+    },
+    {
+      "id": "wr-320e473f3a",
+      "riddle": "What has a gutter but is not a street?",
+      "answer": "A bowling lane"
+    },
+    {
+      "id": "wr-970aa09e77",
+      "riddle": "What has a head and a tail but no body?",
+      "answer": "A coin"
+    },
+    {
+      "id": "wr-39de4f6400",
+      "riddle": "What has a head and a tail, but no body?",
+      "answer": "A coin"
+    },
+    {
+      "id": "wr-d46f346b7f",
+      "riddle": "What has a head but never dies?",
+      "answer": "A coin"
+    },
+    {
+      "id": "wr-683ea98f37",
+      "riddle": "What has a head but never weeps, and a bed but never sleeps?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-cb3c252c5f",
+      "riddle": "What has a head but never weeps?",
+      "answer": "A pillow"
+    },
+    {
+      "id": "wr-8841aa67ca",
+      "riddle": "What has a head, a tail, is brown, and has no legs?",
+      "answer": "A Penny"
+    },
+    {
+      "id": "wr-8b78fb4276",
+      "riddle": "What has a head, a tail, is brown, and has no legs?",
+      "answer": "penny"
+    },
+    {
+      "id": "wr-842531ab95",
+      "riddle": "What has a heart but no other organs?",
+      "answer": "A deck of cards"
+    },
+    {
+      "id": "wr-ee180c4850",
+      "riddle": "What has a heart that doesn't beat?",
+      "answer": "An artichoke"
+    },
+    {
+      "id": "wr-70e73a3c84",
+      "riddle": "What has a horn but does not honk?",
+      "answer": "A rhinoceros"
+    },
+    {
+      "id": "wr-b2449af2eb",
+      "riddle": "What has a jack but is not a car?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-787e2c46cf",
+      "riddle": "What has a king and queen but no castle?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-d3f83910bb",
+      "riddle": "What has a king but is not a country?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-6fb74ca3c7",
+      "riddle": "What has a knight but no horse you can ride?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-a4e1835067",
+      "riddle": "What has a launch but never leaves a dock?",
+      "answer": "A rocket"
+    },
+    {
+      "id": "wr-bfbfb3d313",
+      "riddle": "What has a legend but is not a story?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-8e5530e99b",
+      "riddle": "What has a lid but is not a pot?",
+      "answer": "An eye"
+    },
+    {
+      "id": "wr-fa045d38de",
+      "riddle": "What has a lock but no key and holds your hair?",
+      "answer": "A lock of hair"
+    },
+    {
+      "id": "wr-27cb8c45bd",
+      "riddle": "What has a lot of bread and is very wealthy?",
+      "answer": "A bakery"
+    },
+    {
+      "id": "wr-a0ccc633bd",
+      "riddle": "What has a mate but is not a pair of socks?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-46de94449f",
+      "riddle": "What has a mouth but never eats?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-7b2dc600bc",
+      "riddle": "What has a mouth but never speaks?",
+      "answer": "A cave"
+    },
+    {
+      "id": "wr-9f6ff06a75",
+      "riddle": "What has a mouth but never speaks?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-a255ba851d",
+      "riddle": "What has a neck and no head, two arms but no hands?",
+      "answer": "shirt"
+    },
+    {
+      "id": "wr-be16fc0cec",
+      "riddle": "What has a neck but no head?",
+      "answer": "A bottle"
+    },
+    {
+      "id": "wr-6a3bf91c89",
+      "riddle": "What has a neck, no head, and wears a cap?",
+      "answer": "A bottle"
+    },
+    {
+      "id": "wr-68a0393717",
+      "riddle": "What has a net that is not for fish?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-f10962b3d8",
+      "riddle": "What has a part but is not a machine?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-a3ec09cbe4",
+      "riddle": "What has a payload but is not a truck?",
+      "answer": "A rocket"
+    },
+    {
+      "id": "wr-24af3e686e",
+      "riddle": "What has a pin that is not for bowling?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-1500364357",
+      "riddle": "What has a pony that is not a horse?",
+      "answer": "A ponytail"
+    },
+    {
+      "id": "wr-ffa814826a",
+      "riddle": "What has a pupil but is not a student?",
+      "answer": "An eye"
+    },
+    {
+      "id": "wr-bdf40d5d67",
+      "riddle": "What has a queen but is not a monarchy?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-428354e609",
+      "riddle": "What has a ring but no finger?",
+      "answer": "A telephone"
+    },
+    {
+      "id": "wr-b879671dfb",
+      "riddle": "What has a root that is not a plant?",
+      "answer": "A tooth"
+    },
+    {
+      "id": "wr-210963b50c",
+      "riddle": "What has a salon but is not a wild west town?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-c412a7b4be",
+      "riddle": "What has a scale but is not a fish?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-9f9ed9cc9e",
+      "riddle": "What has a single eye but cannot see?",
+      "answer": "needle"
+    },
+    {
+      "id": "wr-33e6381d5c",
+      "riddle": "What has a sole but is not alive?",
+      "answer": "A shoe"
+    },
+    {
+      "id": "wr-005d7df186",
+      "riddle": "What has a soul but cannot be resurrected?",
+      "answer": "a shoe"
+    },
+    {
+      "id": "wr-a770dde29d",
+      "riddle": "What has a spare but is not a tire?",
+      "answer": "Bowling"
+    },
+    {
+      "id": "wr-b96ff06003",
+      "riddle": "What has a spine but no bones?",
+      "answer": "A book"
+    },
+    {
+      "id": "wr-4ee8022e3e",
+      "riddle": "What has a split end but is not a road?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-9347eef0c3",
+      "riddle": "What has a stage but no actors?",
+      "answer": "A rocket"
+    },
+    {
+      "id": "wr-b96e73a883",
+      "riddle": "What has a sting but is not angry?",
+      "answer": "A bee"
+    },
+    {
+      "id": "wr-64d3aeb5d3",
+      "riddle": "What has a strike but is not a union?",
+      "answer": "Bowling"
+    },
+    {
+      "id": "wr-8820b16d9c",
+      "riddle": "What has a sweet tooth but is not a person?",
+      "answer": "A candy jar"
+    },
+    {
+      "id": "wr-8e6222dc7b",
+      "riddle": "What has a tail and a head and is found in the sky?",
+      "answer": "A comet"
+    },
+    {
+      "id": "wr-3ae7e07280",
+      "riddle": "What has a thumb and four fingers but is not alive?",
+      "answer": "A glove"
+    },
+    {
+      "id": "wr-62a634d8fa",
+      "riddle": "What has a tie that is not clothing?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-f60eb20c4b",
+      "riddle": "What has a tongue but cannot talk?",
+      "answer": "A shoe"
+    },
+    {
+      "id": "wr-20a7ad80c8",
+      "riddle": "What has a tongue but cannot taste?",
+      "answer": "A shoe"
+    },
+    {
+      "id": "wr-2e24fd9e36",
+      "riddle": "What has a trail but leaves no footprints?",
+      "answer": "A comet"
+    },
+    {
+      "id": "wr-8a7628a55f",
+      "riddle": "What has a white cap and a red coat and stands in a garden?",
+      "answer": "A mushroom"
+    },
+    {
+      "id": "wr-07e0f441f4",
+      "riddle": "What has a yellow coat and a white vest and lives in a hive?",
+      "answer": "A bee"
+    },
+    {
+      "id": "wr-33972ffec9",
+      "riddle": "What has a yolk but is not an egg?",
+      "answer": "The sun"
+    },
+    {
+      "id": "wr-8fbb6faac5",
+      "riddle": "What has an ace but is not a pilot?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-cd9011b853",
+      "riddle": "What has an equator but is not a planetarium?",
+      "answer": "The earth"
+    },
+    {
+      "id": "wr-14848e430e",
+      "riddle": "What has an eye but cannot see?",
+      "answer": "A needle"
+    },
+    {
+      "id": "wr-99bcab1ee8",
+      "riddle": "What has an eye but cannot see?",
+      "answer": "A storm"
+    },
+    {
+      "id": "wr-00b2ab8b95",
+      "riddle": "What has braces that are not for pants?",
+      "answer": "Teeth"
+    },
+    {
+      "id": "wr-c5c6870da0",
+      "riddle": "What has branches but no fruit, trunk, or leaves?",
+      "answer": "A bank"
+    },
+    {
+      "id": "wr-84ff6bead6",
+      "riddle": "What has cities but no houses, forests but no trees, and water but no fish?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-fc8925ba91",
+      "riddle": "What has clubs that are not for hitting golf balls?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-9d3340da41",
+      "riddle": "What has continents but no countries you can visit?",
+      "answer": "A globe"
+    },
+    {
+      "id": "wr-617fae3c5a",
+      "riddle": "What has countries but no people?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-869400e43b",
+      "riddle": "What has diamonds that are not jewels?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-c7d9e39eb1",
+      "riddle": "What has ears but cannot hear?",
+      "answer": "Corn"
+    },
+    {
+      "id": "wr-bd2eafb38e",
+      "riddle": "What has enamel but is not paint?",
+      "answer": "A tooth"
+    },
+    {
+      "id": "wr-cd23625f63",
+      "riddle": "What has four fingers and a thumb but is not alive?",
+      "answer": "A glove"
+    },
+    {
+      "id": "wr-04ef5e0fbd",
+      "riddle": "What has four fingers and a thumb, but is not alive",
+      "answer": "A glove"
+    },
+    {
+      "id": "wr-cf0fef312f",
+      "riddle": "What has four wheels and flies?",
+      "answer": "A garbage truck"
+    },
+    {
+      "id": "wr-1eeaa8f6e2",
+      "riddle": "What has garbage and flies?",
+      "answer": "A garbage truck"
+    },
+    {
+      "id": "wr-b89f147252",
+      "riddle": "What has hands but can't clap?",
+      "answer": "A clock"
+    },
+    {
+      "id": "wr-cd6d7fb160",
+      "riddle": "What has hearts that do not beat?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-4628ab7be5",
+      "riddle": "What has innings but is not a tavern?",
+      "answer": "A baseball game"
+    },
+    {
+      "id": "wr-befce76f33",
+      "riddle": "What has jokers but is not a comedy club?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-dd1e887736",
+      "riddle": "What has keys but can't open locks?",
+      "answer": "A piano"
+    },
+    {
+      "id": "wr-14ddacef79",
+      "riddle": "What has lashes but cannot blink on its own?",
+      "answer": "An eye"
+    },
+    {
+      "id": "wr-fd72b4104c",
+      "riddle": "What has legs but doesn't walk?",
+      "answer": "A table"
+    },
+    {
+      "id": "wr-493518a20c",
+      "riddle": "What has many keys but can't open a single door?",
+      "answer": "A piano"
+    },
+    {
+      "id": "wr-7eb95365e3",
+      "riddle": "What has many teeth but can't bite?",
+      "answer": "A comb"
+    },
+    {
+      "id": "wr-0dde0a8807",
+      "riddle": "What has no beginning, end, or middle?",
+      "answer": "A doughnut"
+    },
+    {
+      "id": "wr-222e72987c",
+      "riddle": "What has no heart Yet is alive? It never moves People stab it with knives.",
+      "answer": "A tree"
+    },
+    {
+      "id": "wr-62958f4ddb",
+      "riddle": "What has oceans but no water you can drink?",
+      "answer": "A globe"
+    },
+    {
+      "id": "wr-568c80b70a",
+      "riddle": "What has one eye but can't see?",
+      "answer": "A needle"
+    },
+    {
+      "id": "wr-1c3aaac6d0",
+      "riddle": "What has one foot on each side and one in the middle?",
+      "answer": "A yardstick"
+    },
+    {
+      "id": "wr-5078081b12",
+      "riddle": "What has pages but is not a book?",
+      "answer": "A calendar"
+    },
+    {
+      "id": "wr-90153d5e48",
+      "riddle": "What has pawns but is not a shop?",
+      "answer": "Chess"
+    },
+    {
+      "id": "wr-50fdfa60ff",
+      "riddle": "What has pins but is not a sewing kit?",
+      "answer": "Bowling"
+    },
+    {
+      "id": "wr-ca557915a5",
+      "riddle": "What has poles but is not a tent?",
+      "answer": "The earth"
+    },
+    {
+      "id": "wr-139565594e",
+      "riddle": "What has roads but no cars?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-c150f7b326",
+      "riddle": "What has roots you cannot see and grows on your head?",
+      "answer": "Hair"
+    },
+    {
+      "id": "wr-acf9c688c8",
+      "riddle": "What has six faces and twenty-one eyes?",
+      "answer": "die"
+    },
+    {
+      "id": "wr-9a566b7c32",
+      "riddle": "what has six legs but olny walks with 4?",
+      "answer": "a horse and his rider!"
+    },
+    {
+      "id": "wr-710f256a14",
+      "riddle": "What has spades that do not dig?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-8bb1fc1c2d",
+      "riddle": "What has squares but is not a city block?",
+      "answer": "A chessboard"
+    },
+    {
+      "id": "wr-77417eea95",
+      "riddle": "What has streets but no traffic?",
+      "answer": "A map"
+    },
+    {
+      "id": "wr-fb7c54246f",
+      "riddle": "What has suits but is not clothing?",
+      "answer": "A pack of cards"
+    },
+    {
+      "id": "wr-eea6819c00",
+      "riddle": "What has to be broken before it can be used?",
+      "answer": "An egg"
+    },
+    {
+      "id": "wr-622b7dbad4",
+      "riddle": "What has to be broken before it can be used?",
+      "answer": "egg"
+    },
+    {
+      "id": "wr-5d90be5f0b",
+      "riddle": "What has to be broken before you can use it?",
+      "answer": "An egg"
+    },
+    {
+      "id": "wr-dd2c2eaaee",
+      "riddle": "What has wings but is not a bird and is found on a stage?",
+      "answer": "A play"
+    },
+    {
+      "id": "wr-e43bb9df2b",
+      "riddle": "What has wisdom but is not a sage?",
+      "answer": "A wisdom tooth"
+    },
+    {
+      "id": "wr-d48bd444dd",
+      "riddle": "What has words but never speaks?",
+      "answer": "A book"
+    },
+    {
+      "id": "wr-ac0355780c",
+      "riddle": "What instrument can make any sound and be heart, but not touched or seen?",
+      "answer": "voice"
+    },
+    {
+      "id": "wr-61c508d554",
+      "riddle": "What invention lets you look through a wall?",
+      "answer": "A window"
+    },
+    {
+      "id": "wr-3bdc3e1aa8",
+      "riddle": "What is a bank you cannot rob?",
+      "answer": "A riverbank"
+    },
+    {
+      "id": "wr-b531c9511a",
+      "riddle": "What is a bar you cannot drink at?",
+      "answer": "A measure of music"
+    },
+    {
+      "id": "wr-15c073aa2a",
+      "riddle": "What is a bat that never flies at night and is not alive?",
+      "answer": "A baseball bat"
+    },
+    {
+      "id": "wr-18183d3419",
+      "riddle": "What is a beat you cannot eat?",
+      "answer": "A drumbeat"
+    },
+    {
+      "id": "wr-b4676f8a05",
+      "riddle": "What is a bed you cannot sleep in?",
+      "answer": "A riverbed"
+    },
+    {
+      "id": "wr-fb9c58ea81",
+      "riddle": "What is a bench you sit on but never picnic on?",
+      "answer": "A piano bench"
+    },
+    {
+      "id": "wr-fb558923bd",
+      "riddle": "What is a bolt that is not hardware?",
+      "answer": "A lightning bolt"
+    },
+    {
+      "id": "wr-d9e221ea59",
+      "riddle": "What is a boom you should not fear in a parade?",
+      "answer": "A bass drum"
+    },
+    {
+      "id": "wr-9a929d5825",
+      "riddle": "What is a bow that is not a ribbon?",
+      "answer": "A violin bow"
+    },
+    {
+      "id": "wr-8a59382f0f",
+      "riddle": "What is a bridge that cars cannot cross?",
+      "answer": "A song bridge"
+    },
+    {
+      "id": "wr-7d9055ef4d",
+      "riddle": "What is a charge you cannot pay with a card?",
+      "answer": "An electric charge"
+    },
+    {
+      "id": "wr-2ebf8a5fbe",
+      "riddle": "What is a chip you cannot eat?",
+      "answer": "A poker chip"
+    },
+    {
+      "id": "wr-81040d8272",
+      "riddle": "What is a chord you cannot tie?",
+      "answer": "A musical chord"
+    },
+    {
+      "id": "wr-1e0ce9f66c",
+      "riddle": "What is a chorus you cannot join with only your feet?",
+      "answer": "Singers"
+    },
+    {
+      "id": "wr-7c471bf844",
+      "riddle": "What is a clap that has no hands?",
+      "answer": "Thunder"
+    },
+    {
+      "id": "wr-fd45e4d666",
+      "riddle": "What is a current you cannot swim in?",
+      "answer": "An electric current"
+    },
+    {
+      "id": "wr-1abc418909",
+      "riddle": "What is a damper that is not wet weather?",
+      "answer": "A piano damper"
+    },
+    {
+      "id": "wr-5db49c4984",
+      "riddle": "What is a date you cannot eat?",
+      "answer": "A calendar date"
+    },
+    {
+      "id": "wr-976c3b2581",
+      "riddle": "What is a diamond that is not a gem?",
+      "answer": "A baseball field"
+    },
+    {
+      "id": "wr-9114a6c3f5",
+      "riddle": "What is a disc that is not a plate?",
+      "answer": "A record"
+    },
+    {
+      "id": "wr-542132b9b0",
+      "riddle": "What is a draw you cannot sketch?",
+      "answer": "A tie"
+    },
+    {
+      "id": "wr-318c9a581e",
+      "riddle": "What is a duet that is not a pair of shoes?",
+      "answer": "Two musicians"
+    },
+    {
+      "id": "wr-9b100ae8e5",
+      "riddle": "What is a fall that is not a season?",
+      "answer": "A waterfall"
+    },
+    {
+      "id": "wr-6c42feab38",
+      "riddle": "What is a fallboard that is not autumn?",
+      "answer": "A piano cover"
+    },
+    {
+      "id": "wr-05a85e108a",
+      "riddle": "What is a flash that is not a camera?",
+      "answer": "Lightning"
+    },
+    {
+      "id": "wr-3b9fbf1dfb",
+      "riddle": "What is a flat that is not an apartment?",
+      "answer": "A musical flat"
+    },
+    {
+      "id": "wr-987b8a703e",
+      "riddle": "What is a fly you cannot swat?",
+      "answer": "A fly on a zipper"
+    },
+    {
+      "id": "wr-fc9c147800",
+      "riddle": "What is a fork in the road that you cannot eat with?",
+      "answer": "A junction"
+    },
+    {
+      "id": "wr-862fa381eb",
+      "riddle": "What is a fret you should not worry about?",
+      "answer": "A guitar fret"
+    },
+    {
+      "id": "wr-04edebfecc",
+      "riddle": "What is a hammer that does not hit a nail?",
+      "answer": "A piano hammer"
+    },
+    {
+      "id": "wr-51745ed18a",
+      "riddle": "What is a hook you cannot hang a coat on?",
+      "answer": "A song hook"
+    },
+    {
+      "id": "wr-895bac74c1",
+      "riddle": "What is a house you cannot live in?",
+      "answer": "A greenhouse"
+    },
+    {
+      "id": "wr-feb52f8192",
+      "riddle": "What is a jam you cannot eat?",
+      "answer": "A traffic jam"
+    },
+    {
+      "id": "wr-778297e2ce",
+      "riddle": "What is a key that opens no door and starts no car?",
+      "answer": "A musical key"
+    },
+    {
+      "id": "wr-f5654d4682",
+      "riddle": "What is a lid that is not on a jar?",
+      "answer": "A piano lid"
+    },
+    {
+      "id": "wr-875356c39d",
+      "riddle": "What is a major that is not a soldier?",
+      "answer": "A musical major"
+    },
+    {
+      "id": "wr-625f4e81f4",
+      "riddle": "What is a match you cannot light?",
+      "answer": "A contest"
+    },
+    {
+      "id": "wr-cf238e8591",
+      "riddle": "What is a measure you cannot take with a ruler?",
+      "answer": "A bar of music"
+    },
+    {
+      "id": "wr-6b02c9f9bb",
+      "riddle": "What is a minor that is not a child?",
+      "answer": "A musical minor"
+    },
+    {
+      "id": "wr-ae05886a19",
+      "riddle": "What is a mute that is not a person who is quiet?",
+      "answer": "A trumpet mute"
+    },
+    {
+      "id": "wr-cbcb74ecf0",
+      "riddle": "What is a nail you cannot hammer?",
+      "answer": "A fingernail"
+    },
+    {
+      "id": "wr-40aa5c80e6",
+      "riddle": "What is a natural that is not a park?",
+      "answer": "A musical natural"
+    },
+    {
+      "id": "wr-adee3ea4fa",
+      "riddle": "What is a needle that does not sew?",
+      "answer": "A record needle"
+    },
+    {
+      "id": "wr-c10f54c0ff",
+      "riddle": "What is a note you cannot pass in class?",
+      "answer": "A musical note"
+    },
+    {
+      "id": "wr-9a07868c12",
+      "riddle": "What is a pedal that is not on a bike?",
+      "answer": "A piano pedal"
+    },
+    {
+      "id": "wr-f7ffe4a512",
+      "riddle": "What is a pick you cannot choose?",
+      "answer": "A guitar pick"
+    },
+    {
+      "id": "wr-fb895e82fe",
+      "riddle": "What is a pitch you cannot throw?",
+      "answer": "A musical pitch"
+    },
+    {
+      "id": "wr-8af92cf0e5",
+      "riddle": "What is a pitcher that never throws a ball?",
+      "answer": "A water pitcher"
+    },
+    {
+      "id": "wr-3cfb0a4a4b",
+      "riddle": "What is a quartet that is not four cups?",
+      "answer": "Four musicians"
+    },
+    {
+      "id": "wr-3eb9d780bc",
+      "riddle": "What is a race you cannot run?",
+      "answer": "The human race"
+    },
+    {
+      "id": "wr-31ce9bbe13",
+      "riddle": "What is a record that is not a sports score?",
+      "answer": "A vinyl disc"
+    },
+    {
+      "id": "wr-10971a4084",
+      "riddle": "What is a reed that does not grow in a pond?",
+      "answer": "A clarinet reed"
+    },
+    {
+      "id": "wr-d86ae527e3",
+      "riddle": "What is a refrain you cannot stop saying?",
+      "answer": "A chorus"
+    },
+    {
+      "id": "wr-aa281a3ee1",
+      "riddle": "What is a rest you cannot take on a couch?",
+      "answer": "A musical rest"
+    },
+    {
+      "id": "wr-fd49333715",
+      "riddle": "What is a roll that is not bread?",
+      "answer": "A drum roll"
+    },
+    {
+      "id": "wr-f64df5b185",
+      "riddle": "What is a room you cannot enter?",
+      "answer": "A mushroom"
+    },
+    {
+      "id": "wr-5f8fec23d1",
+      "riddle": "What is a scale you cannot climb?",
+      "answer": "A musical scale"
+    },
+    {
+      "id": "wr-ef99c602d5",
+      "riddle": "What is a school with no students?",
+      "answer": "A school of fish"
+    },
+    {
+      "id": "wr-48b240865d",
+      "riddle": "What is a sharp that will not cut you?",
+      "answer": "A musical sharp"
+    },
+    {
+      "id": "wr-f78353cc3e",
+      "riddle": "What is a single that is not one person?",
+      "answer": "A song"
+    },
+    {
+      "id": "wr-1787d2a814",
+      "riddle": "What is a slide that is not on a playground?",
+      "answer": "A trombone slide"
+    },
+    {
+      "id": "wr-72d83651de",
+      "riddle": "What is a solo you cannot fly?",
+      "answer": "A single musician"
+    },
+    {
+      "id": "wr-9b9f98e8b9",
+      "riddle": "What is a speaker that never gives a speech?",
+      "answer": "A loudspeaker"
+    },
+    {
+      "id": "wr-5c69dddacd",
+      "riddle": "What is a spring that is not a season?",
+      "answer": "A coil"
+    },
+    {
+      "id": "wr-17ab17ec33",
+      "riddle": "What is a staff that is not a stick?",
+      "answer": "A musical staff"
+    },
+    {
+      "id": "wr-009c8bc086",
+      "riddle": "What is a strike that is not bowling?",
+      "answer": "Lightning"
+    },
+    {
+      "id": "wr-113472f882",
+      "riddle": "What is a string that is not for a kite?",
+      "answer": "A guitar string"
+    },
+    {
+      "id": "wr-1526d77cd9",
+      "riddle": "What is a tie you cannot wear?",
+      "answer": "A draw"
+    },
+    {
+      "id": "wr-484d55c8ed",
+      "riddle": "What is a track that trains do not use?",
+      "answer": "A song"
+    },
+    {
+      "id": "wr-83cb422259",
+      "riddle": "what is a triangle with 2 sides?",
+      "answer": "no such thing"
+    },
+    {
+      "id": "wr-d0725e7e32",
+      "riddle": "What is a trio that is not three friends?",
+      "answer": "Three musicians"
+    },
+    {
+      "id": "wr-c78a0a2550",
+      "riddle": "What is a turntable that is not furniture you sit at?",
+      "answer": "A record player"
+    },
+    {
+      "id": "wr-8f46bfd96b",
+      "riddle": "What is a verse that is not in church?",
+      "answer": "A song verse"
+    },
+    {
+      "id": "wr-e944999348",
+      "riddle": "What is a wave you cannot surf?",
+      "answer": "A wave of the hand"
+    },
+    {
+      "id": "wr-b649f11d11",
+      "riddle": "What is a witch's favorite subject in school?",
+      "answer": "Spelling"
+    },
+    {
+      "id": "wr-2db2130624",
+      "riddle": "What is always coming but never arrives?",
+      "answer": "Tomorrow"
+    },
+    {
+      "id": "wr-5c92f16b19",
+      "riddle": "What is always in front of you but can't be seen?",
+      "answer": "The future"
+    },
+    {
+      "id": "wr-3703123dab",
+      "riddle": "What is an album that is not a photo book?",
+      "answer": "A record"
+    },
+    {
+      "id": "wr-ae7b3dadd3",
+      "riddle": "What is an amp that is not a unit of current?",
+      "answer": "A guitar amp"
+    },
+    {
+      "id": "wr-89f91ff840",
+      "riddle": "What is an octave you cannot climb?",
+      "answer": "Eight notes"
+    },
+    {
+      "id": "wr-4431991e92",
+      "riddle": "What is as light as a feather but even the strongest person can't hold it for long?",
+      "answer": "Breath"
+    },
+    {
+      "id": "wr-3674eedbee",
+      "riddle": "What is at the end of a rainbow?",
+      "answer": "The letter W"
+    },
+    {
+      "id": "wr-3466c70139",
+      "riddle": "What is at the end of everything?",
+      "answer": "The letter G"
+    },
+    {
+      "id": "wr-dbca550084",
+      "riddle": "what is black when clean and white when dirty?",
+      "answer": "a chalkboard"
+    },
+    {
+      "id": "wr-910b6b1694",
+      "riddle": "What is black when you buy it, red when you use it, and gray when you throw it away?",
+      "answer": "Charcoal"
+    },
+    {
+      "id": "wr-5f916b34db",
+      "riddle": "What is brighter than the sun but cannot be seen at night from Earth?",
+      "answer": "The sun"
+    },
+    {
+      "id": "wr-1d50109b10",
+      "riddle": "what is brown and stiky and goes round and round",
+      "answer": "poo"
+    },
+    {
+      "id": "wr-3c9569ac48",
+      "riddle": "What is easy to get into but hard to get out of?",
+      "answer": "Trouble"
+    },
+    {
+      "id": "wr-17b1f777e0",
+      "riddle": "What is found in the depths of the earth, yet reaches towards the sky?",
+      "answer": "A tree"
+    },
+    {
+      "id": "wr-1fea141ef5",
+      "riddle": "What is full of holes but still holds water?",
+      "answer": "A sponge"
+    },
+    {
+      "id": "wr-214c24af9e",
+      "riddle": "What is harder to catch the faster you run?",
+      "answer": "Your breath!"
+    },
+    {
+      "id": "wr-8663102ada",
+      "riddle": "What is in the middle of Paris?",
+      "answer": "R"
+    },
+    {
+      "id": "wr-a6e2102c7d",
+      "riddle": "What is it that given one, you’ll have either two or none?",
+      "answer": "choice"
+    },
+    {
+      "id": "wr-181f1c1ef1",
+      "riddle": "What is it that has four legs, one head, and a foot?",
+      "answer": "bed"
+    },
+    {
+      "id": "wr-4aa4357d4a",
+      "riddle": "What is it that is deaf, dumb and blind and always tells the truth?",
+      "answer": "A Mirror"
+    },
+    {
+      "id": "wr-c5d1e6b5f4",
+      "riddle": "What is it that when you take away the whole, you still have some left over?",
+      "answer": "Wholesome"
+    },
+    {
+      "id": "wr-adc09b2622",
+      "riddle": "What is it that you must give before you can keep it.",
+      "answer": "word"
+    },
+    {
+      "id": "wr-0a81f97e51",
+      "riddle": "What is it that you ought to keep after you have given it to someone else?",
+      "answer": "A promise"
+    },
+    {
+      "id": "wr-fbbd1565b7",
+      "riddle": "What is it the more you take, the more you leave behind?",
+      "answer": "Your Feet Footsteps"
+    },
+    {
+      "id": "wr-142ba9d1b8",
+      "riddle": "What is long and slim, works in light. Has but one eye, and an awful bite?",
+      "answer": "needle"
+    },
+    {
+      "id": "wr-1f588fcd27",
+      "riddle": "What is more useful when it is broken?",
+      "answer": "It comes from chickens An egg"
+    },
+    {
+      "id": "wr-bffdc6f185",
+      "riddle": "What is often returned, but never borrowed/",
+      "answer": "thanks"
+    },
+    {
+      "id": "wr-bdd045e887",
+      "riddle": "What is once in a minute, twice in a moment, and never in a thousand years?",
+      "answer": "The letter M"
+    },
+    {
+      "id": "wr-caa8b922f4",
+      "riddle": "what is perfect, pretty, and smart?",
+      "answer": "Anna!!!!"
+    },
+    {
+      "id": "wr-9fc4671f31",
+      "riddle": "What is put on a table, cut, but never eaten?",
+      "answer": "A deck of cards"
+    },
+    {
+      "id": "wr-b8be5c8f7b",
+      "riddle": "What is put on a table, cut, but never eaten?",
+      "answer": "deck"
+    },
+    {
+      "id": "wr-46bf9be6e8",
+      "riddle": "What is red and blue, and purple and green? No one can reach it, not even the queen?",
+      "answer": "A Rainbow"
+    },
+    {
+      "id": "wr-09e8bb1dc7",
+      "riddle": "What is round on the ends and high in the middle?",
+      "answer": "oHIo"
+    },
+    {
+      "id": "wr-85e0ba9cc6",
+      "riddle": "What is so fragile that saying its name breaks it?",
+      "answer": "silence"
+    },
+    {
+      "id": "wr-52ffc7b05b",
+      "riddle": "What is so fragile that when you say its name you break it?",
+      "answer": "Silence"
+    },
+    {
+      "id": "wr-f5527c7356",
+      "riddle": "What is something that can be made, broken, and accepted?",
+      "answer": "a deal"
+    },
+    {
+      "id": "wr-e1499f8df0",
+      "riddle": "What is that over the head and under the hat?",
+      "answer": "hair"
+    },
+    {
+      "id": "wr-d79d27eadb",
+      "riddle": "What is the color of the vest's sleeves ? ...",
+      "answer": "Vests don't have sleeves"
+    },
+    {
+      "id": "wr-bcd1ac661b",
+      "riddle": "What is yours but others use it more than you do?",
+      "answer": "Your name"
+    },
+    {
+      "id": "wr-7a0a10c498",
+      "riddle": "What kind of band never plays music?",
+      "answer": "A rubber band"
+    },
+    {
+      "id": "wr-e894f575d6",
+      "riddle": "What kind of button cannot be undone?",
+      "answer": "A belly button"
+    },
+    {
+      "id": "wr-05653fa9f6",
+      "riddle": "What kind of can never needs a can-opener?",
+      "answer": "A pelican!"
+    },
+    {
+      "id": "wr-69371f15bf",
+      "riddle": "What kind of coat can be put on only when wet?",
+      "answer": "A coat of paint"
+    },
+    {
+      "id": "wr-b4437103df",
+      "riddle": "What kind of coat can be put on only when wet?",
+      "answer": "A coat of paint!"
+    },
+    {
+      "id": "wr-75d63bc055",
+      "riddle": "What kind of coat is always wet when you put it on?",
+      "answer": "A coat of paint"
+    },
+    {
+      "id": "wr-c609ce7354",
+      "riddle": "What kind of cup can't hold water?",
+      "answer": "A cupcake"
+    },
+    {
+      "id": "wr-e17196b643",
+      "riddle": "What kind of music do mummies listen to?",
+      "answer": "Wrap music"
+    },
+    {
+      "id": "wr-e90105af5a",
+      "riddle": "What kind of nail does a carpenter hate to hit?",
+      "answer": "A fingernail"
+    },
+    {
+      "id": "wr-056e42d8b7",
+      "riddle": "What kind of nut is empty at the center and has no shell.",
+      "answer": "doughnut"
+    },
+    {
+      "id": "wr-faf7c2e228",
+      "riddle": "What kind of pet always stays on the floor?",
+      "answer": "carpet"
+    },
+    {
+      "id": "wr-8b0034a09b",
+      "riddle": "What kind of rocks does Frankenstein have in his collection?",
+      "answer": "Tombstones"
+    },
+    {
+      "id": "wr-04a61e86e2",
+      "riddle": "What kind of room has no doors or windows?",
+      "answer": "A mushroom"
+    },
+    {
+      "id": "wr-5bd18abf24",
+      "riddle": "What kind of room has no windows or doors?",
+      "answer": "mushroom"
+    },
+    {
+      "id": "wr-beea2a6283",
+      "riddle": "What kind of running means walking?",
+      "answer": "Running out of gas!"
+    },
+    {
+      "id": "wr-e33e3dcade",
+      "riddle": "What kind of ship has two mates but no captain?",
+      "answer": "A relationship"
+    },
+    {
+      "id": "wr-b8a07e4325",
+      "riddle": "What kind of star is afraid of the night?",
+      "answer": "A shooting star"
+    },
+    {
+      "id": "wr-dfc1b7bc94",
+      "riddle": "What kind of stone is never found in the sea?",
+      "answer": "A milestone"
+    },
+    {
+      "id": "wr-53e36f708a",
+      "riddle": "What kind of storm is always in a rush?",
+      "answer": "a hurry- cane"
+    },
+    {
+      "id": "wr-bcd10d5eed",
+      "riddle": "What kind of tree can you carry in your hand?",
+      "answer": "A palm"
+    },
+    {
+      "id": "wr-37d67c1bf7",
+      "riddle": "What letter is a body of water?",
+      "answer": "C"
+    },
+    {
+      "id": "wr-6109bec1a6",
+      "riddle": "What letter is a drink?",
+      "answer": "T"
+    },
+    {
+      "id": "wr-1bc0463cf1",
+      "riddle": "What letter is an insect?",
+      "answer": "B"
+    },
+    {
+      "id": "wr-05b60341a8",
+      "riddle": "What lies in a tunnel of darkness. That can only attack when pulled back?",
+      "answer": "bullet"
+    },
+    {
+      "id": "wr-14f7515303",
+      "riddle": "What loses its head in the morning and gets it back at night?",
+      "answer": "pillow"
+    },
+    {
+      "id": "wr-6278b54342",
+      "riddle": "What measures out time. Until in time all is smashed to it?",
+      "answer": "sand"
+    },
+    {
+      "id": "wr-50973ec64f",
+      "riddle": "What never gets any wetter, no matter how much it rains?",
+      "answer": "The sea"
+    },
+    {
+      "id": "wr-6358f248b4",
+      "riddle": "What part of the turkey has the most feathers?",
+      "answer": "The outside"
+    },
+    {
+      "id": "wr-1c32b84f34",
+      "riddle": "What question can you never answer yes to?",
+      "answer": "Are you asleep?"
+    },
+    {
+      "id": "wr-3eb93c41c5",
+      "riddle": "What question can you never answer?",
+      "answer": "“What's it like to be dead?“"
+    },
+    {
+      "id": "wr-2e78c08628",
+      "riddle": "What relation would your father's sister's sister-in-law be to you?",
+      "answer": "This person would be your mother"
+    },
+    {
+      "id": "wr-a8c7fe8432",
+      "riddle": "What runs around all day. Then lies under the bed. With its tongue hanging out?",
+      "answer": "shoe"
+    },
+    {
+      "id": "wr-e33ad0079e",
+      "riddle": "What runs but never walks?",
+      "answer": "A river"
+    },
+    {
+      "id": "wr-db45f60eaa",
+      "riddle": "What sport has four letters, is played all around the world, and begins with a T?",
+      "answer": "Golf"
+    },
+    {
+      "id": "wr-27837a548e",
+      "riddle": "What starts with a 'T', ends with a 'T', and has T in it?",
+      "answer": "teapot"
+    },
+    {
+      "id": "wr-dd21f89d82",
+      "riddle": "What starts with a T, ends with a T, and has T in it?",
+      "answer": "A teapot"
+    },
+    {
+      "id": "wr-c2c95783a3",
+      "riddle": "What starts with an E, ends with an E and only has one letter in it?",
+      "answer": "An envelope"
+    },
+    {
+      "id": "wr-0d038e810c",
+      "riddle": "What starts with T, ends with T and has T in it?",
+      "answer": "A teapot"
+    },
+    {
+      "id": "wr-4cf0a94bb1",
+      "riddle": "What starts with T, ends with T, and has T in it?",
+      "answer": "A teapot"
+    },
+    {
+      "id": "wr-296e585e04",
+      "riddle": "What stays where it is when it goes off?",
+      "answer": "A Gun"
+    },
+    {
+      "id": "wr-c5d41630f0",
+      "riddle": "What surrounds the world, yet dwells within a thimble?",
+      "answer": "space"
+    },
+    {
+      "id": "wr-f3cd83bf2d",
+      "riddle": "What time is it when the clock strikes 13?",
+      "answer": "Time to get the clock fixed"
+    },
+    {
+      "id": "wr-4e64650ecb",
+      "riddle": "What tree do Fortune Tellers look at?",
+      "answer": "It's a kind of tree A palm tree of course"
+    },
+    {
+      "id": "wr-0d5c1ea2b9",
+      "riddle": "What two things can you never eat for breakfast?",
+      "answer": "Lunch and dinner"
+    },
+    {
+      "id": "wr-0e1cd80a9e",
+      "riddle": "What wears a coat in the winter and pants in the summer?",
+      "answer": "dog"
+    },
+    {
+      "id": "wr-7429b7ccb2",
+      "riddle": "What word becomes a palindrome when you take away its first letter?",
+      "answer": "Racecar"
+    },
+    {
+      "id": "wr-38dae5d049",
+      "riddle": "What word contains all of the twenty six letters?",
+      "answer": "Alphabet"
+    },
+    {
+      "id": "wr-cad3dcb43a",
+      "riddle": "What word has kst in the middle, in the beginning, and at the end?",
+      "answer": "inkstand"
+    },
+    {
+      "id": "wr-30f9c7418d",
+      "riddle": "What word is spelled incorrectly in every dictionary?",
+      "answer": "Incorrectly"
+    },
+    {
+      "id": "wr-c97be6e865",
+      "riddle": "What word is the same written forward, backward and upside down?",
+      "answer": "noon"
+    },
+    {
+      "id": "wr-e5e7e02cf2",
+      "riddle": "What word looks the same upside down and backward?",
+      "answer": "SWIMS"
+    },
+    {
+      "id": "wr-e5634e0e36",
+      "riddle": "What word of five letters has one left when two are removed?",
+      "answer": "Stone"
+    },
+    {
+      "id": "wr-fa1c404c63",
+      "riddle": "What would you find in the middle of nowhere?",
+      "answer": "Nothing"
+    },
+    {
+      "id": "wr-7e578704ea",
+      "riddle": "What year comes next in this sequence: 1973 1979 1987 1993 1997 1999",
+      "answer": "2003: they are prime years"
+    },
+    {
+      "id": "wr-130f62ba19",
+      "riddle": "What's as big as you are yet doesn't weigh an ounce?",
+      "answer": "Your shadow"
+    },
+    {
+      "id": "wr-369c2538a2",
+      "riddle": "What’s black in the morning, red in the afternoon, and white at night?",
+      "answer": "coal"
+    },
+    {
+      "id": "wr-6e9e09cf15",
+      "riddle": "What's the difference between a penniless man and a feather bed?",
+      "answer": "One is hard up, while the other is soft down"
+    },
+    {
+      "id": "wr-b5443ff9f0",
+      "riddle": "What's the greatest worldwide use of cowhide?",
+      "answer": "To cover cows"
+    },
+    {
+      "id": "wr-91ffdb7770",
+      "riddle": "When I am young I am tall. When I am old I am short. What can I be?",
+      "answer": "Fire A Candle"
+    },
+    {
+      "id": "wr-ce190bf3df",
+      "riddle": "When I point up it's bright, but when I point down it's dark. What am I?",
+      "answer": "A Light Switch"
+    },
+    {
+      "id": "wr-84e22a709c",
+      "riddle": "When set loose I fly away. Never so cursed as when I go astray.",
+      "answer": "fart"
+    },
+    {
+      "id": "wr-cee00a47ce",
+      "riddle": "When they are caught, they are thrown away. When they escape, you itch all day.",
+      "answer": "fleas"
+    },
+    {
+      "id": "wr-9e76928170",
+      "riddle": "Where on Earth do the winds always blow from the South?",
+      "answer": "The North Pole"
+    },
+    {
+      "id": "wr-5988f27dea",
+      "riddle": "Which letter of the alphabet has the most water?",
+      "answer": "C"
+    },
+    {
+      "id": "wr-aa26d5483f",
+      "riddle": "Which word in the English language becomes shorter when it is lengthened?",
+      "answer": "Short"
+    },
+    {
+      "id": "wr-c27d123683",
+      "riddle": "Whilst I was engaged in sitting. I spied the dead carrying the living",
+      "answer": "ship"
+    },
+    {
+      "id": "wr-02b3d64170",
+      "riddle": "Who is he that runs without a leg. And his house on his back?",
+      "answer": "snail"
+    },
+    {
+      "id": "wr-2d8f95a46e",
+      "riddle": "Who spends the day at the window, goes to the table for meals and hides at night?",
+      "answer": "A fly"
+    },
+    {
+      "id": "wr-5563532630",
+      "riddle": "Who works when he plays and plays when he works?",
+      "answer": "musician"
+    },
+    {
+      "id": "wr-664cfc3fcb",
+      "riddle": "Why can't a woman, who is now living in Canada, not be buried in the USA?",
+      "answer": "Because she is still alive!"
+    },
+    {
+      "id": "wr-90dcfc1d05",
+      "riddle": "Why did the Indian chief wear so many feathers?",
+      "answer": "To keep his wigwam"
+    },
+    {
+      "id": "wr-37c23dfa5d",
+      "riddle": "You can carry it everywhere you go, and it does not get heavy. What is it?",
+      "answer": "Your name"
+    },
+    {
+      "id": "wr-70f050db76",
+      "riddle": "You can spin, wheel and twist, but this thing can turn without moving. What is it?",
+      "answer": "Got milk?"
+    },
+    {
+      "id": "wr-3c064e4ff8",
+      "riddle": "You can spin, wheel and twist. But this thing can turn without moving.",
+      "answer": "milk"
+    },
+    {
+      "id": "wr-ec13adf181",
+      "riddle": "You can take off all of my skin and I will not cry but YOU will Why ?",
+      "answer": "I'm an onion"
+    },
+    {
+      "id": "wr-f4ce3b24ad",
+      "riddle": "You can't keep this until you have given it.",
+      "answer": "Your word"
+    },
+    {
+      "id": "wr-df7242bdd8",
+      "riddle": "You heard me before, Yet you hear me again, Then I die, 'Till you call me again.",
+      "answer": "Hello...Hello...Hello I am an echo"
+    },
+    {
+      "id": "wr-f02e3866a2",
+      "riddle": "You heard me before, yet you hear me again, then I die. Until you call me again.",
+      "answer": "echo"
+    },
+    {
+      "id": "wr-95113d157e",
+      "riddle": "You use a knife to slice my head and weep beside me when I am dead. What am I?",
+      "answer": "An onion"
+    },
+    {
+      "id": "wr-310aed4972",
+      "riddle": "You use a knife to slice my head. And weep beside me when I am dead.",
+      "answer": "onion"
+    }
+  ]
+}

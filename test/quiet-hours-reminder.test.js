@@ -56,9 +56,10 @@ test('every Quiet Hours Reminder variant is a valid 6x22 night card', () => {
   }
 });
 
-test('the marketplace-style moon, SHHH, and star cards match their drawings', () => {
+test('the palm, activated, ZZZ, and star cards match their drawings', () => {
   assertLayout(layoutFor({ variant: 'moon' }), DRAWINGS.moon, 'moon');
   assertLayout(layoutFor({ variant: 'shhh' }), DRAWINGS.shhh, 'shhh');
+  assertLayout(layoutFor({ variant: 'zzz' }), DRAWINGS.zzz, 'zzz');
   assertLayout(layoutFor({ variant: 'stars' }), DRAWINGS.stars, 'stars');
 });
 
@@ -69,12 +70,12 @@ test('the until card names the quiet-hours end in 12-hour form', () => {
     variant: 'until',
     window: { start: '22:00', end: '07:00' },
   }), [
-    'vv                  vv',
+    'roygbv                ',
     '                      ',
     '      QUIET HOURS     ',
     '       UNTIL 7AM      ',
     '                      ',
-    'vv                  vv',
+    '                vbgyor',
   ], 'until');
 });
 
