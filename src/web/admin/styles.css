@@ -3093,6 +3093,7 @@ textarea.field-input.text-input-area {
   #tab-settings .public-url-settings-card,
   #tab-settings .guest-snaps-settings-card,
   #tab-settings .guest-book-settings-card,
+  #tab-settings .ring-doorbell-settings-card,
   #tab-settings .weather-alerts-settings-card,
   #tab-settings .world-population-settings-card,
   #tab-settings .calendar-clock-settings-card,
@@ -4075,7 +4076,8 @@ textarea.field-input.text-input-area {
   .stock-market-settings-card .settings-columns,
   .currency-rates-settings-card .settings-columns,
   .starlink-tracker-settings-card .settings-columns,
-  .iss-tracker-settings-card .settings-columns {
+  .iss-tracker-settings-card .settings-columns,
+  .ring-doorbell-settings-card .settings-columns {
     grid-template-columns: minmax(0, 1.05fr) minmax(280px, 1fr);
     align-items: start;
   }

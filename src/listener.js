@@ -113,6 +113,7 @@ const { createSteamLibraryTour } = require('./steam-library-tour');
 const { createPsnLibraryTour } = require('./psn-library-tour');
 const { createYoutubeNowPlaying } = require('./youtube-now-playing');
 const { createPlexNowPlaying } = require('./plex-now-playing');
+const { createRingDoorbellService } = require('./ring-doorbell');
 const { createAutodartsService } = require('./autodarts-service');
 const { createHuupeService } = require('./huupe-service');
 const { createTriviaService } = require('./trivia-service');
@@ -206,6 +207,7 @@ function createListener({
   let psnLibraryTour = null;
   let youtubeNowPlaying = null;
   let plexNowPlaying = null;
+  let ringDoorbell = null;
   let autodarts = null;
   let huupe = null;
   let flightplan = null;
@@ -2336,6 +2338,13 @@ function createListener({
         });
         plexNowPlaying.start();
 
+        ringDoorbell = createRingDoorbellService({
+          config,
+          log,
+          sendUdpPayload,
+        });
+        ringDoorbell.start();
+
         autodarts = createAutodartsService({
           config,
           log,
@@ -2407,6 +2416,8 @@ function createListener({
     getYoutubeStatus: () => youtubeNowPlaying?.statusSnapshot?.() || null,
     plexNowPlaying: () => plexNowPlaying,
     getPlexStatus: () => plexNowPlaying?.statusSnapshot?.() || null,
+    ringDoorbell: () => ringDoorbell,
+    getRingStatus: () => ringDoorbell?.statusSnapshot?.() || null,
     autodarts: () => autodarts,
     getAutodartsStatus: () => autodarts?.statusSnapshot?.() || null,
     huupe: () => huupe,

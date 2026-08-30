@@ -97,6 +97,7 @@
       const err = new Error(data?.error || `Request failed (${response.status})`);
       err.status = response.status;
       err.code = data?.code;
+      err.data = data;
       throw err;
     }
     return data || {};
@@ -836,6 +837,7 @@
     'public-url-settings-card': ['full', 'vestaboard'],
     'guest-snaps-settings-card': ['full', 'vestaboard'],
     'guest-book-settings-card': ['vestaboard'],
+    'ring-doorbell-settings-card': ['vestaboard'],
     'weather-alerts-settings-card': ['vestaboard'],
     'world-population-settings-card': ['vestaboard'],
     'calendar-clock-settings-card': ['vestaboard'],
@@ -5781,6 +5783,301 @@
   });
 
   loadGuestBookSettings();
+
+  // ---------- Ring Doorbell ----------
+  let ringPreviewTimer = null;
+
+  function ringConnectionClass(state) {
+    switch (String(state || '')) {
+      case 'listening': return 'ok';
+      case 'connecting': return 'warn';
+      case 'error': return 'bad';
+      case 'needs_auth': return 'warn';
+      case 'disabled': return 'warn';
+      default: return '';
+    }
+  }
+
+  function showRing2fa(prompt) {
+    const login = $('ring-login-block');
+    const twofa = $('ring-2fa-block');
+    if (login) login.hidden = true;
+    if (twofa) twofa.hidden = false;
+    const hint = $('ring-2fa-prompt');
+    if (hint) hint.textContent = prompt || 'Enter the code Ring sent you.';
+    $('ring-2fa-code')?.focus();
+  }
+
+  function showRingLogin() {
+    const login = $('ring-login-block');
+    const twofa = $('ring-2fa-block');
+    if (login) login.hidden = false;
+    if (twofa) twofa.hidden = true;
+    const code = $('ring-2fa-code');
+    if (code) code.value = '';
+  }
+
+  function renderRingSettings(data = {}) {
+    setChecked('ring-enabled', data.enabled !== false);
+    setChecked('ring-push-ding', data.pushOnDing !== false);
+    setChecked('ring-push-motion', Boolean(data.pushOnMotion));
+    setChecked('ring-quiet-exempt', data.quietHoursExempt !== false);
+    const title = $('ring-title');
+    if (title && document.activeElement !== title) {
+      title.value = data.title || 'Ring Door Bell';
+    }
+    const message = $('ring-message');
+    if (message && document.activeElement !== message) {
+      message.value = data.message || 'Someone is at your front door';
+    }
+    const pill = $('ring-status-pill');
+    const detail = $('ring-status-detail');
+    const conn = data.connection || {};
+    const state = conn.state || (data.configured ? 'idle' : 'needs_auth');
+    if (pill) {
+      pill.textContent = data.pending2fa
+        ? 'Needs 2FA'
+        : state === 'listening'
+          ? 'Listening'
+          : state === 'connecting'
+            ? 'Connecting'
+            : state === 'needs_auth'
+              ? 'Needs auth'
+              : state === 'disabled'
+                ? 'Off'
+                : state === 'error'
+                  ? 'Error'
+                  : data.configured ? 'Ready' : 'Not linked';
+      pill.className = `status-pill ${ringConnectionClass(data.pending2fa ? 'needs_auth' : state)}`;
+    }
+    if (detail) {
+      const bits = [
+        data.pending2fa
+          ? (data.twoFactorPrompt || 'Enter the verification code from Ring.')
+          : (conn.detail || 'Sign in with your Ring email and password.'),
+      ];
+      if (data.tokenSource === 'env') {
+        bits.push('Token comes from RING_REFRESH_TOKEN in .env.');
+      } else if (data.hasToken && data.tokenHint) {
+        bits.push(`Saved token …${data.tokenHint}`);
+      }
+      if (conn.lastError) {
+        bits.push(conn.lastError);
+      }
+      detail.textContent = bits.join(' ');
+    }
+    if (data.pending2fa) {
+      showRing2fa(data.twoFactorPrompt);
+    } else if (!document.activeElement || !['ring-email', 'ring-password', 'ring-2fa-code'].includes(document.activeElement.id)) {
+      showRingLogin();
+    }
+    const cameras = $('ring-cameras');
+    if (cameras) {
+      const list = Array.isArray(data.cameras) ? data.cameras : [];
+      if (!list.length) {
+        cameras.textContent = data.listening
+          ? 'Connected — no cameras found on this account.'
+          : 'Cameras appear after a successful connect.';
+      } else {
+        cameras.textContent = `Cameras: ${list.map((cam) => cam.name || cam.id).join(', ')}`;
+      }
+    }
+    scheduleRingPreview();
+  }
+
+  async function refreshRingPreview() {
+    const host = $('ring-preview');
+    if (!host) return;
+    try {
+      const data = await apiPost('/api/ring/preview', {
+        title: $('ring-title')?.value || '',
+        message: $('ring-message')?.value || '',
+      });
+      if (Array.isArray(data.rows)) {
+        renderVbGrid(host, data.rows);
+      }
+    } catch {
+      // Keep the last good preview if the bridge is mid-restart.
+    }
+  }
+
+  function scheduleRingPreview() {
+    clearTimeout(ringPreviewTimer);
+    ringPreviewTimer = setTimeout(() => {
+      refreshRingPreview();
+    }, 180);
+  }
+
+  async function loadRingSettings() {
+    try {
+      const data = await apiGet('/api/ring/settings');
+      renderRingSettings(data);
+    } catch (error) {
+      const pill = $('ring-status-pill');
+      if (pill) {
+        pill.textContent = 'Unavailable';
+        pill.className = 'status-pill bad';
+      }
+      const detail = $('ring-status-detail');
+      if (detail) detail.textContent = error.message || 'Could not load Ring settings';
+    }
+  }
+
+  function ringSettingsBody() {
+    return {
+      enabled: Boolean($('ring-enabled')?.checked),
+      title: $('ring-title')?.value || '',
+      message: $('ring-message')?.value || '',
+      pushOnDing: Boolean($('ring-push-ding')?.checked),
+      pushOnMotion: Boolean($('ring-push-motion')?.checked),
+      quietHoursExempt: Boolean($('ring-quiet-exempt')?.checked),
+    };
+  }
+
+  ['ring-title', 'ring-message'].forEach((id) => {
+    $(id)?.addEventListener('input', scheduleRingPreview);
+  });
+
+  $('btn-ring-save')?.addEventListener('click', async () => {
+    const button = $('btn-ring-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/settings', ringSettingsBody());
+      renderRingSettings(result);
+      toast('Ring settings saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Save failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-reset')?.addEventListener('click', async () => {
+    const button = $('btn-ring-reset');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/settings', { reset: true });
+      renderRingSettings(result);
+      toast('Ring defaults restored', 'ok');
+    } catch (error) {
+      toast(error.message || 'Reset failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    if (button) button.disabled = true;
+    try {
+      await apiPost('/api/push/ring-doorbell', withTarget({
+        title: $('ring-title')?.value || '',
+        message: $('ring-message')?.value || '',
+      }));
+      toast('Ring preview pushed', 'ok');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-auth')?.addEventListener('click', async () => {
+    const button = $('btn-ring-auth');
+    const input = $('ring-token-input');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/auth/link', {
+        refreshToken: input?.value || '',
+      });
+      if (input) input.value = '';
+      renderRingSettings(result);
+      toast(result.listening ? 'Ring is listening' : 'Ring token saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Connect failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-login')?.addEventListener('click', async () => {
+    const button = $('btn-ring-login');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/auth/login', {
+        email: $('ring-email')?.value || '',
+        password: $('ring-password')?.value || '',
+      });
+      const password = $('ring-password');
+      if (password) password.value = '';
+      if (result.needs2fa) {
+        showRing2fa(result.prompt);
+        toast('Enter your Ring verification code', 'ok');
+        return;
+      }
+      showRingLogin();
+      renderRingSettings(result);
+      toast(result.listening ? 'Ring is listening' : 'Signed in to Ring', 'ok');
+    } catch (error) {
+      toast(error.message || 'Sign-in failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-verify')?.addEventListener('click', async () => {
+    const button = $('btn-ring-verify');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/auth/verify', {
+        code: $('ring-2fa-code')?.value || '',
+      });
+      showRingLogin();
+      renderRingSettings(result);
+      toast(result.listening ? 'Ring is listening' : 'Signed in to Ring', 'ok');
+    } catch (error) {
+      if (error?.data?.needs2fa || error?.data?.prompt) {
+        showRing2fa(error.data.prompt || error.message);
+      }
+      toast(error.message || 'Verification failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-cancel-2fa')?.addEventListener('click', () => {
+    showRingLogin();
+  });
+
+  $('btn-ring-clear')?.addEventListener('click', async () => {
+    const button = $('btn-ring-clear');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/auth/clear', {});
+      renderRingSettings(result);
+      toast('Ring session cleared', 'ok');
+    } catch (error) {
+      toast(error.message || 'Clear failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-ring-reconnect')?.addEventListener('click', async () => {
+    const button = $('btn-ring-reconnect');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/ring/reconnect', {});
+      renderRingSettings(result);
+      toast(result.listening ? 'Listening again' : (result.connection?.detail || 'Reconnect finished'), 'ok');
+    } catch (error) {
+      toast(error.message || 'Reconnect failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  loadRingSettings();
 
   const GB_BOOK_PAGE_SIZE = 10;
   let guestBookPage = 1;
@@ -15782,6 +16079,7 @@
     loadLocaleSettings();
     loadPublicUrlSettings();
     loadGuestBookSettings();
+    loadRingSettings();
     loadGuestSnapsSettings();
     loadWeatherAlertsSettings();
     loadWorldPopulationSettings();

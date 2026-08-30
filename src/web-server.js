@@ -151,6 +151,7 @@ const { createCalendarClock } = require('./calendar-clock');
 const { createDateBook } = require('./date-book');
 const { createRedLetter } = require('./red-letter');
 const { createPlexTop10 } = require('./plex-top10');
+const { createRingDoorbellService } = require('./ring-doorbell');
 const { createWeatherAlerts } = require('./weather-alerts');
 const { createStockMarket } = require('./stock-market');
 const { createCurrencyRates } = require('./currency-rates');
@@ -379,6 +380,8 @@ function createWebServer({
   youtubeNowPlaying = null,
   getPlexStatus = null,
   plexNowPlaying = null,
+  getRingStatus = null,
+  ringDoorbell = null,
   autodarts = null,
   getAutodartsStatus = null,
   huupe = null,
@@ -523,6 +526,15 @@ function createWebServer({
   const currencyRates = createCurrencyRates(config, log);
   const issTracker = createIssTracker(config, log);
   const starlinkTracker = createStarlinkTracker(config, log);
+  const ringDoorbellInstance = typeof ringDoorbell === 'function'
+    ? ringDoorbell()
+    : (ringDoorbell || createRingDoorbellService({
+      config,
+      log,
+      sendUdpPayload,
+    }));
+  // Live ding/motion subscription is owned by the listener; the web server
+  // only needs the same instance for Settings / preview / Push.
   const quietHoursReminder = createQuietHoursReminder({
     persistPath: config.quietHoursReminderPath
       || path.join(config.ROOT || path.resolve(__dirname, '..'), 'data', 'quiet-hours-reminder.json'),
@@ -600,6 +612,9 @@ function createWebServer({
     getPlexTop10Status: () => plexTop10.statusSnapshot(),
     getRedLetterStatus: () => redLetter.statusSnapshot(),
     getGuestBookStatus: () => guestBook.publicStatus(),
+    getRingStatus: () => getRingStatus?.()
+      || ringDoorbellInstance?.statusSnapshot?.()
+      || null,
     getLocaleSettings: () => localeSettings.get(),
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getLearnLanguageStatus: (commandId) => learnLanguages[commandId]?.statusSnapshot() || null,
@@ -2436,6 +2451,187 @@ function createWebServer({
     sendJson(res, result.ok ? 200 : 404, result);
   }
 
+  function ringService() {
+    return ringDoorbellInstance;
+  }
+
+  function handleRingSettingsGet(res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  async function handleRingSettingsPut(body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    if (body?.reset) {
+      service.resetSettings();
+    } else {
+      service.updateSettings({
+        enabled: body?.enabled,
+        title: body?.title,
+        message: body?.message,
+        pushOnDing: body?.pushOnDing,
+        pushOnMotion: body?.pushOnMotion,
+        quietHoursExempt: body?.quietHoursExempt,
+        cameraIds: body?.cameraIds,
+      });
+    }
+    sendJson(res, 200, { ok: true, ...service.statusSnapshot() });
+  }
+
+  function handleRingPreview(body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    const payload = service.previewPayload({
+      title: body?.title,
+      message: body?.message,
+      kind: body?.kind,
+    });
+    sendJson(res, 200, { ok: true, payload, rows: payload.rows });
+  }
+
+  async function handleRingAuthLink(body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    const token = String(body?.refreshToken || body?.token || '').trim();
+    if (!token) {
+      sendJson(res, 400, { ok: false, error: 'Refresh token is required' });
+      return;
+    }
+    try {
+      const status = await service.saveToken(token);
+      sendJson(res, 200, { ok: true, ...status });
+    } catch (error) {
+      if (error?.code === 'ENV_BLOCKS') {
+        sendJson(res, 409, { ok: false, error: error.message });
+        return;
+      }
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleRingAuthLogin(body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    try {
+      const result = await service.loginWithPassword({
+        email: body?.email,
+        password: body?.password,
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      const code = error?.code;
+      const statusCode = code === 'ENV_BLOCKS' ? 409
+        : code === 'BAD_REQUEST' ? 400
+          : 400;
+      sendJson(res, statusCode, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleRingAuthVerify(body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    try {
+      const result = await service.verify2fa({ code: body?.code || body?.twoFactorCode });
+      sendJson(res, 200, result);
+    } catch (error) {
+      const code = error?.code;
+      const statusCode = code === 'ENV_BLOCKS' ? 409
+        : code === 'NO_PENDING' || code === 'EXPIRED' ? 409
+          : 400;
+      sendJson(res, statusCode, {
+        ok: false,
+        error: error?.message || String(error),
+        prompt: error?.prompt || '',
+        needs2fa: code === 'BAD_2FA',
+      });
+    }
+  }
+
+  async function handleRingAuthClear(_body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    try {
+      const status = await service.clearToken();
+      sendJson(res, 200, { ok: true, ...status });
+    } catch (error) {
+      if (error?.code === 'ENV_BLOCKS') {
+        sendJson(res, 409, { ok: false, error: error.message });
+        return;
+      }
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  async function handleRingReconnect(_body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    const status = await service.connect();
+    sendJson(res, 200, { ok: true, ...status });
+  }
+
+  function handleRingDoorbellPush(body, res) {
+    const service = ringService();
+    if (!service) {
+      sendJson(res, 503, { ok: false, error: 'Ring Doorbell is not available' });
+      return;
+    }
+    const payload = service.nextPayload({
+      title: body?.title,
+      message: body?.message,
+      kind: body?.kind || 'ding',
+    });
+    const targetId = plexTargetId(body);
+    const cfg = service.getSettings();
+    const extra = {
+      explicit: true,
+      quietHoursExempt: true,
+      replaceSource: 'ring.doorbell',
+    };
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+      extra.quietHoursExempt = Boolean(cfg.quietHoursExempt);
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Ring doorbell push', { targetId, kind: payload.kind });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      rows: payload.rows,
+      payload,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   async function handleWeeklyWeatherPush(body, res) {
     const settings = localeSettings.get();
     let location = localeSettings.weatherLocation();
@@ -4116,6 +4312,8 @@ function createWebServer({
           handleCalendarClockPush(body, res); break;
         case 'guestbook.invite':
           handleGuestBookInvitePush(body, res); break;
+        case 'ring.doorbell':
+          handleRingDoorbellPush(body, res); break;
         case 'redletter.show':
           handleRedLetterPush(body, res); break;
         case 'signal.quiet-hours':
@@ -7221,6 +7419,11 @@ function createWebServer({
           handleGuestBookSettingsGet(res);
           return;
         }
+        if (pathname === '/api/ring/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleRingSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/guest-snaps/settings') {
           if (!requireAdminSession(req, res)) return;
           handleGuestSnapsSettingsGet(res);
@@ -7526,6 +7729,12 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
           await handleGuestBookSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/ring/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handleRingSettingsPut(body, res);
           return;
         }
         if (pathname === '/api/guest-snaps/settings' && req.method === 'PUT') {
@@ -7904,6 +8113,30 @@ function createWebServer({
             return;
           case '/api/push/guest-book-invite':
             handleGuestBookInvitePush(body, res);
+            return;
+          case '/api/push/ring-doorbell':
+            handleRingDoorbellPush(body, res);
+            return;
+          case '/api/ring/settings':
+            await handleRingSettingsPut(body, res);
+            return;
+          case '/api/ring/preview':
+            handleRingPreview(body, res);
+            return;
+          case '/api/ring/auth/link':
+            await handleRingAuthLink(body, res);
+            return;
+          case '/api/ring/auth/login':
+            await handleRingAuthLogin(body, res);
+            return;
+          case '/api/ring/auth/verify':
+            await handleRingAuthVerify(body, res);
+            return;
+          case '/api/ring/auth/clear':
+            await handleRingAuthClear(body, res);
+            return;
+          case '/api/ring/reconnect':
+            await handleRingReconnect(body, res);
             return;
           case '/api/push/weekly-weather':
             await handleWeeklyWeatherPush(body, res);

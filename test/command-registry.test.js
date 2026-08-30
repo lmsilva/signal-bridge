@@ -589,6 +589,22 @@ test('guestbook.invite is Vestaboard-only Signal and needs a short link', () => 
   assert.equal(ready.hasContent('guestbook.invite'), true);
 });
 
+test('ring.doorbell is Vestaboard-only home and needs a saved token', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'ring.doorbell');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.equal(command.schedulable, false);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'home');
+  assert.equal(command.route, '/api/push/ring-doorbell');
+
+  const empty = createCommandRegistry({});
+  assert.equal(empty.hasContent('ring.doorbell'), false);
+  const ready = createCommandRegistry({ getRingStatus: () => ({ configured: true }) });
+  assert.equal(ready.hasContent('ring.doorbell'), true);
+});
+
 test('calendar.clock is Vestaboard-only home and always has content', () => {
   const command = COMMANDS.find((entry) => entry.id === 'calendar.clock');
   assert.ok(command);

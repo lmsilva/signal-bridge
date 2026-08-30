@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal185">
+  <link rel="stylesheet" href="styles.css?v=signal187">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1074,6 +1074,86 @@
                 <span>Blocked words</span>
               </label>
               <textarea id="guest-book-blocked-words" class="field-input" rows="3" placeholder="one word per line"></textarea>
+            </div>
+          </div>
+        </div>
+
+        </div>
+
+        <div class="section-label" data-settings-group="global">Ring Doorbell</div>
+        <div class="card ring-doorbell-settings-card" id="ring-doorbell-settings-card" data-settings-group="global" data-search-terms="ring doorbell camera ding motion front door">
+          <div class="auth-head">
+            <div class="auth-name">Ring Doorbell</div>
+            <span class="status-pill" id="ring-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="ring-status-detail">
+            Listen for Ring ding events and flip a Vestaboard alert. Sign in with your Ring account below.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="trivia-check">
+                <input type="checkbox" id="ring-enabled" checked>
+                <span>Enable Ring Doorbell</span>
+              </label>
+              <div id="ring-login-block">
+                <label class="field-label field-label-spaced" for="ring-email">Ring email</label>
+                <input class="field-input" id="ring-email" type="email" autocomplete="username" spellcheck="false" placeholder="you@example.com">
+                <label class="field-label field-label-spaced" for="ring-password">Password</label>
+                <input class="field-input" id="ring-password" type="password" autocomplete="current-password" spellcheck="false" placeholder="Ring password">
+                <div class="btn-row" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
+                  <button type="button" class="btn btn-accent" id="btn-ring-login">Sign in to Ring</button>
+                  <button type="button" class="btn btn-outline" id="btn-ring-reconnect">Reconnect</button>
+                  <button type="button" class="btn btn-outline" id="btn-ring-clear">Clear session</button>
+                </div>
+              </div>
+              <div id="ring-2fa-block" hidden>
+                <label class="field-label field-label-spaced" for="ring-2fa-code">Verification code</label>
+                <input class="field-input" id="ring-2fa-code" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="Code from SMS, email, or authenticator">
+                <p class="hint" id="ring-2fa-prompt">Enter the code Ring sent you.</p>
+                <div class="btn-row" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
+                  <button type="button" class="btn btn-accent" id="btn-ring-verify">Verify code</button>
+                  <button type="button" class="btn btn-outline" id="btn-ring-cancel-2fa">Cancel</button>
+                </div>
+              </div>
+              <details class="ring-advanced" style="margin-top:14px">
+                <summary class="hint" style="cursor:pointer">Advanced: paste a refresh token</summary>
+                <label class="field-label field-label-spaced" for="ring-token-input">Refresh token</label>
+                <input class="field-input" id="ring-token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Optional — or set RING_REFRESH_TOKEN in .env">
+                <p class="hint" id="ring-token-hint">Write-only. Stored encrypted. Prefer Sign in above. <code>RING_REFRESH_TOKEN</code> in .env wins if set.</p>
+                <button type="button" class="btn btn-outline btn-block" id="btn-ring-auth" style="margin-top:8px">Save refresh token</button>
+              </details>
+              <label class="field-label field-label-spaced" for="ring-title">Board title</label>
+              <input type="text" id="ring-title" class="field-input" maxlength="18" value="Ring Door Bell" spellcheck="false">
+              <label class="field-label field-label-spaced" for="ring-message">Board message</label>
+              <textarea id="ring-message" class="field-input" rows="2" maxlength="80">Someone is at your front door</textarea>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="ring-push-ding" checked>
+                <span>Push on doorbell press</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="ring-push-motion">
+                <span>Push on motion</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="ring-quiet-exempt" checked>
+                <span>May wake the board during quiet hours</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-ring-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-ring-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-ring-push">Push preview</button>
+              </div>
+              <p class="hint" id="ring-cameras" style="margin-top:12px">Cameras appear after a successful connect.</p>
+            </div>
+            <div class="settings-col board-preview-col">
+              <label class="field-label">Board preview</label>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="ring-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+              <p class="hint" style="margin-top:8px">
+                Red rails and a yellow bell. Title and message update as you type.
+              </p>
             </div>
           </div>
         </div>
@@ -3648,6 +3728,6 @@
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
   <script src="/flap-grid.js?v=2"></script>
-  <script src="app.js?v=signal185"></script>
+  <script src="app.js?v=signal187"></script>
 </body>
 </html>
