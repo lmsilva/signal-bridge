@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guest Book — Signal Bridge mockups (rev 1)</title>
+<style>
+  :root{
+    --bg:#0B1730; --panel:#101E3C; --panel2:#0D1830; --ink:#EDEFF5; --mut:#8B94AD;
+    --line:#22335C; --field:#0A142B; --ok:#2FBF71; --warn:#F2B60F;
+    --boardslab:#0A0A0C; --tile:#17181D; --tileblank:#121318; --tileink:#F5F3EC;
+    --r:#D8342C; --o:#EF7B10; --y:#F2B60F; --g:#159947; --b:#1F6FD6; --v:#7A3F9D; --w:#EEEFF1;
+    --ts:32px; /* board tile width */
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #12234a 0%, var(--bg) 55%);
+    color:var(--ink);
+    font:16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding:48px 20px 96px;
+  }
+  .wrap{max-width:1020px; margin:0 auto;}
+
+  header.page h1{
+    font-size:clamp(34px,6vw,56px); letter-spacing:.28em; font-weight:800;
+    text-transform:uppercase; text-indent:.28em; text-align:center;
+  }
+  header.page .sub{color:var(--mut); text-align:center; margin-top:10px; font-size:15px;}
+  .chipstrip{display:flex; gap:6px; justify-content:center; margin:18px 0 0;}
+  .chipstrip i{width:16px; height:22px; border-radius:3px; display:block; box-shadow:inset 0 -6px 10px rgba(0,0,0,.35);}
+
+  section.zone{margin-top:72px;}
+  .eyebrow{
+    color:var(--mut); letter-spacing:.32em; text-transform:uppercase; font-size:12px; font-weight:700;
+    display:flex; align-items:center; gap:14px;
+  }
+  .eyebrow::after{content:""; height:1px; background:var(--line); flex:1;}
+  .zone > p.lead{color:var(--mut); margin:10px 0 28px; max-width:70ch;}
+
+  figure.mock{margin:0 0 44px;}
+  figure.mock figcaption{
+    color:var(--mut); font-size:14px; margin-top:12px; max-width:78ch;
+  }
+  figure.mock figcaption b{color:var(--ink); font-weight:600;}
+
+  /* ---------- Vestaboard render ---------- */
+  .board{
+    background:var(--boardslab);
+    border:1px solid #26272e; border-radius:16px;
+    padding:calc(var(--ts)*.55) calc(var(--ts)*.6);
+    display:inline-block; max-width:100%; overflow-x:auto;
+    box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.03);
+  }
+  .board .rows{display:grid; gap:calc(var(--ts)*.12);}
+  .board .row{display:grid; grid-template-columns:repeat(22, var(--ts)); gap:calc(var(--ts)*.10);}
+  .cell{
+    position:relative; width:var(--ts); height:calc(var(--ts)*1.42);
+    background:var(--tile); border-radius:calc(var(--ts)*.12);
+    display:flex; align-items:center; justify-content:center;
+    font:700 calc(var(--ts)*.82)/1 ui-monospace, "SF Mono", Consolas, monospace;
+    color:var(--tileink);
+    box-shadow:inset 0 2px 3px rgba(255,255,255,.05), inset 0 -3px 5px rgba(0,0,0,.5);
+  }
+  .cell::after{ /* split-flap seam */
+    content:""; position:absolute; left:0; right:0; top:50%;
+    height:1px; background:rgba(0,0,0,.55); pointer-events:none;
+  }
+  .cell.blank{background:var(--tileblank); box-shadow:inset 0 -2px 4px rgba(0,0,0,.5);}
+  .cell.chip-r{background:var(--r);} .cell.chip-o{background:var(--o);}
+  .cell.chip-y{background:var(--y);} .cell.chip-g{background:var(--g);}
+  .cell.chip-b{background:var(--b);} .cell.chip-v{background:var(--v);}
+  .cell.chip-w{background:var(--w);}
+  .cell[class*="chip-"]{box-shadow:inset 0 3px 4px rgba(255,255,255,.22), inset 0 -5px 8px rgba(0,0,0,.38);}
+  .cell.sel{outline:2px solid var(--y); outline-offset:2px;}
+  .board .brand{
+    text-align:center; color:#5c5f6b; letter-spacing:.5em; text-indent:.5em;
+    font-size:calc(var(--ts)*.34); margin-top:calc(var(--ts)*.5); text-transform:uppercase;
+  }
+
+  @media (max-width:900px){ :root{--ts:22px;} }
+  @media (max-width:640px){ :root{--ts:13px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Guest Book</h1>
+  <div class="chipstrip" aria-hidden="true">
+    <i style="background:var(--r)"></i><i style="background:var(--o)"></i><i style="background:var(--y)"></i>
+    <i style="background:var(--g)"></i><i style="background:var(--b)"></i><i style="background:var(--v)"></i>
+    <i style="background:var(--w)"></i>
+  </div>
+  <p class="sub">Signal Bridge feature mockups · rev 1 · companion to guest-book-requirements.md</p>
+</header>
+
+<!-- ================================================================ -->
+<section class="zone">
+  <div class="eyebrow">On the wall</div>
+  <p class="lead">Three frames the Vestaboard itself will show. The invite is pushable and schedulable like every other Signal Bridge board feature; the alias is filled in live from the short-link service.</p>
+
+  <figure class="mock">
+    <div class="board" data-frame="invite"></div>
+    <figcaption><b>The invitation.</b> Rows 4–5 are exactly 22 tiles each. In board-code protection mode, row 6 additionally shows <b>CODE 314159</b>, centered.</figcaption>
+  </figure>
+
+  <figure class="mock">
+    <div class="board" data-frame="guest"></div>
+    <figcaption><b>A guest message, full takeover.</b> Holds the board for the guest dwell time (default 5 minutes), then the board returns to normal content. The name line comes from the optional name field.</figcaption>
+  </figure>
+
+  <figure class="mock">
+    <div class="board" data-frame="footer"></div>
+    <figcaption><b>Message + invite footer.</b> When the toggle is on and the message leaves the bottom rows free, the second dwell period re-renders the message with the chips row and short link appended — so the board keeps recruiting the next guest.</figcaption>
+  </figure>
+</section>
+
+<style>
+  /* ---------- Phone + admin mock styles ---------- */
+  .phones{display:flex; flex-wrap:wrap; gap:28px; align-items:flex-start;}
+  .phone{width:340px; background:var(--panel2); border:1px solid var(--line); border-radius:36px; padding:12px; box-shadow:0 18px 50px rgba(0,0,0,.4);}
+  .phone .screen{background:var(--bg); border-radius:26px; border:1px solid #182a52; overflow:hidden;}
+  .appbar{display:flex; justify-content:space-between; align-items:center; padding:13px 16px; border-bottom:1px solid var(--line); font-size:11px; letter-spacing:.22em; color:var(--mut); text-transform:uppercase;}
+  .appbar b{color:var(--ink); font-weight:700;}
+  .pcontent{padding:16px;}
+  .mini{--ts:11px;} .mini .board{border-radius:10px;}
+  .thumb{--ts:5px;} .thumb .board{border-radius:6px; box-shadow:none;}
+  .thumb .brand, .mini .brand{display:none;}
+  .tabs{display:flex; gap:8px; margin:0 0 14px;}
+  .tab{flex:1; text-align:center; padding:9px 0; border:1px solid var(--line); border-radius:10px; font-size:11px; letter-spacing:.18em; color:var(--mut); text-transform:uppercase;}
+  .tab.on{background:var(--panel); color:var(--ink); border-color:#33518f;}
+  .fld label{display:block; font-size:11px; color:var(--mut); letter-spacing:.1em; margin:12px 0 6px; text-transform:uppercase;}
+  .fld .in{background:var(--field); border:1px solid var(--line); border-radius:10px; padding:11px 12px; color:var(--ink); font-size:15px;}
+  .seg{display:flex; gap:6px; margin-top:10px;}
+  .seg span{flex:1; text-align:center; border:1px solid var(--line); border-radius:8px; padding:6px 0; color:var(--mut); font-size:13px;}
+  .seg span.on{background:var(--panel); color:var(--ink); border-color:#33518f;}
+  .btn{display:block; width:100%; text-align:center; background:linear-gradient(180deg,#2E6FD8,#1F55AC); border-radius:12px; color:#fff; font-weight:700; font-size:15px; padding:13px 0; margin-top:16px; letter-spacing:.03em;}
+  .hint{color:var(--mut); font-size:12.5px; margin-top:10px; line-height:1.5;}
+  .count{font-size:12px; color:var(--mut); text-align:right; margin-top:8px;}
+  .palette{display:flex; gap:8px; margin-top:12px;}
+  .palette i{width:28px; height:38px; border-radius:6px; display:block; box-shadow:inset 0 -6px 10px rgba(0,0,0,.35);}
+  .palette .key{display:flex; align-items:center; justify-content:center; background:var(--tile); color:var(--tileink); font:700 15px ui-monospace, monospace;}
+  .palette .act{outline:2px solid var(--y); outline-offset:2px;}
+  .center{text-align:center;}
+  .big{font-size:20px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; margin-top:18px;}
+
+  .admin{background:var(--panel2); border:1px solid var(--line); border-radius:18px; padding:26px;}
+  .admin h3{font-size:12px; letter-spacing:.26em; color:var(--mut); text-transform:uppercase; margin-bottom:16px;}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:2px 34px;}
+  .set{display:flex; justify-content:space-between; align-items:center; gap:14px; border-bottom:1px dashed #1a2c55; padding:10px 0; font-size:14.5px;}
+  .set .k{color:var(--ink);} .set .v{color:var(--mut); white-space:nowrap;}
+  .toggle{width:40px; height:22px; border-radius:99px; background:#22335C; position:relative; flex:none;}
+  .toggle.on{background:var(--ok);}
+  .toggle::after{content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff;}
+  .toggle.on::after{left:21px;}
+  .status{display:flex; align-items:center; gap:12px; background:var(--field); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:20px; font-size:14px; flex-wrap:wrap;}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--ok); box-shadow:0 0 8px var(--ok); flex:none;}
+  .mono{font:600 13px ui-monospace, monospace; color:var(--ink);}
+  .linkbtn{margin-left:auto; border:1px solid var(--line); border-radius:8px; padding:6px 12px; color:var(--ink); font-size:12px; letter-spacing:.1em; text-transform:uppercase;}
+  .book .entry{display:flex; gap:16px; align-items:center; border-bottom:1px solid #16264a; padding:14px 0; flex-wrap:wrap;}
+  .book .meta{font-size:14px;} .book .meta small{display:block; color:var(--mut); font-size:12.5px; margin-top:2px;}
+  .pill{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; padding:4px 10px; border-radius:99px; border:1px solid var(--line); color:var(--mut);}
+  .pill.ok{color:var(--ok); border-color:rgba(47,191,113,.4);}
+  .pill.warn{color:var(--warn); border-color:rgba(242,182,15,.4);}
+  .acts{margin-left:auto; display:flex; gap:14px; color:var(--mut); font-size:12px; letter-spacing:.08em; text-transform:uppercase;}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr;} .acts{margin-left:0;} }
+</style>
+
+<!-- ================================================================ -->
+<section class="zone">
+  <div class="eyebrow">On a phone</div>
+  <p class="lead">The guest page at <span class="mono">signal.wittydigital.com/guestbook/</span>, mobile-first, Signal Bridge design system. The live preview is the same renderer as the admin Vestaboard Simulator — one shared component.</p>
+
+  <div class="phones">
+
+    <figure class="mock">
+      <div class="phone"><div class="screen">
+        <div class="appbar"><b>Guest Book</b><span>Signal</span></div>
+        <div class="pcontent">
+          <div class="tabs"><div class="tab on">Message</div><div class="tab">Design</div></div>
+          <div class="mini"><div class="board" data-frame="compose"></div></div>
+          <div class="seg"><span>Left</span><span class="on">Center</span><span>Right</span></div>
+          <div class="seg"><span>Top</span><span class="on">Middle</span><span>Bottom</span></div>
+          <div class="fld"><label>Your message</label><div class="in">Happy birthday!</div></div>
+          <div class="fld"><label>Your name (optional)</label><div class="in">Alex</div></div>
+          <div class="palette">
+            <i style="background:var(--r)"></i><i style="background:var(--o)"></i><i style="background:var(--y)"></i>
+            <i style="background:var(--g)"></i><i style="background:var(--b)"></i><i style="background:var(--v)"></i>
+            <i style="background:var(--w)"></i>
+          </div>
+          <div class="count">21 / 132 tiles</div>
+          <div class="btn">Send to the board</div>
+          <p class="hint">The board can show A–Z, 0–9, punctuation and 7 color chips. Text becomes uppercase.</p>
+        </div>
+      </div></div>
+      <figcaption><b>Compose.</b> Live preview updates as the guest types; alignment presets move the text block; tapping a preview row nudges it there. Send disables when the message cannot fit.</figcaption>
+    </figure>
+
+    <figure class="mock">
+      <div class="phone"><div class="screen">
+        <div class="appbar"><b>Guest Book</b><span>Signal</span></div>
+        <div class="pcontent">
+          <div class="tabs"><div class="tab">Message</div><div class="tab on">Design</div></div>
+          <div class="mini"><div class="board" data-frame="art"></div></div>
+          <div class="palette">
+            <i class="act" style="background:var(--r)"></i><i style="background:var(--o)"></i><i style="background:var(--y)"></i>
+            <i style="background:var(--g)"></i><i style="background:var(--b)"></i><i style="background:var(--v)"></i>
+            <i style="background:var(--w)"></i>
+            <span class="key" style="width:28px;height:38px;border-radius:6px;">A</span>
+            <span class="key" style="width:28px;height:38px;border-radius:6px;">⌫</span>
+          </div>
+          <div class="seg"><span>Undo</span><span>Clear</span></div>
+          <div class="btn">Send to the board</div>
+          <p class="hint">Tap a tile, then paint a chip or type a character. Full 6×22 control — same editor the admin simulator uses.</p>
+        </div>
+      </div></div>
+      <figcaption><b>Design tab (artwork mode).</b> Phase 4. Tile-for-tile drawing with the 7 chips, characters, eraser, undo and clear.</figcaption>
+    </figure>
+
+    <figure class="mock">
+      <div class="phone"><div class="screen">
+        <div class="appbar"><b>Guest Book</b><span>Signal</span></div>
+        <div class="pcontent center" style="padding:44px 22px;">
+          <div style="font-size:12px; letter-spacing:.3em; color:var(--mut); text-transform:uppercase;">Private board</div>
+          <p style="margin:14px 0 4px; font-size:15px;">This guest book is protected.</p>
+          <div class="fld" style="text-align:left;"><label>Password</label><div class="in">••••••••</div></div>
+          <div class="btn">Open the guest book</div>
+          <p class="hint">Ask your host for the password.</p>
+        </div>
+      </div></div>
+      <figcaption><b>Protection gate.</b> Only shown when a mode is on: password, or a 6-digit board code printed on the invite frame itself. Five wrong tries blocks the source for 15 minutes.</figcaption>
+    </figure>
+
+    <figure class="mock">
+      <div class="phone"><div class="screen">
+        <div class="appbar"><b>Guest Book</b><span>Signal</span></div>
+        <div class="pcontent center">
+          <div class="mini" style="display:inline-block;"><div class="board" data-frame="compose"></div></div>
+          <div class="big">On the board!</div>
+          <p class="hint" style="margin-top:8px;">Your message is up for the next 5 minutes.</p>
+          <div class="btn" style="background:var(--panel); border:1px solid var(--line);">Send another · 2 left this hour</div>
+        </div>
+      </div></div>
+      <figcaption><b>Success.</b> Plain-word states for every other outcome too: queued behind another message, waiting for approval, or held until quiet hours end.</figcaption>
+    </figure>
+
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section class="zone">
+  <div class="eyebrow">In the admin</div>
+  <p class="lead">One settings card, and The Book — the permanent log that gives the feature its name.</p>
+
+  <figure class="mock">
+    <div class="admin">
+      <h3>Settings · Guest Book</h3>
+      <div class="grid">
+        <div class="set"><span class="k">Guest Book</span><span class="toggle on"></span></div>
+        <div class="set"><span class="k">Who can send</span><span class="v">Anyone with the link ▾</span></div>
+        <div class="set"><span class="k">Approval before showing</span><span class="toggle"></span></div>
+        <div class="set"><span class="k">Blocked words</span><span class="v">Off · edit list</span></div>
+        <div class="set"><span class="k">Guest dwell</span><span class="v">5 minutes ▾</span></div>
+        <div class="set"><span class="k">Invite footer after message</span><span class="toggle on"></span></div>
+        <div class="set"><span class="k">Rate limit</span><span class="v">3 per 10 min · 100 per day</span></div>
+        <div class="set"><span class="k">Guests may wake the board</span><span class="toggle"></span></div>
+        <div class="set"><span class="k">TinyURL API token</span><span class="v">••••••••••••  edit</span></div>
+        <div class="set"><span class="k">Preferred alias</span><span class="v mono">WITTYBOARD</span></div>
+      </div>
+      <div class="status">
+        <span class="dot"></span>
+        <span>Short link active</span>
+        <span class="mono">TINYURL.COM/WITTYBOARD → /guestbook/</span>
+        <span style="color:var(--mut);">checked 2 h ago · both spellings OK</span>
+        <span class="linkbtn">Check now</span>
+      </div>
+    </div>
+    <figcaption><b>Settings card.</b> Public base URL lives in global settings (shared with Guest Snaps). If the daily check ever fails, the service re-creates the link, falls back on the alias if needed, and raises the standard admin alert.</figcaption>
+  </figure>
+
+  <figure class="mock">
+    <div class="admin book">
+      <h3>The Book</h3>
+      <div class="entry">
+        <div class="thumb"><div class="board" data-frame="compose"></div></div>
+        <div class="meta">Alex<small>Today 6:41 PM · message · from 174.23.■.■</small></div>
+        <span class="pill ok">Shown</span>
+        <div class="acts"><span>Replay</span><span>Delete</span></div>
+      </div>
+      <div class="entry">
+        <div class="thumb"><div class="board" data-frame="art"></div></div>
+        <div class="meta">Anonymous<small>Today 6:39 PM · design · from 174.23.■.■</small></div>
+        <span class="pill warn">Waiting</span>
+        <div class="acts"><span>Approve</span><span>Deny</span></div>
+      </div>
+      <div class="entry">
+        <div class="thumb"><div class="board" data-frame="footer"></div></div>
+        <div class="meta">Mom<small>Yesterday 7:02 PM · message</small></div>
+        <span class="pill ok">Shown</span>
+        <div class="acts"><span>Replay</span><span>Delete</span></div>
+      </div>
+    </div>
+    <figcaption><b>The Book.</b> Every guest message ever received, with a tile-accurate thumbnail, status, and one-tap replay — the log doubles as a keepsake.</figcaption>
+  </figure>
+</section>
+
+<footer style="margin-top:64px; color:var(--mut); font-size:13px; text-align:center;">
+  Guest Book · Signal Bridge · mockups rev 1 — all board frames render at true 6×22.
+</footer>
+
+</div>
+
+<script>
+(function(){
+  function c(s){ var p = Math.floor((22 - s.length) / 2); return new Array(p + 1).join(' ') + s; }
+  var chips = 'roygbvroygbv';
+  var frames = {
+    invite: ['', c('WANT TO LEAVE A NOTE?'), c(chips), 'SIGN THE GUEST BOOK AT', 'TINYURL.COM/WITTYBOARD', ''],
+    guest:  ['', c('CONGRATS ON THE'), c('NEW GAME ROOM!'), '', c('- NICK'), ''],
+    footer: [c('THANKS FOR DINNER!'), c('- MOM'), '', c(chips), 'SIGN THE GUEST BOOK AT', 'TINYURL.COM/WITTYBOARD'],
+    compose:['', c('HAPPY BIRTHDAY!'), '', c('- ALEX'), '', ''],
+    art:    ['   rr rr   WE LOVE    ',
+             '  rrrrrrr  THE SILVAS ',
+             '  rrrrrrr             ',
+             '   rrrrr              ',
+             '    rrr               ',
+             '     r                ']
+  };
+  var chipSet = {r:1,o:1,y:1,g:1,b:1,v:1,w:1};
+
+  function render(el){
+    var rows = frames[el.getAttribute('data-frame')];
+    if(!rows) return;
+    var holder = document.createElement('div'); holder.className = 'rows';
+    for(var r = 0; r < 6; r++){
+      var line = (rows[r] || '');
+      while(line.length < 22) line += ' ';
+      var rowEl = document.createElement('div'); rowEl.className = 'row';
+      for(var i = 0; i < 22; i++){
+        var ch = line.charAt(i);
+        var cell = document.createElement('div');
+        if(ch === ' '){ cell.className = 'cell blank'; }
+        else if(chipSet[ch]){ cell.className = 'cell chip-' + ch; }
+        else { cell.className = 'cell'; cell.textContent = ch; }
+        if(el.getAttribute('data-frame') === 'art' && r === 1 && i === 20){ cell.className += ' sel'; }
+        rowEl.appendChild(cell);
+      }
+      holder.appendChild(rowEl);
+    }
+    el.appendChild(holder);
+    var brand = document.createElement('div'); brand.className = 'brand'; brand.textContent = 'Vestaboard';
+    el.appendChild(brand);
+  }
+
+  var boards = document.querySelectorAll('.board');
+  for(var i = 0; i < boards.length; i++) render(boards[i]);
+})();
+</script>
+</body>
+</html>

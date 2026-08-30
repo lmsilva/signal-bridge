@@ -278,6 +278,7 @@ function createVestaboardHub({
         ? Boolean(options.explicit)
         : !options.scheduler,
       scheduler: Boolean(options.scheduler),
+      breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
       ctx,
       now,

@@ -90,6 +90,34 @@ test('voice query parser returns photo-slideshow for open guest snaps slideshow'
   assert.equal(event?.targetId, '*');
 });
 
+test('publicBaseUrl wins over GUEST_PHOTOBOOTH_URL for booth and slideshow origins', () => {
+  const prev = process.env.GUEST_PHOTOBOOTH_URL;
+  process.env.GUEST_PHOTOBOOTH_URL = 'https://192.168.1.50:47810/';
+  try {
+    const config = {
+      ROOT: require('path').join(__dirname, 'does-not-exist-root'),
+      guestPhotoboothPath: require('path').join(__dirname, 'does-not-exist.json'),
+      web: { publicBaseUrl: 'https://signal.wittydigital.com' },
+      proxyOwnIp: '10.0.0.1',
+      webServer: { port: 47810, https: true },
+    };
+    const settings = resolveGuestPhotoboothSettings({
+      ...config,
+      guestPhotobooth: { wifiSsid: 'Party', wifiPassword: 'secret' },
+    });
+    assert.equal(settings.boothUrl, 'https://signal.wittydigital.com/');
+    assert.equal(defaultGuestPhotoboothUrl(config), 'https://signal.wittydigital.com/');
+    const entries = photosToSlideshowEntries(
+      [{ path: '/qr-images/abc.jpg', createdAt: '2026-07-26T12:00:00.000Z' }],
+      config,
+    );
+    assert.equal(entries[0].url, 'https://signal.wittydigital.com/qr-images/abc.jpg');
+  } finally {
+    if (prev == null) delete process.env.GUEST_PHOTOBOOTH_URL;
+    else process.env.GUEST_PHOTOBOOTH_URL = prev;
+  }
+});
+
 test('defaultGuestPhotoboothUrl uses proxy IP and web port', () => {
   assert.equal(
     defaultGuestPhotoboothUrl({

@@ -10,6 +10,7 @@ const { createListener } = require('./listener');
 const { createWebServer } = require('./web-server');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { createLocaleSettings } = require('./locale-settings');
+const { createPublicUrlSettings } = require('./public-url');
 const { installRefreshPatch } = require('./auth-refresh-patch');
 const { createVestaboardSimulator } = require('./vestaboard/simulator');
 const { createVestaboardHub } = require('./vestaboard');
@@ -54,6 +55,7 @@ async function main() {
   installRefreshPatch({ log });
   const guestSnapsAuth = createGuestSnapsAuth(config, log);
   const localeSettings = createLocaleSettings(config, log);
+  const publicUrlSettings = createPublicUrlSettings(config, log);
 
   // The stand-in board comes up first so the hub can adopt it, and the hub
   // before the listener so its boards are in the registry from the first
@@ -131,6 +133,7 @@ async function main() {
       getPsnLibraryCount: listener.getPsnLibraryCount,
       guestSnapsAuth,
       localeSettings,
+      publicUrlSettings,
     });
     webServer.start().catch((error) => {
       // The control page is a convenience — never take the listener down

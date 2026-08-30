@@ -25,7 +25,7 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal159">
+  <link rel="stylesheet" href="styles.css?v=signal170">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -262,7 +262,7 @@
           <div class="push-share-tiles">
             <div class="section-label">Share to the display</div>
             <div class="card-row card-row-share" id="push-row-share" data-push-category="share"
-                 data-skeleton-count="1" aria-busy="true"></div>
+                 data-skeleton-count="2" aria-busy="true"></div>
           </div>
         </div>
 
@@ -819,6 +819,28 @@
           </div>
         </div>
 
+        <div class="card public-url-settings-card" id="public-url-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Public address</div>
+            <span class="status-pill" id="public-url-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="public-url-status-detail">
+            HTTPS origin for Guest Snaps, the Guest Book short link, and every other human-facing URL.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="public-base-url">Public base URL</label>
+              <input type="url" id="public-base-url" class="field-input" placeholder="https://signal.wittydigital.com" spellcheck="false" autocomplete="off">
+              <button type="button" class="btn btn-accent btn-block" id="btn-public-url-save" style="margin-top:14px">Save public URL</button>
+              <p class="hint" id="public-url-env-note" hidden></p>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Resolved</label>
+              <p class="hint" id="public-url-resolved">Save an https:// hostname guests can reach from outside the house.</p>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="global">Weather</div>
         <div class="card weather-alerts-settings-card" id="weather-alerts-settings-card" data-settings-group="global">
           <div class="auth-head">
@@ -906,7 +928,7 @@
           <p class="auth-detail" id="red-letter-status-detail">
             Counts down to the dates you keep in the Date Book, and shows the event's own message on the day itself.
           </p>
-          <div class="settings-columns">
+          <div class="settings-columns red-letter-settings-columns">
             <div class="settings-col">
               <label class="field-label">Push Now shows</label>
               <div class="segmented" id="red-letter-push-selection" role="group" aria-label="What a manual push shows">
@@ -930,9 +952,90 @@
                 An event happening today always beats a countdown, whichever mode is picked.
               </p>
             </div>
-            <div class="settings-col">
+            <div class="settings-col red-letter-preview-col">
               <label class="field-label">Next on the board</label>
-              <div class="cn-board-preview cn-board-preview-red" id="red-letter-preview" aria-hidden="true"></div>
+              <div class="vb-bezel rl-settings-bezel" aria-hidden="true">
+                <div class="vb-grid" id="red-letter-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="global">Guest Book</div>
+        <div class="card guest-book-settings-card" id="guest-book-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Guest Book</div>
+            <span class="status-pill" id="guest-book-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="guest-book-status-detail">
+            Short link to /guestbook/. Guests write a message; it stays until the next thing lands on the board.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="trivia-check">
+                <input type="checkbox" id="guest-book-enabled" checked>
+                <span>Enable Guest Book</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="guest-book-paused">
+                <span>Pause new sends</span>
+              </label>
+              <label class="field-label field-label-spaced" for="guest-book-who">Who can send</label>
+              <select id="guest-book-who" class="field-input">
+                <option value="anyone">Anyone with the link</option>
+                <option value="password">Password</option>
+                <option value="code">Board code</option>
+              </select>
+              <label class="field-label field-label-spaced" for="guest-book-password">Guest password</label>
+              <input type="password" id="guest-book-password" class="field-input" placeholder="Leave blank to keep the current password" autocomplete="new-password">
+              <p class="hint" id="guest-book-code-hint" hidden></p>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="guest-book-invite-footer" checked>
+                <span>Invite footer when there is room</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="guest-book-wake">
+                <span>Guests may wake the board</span>
+              </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="guest-book-approval">
+                <span>Hold messages for approval</span>
+              </label>
+              <label class="field-label field-label-spaced" for="guest-book-token">TinyURL API token</label>
+              <input type="password" id="guest-book-token" class="field-input" placeholder="Paste token, or set TINYURL_API_TOKEN in .env" autocomplete="new-password" spellcheck="false">
+              <p class="hint" id="guest-book-token-hint">Write-only. Stored encrypted. TINYURL_API_TOKEN in .env wins if set.</p>
+              <label class="field-label field-label-spaced" for="guest-book-alias">Preferred alias</label>
+              <input type="text" id="guest-book-alias" class="field-input" placeholder="WITTYBOARD" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+              <p class="hint">5–10 letters or digits. Printed as TINYURL.COM/ALIAS on the invite row.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-guest-book-save" style="margin-top:14px">Save Guest Book</button>
+              <button type="button" class="btn btn-outline btn-block" id="btn-guest-book-invite" style="margin-top:8px">Show invite on the board</button>
+              <button type="button" class="btn btn-outline btn-block" id="btn-guest-book-open" style="margin-top:8px">Open The Book</button>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Short link</label>
+              <div class="gb-shortlink-status" id="guest-book-shortlink">
+                <span class="gb-dot" id="guest-book-dot" aria-hidden="true"></span>
+                <p class="hint" id="guest-book-shortlink-label">No short link yet.</p>
+                <p class="hint" id="guest-book-shortlink-check">Last check —</p>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-guest-book-check">Check now</button>
+              </div>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="guest-book-rate-on" checked>
+                <span>Rate limit guests</span>
+              </label>
+              <p class="hint">When off, guests can send as often as they like. The daily house cap is also off.</p>
+              <label class="field-label field-label-spaced" for="guest-book-rate">Sends per guest</label>
+              <input type="number" id="guest-book-rate" class="field-input" min="1" max="20" step="1" value="3">
+              <label class="field-label field-label-spaced" for="guest-book-window">Per (minutes)</label>
+              <input type="number" id="guest-book-window" class="field-input" min="1" max="60" step="1" value="10">
+              <label class="field-label field-label-spaced" for="guest-book-daily">Daily house cap</label>
+              <input type="number" id="guest-book-daily" class="field-input" min="1" max="1000" step="1" value="100">
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="guest-book-blocked-on">
+                <span>Blocked words</span>
+              </label>
+              <textarea id="guest-book-blocked-words" class="field-input" rows="3" placeholder="one word per line"></textarea>
             </div>
           </div>
         </div>
@@ -2973,16 +3076,69 @@
           <label class="field-label" for="date-book-name">Event</label>
           <input type="text" class="field-input" id="date-book-name" maxlength="60" placeholder="Wedding anniversary" autocomplete="off">
           <label class="field-label field-label-spaced" for="date-book-message">Message for the day itself</label>
-          <textarea class="field-input cn-fact-input" id="date-book-message" rows="3" maxlength="240" placeholder="Love you always &amp; forever, Christina"></textarea>
-          <div class="date-book-when">
+          <textarea class="field-input cn-fact-input" id="date-book-message" rows="3" maxlength="240" placeholder="Love you always &amp; forever, Ponpon"></textarea>
+          <div class="date-book-when" id="date-book-when">
             <div class="date-book-when-field">
+              <label class="field-label" for="date-book-schedule">When</label>
+              <select class="field-input" id="date-book-schedule">
+                <option value="date">On a date</option>
+                <option value="weekday">Weekday of the month</option>
+              </select>
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="date">
               <label class="field-label" for="date-book-date">Date</label>
               <input type="date" class="field-input" id="date-book-date">
             </div>
-            <label class="trivia-check">
-              <input type="checkbox" id="date-book-recurring">
-              <span>Every year</span>
-            </label>
+            <div class="date-book-when-field" data-date-book-mode="weekday" hidden>
+              <label class="field-label" for="date-book-ordinal">Which</label>
+              <select class="field-input" id="date-book-ordinal">
+                <option value="1">First</option>
+                <option value="2">Second</option>
+                <option value="3">Third</option>
+                <option value="4">Fourth</option>
+                <option value="last">Last</option>
+              </select>
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="weekday" hidden>
+              <label class="field-label" for="date-book-weekday">Weekday</label>
+              <select class="field-input" id="date-book-weekday">
+                <option value="0">Sunday</option>
+                <option value="1" selected>Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="weekday" hidden>
+              <label class="field-label" for="date-book-month">Of</label>
+              <select class="field-input" id="date-book-month">
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9" selected>September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+            </div>
+            <div class="date-book-when-field">
+              <label class="field-label" for="date-book-time">Time</label>
+              <input type="time" class="field-input" id="date-book-time" title="Leave blank for midnight">
+            </div>
+            <div class="date-book-when-field">
+              <span class="field-label" id="date-book-recurring-label">Repeat</span>
+              <label class="trivia-check date-book-repeat-box" for="date-book-recurring">
+                <input type="checkbox" id="date-book-recurring">
+                <span>Every year</span>
+              </label>
+            </div>
           </div>
           <div class="cn-compose-actions">
             <button type="button" class="btn btn-accent" id="btn-date-book-add">Add event</button>
@@ -3005,7 +3161,7 @@
     </div>
   </div>
 
-  <!-- Red Letter layout designer — paint a day-of card flap by flap -->
+  <!-- Red Letter layout designer — simulator look, flap-by-flap Day Of art -->
   <div class="sheet-backdrop" id="red-letter-designer-sheet" hidden>
     <div class="sheet cn-manage-sheet rl-designer-sheet" role="dialog" aria-modal="true" aria-labelledby="red-letter-designer-title">
       <div class="credits-sheet-head">
@@ -3014,7 +3170,7 @@
       </div>
       <p class="hint" id="red-letter-designer-subtitle">…</p>
 
-      <div class="rl-tools" id="red-letter-tools" role="toolbar" aria-label="Drawing tools">
+      <div class="rl-tools" id="red-letter-tools" role="toolbar" aria-label="Colour and tools">
         <button type="button" class="rl-tool rl-tool-chip is-chip-red is-active" data-rl-tool="chip" data-rl-chip="red" title="Red chip" aria-label="Red chip"></button>
         <button type="button" class="rl-tool rl-tool-chip is-chip-orange" data-rl-tool="chip" data-rl-chip="orange" title="Orange chip" aria-label="Orange chip"></button>
         <button type="button" class="rl-tool rl-tool-chip is-chip-yellow" data-rl-tool="chip" data-rl-chip="yellow" title="Yellow chip" aria-label="Yellow chip"></button>
@@ -3029,32 +3185,49 @@
         <button type="button" class="rl-tool rl-tool-wide" data-rl-tool="erase" title="Clear flaps">Erase</button>
       </div>
 
+      <div class="rl-char-row">
+        <span class="field-label">Character</span>
+        <div class="rl-char-palette" id="red-letter-chars" role="toolbar" aria-label="Characters"></div>
+      </div>
+
+      <label class="field-label" for="red-letter-quick-type">Quick type</label>
+      <input type="text" class="field-input rl-quick-type" id="red-letter-quick-type" maxlength="132" placeholder="Click a flap, type a phrase, press Enter (or paste)" autocomplete="off" spellcheck="false">
+
       <p class="hint rl-designer-hint">
-        Drag to paint. Click any flap and type to put letters on it. Flaps marked
-        <span class="rl-inline-slot">Message</span> are where the event's message rewraps itself, so the artwork keeps working when the words change.
+        Click a flap to select it, then pick a colour or character — or drag to paint with the active tool.
+        Flaps marked <span class="rl-inline-slot">Message</span> are where the event's message rewraps itself.
       </p>
 
       <div class="rl-designer-columns">
-        <div class="rl-designer-col">
+        <div class="rl-designer-col rl-designer-board-col">
           <span class="field-label">Your design</span>
-          <div class="rl-designer" id="red-letter-grid" tabindex="0" role="application" aria-label="Vestaboard layout editor"></div>
+          <div class="vb-bezel rl-designer-bezel">
+            <div class="vb-grid rl-designer-grid" id="red-letter-grid" tabindex="0" role="application" aria-label="Vestaboard layout editor"></div>
+            <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+          </div>
           <div class="rl-preset-row">
             <span class="hint">Start from</span>
+            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="confetti">Day of</button>
             <button type="button" class="btn btn-outline btn-sm" data-rl-preset="heart">Heart</button>
-            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="confetti">Confetti</button>
             <button type="button" class="btn btn-outline btn-sm" data-rl-preset="border">Border</button>
             <button type="button" class="btn btn-outline btn-sm" data-rl-preset="blank">Blank</button>
           </div>
         </div>
         <div class="rl-designer-col">
           <span class="field-label">On the board</span>
-          <div class="cn-board-preview cn-board-preview-red" id="red-letter-designer-preview" aria-hidden="true"></div>
+          <div class="vb-bezel rl-designer-preview-bezel" aria-hidden="true">
+            <div class="vb-grid" id="red-letter-designer-preview"></div>
+            <div class="vb-wordmark">VESTABOARD</div>
+          </div>
           <p class="hint" id="red-letter-designer-warning"></p>
         </div>
       </div>
 
       <div class="cn-pager rl-designer-actions">
-        <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-clear">Remove artwork</button>
+        <div class="rl-designer-actions-left">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-blank">Clear board</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-clear">Remove artwork</button>
+        </div>
         <button type="button" class="btn btn-accent btn-sm" id="btn-red-letter-designer-save">Save design</button>
       </div>
     </div>
@@ -3332,8 +3505,19 @@
 
   <!-- Push tile catalog, inlined by the bridge as this page is served. The
        grid is static data, so it must not wait on /api/commands. -->
+  <div class="sheet-backdrop" id="guest-book-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="guest-book-sheet-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="guest-book-sheet-title">The Book</div>
+        <button type="button" class="credits-sheet-close" id="btn-guest-book-sheet-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="guest-book-sheet-summary">Every guest message lands here.</p>
+      <div class="gb-book-list" id="guest-book-list"></div>
+    </div>
+  </div>
+
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
-  <script src="app.js?v=signal159"></script>
+  <script src="app.js?v=signal170"></script>
 </body>
 </html>

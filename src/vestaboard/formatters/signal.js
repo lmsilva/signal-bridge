@@ -178,8 +178,38 @@ function guestSnapsFrames(payload = {}, ctx = {}) {
   return Array.from({ length: copies }, () => ({ ...frame }));
 }
 
+/**
+ * A guest message is a normal snapshot push. The last page stays on the
+ * board until something else replaces it. An optional footer is a second
+ * page with the usual reading-time dwell.
+ */
+function guestBookFrames(payload = {}) {
+  const name = String(payload.name || '').trim();
+  const frames = [];
+  if (Array.isArray(payload.rows)) {
+    frames.push(snapshotFrame(
+      payload.rows,
+      name ? `Guest · ${name}` : 'Guest book',
+      'guest.book',
+    ));
+  }
+  if (Array.isArray(payload.footerRows)) {
+    frames.push(snapshotFrame(payload.footerRows, 'Guest book invite', 'guest.book'));
+  }
+  return frames;
+}
+
+function guestBookInviteFrames(payload = {}) {
+  if (!Array.isArray(payload.rows)) {
+    return [];
+  }
+  return [snapshotFrame(payload.rows, 'Guest book invite', 'guest.book')];
+}
+
 const FORMATTERS = {
   'guest.photobooth': guestSnapsFrames,
+  'guest.book': guestBookFrames,
+  'guest.book.invite': guestBookInviteFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -196,6 +226,8 @@ module.exports = {
   fitBoardName,
   CHIP_PARADE,
   guestSnapsFrames,
+  guestBookFrames,
+  guestBookInviteFrames,
   boothHost,
   splitHost,
   labeledOrStacked,

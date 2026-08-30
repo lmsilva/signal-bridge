@@ -833,6 +833,8 @@
   /** Settings cards → which surfaces they configure. Default is both. */
   const SETTINGS_CARD_KINDS = Object.freeze({
     'locale-settings-card': ['full', 'vestaboard'],
+    'public-url-settings-card': ['full', 'vestaboard'],
+    'guest-book-settings-card': ['vestaboard'],
     'weather-alerts-settings-card': ['vestaboard'],
     'world-population-settings-card': ['vestaboard'],
     'calendar-clock-settings-card': ['vestaboard'],
@@ -5387,6 +5389,366 @@
 
   loadLocaleSettings();
 
+  // ------------------------------------------- Settings → Global / Public URL
+
+  function renderPublicUrlSettings(data = {}) {
+    const settings = data.settings || {};
+    const input = $('public-base-url');
+    if (input && document.activeElement !== input) {
+      input.value = settings.publicBaseUrl || '';
+    }
+    const pill = $('public-url-status-pill');
+    const detail = $('public-url-status-detail');
+    const resolved = $('public-url-resolved');
+    const envNote = $('public-url-env-note');
+    const hasUrl = Boolean(settings.publicBaseUrl);
+    if (pill) {
+      pill.textContent = hasUrl ? 'Set' : 'Not set';
+      pill.className = `status-pill ${hasUrl ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = hasUrl
+        ? 'HTTPS origin for Guest Snaps, the Guest Book short link, and every other human-facing URL.'
+        : 'Save an https:// hostname guests can reach from outside the house.';
+    }
+    if (resolved) {
+      resolved.textContent = data.origin
+        ? data.origin
+        : 'Falls back to GUEST_PHOTOBOOTH_URL, then the LAN address.';
+    }
+    if (envNote) {
+      if (data.envGuestPhotoboothUrlSet) {
+        envNote.hidden = false;
+        envNote.textContent = data.envNote
+          || 'GUEST_PHOTOBOOTH_URL is also set in .env — the Public base URL above wins while it is set.';
+      } else {
+        envNote.hidden = true;
+        envNote.textContent = '';
+      }
+    }
+  }
+
+  async function loadPublicUrlSettings() {
+    try {
+      const data = await apiGet('/api/public-url/settings');
+      renderPublicUrlSettings(data);
+    } catch {
+      renderPublicUrlSettings({});
+    }
+  }
+
+  $('btn-public-url-save')?.addEventListener('click', async () => {
+    const button = $('btn-public-url-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/public-url/settings', {
+        publicBaseUrl: $('public-base-url')?.value || '',
+      });
+      renderPublicUrlSettings(result);
+      toast('Public base URL saved', 'ok');
+      loadGuestBookSettings();
+    } catch (error) {
+      toast(error.message || 'Could not save public URL', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  loadPublicUrlSettings();
+
+  // ------------------------------------------- Settings → Guest Book
+
+  function formatShortlinkCheck(link = {}) {
+    if (!link.lastCheckAt) return 'Last check —';
+    const at = new Date(link.lastCheckAt);
+    if (Number.isNaN(at.getTime())) return 'Last check —';
+    const detail = link.lastCheckDetail ? ` · ${link.lastCheckDetail}` : '';
+    return `Checked ${at.toLocaleString()} ${detail}`.replace(/\s+/g, ' ').trim();
+  }
+
+  function syncGuestBookRateFields() {
+    const on = Boolean($('guest-book-rate-on')?.checked);
+    ['guest-book-rate', 'guest-book-window', 'guest-book-daily'].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = !on;
+    });
+  }
+
+  function renderGuestBookSettings(data = {}) {
+    const settings = data.settings || {};
+    const creds = data.credentials || {};
+    const link = data.shortlink || {};
+    const alias = $('guest-book-alias');
+    if (alias && document.activeElement !== alias) {
+      alias.value = settings.preferredAlias || '';
+    }
+    const setCheck = (id, on) => {
+      const el = $(id);
+      if (el) el.checked = Boolean(on);
+    };
+    setCheck('guest-book-enabled', settings.enabled !== false);
+    setCheck('guest-book-paused', settings.paused);
+    setCheck('guest-book-invite-footer', settings.inviteFooter !== false);
+    setCheck('guest-book-wake', settings.guestsMayWake);
+    setCheck('guest-book-approval', settings.approval);
+    setCheck('guest-book-blocked-on', settings.blockedWordsEnabled);
+    setCheck('guest-book-rate-on', settings.rateLimitEnabled !== false);
+    syncGuestBookRateFields();
+    const who = $('guest-book-who');
+    if (who && document.activeElement !== who) {
+      who.value = settings.whoCanSend || 'anyone';
+    }
+    const rate = $('guest-book-rate');
+    if (rate && document.activeElement !== rate) rate.value = String(settings.ratePerGuest || 3);
+    const windowEl = $('guest-book-window');
+    if (windowEl && document.activeElement !== windowEl) {
+      windowEl.value = String(settings.rateWindowMinutes || 10);
+    }
+    const daily = $('guest-book-daily');
+    if (daily && document.activeElement !== daily) daily.value = String(settings.dailyCap || 100);
+    const blocked = $('guest-book-blocked-words');
+    if (blocked && document.activeElement !== blocked) {
+      blocked.value = (settings.blockedWords || []).join('\n');
+    }
+    const codeHint = $('guest-book-code-hint');
+    if (codeHint) {
+      const pin = data.boardCode || '';
+      codeHint.hidden = !pin;
+      codeHint.textContent = pin ? `Today's board code is ${pin}` : '';
+    }
+    const token = $('guest-book-token');
+    if (token && document.activeElement !== token) {
+      token.value = '';
+      token.placeholder = creds.hasToken
+        ? (creds.tokenHint ? `Saved (…${creds.tokenHint})` : 'Token saved')
+        : 'Paste token, or set TINYURL_API_TOKEN in .env';
+    }
+    const hint = $('guest-book-token-hint');
+    if (hint) {
+      if (creds.envBlocksOverwrite) {
+        hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasToken) {
+        hint.textContent = creds.tokenHint
+          ? `Token saved (…${creds.tokenHint}). Paste a new one to replace it.`
+          : 'Token saved. Paste a new one to replace it.';
+      } else {
+        hint.textContent = 'Write-only. Stored encrypted. TINYURL_API_TOKEN in .env wins if set.';
+      }
+    }
+
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const pill = $('guest-book-status-pill');
+    const detail = $('guest-book-status-detail');
+    const dot = $('guest-book-dot');
+    const label = $('guest-book-shortlink-label');
+    const check = $('guest-book-shortlink-check');
+    const tone = health === 'healthy'
+      ? 'ok'
+      : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    if (pill) {
+      const text = link.alert
+        ? 'Needs repair'
+        : health === 'healthy'
+          ? 'Active'
+          : health === 'missing'
+            ? 'Not set'
+            : 'Unknown';
+      pill.textContent = text;
+      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = link.alert?.message
+        || (link.display
+          ? `Short link ${link.display}`
+          : 'Short link to /guestbook/. Guests write a message on their phone.');
+    }
+    if (dot) {
+      dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    if (label) {
+      label.textContent = link.display || 'No short link yet.';
+    }
+    if (check) {
+      check.textContent = formatShortlinkCheck(link);
+    }
+  }
+
+  async function loadGuestBookSettings() {
+    try {
+      const data = await apiGet('/api/guest-book/settings');
+      renderGuestBookSettings(data);
+    } catch {
+      renderGuestBookSettings({});
+    }
+  }
+
+  $('btn-guest-book-save')?.addEventListener('click', async () => {
+    const button = $('btn-guest-book-save');
+    if (button) button.disabled = true;
+    try {
+      const body = {
+        preferredAlias: $('guest-book-alias')?.value || '',
+        enabled: Boolean($('guest-book-enabled')?.checked),
+        paused: Boolean($('guest-book-paused')?.checked),
+        whoCanSend: $('guest-book-who')?.value || 'anyone',
+        inviteFooter: Boolean($('guest-book-invite-footer')?.checked),
+        guestsMayWake: Boolean($('guest-book-wake')?.checked),
+        approval: Boolean($('guest-book-approval')?.checked),
+        rateLimitEnabled: Boolean($('guest-book-rate-on')?.checked),
+        ratePerGuest: Number($('guest-book-rate')?.value || 3),
+        rateWindowMinutes: Number($('guest-book-window')?.value || 10),
+        dailyCap: Number($('guest-book-daily')?.value || 100),
+        blockedWordsEnabled: Boolean($('guest-book-blocked-on')?.checked),
+        blockedWords: String($('guest-book-blocked-words')?.value || '')
+          .split(/[\n,]+/)
+          .map((word) => word.trim())
+          .filter(Boolean),
+      };
+      const password = String($('guest-book-password')?.value || '').trim();
+      if (password) body.password = password;
+      const token = String($('guest-book-token')?.value || '').trim();
+      if (token) body.apiToken = token;
+      const result = await apiPost('/api/guest-book/settings', body);
+      renderGuestBookSettings(result);
+      if ($('guest-book-token')) $('guest-book-token').value = '';
+      if ($('guest-book-password')) $('guest-book-password').value = '';
+      if (result.shortlink?.error || result.shortlink?.ok === false) {
+        toast(result.shortlink.error || result.shortlink.lastCheckDetail || 'Short link was not created', 'bad');
+      } else {
+        toast('Guest Book settings saved', 'ok');
+      }
+    } catch (error) {
+      toast(error.message || 'Could not save Guest Book settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('guest-book-rate-on')?.addEventListener('change', syncGuestBookRateFields);
+
+  $('btn-guest-book-check')?.addEventListener('click', async () => {
+    const button = $('btn-guest-book-check');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/guest-book/check', {
+        preferredAlias: $('guest-book-alias')?.value || '',
+      });
+      renderGuestBookSettings(result);
+      if (result.shortlink?.error || result.shortlink?.ok === false) {
+        toast(result.shortlink.error || result.shortlink.lastCheckDetail || 'Check failed', 'bad');
+      } else {
+        toast(result.shortlink?.health === 'healthy' ? 'Short link is healthy' : 'Short link checked', 'ok');
+      }
+    } catch (error) {
+      toast(error.message || 'Check failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  loadGuestBookSettings();
+
+  async function renderGuestBookList() {
+    const host = $('guest-book-list');
+    const summary = $('guest-book-sheet-summary');
+    if (!host) return;
+    try {
+      const data = await apiGet('/api/guest-book/book');
+      const entries = data.entries || [];
+      if (summary) {
+        summary.textContent = entries.length
+          ? `${entries.length} message${entries.length === 1 ? '' : 's'} in The Book.`
+          : 'No guest messages yet.';
+      }
+      host.innerHTML = entries.map((entry) => {
+        const when = entry.at
+          ? new Date(entry.at).toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+          : '';
+        const from = entry.name || 'Anonymous';
+        const ip = entry.ip ? ` · ${entry.ip}` : '';
+        return `
+        <article class="gb-book-entry" data-book-id="${escapeHtml(entry.id)}">
+          <div class="gb-book-meta">
+            <strong>From: ${escapeHtml(from)}</strong>
+            <span class="hint">${escapeHtml(when)}${escapeHtml(ip)} · ${escapeHtml(entry.status || '')}</span>
+            <div class="gb-book-actions">
+              <button type="button" class="btn btn-outline btn-sm" data-book-replay>Replay</button>
+              <button type="button" class="btn btn-danger btn-sm" data-book-delete>Delete</button>
+            </div>
+          </div>
+          <div class="cn-board-preview" data-book-preview></div>
+        </article>`;
+      }).join('');
+      host.querySelectorAll('.gb-book-entry').forEach((card, index) => {
+        const entry = entries[index];
+        renderFlapGrid(
+          card.querySelector('[data-book-preview]'),
+          entry?.previewRows || entry?.rows,
+        );
+      });
+    } catch (error) {
+      if (summary) summary.textContent = error.message || 'Could not load The Book.';
+      host.innerHTML = '';
+    }
+  }
+
+  function openGuestBookSheet() {
+    const sheet = $('guest-book-sheet');
+    if (sheet) sheet.hidden = false;
+    renderGuestBookList();
+  }
+
+  function closeGuestBookSheet() {
+    const sheet = $('guest-book-sheet');
+    if (sheet) sheet.hidden = true;
+  }
+
+  $('btn-guest-book-invite')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/guest-book-invite', withTarget());
+      toast(result.shortLabel ? `Invite on the board · ${result.shortLabel}` : 'Invite on the board', 'good');
+    } catch (error) {
+      toast(error?.message || 'Guest Book invite push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-guest-book-open')?.addEventListener('click', () => openGuestBookSheet());
+  $('btn-guest-book-sheet-close')?.addEventListener('click', () => closeGuestBookSheet());
+  registerSheetDismiss('guest-book-sheet', () => closeGuestBookSheet());
+  $('guest-book-list')?.addEventListener('click', async (event) => {
+    const card = event.target.closest('.gb-book-entry');
+    if (!card) return;
+    const id = card.getAttribute('data-book-id');
+    if (event.target.closest('[data-book-replay]')) {
+      try {
+        await apiPost('/api/guest-book/replay', { id });
+        toast('Replayed to the board', 'ok');
+        renderGuestBookList();
+      } catch (error) {
+        toast(error.message || 'Replay failed', 'bad');
+      }
+    }
+    if (event.target.closest('[data-book-delete]')) {
+      try {
+        await apiPost('/api/guest-book/delete', { id });
+        toast('Deleted from The Book', 'ok');
+        renderGuestBookList();
+      } catch (error) {
+        toast(error.message || 'Delete failed', 'bad');
+      }
+    }
+  });
+
   // ------------------------------------------ Settings → Weather Alerts
 
   function renderWeatherAlertsSettings(data = {}) {
@@ -5683,23 +6045,30 @@
       Array.from({ length: 22 }, () => ({ text: '', chip: '' }))
     ));
     const dayRow0 = payload.showHeader ? 1 : 0;
+    // Keep these in lockstep with CAL_COL0 / TEXT_COL in calendar-clock.js.
+    const calCol0 = 1;
+    const textCol = 10;
     if (payload.showHeader && payload.header) {
-      placeCalendarClockText(grid, payload.header, 0, 0);
+      placeCalendarClockText(grid, payload.header, 0, calCol0);
     }
     const monthChip = String(payload.theme?.month || '').toLowerCase();
     const todayChip = String(payload.theme?.today || '').toLowerCase();
     for (const cell of payload.cells || []) {
       const row = dayRow0 + Number(cell.row);
-      const col = Number(cell.col);
-      if (!grid[row] || col < 0 || col >= 7) {
+      const col = calCol0 + Number(cell.col);
+      if (!grid[row] || Number(cell.col) < 0 || Number(cell.col) >= 7 || col >= 22) {
         continue;
       }
       const color = cell.today ? todayChip : monthChip;
       grid[row][col].chip = CALENDAR_CLOCK_CHIP_COLORS.has(color) ? color : '';
     }
-    placeCalendarClockText(grid, payload.weekdayName, 1, 8);
-    placeCalendarClockText(grid, `${payload.monthName || ''}  ${payload.day ?? ''}`.trim(), 2, 8);
-    placeCalendarClockText(grid, payload.timeLabel, 4, 8);
+    const month = String(payload.monthName || '');
+    const day = String(payload.day ?? '');
+    const dateGap = textCol + month.length + 2 + day.length <= 22 ? 2 : 1;
+    placeCalendarClockText(grid, payload.weekdayName, 1, textCol);
+    placeCalendarClockText(grid, month, 2, textCol);
+    placeCalendarClockText(grid, day, 2, textCol + month.length + dateGap);
+    placeCalendarClockText(grid, payload.timeLabel, 4, textCol);
     host.innerHTML = grid.map((row) => (
       `<div class="cn-preview-row">${row.map((cell) => {
         const cls = cell.chip ? ` is-chip-${cell.chip}` : '';
@@ -5844,6 +6213,40 @@
     }).join('');
   }
 
+  /**
+   * Paint a 6×22 code grid as Vestaboard Simulator tiles (`.vb-tile` / `.vb-flap`).
+   * Used for Red Letter's settings preview and the Day Of designer board.
+   */
+  function renderVbGrid(host, rows, { slots = false, caret = null, interactive = false } = {}) {
+    if (!host) return;
+    const grid = Array.isArray(rows) && rows.length ? rows : blankDesignerCells();
+    const parts = [];
+    for (let rowIndex = 0; rowIndex < RL_ROWS; rowIndex += 1) {
+      const row = grid[rowIndex] || [];
+      for (let col = 0; col < RL_COLS; col += 1) {
+        const code = Number(row[col] ?? 0);
+        const chip = FLAP_CHIP_BY_CODE.get(code);
+        const isSlot = code === RL_MESSAGE_CELL;
+        const isCaret = caret && caret.row === rowIndex && caret.col === col;
+        const classes = [
+          'vb-tile',
+          chip ? 'is-chip' : '',
+          slots && isSlot ? 'is-slot' : '',
+          isCaret ? 'is-caret' : '',
+        ].filter(Boolean).join(' ');
+        const glyph = chip || isSlot ? '' : (FLAP_CHARS[code] || ' ');
+        const chipAttr = chip ? ` data-chip="${code}"` : '';
+        const posAttr = interactive ? ` data-rl-row="${rowIndex}" data-rl-col="${col}"` : '';
+        parts.push(
+          `<div class="${classes}"${chipAttr}${posAttr}>`
+          + `<div class="vb-flap"><span class="vb-glyph">${escapeHtml(glyph === ' ' ? '' : glyph)}</span></div>`
+          + `</div>`,
+        );
+      }
+    }
+    host.innerHTML = parts.join('');
+  }
+
   let redLetterState = { settings: {}, events: [], nextUp: null };
   let dateBookPreviewCard = 'countdown';
   let dateBookSelectedId = '';
@@ -5864,6 +6267,53 @@
     if (days === 1) return 'tomorrow';
     if (days < 0) return 'passed';
     return `in ${days} days`;
+  }
+
+  const DATE_BOOK_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const DATE_BOOK_MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const DATE_BOOK_ORDINALS = [
+    { value: '1', label: 'First' },
+    { value: '2', label: 'Second' },
+    { value: '3', label: 'Third' },
+    { value: '4', label: 'Fourth' },
+    { value: 'last', label: 'Last' },
+  ];
+
+  function dateBookSelectOptions(items, selected) {
+    return items.map((item) => {
+      const value = typeof item === 'object' ? item.value : item;
+      const label = typeof item === 'object' ? item.label : item;
+      return `<option value="${escapeHtml(String(value))}"${String(value) === String(selected) ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+  }
+
+  function dateBookScheduleLabel(event = {}) {
+    const time = event.time && event.time !== '00:00' ? ` at ${event.time}` : '';
+    if (event.schedule === 'weekday' && event.ordinal != null && event.weekday != null && event.month) {
+      const which = DATE_BOOK_ORDINALS.find((row) => String(row.value) === String(event.ordinal))?.label || event.ordinal;
+      return `${which} ${DATE_BOOK_WEEKDAYS[event.weekday] || ''} of ${DATE_BOOK_MONTHS[event.month - 1] || ''}${time}`.replace(/\s+/g, ' ').trim();
+    }
+    return `${event.date || ''}${time}`.trim();
+  }
+
+  function syncDateBookWhenMode(scope) {
+    if (!scope) return;
+    const select = scope.querySelector('#date-book-schedule, [data-date-book-schedule]');
+    const mode = select?.value === 'weekday' ? 'weekday' : 'date';
+    scope.querySelectorAll('[data-date-book-mode]').forEach((field) => {
+      field.hidden = field.dataset.dateBookMode !== mode;
+    });
+  }
+
+  function dateBookDraftReady(draft = {}) {
+    if (!String(draft.name || '').trim()) return false;
+    if (draft.schedule === 'weekday') {
+      return draft.ordinal && draft.weekday != null && draft.month;
+    }
+    return Boolean(String(draft.date || '').trim());
   }
 
   function renderRedLetterCard(data = {}) {
@@ -5900,15 +6350,15 @@
     if (!host) return;
     const nextId = redLetterState.nextUp?.id;
     if (!nextId) {
-      renderFlapGrid(host, blankDesignerCells());
+      renderVbGrid(host, blankDesignerCells());
       return;
     }
     try {
       const data = await apiPost('/api/date-book/preview', { eventId: nextId });
       const card = data.countdown?.card === 'day-of' ? data.dayOf : data.countdown;
-      renderFlapGrid(host, card?.rows);
+      renderVbGrid(host, card?.rows);
     } catch {
-      renderFlapGrid(host, blankDesignerCells());
+      renderVbGrid(host, blankDesignerCells());
     }
   }
 
@@ -5975,7 +6425,7 @@
     const needle = dateBookSearch.trim().toLowerCase();
     if (!needle) return redLetterState.events;
     return redLetterState.events.filter((event) => (
-      `${event.name} ${event.message || ''} ${event.date}`.toLowerCase().includes(needle)
+      `${event.name} ${event.message || ''} ${event.date} ${dateBookScheduleLabel(event)}`.toLowerCase().includes(needle)
     ));
   }
 
@@ -5985,7 +6435,7 @@
     if (summary) {
       const total = redLetterState.events.length;
       summary.textContent = total
-        ? `${total} event${total === 1 ? '' : 's'}. One-off dates drop off the board once they pass; yearly ones roll forward on their own.`
+        ? `${total} event${total === 1 ? '' : 's'}. One-off dates drop off the board once they pass; yearly ones — and weekdays of the month, like the last Thursday of November — roll forward on their own.`
         : 'Nothing here yet. Add the dates you want counted down to.';
     }
     if (!list) return;
@@ -6000,23 +6450,63 @@
       const badges = [
         next.isToday ? '<span class="date-book-badge is-today">Today</span>' : '',
         event.recurring ? '<span class="date-book-badge is-yearly">Yearly</span>' : '',
+        event.schedule === 'weekday' ? '<span class="date-book-badge is-yearly">Weekday</span>' : '',
         event.layout ? '<span class="date-book-badge is-art">Artwork</span>' : '',
         next.expired ? '<span class="date-book-badge">Passed</span>' : '',
       ].filter(Boolean).join('');
+      const schedule = event.schedule === 'weekday' ? 'weekday' : 'date';
+      const time = event.time || '';
+      const whenLine = [
+        next.date || event.date,
+        dateBookScheduleLabel(event),
+        next.expired ? '' : dateBookDayLabel(next),
+      ].filter((part, index, all) => part && all.indexOf(part) === index).join(' · ');
       return `
         <article class="cn-fact${event.enabled === false ? ' is-hidden' : ''}" data-date-book-id="${escapeHtml(event.id)}">
           <div class="date-book-row-head">
             <span class="date-book-row-name">${escapeHtml(event.name)}</span>
             ${badges}
-            <span class="date-book-row-when">${escapeHtml(next.date || event.date)}${next.expired ? '' : ` · ${dateBookDayLabel(next)}`}</span>
+            <span class="date-book-row-when">${escapeHtml(whenLine)}</span>
           </div>
           <textarea class="field-input cn-fact-text" rows="2" maxlength="240" data-date-book-message
             placeholder="Message for the day itself">${escapeHtml(event.message || '')}</textarea>
+          <div class="date-book-when">
+            <div class="date-book-when-field">
+              <label class="field-label">When</label>
+              <select class="field-input" data-date-book-schedule>
+                <option value="date"${schedule === 'date' ? ' selected' : ''}>On a date</option>
+                <option value="weekday"${schedule === 'weekday' ? ' selected' : ''}>Weekday of the month</option>
+              </select>
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="date"${schedule === 'date' ? '' : ' hidden'}>
+              <label class="field-label">Date</label>
+              <input type="date" class="field-input" data-date-book-date value="${escapeHtml(event.date || '')}">
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="weekday"${schedule === 'weekday' ? '' : ' hidden'}>
+              <label class="field-label">Which</label>
+              <select class="field-input" data-date-book-ordinal>${dateBookSelectOptions(DATE_BOOK_ORDINALS, event.ordinal || '1')}</select>
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="weekday"${schedule === 'weekday' ? '' : ' hidden'}>
+              <label class="field-label">Weekday</label>
+              <select class="field-input" data-date-book-weekday>${dateBookSelectOptions(DATE_BOOK_WEEKDAYS.map((label, value) => ({ value, label })), event.weekday ?? 1)}</select>
+            </div>
+            <div class="date-book-when-field" data-date-book-mode="weekday"${schedule === 'weekday' ? '' : ' hidden'}>
+              <label class="field-label">Of</label>
+              <select class="field-input" data-date-book-month>${dateBookSelectOptions(DATE_BOOK_MONTHS.map((label, index) => ({ value: index + 1, label })), event.month || 9)}</select>
+            </div>
+            <div class="date-book-when-field">
+              <label class="field-label">Time</label>
+              <input type="time" class="field-input" data-date-book-time value="${escapeHtml(time)}" title="Leave blank for midnight">
+            </div>
+            <div class="date-book-when-field">
+              <span class="field-label">Repeat</span>
+              <label class="trivia-check date-book-repeat-box">
+                <input type="checkbox" data-date-book-recurring ${event.recurring ? 'checked' : ''}>
+                <span>Every year</span>
+              </label>
+            </div>
+          </div>
           <div class="cn-fact-meta">
-            <label class="trivia-check">
-              <input type="checkbox" data-date-book-recurring ${event.recurring ? 'checked' : ''}>
-              <span>Every year</span>
-            </label>
             <div class="cn-fact-actions">
               <button type="button" class="btn btn-outline btn-sm" data-date-book-action="preview">Preview</button>
               <button type="button" class="btn btn-outline btn-sm" data-date-book-action="design">Design</button>
@@ -6030,11 +6520,32 @@
   }
 
   function dateBookDraft() {
+    const schedule = $('date-book-schedule')?.value || 'date';
     return {
       name: $('date-book-name')?.value || '',
       message: $('date-book-message')?.value || '',
-      date: $('date-book-date')?.value || '',
+      schedule,
+      // A leftover calendar date must not pin a weekday rule.
+      date: schedule === 'date' ? ($('date-book-date')?.value || '') : '',
+      time: $('date-book-time')?.value || '',
+      ordinal: $('date-book-ordinal')?.value || '1',
+      weekday: Number($('date-book-weekday')?.value ?? 1),
+      month: Number($('date-book-month')?.value || 9),
       recurring: Boolean($('date-book-recurring')?.checked),
+    };
+  }
+
+  function dateBookRowDraft(row) {
+    if (!row) return {};
+    return {
+      message: row.querySelector('[data-date-book-message]')?.value || '',
+      schedule: row.querySelector('[data-date-book-schedule]')?.value || 'date',
+      date: row.querySelector('[data-date-book-date]')?.value || '',
+      time: row.querySelector('[data-date-book-time]')?.value || '',
+      ordinal: row.querySelector('[data-date-book-ordinal]')?.value || '1',
+      weekday: Number(row.querySelector('[data-date-book-weekday]')?.value ?? 1),
+      month: Number(row.querySelector('[data-date-book-month]')?.value || 9),
+      recurring: Boolean(row.querySelector('[data-date-book-recurring]')?.checked),
     };
   }
 
@@ -6052,9 +6563,13 @@
       ? { eventId: dateBookSelectedId }
       : { event: dateBookDraft() };
     const draft = body.event;
-    if (draft && (!draft.name.trim() || !draft.date)) {
+    if (draft && !dateBookDraftReady(draft)) {
       renderFlapGrid(host, blankDesignerCells());
-      if (hint) hint.textContent = draft.name.trim() || draft.date ? 'Needs a name and a date' : '';
+      if (hint) {
+        hint.textContent = draft.name.trim()
+          ? (draft.schedule === 'weekday' ? 'Needs a weekday of the month' : 'Needs a date')
+          : '';
+      }
       return;
     }
     try {
@@ -6082,6 +6597,7 @@
     if (!sheet) return;
     sheet.hidden = false;
     dateBookSelectedId = '';
+    syncDateBookWhenMode($('date-book-when'));
     loadRedLetter().then(refreshDateBookPreview);
   }
 
@@ -6095,15 +6611,23 @@
   $('btn-date-book-close')?.addEventListener('click', closeDateBookSheet);
   registerSheetDismiss('date-book-manage-sheet', () => closeDateBookSheet());
 
-  ['date-book-name', 'date-book-message', 'date-book-date'].forEach((id) => {
+  ['date-book-name', 'date-book-message', 'date-book-date', 'date-book-time'].forEach((id) => {
     $(id)?.addEventListener('input', () => {
       dateBookSelectedId = '';
       queueDateBookPreview();
     });
   });
-  $('date-book-recurring')?.addEventListener('change', () => {
-    dateBookSelectedId = '';
-    queueDateBookPreview();
+  ['date-book-schedule', 'date-book-ordinal', 'date-book-weekday', 'date-book-month', 'date-book-recurring'].forEach((id) => {
+    $(id)?.addEventListener('change', () => {
+      dateBookSelectedId = '';
+      if (id === 'date-book-schedule') {
+        const weekday = $('date-book-schedule')?.value === 'weekday';
+        const recurring = $('date-book-recurring');
+        if (weekday && recurring && !recurring.checked) recurring.checked = true;
+        syncDateBookWhenMode($('date-book-when'));
+      }
+      queueDateBookPreview();
+    });
   });
 
   $('date-book-preview-tabs')?.addEventListener('click', (event) => {
@@ -6124,12 +6648,12 @@
     button.disabled = true;
     try {
       const created = await apiPost('/api/date-book/events', dateBookDraft());
-      ['date-book-name', 'date-book-message'].forEach((id) => {
+      ['date-book-name', 'date-book-message', 'date-book-time'].forEach((id) => {
         const field = $(id);
         if (field) field.value = '';
       });
       const recurring = $('date-book-recurring');
-      if (recurring) recurring.checked = false;
+      if (recurring) recurring.checked = $('date-book-schedule')?.value === 'weekday';
       applyRedLetterState(created);
       dateBookSelectedId = created.event?.id || '';
       refreshDateBookPreview();
@@ -6139,6 +6663,11 @@
     } finally {
       button.disabled = false;
     }
+  });
+
+  $('date-book-list')?.addEventListener('change', (event) => {
+    if (!event.target.closest('[data-date-book-schedule]')) return;
+    syncDateBookWhenMode(event.target.closest('[data-date-book-id]'));
   });
 
   $('date-book-list')?.addEventListener('click', async (event) => {
@@ -6167,10 +6696,7 @@
       } else {
         const patch = action === 'toggle'
           ? { enabled: stored?.enabled === false }
-          : {
-            message: row.querySelector('[data-date-book-message]')?.value || '',
-            recurring: Boolean(row.querySelector('[data-date-book-recurring]')?.checked),
-          };
+          : dateBookRowDraft(row);
         applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(id)}`), {
           method: 'PUT', body: patch,
         }));
@@ -6186,6 +6712,7 @@
   // ------------------------------------------------ Red Letter designer
 
   // `.` blank, `#` a message flap, anything else a chip letter.
+  // `confetti` is the house Day Of look (rails + message slots).
   const RL_PRESETS = {
     blank: [
       '......................',
@@ -6225,6 +6752,10 @@
     r: 'red', o: 'orange', y: 'yellow', g: 'green', b: 'blue', v: 'violet', w: 'white', k: 'black', f: 'filled',
   };
 
+  // Characters someone can stamp onto a flap from the palette. Space is
+  // listed first so a blank can be picked without switching to Erase.
+  const RL_PALETTE_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$()-_+&=;:\'"%,./?°';
+
   function presetCells(name) {
     const lines = RL_PRESETS[name] || RL_PRESETS.blank;
     return Array.from({ length: RL_ROWS }, (_, row) => (
@@ -6247,11 +6778,46 @@
   function designerCodeForTool() {
     if (designerTool.kind === 'message') return RL_MESSAGE_CELL;
     if (designerTool.kind === 'erase') return 0;
+    if (designerTool.kind === 'char') {
+      return FLAP_CODE_BY_CHAR.get(designerTool.char) ?? 0;
+    }
     return 63 + Math.max(0, FLAP_CHIPS.indexOf(designerTool.chip));
   }
 
+  function syncDesignerToolUi() {
+    document.querySelectorAll('#red-letter-tools [data-rl-tool]').forEach((entry) => {
+      const kind = entry.dataset.rlTool;
+      const on = designerTool.kind === kind
+        && (kind !== 'chip' || entry.dataset.rlChip === designerTool.chip);
+      entry.classList.toggle('is-active', on);
+    });
+    document.querySelectorAll('#red-letter-chars [data-rl-char]').forEach((entry) => {
+      const raw = entry.dataset.rlChar ?? '';
+      const char = raw === 'blank' ? ' ' : raw;
+      const on = designerTool.kind === 'char' && char === designerTool.char;
+      entry.classList.toggle('is-active', on);
+    });
+  }
+
+  function buildCharPalette() {
+    const host = $('red-letter-chars');
+    if (!host || host.dataset.ready === '1') return;
+    host.innerHTML = [...RL_PALETTE_CHARS].map((char) => {
+      const isBlank = char === ' ';
+      const attr = isBlank ? 'blank' : char;
+      const label = isBlank ? 'Blank' : char;
+      const blankClass = isBlank ? ' is-blank' : '';
+      return `<button type="button" class="rl-char${blankClass}" data-rl-char="${escapeHtml(attr)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+    }).join('');
+    host.dataset.ready = '1';
+  }
+
   function renderDesignerGrid() {
-    renderFlapGrid($('red-letter-grid'), designerCells, { slots: true, caret: designerCaret });
+    renderVbGrid($('red-letter-grid'), designerCells, {
+      slots: true,
+      caret: designerCaret,
+      interactive: true,
+    });
   }
 
   async function refreshDesignerPreview() {
@@ -6263,7 +6829,7 @@
       const data = await apiPost('/api/date-book/preview', {
         event: { ...event, layout: { cells: designerCells } },
       });
-      renderFlapGrid(host, data.dayOf?.rows);
+      renderVbGrid(host, data.dayOf?.rows);
       if (warning) {
         if (data.dayOf?.overflow) {
           warning.textContent = 'The message runs past the flaps you marked — mark more, or shorten it.';
@@ -6283,12 +6849,48 @@
     designerPreviewTimer = window.setTimeout(refreshDesignerPreview, 160);
   }
 
-  function paintDesignerCell(row, col, { moveCaret = true } = {}) {
+  function advanceDesignerCaret(row, col) {
+    let nextRow = row;
+    let nextCol = col + 1;
+    if (nextCol >= RL_COLS) {
+      nextCol = 0;
+      nextRow = Math.min(RL_ROWS - 1, row + 1);
+    }
+    designerCaret = { row: nextRow, col: nextCol };
+  }
+
+  function paintDesignerCell(row, col, { moveCaret = true, advance = false } = {}) {
     if (!designerCells[row] || col < 0 || col >= RL_COLS) return;
     designerCells[row][col] = designerCodeForTool();
-    if (moveCaret) designerCaret = { row, col };
+    if (advance) advanceDesignerCaret(row, col);
+    else if (moveCaret) designerCaret = { row, col };
     renderDesignerGrid();
     queueDesignerPreview();
+  }
+
+  function writeCharsFromCaret(text) {
+    if (!designerCaret) {
+      designerCaret = { row: 0, col: 0 };
+    }
+    let { row, col } = designerCaret;
+    for (const raw of String(text || '')) {
+      const upper = raw.toUpperCase();
+      const code = FLAP_CODE_BY_CHAR.get(upper);
+      if (code === undefined) continue;
+      designerCells[row][col] = code;
+      col += 1;
+      if (col >= RL_COLS) {
+        col = 0;
+        row = Math.min(RL_ROWS - 1, row + 1);
+      }
+    }
+    designerCaret = { row, col };
+    renderDesignerGrid();
+    queueDesignerPreview();
+  }
+
+  function designerBoardIsClear() {
+    return designerCells.every((row) => row.every((code) => code === 0));
   }
 
   function designerCellFromPoint(x, y) {
@@ -6302,15 +6904,22 @@
     const sheet = $('red-letter-designer-sheet');
     const event = redLetterState.events.find((entry) => entry.id === eventId);
     if (!sheet || !event) return;
+    buildCharPalette();
     designerEventId = eventId;
     designerCaret = null;
+    designerTool = { kind: 'chip', chip: 'red' };
+    syncDesignerToolUi();
+    // Fresh events start from the house Day Of confetti card (message slots
+    // in the middle rails), not the heart preset.
     designerCells = event.layout?.cells?.length
       ? presetFromSaved(event.layout.cells)
-      : presetCells('heart');
+      : presetCells('confetti');
     const subtitle = $('red-letter-designer-subtitle');
     if (subtitle) {
       subtitle.textContent = `${event.name} — ${event.message || 'no message yet'}`;
     }
+    const quick = $('red-letter-quick-type');
+    if (quick) quick.value = '';
     sheet.hidden = false;
     renderDesignerGrid();
     refreshDesignerPreview();
@@ -6339,9 +6948,39 @@
     const button = event.target.closest('[data-rl-tool]');
     if (!button) return;
     designerTool = { kind: button.dataset.rlTool, chip: button.dataset.rlChip || 'red' };
-    document.querySelectorAll('#red-letter-tools [data-rl-tool]').forEach((entry) => {
-      entry.classList.toggle('is-active', entry === button);
-    });
+    syncDesignerToolUi();
+  });
+
+  $('red-letter-chars')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-rl-char]');
+    if (!button) return;
+    const raw = button.dataset.rlChar ?? '';
+    const char = raw === 'blank' ? ' ' : raw;
+    designerTool = { kind: 'char', char };
+    syncDesignerToolUi();
+    if (designerCaret) {
+      paintDesignerCell(designerCaret.row, designerCaret.col, { advance: true });
+    }
+  });
+
+  const designerQuickType = $('red-letter-quick-type');
+  designerQuickType?.addEventListener('focus', () => {
+    if (!designerCaret) designerCaret = { row: 0, col: 0 };
+    renderDesignerGrid();
+  });
+  designerQuickType?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    writeCharsFromCaret(designerQuickType.value);
+    designerQuickType.value = '';
+  });
+  // Paste a whole phrase without needing Enter — still one go from the caret.
+  designerQuickType?.addEventListener('paste', (event) => {
+    const text = event.clipboardData?.getData('text') || '';
+    if (!text) return;
+    event.preventDefault();
+    writeCharsFromCaret(text);
+    designerQuickType.value = '';
   });
 
   const designerGrid = $('red-letter-grid');
@@ -6350,9 +6989,25 @@
     if (!cell) return;
     event.preventDefault();
     designerGrid.focus();
+    const row = Number(cell.dataset.rlRow);
+    const col = Number(cell.dataset.rlCol);
+    // Character tool with a glyph picked: click paints and advances. Without a
+    // glyph (shouldn't happen), click only moves the caret for quick-type.
+    if (designerTool.kind === 'char') {
+      if (designerTool.char != null) {
+        designerPainting = false;
+        paintDesignerCell(row, col, { advance: true });
+      } else {
+        designerCaret = { row, col };
+        renderDesignerGrid();
+      }
+      return;
+    }
     designerPainting = true;
     designerGrid.setPointerCapture?.(event.pointerId);
-    paintDesignerCell(Number(cell.dataset.rlRow), Number(cell.dataset.rlCol));
+    paintDesignerCell(row, col, {
+      advance: designerTool.kind === 'char',
+    });
   });
 
   // Pointer capture means enter/leave stop firing mid-drag, so the cell under
@@ -6396,7 +7051,7 @@
     if (code === undefined) return;
     event.preventDefault();
     designerCells[row][col] = code;
-    designerCaret = { row, col: Math.min(RL_COLS - 1, col + 1) };
+    advanceDesignerCaret(row, col);
     renderDesignerGrid();
     queueDesignerPreview();
   });
@@ -6408,6 +7063,17 @@
       renderDesignerGrid();
       refreshDesignerPreview();
     });
+  });
+
+  $('btn-red-letter-designer-blank')?.addEventListener('click', () => {
+    if (!designerBoardIsClear()) {
+      const ok = window.confirm('Clear the whole board? This only wipes the editor — Save to keep it, or cancel to leave the flaps as they are.');
+      if (!ok) return;
+    }
+    designerCells = blankDesignerCells();
+    designerCaret = null;
+    renderDesignerGrid();
+    refreshDesignerPreview();
   });
 
   $('btn-red-letter-designer-clear')?.addEventListener('click', async () => {
@@ -6440,6 +7106,7 @@
     }
   });
 
+  buildCharPalette();
   loadRedLetter();
 
   // ------------------------------------------- Settings → Learn Japanese
@@ -14344,7 +15011,7 @@
       state.className = 'vb-row-result';
       state.textContent = item.notBefore
         ? `not before ${vbClockOf(item.notBefore)}`
-        : 'waiting';
+        : (item.status === 'held' ? 'held' : 'waiting');
 
       const source = document.createElement('span');
       source.className = 'vb-row-time';
@@ -14470,6 +15137,8 @@
     loadStarlinkTrackerSettings();
     loadFlightplanSettings();
     loadLocaleSettings();
+    loadPublicUrlSettings();
+    loadGuestBookSettings();
     loadWeatherAlertsSettings();
     loadWorldPopulationSettings();
   });

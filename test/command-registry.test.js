@@ -218,6 +218,8 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('world.population', 'full'), false);
   assert.equal(supportsKind('calendar.clock', 'vestaboard'), true);
   assert.equal(supportsKind('calendar.clock', 'full'), false);
+  assert.equal(supportsKind('guestbook.invite', 'vestaboard'), true);
+  assert.equal(supportsKind('guestbook.invite', 'full'), false);
   assert.equal(supportsKind('bake.inspire', 'vestaboard'), true);
   assert.equal(supportsKind('bake.inspire', 'full'), false);
   assert.equal(supportsKind('weather.alerts', 'vestaboard'), true);
@@ -569,6 +571,22 @@ test('history.day is Vestaboard-only and needs a ready On This Day fact', () => 
 
   const ready = createCommandRegistry({ getOnThisDayStatus: () => ({ available: 12 }) });
   assert.equal(ready.hasContent('history.day'), true);
+});
+
+test('guestbook.invite is Vestaboard-only Signal and needs a short link', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'guestbook.invite');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(command.route, '/api/push/guest-book-invite');
+  assert.equal(command.defaultDurationSeconds, 20);
+
+  const empty = createCommandRegistry({});
+  assert.equal(empty.hasContent('guestbook.invite'), false);
+  const ready = createCommandRegistry({ getGuestBookStatus: () => ({ inviteReady: true }) });
+  assert.equal(ready.hasContent('guestbook.invite'), true);
 });
 
 test('calendar.clock is Vestaboard-only home and always has content', () => {

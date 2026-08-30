@@ -12,6 +12,7 @@ const {
 } = require('./air-quality');
 const { getCategory: getTriviaCategory } = require('./trivia-categories');
 const { resolveTopic } = require('./upside-news-categories');
+const { publicUrl } = require('./public-url');
 
 function displaySeconds(config, override) {
   const value = Number(override);
@@ -650,7 +651,9 @@ function buildGuestPhotoboothPayload(event, config, settings) {
     security: settings?.security,
     hidden: settings?.hidden,
   });
-  const boothUrl = String(settings?.boothUrl || '').trim();
+  const rawBooth = String(settings?.boothUrl || '').trim();
+  const boothUrl = rawBooth
+    || (publicUrl('/', config) ? publicUrl('/', config) : '');
   if (!wifiContent || !boothUrl) {
     return null;
   }

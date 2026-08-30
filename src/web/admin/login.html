@@ -69,6 +69,7 @@
       <button class="btn btn-accent btn-block" type="submit" id="login-submit">Sign in</button>
       <p class="hint" style="margin-top:16px;text-align:center;">
         Guests share photos at <a href="/" style="color:var(--accent)">the photo booth</a>.
+        <span id="guest-book-quicklink" hidden> Guests sign <a href="/guestbook/" style="color:var(--accent)">the guest book</a>.</span>
       </p>
     </form>
   </div>
@@ -81,6 +82,16 @@
       const submit = document.getElementById('login-submit');
       const params = new URLSearchParams(location.search);
       const next = params.get('next') || '/admin/';
+
+      fetch('/api/guestbook/status', { credentials: 'same-origin' })
+        .then((response) => response.json().catch(() => ({})))
+        .then((data) => {
+          const link = document.getElementById('guest-book-quicklink');
+          if (link && data && data.enabled) {
+            link.hidden = false;
+          }
+        })
+        .catch(() => {});
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();

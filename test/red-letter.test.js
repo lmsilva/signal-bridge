@@ -10,10 +10,12 @@ const { redLetterFrames } = require('../src/vestaboard/formatters/feeds');
 const { typeOf } = require('../src/vestaboard/router');
 const {
   parseYmdParts,
+  parseTime,
   zonedMidnightMs,
   sanitiseEvent,
   sanitiseEvents,
   nextOccurrence,
+  nthWeekdayOfMonth,
   upcomingEvents,
   pickEvent,
   createDateBook,
@@ -100,6 +102,8 @@ test('an event needs a name and a date, and keeps its own id', () => {
   assert.equal(event.name, 'Amanda visits');
   assert.equal(event.message, 'Welcome home');
   assert.equal(event.date, '2026-11-27');
+  assert.equal(event.time, '');
+  assert.equal(event.schedule, 'date');
   assert.equal(event.recurring, false);
   assert.equal(event.enabled, true);
   assert.equal(event.layout, null);
@@ -165,6 +169,82 @@ test('the countdown splits the real remaining time, not whole sleeps', () => {
   assert.equal(occurrence.days, 19, 'but 19 whole days of clock time');
   assert.equal(occurrence.hours, 11);
   assert.equal(occurrence.minutes, 55);
+});
+
+test('a clock time is when the hours and minutes count down to', () => {
+  assert.equal(parseTime('18:00'), '18:00');
+  assert.equal(parseTime('9:05:00'), '09:05');
+  assert.equal(parseTime(''), '');
+  assert.equal(parseTime('25:00'), '');
+
+  const at = new Date('2026-12-12T12:05:00-07:00');
+  const dinner = nextOccurrence(
+    { name: 'Dinner', date: '2026-12-25', time: '18:00' },
+    { asOf: at, timeZone: ZONE },
+  );
+  assert.equal(dinner.daysAway, 13, 'still 13 sleeps to Christmas Day');
+  assert.equal(dinner.days, 13);
+  assert.equal(dinner.hours, 5, 'to 6pm, not midnight');
+  assert.equal(dinner.minutes, 55);
+
+  const today = nextOccurrence(
+    { name: 'Tonight', date: '2026-12-12', time: '18:00' },
+    { asOf: at, timeZone: ZONE },
+  );
+  assert.equal(today.isToday, true);
+  assert.equal(today.days, 0);
+  assert.equal(today.hours, 5);
+  assert.equal(today.minutes, 55);
+});
+
+test('Thanksgiving is the last Thursday of November and Labor Day is the first Monday of September', () => {
+  assert.deepEqual(nthWeekdayOfMonth(2026, 11, 4, 'last'), { year: 2026, month: 11, day: 26 });
+  assert.deepEqual(nthWeekdayOfMonth(2026, 9, 1, 1), { year: 2026, month: 9, day: 7 });
+  assert.deepEqual(nthWeekdayOfMonth(2025, 11, 4, 'last'), { year: 2025, month: 11, day: 27 });
+
+  const options = { asOf: NOON, timeZone: ZONE };
+  const thanks = nextOccurrence({
+    name: 'Thanksgiving',
+    schedule: 'weekday',
+    ordinal: 'last',
+    weekday: 4,
+    month: 11,
+    recurring: true,
+  }, options);
+  assert.equal(thanks.date, '2026-11-26');
+  assert.equal(thanks.expired, false);
+
+  const labor = sanitiseEvent({
+    name: 'Labor Day',
+    schedule: 'weekday',
+    ordinal: 1,
+    weekday: 1,
+    month: 9,
+  });
+  assert.equal(labor.recurring, true, 'a weekday holiday repeats unless you say otherwise');
+  assert.equal(labor.id, 'labor-day-n1-mon-sep');
+  assert.equal(nextOccurrence(labor, options).date, '2026-09-07');
+
+  const lastYear = nextOccurrence({
+    name: 'Thanksgiving',
+    schedule: 'weekday',
+    ordinal: 'last',
+    weekday: 4,
+    month: 11,
+    recurring: true,
+  }, { asOf: new Date('2026-11-27T12:00:00-07:00'), timeZone: ZONE });
+  assert.equal(lastYear.date, '2027-11-25', 'the day after Thanksgiving looks to next year');
+
+  const oneOff = nextOccurrence({
+    name: 'This Labor Day',
+    schedule: 'weekday',
+    ordinal: 1,
+    weekday: 1,
+    month: 9,
+    date: '2025-09-01',
+    recurring: false,
+  }, options);
+  assert.equal(oneOff.expired, true, 'a one-off weekday date that already passed is gone');
 });
 
 test('selection skips what is disabled or gone and always prefers today', () => {

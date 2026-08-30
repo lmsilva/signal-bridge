@@ -62,6 +62,10 @@ function makeWebRoot() {
 }
 
 async function startServer({ busy = createDisplayBusy(), configOverrides = {} } = {}) {
+  // Slideshow photo origins follow public-url precedence. A developer .env
+  // GUEST_PHOTOBOOTH_URL must not leak into LAN-host assertions.
+  const prevBoothUrl = process.env.GUEST_PHOTOBOOTH_URL;
+  delete process.env.GUEST_PHOTOBOOTH_URL;
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sched-data-'));
   const sent = [];
   const recorded = [];
@@ -113,6 +117,12 @@ async function startServer({ busy = createDisplayBusy(), configOverrides = {} } 
   const cookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie || '').split(';')[0];
 
   const api = (route, options = {}) => request(`${base}${route}`, { cookie, ...options });
+  const originalStop = webServer.stop.bind(webServer);
+  webServer.stop = () => {
+    originalStop();
+    if (prevBoothUrl == null) delete process.env.GUEST_PHOTOBOOTH_URL;
+    else process.env.GUEST_PHOTOBOOTH_URL = prevBoothUrl;
+  };
   return { webServer, base, cookie, sent, recorded, api, config };
 }
 

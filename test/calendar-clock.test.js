@@ -93,12 +93,12 @@ test('December 31 keeps SMTWTFS and highlights today in yellow', () => {
   assert.deepEqual(payload.theme, { month: 'violet', today: 'yellow' });
 
   assertLayout(calendarClockRows(payload), [
-    'SMTWTFS',
-    ' vvvvvv WEDNESDAY',
-    'vvvvvvv DECEMBER  31',
-    'vvvvvvv',
-    'vvvvvvv 11:59  PM',
-    'vvvy',
+    ' SMTWTFS',
+    '  vvvvvv  WEDNESDAY',
+    ' vvvvvvv  DECEMBER  31',
+    ' vvvvvvv',
+    ' vvvvvvv  11:59  PM',
+    ' vvvy',
   ], 'December 31 2025 header calendar');
 
   const frames = calendarClockFrames(payload);
@@ -119,12 +119,12 @@ test('March 14 drops the header so a Saturday-start 31-day month fits', () => {
   assert.deepEqual(payload.theme, { month: 'blue', today: 'white' });
 
   assertLayout(calendarClockRows(payload), [
-    '      b',
-    'bbbbbbb FRIDAY',
-    'bbbbbwb MARCH  14',
-    'bbbbbbb',
-    'bbbbbbb 2:30  PM',
-    'bb',
+    '       b',
+    ' bbbbbbb  FRIDAY',
+    ' bbbbbwb  MARCH  14',
+    ' bbbbbbb',
+    ' bbbbbbb  2:30  PM',
+    ' bb',
   ], 'March 14 2025 six-week calendar');
 });
 
@@ -138,13 +138,31 @@ test('Monday week-start uses MTWTFSS when the month still fits five rows', () =>
   assert.equal(payload.header, HEADER_MONDAY);
 
   assertLayout(calendarClockRows(payload), [
-    'MTWTFSS',
-    'vvvvvvv WEDNESDAY',
-    'vvvvvvv DECEMBER  31',
-    'vvvvvvv',
-    'vvvvvvv 11:59  PM',
-    'vvy',
+    ' MTWTFSS',
+    ' vvvvvvv  WEDNESDAY',
+    ' vvvvvvv  DECEMBER  31',
+    ' vvvvvvv',
+    ' vvvvvvv  11:59  PM',
+    ' vvy',
   ], 'December 31 2025 Monday week');
+});
+
+test('September still shows a two-digit day after the inset and gutter', () => {
+  const payload = buildCalendarClockPayload(DEFAULT_SETTINGS, {
+    asOf: new Date('2026-09-30T12:00:00-06:00'),
+    timeZone: 'America/Denver',
+  });
+  assert.equal(payload.monthName, 'SEPTEMBER');
+  assert.equal(payload.day, 30);
+  const rows = calendarClockRows(payload);
+  assert.equal(validate(rows).ok, true);
+  const dateRow = rows[2];
+  // SEPTEMBER is one flap too long for the usual two-flap date gap, so the
+  // day sits one flap closer — both digits must still land on the board.
+  assert.equal(dateRow[10], 19); // S
+  assert.equal(dateRow[18], 18); // R
+  assert.equal(dateRow[20], 29); // 3
+  assert.equal(dateRow[21], 36); // 0
 });
 
 test('calendarClockFrames refuse an empty payload', () => {

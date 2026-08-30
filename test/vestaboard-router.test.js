@@ -231,7 +231,7 @@ test('a smart-home command coalesces per device, not per room that heard it', ()
   assert.equal(options.coalesceKey, 'smart-home:Kitchen Lights');
 });
 
-test('an explicit push is exempt from quiet hours; a rotation is not', () => {
+test('an explicit push is not exempt from quiet hours; a rotation is not either', () => {
   let options = null;
   routeEvent({
     payload: WEATHER,
@@ -242,7 +242,7 @@ test('an explicit push is exempt from quiet hours; a rotation is not', () => {
       return { ok: true, accepted: 1 };
     },
   });
-  assert.equal(options.quietHoursExempt, true);
+  assert.equal(options.quietHoursExempt, undefined);
 
   routeEvent({
     payload: WEATHER,
@@ -254,7 +254,7 @@ test('an explicit push is exempt from quiet hours; a rotation is not', () => {
       return { ok: true, accepted: 1 };
     },
   });
-  assert.equal(options.quietHoursExempt, false);
+  assert.equal(options.quietHoursExempt, undefined);
 });
 
 test('a quietHoursExempt override wins over explicit', () => {

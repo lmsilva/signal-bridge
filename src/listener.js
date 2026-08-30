@@ -359,6 +359,7 @@ function createListener({
         || options.source === 'scheduler'
         || payload?.triggeredBy === 'scheduler'
       ),
+      breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
       ctx: options.ctx,
     });

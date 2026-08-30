@@ -79,6 +79,7 @@ const COMMAND_TO_TYPE = {
   'world.population': 'world.population',
   'calendar.clock': 'calendar.clock',
   'redletter.show': 'red-letter.card',
+  'guestbook.invite': 'guest.book.invite',
   'stocks.market': 'stocks.market',
   'fx.rates': 'fx.rates',
   'iss.track': 'iss.track',
@@ -157,6 +158,7 @@ function routeEvent({
   commandId = null,
   explicit = true,
   scheduler = false,
+  breakHold = null,
   quietHoursExempt = null,
   ctx = {},
   now = () => Date.now(),
@@ -210,13 +212,20 @@ function routeEvent({
     const outcome = submit(entry.board.id, frames, {
       priority,
       scheduler,
-      // Someone asking (voice / admin Push) is worth the noise even at 2am.
-      // The scheduler is not — that is what quiet hours are for. A caller can
-      // override that (Feature Presentation live events) without flipping explicit.
+      // Quiet hours: only alarm/timer fires get through, plus a caller that
+      // opts in (Quiet Hours Reminder, Feature Presentation live, guests may
+      // wake). Admin Push / Air now / a spoken ask are not exempt — the
+      // checkbox says so, and a 2am flip is still a flip.
       quietHoursExempt: quietHoursExempt != null
         ? Boolean(quietHoursExempt)
-        : Boolean(explicit),
+        : undefined,
       coalesceKey: coalesceKeyFor(payload, type),
+      replaceSource: (type === 'guest.book' || type === 'guest.book.invite')
+        ? 'guest.book'
+        : null,
+      breakHold: breakHold != null
+        ? Boolean(breakHold)
+        : Boolean(explicit && !scheduler),
     });
     results.push({
       boardId: entry.board.id,

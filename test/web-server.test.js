@@ -150,6 +150,7 @@ async function startTestServer(options = {}) {
     requestAlarmPoll: options.requestAlarmPoll
       || ((device) => alarmPolls.push(device)),
     guestSnapsAuth: options.guestSnapsAuth || null,
+    vestaboardHub: options.vestaboardHub || null,
     trivia: options.trivia || null,
     youtubeNowPlaying: options.youtubeNowPlaying || null,
     rollCredits: options.rollCredits || null,
@@ -207,6 +208,8 @@ test('resolveStaticPath blocks path traversal', () => {
   assert.equal(resolveStaticPath(root, '/'), path.join(root, 'index.html'));
   assert.equal(resolveStaticPath(root, '/admin'), path.join(root, 'admin', 'index.html'));
   assert.equal(resolveStaticPath(root, '/admin/login'), path.join(root, 'admin', 'login.html'));
+  assert.equal(resolveStaticPath(root, '/guestbook'), path.join(root, 'guestbook', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/guestbook/'), path.join(root, 'guestbook', 'index.html'));
 });
 
 test('computeWebBasePath preserves reverse-proxy mount directories', () => {
@@ -399,6 +402,15 @@ test('serves real guest booth and admin SPA with cache-busted assets', async () 
     const css = await request(base + '/admin/styles.css');
     assert.equal(css.status, 200);
     assert.match(css.headers['content-type'], /css/);
+
+    const guestBook = await request(base + '/guestbook/');
+    assert.equal(guestBook.status, 200);
+    assert.match(guestBook.text, /Guest Book/);
+    assert.match(guestBook.text, /id="gb-keys"/);
+    assert.match(guestBook.text, /Tap a flap/);
+    assert.match(guestBook.text, /guestbook\.css\?v=/);
+    assert.match(guestBook.text, /guestbook\.js\?v=/);
+    assert.match(guestBook.text, /flap-grid\.js\?v=/);
   } finally {
     webServer.stop();
   }
@@ -1407,10 +1419,11 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.equal(added.body.upcoming, 1);
     assert.equal(added.body.events[0].next.date, '2099-11-27');
 
-    const edited = await send('PUT', `/api/date-book/events/${id}`, { recurring: true, message: 'See you soon' });
+    const edited = await send('PUT', `/api/date-book/events/${id}`, { recurring: true, message: 'See you soon', time: '18:00' });
     assert.equal(edited.status, 200);
     assert.equal(edited.body.event.recurring, true);
     assert.equal(edited.body.event.message, 'See you soon');
+    assert.equal(edited.body.event.time, '18:00');
     assert.equal(edited.body.event.name, 'Amanda visits', 'a patch keeps the fields it did not mention');
 
     const missing = await send('PUT', '/api/date-book/events/nope', { message: 'x' });
@@ -1465,6 +1478,22 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.equal(settings.body.settings.pushSelection, 'random');
     assert.equal(settings.body.settings.showTime, false);
 
+    const holiday = await postJson(base, '/api/date-book/events', {
+      name: 'Thanksgiving',
+      schedule: 'weekday',
+      ordinal: 'last',
+      weekday: 4,
+      month: 11,
+      message: 'Pass the rolls',
+    });
+    assert.equal(holiday.status, 200);
+    assert.equal(holiday.body.event.schedule, 'weekday');
+    assert.equal(holiday.body.event.recurring, true);
+    assert.equal(holiday.body.event.id, 'thanksgiving-last-thu-nov');
+    const thanksNext = holiday.body.events.find((row) => row.id === 'thanksgiving-last-thu-nov')?.next;
+    assert.match(String(thanksNext?.date || ''), /^20\d\d-11-/);
+
+    await send('DELETE', `/api/date-book/events/${holiday.body.event.id}`);
     const removed = await send('DELETE', `/api/date-book/events/${id}`);
     assert.equal(removed.status, 200);
     assert.deepEqual(removed.body.events, []);
@@ -1489,7 +1518,13 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   assert.match(html, /id="date-book-name"/);
   assert.match(html, /id="date-book-message"/);
   assert.match(html, /id="date-book-date"/);
+  assert.match(html, /id="date-book-schedule"/);
+  assert.match(html, /id="date-book-ordinal"/);
+  assert.match(html, /id="date-book-weekday"/);
+  assert.match(html, /id="date-book-month"/);
+  assert.match(html, /id="date-book-time"/);
   assert.match(html, /id="date-book-recurring"/);
+  assert.match(html, /placeholder="Love you always &amp; forever, Ponpon"/);
   assert.match(html, /data-date-book-preview="countdown"/);
   assert.match(html, /data-date-book-preview="dayOf"/);
   assert.match(html, /id="date-book-list"/);
@@ -1497,6 +1532,10 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   // The designer: a paint palette, a message tool, the grid and the presets.
   assert.match(html, /id="red-letter-designer-sheet"/);
   assert.match(html, /id="red-letter-grid"[^>]*tabindex="0"/);
+  assert.match(html, /class="vb-bezel rl-designer-bezel"/);
+  assert.match(html, /id="red-letter-chars"/);
+  assert.match(html, /id="red-letter-quick-type"/);
+  assert.match(html, /id="btn-red-letter-designer-blank"/);
   assert.match(html, /data-rl-tool="message"/);
   assert.match(html, /data-rl-tool="erase"/);
   for (const chip of ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white', 'black', 'filled']) {
@@ -1507,9 +1546,12 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
   assert.match(css, /\.cn-preview-row span\.is-chip-black \{\s*background: #101013;/);
   assert.match(css, /\.cn-preview-row span\.is-chip-filled \{\s*background: #6e6e6e;/);
+  assert.match(css, /\.red-letter-settings-columns/);
+  assert.match(css, /\.rl-designer-bezel/);
   for (const preset of ['heart', 'confetti', 'border', 'blank']) {
     assert.match(html, new RegExp(`data-rl-preset="${preset}"`));
   }
+  assert.match(html, /data-rl-preset="confetti">Day of</);
 
   assert.match(js, /\/api\/red-letter\/settings/);
   assert.match(js, /\/api\/push\/red-letter/);
@@ -1518,6 +1560,10 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   assert.match(js, /'red-letter-settings-card': \['vestaboard'\]/);
   // Previews render server-built rows rather than a second copy of the layout code.
   assert.match(js, /function renderFlapGrid\(/);
+  assert.match(js, /function renderVbGrid\(/);
+  assert.match(js, /presetCells\('confetti'\)/);
+  assert.match(js, /writeCharsFromCaret/);
+  assert.match(js, /designerBoardIsClear/);
 });
 
 test('world population push delivers an estimate and settings can retune the model', async () => {
@@ -1593,6 +1639,145 @@ test('quiet hours reminder push delivers a random night card to the Vestaboard',
     assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'quiet-hours.reminder');
     assert.equal(sent[0].variant, pushed.body.variant);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('public base URL settings live-reload and reject http', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const empty = await getJson(base, '/api/public-url/settings');
+    assert.equal(empty.status, 200);
+    assert.equal(empty.body.settings.publicBaseUrl, '');
+
+    const bad = await postJson(base, '/api/public-url/settings', {
+      publicBaseUrl: 'http://signal.wittydigital.com',
+    });
+    assert.equal(bad.status, 400);
+    assert.match(bad.body.error, /https/);
+
+    const saved = await postJson(base, '/api/public-url/settings', {
+      publicBaseUrl: 'https://signal.wittydigital.com/',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.publicBaseUrl, 'https://signal.wittydigital.com');
+    assert.equal(saved.body.origin, 'https://signal.wittydigital.com');
+    assert.equal(saved.body.shortLinkReady, true);
+
+    const put = await request(`${base}/api/public-url/settings`, {
+      method: 'PUT',
+      body: { publicBaseUrl: 'https://other.wittydigital.com' },
+      cookie: baseCookies.get(base),
+    });
+    assert.equal(put.status, 200);
+    assert.equal(put.body.settings.publicBaseUrl, 'https://other.wittydigital.com');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('guest book token is 409 when TINYURL_API_TOKEN is in the environment', async () => {
+  const prev = process.env.TINYURL_API_TOKEN;
+  process.env.TINYURL_API_TOKEN = 'env-token-value';
+  const { webServer, base } = await startTestServer();
+  try {
+    const got = await getJson(base, '/api/guest-book/settings');
+    assert.equal(got.status, 200);
+    assert.equal(got.body.credentials.envBlocksOverwrite, true);
+    assert.equal(got.body.credentials.hasToken, true);
+
+    const blocked = await postJson(base, '/api/guest-book/settings', {
+      apiToken: 'session-token',
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.source, 'env');
+    assert.match(blocked.body.error, /TINYURL_API_TOKEN/);
+
+    const badAlias = await postJson(base, '/api/guest-book/settings', {
+      preferredAlias: 'ab',
+    });
+    assert.equal(badAlias.status, 400);
+    assert.match(badAlias.body.error, /5–10|5-10/);
+  } finally {
+    webServer.stop();
+    if (prev == null) delete process.env.TINYURL_API_TOKEN;
+    else process.env.TINYURL_API_TOKEN = prev;
+  }
+});
+
+test('guest book page APIs send without an admin session', async () => {
+  const pushed = [];
+  const { webServer, base } = await startTestServer({
+    autoLogin: false,
+    vestaboardHub: {
+      pushEvent(payload, options) {
+        pushed.push({ payload, options });
+        return { boards: [{ boardId: 'vestaboard', accepted: 1, pending: 0 }] };
+      },
+      boards() {
+        return [{ quietHours: { enabled: false } }];
+      },
+    },
+  });
+  try {
+    const status = await request(`${base}/api/guestbook/status`);
+    assert.equal(status.status, 200);
+    assert.equal(status.body.enabled, true);
+    assert.equal(status.body.closed, false);
+    assert.ok(!status.body.passwordHash);
+
+    const sent = await request(`${base}/api/guestbook/send`, {
+      method: 'POST',
+      body: { text: 'Hello from the guest book', name: 'Luis' },
+    });
+    assert.equal(sent.status, 200);
+    assert.equal(sent.body.ok, true);
+    assert.equal(sent.body.status, 'shown');
+    assert.equal(pushed.length, 1);
+    assert.equal(pushed[0].payload.type, 'guest.book');
+    assert.equal(pushed[0].options.targetId, 'vestaboard');
+
+    const rows = Array.from({ length: 6 }, () => new Array(22).fill(0));
+    rows[0][0] = 65;
+    rows[2][10] = 8;
+    const painted = await request(`${base}/api/guestbook/send`, {
+      method: 'POST',
+      body: { rows, name: 'Luis' },
+    });
+    assert.equal(painted.status, 200);
+    assert.equal(painted.body.ok, true);
+    assert.equal(pushed[1].payload.rows[0][0], 65);
+    assert.equal(pushed[1].payload.rows[2][10], 8);
+
+    const invite = await request(`${base}/api/push/guest-book-invite`, {
+      method: 'POST',
+      body: {},
+    });
+    assert.equal(invite.status, 401);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('guest book invite push needs a short link', async () => {
+  const pushed = [];
+  const { webServer, base } = await startTestServer({
+    vestaboardHub: {
+      pushEvent(payload, options) {
+        pushed.push({ payload, options });
+        return { boards: [{ boardId: 'vestaboard', accepted: 1, pending: 0 }] };
+      },
+      boards() {
+        return [{ quietHours: { enabled: false } }];
+      },
+    },
+  });
+  try {
+    const invite = await postJson(base, '/api/push/guest-book-invite', {});
+    assert.equal(invite.status, 409);
+    assert.match(invite.body.error, /short link/i);
+    assert.equal(pushed.length, 0);
   } finally {
     webServer.stop();
   }
@@ -1979,6 +2164,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'upside-news-settings-card',
     'plex-settings-card',
     'locale-settings-card',
+    'public-url-settings-card',
+    'guest-book-settings-card',
     'learn-japanese-settings-card',
     'learn-language-settings-card',
   ]) {
@@ -2012,6 +2199,22 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="locale-settings-card"/);
   assert.match(html, /id="btn-locale-save"/);
   assert.match(js, /\/api\/locale\/settings/);
+  assert.match(html, /id="public-url-settings-card"/);
+  assert.match(html, /id="btn-public-url-save"/);
+  assert.match(js, /\/api\/public-url\/settings/);
+  assert.match(html, /id="guest-book-settings-card"/);
+  assert.match(html, /id="btn-guest-book-check"/);
+  assert.match(html, /id="guest-book-enabled"/);
+  assert.match(html, /id="btn-guest-book-open"/);
+  assert.match(html, /id="btn-guest-book-invite"/);
+  assert.match(html, /id="guest-book-sheet"/);
+  assert.doesNotMatch(html, /id="guest-book-dwell"/);
+  assert.match(js, /From: /);
+  assert.match(js, /previewRows/);
+  assert.match(js, /\/api\/guest-book\/settings/);
+  assert.match(js, /\/api\/guest-book\/check/);
+  assert.match(js, /\/api\/guest-book\/book/);
+  assert.match(js, /\/api\/push\/guest-book-invite/);
   assert.match(html, /id="learn-japanese-settings-card"/);
   assert.match(html, /id="btn-learn-japanese-push"/);
   assert.match(html, /id="learn-spanish-settings-card"/);
@@ -2021,8 +2224,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/learn-japanese/);
   assert.match(js, /\/api\/learn-\$\{language\}\/settings/);
   assert.match(js, /\/api\/push\/learn-\$\{language\}/);
-  assert.match(html, /styles\.css\?v=signal159/);
-  assert.match(html, /app\.js\?v=signal159/);
+  assert.match(html, /id="guest-book-rate-on"/);
+  assert.match(html, /styles\.css\?v=signal170/);
+  assert.match(html, /app\.js\?v=signal170/);
   assert.doesNotMatch(html, /document\.write/);
   assert.match(js, /function confirmCorpusRemove\(/);
   assert.match(js, /data-cn-remove/);
@@ -3483,6 +3687,8 @@ test('admin login page and logout control exist', () => {
   const login = fs.readFileSync(path.join(__dirname, '../src/web/admin/login.html'), 'utf8');
   const admin = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   assert.match(login, /\/api\/admin\/login/);
+  assert.match(login, /id="guest-book-quicklink"/);
+  assert.match(login, /\/guestbook\//);
   assert.match(admin, /id="btn-admin-logout"/);
 });
 

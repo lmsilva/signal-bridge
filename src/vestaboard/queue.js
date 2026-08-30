@@ -88,6 +88,7 @@ function createQueue({
     lastSnapshot: null,
     lastPostAt: null,
     lastSchedulerFlipAt: null,
+    holdUntil: null,
     health: 'ok',
     healthReason: null,
     failures: 0,
@@ -117,6 +118,11 @@ function createQueue({
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_DWELL_SECONDS) * 1000;
   }
 
+  function holdMsOf(frame) {
+    const seconds = Number(frame?.holdSeconds);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+  }
+
   function emit(event, detail) {
     for (const listener of listeners) {
       try {
@@ -127,12 +133,22 @@ function createQueue({
     }
   }
 
+  function itemHeld(item, at = now()) {
+    return item.priority !== 'alert'
+      && item.scheduler
+      && state.holdUntil
+      && at < state.holdUntil;
+  }
+
   function pending() {
     return items.map((item) => ({
       label: item.frame.label || 'Frame',
       source: item.frame.source || '',
       priority: item.priority,
       notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
+      status: item.notBefore
+        ? null
+        : (itemHeld(item) ? 'held' : 'waiting'),
     }));
   }
 
@@ -159,10 +175,11 @@ function createQueue({
     emit('health', { boardId: config.id, health, reason });
   }
 
-  function isExempt(frame, explicit) {
-    if (typeof explicit === 'boolean') return explicit;
+  function isExempt(frame, override) {
     const event = String(frame?.source || '').split(' ')[0];
-    return QUIET_HOURS_EXEMPT.has(event);
+    if (QUIET_HOURS_EXEMPT.has(event)) return true;
+    if (typeof override === 'boolean') return override;
+    return false;
   }
 
   /**
@@ -250,6 +267,15 @@ function createQueue({
       scheduler: Boolean(options.scheduler),
     }));
 
+    if (!made[0].quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
+      log?.debug?.(`Vestaboard ${config.id} skip (quiet) ${list[0].label || ''}`.trim());
+      return { accepted: 0, dropped: list.length, reason: 'quiet' };
+    }
+
+    if (options.breakHold) {
+      state.holdUntil = null;
+    }
+
     let dropped = 0;
     if (priority === 'alert') {
       const heldAlerts = items.filter((item) => item.priority === 'alert');
@@ -260,17 +286,38 @@ function createQueue({
         log?.debug?.(`Vestaboard ${config.id} alert dropped ${dropped} pending page(s)`);
       }
     } else {
-      items.push(...made);
+      const replaceSource = options.replaceSource ? String(options.replaceSource) : '';
+      if (replaceSource) {
+        for (let i = items.length - 1; i >= 0; i -= 1) {
+          if (String(items[i].frame.source || '') === replaceSource) {
+            items.splice(i, 1);
+          }
+        }
+      }
+      if (options.breakHold) {
+        const firstSnapshot = items.findIndex((item) => item.priority !== 'alert');
+        if (firstSnapshot === -1) {
+          items.push(...made);
+        } else {
+          items.splice(firstSnapshot, 0, ...made);
+        }
+      } else {
+        items.push(...made);
+      }
     }
 
     announceQueue();
     return { accepted: made.length, dropped, reason: 'queued' };
   }
 
-  function dropHead(reason, item) {
-    items.shift();
+  function dropAt(index, reason, item) {
+    items.splice(index, 1);
     log?.debug?.(`Vestaboard ${config.id} ${reason} ${item.frame.label || ''}`.trim());
     announceQueue();
+  }
+
+  function dropHead(reason, item) {
+    dropAt(0, reason, item);
   }
 
   function onPosted(item, at) {
@@ -290,6 +337,8 @@ function createQueue({
       if (item.scheduler) {
         state.lastSchedulerFlipAt = at;
       }
+      const holdMs = holdMsOf(item.frame);
+      state.holdUntil = holdMs ? at + holdMs : null;
     }
 
     // Hand the next page of this sequence its turn.
@@ -343,19 +392,32 @@ function createQueue({
       return null;
     }
 
-    const item = items[0];
+    // A guest dwell parks scheduler pages, not the whole line. Air now / Push
+    // sitting behind a held invite must still be able to reach the board.
+    let index = 0;
+    while (index < items.length && itemHeld(items[index], at)) {
+      if (sameLayout(items[index].frame.rows, state.current)) {
+        dropAt(index, 'dedupe drop', items[index]);
+        return 'duplicate';
+      }
+      index += 1;
+    }
+    if (index >= items.length) {
+      return null;
+    }
+    const item = items[index];
     if (item.notBefore && at < item.notBefore) return null;
     if (state.retryNotBefore && at < state.retryNotBefore) return null;
     if (state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
 
     if (!item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
-      dropHead('skip (quiet)', item);
+      dropAt(index, 'skip (quiet)', item);
       return 'quiet';
     }
 
     // The physical board would not move for this, so neither should we.
     if (sameLayout(item.frame.rows, state.current)) {
-      dropHead('dedupe drop', item);
+      dropAt(index, 'dedupe drop', item);
       return 'duplicate';
     }
 
@@ -372,7 +434,7 @@ function createQueue({
     }
 
     if (outcome.ok) {
-      items.shift();
+      items.splice(index, 1);
       onPosted(item, now());
       announceQueue();
       emit('posted', { boardId: config.id, frame: item.frame });
@@ -390,7 +452,7 @@ function createQueue({
     if (outcome.reason === 'layout') {
       // Retrying an unshowable frame forever would wedge everything behind it.
       log?.warn?.(`Vestaboard ${config.id} refused a layout: ${outcome.message || 'invalid'}`);
-      dropHead('skip (bad layout)', item);
+      dropAt(index, 'skip (bad layout)', item);
       return 'rejected';
     }
 
@@ -418,6 +480,7 @@ function createQueue({
       healthReason: state.healthReason,
       queued: items.length,
       lastPostAt: state.lastPostAt,
+      holdUntil: state.holdUntil,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
     /**
