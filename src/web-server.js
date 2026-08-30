@@ -35,9 +35,11 @@ const {
 } = require('./udp-payload');
 const {
   resolveGuestPhotoboothSettings,
+  resolveBoothPushUrl,
   photosToSlideshowEntries,
 } = require('./guest-photobooth');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
+const { createGuestSnapsSettings } = require('./guest-snaps-settings');
 const { getIndoorLocations } = require('./indoor-locations');
 const { ALL_TARGET_ID } = require('./display-registry');
 const {
@@ -124,7 +126,7 @@ const { createLocaleSettings } = require('./locale-settings');
 const { createPublicUrlSettings, publicUrl, isUsableShortLinkOrigin } = require('./public-url');
 const { createGuestBookSettings, sanitiseAlias, publicSettings } = require('./guest-book-settings');
 const { createGuestBook, guestClientIp } = require('./guest-book');
-const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH } = require('./shortlinks');
+const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH, GUESTSNAPS_NAME, GUESTSNAPS_PATH } = require('./shortlinks');
 const { houseTimeZone } = require('./vestaboard/clock');
 const {
   defaultCredentialsPath: defaultTinyurlCredentialsPath,
@@ -407,6 +409,7 @@ function createWebServer({
   publicUrlSettings: publicUrlSettingsInjected = null,
   guestBookSettings: guestBookSettingsInjected = null,
   guestBook: guestBookInjected = null,
+  guestSnapsSettings: guestSnapsSettingsInjected = null,
   shortlinks: shortlinksInjected = null,
   shortlinksFetch = null,
   shortlinksHealthIntervalMs = undefined,
@@ -460,6 +463,7 @@ function createWebServer({
   const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
   const publicUrlSettings = publicUrlSettingsInjected || createPublicUrlSettings(config, log);
   const guestBookSettings = guestBookSettingsInjected || createGuestBookSettings(config, log);
+  const guestSnapsSettings = guestSnapsSettingsInjected || createGuestSnapsSettings(config, log);
   const shortlinks = shortlinksInjected || createShortlinks(config, log, {
     fetchImpl: shortlinksFetch,
     healthIntervalMs: shortlinksHealthIntervalMs != null
@@ -477,6 +481,8 @@ function createWebServer({
         targetId: 'vestaboard',
         quietHoursExempt: options.quietHoursExempt,
         explicit: options.explicit,
+        breakHold: options.breakHold,
+        replaceSource: options.replaceSource,
       });
     },
     getTimeZone: () => localeSettings.get()?.timeZone || houseTimeZone(config),
@@ -2066,12 +2072,19 @@ function createWebServer({
           preferredAlias: guest.preferredAlias,
         });
       }
+      const snaps = guestSnapsSettings.get();
+      if (snaps.preferredAlias) {
+        await shortlinks.ensure(GUESTSNAPS_NAME, GUESTSNAPS_PATH, {
+          preferredAlias: snaps.preferredAlias,
+        });
+      }
       sendJson(res, 200, {
         ok: true,
         settings,
         origin: publicUrl('', config),
         shortLinkReady: isUsableShortLinkOrigin(publicUrl('/guestbook/', config)),
         shortlink: shortlinks.status(GUESTBOOK_NAME),
+        guestSnapsShortlink: shortlinks.status(GUESTSNAPS_NAME),
         ...publicUrlEnvNote(),
       });
     } catch (error) {
@@ -2198,6 +2211,106 @@ function createWebServer({
     }
   }
 
+  function handleGuestSnapsSettingsGet(res) {
+    const settings = guestSnapsSettings.get();
+    sendJson(res, 200, {
+      ok: true,
+      settings,
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+      shortlink: shortlinks.status(GUESTSNAPS_NAME),
+      targetPath: GUESTSNAPS_PATH,
+      targetUrl: publicUrl(GUESTSNAPS_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GUESTSNAPS_PATH, config)),
+      booth: resolveGuestPhotoboothSettings(config),
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  async function handleGuestSnapsSettingsPut(body, res) {
+    const credPath = tinyurlCredPath();
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'apiToken')
+      || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
+      const token = String(body.apiToken || body.token || '').trim();
+      if (token) {
+        if (String(process.env.TINYURL_API_TOKEN || '').trim()) {
+          sendJson(res, 409, {
+            ok: false,
+            error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
+            source: 'env',
+          });
+          return;
+        }
+        try {
+          saveTinyurlToken(credPath, token);
+        } catch (error) {
+          sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+          return;
+        }
+      }
+    }
+
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'preferredAlias')) {
+      try {
+        patch.preferredAlias = sanitiseAlias(body.preferredAlias);
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+        return;
+      }
+    }
+
+    const settings = Object.keys(patch).length
+      ? guestSnapsSettings.update(patch)
+      : guestSnapsSettings.get();
+
+    let shortlink = shortlinks.status(GUESTSNAPS_NAME);
+    if (settings.preferredAlias) {
+      await shortlinks.ensure(GUESTSNAPS_NAME, GUESTSNAPS_PATH, {
+        preferredAlias: settings.preferredAlias,
+      });
+      shortlink = shortlinks.status(GUESTSNAPS_NAME);
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      settings,
+      credentials: tinyurlCredentialsStatus(credPath),
+      shortlink,
+      targetPath: GUESTSNAPS_PATH,
+      targetUrl: publicUrl(GUESTSNAPS_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GUESTSNAPS_PATH, config)),
+      booth: resolveGuestPhotoboothSettings(config),
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  async function handleGuestSnapsCheck(body, res) {
+    try {
+      let settings = guestSnapsSettings.get();
+      if (String(body?.preferredAlias || '').trim()) {
+        settings = guestSnapsSettings.update({
+          preferredAlias: sanitiseAlias(body.preferredAlias),
+        });
+      }
+      if (settings.preferredAlias) {
+        await shortlinks.ensure(GUESTSNAPS_NAME, GUESTSNAPS_PATH, {
+          preferredAlias: settings.preferredAlias,
+        });
+      }
+      const shortlink = await shortlinks.check(GUESTSNAPS_NAME);
+      sendJson(res, 200, {
+        ok: true,
+        settings,
+        credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+        shortlink,
+        targetPath: GUESTSNAPS_PATH,
+        targetUrl: publicUrl(GUESTSNAPS_PATH, config),
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
   function handleGuestbookStatus(res) {
     sendJson(res, 200, { ok: true, ...guestBook.publicStatus() });
   }
@@ -2245,13 +2358,41 @@ function createWebServer({
     sendJson(res, status, result);
   }
 
-  function handleGuestBookList(res) {
-    sendJson(res, 200, { ok: true, entries: guestBook.list({ limit: 200 }) });
+  function handleGuestBookList(query = {}, res) {
+    const pageSize = Math.min(50, Math.max(1, Number(query.pageSize) || 10));
+    const status = String(query.status || '').trim().toLowerCase();
+    const filter = (status === 'waiting' || status === 'released') ? status : '';
+    const total = guestBook.count({ status: filter || undefined });
+    const pages = Math.max(1, Math.ceil(total / pageSize) || 1);
+    const page = Math.min(pages, Math.max(1, Number(query.page) || 1));
+    const entries = guestBook.list({
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      status: filter || undefined,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      entries,
+      total,
+      page,
+      pageSize,
+      pages,
+      status: filter || 'all',
+      waiting: guestBook.count({ status: 'waiting' }),
+    });
   }
 
   function handleGuestBookReplay(body, res) {
-    const result = guestBook.replay(body?.id);
-    sendJson(res, result.ok ? 200 : 404, result);
+    const ids = Array.isArray(body?.ids) ? body.ids : null;
+    const result = ids ? guestBook.replayMany(ids) : guestBook.replay(body?.id);
+    const status = result.ok ? 200 : (result.error?.includes('Release') || result.error?.includes('Nothing') ? 409 : 404);
+    sendJson(res, status, result);
+  }
+
+  function handleGuestBookRelease(body, res) {
+    const ids = Array.isArray(body?.ids) ? body.ids : null;
+    const result = ids ? guestBook.releaseMany(ids) : guestBook.release(body?.id);
+    sendJson(res, result.ok ? 200 : (result.error?.includes('waiting') || result.error?.includes('Only waiting') ? 409 : 404), result);
   }
 
   function handleGuestBookInvitePush(body, res) {
@@ -2290,7 +2431,8 @@ function createWebServer({
   }
 
   function handleGuestBookDelete(body, res) {
-    const result = guestBook.remove(body?.id);
+    const ids = Array.isArray(body?.ids) ? body.ids : null;
+    const result = guestBook.remove(ids || body?.id);
     sendJson(res, result.ok ? 200 : 404, result);
   }
 
@@ -4338,6 +4480,7 @@ function createWebServer({
       return;
     }
     const pinInfo = result.display;
+    const boothPush = resolveBoothPushUrl(settings, shortlinks.status(GUESTSNAPS_NAME));
     const payload = buildGuestPhotoboothPayload(
       {
         device: 'Signal',
@@ -4349,6 +4492,8 @@ function createWebServer({
       config,
       {
         ...settings,
+        boothUrl: boothPush.boothUrl,
+        shortLabel: boothPush.shortLabel,
         accessPin: pinInfo?.accessPin,
         accessPinHint: pinInfo?.accessPinHint,
       },
@@ -6672,10 +6817,16 @@ function createWebServer({
       const vGuestJs = assetVersionBeside(filePath, 'guestbook.js');
       const vGuestCss = assetVersionBeside(filePath, 'guestbook.css');
       let vFlap = String(Date.now());
+      let vBezel = String(Date.now());
       try {
         vFlap = String(fs.statSync(path.join(staticRoot, 'flap-grid.js')).mtimeMs);
       } catch {
         // optional shared renderer
+      }
+      try {
+        vBezel = String(fs.statSync(path.join(staticRoot, 'vestaboard-bezel.css')).mtimeMs);
+      } catch {
+        // optional shared Flagship bezel
       }
       html = html
         .replace(/(href="(?:\.\/)?styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vStyles}$2`)
@@ -6684,7 +6835,8 @@ function createWebServer({
         .replace(/(src="(?:\.\/)?booth\.js)(?:\?[^"]*)?(")/, `$1?v=${vBoothJs}$2`)
         .replace(/(href="(?:\.\/)?guestbook\.css)(?:\?[^"]*)?(")/, `$1?v=${vGuestCss}$2`)
         .replace(/(src="(?:\.\/)?guestbook\.js)(?:\?[^"]*)?(")/, `$1?v=${vGuestJs}$2`)
-        .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`);
+        .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`)
+        .replace(/(href="(?:\/)?vestaboard-bezel\.css)(?:\?[^"]*)?(")/, `href="/vestaboard-bezel.css?v=${vBezel}"`);
       html = inlinePushCatalog(html);
       res.writeHead(200, {
         'Content-Type': MIME_TYPES[ext] || 'text/html; charset=utf-8',
@@ -7069,9 +7221,14 @@ function createWebServer({
           handleGuestBookSettingsGet(res);
           return;
         }
+        if (pathname === '/api/guest-snaps/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleGuestSnapsSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/guest-book/book') {
           if (!requireAdminSession(req, res)) return;
-          handleGuestBookList(res);
+          handleGuestBookList(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
         if (pathname === '/api/weather-alerts/settings') {
@@ -7369,6 +7526,12 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
           await handleGuestBookSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/guest-snaps/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handleGuestSnapsSettingsPut(body, res);
           return;
         }
         if (pathname.startsWith('/api/date-book/')) {
@@ -7724,8 +7887,17 @@ function createWebServer({
           case '/api/guest-book/check':
             await handleGuestBookCheck(body, res);
             return;
+          case '/api/guest-snaps/settings':
+            await handleGuestSnapsSettingsPut(body, res);
+            return;
+          case '/api/guest-snaps/check':
+            await handleGuestSnapsCheck(body, res);
+            return;
           case '/api/guest-book/replay':
             handleGuestBookReplay(body, res);
+            return;
+          case '/api/guest-book/release':
+            handleGuestBookRelease(body, res);
             return;
           case '/api/guest-book/delete':
             handleGuestBookDelete(body, res);

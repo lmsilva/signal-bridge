@@ -154,6 +154,8 @@ async function startTestServer(options = {}) {
     trivia: options.trivia || null,
     youtubeNowPlaying: options.youtubeNowPlaying || null,
     rollCredits: options.rollCredits || null,
+    shortlinksFetch: options.shortlinksFetch || null,
+    shortlinksHealthIntervalMs: options.shortlinksHealthIntervalMs,
     scheduleRestart: () => {},
     webRoot: options.webRoot || makeTempWebRoot(),
   });
@@ -175,6 +177,8 @@ async function startTestServer(options = {}) {
     timerPolls,
     alarmPolls,
     cookie,
+    dataDir: config.ROOT,
+    config,
   };
 }
 
@@ -407,10 +411,15 @@ test('serves real guest booth and admin SPA with cache-busted assets', async () 
     assert.equal(guestBook.status, 200);
     assert.match(guestBook.text, /Guest Book/);
     assert.match(guestBook.text, /id="gb-keys"/);
-    assert.match(guestBook.text, /Tap a flap/);
+    assert.match(guestBook.text, /Select a flap/);
+    assert.match(guestBook.text, /btn-gb-clear-footer/);
+    assert.match(guestBook.text, /btn-gb-restore-footer/);
     assert.match(guestBook.text, /guestbook\.css\?v=/);
     assert.match(guestBook.text, /guestbook\.js\?v=/);
     assert.match(guestBook.text, /flap-grid\.js\?v=/);
+    assert.match(guestBook.text, /vestaboard-bezel\.css\?v=/);
+    assert.match(guestBook.text, /vb-bezel/);
+    assert.match(guestBook.text, /id="gb-preview"/);
   } finally {
     webServer.stop();
   }
@@ -1548,10 +1557,30 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   assert.match(css, /\.cn-preview-row span\.is-chip-filled \{\s*background: #6e6e6e;/);
   assert.match(css, /\.red-letter-settings-columns/);
   assert.match(css, /\.rl-designer-bezel/);
-  for (const preset of ['heart', 'confetti', 'border', 'blank']) {
+  for (const preset of [
+    'heart', 'confetti', 'border', 'blank',
+    'halloween', 'summer', 'beach', 'christmas', 'autumn',
+  ]) {
     assert.match(html, new RegExp(`data-rl-preset="${preset}"`));
   }
   assert.match(html, /data-rl-preset="confetti">Day of</);
+  assert.match(html, /data-rl-preset="halloween">Halloween</);
+  assert.match(html, /data-rl-preset="christmas">Christmas</);
+  assert.match(js, /halloween:\s*\[/);
+  assert.match(js, /summer:\s*\[/);
+  assert.match(js, /beach:\s*\[/);
+  assert.match(js, /christmas:\s*\[/);
+  assert.match(js, /autumn:\s*\[/);
+  // Every preset line is a full 22-column board row.
+  for (const name of ['halloween', 'summer', 'beach', 'christmas', 'autumn']) {
+    const block = js.match(new RegExp(`${name}:\\s*\\[([\\s\\S]*?)\\]`));
+    assert.ok(block, `${name} preset is defined`);
+    const lines = [...block[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+    assert.equal(lines.length, 6, `${name} has six rows`);
+    for (const line of lines) {
+      assert.equal(line.length, 22, `${name} row is 22 wide: ${line}`);
+    }
+  }
 
   assert.match(js, /\/api\/red-letter\/settings/);
   assert.match(js, /\/api\/push\/red-letter/);
@@ -1699,6 +1728,86 @@ test('guest book token is 409 when TINYURL_API_TOKEN is in the environment', asy
     });
     assert.equal(badAlias.status, 400);
     assert.match(badAlias.body.error, /5–10|5-10/);
+  } finally {
+    webServer.stop();
+    if (prev == null) delete process.env.TINYURL_API_TOKEN;
+    else process.env.TINYURL_API_TOKEN = prev;
+  }
+});
+
+test('guest snaps settings round-trip preferred alias and share the TinyURL token', async () => {
+  const prev = process.env.TINYURL_API_TOKEN;
+  delete process.env.TINYURL_API_TOKEN;
+  const calls = [];
+  const { webServer, base, dataDir } = await startTestServer({
+    shortlinksFetch: async (url, options = {}) => {
+      calls.push({ url: String(url), method: options.method || 'GET', body: options.body });
+      if (String(url).includes('/create')) {
+        const body = JSON.parse(options.body || '{}');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              domain: 'tinyurl.com',
+              alias: String(body.alias || 'GUESTS').toUpperCase(),
+              tiny_url: `https://tinyurl.com/${String(body.alias || 'GUESTS').toUpperCase()}`,
+            },
+          }),
+          text: async () => JSON.stringify({
+            data: {
+              domain: 'tinyurl.com',
+              alias: String(body.alias || 'GUESTS').toUpperCase(),
+              tiny_url: `https://tinyurl.com/${String(body.alias || 'GUESTS').toUpperCase()}`,
+            },
+          }),
+          headers: { get: () => '' },
+        };
+      }
+      return {
+        ok: false,
+        status: 301,
+        headers: {
+          get(name) {
+            return String(name).toLowerCase() === 'location'
+              ? 'https://signal.wittydigital.com/'
+              : '';
+          },
+        },
+        text: async () => '',
+      };
+    },
+  });
+  try {
+    const origin = await postJson(base, '/api/public-url/settings', {
+      publicBaseUrl: 'https://signal.wittydigital.com/',
+    });
+    assert.equal(origin.status, 200);
+
+    const got = await getJson(base, '/api/guest-snaps/settings');
+    assert.equal(got.status, 200);
+    assert.equal(got.body.targetPath, '/');
+    assert.equal(got.body.targetUrl, 'https://signal.wittydigital.com/');
+    assert.equal(got.body.shortLinkReady, true);
+
+    const saved = await postJson(base, '/api/guest-snaps/settings', {
+      preferredAlias: 'guests',
+      apiToken: 'test-token-guest-snaps',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.preferredAlias, 'GUESTS');
+    assert.equal(saved.body.shortlink.alias, 'GUESTS');
+    assert.equal(saved.body.shortlink.flapLabel, 'TINYURL.COM/GUESTS');
+    assert.equal(saved.body.credentials.hasToken, true);
+    assert.ok(calls.some((call) => String(call.url).includes('/create')));
+
+    const bad = await postJson(base, '/api/guest-snaps/settings', {
+      preferredAlias: 'ab',
+    });
+    assert.equal(bad.status, 400);
+
+    const settingsFile = path.join(dataDir, 'data', 'guest-snaps-settings.json');
+    assert.equal(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).preferredAlias, 'GUESTS');
   } finally {
     webServer.stop();
     if (prev == null) delete process.env.TINYURL_API_TOKEN;
@@ -2165,6 +2274,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'plex-settings-card',
     'locale-settings-card',
     'public-url-settings-card',
+    'guest-snaps-settings-card',
     'guest-book-settings-card',
     'learn-japanese-settings-card',
     'learn-language-settings-card',
@@ -2202,18 +2312,40 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="public-url-settings-card"/);
   assert.match(html, /id="btn-public-url-save"/);
   assert.match(js, /\/api\/public-url\/settings/);
+  assert.match(html, /id="guest-snaps-settings-card"/);
+  assert.match(html, /id="guest-snaps-alias"/);
+  assert.match(html, /id="btn-guest-snaps-save"/);
   assert.match(html, /id="guest-book-settings-card"/);
   assert.match(html, /id="btn-guest-book-check"/);
   assert.match(html, /id="guest-book-enabled"/);
   assert.match(html, /id="btn-guest-book-open"/);
   assert.match(html, /id="btn-guest-book-invite"/);
   assert.match(html, /id="guest-book-sheet"/);
+  assert.match(html, /id="guest-book-bulk"/);
+  assert.match(html, /id="btn-guest-book-release-selected"/);
+  assert.match(html, /id="btn-guest-book-push-selected"/);
+  assert.match(html, /id="guest-book-delete-sheet"/);
+  assert.match(html, /id="btn-guest-book-delete-selected"/);
+  assert.doesNotMatch(html, /id="guest-book-select-page"/);
+  assert.match(html, /id="btn-guest-book-prev"/);
+  assert.match(html, /id="btn-guest-book-next"/);
+  assert.match(html, /data-book-filter="waiting"/);
+  assert.match(html, /data-book-filter="released"/);
+  assert.match(html, /class="cn-fact-list gb-book-list"/);
   assert.doesNotMatch(html, /id="guest-book-dwell"/);
   assert.match(js, /From: /);
   assert.match(js, /previewRows/);
+  assert.match(js, /guestBookSelected/);
+  assert.match(js, /data-book-release/);
+  assert.match(js, /\/api\/guest-book\/release/);
+  assert.match(js, /btn-guest-book-release-selected/);
+  assert.match(js, /btn-guest-book-push-selected/);
+  assert.match(js, /openGuestBookDeleteConfirm/);
+  assert.match(js, /guest-book-delete-sheet/);
+  assert.doesNotMatch(js, /Delete this message from The Book\?/);
   assert.match(js, /\/api\/guest-book\/settings/);
   assert.match(js, /\/api\/guest-book\/check/);
-  assert.match(js, /\/api\/guest-book\/book/);
+  assert.match(js, /\/api\/guest-book\/book\?page=/);
   assert.match(js, /\/api\/push\/guest-book-invite/);
   assert.match(html, /id="learn-japanese-settings-card"/);
   assert.match(html, /id="btn-learn-japanese-push"/);
@@ -2225,8 +2357,58 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/learn-\$\{language\}\/settings/);
   assert.match(js, /\/api\/push\/learn-\$\{language\}/);
   assert.match(html, /id="guest-book-rate-on"/);
-  assert.match(html, /styles\.css\?v=signal170/);
-  assert.match(html, /app\.js\?v=signal170/);
+  assert.match(html, /id="guest-book-invite-footer"/);
+  assert.match(html, /value="always"/);
+  assert.match(html, /value="whenRoom"/);
+  assert.match(html, /styles\.css\?v=signal185/);
+  assert.match(html, /app\.js\?v=signal185/);
+  assert.match(js, /function dateBookPreviewEvent\(/);
+  assert.match(js, /setHours\(24, 0, 0, 0\)/);
+  assert.match(js, /dateBookPreviewEvent\(draft\)/);
+  assert.match(js, /Mirror stockMarketFrames/);
+  assert.match(js, /STOCKS 1\/\$\{pages\}/);
+  assert.match(js, /flapChipCode\('white'\)/);
+  assert.match(js, /sample\.dir === 'down' \? 'red'/);
+  assert.match(html, /id="btn-red-letter-designer-undo"/);
+  assert.match(html, /id="btn-red-letter-designer-reset"/);
+  assert.match(html, /id="red-letter-unsaved-sheet"/);
+  assert.match(html, /class="rl-preset-block"/);
+  assert.match(js, /function requestCloseRedLetterDesigner\(/);
+  assert.match(js, /function undoDesigner\(/);
+  assert.match(js, /function resetDesigner\(/);
+  assert.match(js, /designerIsDirty\(/);
+  assert.match(css, /\.rl-preset-block \{/);
+  assert.match(js, /ggyoyoyoyggg/);
+  assert.match(js, /fgg\.bwbwbw/);
+  assert.match(js, /royyoyr\.\./);
+  assert.match(css, /\.date-book-sheet,\s*\.rl-designer-sheet \{[^}]*max-height: min\(94dvh, 980px\)/);
+  assert.match(css, /\.date-book-sheet > \.cn-fact-list \{[^}]*min-height: min\(280px, 36dvh\)/);
+  assert.match(css, /\.rl-tools \{[^}]*margin-bottom: 16px/);
+  assert.match(css, /\.rl-char-row \{[^}]*margin: 0 0 16px/);
+  assert.match(css, /\.rl-designer-hint \{[^}]*margin: 0 0 16px/);
+  assert.match(html, /vestaboard-bezel\.css/);
+  assert.match(html, /flap-grid\.js/);
+  assert.match(css, /\.vb-bezel \{/);
+  assert.match(css, /\.board-preview-col \.vb-bezel\.preview-bezel \{[^}]*max-width: none/);
+  for (const id of [
+    'stock-market-preview',
+    'currency-rates-preview',
+    'starlink-tracker-preview',
+    'iss-tracker-preview',
+  ]) {
+    assert.match(
+      html,
+      new RegExp(`class="settings-col board-preview-col"[\\s\\S]*?id="${id}"`),
+      `${id} sits in a full-width board-preview-col`,
+    );
+    assert.match(
+      html,
+      new RegExp(`vb-bezel preview-bezel[\\s\\S]*?id="${id}"`),
+      `${id} uses the Flagship bezel preview`,
+    );
+  }
+  assert.match(js, /\/api\/guest-snaps\/settings/);
+  assert.match(js, /\/api\/guest-snaps\/check/);
   assert.doesNotMatch(html, /document\.write/);
   assert.match(js, /function confirmCorpusRemove\(/);
   assert.match(js, /data-cn-remove/);
@@ -3626,8 +3808,8 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
     // next to it instead of with that textarea's label.
     assert.match(html, new RegExp(
       `<div class="cn-preview-col">\\s*<span class="field-label">Board preview</span>\\s*`
-      + `<div class="cn-board-preview[^"]*" id="${name}-preview"`,
-    ), `${name} preview sits in a labelled column`);
+      + `<div class="vb-bezel preview-bezel"[\\s\\S]*?id="${name}-preview"`,
+    ), `${name} preview sits in a labelled Flagship bezel column`);
   }
   // On This Day already labels its preview in a settings column.
   assert.match(html, /id="on-this-day-manage-sheet"/);
@@ -3639,9 +3821,8 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
 
   // Manage dialogs grow the board past the 200px settings-card thumbnail —
   // the postage-stamp preview in Chuck Norris (and the other corpus sheets)
-  // was unreadable.
-  assert.match(css, /\.cn-manage-sheet \.cn-board-preview \{[^}]*max-width: 320px;/);
-  assert.match(css, /\.cn-manage-sheet \.cn-preview-row span \{[^}]*font-size: clamp\(0\.42rem/);
+  // was unreadable. Previews use the Flagship bezel (shared with Red Letter).
+  assert.match(css, /\.cn-manage-sheet \.vb-bezel\.preview-bezel \{[^}]*max-width: 320px;/);
   assert.match(css, /@media \(min-width: 820px\) \{\s*\.cn-manage-sheet \.cn-compose \{[^}]*minmax\(260px, 320px\)/);
 
   // One scrollbar treatment for the whole admin.

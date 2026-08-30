@@ -160,6 +160,7 @@ function routeEvent({
   scheduler = false,
   breakHold = null,
   quietHoursExempt = null,
+  replaceSource: replaceSourceOpt = undefined,
   ctx = {},
   now = () => Date.now(),
   submit,
@@ -209,6 +210,14 @@ function routeEvent({
     }
 
     const priority = frames[0].priority === 'alert' ? 'alert' : 'snapshot';
+    let replaceSource = null;
+    if (replaceSourceOpt === false || replaceSourceOpt === null) {
+      replaceSource = null;
+    } else if (replaceSourceOpt != null && replaceSourceOpt !== '') {
+      replaceSource = String(replaceSourceOpt);
+    } else if (type === 'guest.book' || type === 'guest.book.invite') {
+      replaceSource = 'guest.book';
+    }
     const outcome = submit(entry.board.id, frames, {
       priority,
       scheduler,
@@ -220,9 +229,7 @@ function routeEvent({
         ? Boolean(quietHoursExempt)
         : undefined,
       coalesceKey: coalesceKeyFor(payload, type),
-      replaceSource: (type === 'guest.book' || type === 'guest.book.invite')
-        ? 'guest.book'
-        : null,
+      replaceSource,
       breakHold: breakHold != null
         ? Boolean(breakHold)
         : Boolean(explicit && !scheduler),

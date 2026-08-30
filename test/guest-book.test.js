@@ -47,13 +47,12 @@ test('an open book accepts a message and records it in The Book', () => {
   const result = book.send({ text: 'Thanks for dinner', name: 'Ada' }, { ip: '1.2.3.4' });
   assert.equal(result.ok, true);
   assert.equal(result.status, 'shown');
-  assert.equal(result.message, 'Your message is up.');
+  assert.equal(result.message, 'Your message has been pushed and will be displayed if outside quiet hours.');
   assert.equal(result.dwellSeconds, undefined);
   assert.equal(pushed[0].payload.type, 'guest.book');
   assert.equal(pushed[0].payload.dwellSeconds, undefined);
   assert.equal(book.list()[0].name, 'Ada');
-  assert.equal(book.list()[0].ip.includes('1.2'), true);
-  assert.equal(book.list()[0].ip.includes('3.4'), false);
+  assert.equal(book.list()[0].ip, '1.2.3.4');
 });
 
 test('pause closes the page and refuses sends', () => {
@@ -137,7 +136,7 @@ test('a painted grid is stored as design and keeps cell placement', () => {
   const listed = book.list()[0];
   assert.equal(listed.source, 'design');
   assert.equal(listed.name, 'Luis');
-  assert.match(listed.ip, /4\.4/);
+  assert.equal(listed.ip, '4.4.4.4');
   assert.equal(listed.rows[0][0], CHIPS.yellow);
   assert.equal(listed.rows[2][10], 8);
   assert.equal(listed.rows[4][8] || 0, 0, 'The Book keeps guest flaps without the house footer');
@@ -146,6 +145,94 @@ test('a painted grid is stored as design and keeps cell placement', () => {
   assert.equal(pushed[0].payload.rows[2][10], 8);
   assert.equal(pushed[0].payload.rows[4][8], CHIPS.red);
   assert.equal(pushed[0].payload.footerRows, null);
+});
+
+test('approval holds a message until the host releases it', () => {
+  const { book, pushed } = makeBook({ settings: { approval: true } });
+  const result = book.send({ text: 'Please post me', name: 'Ada' }, { ip: '1.2.3.4' });
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'waiting');
+  assert.match(result.message, /waiting for the host/i);
+  assert.equal(pushed.length, 0);
+  assert.equal(book.count({ status: 'waiting' }), 1);
+  assert.equal(book.list({ status: 'waiting' })[0].name, 'Ada');
+
+  const released = book.release(result.entryId);
+  assert.equal(released.ok, true);
+  assert.equal(released.entry.status, 'released');
+  assert.ok(released.entry.releasedAt);
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].payload.type, 'guest.book');
+  assert.equal(book.count({ status: 'waiting' }), 0);
+  assert.equal(book.count({ status: 'released' }), 1);
+  assert.equal(book.release(result.entryId).ok, false);
+  assert.equal(book.replay(result.entryId).ok, true);
+});
+
+test('replay refuses a waiting message — release it first', () => {
+  const { book, pushed } = makeBook({ settings: { approval: true } });
+  const result = book.send({ text: 'Hold me', name: 'Bea' }, { ip: '2.2.2.2' });
+  assert.equal(result.status, 'waiting');
+  const blocked = book.replay(result.entryId);
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.error, /Release this message/i);
+  assert.equal(pushed.length, 0);
+});
+
+test('releaseMany and replayMany queue older messages before newer ones', () => {
+  let now = 1_000_000;
+  const { book, pushed } = makeBook({
+    settings: { approval: true },
+    now: () => now,
+  });
+  const first = book.send({ text: 'Oldest', name: 'A' }, { ip: '1.1.1.1' });
+  now += 60_000;
+  const second = book.send({ text: 'Middle', name: 'B' }, { ip: '1.1.1.2' });
+  now += 60_000;
+  const third = book.send({ text: 'Newest', name: 'C' }, { ip: '1.1.1.3' });
+  assert.equal(book.count({ status: 'waiting' }), 3);
+
+  // Select newest-first in the request; the board still gets oldest first.
+  const released = book.releaseMany([third.entryId, first.entryId, second.entryId]);
+  assert.equal(released.ok, true);
+  assert.equal(released.released, 3);
+  assert.equal(pushed.length, 3);
+  assert.match(String(pushed[0].payload.name), /A/);
+  assert.match(String(pushed[1].payload.name), /B/);
+  assert.match(String(pushed[2].payload.name), /C/);
+  assert.equal(pushed[0].options.replaceSource, 'guest.book');
+  assert.equal(pushed[0].options.breakHold, true);
+  assert.equal(pushed[1].options.replaceSource, false);
+  assert.equal(pushed[1].options.breakHold, false);
+  assert.equal(pushed[2].options.replaceSource, false);
+
+  pushed.length = 0;
+  const again = book.replayMany([third.entryId, first.entryId]);
+  assert.equal(again.ok, true);
+  assert.equal(again.pushed, 2);
+  assert.match(String(pushed[0].payload.name), /A/);
+  assert.match(String(pushed[1].payload.name), /C/);
+});
+
+test('list paginates and remove can delete several entries at once', () => {
+  const { book } = makeBook();
+  for (let i = 0; i < 12; i += 1) {
+    const rows = blankBoard();
+    rows[0][0] = 1 + (i % 26);
+    assert.equal(book.send({ rows, name: `Guest ${i}` }, { ip: `1.1.1.${i + 1}` }).ok, true);
+  }
+  assert.equal(book.count(), 12);
+  assert.equal(book.list({ limit: 5, offset: 0 }).length, 5);
+  assert.equal(book.list({ limit: 5, offset: 5 }).length, 5);
+  assert.equal(book.list({ limit: 5, offset: 10 }).length, 2);
+
+  const firstPage = book.list({ limit: 3, offset: 0 });
+  const ids = firstPage.map((entry) => entry.id);
+  const removed = book.remove(ids);
+  assert.equal(removed.ok, true);
+  assert.equal(removed.deleted, 3);
+  assert.equal(book.count(), 9);
+  assert.equal(book.remove('missing-id').ok, false);
 });
 
 test('replay stamps the current short link onto a stored message', () => {
@@ -183,12 +270,43 @@ test('replay stamps the current short link onto a stored message', () => {
   assert.doesNotMatch(decodeCodes(pushed[1].payload.rows[5]), /OLDALIAS/);
 });
 
+test('always invite footer locks the last two rows on the public status', () => {
+  const { book } = makeBook({ settings: { inviteFooter: 'always' } });
+  const status = book.publicStatus();
+  assert.equal(status.inviteFooterMode, 'always');
+  assert.equal(status.editableRows, 4);
+  assert.ok(status.footerRows);
+});
+
+test('whenRoom design leaves overwritten footer rows alone', () => {
+  const { book, pushed } = makeBook({ settings: { inviteFooter: 'whenRoom' } });
+  const rows = blankBoard();
+  rows[0][0] = 8;
+  rows[5][0] = 8; // guest wrote over the invite row
+  const result = book.send({ rows, name: 'Luis' }, { ip: '4.4.4.4' });
+  assert.equal(result.ok, true);
+  assert.equal(pushed[0].payload.rows[5][0], 8);
+  assert.equal(pushed[0].payload.rows[4][8] || 0, 0);
+});
+
+test('always invite footer stamps over the last two rows on send', () => {
+  const { book, pushed } = makeBook({ settings: { inviteFooter: 'always' } });
+  const rows = blankBoard();
+  rows[0][0] = 8;
+  rows[5][0] = 8;
+  const result = book.send({ rows, name: 'Luis' }, { ip: '4.4.4.4' });
+  assert.equal(result.ok, true);
+  assert.equal(pushed[0].payload.rows[4][8], CHIPS.red);
+  assert.notEqual(pushed[0].payload.rows[5][0], 8);
+});
+
 test('public status exposes the locked invite so the guest page can preview it', () => {
   const { book } = makeBook();
   const status = book.publicStatus();
   assert.equal(status.inviteFooter, true);
+  assert.equal(status.inviteFooterMode, 'whenRoom');
   assert.equal(status.inviteReady, true);
-  assert.equal(status.editableRows, 4);
+  assert.equal(status.editableRows, 6);
   assert.equal(status.shortLabel, 'TINYURL.COM/WITTYBOARD');
   assert.equal(status.footerRows[4][8], CHIPS.red);
   assert.ok(status.footerRows[5].some((code) => code !== 0));

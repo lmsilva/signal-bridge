@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { publicUrl, resolvePublicOrigin } = require('./public-url');
+const { publicTinyUrl, flapLabel } = require('./shortlinks');
 
 // Primary brand phrase — "Alexa, open guest snaps" (welcome / how to connect)
 const GUEST_SNAPS_RE = /\b(?:open|show|start|launch|display)?\s*(?:the\s+)?guest\s*snaps?\b/i;
@@ -241,6 +242,30 @@ function defaultGuestPhotoboothUrl(config = {}) {
   return origin ? `${origin}/` : '';
 }
 
+/**
+ * Prefer a TinyURL short link for the QR + Vestaboard when one is ready.
+ * Falls back to the public booth origin (Settings → Public base URL).
+ */
+function resolveBoothPushUrl(settings = {}, shortlink = null) {
+  const full = String(settings?.boothUrl || '').trim();
+  const alias = String(shortlink?.alias || '').trim();
+  if (alias) {
+    const tiny = String(shortlink.tinyUrl || '').trim() || publicTinyUrl(alias);
+    return {
+      boothUrl: tiny,
+      shortLabel: shortlink.flapLabel || flapLabel(alias),
+      fullBoothUrl: full,
+      usedShortLink: true,
+    };
+  }
+  return {
+    boothUrl: full,
+    shortLabel: '',
+    fullBoothUrl: full,
+    usedShortLink: false,
+  };
+}
+
 module.exports = {
   GUEST_SNAPS_RE,
   GUEST_PHOTOBOOTH_RE,
@@ -249,6 +274,7 @@ module.exports = {
   matchesGuestPhotoboothQuery,
   photosToSlideshowEntries,
   resolveGuestPhotoboothSettings,
+  resolveBoothPushUrl,
   defaultGuestPhotoboothUrl,
   loadGuestPhotoboothFile,
   parseDotEnvFile,

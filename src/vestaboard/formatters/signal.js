@@ -108,13 +108,23 @@ function labeledOrStacked(label, value, width) {
 }
 
 function paintGuestFooter(text) {
+  const folded = fold(String(text || ''));
   const row = blankRow(COLS);
-  row[0] = chipCode('blue');
-  row[COLS - 1] = chipCode('blue');
-  if (text.length <= 18) {
-    placeText(row, text, 2);
+  if (!folded) {
+    return row;
+  }
+  // Short flap labels (TINYURL.COM/ALIAS) can be up to 22 wide — drop the
+  // blue chips rather than truncating an address guests must type.
+  if (folded.length <= 18) {
+    row[0] = chipCode('blue');
+    row[COLS - 1] = chipCode('blue');
+    placeText(row, folded, 2);
+  } else if (folded.length <= 20) {
+    row[0] = chipCode('blue');
+    row[COLS - 1] = chipCode('blue');
+    placeText(row, folded.slice(0, 20), 1);
   } else {
-    placeText(row, text.slice(0, 20), 1);
+    placeText(row, folded.slice(0, COLS), 0);
   }
   return row;
 }
@@ -130,7 +140,14 @@ function guestSnapsFrames(payload = {}, ctx = {}) {
   const wifi = guest.wifi || {};
   const ssid = fold(wifi.ssid || ctx.ssid || ctx.wifiSsid);
   const password = fold(guest.wifi?.password || ctx.password || ctx.wifiPassword);
-  const url = boothHost(guest.booth?.content || ctx.boothUrl);
+  const shortLabel = fold(guest.booth?.shortLabel || '');
+  const url = shortLabel || boothHost(guest.booth?.content || ctx.boothUrl);
+  // TinyURL flap labels must stay one piece — splitHost would break at the
+  // dots in TINYURL.COM and guests would mistype the address. A 10-letter
+  // alias is 22 flaps wide and still fits a full footer row.
+  const hostLines = /^TINYURL\.COM\//.test(url)
+    ? (url.length <= COLS ? [url] : chunkText(url, BODY_WIDTH))
+    : splitHost(url, BODY_WIDTH);
 
   if (!ssid && !url) {
     return [];
@@ -138,7 +155,6 @@ function guestSnapsFrames(payload = {}, ctx = {}) {
 
   let wifiLines = labeledOrStacked('WIFI', ssid, BODY_WIDTH);
   let passLines = labeledOrStacked('PASS', password, BODY_WIDTH);
-  let hostLines = splitHost(url, BODY_WIDTH);
   const slots = MAX_BODY_ROWS + (url ? 1 : 0);
   if (wifiLines.length + passLines.length + hostLines.length > slots) {
     wifiLines = ssid ? chunkText(ssid, BODY_WIDTH) : [];

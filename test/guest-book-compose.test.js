@@ -44,7 +44,8 @@ test('the invite footer pins a short message and adds chips plus the short link'
   const layout = layoutMessage({ text: 'Hi', valign: 'middle' });
   const footer = footerRows(layout.rows, 'TINYURL.COM/WITTYBOARD');
   assert.ok(footer);
-  assert.equal(FOOTER_CHIP_START, 8);
+  assert.equal(FOOTER_CHIP_START, 7);
+  assert.equal(footer[4][7], CHIPS.white);
   assert.equal(footer[4][8], CHIPS.red);
   assert.equal(footer[4][14], CHIPS.white);
   assert.ok(footer[5].some((code) => code !== 0));
@@ -56,6 +57,7 @@ test('the invite screen is SIGN THE / GUEST BOOK plus the locked footer', () => 
   assert.equal(rows[0][7], 19); // S
   assert.equal(rows[1][6], 7); // G
   assert.equal(rows[2].every((code) => code === 0), true);
+  assert.equal(rows[4][7], CHIPS.white);
   assert.equal(rows[4][8], CHIPS.red);
   assert.equal(rows[5][0] !== 0, true);
 });
@@ -64,6 +66,7 @@ test('the invite screen prints CODE ###### when a board code is set', () => {
   const rows = inviteScreenRows('TINYURL.COM/WITTYBOARD', { boardCode: '314159' });
   assert.ok(rows);
   assert.match(decodeCodes(rows[2]), /CODE 314159/);
+  assert.equal(rows[4][7], CHIPS.white);
   assert.equal(rows[4][8], CHIPS.red);
 });
 
@@ -76,6 +79,7 @@ test('a painted grid with the invite locked only counts the guest rows', () => {
   assert.equal(layout.ok, true);
   const stamped = stampInviteFooter(layout.rows, 'TINYURL.COM/WITTYBOARD');
   assert.equal(stamped[1][3], 8);
+  assert.equal(stamped[4][7], CHIPS.white);
   assert.equal(stamped[4][8], CHIPS.red);
   assert.equal(stamped[5][0] !== CHIPS.yellow, true);
 });

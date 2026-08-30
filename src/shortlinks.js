@@ -35,6 +35,8 @@ const PUBLIC_HOST = 'https://tinyurl.com';
 const DOMAIN = 'tinyurl.com';
 const GUESTBOOK_NAME = 'guestbook';
 const GUESTBOOK_PATH = '/guestbook/';
+const GUESTSNAPS_NAME = 'guestsnaps';
+const GUESTSNAPS_PATH = '/';
 const DEFAULT_HEALTH_MS = 24 * 60 * 60 * 1000;
 
 function nowIso(nowFn) {
@@ -661,8 +663,9 @@ function createShortlinks(config = {}, log = console, options = {}) {
       ...link,
       flapLabel: flapLabel(link.alias),
       display: link.alias
-        ? `${flapLabel(link.alias)} → ${link.targetPath || GUESTBOOK_PATH}`
+        ? `${flapLabel(link.alias)} → ${link.targetPath || '/'}`
         : '',
+      tinyUrl: link.alias ? publicTinyUrl(link.alias) : '',
     };
   }
 
@@ -709,6 +712,8 @@ function createShortlinks(config = {}, log = console, options = {}) {
     path: statePath,
     GUESTBOOK_NAME,
     GUESTBOOK_PATH,
+    GUESTSNAPS_NAME,
+    GUESTSNAPS_PATH,
   };
 }
 
@@ -719,6 +724,8 @@ module.exports = {
   DOMAIN,
   GUESTBOOK_NAME,
   GUESTBOOK_PATH,
+  GUESTSNAPS_NAME,
+  GUESTSNAPS_PATH,
   DEFAULT_HEALTH_MS,
   urlsMatch,
   isAliasTakenError,

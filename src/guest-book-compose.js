@@ -283,8 +283,8 @@ function layoutMessage({
   };
 }
 
-/** 7 chips: one column right of mathematical center so the parade reads even. */
-const FOOTER_CHIP_START = 8;
+/** 8 chips centered on 22 cols: white before red, white at the end. */
+const FOOTER_CHIP_START = 7;
 
 function inviteFooterPair(shortLabel) {
   const label = fold(String(shortLabel || '')).slice(0, COLS);
@@ -292,7 +292,7 @@ function inviteFooterPair(shortLabel) {
     return null;
   }
   const chips = blankRow(COLS);
-  const parade = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white'];
+  const parade = ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white'];
   parade.forEach((colour, index) => {
     chips[FOOTER_CHIP_START + index] = CHIPS[colour];
   });

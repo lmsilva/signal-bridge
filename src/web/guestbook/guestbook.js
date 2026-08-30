@@ -14,7 +14,7 @@
   const state = {
     status: null,
     rows: null,
-    caret: { row: 2, col: 7 },
+    caret: { row: 0, col: 0 },
     undo: [],
     layoutOk: false,
     cooldownUntil: 0,
@@ -32,19 +32,62 @@
     return n > 0 && n <= 6 ? n : 6;
   }
 
+  function footerMode() {
+    return state.status?.inviteFooterMode || 'off';
+  }
+
+  function footerLocked() {
+    return footerMode() === 'always';
+  }
+
+  function footerOptional() {
+    return footerMode() === 'whenRoom' && Boolean(state.status?.footerRows);
+  }
+
+  function syncFooterButtons() {
+    const clearBtn = $('btn-gb-clear-footer');
+    const restoreBtn = $('btn-gb-restore-footer');
+    const show = footerOptional();
+    if (clearBtn) clearBtn.hidden = !show;
+    if (restoreBtn) restoreBtn.hidden = !show;
+  }
+
+  function usedInRows(rows, from, to) {
+    let sum = 0;
+    for (let row = from; row < to; row += 1) {
+      sum += (rows?.[row] || []).filter((code) => Number(code) > 0).length;
+    }
+    return sum;
+  }
+
+  function footerInstalled(rows) {
+    const footer = state.status?.footerRows;
+    if (!footer || !rows) return false;
+    for (let row = 4; row < 6; row += 1) {
+      const want = footer[row] || [];
+      const have = rows[row] || [];
+      for (let col = 0; col < (gridApi().COLS || 22); col += 1) {
+        if (Number(want[col] || 0) !== Number(have[col] || 0)) return false;
+      }
+    }
+    return true;
+  }
+
   function usedCount(rows) {
-    const limit = editableRows();
-    return (rows || []).slice(0, limit).reduce((sum, row) => (
-      sum + (row || []).filter((code) => Number(code) > 0).length
-    ), 0);
+    // With the invite present (always, or whenRoom still showing it), only the
+    // top four rows count as the guest's message so Send stays off on a bare invite.
+    if (footerLocked() || (footerOptional() && footerInstalled(rows))) {
+      return usedInRows(rows, 0, 4);
+    }
+    return usedInRows(rows, 0, editableRows());
   }
 
   function displayRows() {
     const out = (state.rows || blankRows()).map((row) => row.slice());
     const footer = state.status?.footerRows;
-    const lockAt = editableRows();
-    if (footer && lockAt < 6) {
-      for (let row = lockAt; row < 6; row += 1) {
+    // Always mode: house invite is locked chrome overlaid on the last two rows.
+    if (footer && footerLocked()) {
+      for (let row = 4; row < 6; row += 1) {
         out[row] = Array.isArray(footer[row]) ? footer[row].slice() : out[row];
       }
     }
@@ -101,17 +144,17 @@
           status.textContent = '';
           status.className = 'gb-status';
         }
-        focusKeys();
+        focusForTyping();
       }
     }
   }
 
-  function startCooldown(seconds, message) {
+  function startCooldown(seconds) {
     stopCooldown();
     const total = Math.max(1, Math.round(Number(seconds) || 60));
     state.cooldownUntil = Date.now() + (total * 1000);
-    const msg = $('gb-cooldown-message');
-    if (msg) msg.textContent = message || 'Please wait before sending another.';
+    const title = $('gb-cooldown-message');
+    if (title) title.textContent = 'Rate Limit Reached';
     showPane('gb-cooldown');
     syncCooldownUi();
     cooldownTimer = setInterval(syncCooldownUi, 1000);
@@ -128,7 +171,7 @@
     if (typeof window.renderFlapGrid === 'function') {
       window.renderFlapGrid($('gb-preview'), displayRows(), {
         caret: state.caret,
-        lockFrom: editableRows(),
+        lockFrom: footerLocked() ? 4 : 6,
       });
     }
     const used = usedCount(state.rows);
@@ -140,6 +183,7 @@
     if (send) send.disabled = !state.layoutOk || cooldownLeft() > 0;
     const undo = $('btn-gb-undo');
     if (undo) undo.disabled = !state.undo.length;
+    syncFooterButtons();
   }
 
   function focusKeys() {
@@ -147,6 +191,38 @@
     if (!keys) return;
     keys.value = '';
     keys.focus({ preventScroll: true });
+  }
+
+  function focusBoard() {
+    const preview = $('gb-preview');
+    if (preview) preview.focus({ preventScroll: true });
+    const keys = $('gb-keys');
+    if (keys) keys.value = '';
+  }
+
+  /** Phones still need the text field for the soft keyboard; PCs type on the board. */
+  function focusForTyping() {
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    if (coarse) focusKeys();
+    else focusBoard();
+  }
+
+  function stampFooterIntoRows(rows) {
+    const footer = state.status?.footerRows;
+    if (!footer || !rows) return rows;
+    const next = rows.map((row) => row.slice());
+    for (let row = 4; row < 6; row += 1) {
+      next[row] = Array.isArray(footer[row]) ? footer[row].slice() : new Array((gridApi().COLS || 22)).fill(0);
+    }
+    return next;
+  }
+
+  function clearFooterRows(rows) {
+    const next = (rows || blankRows()).map((row) => row.slice());
+    const cols = gridApi().COLS || 22;
+    next[4] = new Array(cols).fill(0);
+    next[5] = new Array(cols).fill(0);
+    return next;
   }
 
   function moveCaret(row, col) {
@@ -183,13 +259,13 @@
 
   function setCell(code) {
     if (state.caret.row >= editableRows()) {
-      focusKeys();
+      focusForTyping();
       return;
     }
     snapshot();
     state.rows[state.caret.row][state.caret.col] = code;
     advance();
-    focusKeys();
+    focusForTyping();
   }
 
   function codeForChar(char) {
@@ -219,8 +295,12 @@
 
   function resetBoard() {
     state.rows = blankRows();
+    // whenRoom: seed the invite so guests see it and can clear/overwrite it.
+    if (footerOptional()) {
+      state.rows = stampFooterIntoRows(state.rows);
+    }
     state.undo = [];
-    state.caret = { row: 2, col: 7 };
+    state.caret = { row: 0, col: 0 };
     paint();
   }
 
@@ -246,7 +326,7 @@
     showPane('gb-compose');
     if (!state.rows) resetBoard();
     else paint();
-    focusKeys();
+    focusForTyping();
   }
 
   async function loadStatus() {
@@ -254,9 +334,13 @@
     state.status = status;
     const hint = $('gb-charset-hint');
     if (hint) {
-      hint.textContent = status.inviteFooter
-        ? 'Tap a flap, then type in the box. The last two rows are the house invite — they stay on the board.'
-        : 'Tap a flap, then type in the box. Color chips paint the selected flap.';
+      if (status.inviteFooterMode === 'always') {
+        hint.textContent = 'Select a flap, then type. The last two rows are the house invite and stay locked.';
+      } else if (status.inviteFooterMode === 'whenRoom') {
+        hint.textContent = 'Select a flap, then type. Clear the footer for more room, or restore it when you want the invite back.';
+      } else {
+        hint.textContent = 'Select a flap, then type. Color chips paint the selected flap.';
+      }
     }
     if (status.closed) {
       const reason = $('gb-closed-reason');
@@ -279,7 +363,7 @@
       showPane('gb-compose');
       if (!state.rows) resetBoard();
       else paint();
-      focusKeys();
+      focusForTyping();
     } catch (error) {
       if (status) {
         status.textContent = error.message;
@@ -293,43 +377,43 @@
   $('gb-preview')?.addEventListener('pointerdown', (event) => {
     const cell = event.target.closest('[data-flap-row]');
     if (!cell) {
-      focusKeys();
+      focusForTyping();
       return;
     }
     const row = Number(cell.getAttribute('data-flap-row'));
     if (row >= editableRows()) {
-      focusKeys();
+      focusForTyping();
       return;
     }
     moveCaret(row, Number(cell.getAttribute('data-flap-col')));
-    focusKeys();
+    focusForTyping();
   });
 
-  $('gb-keys')?.addEventListener('keydown', (event) => {
+  function handleBoardKeydown(event) {
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       retreat();
-      return;
+      return true;
     }
     if (event.key === 'ArrowRight') {
       event.preventDefault();
       advance();
-      return;
+      return true;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
       moveCaret(state.caret.row - 1, state.caret.col);
-      return;
+      return true;
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       moveCaret(state.caret.row + 1, state.caret.col);
-      return;
+      return true;
     }
     if (event.key === 'Enter') {
       event.preventDefault();
       moveCaret(state.caret.row + 1, 0);
-      return;
+      return true;
     }
     if (event.key === 'Backspace') {
       event.preventDefault();
@@ -342,14 +426,50 @@
         state.rows[state.caret.row][state.caret.col] = 0;
         paint();
       }
-      return;
+      return true;
     }
     if (event.key === 'Delete') {
       event.preventDefault();
       snapshot();
       state.rows[state.caret.row][state.caret.col] = 0;
       paint();
+      return true;
     }
+    if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const code = codeForChar(event.key);
+      if (code == null) return false;
+      event.preventDefault();
+      setCell(code);
+      return true;
+    }
+    return false;
+  }
+
+  function shouldCaptureBoardKeys() {
+    if ($('gb-compose')?.hidden) return false;
+    const el = document.activeElement;
+    if (!el || el === document.body) return true;
+    if (el === $('gb-preview') || el === $('gb-keys')) return true;
+    if (el.id === 'gb-name' || el.id === 'gb-unlock-input') return false;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return false;
+    if (el.isContentEditable) return false;
+    return true;
+  }
+
+  $('gb-keys')?.addEventListener('keydown', (event) => {
+    handleBoardKeydown(event);
+  });
+
+  $('gb-preview')?.addEventListener('keydown', (event) => {
+    handleBoardKeydown(event);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (!shouldCaptureBoardKeys()) return;
+    if (document.activeElement === $('gb-keys') || document.activeElement === $('gb-preview')) {
+      return; // those listeners already handle it
+    }
+    handleBoardKeydown(event);
   });
 
   $('gb-keys')?.addEventListener('input', (event) => {
@@ -386,7 +506,7 @@
     snapshot();
     state.rows[state.caret.row][state.caret.col] = 0;
     paint();
-    focusKeys();
+    focusForTyping();
   });
 
   $('btn-gb-undo')?.addEventListener('click', () => {
@@ -395,20 +515,36 @@
       state.rows = prev;
       paint();
     }
-    focusKeys();
+    focusForTyping();
   });
 
   $('btn-gb-clear')?.addEventListener('click', () => {
-    if (!usedCount(state.rows)) return;
+    if (!usedCount(state.rows) && !footerOptional()) return;
     snapshot();
     const next = blankRows();
     const lockAt = editableRows();
     for (let row = 0; row < lockAt; row += 1) {
       next[row] = new Array((gridApi().COLS || 22)).fill(0);
     }
-    state.rows = next;
+    state.rows = footerOptional() ? stampFooterIntoRows(next) : next;
     paint();
-    focusKeys();
+    focusForTyping();
+  });
+
+  $('btn-gb-clear-footer')?.addEventListener('click', () => {
+    if (!footerOptional()) return;
+    snapshot();
+    state.rows = clearFooterRows(state.rows);
+    paint();
+    focusForTyping();
+  });
+
+  $('btn-gb-restore-footer')?.addEventListener('click', () => {
+    if (!footerOptional()) return;
+    snapshot();
+    state.rows = stampFooterIntoRows(state.rows || blankRows());
+    paint();
+    focusForTyping();
   });
 
   $('gb-name')?.addEventListener('input', (event) => {
@@ -436,7 +572,16 @@
         window.renderFlapGrid($('gb-done-preview'), result.rows);
       }
       const message = $('gb-done-message');
-      if (message) message.textContent = result.message || 'Your message is up.';
+      if (message) {
+        message.textContent = result.status === 'waiting'
+          ? 'Message will be displayed once it is approved.'
+          : (result.message || 'Your message has been pushed and will be displayed if outside quiet hours.');
+      }
+      const hint = $('gb-done-hint');
+      if (hint) {
+        hint.textContent = '';
+        hint.hidden = true;
+      }
       showPane('gb-done');
     } catch (error) {
       if (error.data?.needsUnlock) {
@@ -450,10 +595,7 @@
         return;
       }
       if (error.status === 429 || error.data?.retryAfterSeconds > 0) {
-        startCooldown(
-          error.data.retryAfterSeconds,
-          error.data.error || error.message,
-        );
+        startCooldown(error.data.retryAfterSeconds);
         return;
       }
       if (status) {
@@ -473,14 +615,14 @@
     resetBoard();
     showPane('gb-compose');
     paint();
-    focusKeys();
+    focusForTyping();
   });
 
   $('btn-gb-cooldown-back')?.addEventListener('click', () => {
     showPane('gb-compose');
     paint();
     syncCooldownUi();
-    focusKeys();
+    focusForTyping();
   });
 
   loadStatus().catch((error) => {

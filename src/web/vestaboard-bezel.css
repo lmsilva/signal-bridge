@@ -1,0 +1,219 @@
+/* Shared Vestaboard Flagship bezel + flaps — admin simulator, settings previews, Guest Book. */
+
+/* The bezel is deliberately not a .card — a real board is a slab on a wall,
+   not a panel in a list. Every proportion below was measured off a photograph
+   of the physical Flagship: a 1.87:1 panel, a 7% bezel, a 27.7 x 49.6 cell,
+   and a flap that is only two thirds of its cell wide. The tonal order is the
+   part that sells it and the part that is easy to get backwards — the raised
+   rails between columns are LIGHTER than the flap faces they separate, and
+   rows are divided by a dark seam rather than a light one. */
+.vb-bezel {
+  /* A size container so the wordmark can scale with the slab the same way
+     the flaps scale with the grid. */
+  container-type: inline-size;
+  position: relative;
+  /* Fill the column. Auto side margins would make this a shrink-to-fit flex
+     item, and `contain: inline-size` means the flaps cannot report a width to
+     shrink to — the board would collapse to its own padding. */
+  width: 100%;
+  padding: 6.9% 7% 3.2%;
+  /* The bezel shows through every gap, so this is also the rail between
+     columns and the open band beneath each flap. Kept almost flat on purpose:
+     the light falloff belongs to the ::after overlay, which dims flaps and
+     bezel together and so preserves their ratio on every row. A bezel that
+     darkened on its own would leave the bottom rows with no contrast. */
+  background: linear-gradient(180deg, #292930 0%, #26262d 100%);
+  border-radius: 5px;
+  box-shadow:
+    /* the lit top edge of a box standing off a wall */
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 5px rgba(0, 0, 0, 0.55),
+    0 34px 54px -22px rgba(0, 0, 0, 0.85);
+  transition: opacity 200ms ease, filter 200ms ease;
+}
+.vb-bezel.is-offline { opacity: 0.45; filter: grayscale(0.8); }
+
+/* A single raking light across the slab, the way the product shots are lit. */
+.vb-bezel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0) 38%,
+    rgba(0, 0, 0, 0.34) 100%
+  );
+  pointer-events: none;
+}
+
+.vb-grid {
+  container-type: inline-size;
+  display: grid;
+  /* minmax(0,…) rather than 1fr: a glyph wider than its share of a narrow
+     board would otherwise push the track out and overflow the bezel. */
+  grid-template-columns: repeat(22, minmax(0, 1fr));
+  /* A 27.7 x 49.6 cell holding a 21 x 30 flap window: the rest is bezel. */
+  column-gap: 1.1cqw;
+  row-gap: 2.97cqw;
+  perspective: 900px;
+}
+
+.vb-wordmark {
+  position: relative;
+  margin-top: 3cqw;
+  text-align: center;
+  font-size: 0.95cqw;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  color: rgba(255, 255, 255, 0.17);
+  user-select: none;
+}
+
+.vb-tile {
+  position: relative;
+  /* The flap window only — the bezel below it belongs to the row gap. */
+  aspect-ratio: 2 / 3;
+  min-width: 0;
+  /* Close enough that a top-hinged rotateX reads as a card dropping, not a
+     2D squash. Grid perspective is too far for a 30px-tall flap. */
+  perspective: 72px;
+}
+
+.vb-flap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.39cqw;
+  border-radius: 2% / 1.4%;
+  background-image:
+    /* The recess walls. Hard-edged rather than a ramp: on the real board this
+       is a 2px bar of near-black, and softening it reads as a vignette
+       instead of an edge. Deeper on the left, where the light rakes in. */
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.92) 0%,
+      rgba(0, 0, 0, 0.92) 6%,
+      rgba(0, 0, 0, 0.14) 9%,
+      rgba(0, 0, 0, 0) 15%,
+      rgba(0, 0, 0, 0) 89%,
+      rgba(0, 0, 0, 0.2) 93%,
+      rgba(0, 0, 0, 0.55) 96%,
+      rgba(0, 0, 0, 0.55) 100%
+    ),
+    /* the lintel above the card and the shadow it drops at the sill */
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.7) 0%,
+      rgba(0, 0, 0, 0.7) 4%,
+      rgba(0, 0, 0, 0.12) 7%,
+      rgba(0, 0, 0, 0) 11%,
+      rgba(0, 0, 0, 0) 91%,
+      rgba(0, 0, 0, 0.2) 94%,
+      rgba(0, 0, 0, 0.5) 97%,
+      rgba(0, 0, 0, 0.5) 100%
+    ),
+    /* The card itself, split across the middle. Held at roughly 0.78 of the
+       bezel at the top and rising to meet it at the sill, which is the
+       relationship measured off the real board. */
+    linear-gradient(
+      180deg,
+      #1f1f26 0%,
+      #222229 46%,
+      #1a1a21 50%,
+      #1f1f26 54%,
+      #252529 100%
+    );
+  color: #f0eee8;
+  /* Sized against the board's own width so the glyphs stay proportional at
+     any viewport, phone included. */
+  font-size: 3.86cqw;
+  /* The board's own stack, not the app's — a light grotesque, with Segoe UI
+     ahead of Arial so Windows gets a real Light face instead of Regular. */
+  font-family: "Helvetica Neue", "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0;
+  transform-origin: 50% 0;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+/* The printed character is narrower than any grotesque we can rely on being
+   installed, and it sits high in the cell because the shoulder of the next
+   card fills the space below it. */
+.vb-glyph {
+  display: block;
+  transform: scaleX(0.82);
+}
+
+/* A colour chip is a painted card sitting in the same recess, so it keeps the
+   walls and the seam and only swaps the face. */
+.vb-tile.is-chip .vb-flap {
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.92) 0%,
+      rgba(0, 0, 0, 0.92) 6%,
+      rgba(0, 0, 0, 0.14) 9%,
+      rgba(0, 0, 0, 0) 15%,
+      rgba(0, 0, 0, 0) 89%,
+      rgba(0, 0, 0, 0.2) 93%,
+      rgba(0, 0, 0, 0.55) 96%,
+      rgba(0, 0, 0, 0.55) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.7) 0%,
+      rgba(0, 0, 0, 0.7) 4%,
+      rgba(0, 0, 0, 0.12) 7%,
+      rgba(0, 0, 0, 0) 11%,
+      rgba(0, 0, 0, 0) 91%,
+      rgba(0, 0, 0, 0.2) 94%,
+      rgba(0, 0, 0, 0.5) 97%,
+      rgba(0, 0, 0, 0.5) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05) 46%,
+      rgba(0, 0, 0, 0.3) 50%,
+      rgba(255, 255, 255, 0.02) 54%,
+      rgba(255, 255, 255, 0.07) 100%
+    );
+}
+/* background-color only — the .is-chip gradient supplies the flap shading. */
+.vb-tile[data-chip="63"] .vb-flap { background-color: #e03c31; }
+.vb-tile[data-chip="64"] .vb-flap { background-color: #f58220; }
+.vb-tile[data-chip="65"] .vb-flap { background-color: #ffd200; }
+.vb-tile[data-chip="66"] .vb-flap { background-color: #22a24b; }
+.vb-tile[data-chip="67"] .vb-flap { background-color: #0f62c8; }
+.vb-tile[data-chip="68"] .vb-flap { background-color: #7b3f98; }
+.vb-tile[data-chip="69"] .vb-flap { background-color: #f2f2f2; }
+.vb-tile[data-chip="70"] .vb-flap { background-color: #101013; }
+.vb-tile[data-chip="71"] .vb-flap { background-color: #6e6e6e; }
+
+/* Preview / designer caret and locked invite rows */
+.vb-tile.is-caret {
+  z-index: 1;
+}
+.vb-tile.is-caret .vb-flap {
+  box-shadow:
+    inset 0 0 0 2px #38bdf8,
+    0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+.vb-tile.is-locked {
+  cursor: default;
+  opacity: 0.9;
+}
+.vb-tile.is-locked[data-flap-row="4"] .vb-flap {
+  box-shadow: inset 0 2px 0 rgba(58, 42, 18, 0.85);
+}
+.vb-bezel.preview-bezel {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}

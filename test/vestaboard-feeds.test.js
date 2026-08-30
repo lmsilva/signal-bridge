@@ -336,6 +336,41 @@ test('guest snaps keeps a long password and host by wrapping, never cutting', ()
   ], 'guest snaps long wifi');
 });
 
+test('guest snaps prefers a TinyURL flap label that fits one footer row', () => {
+  const frames = signal.guestSnapsFrames({
+    type: 'guest.photobooth',
+    displaySeconds: 180,
+    guestPhotobooth: {
+      wifi: { ssid: 'PANDAMONIUM' },
+      booth: { content: 'https://tinyurl.com/GUESTS' },
+    },
+  }, { password: 'thoseportuguesepigs2' });
+
+  assertLayout(frames[0].rows, [
+    'bb GUEST SNAPS      bb',
+    ' WIFI PANDAMONIUM',
+    ' PASS',
+    ' THOSEPORTUGUESEPIGS2',
+    ' SHARE PHOTOS AT:',
+    'b TINYURL.COM/GUESTS b',
+  ], 'guest snaps short url');
+});
+
+test('guest snaps prints a 10-letter TinyURL alias without clipping flaps', () => {
+  const frames = signal.guestSnapsFrames({
+    type: 'guest.photobooth',
+    displaySeconds: 60,
+    guestPhotobooth: {
+      wifi: { ssid: 'CASA' },
+      booth: { content: 'https://tinyurl.com/WITTYBOARD' },
+    },
+  }, { password: 'OK' });
+
+  const drawn = formatLayout(frames[0].rows);
+  assert.match(drawn, /TINYURL\.COM\/WITTYBOARD/);
+  assert.doesNotMatch(drawn, /WITTYBOAR[^D]/);
+});
+
 test('a booth host splits at a dot rather than hyphenating', () => {
   assert.deepEqual(
     signal.splitHost('SIGNAL.WITTYDIGITAL.COM', 20),

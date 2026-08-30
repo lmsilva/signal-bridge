@@ -25,7 +25,8 @@
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal170">
+  <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
+  <link rel="stylesheet" href="styles.css?v=signal185">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -914,7 +915,10 @@
             </div>
             <div class="settings-col">
               <label class="field-label">Board preview</label>
-              <div class="cn-preview" id="calendar-clock-preview" aria-hidden="true"></div>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="calendar-clock-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
             </div>
           </div>
         </div>
@@ -962,6 +966,38 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="global">Guest Snaps</div>
+        <div class="card guest-snaps-settings-card" id="guest-snaps-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Guest Snaps</div>
+            <span class="status-pill" id="guest-snaps-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="guest-snaps-status-detail">
+            Short link to the photo booth (Public base URL → /). Printed on the Vestaboard as TINYURL.COM/ALIAS so guests can type it.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="guest-snaps-token">TinyURL API token</label>
+              <input type="password" id="guest-snaps-token" class="field-input" placeholder="Paste token, or set TINYURL_API_TOKEN in .env" autocomplete="new-password" spellcheck="false">
+              <p class="hint" id="guest-snaps-token-hint">Shared with Guest Book. Write-only. TINYURL_API_TOKEN in .env wins if set.</p>
+              <label class="field-label field-label-spaced" for="guest-snaps-alias">Preferred alias</label>
+              <input type="text" id="guest-snaps-alias" class="field-input" placeholder="WITTYSNAP" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+              <p class="hint">5–10 letters or digits. Must differ from the Guest Book alias.</p>
+              <button type="button" class="btn btn-accent btn-block" id="btn-guest-snaps-save" style="margin-top:14px">Save Guest Snaps</button>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Short link</label>
+              <div class="gb-shortlink-status" id="guest-snaps-shortlink">
+                <span class="gb-dot" id="guest-snaps-dot" aria-hidden="true"></span>
+                <p class="hint" id="guest-snaps-shortlink-label">No short link yet.</p>
+                <p class="hint" id="guest-snaps-shortlink-check">Last check —</p>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-guest-snaps-check">Check now</button>
+              </div>
+              <p class="hint field-label-spaced" id="guest-snaps-target-hint">Target —</p>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="global">Guest Book</div>
         <div class="card guest-book-settings-card" id="guest-book-settings-card" data-settings-group="global">
           <div class="auth-head">
@@ -990,10 +1026,12 @@
               <label class="field-label field-label-spaced" for="guest-book-password">Guest password</label>
               <input type="password" id="guest-book-password" class="field-input" placeholder="Leave blank to keep the current password" autocomplete="new-password">
               <p class="hint" id="guest-book-code-hint" hidden></p>
-              <label class="trivia-check field-label-spaced">
-                <input type="checkbox" id="guest-book-invite-footer" checked>
-                <span>Invite footer when there is room</span>
-              </label>
+              <label class="field-label field-label-spaced" for="guest-book-invite-footer">Invite footer</label>
+              <select id="guest-book-invite-footer" class="field-input">
+                <option value="always">Always</option>
+                <option value="whenRoom" selected>If there is room</option>
+              </select>
+              <p class="hint">Always locks the last two rows for the chip parade and short link. If there is room, guests can overwrite those rows for a longer message.</p>
               <label class="trivia-check">
                 <input type="checkbox" id="guest-book-wake">
                 <span>Guests may wake the board</span>
@@ -1072,7 +1110,10 @@
               <p class="hint" id="world-population-live" style="font-size:1.35rem; font-variant-numeric:tabular-nums; margin:0 0 8px">…</p>
               <p class="hint" id="world-population-rates">…</p>
               <label class="field-label field-label-spaced">Board preview</label>
-              <div class="cn-preview" id="world-population-preview" aria-hidden="true"></div>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="world-population-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
               <p class="hint" id="world-population-hint" style="margin-top:8px">Tune the baseline when UN figures update; the board advances by births − deaths each second.</p>
             </div>
           </div>
@@ -1702,9 +1743,12 @@
                 <button type="button" class="btn btn-outline" id="btn-stock-market-push">Push Now</button>
               </div>
             </div>
-            <div class="settings-col">
+            <div class="settings-col board-preview-col">
               <label class="field-label">Board preview</label>
-              <div class="cn-board-preview cn-board-preview-stoic" id="stock-market-preview" aria-hidden="true"></div>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="stock-market-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
               <p class="hint" id="stock-market-hint" style="margin-top:8px">
                 Defaults cover mega-cap tech plus SPY/QQQ/DIA. Indexes use Yahoo symbols like ^GSPC.
               </p>
@@ -1734,9 +1778,12 @@
                 <button type="button" class="btn btn-outline" id="btn-currency-rates-push">Push Now</button>
               </div>
             </div>
-            <div class="settings-col">
+            <div class="settings-col board-preview-col">
               <label class="field-label">Board preview</label>
-              <div class="cn-board-preview cn-board-preview-stoic" id="currency-rates-preview" aria-hidden="true"></div>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="currency-rates-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
               <p class="hint" id="currency-rates-hint" style="margin-top:8px">
                 Defaults: Euro, GBP, Yen, CAD, Mexican &amp; Argentine pesos, Bahamas dollar, Chinese yuan.
               </p>
@@ -1863,9 +1910,12 @@
                 <button type="button" class="btn btn-outline" id="btn-starlink-tracker-push">Push Now</button>
               </div>
             </div>
-            <div class="settings-col">
+            <div class="settings-col board-preview-col">
               <label class="field-label">Board preview</label>
-              <div class="cn-board-preview cn-board-preview-stoic" id="starlink-tracker-preview" aria-hidden="true"></div>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="starlink-tracker-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
               <p class="hint" id="starlink-tracker-location" style="margin-top:8px">
                 Uses the house pin under Settings → Global → Location.
               </p>
@@ -1903,9 +1953,12 @@
                 <button type="button" class="btn btn-outline" id="btn-iss-tracker-push">Push Now</button>
               </div>
             </div>
-            <div class="settings-col">
+            <div class="settings-col board-preview-col">
               <label class="field-label">Board preview</label>
-              <div class="cn-board-preview cn-board-preview-stoic" id="iss-tracker-preview" aria-hidden="true"></div>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="iss-tracker-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
               <p class="hint" id="iss-tracker-location" style="margin-top:8px">
                 Uses the house pin under Settings → Global → Location for the AWAY distance.
               </p>
@@ -2761,7 +2814,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview" id="chuck-norris-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="chuck-norris-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
         </div>
       </div>
       <div class="cn-toolbar">
@@ -2799,7 +2855,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview cn-board-preview-amazing" id="amazing-facts-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="amazing-facts-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
         </div>
       </div>
       <div class="cn-toolbar">
@@ -2840,7 +2899,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview cn-board-preview-stoic" id="world-geography-facts-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="world-geography-facts-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
         </div>
       </div>
       <div class="settings-columns" style="margin:0 0 12px">
@@ -2895,7 +2957,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview cn-board-preview-violet" id="conversation-starters-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="conversation-starters-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
         </div>
       </div>
       <div class="cn-toolbar">
@@ -2935,7 +3000,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview cn-board-preview-stoic" id="stoic-quotes-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="stoic-quotes-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
         </div>
       </div>
       <div class="cn-toolbar">
@@ -2975,7 +3043,10 @@
         </div>
         <div class="settings-col">
           <label class="field-label">Board preview</label>
-          <div class="cn-board-preview cn-board-preview-stoic" id="on-this-day-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="on-this-day-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
           <span class="hint" id="on-this-day-fit-hint"></span>
         </div>
       </div>
@@ -3044,7 +3115,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview cn-board-preview-bake" id="baking-inspiration-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="baking-inspiration-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
         </div>
       </div>
       <div class="cn-toolbar">
@@ -3147,7 +3221,10 @@
         </div>
         <div class="cn-preview-col">
           <span class="field-label">Board preview</span>
-          <div class="cn-board-preview cn-board-preview-red" id="date-book-preview" aria-hidden="true"></div>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="date-book-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
           <div class="segmented date-book-preview-tabs" id="date-book-preview-tabs" role="group" aria-label="Which card to preview">
             <button type="button" class="segmented-btn active" data-date-book-preview="countdown" aria-pressed="true">Countdown</button>
             <button type="button" class="segmented-btn" data-date-book-preview="dayOf" aria-pressed="false">Day of</button>
@@ -3205,13 +3282,6 @@
             <div class="vb-grid rl-designer-grid" id="red-letter-grid" tabindex="0" role="application" aria-label="Vestaboard layout editor"></div>
             <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
           </div>
-          <div class="rl-preset-row">
-            <span class="hint">Start from</span>
-            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="confetti">Day of</button>
-            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="heart">Heart</button>
-            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="border">Border</button>
-            <button type="button" class="btn btn-outline btn-sm" data-rl-preset="blank">Blank</button>
-          </div>
         </div>
         <div class="rl-designer-col">
           <span class="field-label">On the board</span>
@@ -3223,12 +3293,42 @@
         </div>
       </div>
 
+      <div class="rl-preset-block">
+        <span class="field-label">Start from</span>
+        <div class="rl-preset-row" role="group" aria-label="Theme presets">
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="confetti">Day of</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="heart">Heart</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="halloween">Halloween</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="summer">Summer</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="beach">Beach</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="christmas">Christmas</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="autumn">Autumn</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="border">Border</button>
+          <button type="button" class="btn btn-outline btn-sm" data-rl-preset="blank">Blank</button>
+        </div>
+      </div>
+
       <div class="cn-pager rl-designer-actions">
         <div class="rl-designer-actions-left">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-undo" disabled>Undo</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-reset" disabled>Reset</button>
           <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-blank">Clear board</button>
           <button type="button" class="btn btn-outline btn-sm" id="btn-red-letter-designer-clear">Remove artwork</button>
         </div>
         <button type="button" class="btn btn-accent btn-sm" id="btn-red-letter-designer-save">Save design</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Day-of designer unsaved-changes prompt -->
+  <div class="sheet-backdrop" id="red-letter-unsaved-sheet" hidden>
+    <div class="sheet sheet-confirm">
+      <div class="sheet-title">Save your design?</div>
+      <p class="sheet-subtext">You have unsaved changes on this day-of card.</p>
+      <div class="sheet-actions sheet-actions-stack">
+        <button type="button" class="btn btn-accent btn-block" id="btn-red-letter-unsaved-save">Save and close</button>
+        <button type="button" class="btn btn-danger btn-block" id="btn-red-letter-unsaved-discard">Discard changes</button>
+        <button type="button" class="btn btn-outline btn-block" id="btn-red-letter-unsaved-cancel">Keep editing</button>
       </div>
     </div>
   </div>
@@ -3506,18 +3606,48 @@
   <!-- Push tile catalog, inlined by the bridge as this page is served. The
        grid is static data, so it must not wait on /api/commands. -->
   <div class="sheet-backdrop" id="guest-book-sheet" hidden>
-    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="guest-book-sheet-title">
+    <div class="sheet cn-manage-sheet gb-book-sheet" role="dialog" aria-modal="true" aria-labelledby="guest-book-sheet-title">
       <div class="credits-sheet-head">
         <div class="sheet-title" id="guest-book-sheet-title">The Book</div>
         <button type="button" class="credits-sheet-close" id="btn-guest-book-sheet-close" aria-label="Close">×</button>
       </div>
       <p class="hint" id="guest-book-sheet-summary">Every guest message lands here.</p>
-      <div class="gb-book-list" id="guest-book-list"></div>
+      <div class="segmented gb-book-filter" id="guest-book-filter" role="group" aria-label="Filter The Book">
+        <button type="button" class="segmented-btn active" data-book-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="segmented-btn" data-book-filter="waiting" aria-pressed="false">Waiting for approval</button>
+        <button type="button" class="segmented-btn" data-book-filter="released" aria-pressed="false">Released</button>
+      </div>
+      <div class="gb-book-bulk" id="guest-book-bulk" hidden>
+        <span class="hint" id="guest-book-bulk-label">0 selected</span>
+        <div class="gb-book-bulk-actions">
+          <button type="button" class="btn btn-accent btn-sm" id="btn-guest-book-release-selected" hidden>Release</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-guest-book-push-selected" hidden>Push to board</button>
+          <button type="button" class="btn btn-danger btn-sm" id="btn-guest-book-delete-selected">Delete selected</button>
+        </div>
+      </div>
+      <div class="cn-fact-list gb-book-list" id="guest-book-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-guest-book-prev">Previous</button>
+        <span class="hint" id="guest-book-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-guest-book-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="guest-book-delete-sheet" hidden>
+    <div class="sheet sheet-confirm" role="dialog" aria-modal="true" aria-labelledby="guest-book-delete-title">
+      <div class="sheet-title" id="guest-book-delete-title">Delete this message?</div>
+      <p class="sheet-subtext">This removes it from The Book and cannot be undone.</p>
+      <div class="sheet-actions sheet-actions-confirm">
+        <button type="button" class="btn btn-outline" id="guest-book-delete-cancel">Cancel</button>
+        <button type="button" class="btn btn-danger" id="guest-book-delete-confirm">Delete</button>
+      </div>
     </div>
   </div>
 
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
-  <script src="app.js?v=signal170"></script>
+  <script src="/flap-grid.js?v=2"></script>
+  <script src="app.js?v=signal185"></script>
 </body>
 </html>

@@ -181,17 +181,94 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* While The Book is open, lock the page behind the dialog. */
+html.gb-book-open,
+html.gb-book-open body {
+  overflow: hidden;
+}
+
 .gb-book-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 0;
+  overscroll-behavior: contain;
+}
+
+.gb-book-bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(224, 60, 49, 0.35);
+  background: rgba(224, 60, 49, 0.08);
+}
+
+.gb-book-bulk[hidden] {
+  display: none;
+}
+
+.gb-book-bulk .hint {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.gb-book-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.gb-book-filter {
+  margin: 0 0 12px;
+  flex-wrap: wrap;
+}
+
+.gb-book-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gb-book-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+}
+
+.gb-book-badge.is-waiting {
+  border-color: rgba(244, 197, 106, 0.55);
+  color: #f4c56a;
+  background: rgba(244, 197, 106, 0.1);
+}
+
+.gb-book-badge.is-released {
+  border-color: rgba(70, 180, 120, 0.45);
+  color: #7dcea0;
+}
+
+.gb-book-entry.is-waiting {
+  border-color: rgba(244, 197, 106, 0.45);
+  box-shadow: inset 3px 0 0 #f4c56a;
 }
 
 .gb-book-entry {
   display: grid;
-  grid-template-columns: 1fr minmax(140px, 180px);
-  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) minmax(240px, 320px);
+  gap: 14px;
   align-items: start;
   padding: 12px;
   border-radius: 12px;
@@ -199,8 +276,28 @@ body {
   background: rgba(16, 16, 19, 0.35);
 }
 
-.gb-book-entry .cn-board-preview {
+.gb-book-entry.is-selected {
+  border-color: rgba(244, 197, 106, 0.55);
+  background: rgba(244, 197, 106, 0.06);
+}
+
+.gb-book-check {
+  display: grid;
+  place-items: start center;
+  padding-top: 2px;
+}
+
+.gb-book-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.gb-book-entry .cn-board-preview,
+.gb-book-entry .vb-bezel.preview-bezel {
   max-width: none;
+  width: 100%;
   justify-self: stretch;
 }
 
@@ -225,6 +322,15 @@ body {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .gb-book-entry {
+    grid-template-columns: auto 1fr;
+  }
+  .gb-book-entry .cn-board-preview {
+    grid-column: 2 / -1;
+  }
 }
 
 /* ---------- Display picker ---------- */
@@ -2610,6 +2716,8 @@ textarea.field-input.text-input-area {
   align-items: flex-end;
   justify-content: center;
   z-index: 40;
+  /* Keep wheel/trackpad gestures inside the modal so the page behind does not scroll. */
+  overscroll-behavior: contain;
 }
 
 .sheet {
@@ -2983,6 +3091,7 @@ textarea.field-input.text-input-area {
   #tab-settings .learn-language-settings-card,
   #tab-settings .locale-settings-card,
   #tab-settings .public-url-settings-card,
+  #tab-settings .guest-snaps-settings-card,
   #tab-settings .guest-book-settings-card,
   #tab-settings .weather-alerts-settings-card,
   #tab-settings .world-population-settings-card,
@@ -3909,7 +4018,7 @@ textarea.field-input.text-input-area {
   padding: 6px;
   border-radius: 10px;
   background: #141414;
-  border: 1px solid #3a2a12;
+  border: 1px solid #3a3a3a;
   width: 100%;
   max-width: 200px;
   min-width: 0;
@@ -3923,15 +4032,55 @@ textarea.field-input.text-input-area {
 }
 .cn-board-preview-violet .cn-preview-row span {
   background: #16101c;
-  color: #d4b8f0;
+  color: #f0eee8;
 }
 .cn-board-preview-stoic {
   border-color: #3a3a3a;
 }
 .cn-board-preview-stoic .cn-preview-row span {
   background: #1a1a1a;
-  color: #e8e8e8;
+  color: #f0eee8;
 }
+
+/*
+ * Stock / FX / Starlink / ISS settings: the board preview fills the right
+ * column instead of sitting as a 200px postage stamp with empty air below.
+ */
+.board-preview-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.board-preview-col > .field-label {
+  margin: 0;
+}
+.board-preview-col .cn-board-preview,
+.board-preview-col .vb-bezel.preview-bezel {
+  max-width: none;
+  width: 100%;
+  justify-self: stretch;
+}
+.board-preview-col .cn-preview-row {
+  gap: 2px;
+}
+.board-preview-col .cn-preview-row span {
+  font-size: clamp(0.5rem, 4.6cqw, 0.82rem);
+}
+.board-preview-col > .hint {
+  margin: 0;
+}
+
+@media (min-width: 720px) {
+  .stock-market-settings-card .settings-columns,
+  .currency-rates-settings-card .settings-columns,
+  .starlink-tracker-settings-card .settings-columns,
+  .iss-tracker-settings-card .settings-columns {
+    grid-template-columns: minmax(0, 1.05fr) minmax(280px, 1fr);
+    align-items: start;
+  }
+}
+
 .cn-board-preview-amazing {
   border-color: #4a3a10;
 }
@@ -3944,14 +4093,14 @@ textarea.field-input.text-input-area {
 }
 .cn-board-preview-red .cn-preview-row span {
   background: #1a1a1a;
-  color: #e8e8e8;
+  color: #f0eee8;
 }
 .cn-board-preview-bake {
   border-color: #4a4010;
 }
 .cn-board-preview-bake .cn-preview-row span {
   background: #1a1808;
-  color: #f0e080;
+  color: #f0eee8;
 }
 .cn-preview-row {
   display: grid;
@@ -3962,8 +4111,8 @@ textarea.field-input.text-input-area {
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  background: #1c140a;
-  color: #f4c56a;
+  background: #1a1a1a;
+  color: #f0eee8;
   font-size: clamp(0.28rem, 4cqw, 0.45rem);
   font-weight: 800;
   letter-spacing: 0;
@@ -4012,16 +4161,31 @@ textarea.field-input.text-input-area {
 /* ---------------------------------------------- Red Letter layout designer */
 
 /* The Date Book manager and the designer both run wider than a corpus sheet:
-   a 22-column board at a tappable flap size needs the room. */
+   a 22-column board at a tappable flap size needs the room. Date Book also
+   grows taller so the event list isn't a one-and-a-half-row postage stamp. */
 .date-book-sheet,
 .rl-designer-sheet {
   max-width: min(1040px, calc(100vw - 24px));
+  max-height: min(94dvh, 980px);
+}
+.rl-designer-sheet {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+}
+.date-book-sheet > .cn-fact-list {
+  min-height: min(280px, 36dvh);
+}
+.date-book-sheet .cn-compose {
+  margin-bottom: 4px;
+}
+.date-book-sheet .cn-toolbar {
+  margin-top: 4px;
+  margin-bottom: 10px;
 }
 .date-book-when {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 10px 12px;
-  margin-top: 14px;
+  gap: 12px 14px;
+  margin-top: 16px;
   align-items: start;
 }
 .date-book-when-field {
@@ -4095,14 +4259,14 @@ textarea.field-input.text-input-area {
 
 .rl-designer-columns {
   display: grid;
-  gap: 16px 20px;
-  margin: 4px 0 14px;
+  gap: 18px 24px;
+  margin: 6px 0 18px;
   min-width: 0;
 }
 @media (min-width: 860px) {
   .rl-designer-columns { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); align-items: start; }
 }
-.rl-designer-col { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.rl-designer-col { display: grid; gap: 10px; min-width: 0; align-content: start; }
 .rl-designer-board-col { min-width: 0; }
 
 /* Designer board reuses the Vestaboard Simulator bezel/tiles so editing
@@ -4140,11 +4304,21 @@ textarea.field-input.text-input-area {
     0 0 0 1px rgba(244, 197, 106, 0.45);
 }
 
-.rl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.rl-designer-sheet > .hint#red-letter-designer-subtitle {
+  margin: 0 0 16px;
+  line-height: 1.45;
+}
+.rl-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
 .rl-tool {
   appearance: none;
-  height: 30px;
-  min-width: 30px;
+  height: 32px;
+  min-width: 32px;
   padding: 0;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -4166,28 +4340,28 @@ textarea.field-input.text-input-area {
 .rl-tool-chip.is-chip-white { background: #f2f2f2; }
 .rl-tool-chip.is-chip-black { background: #101013; }
 .rl-tool-chip.is-chip-filled { background: #6e6e6e; }
-.rl-tool-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+.rl-tool-sep { width: 1px; height: 22px; background: var(--line); margin: 0 6px; }
 
 .rl-char-row {
   display: grid;
-  gap: 6px;
-  margin: 0 0 10px;
+  gap: 8px;
+  margin: 0 0 16px;
 }
 .rl-char-palette {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  max-height: 118px;
+  gap: 6px;
+  max-height: 132px;
   overflow: auto;
-  padding: 6px;
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg);
 }
 .rl-char {
   appearance: none;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border-radius: 6px;
   border: 1px solid var(--line);
@@ -4208,8 +4382,12 @@ textarea.field-input.text-input-area {
   font-size: 0.62rem;
   letter-spacing: -0.02em;
 }
+.rl-designer-sheet > .field-label[for="red-letter-quick-type"] {
+  margin: 0 0 8px;
+  display: block;
+}
 .rl-quick-type {
-  margin: 0 0 10px;
+  margin: 0 0 14px;
   font-family: "Helvetica Neue", "Segoe UI", system-ui, Helvetica, Arial, monospace;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4223,12 +4401,40 @@ textarea.field-input.text-input-area {
   color: #ff9d95;
   font-weight: 700;
 }
-.rl-designer-hint { margin: 0 0 10px; }
-.rl-preset-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rl-designer-actions { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.rl-designer-hint {
+  margin: 0 0 16px;
+  line-height: 1.45;
+}
+.rl-preset-block {
+  margin: 18px 0 4px;
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--line);
+}
+.rl-preset-block > .field-label {
+  display: block;
+  margin: 0 0 10px;
+}
+.rl-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.rl-designer-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 16px;
+  padding-bottom: 4px;
+  border-top: 1px solid var(--line);
+}
 .rl-designer-actions-left { display: flex; flex-wrap: wrap; gap: 8px; }
 .rl-designer-sheet .cn-board-preview,
-.date-book-sheet .cn-preview-col .cn-board-preview { max-width: none; width: 100%; }
+.rl-designer-sheet .vb-bezel.preview-bezel,
+.date-book-sheet .cn-preview-col .cn-board-preview,
+.date-book-sheet .cn-preview-col .vb-bezel.preview-bezel { max-width: none; width: 100%; }
 .chuck-norris-actions,
 .cn-settings-actions {
   display: flex;
@@ -4254,6 +4460,7 @@ textarea.field-input.text-input-area {
   flex: 1 1 auto;
   min-height: 140px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 2px 6px 2px 2px;
   margin: 0 -2px;
 }
@@ -4272,11 +4479,9 @@ textarea.field-input.text-input-area {
     align-items: start;
   }
 }
-.cn-manage-sheet .cn-board-preview {
+.cn-manage-sheet .cn-board-preview,
+.cn-manage-sheet .vb-bezel.preview-bezel {
   max-width: 320px;
-  padding: 8px;
-  gap: 3px;
-  border-radius: 12px;
 }
 .cn-manage-sheet .cn-preview-row {
   gap: 1.5px;
@@ -4294,7 +4499,8 @@ textarea.field-input.text-input-area {
 .cn-preview-col .field-label {
   text-align: right;
 }
-.cn-manage-sheet .cn-preview-col .cn-board-preview {
+.cn-manage-sheet .cn-preview-col .cn-board-preview,
+.cn-manage-sheet .cn-preview-col .vb-bezel.preview-bezel {
   justify-self: stretch;
   width: 100%;
   max-width: none;
@@ -4306,12 +4512,15 @@ textarea.field-input.text-input-area {
   .cn-preview-col .field-label {
     text-align: left;
   }
-  .cn-board-preview {
+  .cn-board-preview,
+  .vb-bezel.preview-bezel {
     justify-self: start;
     max-width: 180px;
   }
   .cn-manage-sheet .cn-board-preview,
-  .cn-manage-sheet .cn-preview-col .cn-board-preview {
+  .cn-manage-sheet .cn-preview-col .cn-board-preview,
+  .cn-manage-sheet .vb-bezel.preview-bezel,
+  .cn-manage-sheet .cn-preview-col .vb-bezel.preview-bezel {
     max-width: min(320px, 100%);
     width: 100%;
   }

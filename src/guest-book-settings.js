@@ -22,12 +22,20 @@ const FALLBACK = {
   blockedWordsEnabled: false,
   blockedWords: [],
   approval: false,
-  inviteFooter: true,
+  inviteFooter: 'whenRoom',
   guestsMayWake: false,
 };
 
 const ALIAS_RE = /^[A-Za-z0-9]{5,10}$/;
 const WHO = new Set(['anyone', 'password', 'code']);
+const INVITE_FOOTER_MODES = new Set(['always', 'whenRoom']);
+
+/** Legacy boolean true → whenRoom; false/off kept as off for older settings files. */
+function normaliseInviteFooter(value) {
+  if (value === 'always') return 'always';
+  if (value === false || value === 'off') return 'off';
+  return 'whenRoom';
+}
 
 function sanitiseAlias(value, { required = false } = {}) {
   const raw = String(value == null ? '' : value).trim();
@@ -95,7 +103,7 @@ function sanitiseSettings(raw = {}, base = FALLBACK) {
     blockedWordsEnabled: Boolean(merged.blockedWordsEnabled),
     blockedWords: words.slice(0, 200),
     approval: Boolean(merged.approval),
-    inviteFooter: merged.inviteFooter !== false,
+    inviteFooter: normaliseInviteFooter(merged.inviteFooter),
     guestsMayWake: Boolean(merged.guestsMayWake),
   };
 }
@@ -167,6 +175,8 @@ function createGuestBookSettings(config = {}, log = console) {
 module.exports = {
   FALLBACK,
   ALIAS_RE,
+  INVITE_FOOTER_MODES,
+  normaliseInviteFooter,
   sanitiseAlias,
   sanitiseSettings,
   hashPassword,

@@ -834,6 +834,7 @@
   const SETTINGS_CARD_KINDS = Object.freeze({
     'locale-settings-card': ['full', 'vestaboard'],
     'public-url-settings-card': ['full', 'vestaboard'],
+    'guest-snaps-settings-card': ['full', 'vestaboard'],
     'guest-book-settings-card': ['vestaboard'],
     'weather-alerts-settings-card': ['vestaboard'],
     'world-population-settings-card': ['vestaboard'],
@@ -5447,6 +5448,7 @@
       renderPublicUrlSettings(result);
       toast('Public base URL saved', 'ok');
       loadGuestBookSettings();
+      loadGuestSnapsSettings();
     } catch (error) {
       toast(error.message || 'Could not save public URL', 'bad');
     } finally {
@@ -5455,6 +5457,135 @@
   });
 
   loadPublicUrlSettings();
+
+  // ------------------------------------------- Settings → Guest Snaps
+
+  function renderGuestSnapsSettings(data = {}) {
+    const settings = data.settings || {};
+    const creds = data.credentials || {};
+    const link = data.shortlink || {};
+    const alias = $('guest-snaps-alias');
+    if (alias && document.activeElement !== alias) {
+      alias.value = settings.preferredAlias || '';
+    }
+    const token = $('guest-snaps-token');
+    if (token && document.activeElement !== token) {
+      token.value = '';
+      token.placeholder = creds.hasToken
+        ? (creds.tokenHint ? `Saved (…${creds.tokenHint})` : 'Token saved')
+        : 'Paste token, or set TINYURL_API_TOKEN in .env';
+    }
+    const hint = $('guest-snaps-token-hint');
+    if (hint) {
+      if (creds.envBlocksOverwrite) {
+        hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasToken) {
+        hint.textContent = creds.tokenHint
+          ? `Shared token saved (…${creds.tokenHint}). Paste a new one to replace it.`
+          : 'Shared token saved. Paste a new one to replace it.';
+      } else {
+        hint.textContent = 'Shared with Guest Book. Write-only. TINYURL_API_TOKEN in .env wins if set.';
+      }
+    }
+
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const pill = $('guest-snaps-status-pill');
+    const detail = $('guest-snaps-status-detail');
+    const dot = $('guest-snaps-dot');
+    const label = $('guest-snaps-shortlink-label');
+    const check = $('guest-snaps-shortlink-check');
+    const targetHint = $('guest-snaps-target-hint');
+    const tone = health === 'healthy'
+      ? 'ok'
+      : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    if (pill) {
+      const text = link.alert
+        ? 'Needs repair'
+        : health === 'healthy'
+          ? 'Active'
+          : health === 'missing'
+            ? 'Not set'
+            : 'Unknown';
+      pill.textContent = text;
+      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = link.alert?.message
+        || (link.display
+          ? `Short link ${link.display}`
+          : 'Short link to the photo booth. Printed on the Vestaboard as TINYURL.COM/ALIAS.');
+    }
+    if (dot) {
+      dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    if (label) {
+      label.textContent = link.display || 'No short link yet.';
+    }
+    if (check) {
+      check.textContent = formatShortlinkCheck(link);
+    }
+    if (targetHint) {
+      const target = data.targetUrl || '';
+      targetHint.textContent = target
+        ? `Target ${target}`
+        : 'Set a Public base URL (HTTPS) first — LAN IPs cannot be shortened.';
+    }
+  }
+
+  async function loadGuestSnapsSettings() {
+    try {
+      const data = await apiGet('/api/guest-snaps/settings');
+      renderGuestSnapsSettings(data);
+    } catch {
+      renderGuestSnapsSettings({});
+    }
+  }
+
+  $('btn-guest-snaps-save')?.addEventListener('click', async () => {
+    const button = $('btn-guest-snaps-save');
+    if (button) button.disabled = true;
+    try {
+      const body = {
+        preferredAlias: $('guest-snaps-alias')?.value || '',
+      };
+      const token = String($('guest-snaps-token')?.value || '').trim();
+      if (token) body.apiToken = token;
+      const result = await apiPost('/api/guest-snaps/settings', body);
+      renderGuestSnapsSettings(result);
+      if ($('guest-snaps-token')) $('guest-snaps-token').value = '';
+      if (result.shortlink?.error || result.shortlink?.ok === false) {
+        toast(result.shortlink.error || result.shortlink.lastCheckDetail || 'Short link was not created', 'bad');
+      } else {
+        toast('Guest Snaps settings saved', 'ok');
+      }
+    } catch (error) {
+      toast(error.message || 'Could not save Guest Snaps settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-guest-snaps-check')?.addEventListener('click', async () => {
+    const button = $('btn-guest-snaps-check');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/guest-snaps/check', {
+        preferredAlias: $('guest-snaps-alias')?.value || '',
+      });
+      renderGuestSnapsSettings(result);
+      if (result.shortlink?.error || result.shortlink?.ok === false) {
+        toast(result.shortlink.error || result.shortlink.lastCheckDetail || 'Check failed', 'bad');
+      } else {
+        toast(result.shortlink?.health === 'healthy' ? 'Short link is healthy' : 'Short link checked', 'ok');
+      }
+    } catch (error) {
+      toast(error.message || 'Check failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  loadGuestSnapsSettings();
 
   // ------------------------------------------- Settings → Guest Book
 
@@ -5488,12 +5619,15 @@
     };
     setCheck('guest-book-enabled', settings.enabled !== false);
     setCheck('guest-book-paused', settings.paused);
-    setCheck('guest-book-invite-footer', settings.inviteFooter !== false);
     setCheck('guest-book-wake', settings.guestsMayWake);
     setCheck('guest-book-approval', settings.approval);
     setCheck('guest-book-blocked-on', settings.blockedWordsEnabled);
     setCheck('guest-book-rate-on', settings.rateLimitEnabled !== false);
     syncGuestBookRateFields();
+    const inviteFooter = $('guest-book-invite-footer');
+    if (inviteFooter && document.activeElement !== inviteFooter) {
+      inviteFooter.value = settings.inviteFooter === 'always' ? 'always' : 'whenRoom';
+    }
     const who = $('guest-book-who');
     if (who && document.activeElement !== who) {
       who.value = settings.whoCanSend || 'anyone';
@@ -5591,7 +5725,7 @@
         enabled: Boolean($('guest-book-enabled')?.checked),
         paused: Boolean($('guest-book-paused')?.checked),
         whoCanSend: $('guest-book-who')?.value || 'anyone',
-        inviteFooter: Boolean($('guest-book-invite-footer')?.checked),
+        inviteFooter: $('guest-book-invite-footer')?.value === 'always' ? 'always' : 'whenRoom',
         guestsMayWake: Boolean($('guest-book-wake')?.checked),
         approval: Boolean($('guest-book-approval')?.checked),
         rateLimitEnabled: Boolean($('guest-book-rate-on')?.checked),
@@ -5648,17 +5782,180 @@
 
   loadGuestBookSettings();
 
-  async function renderGuestBookList() {
+  const GB_BOOK_PAGE_SIZE = 10;
+  let guestBookPage = 1;
+  let guestBookPages = 1;
+  let guestBookTotal = 0;
+  let guestBookFilter = 'all';
+  let guestBookWaitingCount = 0;
+  let guestBookSelected = new Set();
+  let guestBookPageIds = [];
+  /** id → { status, at } for the current page (bulk action gating). */
+  let guestBookPageMeta = new Map();
+
+  function guestBookStatusLabel(status) {
+    switch (String(status || '')) {
+      case 'waiting': return 'Waiting for approval';
+      case 'released': return 'Released';
+      case 'held': return 'Held for quiet hours';
+      case 'queued': return 'Queued';
+      case 'shown': return 'Shown';
+      default: return status || '';
+    }
+  }
+
+  function selectedGuestBookEntries() {
+    return [...guestBookSelected]
+      .map((id) => {
+        const meta = guestBookPageMeta.get(id);
+        return meta ? { id, ...meta } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function syncGuestBookSelectionUi() {
+    const bulk = $('guest-book-bulk');
+    const deleteBtn = $('btn-guest-book-delete-selected');
+    const releaseBtn = $('btn-guest-book-release-selected');
+    const pushBtn = $('btn-guest-book-push-selected');
+    const bulkLabel = $('guest-book-bulk-label');
+    const count = guestBookSelected.size;
+    const selected = selectedGuestBookEntries();
+    const allWaiting = count > 0 && selected.length === count
+      && selected.every((entry) => entry.status === 'waiting');
+    const pushable = selected.filter((entry) => entry.status !== 'waiting');
+    if (bulk) bulk.hidden = count === 0;
+    if (bulkLabel) {
+      bulkLabel.textContent = count === 1 ? '1 selected' : `${count} selected`;
+    }
+    if (deleteBtn) {
+      deleteBtn.textContent = count === 1 ? 'Delete' : `Delete ${count}`;
+    }
+    if (releaseBtn) {
+      releaseBtn.hidden = !allWaiting;
+      releaseBtn.textContent = count === 1 ? 'Release' : `Release ${count}`;
+    }
+    if (pushBtn) {
+      pushBtn.hidden = pushable.length === 0;
+      pushBtn.textContent = pushable.length === 1
+        ? 'Push to board'
+        : `Push ${pushable.length} to board`;
+    }
+    document.querySelectorAll('#guest-book-list .gb-book-entry').forEach((card) => {
+      const id = card.getAttribute('data-book-id');
+      const on = guestBookSelected.has(id);
+      card.classList.toggle('is-selected', on);
+      const box = card.querySelector('[data-book-select]');
+      if (box) box.checked = on;
+    });
+  }
+
+  let guestBookPendingDeleteIds = [];
+
+  function openGuestBookDeleteConfirm(ids) {
+    const list = [...new Set((ids || []).filter(Boolean))];
+    if (!list.length) return;
+    guestBookPendingDeleteIds = list;
+    const title = $('guest-book-delete-title');
+    if (title) {
+      title.textContent = list.length === 1
+        ? 'Delete this message?'
+        : `Delete ${list.length} messages?`;
+    }
+    const sheet = $('guest-book-delete-sheet');
+    if (sheet) sheet.hidden = false;
+  }
+
+  function closeGuestBookDeleteConfirm() {
+    const sheet = $('guest-book-delete-sheet');
+    if (sheet) sheet.hidden = true;
+    guestBookPendingDeleteIds = [];
+  }
+
+  async function confirmGuestBookDelete() {
+    const list = [...guestBookPendingDeleteIds];
+    if (!list.length) {
+      closeGuestBookDeleteConfirm();
+      return;
+    }
+    const confirmBtn = $('guest-book-delete-confirm');
+    if (confirmBtn) confirmBtn.disabled = true;
+    try {
+      const result = list.length === 1
+        ? await apiPost('/api/guest-book/delete', { id: list[0] })
+        : await apiPost('/api/guest-book/delete', { ids: list });
+      list.forEach((id) => guestBookSelected.delete(id));
+      const deleted = Number(result?.deleted || list.length);
+      toast(
+        deleted === 1 ? 'Deleted from The Book' : `Deleted ${deleted} from The Book`,
+        'ok',
+      );
+      closeGuestBookDeleteConfirm();
+      const remainingOnPage = guestBookPageIds.filter((id) => !list.includes(id)).length;
+      if (!remainingOnPage && guestBookPage > 1) guestBookPage -= 1;
+      await renderGuestBookList();
+    } catch (error) {
+      toast(error.message || 'Delete failed', 'bad');
+    } finally {
+      if (confirmBtn) confirmBtn.disabled = false;
+    }
+  }
+
+  function deleteGuestBookEntries(ids) {
+    openGuestBookDeleteConfirm(ids);
+  }
+
+  function updateGuestBookPager() {
+    const label = $('guest-book-page-label');
+    const prev = $('btn-guest-book-prev');
+    const next = $('btn-guest-book-next');
+    if (label) {
+      label.textContent = guestBookTotal
+        ? `Page ${guestBookPage} of ${guestBookPages}`
+        : 'No pages';
+    }
+    if (prev) prev.disabled = guestBookPage <= 1;
+    if (next) next.disabled = guestBookPage >= guestBookPages || !guestBookTotal;
+  }
+
+  async function renderGuestBookList({ resetSelection = false } = {}) {
     const host = $('guest-book-list');
     const summary = $('guest-book-sheet-summary');
     if (!host) return;
+    if (resetSelection) guestBookSelected = new Set();
     try {
-      const data = await apiGet('/api/guest-book/book');
+      const filterQs = guestBookFilter !== 'all' ? `&status=${encodeURIComponent(guestBookFilter)}` : '';
+      const data = await apiGet(
+        `/api/guest-book/book?page=${guestBookPage}&pageSize=${GB_BOOK_PAGE_SIZE}${filterQs}`,
+      );
       const entries = data.entries || [];
+      guestBookTotal = Number(data.total || 0);
+      guestBookPages = Math.max(1, Number(data.pages || 1));
+      guestBookPage = Math.min(guestBookPages, Math.max(1, Number(data.page || 1)));
+      guestBookWaitingCount = Number(data.waiting || 0);
+      guestBookPageIds = entries.map((entry) => entry.id).filter(Boolean);
+      guestBookPageMeta = new Map(
+        entries
+          .filter((entry) => entry.id)
+          .map((entry) => [entry.id, { status: entry.status || '', at: entry.at || '' }]),
+      );
       if (summary) {
-        summary.textContent = entries.length
-          ? `${entries.length} message${entries.length === 1 ? '' : 's'} in The Book.`
-          : 'No guest messages yet.';
+        const waitingNote = guestBookWaitingCount
+          ? ` · ${guestBookWaitingCount} waiting for approval`
+          : '';
+        if (!guestBookTotal) {
+          summary.textContent = guestBookFilter === 'waiting'
+            ? 'Nothing waiting for approval.'
+            : guestBookFilter === 'released'
+              ? 'No released messages yet.'
+              : 'No guest messages yet.';
+        } else if (guestBookFilter === 'all') {
+          summary.textContent = `${guestBookTotal} message${guestBookTotal === 1 ? '' : 's'} in The Book${waitingNote}.`;
+        } else if (guestBookFilter === 'waiting') {
+          summary.textContent = `${guestBookTotal} waiting for approval.`;
+        } else {
+          summary.textContent = `${guestBookTotal} released message${guestBookTotal === 1 ? '' : 's'}.`;
+        }
       }
       host.innerHTML = entries.map((entry) => {
         const when = entry.at
@@ -5672,17 +5969,41 @@
           : '';
         const from = entry.name || 'Anonymous';
         const ip = entry.ip ? ` · ${entry.ip}` : '';
+        const checked = guestBookSelected.has(entry.id) ? ' checked' : '';
+        const selected = guestBookSelected.has(entry.id) ? ' is-selected' : '';
+        const waiting = entry.status === 'waiting';
+        const badge = waiting
+          ? '<span class="gb-book-badge is-waiting">Needs approval</span>'
+          : entry.status === 'released'
+            ? '<span class="gb-book-badge is-released">Released</span>'
+            : '';
+        const releaseBtn = waiting
+          ? '<button type="button" class="btn btn-accent btn-sm" data-book-release>Release</button>'
+          : '';
+        const replayBtn = waiting
+          ? ''
+          : '<button type="button" class="btn btn-outline btn-sm" data-book-replay>Replay</button>';
         return `
-        <article class="gb-book-entry" data-book-id="${escapeHtml(entry.id)}">
+        <article class="gb-book-entry${selected}${waiting ? ' is-waiting' : ''}" data-book-id="${escapeHtml(entry.id)}" data-book-status="${escapeHtml(entry.status || '')}">
+          <label class="gb-book-check">
+            <input type="checkbox" data-book-select aria-label="Select message"${checked}>
+          </label>
           <div class="gb-book-meta">
-            <strong>From: ${escapeHtml(from)}</strong>
-            <span class="hint">${escapeHtml(when)}${escapeHtml(ip)} · ${escapeHtml(entry.status || '')}</span>
+            <div class="gb-book-row-head">
+              <strong>From: ${escapeHtml(from)}</strong>
+              ${badge}
+            </div>
+            <span class="hint">${escapeHtml(when)}${escapeHtml(ip)} · ${escapeHtml(guestBookStatusLabel(entry.status))}</span>
             <div class="gb-book-actions">
-              <button type="button" class="btn btn-outline btn-sm" data-book-replay>Replay</button>
+              ${releaseBtn}
+              ${replayBtn}
               <button type="button" class="btn btn-danger btn-sm" data-book-delete>Delete</button>
             </div>
           </div>
-          <div class="cn-board-preview" data-book-preview></div>
+          <div class="vb-bezel preview-bezel gb-book-bezel" aria-hidden="true">
+            <div class="vb-grid" data-book-preview></div>
+            <div class="vb-wordmark">VESTABOARD</div>
+          </div>
         </article>`;
       }).join('');
       host.querySelectorAll('.gb-book-entry').forEach((card, index) => {
@@ -5692,21 +6013,38 @@
           entry?.previewRows || entry?.rows,
         );
       });
+      updateGuestBookPager();
+      syncGuestBookSelectionUi();
     } catch (error) {
       if (summary) summary.textContent = error.message || 'Could not load The Book.';
       host.innerHTML = '';
+      guestBookPageIds = [];
+      guestBookPageMeta = new Map();
+      updateGuestBookPager();
+      syncGuestBookSelectionUi();
     }
   }
 
   function openGuestBookSheet() {
     const sheet = $('guest-book-sheet');
     if (sheet) sheet.hidden = false;
-    renderGuestBookList();
+    document.documentElement.classList.add('gb-book-open');
+    guestBookPage = 1;
+    guestBookFilter = 'all';
+    document.querySelectorAll('#guest-book-filter [data-book-filter]').forEach((button) => {
+      const on = button.getAttribute('data-book-filter') === 'all';
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    renderGuestBookList({ resetSelection: true });
   }
 
   function closeGuestBookSheet() {
     const sheet = $('guest-book-sheet');
     if (sheet) sheet.hidden = true;
+    document.documentElement.classList.remove('gb-book-open');
+    guestBookSelected = new Set();
+    closeGuestBookDeleteConfirm();
   }
 
   $('btn-guest-book-invite')?.addEventListener('click', async (event) => {
@@ -5725,10 +6063,122 @@
   $('btn-guest-book-open')?.addEventListener('click', () => openGuestBookSheet());
   $('btn-guest-book-sheet-close')?.addEventListener('click', () => closeGuestBookSheet());
   registerSheetDismiss('guest-book-sheet', () => closeGuestBookSheet());
+  registerSheetDismiss('guest-book-delete-sheet', () => closeGuestBookDeleteConfirm());
+  $('guest-book-delete-cancel')?.addEventListener('click', () => closeGuestBookDeleteConfirm());
+  $('guest-book-delete-confirm')?.addEventListener('click', () => confirmGuestBookDelete());
+
+  $('btn-guest-book-prev')?.addEventListener('click', () => {
+    if (guestBookPage <= 1) return;
+    guestBookPage -= 1;
+    renderGuestBookList();
+  });
+  $('btn-guest-book-next')?.addEventListener('click', () => {
+    if (guestBookPage >= guestBookPages) return;
+    guestBookPage += 1;
+    renderGuestBookList();
+  });
+
+  $('guest-book-filter')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-book-filter]');
+    if (!button) return;
+    const next = button.getAttribute('data-book-filter') || 'all';
+    if (next === guestBookFilter) return;
+    guestBookFilter = next;
+    guestBookPage = 1;
+    document.querySelectorAll('#guest-book-filter [data-book-filter]').forEach((entry) => {
+      const on = entry === button;
+      entry.classList.toggle('active', on);
+      entry.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    renderGuestBookList({ resetSelection: true });
+  });
+
+  $('btn-guest-book-delete-selected')?.addEventListener('click', () => {
+    deleteGuestBookEntries([...guestBookSelected]);
+  });
+
+  $('btn-guest-book-release-selected')?.addEventListener('click', async () => {
+    const ids = selectedGuestBookEntries()
+      .filter((entry) => entry.status === 'waiting')
+      .map((entry) => entry.id);
+    if (!ids.length) return;
+    const button = $('btn-guest-book-release-selected');
+    if (button) button.disabled = true;
+    try {
+      const result = ids.length === 1
+        ? await apiPost('/api/guest-book/release', { id: ids[0] })
+        : await apiPost('/api/guest-book/release', { ids });
+      const count = Number(result?.released || ids.length);
+      ids.forEach((id) => guestBookSelected.delete(id));
+      toast(count === 1 ? 'Released to the board' : `Released ${count} to the board`, 'ok');
+      await renderGuestBookList();
+    } catch (error) {
+      toast(error.message || 'Release failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-guest-book-push-selected')?.addEventListener('click', async () => {
+    const ids = selectedGuestBookEntries()
+      .filter((entry) => entry.status !== 'waiting')
+      .map((entry) => entry.id);
+    if (!ids.length) return;
+    const button = $('btn-guest-book-push-selected');
+    if (button) button.disabled = true;
+    try {
+      const result = ids.length === 1
+        ? await apiPost('/api/guest-book/replay', { id: ids[0] })
+        : await apiPost('/api/guest-book/replay', { ids });
+      const count = Number(result?.pushed || ids.length);
+      toast(count === 1 ? 'Pushed to the board' : `Pushed ${count} to the board`, 'ok');
+      await renderGuestBookList();
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  // Wheel on the dimmed backdrop (outside the sheet) must not move Settings.
+  $('guest-book-sheet')?.addEventListener('wheel', (event) => {
+    const sheet = event.currentTarget.querySelector('.sheet');
+    if (sheet?.contains(event.target)) return;
+    event.preventDefault();
+  }, { passive: false });
+
+  $('guest-book-list')?.addEventListener('change', (event) => {
+    const box = event.target.closest('[data-book-select]');
+    const card = event.target.closest('.gb-book-entry');
+    if (!box || !card) return;
+    const id = card.getAttribute('data-book-id');
+    if (!id) return;
+    if (box.checked) guestBookSelected.add(id);
+    else guestBookSelected.delete(id);
+    syncGuestBookSelectionUi();
+  });
+
   $('guest-book-list')?.addEventListener('click', async (event) => {
     const card = event.target.closest('.gb-book-entry');
     if (!card) return;
     const id = card.getAttribute('data-book-id');
+    if (event.target.closest('[data-book-select]') || event.target.closest('.gb-book-check')) {
+      return;
+    }
+    if (event.target.closest('[data-book-release]')) {
+      const button = event.target.closest('[data-book-release]');
+      button.disabled = true;
+      try {
+        await apiPost('/api/guest-book/release', { id });
+        toast('Released to the board', 'ok');
+        guestBookSelected.delete(id);
+        await renderGuestBookList();
+      } catch (error) {
+        toast(error.message || 'Release failed', 'bad');
+        button.disabled = false;
+      }
+      return;
+    }
     if (event.target.closest('[data-book-replay]')) {
       try {
         await apiPost('/api/guest-book/replay', { id });
@@ -5737,15 +6187,10 @@
       } catch (error) {
         toast(error.message || 'Replay failed', 'bad');
       }
+      return;
     }
     if (event.target.closest('[data-book-delete]')) {
-      try {
-        await apiPost('/api/guest-book/delete', { id });
-        toast('Deleted from The Book', 'ok');
-        renderGuestBookList();
-      } catch (error) {
-        toast(error.message || 'Delete failed', 'bad');
-      }
+      await deleteGuestBookEntries([id]);
     }
   });
 
@@ -5885,10 +6330,7 @@
     while (lines.length < 6) {
       lines.push('');
     }
-    host.innerHTML = lines.slice(0, 6).map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    paintPreviewLines(host, lines.slice(0, 6));
   }
 
   function renderWorldPopulationSettings(data = {}) {
@@ -6069,12 +6511,10 @@
     placeCalendarClockText(grid, month, 2, textCol);
     placeCalendarClockText(grid, day, 2, textCol + month.length + dateGap);
     placeCalendarClockText(grid, payload.timeLabel, 4, textCol);
-    host.innerHTML = grid.map((row) => (
-      `<div class="cn-preview-row">${row.map((cell) => {
-        const cls = cell.chip ? ` is-chip-${cell.chip}` : '';
-        return `<span class="${cls.trim()}">${escapeHtml(cell.chip ? '' : cell.text)}</span>`;
-      }).join('')}</div>`
-    )).join('');
+    const codeRows = grid.map((row) => row.map((cell) => (
+      cell.chip ? flapChipCode(cell.chip) : flapCharCode(cell.text)
+    )));
+    renderVbGrid(host, codeRows);
   }
 
   function renderCalendarClockSettings(data = {}) {
@@ -6188,63 +6628,61 @@
     return Array.from({ length: RL_ROWS }, () => new Array(RL_COLS).fill(0));
   }
 
-  /**
-   * Draw a 6x22 code grid into a `.cn-board-preview` host. `slots` renders the
-   * message cells as outlines instead of blanks, which only the editor wants.
-   */
-  function renderFlapGrid(host, rows, { slots = false, caret = null } = {}) {
-    if (!host) return;
-    const grid = Array.isArray(rows) && rows.length ? rows : blankDesignerCells();
-    host.innerHTML = grid.map((row, rowIndex) => {
-      const cells = Array.from({ length: RL_COLS }, (_, col) => {
-        const code = Number(row?.[col] ?? 0);
-        const chip = FLAP_CHIP_BY_CODE.get(code);
-        const isSlot = code === RL_MESSAGE_CELL;
-        const classes = [
-          chip ? `is-chip-${chip}` : '',
-          slots && isSlot ? 'is-slot' : '',
-          caret && caret.row === rowIndex && caret.col === col ? 'is-caret' : '',
-        ].filter(Boolean).join(' ');
-        const char = chip || isSlot ? '' : (FLAP_CHARS[code] || ' ');
-        const attrs = slots ? ` data-rl-row="${rowIndex}" data-rl-col="${col}"` : '';
-        return `<span class="${classes}"${attrs}>${escapeHtml(char === ' ' ? '' : char)}</span>`;
-      }).join('');
-      return `<div class="cn-preview-row">${cells}</div>`;
-    }).join('');
+  function flapChipCode(name) {
+    const index = FLAP_CHIPS.indexOf(String(name || '').toLowerCase());
+    return index >= 0 ? 63 + index : 0;
+  }
+
+  function flapCharCode(ch) {
+    const raw = String(ch == null ? '' : ch);
+    if (!raw || raw === ' ' || raw === '■') return 0;
+    return FLAP_CODE_BY_CHAR.get(raw.toUpperCase()) || 0;
   }
 
   /**
-   * Paint a 6×22 code grid as Vestaboard Simulator tiles (`.vb-tile` / `.vb-flap`).
-   * Used for Red Letter's settings preview and the Day Of designer board.
+   * Paint a 6×22 code grid as Vestaboard Simulator tiles (shared flap-grid.js).
+   * Hosts are `.vb-grid` inside a `.vb-bezel` — same look as Red Letter / the sim.
    */
   function renderVbGrid(host, rows, { slots = false, caret = null, interactive = false } = {}) {
-    if (!host) return;
-    const grid = Array.isArray(rows) && rows.length ? rows : blankDesignerCells();
-    const parts = [];
-    for (let rowIndex = 0; rowIndex < RL_ROWS; rowIndex += 1) {
-      const row = grid[rowIndex] || [];
-      for (let col = 0; col < RL_COLS; col += 1) {
-        const code = Number(row[col] ?? 0);
-        const chip = FLAP_CHIP_BY_CODE.get(code);
-        const isSlot = code === RL_MESSAGE_CELL;
-        const isCaret = caret && caret.row === rowIndex && caret.col === col;
-        const classes = [
-          'vb-tile',
-          chip ? 'is-chip' : '',
-          slots && isSlot ? 'is-slot' : '',
-          isCaret ? 'is-caret' : '',
-        ].filter(Boolean).join(' ');
-        const glyph = chip || isSlot ? '' : (FLAP_CHARS[code] || ' ');
-        const chipAttr = chip ? ` data-chip="${code}"` : '';
-        const posAttr = interactive ? ` data-rl-row="${rowIndex}" data-rl-col="${col}"` : '';
-        parts.push(
-          `<div class="${classes}"${chipAttr}${posAttr}>`
-          + `<div class="vb-flap"><span class="vb-glyph">${escapeHtml(glyph === ' ' ? '' : glyph)}</span></div>`
-          + `</div>`,
-        );
-      }
+    if (typeof window.renderFlapGrid === 'function') {
+      window.renderFlapGrid(host, rows, {
+        slots,
+        caret,
+        interactive,
+        rowAttr: 'data-rl-row',
+        colAttr: 'data-rl-col',
+        messageCell: RL_MESSAGE_CELL,
+        lockFrom: RL_ROWS,
+      });
+      return;
     }
-    host.innerHTML = parts.join('');
+    if (!host) return;
+    host.textContent = '';
+  }
+
+  function renderFlapGrid(host, rows, opts = {}) {
+    renderVbGrid(host, rows, opts);
+  }
+
+  /** Text lines → simulator tiles. `decorate(row, col, ch)` may return a code. */
+  function paintPreviewLines(host, lines, decorate) {
+    if (typeof window.paintPreviewLines === 'function') {
+      window.paintPreviewLines(host, lines, decorate);
+      return;
+    }
+    if (!host) return;
+    const rows = [];
+    for (let row = 0; row < RL_ROWS; row += 1) {
+      const line = String(lines?.[row] || '').padEnd(RL_COLS, ' ').slice(0, RL_COLS);
+      const codes = [];
+      for (let col = 0; col < RL_COLS; col += 1) {
+        const ch = line[col];
+        const over = typeof decorate === 'function' ? decorate(row, col, ch) : null;
+        codes.push(over != null ? over : flapCharCode(ch));
+      }
+      rows.push(codes);
+    }
+    renderVbGrid(host, rows);
   }
 
   let redLetterState = { settings: {}, events: [], nextUp: null };
@@ -6314,6 +6752,44 @@
       return draft.ordinal && draft.weekday != null && draft.month;
     }
     return Boolean(String(draft.date || '').trim());
+  }
+
+  /**
+   * Compose-sheet preview: if the date (or name) is still being filled in,
+   * invent enough of an event that the board can flip a live sample. Missing
+   * calendar dates aim at the next local midnight so Countdown is never blank
+   * while someone types the day-of message.
+   */
+  function dateBookPreviewEvent(draft = {}) {
+    const event = { ...draft };
+    const name = String(event.name || '').trim();
+    const message = String(event.message || '').trim();
+    if (!name) {
+      event.name = message ? message.slice(0, 40) : 'EVENT';
+    }
+    if (event.schedule === 'weekday') {
+      return event;
+    }
+    if (!String(event.date || '').trim()) {
+      const nextMidnight = new Date();
+      nextMidnight.setHours(24, 0, 0, 0);
+      const y = nextMidnight.getFullYear();
+      const m = String(nextMidnight.getMonth() + 1).padStart(2, '0');
+      const d = String(nextMidnight.getDate()).padStart(2, '0');
+      event.date = `${y}-${m}-${d}`;
+    }
+    return event;
+  }
+
+  function dateBookComposeHint(draft = {}) {
+    const named = Boolean(String(draft.name || '').trim());
+    const messaged = Boolean(String(draft.message || '').trim());
+    if (!named && !messaged) return '';
+    if (!named) return 'Needs an event name';
+    if (draft.schedule === 'weekday') {
+      return dateBookDraftReady(draft) ? '' : 'Needs a weekday of the month';
+    }
+    return String(draft.date || '').trim() ? '' : 'Needs a date';
   }
 
   function renderRedLetterCard(data = {}) {
@@ -6554,36 +7030,48 @@
   /**
    * Previews come from the bridge rather than a second copy of the layout
    * code in the browser, so what the sheet shows is what the board will flip.
+   * The compose form keeps painting while the date/name are incomplete by
+   * borrowing next midnight (and a stand-in name) for the request only.
    */
   async function refreshDateBookPreview() {
     const host = $('date-book-preview');
     const hint = $('date-book-fit-hint');
     if (!host) return;
-    const body = dateBookSelectedId
-      ? { eventId: dateBookSelectedId }
-      : { event: dateBookDraft() };
-    const draft = body.event;
-    if (draft && !dateBookDraftReady(draft)) {
-      renderFlapGrid(host, blankDesignerCells());
-      if (hint) {
-        hint.textContent = draft.name.trim()
-          ? (draft.schedule === 'weekday' ? 'Needs a weekday of the month' : 'Needs a date')
-          : '';
+    if (dateBookSelectedId) {
+      try {
+        const data = await apiPost('/api/date-book/preview', { eventId: dateBookSelectedId });
+        const card = dateBookPreviewCard === 'dayOf' ? data.dayOf : data.countdown;
+        renderVbGrid(host, card?.rows);
+        if (hint) {
+          hint.textContent = card?.overflow
+            ? 'The message is longer than the artwork has room for'
+            : '';
+        }
+      } catch (error) {
+        renderVbGrid(host, blankDesignerCells());
+        if (hint) hint.textContent = error?.message || '';
       }
       return;
     }
+
+    const draft = dateBookDraft();
+    const composeHint = dateBookComposeHint(draft);
+    if (!String(draft.name || '').trim() && !String(draft.message || '').trim()) {
+      renderVbGrid(host, blankDesignerCells());
+      if (hint) hint.textContent = '';
+      return;
+    }
     try {
-      const data = await apiPost('/api/date-book/preview', body);
+      const data = await apiPost('/api/date-book/preview', { event: dateBookPreviewEvent(draft) });
       const card = dateBookPreviewCard === 'dayOf' ? data.dayOf : data.countdown;
-      renderFlapGrid(host, card?.rows);
+      renderVbGrid(host, card?.rows);
       if (hint) {
-        hint.textContent = card?.overflow
-          ? 'The message is longer than the artwork has room for'
-          : '';
+        hint.textContent = composeHint
+          || (card?.overflow ? 'The message is longer than the artwork has room for' : '');
       }
     } catch (error) {
-      renderFlapGrid(host, blankDesignerCells());
-      if (hint) hint.textContent = error?.message || '';
+      renderVbGrid(host, blankDesignerCells());
+      if (hint) hint.textContent = composeHint || error?.message || '';
     }
   }
 
@@ -6738,6 +7226,46 @@
       '######################',
       'wrvwrvwrvwrvwrvwrvwrvw',
     ],
+    halloween: [
+      '..ooooo...............',
+      '.ooooooo.#############',
+      '.oykkkyo.#############',
+      '.oykykyo.#############',
+      '.okyyyko.#############',
+      '..ooooo...............',
+    ],
+    summer: [
+      'y.y...y.y.............',
+      '.y..yyy..y.###########',
+      '..yyyyyyy..###########',
+      '.y.yyyyy.y.###########',
+      'y..yyy..y..###########',
+      'ggyoyoyoyggg..........',
+    ],
+    beach: [
+      'g.....ww..............',
+      'gg...wwww.............',
+      'fgg.bwbwbw.###########',
+      'f..wbwbwbw.###########',
+      '..yyyyyyyy.###########',
+      '.yyyyyyyyyy...........',
+    ],
+    christmas: [
+      '.....w................',
+      '....grg.##############',
+      '...grgrg.#############',
+      '..grgrgrg.############',
+      '.grgrgrgrg.###########',
+      '....fff...............',
+    ],
+    autumn: [
+      'r.y.o.................',
+      '.oyo.r.y.#############',
+      'royyoyr..#############',
+      '.rorror.y#############',
+      'y.ror.o...............',
+      '..fff.y.o.............',
+    ],
     border: [
       'rrrrrrrrrrrrrrrrrrrrrr',
       'r####################r',
@@ -6770,10 +7298,65 @@
 
   let designerEventId = '';
   let designerCells = blankDesignerCells();
+  let designerBaseline = blankDesignerCells();
+  let designerUndo = [];
   let designerTool = { kind: 'chip', chip: 'red' };
   let designerCaret = null;
   let designerPainting = false;
   let designerPreviewTimer = 0;
+
+  function cloneDesignerCells(cells) {
+    return Array.from({ length: RL_ROWS }, (_, row) => (
+      Array.from({ length: RL_COLS }, (_, col) => Number(cells?.[row]?.[col] ?? 0))
+    ));
+  }
+
+  function designerCellsEqual(a, b) {
+    for (let row = 0; row < RL_ROWS; row += 1) {
+      for (let col = 0; col < RL_COLS; col += 1) {
+        if (Number(a?.[row]?.[col] ?? 0) !== Number(b?.[row]?.[col] ?? 0)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function designerIsDirty() {
+    return Boolean(designerEventId) && !designerCellsEqual(designerCells, designerBaseline);
+  }
+
+  function syncDesignerActionUi() {
+    const undoBtn = $('btn-red-letter-designer-undo');
+    const resetBtn = $('btn-red-letter-designer-reset');
+    if (undoBtn) undoBtn.disabled = designerUndo.length === 0;
+    if (resetBtn) resetBtn.disabled = !designerIsDirty();
+  }
+
+  function pushDesignerUndo() {
+    designerUndo.push(cloneDesignerCells(designerCells));
+    if (designerUndo.length > 40) designerUndo.shift();
+    syncDesignerActionUi();
+  }
+
+  function undoDesigner() {
+    if (!designerUndo.length) return;
+    designerCells = designerUndo.pop();
+    designerCaret = null;
+    renderDesignerGrid();
+    refreshDesignerPreview();
+    syncDesignerActionUi();
+  }
+
+  function resetDesigner() {
+    if (!designerIsDirty()) return;
+    pushDesignerUndo();
+    designerCells = cloneDesignerCells(designerBaseline);
+    designerCaret = null;
+    renderDesignerGrid();
+    refreshDesignerPreview();
+    syncDesignerActionUi();
+  }
 
   function designerCodeForTool() {
     if (designerTool.kind === 'message') return RL_MESSAGE_CELL;
@@ -6866,12 +7449,14 @@
     else if (moveCaret) designerCaret = { row, col };
     renderDesignerGrid();
     queueDesignerPreview();
+    syncDesignerActionUi();
   }
 
   function writeCharsFromCaret(text) {
     if (!designerCaret) {
       designerCaret = { row: 0, col: 0 };
     }
+    pushDesignerUndo();
     let { row, col } = designerCaret;
     for (const raw of String(text || '')) {
       const upper = raw.toUpperCase();
@@ -6887,6 +7472,7 @@
     designerCaret = { row, col };
     renderDesignerGrid();
     queueDesignerPreview();
+    syncDesignerActionUi();
   }
 
   function designerBoardIsClear() {
@@ -6907,6 +7493,7 @@
     buildCharPalette();
     designerEventId = eventId;
     designerCaret = null;
+    designerUndo = [];
     designerTool = { kind: 'chip', chip: 'red' };
     syncDesignerToolUi();
     // Fresh events start from the house Day Of confetti card (message slots
@@ -6914,6 +7501,7 @@
     designerCells = event.layout?.cells?.length
       ? presetFromSaved(event.layout.cells)
       : presetCells('confetti');
+    designerBaseline = cloneDesignerCells(designerCells);
     const subtitle = $('red-letter-designer-subtitle');
     if (subtitle) {
       subtitle.textContent = `${event.name} — ${event.message || 'no message yet'}`;
@@ -6923,6 +7511,7 @@
     sheet.hidden = false;
     renderDesignerGrid();
     refreshDesignerPreview();
+    syncDesignerActionUi();
   }
 
   function presetFromSaved(cells) {
@@ -6938,11 +7527,67 @@
   function closeRedLetterDesigner() {
     const sheet = $('red-letter-designer-sheet');
     if (sheet) sheet.hidden = true;
+    const unsaved = $('red-letter-unsaved-sheet');
+    if (unsaved) unsaved.hidden = true;
     designerEventId = '';
+    designerUndo = [];
+    syncDesignerActionUi();
   }
 
-  $('btn-red-letter-designer-close')?.addEventListener('click', closeRedLetterDesigner);
-  registerSheetDismiss('red-letter-designer-sheet', () => closeRedLetterDesigner());
+  function hideRedLetterUnsavedSheet() {
+    const sheet = $('red-letter-unsaved-sheet');
+    if (sheet) sheet.hidden = true;
+  }
+
+  function requestCloseRedLetterDesigner() {
+    if (!designerEventId) {
+      closeRedLetterDesigner();
+      return;
+    }
+    if (!designerIsDirty()) {
+      closeRedLetterDesigner();
+      return;
+    }
+    const sheet = $('red-letter-unsaved-sheet');
+    if (sheet) sheet.hidden = false;
+  }
+
+  async function saveRedLetterDesigner({ closeAfter = true } = {}) {
+    if (!designerEventId) return false;
+    const button = $('btn-red-letter-designer-save');
+    if (button) button.disabled = true;
+    try {
+      applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(designerEventId)}`), {
+        method: 'PUT', body: { layout: { cells: designerCells } },
+      }));
+      designerBaseline = cloneDesignerCells(designerCells);
+      designerUndo = [];
+      syncDesignerActionUi();
+      toast('Design saved', 'good');
+      if (closeAfter) closeRedLetterDesigner();
+      return true;
+    } catch (error) {
+      toast(error?.message || 'Could not save the design', 'bad');
+      return false;
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  $('btn-red-letter-designer-close')?.addEventListener('click', requestCloseRedLetterDesigner);
+  registerSheetDismiss('red-letter-designer-sheet', () => requestCloseRedLetterDesigner());
+  registerSheetDismiss('red-letter-unsaved-sheet', () => hideRedLetterUnsavedSheet());
+  $('btn-red-letter-unsaved-cancel')?.addEventListener('click', hideRedLetterUnsavedSheet);
+  $('btn-red-letter-unsaved-discard')?.addEventListener('click', () => {
+    hideRedLetterUnsavedSheet();
+    closeRedLetterDesigner();
+  });
+  $('btn-red-letter-unsaved-save')?.addEventListener('click', async () => {
+    hideRedLetterUnsavedSheet();
+    await saveRedLetterDesigner({ closeAfter: true });
+  });
+  $('btn-red-letter-designer-undo')?.addEventListener('click', () => undoDesigner());
+  $('btn-red-letter-designer-reset')?.addEventListener('click', () => resetDesigner());
 
   $('red-letter-tools')?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-rl-tool]');
@@ -6959,6 +7604,7 @@
     designerTool = { kind: 'char', char };
     syncDesignerToolUi();
     if (designerCaret) {
+      pushDesignerUndo();
       paintDesignerCell(designerCaret.row, designerCaret.col, { advance: true });
     }
   });
@@ -6996,6 +7642,7 @@
     if (designerTool.kind === 'char') {
       if (designerTool.char != null) {
         designerPainting = false;
+        pushDesignerUndo();
         paintDesignerCell(row, col, { advance: true });
       } else {
         designerCaret = { row, col };
@@ -7004,6 +7651,7 @@
       return;
     }
     designerPainting = true;
+    pushDesignerUndo();
     designerGrid.setPointerCapture?.(event.pointerId);
     paintDesignerCell(row, col, {
       advance: designerTool.kind === 'char',
@@ -7019,7 +7667,9 @@
   });
 
   ['pointerup', 'pointercancel'].forEach((name) => {
-    designerGrid?.addEventListener(name, () => { designerPainting = false; });
+    designerGrid?.addEventListener(name, () => {
+      designerPainting = false;
+    });
   });
 
   designerGrid?.addEventListener('keydown', (event) => {
@@ -7039,29 +7689,40 @@
     if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); move(row + 1, 0); return; }
     if (event.key === 'Backspace') {
       event.preventDefault();
+      pushDesignerUndo();
       const back = Math.max(0, col - 1);
       designerCells[row][back] = 0;
       designerCaret = { row, col: back };
       renderDesignerGrid();
       queueDesignerPreview();
+      syncDesignerActionUi();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
+      event.preventDefault();
+      undoDesigner();
       return;
     }
     if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
     const code = FLAP_CODE_BY_CHAR.get(event.key.toUpperCase());
     if (code === undefined) return;
     event.preventDefault();
+    pushDesignerUndo();
     designerCells[row][col] = code;
     advanceDesignerCaret(row, col);
     renderDesignerGrid();
     queueDesignerPreview();
+    syncDesignerActionUi();
   });
 
   document.querySelectorAll('[data-rl-preset]').forEach((button) => {
     button.addEventListener('click', () => {
+      pushDesignerUndo();
       designerCells = presetCells(button.dataset.rlPreset);
       designerCaret = null;
       renderDesignerGrid();
       refreshDesignerPreview();
+      syncDesignerActionUi();
     });
   });
 
@@ -7070,10 +7731,12 @@
       const ok = window.confirm('Clear the whole board? This only wipes the editor — Save to keep it, or cancel to leave the flaps as they are.');
       if (!ok) return;
     }
+    pushDesignerUndo();
     designerCells = blankDesignerCells();
     designerCaret = null;
     renderDesignerGrid();
     refreshDesignerPreview();
+    syncDesignerActionUi();
   });
 
   $('btn-red-letter-designer-clear')?.addEventListener('click', async () => {
@@ -7089,21 +7752,8 @@
     }
   });
 
-  $('btn-red-letter-designer-save')?.addEventListener('click', async (event) => {
-    if (!designerEventId) return;
-    const button = event.currentTarget;
-    button.disabled = true;
-    try {
-      applyRedLetterState(await apiFetch(appUrl(`/api/date-book/events/${encodeURIComponent(designerEventId)}`), {
-        method: 'PUT', body: { layout: { cells: designerCells } },
-      }));
-      closeRedLetterDesigner();
-      toast('Design saved', 'good');
-    } catch (error) {
-      toast(error?.message || 'Could not save the design', 'bad');
-    } finally {
-      button.disabled = false;
-    }
+  $('btn-red-letter-designer-save')?.addEventListener('click', async () => {
+    await saveRedLetterDesigner({ closeAfter: true });
   });
 
   buildCharPalette();
@@ -7510,10 +8160,7 @@
     while (lines.length < 6) {
       lines.push('');
     }
-    host.innerHTML = lines.map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    paintPreviewLines(host, lines);
     const hint = $('chuck-norris-fit-hint');
     if (hint) {
       const rows = wrapPreview(text, 22).length;
@@ -7797,10 +8444,7 @@
     for (let i = 0; i < 5; i += 1) {
       lines.push(body[i - padTop] || '');
     }
-    host.innerHTML = lines.map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    paintPreviewLines(host, lines);
     const hint = $('amazing-facts-fit-hint');
     if (hint) {
       const rows = wrapPreview(text, 22).length;
@@ -8101,10 +8745,7 @@
     while (lines.length < 6) {
       lines.push('');
     }
-    host.innerHTML = lines.map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    paintPreviewLines(host, lines);
     const hint = $('world-geography-facts-fit-hint');
     if (hint) {
       const rows = wrapPreview(text, 22).length;
@@ -8350,10 +8991,7 @@
     for (let i = 0; i < 5; i += 1) {
       lines.push(body[i - padTop] || '');
     }
-    host.innerHTML = lines.map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    paintPreviewLines(host, lines);
     const hint = $('conversation-starters-fit-hint');
     if (hint) {
       const rows = wrapPreview(text, 22).length;
@@ -8570,13 +9208,10 @@
       lines.push('');
     }
     lines.push(authorLine);
-    host.innerHTML = lines.map((line, index) => {
-      let cells = String(line).padEnd(22, ' ').slice(0, 22);
-      if (index === 5 && authorLine) {
-        cells = String(authorLine).padStart(22, ' ').slice(-22);
-      }
-      return `<div class="cn-preview-row">${cells.split('').map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    if (authorLine) {
+      lines[5] = String(authorLine).padStart(22, ' ').slice(-22);
+    }
+    paintPreviewLines(host, lines);
     const hint = $('stoic-quotes-fit-hint');
     if (hint) {
       const rows = wrapPreview(text, 22).length;
@@ -8832,14 +9467,11 @@
     while (lines.length < 6) {
       lines.push('');
     }
-    host.innerHTML = lines.map((line, index) => {
-      let cells = String(line || '').padEnd(22, ' ').slice(0, 22);
-      if (index === 1 && dateLine) {
-        const pad = Math.max(0, Math.floor((22 - dateLine.length) / 2));
-        cells = `${' '.repeat(pad)}${dateLine}`.padEnd(22, ' ').slice(0, 22);
-      }
-      return `<div class="cn-preview-row">${cells.split('').map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    if (dateLine) {
+      const pad = Math.max(0, Math.floor((22 - dateLine.length) / 2));
+      lines[1] = `${' '.repeat(pad)}${dateLine}`.padEnd(22, ' ').slice(0, 22);
+    }
+    paintPreviewLines(host, lines);
     const hint = $('on-this-day-fit-hint');
     if (hint) {
       const rows = wrapPreview(text, 22).length;
@@ -9135,10 +9767,7 @@
     while (lines.length < 6) {
       lines.push('');
     }
-    host.innerHTML = lines.slice(0, 6).map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+    paintPreviewLines(host, lines.slice(0, 6));
     const hint = $('baking-inspiration-fit-hint');
     if (hint) {
       if (!name && !parts.length) {
@@ -9372,26 +10001,53 @@
     if (!host) {
       return;
     }
-    const list = (tickers || []).slice(0, 5);
-    const lines = ['STOCK MARKET', ...list.map((ticker, index) => {
-      const samples = [
-        { price: '319.70', change: '+3.3%' },
-        { price: '513.50', change: '+6.3%' },
-        { price: '346.60', change: '+0.5%' },
-        { price: '185.00', change: '-0.4%' },
-        { price: '120.50', change: '+1.2%' },
-      ];
-      const sample = samples[index % samples.length];
-      const symbol = String(ticker || '').toUpperCase().slice(0, 5).padEnd(5, ' ');
-      return `${symbol} ${sample.price} ${sample.change}`;
-    })];
-    while (lines.length < 6) {
-      lines.push('');
+    // Mirror stockMarketFrames / stockQuoteRow: white title chips, price+change
+    // right-aligned ahead of a green/red direction chip, five quotes per page.
+    const list = (tickers || [])
+      .map((ticker) => String(ticker || '').trim().toUpperCase().replace(/[^A-Z0-9.^_=-]/g, '').slice(0, 5))
+      .filter(Boolean)
+      .slice(0, 10);
+    const page = list.slice(0, 5);
+    const pages = Math.max(1, Math.ceil(Math.max(list.length, 1) / 5));
+    const title = list.length > 5 ? `STOCKS 1/${pages}` : 'STOCK MARKET';
+    const mode = currentStockChangeMode();
+    const samples = [
+      { price: '319.70', percent: '+3.3%', points: '+10.35', dir: 'up' },
+      { price: '513.50', percent: '+6.3%', points: '+30.29', dir: 'up' },
+      { price: '346.60', percent: '+0.5%', points: '+1.72', dir: 'up' },
+      { price: '185.00', percent: '-0.4%', points: '-0.74', dir: 'down' },
+      { price: '120.50', percent: '+1.2%', points: '+1.43', dir: 'up' },
+    ];
+
+    const rows = blankDesignerCells();
+    rows[0][0] = flapChipCode('white');
+    rows[0][1] = flapChipCode('white');
+    rows[0][20] = flapChipCode('white');
+    rows[0][21] = flapChipCode('white');
+    const titleBody = String(title).slice(0, 18);
+    const titlePad = Math.max(0, 18 - titleBody.length);
+    const titleLeft = Math.floor(titlePad / 2);
+    const titleLine = `${' '.repeat(titleLeft)}${titleBody}${' '.repeat(titlePad - titleLeft)}`;
+    for (let col = 0; col < 18; col += 1) {
+      rows[0][2 + col] = flapCharCode(titleLine[col]);
     }
-    host.innerHTML = lines.slice(0, 6).map((line) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      return `<div class="cn-preview-row">${cells.map((ch) => `<span>${escapeHtml(ch === ' ' ? '' : ch)}</span>`).join('')}</div>`;
-    }).join('');
+
+    page.forEach((symbol, index) => {
+      const sample = samples[index % samples.length];
+      const change = mode === 'points' ? sample.points : sample.percent;
+      const right = `${sample.price} ${change}`.slice(0, 15);
+      const start = Math.max(6, 20 - right.length);
+      const row = rows[index + 1];
+      for (let col = 0; col < symbol.length && col < 5; col += 1) {
+        row[col] = flapCharCode(symbol[col]);
+      }
+      for (let col = 0; col < right.length; col += 1) {
+        row[start + col] = flapCharCode(right[col]);
+      }
+      row[21] = flapChipCode(sample.dir === 'down' ? 'red' : sample.dir === 'up' ? 'green' : 'white');
+    });
+
+    renderVbGrid(host, rows);
   }
 
   function renderStockMarketSettings(data = {}) {
@@ -9443,6 +10099,12 @@
     const btn = event.target.closest('[data-stock-change]');
     if (!btn) return;
     setStockChangeMode(btn.getAttribute('data-stock-change'));
+    const tickers = String($('stock-market-tickers')?.value || '')
+      .split(/[\s,;|]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    renderStockMarketPreview(tickers);
   });
 
   $('stock-market-tickers')?.addEventListener('input', () => {
@@ -9547,26 +10209,18 @@
     });
     const lines = [title, header, ...dataLines];
     while (lines.length < 6) lines.push('');
-    host.innerHTML = lines.slice(0, 6).map((line, rowIndex) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      if (rowIndex === 0) {
-        cells[0] = '■';
-        cells[1] = '■';
-        cells[20] = '■';
-        cells[21] = '■';
+    paintPreviewLines(host, lines.slice(0, 6), (rowIndex, col, ch) => {
+      if (rowIndex === 0 && (col === 0 || col === 1 || col === 20 || col === 21)) {
+        return flapChipCode('white');
       }
-      return `<div class="cn-preview-row">${cells.map((ch, col) => {
-        let cls = '';
-        if (rowIndex === 0 && (col === 0 || col === 1 || col === 20 || col === 21)) {
-          cls = ' is-chip-white';
-        } else if (rowIndex >= 2 && col === 21 && ch === '#') {
-          const dir = samples[(rowIndex - 2) % samples.length]?.dir;
-          cls = dir === 'up' ? ' is-chip-green' : dir === 'down' ? ' is-chip-red' : ' is-chip-white';
-          ch = '';
-        }
-        return `<span class="${cls.trim()}">${escapeHtml(ch === ' ' || ch === '■' ? '' : ch)}</span>`;
-      }).join('')}</div>`;
-    }).join('');
+      if (rowIndex >= 2 && col === 21 && ch === '#') {
+        const dir = samples[(rowIndex - 2) % samples.length]?.dir;
+        if (dir === 'up') return flapChipCode('green');
+        if (dir === 'down') return flapChipCode('red');
+        return flapChipCode('white');
+      }
+      return null;
+    });
   }
 
   function renderCurrencyRatesSettings(data = {}) {
@@ -9676,9 +10330,7 @@
     if (settings.showWeather !== false) lines.push('CLEAR SKY');
     if (settings.showVisibility !== false) lines.push('GOOD VISIBILITY');
     while (lines.length < 6) lines.push('');
-    host.innerHTML = lines.slice(0, 6).map((line) => (
-      `<div class="cn-board-row">${escapeHtml(String(line).padEnd(22).slice(0, 22))}</div>`
-    )).join('');
+    paintPreviewLines(host, lines.slice(0, 6));
   }
 
   function renderStarlinkTrackerSettings(data = {}) {
@@ -9820,24 +10472,15 @@
       center(settings.showAltitude !== false ? alt : ''),
       center(speed),
     ];
-    host.innerHTML = lines.slice(0, 6).map((line, rowIndex) => {
-      const cells = String(line).padEnd(22, ' ').slice(0, 22).split('');
-      if (rowIndex === 0) {
-        cells[0] = '■';
-        cells[1] = '■';
-        cells[20] = '■';
-        cells[21] = '■';
-      } else if (rowIndex === 1) {
-        cells[0] = '■';
-        cells[21] = '■';
+    paintPreviewLines(host, lines.slice(0, 6), (rowIndex, col) => {
+      if (rowIndex === 0 && (col === 0 || col === 1 || col === 20 || col === 21)) {
+        return flapChipCode('white');
       }
-      return `<div class="cn-preview-row">${cells.map((ch, col) => {
-        const isChip = (rowIndex === 0 && (col === 0 || col === 1 || col === 20 || col === 21))
-          || (rowIndex === 1 && (col === 0 || col === 21));
-        const cls = isChip ? ' is-chip-white' : '';
-        return `<span class="${cls.trim()}">${escapeHtml(ch === ' ' || ch === '■' ? '' : ch)}</span>`;
-      }).join('')}</div>`;
-    }).join('');
+      if (rowIndex === 1 && (col === 0 || col === 21)) {
+        return flapChipCode('white');
+      }
+      return null;
+    });
   }
 
   function renderIssTrackerSettings(data = {}) {
@@ -15139,6 +15782,7 @@
     loadLocaleSettings();
     loadPublicUrlSettings();
     loadGuestBookSettings();
+    loadGuestSnapsSettings();
     loadWeatherAlertsSettings();
     loadWorldPopulationSettings();
   });

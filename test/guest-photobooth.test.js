@@ -5,6 +5,7 @@ const {
   matchesGuestSnapsSlideshowQuery,
   photosToSlideshowEntries,
   resolveGuestPhotoboothSettings,
+  resolveBoothPushUrl,
   defaultGuestPhotoboothUrl,
 } = require('../src/guest-photobooth');
 const { buildGuestPhotoboothPayload, buildWifiQrContent } = require('../src/udp-payload');
@@ -198,6 +199,21 @@ test('resolveGuestPhotoboothSettings reads data/guest-photobooth.json', () => {
     if (prev.url == null) delete process.env.GUEST_PHOTOBOOTH_URL;
     else process.env.GUEST_PHOTOBOOTH_URL = prev.url;
   }
+});
+
+test('resolveBoothPushUrl prefers a TinyURL short link when an alias is ready', () => {
+  const full = resolveBoothPushUrl({ boothUrl: 'https://signal.wittydigital.com/' }, null);
+  assert.equal(full.boothUrl, 'https://signal.wittydigital.com/');
+  assert.equal(full.usedShortLink, false);
+
+  const short = resolveBoothPushUrl(
+    { boothUrl: 'https://signal.wittydigital.com/' },
+    { alias: 'GUESTS', flapLabel: 'TINYURL.COM/GUESTS', tinyUrl: 'https://tinyurl.com/GUESTS' },
+  );
+  assert.equal(short.boothUrl, 'https://tinyurl.com/GUESTS');
+  assert.equal(short.shortLabel, 'TINYURL.COM/GUESTS');
+  assert.equal(short.fullBoothUrl, 'https://signal.wittydigital.com/');
+  assert.equal(short.usedShortLink, true);
 });
 
 test('buildGuestPhotoboothPayload includes wifi + booth QR content', () => {
