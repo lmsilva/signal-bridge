@@ -4,11 +4,15 @@
   const gridEl = document.getElementById('gm-grid');
   const form = document.getElementById('gm-word-form');
   const input = document.getElementById('gm-word');
+  const play = document.getElementById('gm-play');
 
   window.scrambleRender = (session) => {
     const playing = session.phase === 'round' && Array.isArray(session.grid);
     gridEl.hidden = !playing;
     form.hidden = !playing;
+    // Between rounds there is no board to sit beside, so a wide screen drops
+    // back to one column instead of leaving half of itself empty.
+    play?.classList.toggle('gm-no-board', !playing);
     if (!playing) {
       gridEl.innerHTML = '';
       return;

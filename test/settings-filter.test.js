@@ -133,7 +133,7 @@ test('decideSettingsFilter never hides a section tab', () => {
 });
 
 test('the admin page loads the shared filter and does not hide zero-hit tabs', () => {
-  assert.match(html, /settings-filter\.js\?v=signal194/);
+  assert.match(html, /settings-filter\.js\?v=signal195/);
   assert.match(html, /id="vb-settings-card"[^>]*data-search-terms="[^"]*quiet hours/);
   assert.match(html, /<div class="section-label" data-settings-group="media">Vestaboards<\/div>\s*<div class="card vb-settings-card"/);
   assert.match(appJs, /SignalSettingsFilter/);

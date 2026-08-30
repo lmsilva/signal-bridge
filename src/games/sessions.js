@@ -78,9 +78,20 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     };
   }
 
-  function publicSession(session, at = now()) {
+  /** What one player has found this round — never another player's list. */
+  function playerWords(session, playerId) {
+    const current = session.rounds[session.rounds.length - 1];
+    if (!current || !playerId) return [];
+    return (current.wordsByPlayer.get(playerId) || [])
+      .map((word) => ({ word, points: scoreWord(word) }));
+  }
+
+  function publicSession(session, at = now(), playerId = '') {
     const game = gameOf(session.gameType);
+    const settings = settingsOf(session.gameType);
     const current = session.rounds[session.rounds.length - 1] || null;
+    const player = playerId ? session.players.find((p) => p.id === playerId) : null;
+    const revealing = session.phase === 'intermission' || session.phase === 'final';
     return {
       sessionId: session.id,
       gameType: session.gameType,
@@ -88,25 +99,36 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       code: session.code,
       phase: session.phase,
       roundIndex: session.roundIndex,
-      rounds: settingsOf(session.gameType).rounds,
+      rounds: settings.rounds,
+      allowLateJoin: settings.allowLateJoin !== false,
       remainingSeconds: remainingSeconds(session, at),
       playerCount: session.players.length,
       players: session.players.map(publicPlayer),
       scores: session.scores || [],
       best: session.best || null,
       grid: session.phase === 'round' ? current?.grid || null : null,
+      lastRound: revealing ? session.lastRound || null : null,
+      you: player
+        ? { ...publicPlayer(player), words: playerWords(session, playerId) }
+        : null,
       alias: aliasOf(session),
     };
   }
 
   function emit(session, reason = 'update') {
-    const payload = publicSession(session);
     const set = listeners.get(session.id);
     if (!set) return;
-    const line = `event: session\ndata: ${JSON.stringify({ reason, session: payload })}\n\n`;
-    for (const res of set) {
+    const at = now();
+    const lines = new Map();
+    for (const [res, playerId] of set) {
+      if (!lines.has(playerId)) {
+        lines.set(playerId, `event: session\ndata: ${JSON.stringify({
+          reason,
+          session: publicSession(session, at, playerId),
+        })}\n\n`);
+      }
       try {
-        res.write(line);
+        res.write(lines.get(playerId));
       } catch {
         set.delete(res);
       }
@@ -128,6 +150,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
 
   function pushPhase(session, card, extra = {}) {
     const game = gameOf(session.gameType);
+    const settings = settingsOf(session.gameType);
     const hold = extra.holdSeconds != null ? extra.holdSeconds : remainingSeconds(session);
     const payload = {
       type: 'word.scramble',
@@ -135,6 +158,12 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       phase: session.phase,
       card,
       code: session.code,
+      // The board is the only place a latecomer can read the code, so it
+      // rides every card while joining mid-game is allowed.
+      showCode: settings.allowLateJoin !== false,
+      roundIndex: session.roundIndex,
+      rounds: settings.rounds,
+      final: session.phase === 'final',
       alias: aliasOf(session),
       playerCount: session.players.length,
       grid: extra.grid || session.rounds[session.rounds.length - 1]?.grid || [],
@@ -177,7 +206,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     emit(session, 'closed');
     const set = listeners.get(session.id);
     if (set) {
-      for (const res of set) {
+      for (const res of set.keys()) {
         try { res.end(); } catch { /* gone */ }
       }
       listeners.delete(session.id);
@@ -254,6 +283,21 @@ function createGameSessions(config = {}, log = console, deps = {}) {
         found.push({ word, playerId, name: player?.name || '' });
       }
     }
+
+    // The reveal between rounds: every word the table found, and who got it.
+    const byWord = new Map();
+    for (const row of found) {
+      const entry = byWord.get(row.word)
+        || { word: row.word, points: scoreWord(row.word), names: [] };
+      if (row.name && !entry.names.includes(row.name)) entry.names.push(row.name);
+      byWord.set(row.word, entry);
+    }
+    session.lastRound = {
+      index: session.roundIndex,
+      words: [...byWord.values()]
+        .sort((a, b) => b.points - a.points || a.word.localeCompare(b.word)),
+    };
+
     const hardest = hardestWord(found);
     if (hardest && (!session.best || hardest.word.length > session.best.word.length)) {
       session.best = {
@@ -320,6 +364,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       roundIndex: 0,
       scores: [],
       best: null,
+      lastRound: null,
       sseCount: 0,
       lastSseAt: now(),
       hadPlayer: false,
@@ -349,6 +394,10 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       ? session.players.find((p) => p.id === playerId)
       : null;
     if (!player) {
+      const started = session.phase !== 'invited' && session.phase !== 'lobby';
+      if (started && settings.allowLateJoin === false) {
+        return { ok: false, error: 'That game already started' };
+      }
       if (session.players.length >= settings.maxPlayers) {
         return { ok: false, error: 'That game is full' };
       }
@@ -376,7 +425,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     return {
       ok: true,
       player,
-      session: publicSession(session),
+      session: publicSession(session, now(), player.id),
       cookie: `${session.id}|${player.id}`,
     };
   }
@@ -406,7 +455,13 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const player = session.players.find((p) => p.id === playerId);
     const live = (player.score || 0) + words.reduce((sum, word) => sum + scoreWord(word), 0);
     emit(session, 'word');
-    return { ok: true, word: result.word, points: result.points, liveScore: live };
+    return {
+      ok: true,
+      word: result.word,
+      points: result.points,
+      liveScore: live,
+      words: playerWords(session, playerId),
+    };
   }
 
   function leave({ sessionId, playerId } = {}) {
@@ -417,12 +472,12 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     return { ok: true };
   }
 
-  function subscribe(sessionId, res) {
+  function subscribe(sessionId, res, playerId = '') {
     const session = getById(sessionId);
     if (!session) return () => {};
-    if (!listeners.has(sessionId)) listeners.set(sessionId, new Set());
+    if (!listeners.has(sessionId)) listeners.set(sessionId, new Map());
     const set = listeners.get(sessionId);
-    set.add(res);
+    set.set(res, String(playerId || ''));
     session.sseCount = set.size;
     session.lastSseAt = now();
     return () => {
@@ -488,7 +543,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     leave,
     getByCode,
     getById,
-    publicSession: (session) => publicSession(session),
+    publicSession: (session, playerId = '') => publicSession(session, now(), playerId),
     subscribe,
     tick,
     listActive,

@@ -1875,6 +1875,53 @@ test('games page and a live session join without an admin session', async () => 
     assert.equal(joined.status, 200);
     assert.equal(joined.body.player.name, 'Luis');
     assert.match(String(joined.headers['set-cookie'] || ''), /signal_games=/);
+    assert.equal(joined.body.session.allowLateJoin, true);
+    assert.deepEqual(joined.body.session.you.words, []);
+
+    // One standings list, or the same player shows up twice on the phone.
+    const js = fs.readFileSync(path.join(realRoot, 'games', 'games.js'), 'utf8');
+    assert.match(page.text, /id="gm-list"/);
+    assert.doesNotMatch(page.text, /id="gm-roster"/);
+    assert.doesNotMatch(page.text, /id="gm-scores"/);
+    assert.match(page.text, /id="gm-found"/);
+    assert.match(page.text, /id="gm-recap"/);
+    assert.match(page.text, /id="gm-code-line"/);
+    assert.match(js, /Friends can still join/);
+
+    // Phone first, but the board and the lists sit side by side on a tablet
+    // or a laptop, and the tiles size off their column rather than the window.
+    const css = fs.readFileSync(path.join(realRoot, 'games', 'games.css'), 'utf8');
+    assert.match(page.text, /class="gm-stage"/);
+    assert.match(page.text, /class="gm-side"/);
+    assert.match(css, /@media \(min-width: 760px\)/);
+    assert.match(css, /@media \(min-width: 1080px\)/);
+    assert.match(css, /container-type: inline-size/);
+    assert.match(css, /font-size: clamp\([^)]*cqi/);
+    assert.match(css, /\[hidden\] \{ display: none !important; \}/,
+      'grid and flex panels would otherwise ignore the hidden attribute');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('Word Scramble settings carry the mid-game join rule', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const initial = await getJson(base, '/api/word-scramble/settings');
+    assert.equal(initial.status, 200);
+    assert.equal(initial.body.settings.allowLateJoin, true);
+
+    const off = await postJson(base, '/api/word-scramble/settings', { allowLateJoin: false });
+    assert.equal(off.status, 200);
+    assert.equal(off.body.settings.allowLateJoin, false);
+
+    // A save that does not mention the rule leaves it alone.
+    const other = await postJson(base, '/api/word-scramble/settings', { rounds: 4 });
+    assert.equal(other.body.settings.rounds, 4);
+    assert.equal(other.body.settings.allowLateJoin, false);
+
+    const on = await postJson(base, '/api/word-scramble/settings', { allowLateJoin: true });
+    assert.equal(on.body.settings.allowLateJoin, true);
   } finally {
     webServer.stop();
   }
@@ -2512,12 +2559,14 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal194/);
-  assert.match(html, /settings-filter\.js\?v=signal194/);
-  assert.match(html, /app\.js\?v=signal194/);
+  assert.match(html, /styles\.css\?v=signal195/);
+  assert.match(html, /settings-filter\.js\?v=signal195/);
+  assert.match(html, /app\.js\?v=signal195/);
   assert.match(html, /id="tinyurl-settings-card"/);
   assert.match(html, /id="word-scramble-settings-card"/);
   assert.match(html, /id="word-scramble-sessions-sheet"/);
+  assert.match(html, /id="word-scramble-late-join"/);
+  assert.match(js, /allowLateJoin/);
   assert.match(html, /id="guest-book-clear-override"/);
   assert.match(html, /id="guest-snaps-clear-override"/);
   assert.match(js, /\/api\/tinyurl\/settings/);

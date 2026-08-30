@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-30 (admin login guest links)
+**Last updated:** 2026-08-30 (Word Scramble plays on any screen)
 
 ---
 
@@ -152,15 +152,15 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/chuck-norris-settings.js` | Hidden shipped ids, text overrides, custom facts, recent ids in `data/chuck-norris-settings.json`. Settings → News |
 | `src/chuck-norris-facts.json` | Shipped chucknorris.io / ICNDB-derived facts that fit one 5×22 frame (~6200). Explicit/NSFW omitted. Rebuild with `tools/build-chuck-norris-facts.js` |
 | `tools/build-chuck-norris-facts.js` | Fetch or read a chucknorris.io search dump and keep board-fit, family-safe facts |
-| `src/word-scramble.js` | **Word Scramble** — Boggle on a 4×4 grid. Classic 16 dice minus Q, 8-way DFS with binary-search prefix pruning on a sorted ENABLE1 list, quality gate (≥30 words including one 6-letter), standard scoring, `everyone` / `cancel` duplicate rules |
+| `src/word-scramble.js` | **Word Scramble** — Boggle on a 4×4 grid. Classic 16 dice minus Q, 8-way DFS with binary-search prefix pruning on a sorted ENABLE1 list, quality gate (≥30 words including one 6-letter), `everyone` / `cancel` duplicate rules. `SCORE_LADDER` pays every extra letter more (3→1, 4→2, 5→4, 6→6, 7→9, 8→12, then +3 a letter) |
 | `src/word-scramble-words.json` | Sorted ENABLE1 words of 3–9 letters. Rebuild with `tools/build-word-scramble-words.js` |
 | `tools/build-word-scramble-words.js` | Fetch public-domain ENABLE1 and write the shipped scramble corpus |
 | `src/games/registry.js` | Game types (`scramble` today). Wheel of Fortune drops in here later |
-| `src/games/sessions.js` | Live sessions: 4-letter codes, `invited → lobby → round → intermission → … → final → closed`, SSE, 1s tick (`NODE_TEST_CONTEXT` skips it), idle / invite TTL close. Phase posts are snapshot + `breakHold` + `replaceSource: 'word.scramble'` + `holdSeconds` on every round frame |
+| `src/games/sessions.js` | Live sessions: 4-letter codes, `invited → lobby → round → intermission → … → final → closed`, SSE, 1s tick (`NODE_TEST_CONTEXT` skips it), idle / invite TTL close. Phase posts are snapshot + `breakHold` + `replaceSource: 'word.scramble'` + `holdSeconds` on every round frame. SSE is **per listener**: `you.words` is only that phone's list; `lastRound` reveals every word (and who found it) between rounds. `allowLateJoin: false` refuses new phones once the lobby breaks |
 | `src/games/archive.js` | Month JSONL at `data/game-sessions/YYYY-MM.jsonl`, `sessionId` dedupe. Archived on finish and abandon |
 | `src/games/settings.js` | `data/game-settings.json`, namespaced by game id, re-read on every `get()` |
-| `src/vestaboard/formatters/games.js` | Word Scramble invite / lobby / 4×4 round / high scores / best word |
-| `src/web/games/` | Public `/games/` — join by code + first name, SSE, grid + word input |
+| `src/vestaboard/formatters/games.js` | Word Scramble invite / lobby / 4×4 round / high scores / best word. Title centres between the green chips; the round card carries `ROUND n OF m` and (while late joining is on) `CODE ABCD`; the scores card trades its fifth row for `GAME CODE: ABCD` |
+| `src/web/games/` | Public `/games/` — join by code + first name, SSE, grid + word input. Phone first and responsive: one column with the compose bar stuck to the thumb line, board beside the word/score cards from 760px, a capped 620px stage centred against a 400px sidebar from 1080px, and one centred column again whenever there is no grid (lobby, intermission, final). Tiles size off their own container (`cqi`) and off viewport height, so the board plus the input still fit a landscape phone |
 | `src/word-riddles.js` | **Word Riddles** — pick a shipped or house-edited riddle+answer and build `word.riddles` (intro → riddle → reveal). No network. Skips recent ids |
 | `src/word-riddles-settings.js` | Hidden shipped ids, riddle/answer overrides, custom riddles, reveal delay, intro toggle, recent ids in `data/word-riddles-settings.json`. Settings → Game night |
 | `src/word-riddles-riddles.json` | Shipped board-fit riddles (~575) from crawsome/riddles (Unlicense), nkilm/riddles-api (MIT), and public-domain classics. Rebuild with `tools/build-word-riddles.js` |
@@ -469,7 +469,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `data/guest-book-settings.json` | Guest Book enable/pause, alias, who-can-send, scrypt password hash, rates. Token is not stored here |
 | `data/guest-book.json` | The Book — guest messages (rows, status, full guest IP). Permanent until deleted |
 | `data/shortlinks.json` | Named short links (`guestbook` → `/guestbook/`, `guestsnaps` → `/`, `games` → `/games/`). Current alias, target, last health check, repair alert |
-| `data/game-settings.json` | Per-game timings and rules (Word Scramble lobby/round/intermission, duplicate rule, alias) |
+| `data/game-settings.json` | Per-game timings and rules (Word Scramble lobby/round/intermission, duplicate rule, `allowLateJoin`, alias) |
 | `data/game-sessions/YYYY-MM.jsonl` | Finished and abandoned game sessions |
 | `timerSync.*` | Poll intervals, mirror file, fire-verify slack |
 | `alarmSync.*` | Alarm poll/mirror; `localTimeZone` for `originalDate`/`originalTime` (default `America/Denver`) |
@@ -717,7 +717,7 @@ Public APIs: `GET /api/displays` (+ events SSE), `GET /api/guest/session`, `POST
 | `GET`/`POST /api/word-riddles/riddles` | Word Riddles list (search/page) and add/edit/hide. Persist in `data/word-riddles-settings.json` |
 | `GET`/`POST /api/word-riddles/settings` | Reveal delay (10–180s) and intro-card toggle |
 | `POST /api/push/word-riddles` | Vestaboard Word Riddles (`word.riddles`). Target coerced to a board. **409** if every riddle is hidden |
-| `GET`/`POST`/`PUT /api/word-scramble/settings` | Word Scramble timings, duplicate rule, alias, optional TinyURL override |
+| `GET`/`POST`/`PUT /api/word-scramble/settings` | Word Scramble timings, duplicate rule, `allowLateJoin`, alias, optional TinyURL override |
 | `GET /api/game-sessions` | Admin: live game sessions |
 | `GET /api/game-sessions/history` | Admin: archived sessions, 10 per page |
 | `POST /api/game-sessions/end` | Admin: end a live session (confirm sheet, never `window.confirm`) |
@@ -799,6 +799,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-30: **Word Scramble plays on any screen** — `/games/` is still built for a phone (single column, sticky compose bar in thumb reach) but now spends the room a tablet or laptop gives it: the board sits beside the word and score cards from 760px, the stage caps at 620px and centres against a 400px sidebar from 1080px, and the page falls back to one centred column between rounds when there is no board to sit beside. Letter tiles size off their container rather than the window, and off viewport height too, so a landscape phone still gets the whole grid and the input on screen. Standings show a rank and highlight your row. Cache-bust games `?v=3`. Tests: `web-server`.
+- 2026-08-30: **Word Scramble round, code and word list** — Longer words now always beat shorter ones (`SCORE_LADDER`, +3 a letter past eight). The board title centres between its chips, the round card says `ROUND n OF m`, and the code rides the round and score cards so latecomers can read it (Settings → **Let phones join mid-game**; off refuses new phones once the lobby breaks). The phone shows one standings list instead of a players list stacked on an identical scores list, keeps the code in view, lists the words you have found with their points, and reveals every word the table found between rounds — SSE payloads are now built per listener so nobody sees another phone's list mid-round. Cache-bust `?v=signal195` / games `?v=2`. Tests: `word-scramble`, `game-sessions`, `web-server`.
 - 2026-08-30: **Admin login guest links** — the footer under Sign in is left-aligned guest destinations (Photo booth / Guest book) instead of a centered run-on sentence that wrapped mid-link. Tests: `web-server`.
 - 2026-08-30: **Red Letter random is a real random** — `pickEvent` in `random` mode draws from every upcoming Date Book event; a day-of card only wins in `next` mode. Settings preview paints `boardPreview` (the same pick Push Now uses) instead of always forcing the next countdown. Cache-bust `?v=signal194`. Tests: `red-letter`, `web-server`.
 - 2026-08-30: **Word Scramble + games framework** — Unified TinyURL token (global card + per-feature override). Public `/games/` hosts a Boggle session (lobby, 3 rounds, phone timer). Vestaboard shows invite / lobby / static 4×4 / high scores / best word. Command `scramble.invite`. Cache-bust `?v=signal193`. Tests: `tinyurl-credentials`, `word-scramble`, `game-sessions`, `command-registry`, `vestaboard-queue`, `web-server`.

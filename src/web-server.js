@@ -2448,7 +2448,7 @@ function createWebServer({
     for (const key of [
       'lobbySeconds', 'roundSeconds', 'intermissionSeconds', 'rounds',
       'inviteTtlMinutes', 'idleTimeoutSeconds', 'maxPlayers', 'minSolutions',
-      'duplicateRule',
+      'duplicateRule', 'allowLateJoin',
     ]) {
       if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
         patch[key] = body[key];
@@ -2574,6 +2574,9 @@ function createWebServer({
       sendJson(res, 404, { ok: false, error: 'Session not found' });
       return;
     }
+    // The cookie decides whose found-words list rides along on this stream.
+    const seated = parseGamesCookie(req.headers.cookie);
+    const playerId = seated.sessionId === sessionId ? seated.playerId : '';
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -2582,9 +2585,9 @@ function createWebServer({
     res.write(': connected\n\n');
     res.write(`event: session\ndata: ${JSON.stringify({
       reason: 'hello',
-      session: gameSessions.publicSession(session),
+      session: gameSessions.publicSession(session, playerId),
     })}\n\n`);
-    const unsubscribe = gameSessions.subscribe(sessionId, res);
+    const unsubscribe = gameSessions.subscribe(sessionId, res, playerId);
     const heartbeat = setInterval(() => {
       try {
         res.write(': ping\n\n');
