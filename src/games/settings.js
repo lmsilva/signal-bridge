@@ -16,6 +16,7 @@ const DEFAULTS = Object.freeze({
     maxPlayers: 12,
     minSolutions: 30,
     duplicateRule: 'everyone',
+    allowLateJoin: true,
     preferredAlias: 'WITTYGAME',
   }),
 });
@@ -46,6 +47,9 @@ function sanitiseGame(id, raw = {}, base = DEFAULTS[id] || {}) {
     maxPlayers: clampInt(incoming.maxPlayers, 2, 24, base.maxPlayers),
     minSolutions: clampInt(incoming.minSolutions, 10, 80, base.minSolutions),
     duplicateRule: incoming.duplicateRule === 'cancel' ? 'cancel' : 'everyone',
+    allowLateJoin: incoming.allowLateJoin != null
+      ? incoming.allowLateJoin !== false
+      : base.allowLateJoin !== false,
     preferredAlias: alias.length >= 5 ? alias : (base.preferredAlias || 'WITTYGAME'),
   };
 }

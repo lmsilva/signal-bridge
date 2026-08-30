@@ -4,7 +4,7 @@
  * Dice are the classic 16, minus Q (a flap is one letter; Qu needs a rule
  * nobody can read from across the room). The solver walks 8-way adjacency
  * without reusing a cell, pruning prefixes with a binary search on the
- * sorted ENABLE1 list. Scoring is the standard Boggle ladder.
+ * sorted ENABLE1 list. Scoring climbs with every extra letter.
  */
 
 const fs = require('fs');
@@ -134,14 +134,20 @@ function solveGrid(grid, words = loadWords()) {
   return [...found].sort();
 }
 
+/**
+ * Points by word length. Classic Boggle pays a 3 and a 4 the same 1 point,
+ * which reads as a bug to anyone watching the board — every extra letter
+ * earns more here. Past the ladder each letter is worth another 3.
+ */
+const SCORE_LADDER = Object.freeze([0, 0, 0, 1, 2, 4, 6, 9, 12]);
+const SCORE_PER_EXTRA_LETTER = 3;
+
 function scoreWord(word) {
   const n = String(word || '').length;
   if (n < MIN_WORD) return 0;
-  if (n <= 4) return 1;
-  if (n === 5) return 2;
-  if (n === 6) return 3;
-  if (n === 7) return 5;
-  return 11;
+  const last = SCORE_LADDER.length - 1;
+  if (n <= last) return SCORE_LADDER[n];
+  return SCORE_LADDER[last] + SCORE_PER_EXTRA_LETTER * (n - last);
 }
 
 function createRound({
@@ -232,6 +238,7 @@ module.exports = {
   GRID,
   DICE,
   MIN_WORD,
+  SCORE_LADDER,
   DEFAULT_MIN_SOLUTIONS,
   WORDS_PATH,
   loadWords,

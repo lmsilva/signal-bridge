@@ -34,7 +34,7 @@ function fakeGame() {
     validateAction: (_round, action, payload) => {
       const word = String(payload?.word || '').toLowerCase();
       if (action !== 'word') return { ok: false, reason: 'unknown-action' };
-      if (['cat', 'wind', 'leap'].includes(word)) {
+      if (['cat', 'wind', 'leap', 'scrambled'].includes(word)) {
         return { ok: true, word, points: 1 };
       }
       return { ok: false, reason: 'not-a-word' };
@@ -47,7 +47,7 @@ function fakeGame() {
   };
 }
 
-function makeApi() {
+function makeApi(overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'games-'));
   let nowMs = Date.parse('2026-08-30T18:00:00Z');
   const pushes = [];
@@ -61,7 +61,7 @@ function makeApi() {
         return (i % 17) / 17;
       };
     })(),
-    gameSettings: { get: () => ({ ...SETTINGS }) },
+    gameSettings: { get: () => ({ ...SETTINGS, ...overrides }) },
     archive,
     gameOf: () => fakeGame(),
     getShortlink: () => ({ alias: 'WITTYGAME' }),
@@ -177,6 +177,95 @@ test('an untouched invite expires without counting as a played game heartbeat', 
   const row = archive.listAll()[0];
   assert.equal(row.reason, 'invite-expired');
   assert.equal(row.abandoned, true);
+});
+
+test('turning late joining off closes the door once the lobby breaks', () => {
+  const { api, advance } = makeApi({ allowLateJoin: false });
+  const invited = api.create();
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  assert.equal(luis.ok, true);
+  assert.equal(luis.session.allowLateJoin, false);
+
+  advance(11);
+  assert.equal(api.getByCode(invited.code).phase, 'round');
+  const ada = api.join({ code: invited.code, name: 'Ada' });
+  assert.equal(ada.ok, false);
+  assert.match(ada.error, /already started/);
+
+  // A player who is already in keeps their seat on a page refresh.
+  const again = api.join({ code: invited.code, name: 'Luis', playerId: luis.player.id });
+  assert.equal(again.ok, true);
+});
+
+test('the board carries the round and the code while phones may still join', () => {
+  const { api, advance, pushes } = makeApi();
+  const invited = api.create();
+  api.join({ code: invited.code, name: 'Luis' });
+  advance(11);
+
+  const round = pushes.filter((row) => row.payload.card === 'round').pop();
+  assert.equal(round.payload.roundIndex, 1);
+  assert.equal(round.payload.rounds, 3);
+  assert.equal(round.payload.showCode, true);
+  assert.equal(round.payload.code, invited.code);
+
+  const shut = makeApi({ allowLateJoin: false });
+  const closed = shut.api.create();
+  shut.api.join({ code: closed.code, name: 'Luis' });
+  shut.advance(11);
+  const quiet = shut.pushes.filter((row) => row.payload.card === 'round').pop();
+  assert.equal(quiet.payload.showCode, false);
+});
+
+test('a stream only ever carries the words that watcher found', () => {
+  const { api, advance } = makeApi();
+  const invited = api.create();
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  const ada = api.join({ code: invited.code, name: 'Ada' });
+  const seen = { luis: [], ada: [] };
+  const sink = (bucket) => ({ write: (line) => seen[bucket].push(line), end() {} });
+  api.subscribe(invited.sessionId, sink('luis'), luis.player.id);
+  api.subscribe(invited.sessionId, sink('ada'), ada.player.id);
+
+  advance(11);
+  const live = api.getByCode(invited.code);
+  api.submit({ sessionId: live.id, playerId: luis.player.id, payload: { word: 'cat' } });
+
+  const last = (bucket) => JSON.parse(seen[bucket].pop().split('data: ')[1]).session;
+  assert.deepEqual(last('luis').you.words, [{ word: 'cat', points: 1 }]);
+  assert.deepEqual(last('ada').you.words, [], 'nobody sees another phone list mid-round');
+  assert.equal(last('ada').you.name, 'Ada');
+});
+
+test('the reveal between rounds lists every word and who found it', () => {
+  const { api, advance } = makeApi();
+  const invited = api.create();
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  const ada = api.join({ code: invited.code, name: 'Ada' });
+  api.subscribe(invited.sessionId, { write() {}, end() {} }, luis.player.id);
+  advance(11);
+  const live = api.getByCode(invited.code);
+  api.submit({ sessionId: live.id, playerId: luis.player.id, payload: { word: 'cat' } });
+  api.submit({ sessionId: live.id, playerId: ada.player.id, payload: { word: 'cat' } });
+  const long = api.submit({
+    sessionId: live.id,
+    playerId: ada.player.id,
+    payload: { word: 'scrambled' },
+  });
+  assert.deepEqual(long.words.map((row) => row.word), ['cat', 'scrambled']);
+
+  advance(21);
+  const paused = api.publicSession(api.getByCode(invited.code), ada.player.id);
+  assert.equal(paused.phase, 'intermission');
+  assert.equal(paused.lastRound.index, 1);
+  assert.deepEqual(paused.lastRound.words, [
+    { word: 'scrambled', points: 15, names: ['Ada'] },
+    { word: 'cat', points: 1, names: ['Luis', 'Ada'] },
+  ]);
+
+  // During the next round the reveal is put away again.
+  advance(6);
+  assert.equal(api.publicSession(api.getByCode(invited.code)).lastRound, null);
 });
 
 test('end archives the session as abandoned', () => {

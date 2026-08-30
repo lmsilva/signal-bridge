@@ -7,10 +7,18 @@ const { COLS, fold, blankRow, placeText, assertValidLayout } = require('../encod
 const { chipCode, centered } = require('../frames');
 const { snapshotFrame } = require('./common');
 const { flapLabel } = require('../../shortlinks');
+const { scoreWord } = require('../../word-scramble');
 
 const SOURCE = 'word.scramble';
 const YELLOW = () => chipCode('yellow');
 const GREEN = () => chipCode('green');
+
+/** Chips own the first and last two flaps; the title centres in what is left. */
+const TITLE_FROM = 2;
+const TITLE_WIDTH = COLS - 4;
+
+/** The round card keeps the grid (and its border) right of this column. */
+const ROUND_TEXT_WIDTH = 14;
 
 function titleRow() {
   const row = blankRow(COLS);
@@ -18,8 +26,24 @@ function titleRow() {
   row[1] = GREEN();
   row[20] = GREEN();
   row[21] = GREEN();
-  placeText(row, fold('WORD SCRAMBLE'), 3);
-  return row;
+  return centered(fold('WORD SCRAMBLE'), {
+    row,
+    from: TITLE_FROM,
+    width: TITLE_WIDTH,
+    lean: 'left',
+  });
+}
+
+function codeLabel(code) {
+  const pin = String(code || '').trim().toUpperCase().slice(0, 4);
+  return pin ? `GAME CODE: ${pin}` : '';
+}
+
+function roundLabel(roundIndex, rounds) {
+  const index = Math.max(0, Number(roundIndex) || 0);
+  if (!index) return '';
+  const total = Math.max(0, Number(rounds) || 0);
+  return total > 1 ? `ROUND ${index} OF ${total}` : `ROUND ${index}`;
 }
 
 function inviteRows({ code = '', alias = 'WITTYGAME' } = {}) {
@@ -50,16 +74,31 @@ function lobbyRows({ code = '', playerCount = 0 } = {}) {
 }
 
 /**
- * HOW MANY / SCRAMBLED / WORDS CAN / YOU FIND? on the left.
+ * HOW MANY / SCRAMBLED / WORDS CAN / YOU FIND? on the left, then which round
+ * this is and — when late joining is allowed — the code to get in on a phone.
  * Yellow border at cols 14–21 around the 4×4 letters at cols 16–19, rows 1–4.
  */
-function roundRows({ grid = [] } = {}) {
-  const lines = ['HOW MANY', 'SCRAMBLED', 'WORDS CAN', 'YOU FIND?'];
+function roundRows({
+  grid = [],
+  roundIndex = 0,
+  rounds = 0,
+  code = '',
+  showCode = false,
+} = {}) {
+  const lines = [
+    'HOW MANY',
+    'SCRAMBLED',
+    'WORDS CAN',
+    'YOU FIND?',
+    roundLabel(roundIndex, rounds),
+    showCode && codeLabel(code) ? `CODE ${String(code).trim().toUpperCase().slice(0, 4)}` : '',
+  ];
   const rows = [];
   for (let r = 0; r < 6; r += 1) {
     const row = blankRow(COLS);
-    if (r < 4) {
-      placeText(row, fold(lines[r]), 0);
+    const line = lines[r];
+    if (line) {
+      placeText(row, fold(line).slice(0, ROUND_TEXT_WIDTH), 0);
     }
     if (r === 0 || r === 5) {
       for (let c = 14; c <= 21; c += 1) row[c] = YELLOW();
@@ -83,16 +122,30 @@ function leaderDots(name, score, width = COLS) {
   return `${left} ${'.'.repeat(dots)}${right}`.slice(0, width);
 }
 
-function scoresRows({ scores = [] } = {}) {
+/**
+ * The last row is the code when players may still join, so the board never
+ * leaves a latecomer guessing between rounds. Without it the fifth score fits.
+ */
+function scoresRows({
+  scores = [],
+  code = '',
+  showCode = false,
+  final = false,
+} = {}) {
+  const footer = showCode ? codeLabel(code) : '';
+  const capacity = footer ? 4 : 5;
   const rows = [
-    centered(fold('HIGH SCORES'), { from: 0, width: COLS }),
+    centered(fold(final ? 'FINAL SCORES' : 'HIGH SCORES'), { from: 0, width: COLS }),
   ];
-  const top = (scores || []).slice(0, 5);
-  for (let i = 0; i < 5; i += 1) {
+  const top = (scores || []).slice(0, capacity);
+  for (let i = 0; i < capacity; i += 1) {
     const entry = top[i];
     rows.push(entry
       ? placeText(blankRow(COLS), leaderDots(entry.name, entry.score), 0)
       : blankRow(COLS));
+  }
+  if (footer) {
+    rows.push(centered(fold(footer), { from: 0, width: COLS }));
   }
   return assertValidLayout(rows, 'word-scramble-scores');
 }
@@ -103,19 +156,9 @@ function bestRows({ word = '', name = '', points = 0 } = {}) {
     centered(fold(String(word || '').toUpperCase()), { from: 0, width: COLS }),
     centered(fold('FOUND BY'), { from: 0, width: COLS }),
     centered(fold(String(name || '').toUpperCase()), { from: 0, width: COLS }),
-    centered(fold(String(points || scoreOrBlank(word))), { from: 0, width: COLS }),
+    centered(fold(String(points || scoreWord(word) || '')), { from: 0, width: COLS }),
     blankRow(COLS),
   ], 'word-scramble-best');
-}
-
-function scoreOrBlank(word) {
-  const n = String(word || '').length;
-  if (n < 3) return '';
-  if (n <= 4) return '1';
-  if (n === 5) return '2';
-  if (n === 6) return '3';
-  if (n === 7) return '5';
-  return '11';
 }
 
 function withHold(frame, holdSeconds) {
@@ -143,7 +186,12 @@ function roundFrames(payload = {}) {
 }
 
 function scoresFrames(payload = {}) {
-  return [snapshotFrame(scoresRows(payload), 'High scores', SOURCE)];
+  const final = payload.final != null ? payload.final : payload.phase === 'final';
+  return [snapshotFrame(
+    scoresRows({ ...payload, final }),
+    final ? 'Final scores' : 'High scores',
+    SOURCE,
+  )];
 }
 
 function bestFrames(payload = {}) {
@@ -183,6 +231,7 @@ module.exports = {
   SOURCE,
   FORMATTERS,
   framesFor,
+  roundLabel,
   inviteRows,
   lobbyRows,
   roundRows,

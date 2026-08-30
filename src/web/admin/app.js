@@ -10251,6 +10251,8 @@
     if (dup && document.activeElement !== dup) {
       dup.value = settings.duplicateRule === 'cancel' ? 'cancel' : 'everyone';
     }
+    const lateJoin = $('word-scramble-late-join');
+    if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
     const alias = $('word-scramble-alias');
     if (alias && document.activeElement !== alias) {
       alias.value = settings.preferredAlias || 'WITTYGAME';
@@ -10326,6 +10328,7 @@
         intermissionSeconds: Number($('word-scramble-intermission')?.value),
         rounds: Number($('word-scramble-rounds')?.value),
         duplicateRule: $('word-scramble-dup')?.value,
+        allowLateJoin: $('word-scramble-late-join')?.checked !== false,
         preferredAlias: $('word-scramble-alias')?.value || '',
       };
       const token = String($('word-scramble-token')?.value || '').trim();

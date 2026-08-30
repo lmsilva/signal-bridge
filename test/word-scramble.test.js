@@ -25,6 +25,7 @@ const {
   scoresRows,
   bestRows,
   roundFrames,
+  roundLabel,
 } = require('../src/vestaboard/formatters/games');
 
 const WORDS = [
@@ -89,14 +90,22 @@ test('the solver walks 8-way adjacency and does not reuse a cell', () => {
   assert.equal(found.includes('cccc'), false);
 });
 
-test('scoring uses the standard Boggle ladder', () => {
+test('every extra letter is worth more than the last', () => {
+  assert.equal(scoreWord('no'), 0, 'two letters are too short to score');
   assert.equal(scoreWord('cat'), 1);
-  assert.equal(scoreWord('cats'), 1);
-  assert.equal(scoreWord('winds'), 2);
-  assert.equal(scoreWord('winder'), 3);
-  assert.equal(scoreWord('winders'), 5);
-  assert.equal(scoreWord('scrambled'), 11);
-  assert.equal(scoreWord('no'), 0);
+  assert.equal(scoreWord('cats'), 2, 'a four is worth more than a three');
+  assert.equal(scoreWord('winds'), 4);
+  assert.equal(scoreWord('winder'), 6);
+  assert.equal(scoreWord('winders'), 9);
+  assert.equal(scoreWord('scramble'), 12);
+  assert.equal(scoreWord('scrambled'), 15, 'past the ladder each letter adds 3');
+
+  let previous = 0;
+  for (let n = 3; n <= 14; n += 1) {
+    const points = scoreWord('a'.repeat(n));
+    assert.ok(points > previous, `${n} letters must beat ${n - 1}`);
+    previous = points;
+  }
 });
 
 test('everyone scores a shared word; cancel zeroes it', () => {
@@ -106,13 +115,13 @@ test('everyone scores a shared word; cancel zeroes it', () => {
   ];
   const everyone = scoreRound(players, { duplicateRule: 'everyone', words: WORDS });
   const byId = Object.fromEntries(everyone.map((row) => [row.id, row.score]));
-  assert.equal(byId.a, 2);
-  assert.equal(byId.b, 2);
+  assert.equal(byId.a, 3, 'cat (1) + wind (2)');
+  assert.equal(byId.b, 3, 'cat (1) + leap (2)');
 
   const cancel = scoreRound(players, { duplicateRule: 'cancel', words: WORDS });
   const cancelById = Object.fromEntries(cancel.map((row) => [row.id, row.score]));
-  assert.equal(cancelById.a, 1);
-  assert.equal(cancelById.b, 1);
+  assert.equal(cancelById.a, 2, 'the shared cat is worth nothing');
+  assert.equal(cancelById.b, 2);
 });
 
 test('validateWord rejects words that are not on the board', () => {
@@ -141,12 +150,12 @@ test('hardestWord prefers the longest, then A–Z', () => {
     { word: 'scrambled', playerId: 'c' },
   ]);
   assert.equal(best.word, 'scrambled');
-  assert.equal(best.points, 11);
+  assert.equal(best.points, 15);
 });
 
-test('invite frame matches the marketplace drawing', () => {
+test('invite frame matches the marketplace drawing, title centred between the chips', () => {
   assertLayout(inviteRows({ code: 'SLNG', alias: 'WITTYGAME' }), [
-    'gg WORD SCRAMBLE    gg',
+    'gg  WORD SCRAMBLE   gg',
     '',
     '  JOIN THE NEXT GAME',
     ' TINYURL.COM/WITTYGAME',
@@ -157,7 +166,7 @@ test('invite frame matches the marketplace drawing', () => {
 
 test('lobby frame shows the player count and code', () => {
   assertLayout(lobbyRows({ code: 'SLNG', playerCount: 2 }), [
-    'gg WORD SCRAMBLE    gg',
+    'gg  WORD SCRAMBLE   gg',
     '       2 PLAYERS',
     '       GAME CODE',
     '         SLNG',
@@ -183,6 +192,42 @@ test('round frame frames the 4x4 in yellow and holds the remaining seconds', () 
   assert.equal(frames[0].priority, 'snapshot');
 });
 
+test('the round card says which round it is, and the code while phones may still join', () => {
+  assertLayout(roundRows({
+    grid: ['CATE', 'ORWX', 'WIND', 'LEAP'],
+    roundIndex: 1,
+    rounds: 3,
+    code: 'SLNG',
+    showCode: true,
+  }), [
+    'HOW MANY      yyyyyyyy',
+    'SCRAMBLED     yyCATEyy',
+    'WORDS CAN     yyORWXyy',
+    'YOU FIND?     yyWINDyy',
+    'ROUND 1 OF 3  yyLEAPyy',
+    'CODE SLNG     yyyyyyyy',
+  ], 'word-scramble round with round and code');
+
+  // Late joining off: the round still shows, the code does not.
+  assertLayout(roundRows({
+    grid: ['CATE', 'ORWX', 'WIND', 'LEAP'],
+    roundIndex: 2,
+    rounds: 3,
+    code: 'SLNG',
+  }), [
+    'HOW MANY      yyyyyyyy',
+    'SCRAMBLED     yyCATEyy',
+    'WORDS CAN     yyORWXyy',
+    'YOU FIND?     yyWINDyy',
+    'ROUND 2 OF 3  yyLEAPyy',
+    '              yyyyyyyy',
+  ], 'word-scramble round without the code');
+
+  assert.equal(roundLabel(1, 3), 'ROUND 1 OF 3');
+  assert.equal(roundLabel(1, 1), 'ROUND 1', 'a one-round game does not count to one');
+  assert.equal(roundLabel(0, 3), '');
+});
+
 test('scores and best-word frames match the drawings', () => {
   assertLayout(scoresRows({
     scores: [{ name: 'Luis', score: 12 }, { name: 'Ada', score: 9 }],
@@ -194,12 +239,28 @@ test('scores and best-word frames match the drawings', () => {
     '',
     '',
   ], 'word-scramble scores');
-  assertLayout(bestRows({ word: 'scrambled', name: 'Luis', points: 11 }), [
+  assertLayout(bestRows({ word: 'scrambled', name: 'Luis', points: 15 }), [
     '       BEST WORD',
     '       SCRAMBLED',
     '       FOUND BY',
     '         LUIS',
-    '          11',
+    '          15',
     '',
   ], 'word-scramble best');
+});
+
+test('the scores card trades its fifth row for the code so latecomers can join', () => {
+  assertLayout(scoresRows({
+    scores: [{ name: 'Luis', score: 12 }, { name: 'Ada', score: 9 }],
+    code: 'SLNG',
+    showCode: true,
+    final: true,
+  }), [
+    '     FINAL SCORES',
+    'LUIS ...............12',
+    'ADA .................9',
+    '',
+    '',
+    '    GAME CODE: SLNG',
+  ], 'word-scramble final scores with the code');
 });

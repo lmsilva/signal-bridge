@@ -1,29 +1,351 @@
+/*
+ * Word Scramble, phone first.
+ *
+ * Most players hold a phone, so the single column and the thumb-height
+ * compose bar are the base case. Wider screens get the board and the lists
+ * side by side instead of a long scroll, and the letter tiles size off their
+ * own container (not the viewport) so the same grid works in a narrow phone
+ * column and in a desktop half-width stage.
+ */
+
 :root {
   color-scheme: dark;
-  --bg: #0b1730;
+  --bg: #070f22;
   --card: #13233f;
+  --card-soft: #182b4d;
+  --line: #27395c;
   --ink: #f4f1ea;
-  --muted: #9aa6b8;
+  --muted: #94a3b8;
   --accent: #3b82f6;
+  --good: #4ade80;
+  --warn: #f59e0b;
+  --radius: 16px;
+  --gutter: clamp(16px, 4vw, 32px);
+  --gap: clamp(14px, 2.6vw, 24px);
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; }
-.gm-header { display: flex; gap: 12px; align-items: center; padding: 20px 20px 8px; }
-.gm-logo { border-radius: 8px; }
-.gm-header h1 { margin: 0; font-size: 1.25rem; }
-.gm-header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
-.gm-main { padding: 16px 20px 40px; max-width: 420px; }
-.gm-label { display: block; margin: 14px 0 6px; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-.gm-input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #2a3b58; background: var(--card); color: var(--ink); font-size: 1.1rem; }
-.gm-send, .gm-secondary { width: 100%; margin-top: 16px; padding: 12px; border: 0; border-radius: 10px; font-size: 1rem; cursor: pointer; }
-.gm-send { background: var(--accent); color: white; }
-.gm-secondary { background: transparent; color: var(--muted); border: 1px solid #2a3b58; }
-.gm-status { min-height: 1.2em; color: #f59e0b; }
-.gm-phase { font-size: 1.1rem; margin: 0 0 4px; }
-.gm-timer { font-size: 2rem; font-variant-numeric: tabular-nums; margin: 0 0 12px; }
-.gm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
-.gm-cell { aspect-ratio: 1; display: grid; place-items: center; background: #1d4ed8; border-radius: 10px; font-size: 1.6rem; font-weight: 700; }
-.gm-roster, .gm-board { list-style: none; padding: 0; margin: 16px 0; }
-.gm-roster li, .gm-board li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #24344f; }
-.gm-score { color: var(--muted); }
+
+/* Several panels are display:grid/flex, which would otherwise beat [hidden]. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(120% 70% at 50% 0%, #10203f 0%, rgba(16, 32, 63, 0) 60%),
+    var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+.gm-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--gutter) calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.gm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- chrome */
+
+.gm-header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: clamp(18px, 4vw, 28px) 0 clamp(14px, 2.5vw, 20px);
+}
+
+.gm-logo { border-radius: 10px; flex: none; }
+.gm-headings { min-width: 0; }
+.gm-header h1 { margin: 0; font-size: clamp(1.15rem, 3.4vw, 1.6rem); letter-spacing: -0.01em; }
+.gm-header p { margin: 3px 0 0; color: var(--muted); font-size: clamp(0.85rem, 2.2vw, 0.95rem); }
+
+.gm-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: clamp(14px, 2.6vw, 20px);
+}
+
+/* ------------------------------------------------------------- join */
+
+.gm-join { display: grid; justify-items: stretch; }
+.gm-join-card { width: 100%; max-width: 440px; margin-inline: auto; }
+
+.gm-label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.gm-label:first-child { margin-top: 0; }
+
+.gm-input {
+  width: 100%;
+  padding: 13px 15px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #0e1b33;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+}
+.gm-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+.gm-input-code {
+  font-size: clamp(1.4rem, 6vw, 1.9rem);
+  letter-spacing: 0.34em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.gm-send, .gm-secondary {
+  width: 100%;
+  margin-top: 16px;
+  padding: 13px 16px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gm-send { background: var(--accent); color: #fff; }
+.gm-send:hover { background: #2f74e8; }
+.gm-secondary {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.gm-secondary:hover { color: var(--ink); border-color: #35507e; }
+
+.gm-status { min-height: 1.3em; margin: 10px 0 0; color: var(--warn); font-size: 0.92rem; }
+
+/* ------------------------------------------------------------- play */
+
+.gm-play {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+}
+
+.gm-stage { display: grid; gap: clamp(12px, 2vw, 18px); }
+
+.gm-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.gm-meta-main { min-width: 0; }
+.gm-phase {
+  margin: 0;
+  font-size: clamp(1rem, 2.6vw, 1.3rem);
+  font-weight: 600;
+}
+.gm-score { margin: 3px 0 0; color: var(--muted); font-size: 0.92rem; }
+.gm-timer {
+  margin: 0;
+  font-size: clamp(2rem, 8vw, 3.2rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.gm-code-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.gm-code-label { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.gm-code-value { font-size: 1.2rem; letter-spacing: 0.2em; }
+.gm-code-note { font-size: 0.82rem; color: var(--muted); }
+
+/*
+ * Tiles size off the stage width, so the grid fits any column it lands in.
+ * The height term keeps the whole board plus the input on screen when there
+ * is little of it — a landscape phone, or a short desktop window.
+ */
+.gm-board-wrap {
+  container-type: inline-size;
+  width: 100%;
+  max-width: min(520px, max(220px, calc(100dvh - 390px)));
+  margin-inline: auto;
+}
+/* Collapse the empty slot too, or its stage gaps leave a hole. */
+.gm-play.gm-no-board .gm-board-wrap { display: none; }
+.gm-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(6px, 2.4cqi, 14px);
+}
+.gm-cell {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: clamp(10px, 3.5cqi, 20px);
+  background: linear-gradient(180deg, #2c6ef0 0%, #1d4ed8 100%);
+  box-shadow: inset 0 -3px 0 rgba(2, 6, 23, 0.35), 0 8px 18px rgba(2, 6, 23, 0.35);
+  font-size: clamp(1.3rem, 11cqi, 3.4rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* On a phone the compose bar rides the bottom of the screen, in thumb reach. */
+.gm-compose {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 0 calc(var(--gutter) * -1);
+  padding: 12px var(--gutter) calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(7, 15, 34, 0) 0%, var(--bg) 45%);
+}
+.gm-compose-row { display: flex; gap: 10px; }
+.gm-compose-row .gm-input { flex: 1 1 auto; min-width: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+.gm-send-inline { width: auto; flex: none; margin-top: 0; padding-inline: clamp(16px, 4vw, 26px); }
+
+/* ------------------------------------------------------------- lists */
+
+.gm-side { display: grid; gap: var(--gap); align-content: start; }
+.gm-section { margin: 0; }
+.gm-h2 {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.gm-board { list-style: none; padding: 0; margin: 6px 0 0; }
+.gm-board li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.gm-board li:last-child { border-bottom: 0; }
+.gm-board .gm-rank { flex: none; width: 1.6em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gm-board .gm-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-board .gm-points { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; }
+.gm-board li.is-you { color: #bfdbfe; }
+.gm-board li.is-you .gm-points { color: var(--accent); }
+
+.gm-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 10px 0 0;
+}
+.gm-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+}
+.gm-chip-word { font-weight: 600; letter-spacing: 0.03em; }
+.gm-chip-points { font-size: 0.78rem; color: var(--good); font-variant-numeric: tabular-nums; }
+.gm-chip-who { font-size: 0.72rem; color: var(--muted); }
+
+/* --------------------------------------------------- tablet and up */
+
+@media (min-width: 760px) {
+  .gm-join { min-height: 62vh; align-content: center; }
+
+  .gm-play { grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr); }
+  .gm-board-wrap { margin-inline: 0; }
+
+  /* Room to scroll to the input, so it stops floating over the board. */
+  .gm-compose {
+    position: static;
+    margin: 0;
+    padding: 0;
+    background: none;
+  }
+}
+
+/* Cap the stage with the board and centre the pair, so a wide window does not
+   leave a gap between the last letter and the sidebar. */
+@media (min-width: 1080px) {
+  .gm-play {
+    grid-template-columns: minmax(0, 620px) minmax(300px, 400px);
+    justify-content: center;
+  }
+  .gm-board-wrap { max-width: min(620px, max(220px, calc(100dvh - 390px))); }
+
+  /* Sticky, but it scrolls itself — a long word list must stay reachable. */
+  .gm-side {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+}
+
+/* No board on screen: lobby, intermission, the final. One centred column. */
+@media (min-width: 760px) {
+  .gm-play.gm-no-board {
+    grid-template-columns: minmax(0, 560px);
+    justify-content: center;
+  }
+  .gm-play.gm-no-board .gm-side { position: static; max-height: none; overflow: visible; }
+}
+
+/*
+ * Short and wide — a landscape phone, or a half-height desktop window. Keyed
+ * on height alone: a landscape phone is ~840px wide, so a width query here
+ * would never fire. Trim the chrome to buy the board back its height.
+ */
+@media (orientation: landscape) and (max-height: 560px) {
+  /* Two columns even with no board — on 390px of height, halving the scroll
+     beats centring one column. */
+  .gm-play,
+  .gm-play.gm-no-board {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    justify-content: stretch;
+  }
+  .gm-header { padding-block: 10px 6px; }
+  .gm-header p { display: none; }
+  .gm-logo { width: 30px; height: 30px; }
+  .gm-timer { font-size: clamp(1.5rem, 7vh, 2.2rem); }
+  .gm-phase { font-size: 1rem; }
+  .gm-code-line { padding: 7px 12px; }
+  .gm-code-value { font-size: 1rem; }
+  .gm-board-wrap { max-width: max(180px, calc(100dvh - 210px)); }
+  .gm-compose { position: static; margin: 0; padding: 0; background: none; }
+  .gm-side { position: static; max-height: none; overflow: visible; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gm-cell { transition: transform 120ms ease; }
+}
