@@ -113,6 +113,8 @@ async function main() {
       youtubeNowPlaying: listener.youtubeNowPlaying,
       getPlexStatus: listener.getPlexStatus,
       plexNowPlaying: listener.plexNowPlaying,
+      getRingStatus: listener.getRingStatus,
+      ringDoorbell: listener.ringDoorbell,
       autodarts: listener.autodarts,
       getAutodartsStatus: listener.getAutodartsStatus,
       huupe: listener.huupe,

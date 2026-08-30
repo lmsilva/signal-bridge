@@ -23,6 +23,7 @@
   "dependencies": {
     "alexa-remote2": "^8.0.4",
     "psn-api": "^2.18.0",
+    "ring-client-api": "^14.3.0",
     "sharp": "^0.35.3",
     "ws": "^8.21.3"
   }

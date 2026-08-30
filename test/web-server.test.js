@@ -2276,6 +2276,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'public-url-settings-card',
     'guest-snaps-settings-card',
     'guest-book-settings-card',
+    'ring-doorbell-settings-card',
     'learn-japanese-settings-card',
     'learn-language-settings-card',
   ]) {
@@ -2316,6 +2317,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-snaps-alias"/);
   assert.match(html, /id="btn-guest-snaps-save"/);
   assert.match(html, /id="guest-book-settings-card"/);
+  assert.match(html, /id="ring-doorbell-settings-card"/);
+  assert.match(html, /id="ring-preview"/);
   assert.match(html, /id="btn-guest-book-check"/);
   assert.match(html, /id="guest-book-enabled"/);
   assert.match(html, /id="btn-guest-book-open"/);
@@ -2360,8 +2363,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal185/);
-  assert.match(html, /app\.js\?v=signal185/);
+  assert.match(html, /styles\.css\?v=signal187/);
+  assert.match(html, /app\.js\?v=signal187/);
+  assert.match(html, /id="btn-ring-login"/);
+  assert.match(html, /id="ring-2fa-block"/);
   assert.match(js, /function dateBookPreviewEvent\(/);
   assert.match(js, /setHours\(24, 0, 0, 0\)/);
   assert.match(js, /dateBookPreviewEvent\(draft\)/);

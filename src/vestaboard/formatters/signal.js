@@ -2,7 +2,7 @@
 
 const { COLS, blankRow, placeText, fold } = require('../encoder');
 const { badgeFrame, chipCode, BODY_FROM, BODY_TO, MAX_BODY_ROWS } = require('../frames');
-const { snapshotFrame, padRows } = require('./common');
+const { snapshotFrame, alertFrame, padRows } = require('./common');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
 
@@ -222,10 +222,23 @@ function guestBookInviteFrames(payload = {}) {
   return [snapshotFrame(payload.rows, 'Guest book invite', 'guest.book')];
 }
 
+/**
+ * Ring ding / motion — painted rows from ring-doorbell.js. Alert priority so
+ * the doorbell preempts a rotation the way a reminder does.
+ */
+function ringDoorbellFrames(payload = {}) {
+  if (!Array.isArray(payload.rows)) {
+    return [];
+  }
+  const label = payload.kind === 'motion' ? 'Ring motion' : 'Ring doorbell';
+  return [alertFrame(payload.rows, label, 'ring.doorbell')];
+}
+
 const FORMATTERS = {
   'guest.photobooth': guestSnapsFrames,
   'guest.book': guestBookFrames,
   'guest.book.invite': guestBookInviteFrames,
+  'ring.doorbell': ringDoorbellFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -244,6 +257,7 @@ module.exports = {
   guestSnapsFrames,
   guestBookFrames,
   guestBookInviteFrames,
+  ringDoorbellFrames,
   boothHost,
   splitHost,
   labeledOrStacked,

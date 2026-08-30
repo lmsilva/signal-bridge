@@ -80,6 +80,7 @@ const COMMAND_TO_TYPE = {
   'calendar.clock': 'calendar.clock',
   'redletter.show': 'red-letter.card',
   'guestbook.invite': 'guest.book.invite',
+  'ring.doorbell': 'ring.doorbell',
   'stocks.market': 'stocks.market',
   'fx.rates': 'fx.rates',
   'iss.track': 'iss.track',
@@ -217,6 +218,8 @@ function routeEvent({
       replaceSource = String(replaceSourceOpt);
     } else if (type === 'guest.book' || type === 'guest.book.invite') {
       replaceSource = 'guest.book';
+    } else if (type === 'ring.doorbell') {
+      replaceSource = 'ring.doorbell';
     }
     const outcome = submit(entry.board.id, frames, {
       priority,
