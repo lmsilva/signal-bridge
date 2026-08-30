@@ -1,8 +1,8 @@
 /**
  * Calendar Clock — marketplace monthly calendar + house clock on the flaps.
  *
- * No network. The left seven columns are a month grid (one chip per day);
- * the right side is weekday, month+day, and a 12-hour clock. A 5-week month
+ * No network. Seven chip columns sit one flap in from the left; two blank
+ * columns then the weekday, month+day, and a 12-hour clock. A 5-week month
  * keeps `SMTWTFS` on row 1 so the chips line up under the letters. A 6-week
  * month (31 days starting Friday/Saturday on a Sunday week, and similar
  * Monday-week cases) spends that row on days instead.
@@ -59,7 +59,11 @@ const DEFAULT_SETTINGS = Object.freeze({
 });
 
 const CAL_COLS = 7;
-const TEXT_COL = 8;
+/** One blank flap so the month grid is not glued to the bezel. */
+const CAL_COL0 = 1;
+/** Two blank flaps between the last day chip and the weekday / date / clock. */
+const TEXT_GAP = 2;
+const TEXT_COL = CAL_COL0 + CAL_COLS + TEXT_GAP;
 
 function weekStartIndex(value) {
   const raw = String(value || '').trim().toLowerCase();
@@ -191,16 +195,17 @@ function calendarClockRows(model) {
   const rows = [0, 1, 2, 3, 4, 5].map(() => blankRow(COLS));
   const dayRow0 = model.showHeader ? 1 : 0;
   if (model.showHeader && model.header) {
-    placeText(rows[0], fold(model.header), 0);
+    placeText(rows[0], fold(model.header), CAL_COL0);
   }
   const monthChip = chipCode(model.theme.month);
   const todayChip = chipCode(model.theme.today);
   for (const cell of model.cells) {
     const row = dayRow0 + cell.row;
-    if (row < 0 || row >= ROWS || cell.col < 0 || cell.col >= CAL_COLS) {
+    const col = CAL_COL0 + cell.col;
+    if (row < 0 || row >= ROWS || cell.col < 0 || cell.col >= CAL_COLS || col >= COLS) {
       continue;
     }
-    rows[row][cell.col] = cell.today ? todayChip : monthChip;
+    rows[row][col] = cell.today ? todayChip : monthChip;
   }
 
   // Weekday / date / time sit on the same rows whether or not the header
@@ -216,7 +221,11 @@ function calendarClockRows(model) {
   const meridiem = fold(timeBits[1] || '');
   if (weekday) placeText(rows[1], weekday, TEXT_COL);
   if (month) placeText(rows[2], month, TEXT_COL);
-  if (day) placeText(rows[2], day, TEXT_COL + month.length + 2);
+  if (day) {
+    // SEPTEMBER + a two-digit day is one flap too wide for a two-flap gap.
+    const dateGap = TEXT_COL + month.length + 2 + day.length <= COLS ? 2 : 1;
+    placeText(rows[2], day, TEXT_COL + month.length + dateGap);
+  }
   if (clock) placeText(rows[4], clock, TEXT_COL);
   if (meridiem) placeText(rows[4], meridiem, TEXT_COL + clock.length + 2);
   return rows;
@@ -336,6 +345,8 @@ module.exports = {
   MONTH_THEMES,
   HEADER_SUNDAY,
   HEADER_MONDAY,
+  CAL_COL0,
+  TEXT_COL,
   DEFAULT_SETTINGS,
   sanitiseSettings,
   weekStartIndex,

@@ -497,11 +497,21 @@ test('clock strings parse only when they are real times', () => {
 
 test('inside quiet hours a snapshot is dropped rather than saved for morning', async () => {
   const h = makeQueue({ quietHours: { start: '00:00', end: '23:59' } });
-  h.queue.submit([frame('WEATHER', 1)]);
-
-  assert.equal(await h.queue.tick(), 'quiet');
+  const submitted = h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(submitted.accepted, 0);
+  assert.equal(submitted.reason, 'quiet');
   assert.equal(h.transport.posts.length, 0);
   assert.equal(h.queue.pending().length, 0, 'not held for later — it would be stale');
+});
+
+test('a snapshot already in line is dropped once quiet hours open', async () => {
+  const h = makeQueue({ quietHours: { start: '22:00', end: '07:00', enabled: false } });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(h.queue.pending().length, 1);
+  h.queue.setConfig({ quietHours: { start: '00:00', end: '23:59', enabled: true } });
+  assert.equal(await h.queue.tick(), 'quiet');
+  assert.equal(h.transport.posts.length, 0);
+  assert.equal(h.queue.pending().length, 0);
 });
 
 test('alarm and timer fires still get through quiet hours', async () => {
@@ -515,8 +525,12 @@ test('alarm and timer fires still get through quiet hours', async () => {
   assert.equal(await h.queue.tick(), 'posted');
 
   h.advance(15 * SECOND);
-  h.queue.submit([frame('BROADCAST', 7, { source: 'broadcast kitchen' })], { priority: 'alert' });
-  assert.equal(await h.queue.tick(), 'quiet', 'an alert is not automatically exempt');
+  const broadcast = h.queue.submit(
+    [frame('BROADCAST', 7, { source: 'broadcast kitchen' })],
+    { priority: 'alert' },
+  );
+  assert.equal(broadcast.reason, 'quiet', 'an alert is not automatically exempt');
+  assert.equal(broadcast.accepted, 0);
 });
 
 test('the caller can declare a frame exempt outright', async () => {
@@ -531,4 +545,79 @@ test('the board state reports whether quiet hours are running', () => {
 
   const quiet = makeQueue({ quietHours: { start: '00:00', end: '23:59' } });
   assert.equal(quiet.queue.state().quietHours, true);
+});
+
+test('holdSeconds keeps the next snapshot off the board until the hold ends', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  assert.equal(h.queue.pending().length, 1);
+  h.advance(284 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 2);
+});
+
+test('an explicit snapshot may post after the rate window during a guest hold', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('REPLAY', 2)]);
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 2);
+});
+
+test('replaceSource drops earlier pages from the same guest book run', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('OLD', 1, { source: 'guest.book' }), frame('OLD FOOTER', 2, { source: 'guest.book' })]);
+  h.queue.submit([frame('NEW', 3, { source: 'guest.book' })], { replaceSource: 'guest.book' });
+  assert.equal(h.queue.pending().length, 1);
+  assert.equal(h.queue.pending()[0].label, 'NEW');
+});
+
+test('a held scheduler page does not block an explicit Air now behind it', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('INVITE', 2)], { scheduler: true });
+  h.queue.submit([frame('CLOCK', 3)]);
+  assert.equal(h.queue.pending()[0].status, 'held');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 3);
+  assert.equal(h.queue.pending()[0].label, 'INVITE');
+});
+
+test('a held page that is already on the board is dropped instead of parking the line', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('INVITE', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('INVITE AGAIN', 1)], { scheduler: true });
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'duplicate');
+  assert.equal(h.queue.pending().length, 0);
+});
+
+test('breakHold puts an explicit snapshot in front of parked scheduler pages', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('GUEST', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('PARKED', 2)], { scheduler: true });
+  h.queue.submit([frame('AIR NOW', 3)], { breakHold: true });
+  assert.equal(h.queue.pending()[0].label, 'AIR NOW');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 3);
+});
+
+test('an alert still preempts a guest hold', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('GUEST', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.advance(16 * SECOND);
+  h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })], { priority: 'alert' });
+  assert.equal(await h.queue.tick(), 'posted');
 });

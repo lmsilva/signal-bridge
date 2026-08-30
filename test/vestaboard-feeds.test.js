@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const { validate } = require('../src/vestaboard/encoder');
 const { parseLayout, formatLayout } = require('../src/vestaboard/notation');
+const { dwellFor } = require('../src/vestaboard/frames');
 const feeds = require('../src/vestaboard/formatters/feeds');
 const signal = require('../src/vestaboard/formatters/signal');
 
@@ -249,6 +250,39 @@ test('boolean trivia fits when the question is three lines or fewer', () => {
     text: 'Is the sky blue?',
     answers: ['True', 'False'],
   }), 'boolean');
+});
+
+test('guest book frames are a normal push — no hold, optional invite page', () => {
+  const rows = Array.from({ length: 6 }, () => new Array(22).fill(0));
+  const footer = Array.from({ length: 6 }, () => new Array(22).fill(0));
+  footer[5][0] = 1;
+  const frames = signal.guestBookFrames({
+    type: 'guest.book',
+    rows,
+    footerRows: footer,
+    name: 'Luis',
+  });
+  assert.equal(frames.length, 2);
+  assert.equal(frames[0].holdSeconds, undefined);
+  assert.equal(frames[0].dwellSeconds, dwellFor(rows, { base: 15 }));
+  assert.equal(frames[0].source, 'guest.book');
+  assert.equal(frames[0].label, 'Guest · Luis');
+  assert.equal(frames[1].holdSeconds, undefined);
+  assert.equal(frames[1].source, 'guest.book');
+});
+
+test('guest book invite is one snapshot page', () => {
+  const rows = Array.from({ length: 6 }, () => new Array(22).fill(0));
+  rows[0][0] = 1;
+  const frames = signal.guestBookInviteFrames({
+    type: 'guest.book.invite',
+    rows,
+  });
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0].holdSeconds, undefined);
+  assert.equal(frames[0].dwellSeconds, dwellFor(rows, { base: 15 }));
+  assert.equal(frames[0].label, 'Guest book invite');
+  assert.equal(frames[0].source, 'guest.book');
 });
 
 test('guest snaps types the wifi and the booth host, never the QR payload', () => {

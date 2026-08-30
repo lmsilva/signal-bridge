@@ -8,10 +8,14 @@
  *
  * Settings resolve from (first non-empty wins):
  *   process.env → root `.env` on disk → `data/guest-photobooth.json` → config.guestPhotobooth
+ *
+ * Booth / slideshow origin precedence (see public-url.js):
+ *   web.publicBaseUrl → GUEST_PHOTOBOOTH_URL → file boothUrl → LAN default.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { publicUrl, resolvePublicOrigin } = require('./public-url');
 
 // Primary brand phrase — "Alexa, open guest snaps" (welcome / how to connect)
 const GUEST_SNAPS_RE = /\b(?:open|show|start|launch|display)?\s*(?:the\s+)?guest\s*snaps?\b/i;
@@ -62,9 +66,25 @@ function matchesGuestPhotoboothQuery(summary, response) {
   return false;
 }
 
+function boothOriginExtras(config = {}, extras = {}) {
+  const guest = extras.guest || (
+    (config.ROOT || config.guestPhotoboothPath)
+      ? { ...loadGuestPhotoboothFile(config), ...(config.guestPhotobooth || {}) }
+      : { ...(config.guestPhotobooth || {}) }
+  );
+  const fileEnv = extras.fileEnv
+    || (config.ROOT ? parseDotEnvFile(path.join(config.ROOT, '.env')) : {});
+  return {
+    env: extras.env,
+    fileEnv,
+    boothUrl: firstNonEmpty(guest.boothUrl, guest.url),
+  };
+}
+
 /** Absolute http(s) URLs for UDP `photo.slideshow` from qr-image-cache `list()`. */
 function photosToSlideshowEntries(listed, config = {}) {
-  const origin = String(defaultGuestPhotoboothUrl(config) || '').replace(/\/$/, '');
+  const extras = boothOriginExtras(config);
+  const origin = resolvePublicOrigin(config, extras);
   if (!origin) {
     return [];
   }
@@ -76,7 +96,7 @@ function photosToSlideshowEntries(listed, config = {}) {
       }
       const pathPart = rel.startsWith('/') ? rel : `/${rel}`;
       return {
-        url: `${origin}${pathPart}`,
+        url: publicUrl(pathPart, config, extras) || `${origin}${pathPart}`,
         uploadedAt: entry.createdAt || null,
       };
     })
@@ -189,15 +209,11 @@ function resolveGuestPhotoboothSettings(config = {}) {
     hidden = truthyEnv(fileEnv.GUEST_WIFI_HIDDEN);
   }
 
-  let boothUrl = firstNonEmpty(
-    process.env.GUEST_PHOTOBOOTH_URL,
-    fileEnv.GUEST_PHOTOBOOTH_URL,
-    guest.boothUrl,
-    guest.url,
-  );
-  if (!boothUrl) {
-    boothUrl = defaultGuestPhotoboothUrl(config);
-  }
+  const origin = resolvePublicOrigin(config, {
+    fileEnv,
+    boothUrl: firstNonEmpty(guest.boothUrl, guest.url),
+  });
+  const boothUrl = origin ? `${origin}/` : '';
 
   const displaySeconds = Number(
     firstNonEmpty(
@@ -221,20 +237,8 @@ function resolveGuestPhotoboothSettings(config = {}) {
 }
 
 function defaultGuestPhotoboothUrl(config = {}) {
-  const https = config.webServer?.https !== false;
-  const port = Number(config.webServer?.port) > 0
-    ? Number(config.webServer.port)
-    : 47810;
-  const host = String(
-    config.proxyOwnIp
-    || (Array.isArray(config.webServer?.certHosts) && config.webServer.certHosts[0])
-    || '',
-  ).trim();
-  if (!host || host === '127.0.0.1' || host === 'localhost') {
-    return '';
-  }
-  const scheme = https ? 'https' : 'http';
-  return `${scheme}://${host}:${port}/`;
+  const origin = resolvePublicOrigin(config, boothOriginExtras(config));
+  return origin ? `${origin}/` : '';
 }
 
 module.exports = {
@@ -248,4 +252,5 @@ module.exports = {
   defaultGuestPhotoboothUrl,
   loadGuestPhotoboothFile,
   parseDotEnvFile,
+  boothOriginExtras,
 };

@@ -121,6 +121,16 @@ const { createHuupeService } = require('./huupe-service');
 const { createFlightplanService } = require('./flightplan-service');
 const { filterLegsByAirport } = require('./flightplan-api');
 const { createLocaleSettings } = require('./locale-settings');
+const { createPublicUrlSettings, publicUrl, isUsableShortLinkOrigin } = require('./public-url');
+const { createGuestBookSettings, sanitiseAlias, publicSettings } = require('./guest-book-settings');
+const { createGuestBook, guestClientIp } = require('./guest-book');
+const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH } = require('./shortlinks');
+const { houseTimeZone } = require('./vestaboard/clock');
+const {
+  defaultCredentialsPath: defaultTinyurlCredentialsPath,
+  saveTinyurlToken,
+  credentialsStatus: tinyurlCredentialsStatus,
+} = require('./tinyurl-credentials');
 const { fetchWeatherForecast, resolveHouseLocale } = require('./weather-fetch');
 const { extractWeatherLocation } = require('./weather-location');
 const { loadWeatherCache, saveWeatherCache } = require('./weather-cache');
@@ -244,6 +254,8 @@ function resolveStaticPath(webRoot, urlPathname) {
     pathname = '/admin/index.html';
   } else if (pathname === '/admin/login' || pathname === '/admin/login/') {
     pathname = '/admin/login.html';
+  } else if (pathname === '/guestbook' || pathname === '/guestbook/') {
+    pathname = '/guestbook/index.html';
   }
   const resolved = path.normalize(path.join(webRoot, pathname));
   if (resolved !== webRoot && !resolved.startsWith(webRoot + path.sep)) {
@@ -392,6 +404,12 @@ function createWebServer({
   scheduleRestart,
   webRoot,
   localeSettings: localeSettingsInjected = null,
+  publicUrlSettings: publicUrlSettingsInjected = null,
+  guestBookSettings: guestBookSettingsInjected = null,
+  guestBook: guestBookInjected = null,
+  shortlinks: shortlinksInjected = null,
+  shortlinksFetch = null,
+  shortlinksHealthIntervalMs = undefined,
 } = {}) {
   let schedulerAir = null;
 
@@ -440,6 +458,34 @@ function createWebServer({
   }
   const slideshowSettings = createSlideshowSettings(config, log);
   const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
+  const publicUrlSettings = publicUrlSettingsInjected || createPublicUrlSettings(config, log);
+  const guestBookSettings = guestBookSettingsInjected || createGuestBookSettings(config, log);
+  const shortlinks = shortlinksInjected || createShortlinks(config, log, {
+    fetchImpl: shortlinksFetch,
+    healthIntervalMs: shortlinksHealthIntervalMs != null
+      ? shortlinksHealthIntervalMs
+      : (process.env.NODE_TEST_CONTEXT ? 0 : undefined),
+  });
+  const guestBook = guestBookInjected || createGuestBook(config, log, {
+    getSettings: () => guestBookSettings.get(),
+    getShortlink: () => shortlinks.status(GUESTBOOK_NAME),
+    pushToBoard: (payload, options = {}) => {
+      if (!vestaboardHub?.pushEvent) {
+        return { boards: [] };
+      }
+      return vestaboardHub.pushEvent(payload, {
+        targetId: 'vestaboard',
+        quietHoursExempt: options.quietHoursExempt,
+        explicit: options.explicit,
+      });
+    },
+    getTimeZone: () => localeSettings.get()?.timeZone || houseTimeZone(config),
+    getQuietHours: () => {
+      const boards = typeof vestaboardHub?.boards === 'function' ? vestaboardHub.boards() : [];
+      return boards[0]?.quietHours || null;
+    },
+  });
+  guestBook.start?.();
   const learnJapanese = createLearnJapanese(config, log);
   const learnLanguages = createLearnLanguages(config, log);
   const chuckNorris = createChuckNorris(config, log);
@@ -547,6 +593,7 @@ function createWebServer({
       || null,
     getPlexTop10Status: () => plexTop10.statusSnapshot(),
     getRedLetterStatus: () => redLetter.statusSnapshot(),
+    getGuestBookStatus: () => guestBook.publicStatus(),
     getLocaleSettings: () => localeSettings.get(),
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getLearnLanguageStatus: (commandId) => learnLanguages[commandId]?.statusSnapshot() || null,
@@ -1985,6 +2032,266 @@ function createWebServer({
     } catch (error) {
       sendJson(res, 502, { ok: false, error: error?.message || 'Location lookup failed' });
     }
+  }
+
+  function publicUrlEnvNote() {
+    const envSet = Boolean(String(process.env.GUEST_PHOTOBOOTH_URL || '').trim());
+    return {
+      envGuestPhotoboothUrlSet: envSet,
+      envNote: envSet
+        ? 'GUEST_PHOTOBOOTH_URL is also set in .env — the Public base URL above wins while it is set.'
+        : '',
+    };
+  }
+
+  function handlePublicUrlSettingsGet(res) {
+    const settings = publicUrlSettings.get();
+    sendJson(res, 200, {
+      ok: true,
+      settings,
+      origin: publicUrl('', config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl('/guestbook/', config)),
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  async function handlePublicUrlSettingsPut(body, res) {
+    try {
+      const settings = publicUrlSettings.update({
+        publicBaseUrl: body?.publicBaseUrl,
+      });
+      const guest = guestBookSettings.get();
+      if (guest.preferredAlias) {
+        await shortlinks.ensure(GUESTBOOK_NAME, GUESTBOOK_PATH, {
+          preferredAlias: guest.preferredAlias,
+        });
+      }
+      sendJson(res, 200, {
+        ok: true,
+        settings,
+        origin: publicUrl('', config),
+        shortLinkReady: isUsableShortLinkOrigin(publicUrl('/guestbook/', config)),
+        shortlink: shortlinks.status(GUESTBOOK_NAME),
+        ...publicUrlEnvNote(),
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function tinyurlCredPath() {
+    return config.tinyurlCredentialsPath || defaultTinyurlCredentialsPath(config.ROOT);
+  }
+
+  function handleGuestBookSettingsGet(res) {
+    const settings = guestBookSettings.get();
+    sendJson(res, 200, {
+      ok: true,
+      settings: publicSettings(settings),
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+      shortlink: shortlinks.status(GUESTBOOK_NAME),
+      targetPath: GUESTBOOK_PATH,
+      targetUrl: publicUrl(GUESTBOOK_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GUESTBOOK_PATH, config)),
+      boardCode: settings.whoCanSend === 'code' ? guestBook.currentCode().pin : '',
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  async function handleGuestBookSettingsPut(body, res) {
+    const credPath = tinyurlCredPath();
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'apiToken')
+      || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
+      const token = String(body.apiToken || body.token || '').trim();
+      if (token) {
+        if (String(process.env.TINYURL_API_TOKEN || '').trim()) {
+          sendJson(res, 409, {
+            ok: false,
+            error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
+            source: 'env',
+          });
+          return;
+        }
+        try {
+          saveTinyurlToken(credPath, token);
+        } catch (error) {
+          sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+          return;
+        }
+      }
+    }
+
+    let settings = guestBookSettings.get();
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'preferredAlias')) {
+      try {
+        patch.preferredAlias = sanitiseAlias(body.preferredAlias);
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+        return;
+      }
+    }
+    for (const key of [
+      'enabled', 'paused', 'whoCanSend', 'rateLimitEnabled', 'ratePerGuest',
+      'rateWindowMinutes', 'dailyCap', 'blockedWordsEnabled', 'blockedWords',
+      'approval',
+      'inviteFooter', 'guestsMayWake',
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+        patch[key] = body[key];
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'password')) {
+      patch.password = body.password;
+    }
+    if (body?.clearPassword) {
+      patch.clearPassword = true;
+    }
+    if (Object.keys(patch).length) {
+      settings = guestBookSettings.update(patch);
+    }
+
+    let shortlink = shortlinks.status(GUESTBOOK_NAME);
+    if (settings.preferredAlias) {
+      shortlink = await shortlinks.ensure(GUESTBOOK_NAME, GUESTBOOK_PATH, {
+        preferredAlias: settings.preferredAlias,
+      });
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      settings: publicSettings(settings),
+      credentials: tinyurlCredentialsStatus(credPath),
+      shortlink,
+      targetPath: GUESTBOOK_PATH,
+      targetUrl: publicUrl(GUESTBOOK_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GUESTBOOK_PATH, config)),
+      boardCode: settings.whoCanSend === 'code' ? guestBook.currentCode().pin : '',
+      ...publicUrlEnvNote(),
+    });
+  }
+
+  async function handleGuestBookCheck(body, res) {
+    try {
+      let settings = guestBookSettings.get();
+      if (String(body?.preferredAlias || '').trim()) {
+        settings = guestBookSettings.update({
+          preferredAlias: sanitiseAlias(body.preferredAlias),
+        });
+      }
+      if (settings.preferredAlias) {
+        await shortlinks.ensure(GUESTBOOK_NAME, GUESTBOOK_PATH, {
+          preferredAlias: settings.preferredAlias,
+        });
+      }
+      const shortlink = await shortlinks.check(GUESTBOOK_NAME);
+      sendJson(res, 200, {
+        ok: true,
+        settings: publicSettings(settings),
+        credentials: tinyurlCredentialsStatus(tinyurlCredPath()),
+        shortlink,
+        targetPath: GUESTBOOK_PATH,
+        targetUrl: publicUrl(GUESTBOOK_PATH, config),
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function handleGuestbookStatus(res) {
+    sendJson(res, 200, { ok: true, ...guestBook.publicStatus() });
+  }
+
+  function handleGuestbookPreview(body, res) {
+    const layout = guestBook.preview(body || {});
+    sendJson(res, layout.ok ? 200 : 400, { ok: layout.ok, ...layout });
+  }
+
+  function handleGuestbookUnlock(body, req, res) {
+    const result = guestBook.unlock({
+      password: body?.password,
+      code: body?.code,
+    }, guestClientIp(req));
+    if (!result.ok) {
+      sendJson(res, result.locked ? 429 : 401, result);
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': result.setCookie,
+    });
+    res.end(JSON.stringify({
+      ok: true,
+      expiresAt: new Date(result.expiresAt).toISOString(),
+    }));
+  }
+
+  function handleGuestbookSend(body, req, res) {
+    const result = guestBook.send(body || {}, { ip: guestClientIp(req), req });
+    if (!result.ok && result.retryAfterSeconds > 0) {
+      const data = JSON.stringify(result);
+      res.writeHead(429, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Retry-After': String(result.retryAfterSeconds),
+      });
+      res.end(data);
+      return;
+    }
+    const status = result.ok
+      ? 200
+      : (result.closed ? 403 : (result.needsUnlock ? 401 : 400));
+    sendJson(res, status, result);
+  }
+
+  function handleGuestBookList(res) {
+    sendJson(res, 200, { ok: true, entries: guestBook.list({ limit: 200 }) });
+  }
+
+  function handleGuestBookReplay(body, res) {
+    const result = guestBook.replay(body?.id);
+    sendJson(res, result.ok ? 200 : 404, result);
+  }
+
+  function handleGuestBookInvitePush(body, res) {
+    const built = guestBook.invitePayload();
+    if (!built.ok) {
+      sendJson(res, 409, built);
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload({
+        type: 'guest.book.invite',
+        rows: built.rows,
+        shortLabel: built.shortLabel,
+      }, targetId, extra)
+      : sendUdpPayload({
+        type: 'guest.book.invite',
+        rows: built.rows,
+        shortLabel: built.shortLabel,
+      }, { ...extra, targetId });
+    log.info('Guest Book invite', { targetId, shortLabel: built.shortLabel });
+    sendJson(res, 200, {
+      ok: true,
+      type: 'guest.book.invite',
+      targetId,
+      shortLabel: built.shortLabel,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleGuestBookDelete(body, res) {
+    const result = guestBook.remove(body?.id);
+    sendJson(res, result.ok ? 200 : 404, result);
   }
 
   async function handleWeeklyWeatherPush(body, res) {
@@ -3559,12 +3866,19 @@ function createWebServer({
       ...params,
       device,
       targetId: deliveryId,
-      // Air now is a human press — same path as the Push tile (explicit, no
-      // scheduler rotation gap / quiet-hours drop). Automated ticks stay soft.
+      // Air now is a human press — same path as the Push tile (explicit, jumps
+      // the rotation gap). Quiet hours still apply: only alarm/timer fires
+      // reach the board unless the caller opts in. Automated ticks stay soft.
       triggeredBy: manual ? 'manual' : 'scheduler',
     };
 
-    schedulerAir = { source: manual ? 'manual' : 'scheduler', targetId: deliveryId };
+    schedulerAir = {
+      source: manual ? 'manual' : 'scheduler',
+      scheduler: !manual,
+      explicit: Boolean(manual),
+      breakHold: Boolean(manual),
+      targetId: deliveryId,
+    };
     try {
       switch (commandId) {
         case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
@@ -3658,6 +3972,8 @@ function createWebServer({
           handleWorldPopulationPush(body, res); break;
         case 'calendar.clock':
           handleCalendarClockPush(body, res); break;
+        case 'guestbook.invite':
+          handleGuestBookInvitePush(body, res); break;
         case 'redletter.show':
           handleRedLetterPush(body, res); break;
         case 'signal.quiet-hours':
@@ -6353,11 +6669,22 @@ function createWebServer({
       const vStyles = assetVersionBeside(filePath, 'styles.css');
       const vBoothJs = assetVersionBeside(filePath, 'booth.js');
       const vBoothCss = assetVersionBeside(filePath, 'booth.css');
+      const vGuestJs = assetVersionBeside(filePath, 'guestbook.js');
+      const vGuestCss = assetVersionBeside(filePath, 'guestbook.css');
+      let vFlap = String(Date.now());
+      try {
+        vFlap = String(fs.statSync(path.join(staticRoot, 'flap-grid.js')).mtimeMs);
+      } catch {
+        // optional shared renderer
+      }
       html = html
         .replace(/(href="(?:\.\/)?styles\.css)(?:\?[^"]*)?(")/, `$1?v=${vStyles}$2`)
         .replace(/(src="(?:\.\/)?app\.js)(?:\?[^"]*)?(")/, `$1?v=${vApp}$2`)
         .replace(/(href="(?:\.\/)?booth\.css)(?:\?[^"]*)?(")/, `$1?v=${vBoothCss}$2`)
-        .replace(/(src="(?:\.\/)?booth\.js)(?:\?[^"]*)?(")/, `$1?v=${vBoothJs}$2`);
+        .replace(/(src="(?:\.\/)?booth\.js)(?:\?[^"]*)?(")/, `$1?v=${vBoothJs}$2`)
+        .replace(/(href="(?:\.\/)?guestbook\.css)(?:\?[^"]*)?(")/, `$1?v=${vGuestCss}$2`)
+        .replace(/(src="(?:\.\/)?guestbook\.js)(?:\?[^"]*)?(")/, `$1?v=${vGuestJs}$2`)
+        .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`);
       html = inlinePushCatalog(html);
       res.writeHead(200, {
         'Content-Type': MIME_TYPES[ext] || 'text/html; charset=utf-8',
@@ -6590,6 +6917,10 @@ function createWebServer({
           handleGuestSession(req, res);
           return;
         }
+        if (pathname === '/api/guestbook/status') {
+          handleGuestbookStatus(res);
+          return;
+        }
         if (pathname === '/api/displays') {
           handleDisplaysList(res);
           return;
@@ -6726,6 +7057,21 @@ function createWebServer({
         if (pathname === '/api/locale/settings') {
           if (!requireAdminSession(req, res)) return;
           handleLocaleSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/public-url/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handlePublicUrlSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/guest-book/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleGuestBookSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/guest-book/book') {
+          if (!requireAdminSession(req, res)) return;
+          handleGuestBookList(res);
           return;
         }
         if (pathname === '/api/weather-alerts/settings') {
@@ -7013,6 +7359,18 @@ function createWebServer({
           handleRedLetterSettingsPut(body, res);
           return;
         }
+        if (pathname === '/api/public-url/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handlePublicUrlSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/guest-book/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handleGuestBookSettingsPut(body, res);
+          return;
+        }
         if (pathname.startsWith('/api/date-book/')) {
           if (!requireAdminSession(req, res)) return;
           const body = req.method === 'PUT' ? await readJsonBody(req, MAX_BODY_BYTES) : {};
@@ -7097,6 +7455,18 @@ function createWebServer({
         }
         if (pathname === '/api/guest/request-pin') {
           handleGuestRequestPin(req, res);
+          return;
+        }
+        if (pathname === '/api/guestbook/preview') {
+          handleGuestbookPreview(body, res);
+          return;
+        }
+        if (pathname === '/api/guestbook/unlock') {
+          handleGuestbookUnlock(body, req, res);
+          return;
+        }
+        if (pathname === '/api/guestbook/send') {
+          handleGuestbookSend(body, req, res);
           return;
         }
         if (pathname === '/api/qr/image-upload') {
@@ -7344,6 +7714,24 @@ function createWebServer({
             return;
           case '/api/locale/settings':
             await handleLocaleSettingsPut(body, res);
+            return;
+          case '/api/public-url/settings':
+            await handlePublicUrlSettingsPut(body, res);
+            return;
+          case '/api/guest-book/settings':
+            await handleGuestBookSettingsPut(body, res);
+            return;
+          case '/api/guest-book/check':
+            await handleGuestBookCheck(body, res);
+            return;
+          case '/api/guest-book/replay':
+            handleGuestBookReplay(body, res);
+            return;
+          case '/api/guest-book/delete':
+            handleGuestBookDelete(body, res);
+            return;
+          case '/api/push/guest-book-invite':
+            handleGuestBookInvitePush(body, res);
             return;
           case '/api/push/weekly-weather':
             await handleWeeklyWeatherPush(body, res);
@@ -7685,6 +8073,8 @@ function createWebServer({
   }
 
   function stop() {
+    guestBook.stop?.();
+    shortlinks.stop?.();
     scheduler.stop();
     rollCreditsInstance.close?.();
     if (!autodarts) {

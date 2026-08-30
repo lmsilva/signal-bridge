@@ -1031,9 +1031,9 @@ function bakingInspirationFrames(payload = {}) {
 }
 
 /**
- * Calendar Clock (marketplace productivity): 7-col month chips on the left,
- * weekday / month+day / 12h clock on the right. `SMTWTFS` only when the
- * month fits in five week rows.
+ * Calendar Clock (marketplace productivity): 7-col month chips inset one
+ * flap from the left, two blank flaps, then weekday / month+day / 12h clock.
+ * `SMTWTFS` only when the month fits in five week rows.
  */
 function calendarClockFrames(payload = {}) {
   const rows = calendarClockRows(payload);
