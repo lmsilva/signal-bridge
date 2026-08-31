@@ -425,6 +425,12 @@ test('serves real guest booth and admin SPA with cache-busted assets', async () 
     assert.match(guestBook.text, /vestaboard-bezel\.css\?v=/);
     assert.match(guestBook.text, /vb-bezel/);
     assert.match(guestBook.text, /id="gb-preview"/);
+    assert.match(guestBook.text, /id="gb-name"/);
+    const guestJs = fs.readFileSync(path.join(__dirname, '../src/web/guestbook/guestbook.js'), 'utf8');
+    assert.match(guestJs, /signal\.guestbook\.name/);
+    assert.match(guestJs, /dismissKeyboard/);
+    assert.match(guestJs, /The letter box is the only thing that should raise a phone keyboard/);
+    assert.doesNotMatch(guestJs, /if \(code\) setCell\(code\);\s*focusForTyping/);
   } finally {
     webServer.stop();
   }
@@ -2973,7 +2979,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
   assert.match(html, /styles\.css\?v=signal215/);
-  assert.match(html, /settings-filter\.js\?v=signal215/);
+  assert.match(html, /settings-filter\.js\?v=signal216/);
   assert.match(html, /app\.js\?v=signal215/);
   assert.match(html, /id="tinyurl-settings-card"/);
   assert.match(html, /id="word-scramble-settings-card"/);
