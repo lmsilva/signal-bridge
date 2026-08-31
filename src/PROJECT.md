@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-31 (Word Scramble board follow-ups stay ahead of the hold)
+**Last updated:** 2026-08-31 (Word of the Day push no longer freezes the bridge)
 
 ---
 
@@ -866,6 +866,10 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 ---
 
 ## Recent changes
+
+- 2026-08-31: **Word of the Day push no longer freezes the bridge** — `pickWord` / `resolveWords` ran `fitsBoard` (a full 6×22 layout) across all 161,858 shipped entries on every Push. That blocked the event loop and could OOM the process, which dropped the simulator SSE and marked the bridge offline. The corpus is already board-fit at build time, so runtime only filters by part of speech and looks up by id. Tests: `word-of-the-day`.
+
+- 2026-08-31: **Periodic Table (and Word of the Day) Settings previews use the Flagship bezel** — they were a bare flap grid on the card, not the Vestaboard Simulator slab the other News/Travel cards use. Both now sit in `board-preview-col` inside `.vb-bezel.preview-bezel` with the VESTABOARD wordmark. Cache-bust `?v=signal213`. Tests: `web-server`.
 
 - 2026-08-31: **Word Scramble phone keyboard no longer hides the letters** — focusing “Tap the letters or type” used to let Safari scroll the field to the top of the visual viewport, leaving a blank half-screen under the keyboard. While typing, the page now locks to `--gm-vh` (`position: fixed`) and sizes the grid to `--gm-board-max` so the tiles stay above the box. Tapping the field after building a word on the tiles places the caret after the last letter. Cache-bust games `games.css?v=5` / `scramble.js?v=7`. Tests: `web-server`.
 - 2026-08-31: **Daily Bucket Fillers** — Vestaboard-only push + schedule (`bucket.fillers`) matching the marketplace channel. No title row — short two-liners centred, longer challenges indented two columns and wrapped a bit tighter so they use more of the six rows, block centred vertically. Corpus is `src/daily-bucket-fillers-fillers.json` (~531 board-fit kindness challenges), built by `tools/build-daily-bucket-fillers.js` from a curated seed plus template expansion. Settings → News: Chuck Norris-style manage sheet with live preview, search, pager, Push Random. Cache-bust `?v=signal212`. Tests: `daily-bucket-fillers` (three channel golden frames), `command-registry`, `web-server`.

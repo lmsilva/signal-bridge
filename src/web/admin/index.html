@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal212">
+  <link rel="stylesheet" href="styles.css?v=signal213">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1875,11 +1875,12 @@
                 <button type="button" class="btn btn-outline" id="btn-periodic-table-reset">Reset filters</button>
               </div>
             </div>
-            <div class="settings-col">
+            <div class="settings-col board-preview-col">
               <label class="field-label" for="periodic-table-element">Preview element</label>
               <select class="field-input" id="periodic-table-element"></select>
-              <div class="vb-preview-wrap" style="margin-top:12px">
+              <div class="vb-bezel preview-bezel" style="margin-top:12px" aria-hidden="true">
                 <div class="vb-grid" id="periodic-table-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
               </div>
               <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
                 <button type="button" class="btn btn-accent" id="btn-periodic-table-push-selected">Push selected</button>
@@ -1908,13 +1909,14 @@
                 <button type="button" class="btn btn-outline" id="btn-word-of-the-day-reset">Reset filters</button>
               </div>
             </div>
-            <div class="settings-col">
+            <div class="settings-col board-preview-col">
               <label class="field-label" for="word-of-the-day-search">Find a word</label>
               <input type="search" class="field-input" id="word-of-the-day-search" placeholder="Search words or definitions" autocomplete="off">
               <label class="field-label field-label-spaced" for="word-of-the-day-word">Preview word</label>
               <select class="field-input" id="word-of-the-day-word"></select>
-              <div class="vb-preview-wrap" style="margin-top:12px">
+              <div class="vb-bezel preview-bezel" style="margin-top:12px" aria-hidden="true">
                 <div class="vb-grid" id="word-of-the-day-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
               </div>
               <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
                 <button type="button" class="btn btn-accent" id="btn-word-of-the-day-push-selected">Push selected</button>
@@ -4594,7 +4596,7 @@
     </div>
   </div>
 
-  <script src="settings-filter.js?v=signal212"></script>
-  <script src="app.js?v=signal212"></script>
+  <script src="settings-filter.js?v=signal213"></script>
+  <script src="app.js?v=signal213"></script>
 </body>
 </html>

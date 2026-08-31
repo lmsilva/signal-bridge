@@ -106,6 +106,22 @@ test('part-of-speech labels cover the standard buckets', () => {
   assert.ok(parts.some((row) => row.id === 'adj' || row.id === 'adjective'));
 });
 
+test('picking a known word does not re-layout the 160k corpus', () => {
+  const started = Date.now();
+  const picked = pickWord({}, { word: 'oracy' });
+  const elapsed = Date.now() - started;
+  assert.equal(picked.word, 'oracy');
+  assert.ok(elapsed < 50, `pickWord took ${elapsed}ms — that freezes the bridge`);
+});
+
+test('resolveWords trusts the shipped list instead of calling fitsBoard', () => {
+  const started = Date.now();
+  const pool = resolveWords({});
+  const elapsed = Date.now() - started;
+  assert.equal(pool.length, loadShipped().length);
+  assert.ok(elapsed < 20, `resolveWords took ${elapsed}ms`);
+});
+
 test('pickWord avoids recent ids when possible', () => {
   const pool = resolveWords({});
   const first = pool[0];
