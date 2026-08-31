@@ -216,6 +216,10 @@ function createGameSessions(config = {}, log = console, deps = {}) {
    * Drop the tail of a multi-page run another feature was airing — riddles,
    * stocks, and the like — but leave single-page scheduler items waiting.
    * They stay parked behind the game lock until the session closes.
+   *
+   * Vestaboard games register their `source` in `games/registry.js`. While a
+   * session holds the board, manual Push / Air now / scheduler ticks must not
+   * interrupt — the queue enforces that via `holdKind: game`.
    */
   function takeBoard() {
     try {

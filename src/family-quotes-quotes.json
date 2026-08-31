@@ -1,51 +1,11 @@
 {
   "source": "Public quote collections, curated.",
   "note": "Warm quotes about family, home, love and kindness. Only quotes that fit one Vestaboard frame (6 rows, wrapped at 21 columns, attribution included).",
-  "builtAt": "2026-08-30T23:53:33.943Z",
+  "builtAt": "2026-08-31T02:38:43.051Z",
   "bodyRows": 6,
   "bodyWidth": 21,
-  "count": 1636,
+  "count": 1576,
   "quotes": [
-    {
-      "id": "quote-7ff1ff19a7",
-      "text": ", the rest of the girls pretended not to notice. That's just what best friends do.",
-      "author": "Sara Shepard"
-    },
-    {
-      "id": "quote-8eb2266fae",
-      "text": ",- watching his son in quick pulses of attention.",
-      "author": "Thomas Pynchon"
-    },
-    {
-      "id": "quote-6f3ec42760",
-      "text": ".every piece of the laughing was a tiny bird come tumbling out to fly around the room.",
-      "author": "Patrick Rothfuss"
-    },
-    {
-      "id": "quote-633c15ccc6",
-      "text": ".eyes that, like those of children, look at an eternal present without forgiveness.",
-      "author": "Italo Calvino"
-    },
-    {
-      "id": "quote-cf930b759e",
-      "text": ".marriage, they say, halves one's rights and doubles one's duties.",
-      "author": "Louisa May Alcott"
-    },
-    {
-      "id": "quote-a193cfe02a",
-      "text": ".she rejoiced as only mothers can in the good fortunes of their children.",
-      "author": "Louisa May Alcott"
-    },
-    {
-      "id": "quote-62422e6a2a",
-      "text": ".the kind of laugh that you could laugh forever but never end up happy.",
-      "author": "Haruki Murakami"
-    },
-    {
-      "id": "quote-9b1ea61f00",
-      "text": "(24/7) once you sign on to be a mother, that's the only shift they offer.",
-      "author": "Jodi Picoult"
-    },
     {
       "id": "quote-b943ae4c44",
       "text": "A baby is born with a need to be loved - and never outgrows it.",
@@ -95,11 +55,6 @@
       "id": "quote-2ef5fd403f",
       "text": "A disciplined person is one who follows the will of the one who gives the orders.",
       "author": "Vince Lombardi"
-    },
-    {
-      "id": "quote-ebd0eb8577",
-      "text": "A dog has one aim in life. to bestow his heart.",
-      "author": "J. R. Ackerley"
     },
     {
       "id": "quote-cfc3ca548a",
@@ -172,6 +127,11 @@
       "author": "Gary Moore"
     },
     {
+      "id": "quote-114a2e56b7",
+      "text": "A friend is someone with whom you dare to be yourself.",
+      "author": "Frank Crane"
+    },
+    {
       "id": "quote-cca35e2f0f",
       "text": "A friend is what the heart needs all the time.",
       "author": "Henry Van Dyke"
@@ -180,6 +140,11 @@
       "id": "quote-dc365441be",
       "text": "A friend to all is a friend to none.",
       "author": "Aristotle"
+    },
+    {
+      "id": "quote-0248228ff7",
+      "text": "A friend who is far away is sometimes much nearer than one who is at hand.",
+      "author": "Les Brown"
     },
     {
       "id": "quote-189d497aac",
@@ -312,19 +277,9 @@
       "author": "Charles Dickens"
     },
     {
-      "id": "quote-be73efd4cb",
-      "text": "A man can be happy with any woman as long as he does not love her.",
-      "author": "Oscar Wilde"
-    },
-    {
       "id": "quote-658f838bc0",
       "text": "A man in love is incomplete until he has married. Then he's finished.",
       "author": "Zsa Zsa Gabor"
-    },
-    {
-      "id": "quote-f33523681f",
-      "text": "A man is already halfway in love with any woman who listens to him.",
-      "author": "Brendan Behan"
     },
     {
       "id": "quote-9f4aabeb75",
@@ -340,11 +295,6 @@
       "id": "quote-01ff213c99",
       "text": "A man who can laugh at himself is truly blessed, for he will never lack for amusement.",
       "author": "James Carlos Blake"
-    },
-    {
-      "id": "quote-6def3c876e",
-      "text": "A man who indulges in parenthood for the first time at the age of fifty-four deserves all he gets.",
-      "author": "Raymond Chandler"
     },
     {
       "id": "quote-a226d3ffe5",
@@ -447,6 +397,11 @@
       "author": "Kyle Hill"
     },
     {
+      "id": "quote-d9a7c5feaf",
+      "text": "A random act of kindness, no matter how small, can make a tremendous impact on someone else's life.",
+      "author": "Roy Bennett"
+    },
+    {
       "id": "quote-36652ae34a",
       "text": "A real friend isn't capable of feeling sorry for you.",
       "author": "Jodi Picoult"
@@ -477,9 +432,19 @@
       "author": "Phyllis Diller"
     },
     {
+      "id": "quote-5615e65526",
+      "text": "A smile is a facelift that's in everyone's price range!",
+      "author": "Tom Wilson"
+    },
+    {
       "id": "quote-33002dc7c1",
       "text": "A smile is better when you win.",
       "author": "Unai Emery"
+    },
+    {
+      "id": "quote-f0e308a26f",
+      "text": "A smile is happiness you'll find right under your nose.",
+      "author": "Tom Wilson"
     },
     {
       "id": "quote-5dc3beeda2",
@@ -637,11 +602,6 @@
       "author": "Farah Khan"
     },
     {
-      "id": "quote-acd554b529",
-      "text": "Africa for the Africans. at home and abroad!",
-      "author": "Marcus Garvey"
-    },
-    {
       "id": "quote-425945b399",
       "text": "Against the assault of laughter, nothing can stand.",
       "author": "Mark Twain"
@@ -732,11 +692,6 @@
       "author": "Lord Byron"
     },
     {
-      "id": "quote-a2909e8204",
-      "text": "Always be nice to your children because they are the ones who will choose your rest home.",
-      "author": "Phyllis Diller"
-    },
-    {
       "id": "quote-6e317d1e32",
       "text": "Always keep an open mind and a compassionate heart.",
       "author": "Phil Jackson"
@@ -787,24 +742,9 @@
       "author": "Brad Goreski"
     },
     {
-      "id": "quote-8267f9c989",
-      "text": "An empty canvas is a living wonder. far lovelier than certain pictures.",
-      "author": "Wassily Kandinsky"
-    },
-    {
-      "id": "quote-497efb0cd1",
-      "text": "An ideal wife is any woman who has an ideal husband.",
-      "author": "Booth Tarkington"
-    },
-    {
       "id": "quote-0fe6d9e43c",
       "text": "Any friendship or relationship is about a language.",
       "author": "Gina Bellman"
-    },
-    {
-      "id": "quote-61672ed989",
-      "text": "Any kind of crisis can be good. It wakes you up.",
-      "author": "Ryan Reynolds"
     },
     {
       "id": "quote-56b3ed272f",
@@ -825,11 +765,6 @@
       "id": "quote-9a529b24f5",
       "text": "Anyone who loves in the expectation of being loved in return is wasting their time.",
       "author": "Paulo Coelho"
-    },
-    {
-      "id": "quote-85c879080e",
-      "text": "Anyone who starts piercing the bubble of happiness, get 'em out of your life.",
-      "author": "Robert Kraft"
     },
     {
       "id": "quote-9f4916442e",
@@ -947,11 +882,6 @@
       "author": "Carl Sandburg"
     },
     {
-      "id": "quote-8981f8fbdf",
-      "text": "Be a friend to thyself, and others will be so too.",
-      "author": "Thomas Fuller"
-    },
-    {
       "id": "quote-999e154fa4",
       "text": "Be brave, young lovers, and follow your star.",
       "author": "Oscar Hammerstein II"
@@ -975,6 +905,16 @@
       "id": "quote-68e7932142",
       "text": "Be grateful for the home you have, knowing that at this moment, all you have is all you need.",
       "author": "Sarah Ban Breathnach"
+    },
+    {
+      "id": "quote-b58b0e7007",
+      "text": "Be grateful for what you already have while you pursue what you want.",
+      "author": "Roy Bennett"
+    },
+    {
+      "id": "quote-3b5e9afb53",
+      "text": "Be grateful for what you already have while you pursue your goals.",
+      "author": "Roy Bennett"
     },
     {
       "id": "quote-76126407b6",
@@ -1022,9 +962,19 @@
       "author": "Anne Rice"
     },
     {
+      "id": "quote-6bd457ae6f",
+      "text": "Be more generous to others than you would ever expect anyone to be to you.",
+      "author": "George Hammond"
+    },
+    {
       "id": "quote-fd3f39a547",
       "text": "Be patient. Patience is the mother of all virtues.",
       "author": "Hrithik Roshan"
+    },
+    {
+      "id": "quote-c2a2bde5bd",
+      "text": "Be positive. Be true. Be kind.",
+      "author": "Roy Bennett"
     },
     {
       "id": "quote-9457de0db9",
@@ -1422,11 +1372,6 @@
       "author": "Plutarch"
     },
     {
-      "id": "quote-fb9e3a4b5e",
-      "text": "Do not swear by the moon, for she changes constantly. then your love would also change.",
-      "author": "William Shakespeare"
-    },
-    {
       "id": "quote-37ae19e19a",
       "text": "Do your work with your whole heart, and you will succeed - there's so little competition.",
       "author": "Elbert Hubbard"
@@ -1522,11 +1467,6 @@
       "author": "Jill Biden"
     },
     {
-      "id": "quote-0c54f5d7ce",
-      "text": "Employee fathers need to step up to the plate and put their family needs on the table.",
-      "author": "James Levine"
-    },
-    {
       "id": "quote-473be03cc5",
       "text": "Enthusiasm is the mother of effort, and without it nothing great was ever achieved.",
       "author": "Ralph Waldo Emerson"
@@ -1595,21 +1535,6 @@
       "id": "quote-873898cfbb",
       "text": "Every gift from a friend is a wish for your happiness.",
       "author": "Richard Bach"
-    },
-    {
-      "id": "quote-d43afce4c1",
-      "text": "Every man can tell how many goats or sheep he possesses, but not how many friends.",
-      "author": "Marcus Tullius Cicero"
-    },
-    {
-      "id": "quote-26cb1c2aa3",
-      "text": "Every man is surrounded by a neighborhood of voluntary spies.",
-      "author": "Jane Austen"
-    },
-    {
-      "id": "quote-a682752492",
-      "text": "Every man's reputation proceeds from those of his own household.",
-      "author": "Marcus Tullius Cicero"
     },
     {
       "id": "quote-37229c9988",
@@ -1777,6 +1702,11 @@
       "author": "John Ruskin"
     },
     {
+      "id": "quote-81a9ab6647",
+      "text": "First and last, what is demanded of genius is love of truth.",
+      "author": "Johann Wolfgang von Goethe"
+    },
+    {
       "id": "quote-52e9a3bc4a",
       "text": "Five or six hundred heads cut off would have assured your repose, freedom and happiness.",
       "author": "Jean-Paul Marat"
@@ -1810,11 +1740,6 @@
       "id": "quote-d125c50001",
       "text": "For many of us, the curtain has just come down on childhood.",
       "author": "Mitch Albom"
-    },
-    {
-      "id": "quote-6266f2a867",
-      "text": "For poetry there exists neither large countries nor small. Its domain is in the heart of all men.",
-      "author": "Giorgos Seferis"
     },
     {
       "id": "quote-426a12f6fc",
@@ -1895,11 +1820,6 @@
       "id": "quote-f65c265a62",
       "text": "Friends show their love in times of trouble, not in happiness.",
       "author": "Euripides"
-    },
-    {
-      "id": "quote-877e30bf91",
-      "text": "Friends. they cherish one another's hopes. They are kind to one another's dreams.",
-      "author": "Henry David Thoreau"
     },
     {
       "id": "quote-26078e87cb",
@@ -2060,6 +1980,11 @@
       "id": "quote-726c13b589",
       "text": "Gratification and happiness are becoming important measures of our quality of life.",
       "author": "Charles Kennedy"
+    },
+    {
+      "id": "quote-eab7e4de0d",
+      "text": "Gratitude builds a bridge to abundance.",
+      "author": "Roy Bennett"
     },
     {
       "id": "quote-cfc31bb3c0",
@@ -2357,6 +2282,11 @@
       "author": "Andrei Platonov"
     },
     {
+      "id": "quote-637efbc9ff",
+      "text": "Happiness: a way station between too little and too much.",
+      "author": "Channing Pollock"
+    },
+    {
       "id": "quote-7d46e0b003",
       "text": "Happy are those who evolve from within.",
       "author": "Amit Abraham"
@@ -2402,76 +2332,6 @@
       "author": "Sandra Day O'Connor"
     },
     {
-      "id": "quote-13099b7f5e",
-      "text": "He deserves paradise who makes his companions laugh.",
-      "author": "Alka Joshi"
-    },
-    {
-      "id": "quote-5c50a1a902",
-      "text": "He feels safer just knowing that even if he's away there is a home waiting for him to return.",
-      "author": "Gabriel Ba"
-    },
-    {
-      "id": "quote-b804ceff01",
-      "text": "He imagines a necessary joy in things that must fly to eat.",
-      "author": "Wendell Berry"
-    },
-    {
-      "id": "quote-1e957fba37",
-      "text": "He is as full of valor as of kindness. Princely in both.",
-      "author": "William Shakespeare"
-    },
-    {
-      "id": "quote-05d97a1cdf",
-      "text": "He is greatest whose strength carries up the most hearts by the attraction of his own.",
-      "author": "Henry Ward Beecher"
-    },
-    {
-      "id": "quote-6e9d0ea841",
-      "text": "He is happiest, be he king or peasant, who finds peace in his home.",
-      "author": "Johann Wolfgang von Goethe"
-    },
-    {
-      "id": "quote-3d764c1ec3",
-      "text": "He is richest who is content with the least, for content is the wealth of nature.",
-      "author": "Socrates"
-    },
-    {
-      "id": "quote-359488557c",
-      "text": "He that always gives way to others will end in having no principles of his own.",
-      "author": "Aesop"
-    },
-    {
-      "id": "quote-775c84da9f",
-      "text": "He who does not love his own language is worse than an animal and smelly fish.",
-      "author": "Jose Rizal"
-    },
-    {
-      "id": "quote-a62bc00fa0",
-      "text": "He who falls in love with himself will have no rivals.",
-      "author": "Benjamin Franklin"
-    },
-    {
-      "id": "quote-f87736f6ff",
-      "text": "He who is not contented with what he has, would not be contented with what he would like to have.",
-      "author": "Socrates"
-    },
-    {
-      "id": "quote-e8ed9b9636",
-      "text": "He who laughs best today, will also laughs last.",
-      "author": "Friedrich Nietzsche"
-    },
-    {
-      "id": "quote-544ed3ffe4",
-      "text": "Her heart was a secret garden and the walls were very high.",
-      "author": "William Goldman"
-    },
-    {
-      "id": "quote-3e6825eeaa",
-      "text": "Her laughter was an upbeat song set to a minor key.",
-      "author": "Ken Scholes"
-    },
-    {
       "id": "quote-dac0b5dcc4",
       "text": "Here is the world, and you live in it, and are grateful. You try to be grateful.",
       "author": "Michael Cunningham"
@@ -2480,11 +2340,6 @@
       "id": "quote-c65878d2f7",
       "text": "Heroism is accessible. Happiness is more difficult.",
       "author": "Albert Camus"
-    },
-    {
-      "id": "quote-a6eeeede1b",
-      "text": "His manners are old-fashioned, the work of a vigilant mother.",
-      "author": "Rumaan Alam"
     },
     {
       "id": "quote-ebe34b9943",
@@ -2510,6 +2365,11 @@
       "id": "quote-4692753b0e",
       "text": "Home is people. Home is what you take with you, not what you leave behind.",
       "author": "N.K. Jemisin"
+    },
+    {
+      "id": "quote-6afdf2c64a",
+      "text": "Home is the most popular, and will be the most enduring of all earthly establishments.",
+      "author": "Channing Pollock"
     },
     {
       "id": "quote-0721bfc39d",
@@ -2545,11 +2405,6 @@
       "id": "quote-eb03568c1c",
       "text": "Home's where you go when you run out of homes.",
       "author": "John le Carre"
-    },
-    {
-      "id": "quote-3406352506",
-      "text": "Hope smiles from the threshold of the year to come, whispering, 'It will be happier.",
-      "author": "Alfred Lord Tennyson"
     },
     {
       "id": "quote-4b3e4f4237",
@@ -2812,11 +2667,6 @@
       "author": "George Washington Carver"
     },
     {
-      "id": "quote-85d9683630",
-      "text": "If you own a home with wheels on it and several cars without, you just might be a redneck.",
-      "author": "Jeff Foxworthy"
-    },
-    {
       "id": "quote-0564cc0ab5",
       "text": "If you smile when no one else is around, you really mean it.",
       "author": "Andy Rooney"
@@ -2840,11 +2690,6 @@
       "id": "quote-e05176d3fa",
       "text": "If you want to be loved, be lovable.",
       "author": "Ovid"
-    },
-    {
-      "id": "quote-d975fba876",
-      "text": "If you want to be the best, you've got the beat the best, and the best is 'Blessed,' baby.",
-      "author": "Max Holloway"
     },
     {
       "id": "quote-2092aa6295",
@@ -2925,11 +2770,6 @@
       "id": "quote-7062569710",
       "text": "In every conceivable manner, the family is link to our past, bridge to our future.",
       "author": "Alex Haley"
-    },
-    {
-      "id": "quote-a319b4cd6e",
-      "text": "In every man's heart there is a secret nerve that answers to the vibrations of beauty.",
-      "author": "Christopher Morley"
     },
     {
       "id": "quote-41d7b82810",
@@ -3025,11 +2865,6 @@
       "id": "quote-a0a74eaac5",
       "text": "It is a fine seasoning for joy to think of those we love.",
       "author": "Moliere"
-    },
-    {
-      "id": "quote-c0ab36c845",
-      "text": "It is a known fact that every man's heart is set on having a daughter.",
-      "author": "Francoise Sagan"
     },
     {
       "id": "quote-1b12ad765b",
@@ -3197,6 +3032,11 @@
       "author": "Jill Zarin"
     },
     {
+      "id": "quote-04200e82de",
+      "text": "It will all come out right in the end: the stars go home and so do we.",
+      "author": "Peter Davidson"
+    },
+    {
       "id": "quote-98136f98cb",
       "text": "It's a delight to trust somebody so completely.",
       "author": "Jeff Goldblum"
@@ -3287,11 +3127,6 @@
       "author": "Andrew Vachss"
     },
     {
-      "id": "quote-a88e058a99",
-      "text": "It's the friends you can call up at 4 a.m. that matter.",
-      "author": "Marlene Dietrich"
-    },
-    {
       "id": "quote-e077b19155",
       "text": "It's the most amazing feeling to hold your child in your arms.",
       "author": "Chris O'Donnell"
@@ -3345,11 +3180,6 @@
       "id": "quote-b457563b60",
       "text": "Just take the ball and throw it where you want to. Throw strikes. Home plate don't move.",
       "author": "Satchel Paige"
-    },
-    {
-      "id": "quote-57782b2c99",
-      "text": "Justice is the set and constant purpose which gives every man his due.",
-      "author": "Marcus Tullius Cicero"
     },
     {
       "id": "quote-a5dfd19eff",
@@ -3622,11 +3452,6 @@
       "author": "Suman Pokhrel"
     },
     {
-      "id": "quote-d7874c2123",
-      "text": "Life everlasting in a state of happiness is the greatest desire of all men.",
-      "author": "Joseph Franklin Rutherford"
-    },
-    {
       "id": "quote-cfa681d41b",
       "text": "Life finds its purpose and fulfillment in the expansion of happiness.",
       "author": "Maharishi Mahesh Yogi"
@@ -3732,19 +3557,9 @@
       "author": "George Eliot"
     },
     {
-      "id": "quote-640020ba99",
-      "text": "Livin' the Life' is about celebrating life and spreading love and kindness around the world.",
-      "author": "Ananya Birla"
-    },
-    {
       "id": "quote-8f47e10d38",
       "text": "Longevity in friendship is very important and one of the keys to the foundation of a happy life.",
       "author": "Karrueche Tran"
-    },
-    {
-      "id": "quote-e738000dd3",
-      "text": "Look back, and smile on perils past.",
-      "author": "Walter Scott"
     },
     {
       "id": "quote-5c692aa72e",
@@ -4047,11 +3862,6 @@
       "author": "Jean Anouilh"
     },
     {
-      "id": "quote-3ce71058cd",
-      "text": "Love is. never asking for more than you are prepared to give.",
-      "author": "Kim Casali"
-    },
-    {
       "id": "quote-ddbcdb4254",
       "text": "Love isn't blind. Maybe we are all born blind and love finally gives us sight.",
       "author": "Kamand Kojouri"
@@ -4147,11 +3957,6 @@
       "author": "George Bernard Shaw"
     },
     {
-      "id": "quote-1ec0a7fc22",
-      "text": "Make no mistake about why these babies are here - they are here to replace us.",
-      "author": "Jerry Seinfeld"
-    },
-    {
       "id": "quote-ac45913bbf",
       "text": "Make others laugh by laughing at yourself. This is the best way to de-stress.",
       "author": "Tapan Ghosh"
@@ -4175,11 +3980,6 @@
       "id": "quote-f4cd332ef1",
       "text": "Man's heart away from nature becomes hard.",
       "author": "Standing Bear"
-    },
-    {
-      "id": "quote-f830b57a47",
-      "text": "Many a good hanging prevents a bad marriage.",
-      "author": "William Shakespeare"
     },
     {
       "id": "quote-c1adc8e11e",
@@ -4242,11 +4042,6 @@
       "author": "Lee Radziwill"
     },
     {
-      "id": "quote-d06f7039e8",
-      "text": "Marriage is an institution and that's where a couple finish up.",
-      "author": "Les Dawson"
-    },
-    {
       "id": "quote-a64ca1c457",
       "text": "Marriage is definitely a very comforting feeling.",
       "author": "Mohit Chauhan"
@@ -4295,11 +4090,6 @@
       "id": "quote-9ec7b47618",
       "text": "Marriage requires a special talent, like acting. Monogamy requires genius.",
       "author": "Warren Beatty"
-    },
-    {
-      "id": "quote-b93d51a801",
-      "text": "Marriage, it seems, confines every man to his proper rank.",
-      "author": "Jean de la Bruyere"
     },
     {
       "id": "quote-88f8a2ebd6",
@@ -4377,11 +4167,6 @@
       "author": "Oprah Winfrey"
     },
     {
-      "id": "quote-bb82c1b163",
-      "text": "Money won't make you happy. but everybody wants to find out for themselves.",
-      "author": "Zig Ziglar"
-    },
-    {
       "id": "quote-91095c00b0",
       "text": "Moral science is better occupied when treating of friendship than of justice.",
       "author": "Thomas Aquinas"
@@ -4425,11 +4210,6 @@
       "id": "quote-ec8bb904b6",
       "text": "Most smiles are started by another smile.",
       "author": "Frank A. Clark"
-    },
-    {
-      "id": "quote-3ce00bd5b0",
-      "text": "Most women put off entertaining until the kids are grown.",
-      "author": "Erma Bombeck"
     },
     {
       "id": "quote-1e2db27f41",
@@ -4537,11 +4317,6 @@
       "author": "Alice Walker"
     },
     {
-      "id": "quote-8115ac7e94",
-      "text": "Never contract friendship with a man that is not better than thyself.",
-      "author": "Confucius"
-    },
-    {
       "id": "quote-c8ad621a13",
       "text": "Never do a wrong thing to make a friend or to keep one.",
       "author": "Robert E. Lee"
@@ -4555,6 +4330,11 @@
       "id": "quote-342fa6b564",
       "text": "Never have more children than you have car windows.",
       "author": "Erma Bombeck"
+    },
+    {
+      "id": "quote-d5fa30dd7c",
+      "text": "Never love anyone who treats you like you're ordinary.",
+      "author": "Oscar Wilde"
     },
     {
       "id": "quote-6e6efba8c0",
@@ -4625,11 +4405,6 @@
       "id": "quote-a41153e8f8",
       "text": "Nothing is more beautiful than the loveliness of the woods before sunrise.",
       "author": "George Washington Carver"
-    },
-    {
-      "id": "quote-eb95455896",
-      "text": "Nothing is more precious than life. especially the life of your child.",
-      "author": "Peter Diamandis"
     },
     {
       "id": "quote-b03a0de450",
@@ -4780,16 +4555,6 @@
       "id": "quote-62caa2247f",
       "text": "One of the things that binds us as a family is a shared sense of humor.",
       "author": "Ralph Fiennes"
-    },
-    {
-      "id": "quote-367658d0b5",
-      "text": "One should always be in love. That is the reason one should never marry.",
-      "author": "Oscar Wilde"
-    },
-    {
-      "id": "quote-40f3742d52",
-      "text": "One should always be in love. That's the reason one should never marry.",
-      "author": "Oscar Wilde"
     },
     {
       "id": "quote-5449146c0d",
@@ -5157,11 +4922,6 @@
       "author": "Mark Manson"
     },
     {
-      "id": "quote-8eb56f61bc",
-      "text": "Real happiness is cheap enough, yet how dearly we pay for its counterfeit.",
-      "author": "Hosea Ballou"
-    },
-    {
       "id": "quote-50d2f65a0f",
       "text": "Real success is finding your lifework in the work that you love.",
       "author": "David McCullough"
@@ -5237,11 +4997,6 @@
       "author": "Linus Pauling"
     },
     {
-      "id": "quote-655b60e7ec",
-      "text": "Say what you will, 'tis better to be left than never to have been loved.",
-      "author": "William Congreve"
-    },
-    {
       "id": "quote-114c299b3f",
       "text": "Science gives us knowledge, but only philosophy can give us wisdom.",
       "author": "Will Durant"
@@ -5282,21 +5037,6 @@
       "author": "Christie Brinkley"
     },
     {
-      "id": "quote-d6700d5f6f",
-      "text": "She laughs. A clean, bright, and silver sound, like wind chimes.",
-      "author": "Jeff Zentner"
-    },
-    {
-      "id": "quote-b2d317d426",
-      "text": "She will simply cherish every moment she's allocated until there are no more.",
-      "author": "Liane Moriarty"
-    },
-    {
-      "id": "quote-759f7754cd",
-      "text": "She's a strong woman, and that's more important than wearing a pretty smile for the world's sake.",
-      "author": "Victoria Scott"
-    },
-    {
       "id": "quote-ecaecff166",
       "text": "Sisters function as safety nets in a chaotic world simply by being there for each other.",
       "author": "Carol Saline"
@@ -5305,11 +5045,6 @@
       "id": "quote-95ae228e57",
       "text": "Smile in the mirror. Do that every morning and you'll start to see a big difference in your life.",
       "author": "Yoko Ono"
-    },
-    {
-      "id": "quote-16bec18a0a",
-      "text": "Smile, 'cause life is gonna be what it is. There are brighter days ahead.",
-      "author": "Darnell Lamont Walker"
     },
     {
       "id": "quote-e185cb656b",
@@ -5397,11 +5132,6 @@
       "author": "Mother Teresa"
     },
     {
-      "id": "quote-ba6748378e",
-      "text": "Stay' is a charming word in a friend's vocabulary.",
-      "author": "Louisa May Alcott"
-    },
-    {
       "id": "quote-82451016d9",
       "text": "Stick to the basics, hold on to your family and friends - they will never go out of fashion.",
       "author": "Niki Taylor"
@@ -5430,6 +5160,11 @@
       "id": "quote-f45f3ca0eb",
       "text": "Strength and compassion are not mutually exclusive.",
       "author": "Robert Kiyosaki"
+    },
+    {
+      "id": "quote-fdbed1face",
+      "text": "Strength of character may be learned at work, but beauty of character is learned at home.",
+      "author": "Henry Drummond"
     },
     {
       "id": "quote-57a5307ac5",
@@ -5472,11 +5207,6 @@
       "author": "Mirza Tahir Ahmad"
     },
     {
-      "id": "quote-d6e4115a82",
-      "text": "Take time to be kind and to say 'thank you.",
-      "author": "Zig Ziglar"
-    },
-    {
       "id": "quote-03b3317379",
       "text": "Taking care of foster children, now that is so cool.",
       "author": "Anna Paulina Luna"
@@ -5505,11 +5235,6 @@
       "id": "quote-d25830a63b",
       "text": "Technology offers us a unique opportunity, though rarely welcome, to practice patience.",
       "author": "Allan Lokos"
-    },
-    {
-      "id": "quote-2343e216dd",
-      "text": "Thankfully, forgiveness, and the healing it brings in its wake, has nothing to do with 'deserve.",
-      "author": "Eric Metaxas"
     },
     {
       "id": "quote-c478e60f32",
@@ -5660,11 +5385,6 @@
       "id": "quote-0b5004a6b4",
       "text": "The butterfly counts not months but moments, and has time enough.",
       "author": "Rabindranath Tagore"
-    },
-    {
-      "id": "quote-ba5d89b51c",
-      "text": "The catch phrase for the day is 'Do an act of kindness. Help one person smile.",
-      "author": "Harvey Ball"
     },
     {
       "id": "quote-a94a5345b9",
@@ -5892,11 +5612,6 @@
       "author": "Keren Woodward"
     },
     {
-      "id": "quote-7b389aa9f4",
-      "text": "The handy thing about being a father is that the historical standard is so pitifully low.",
-      "author": "Michael Chabon"
-    },
-    {
       "id": "quote-279841e583",
       "text": "The happiness of this life depends less on what befalls you than the way in which you take it.",
       "author": "Elbert Hubbard"
@@ -5985,6 +5700,11 @@
       "id": "quote-44645fb585",
       "text": "The joy of living, its beauty is all bound up in the fact that life can surprise you.",
       "author": "Frank Herbert"
+    },
+    {
+      "id": "quote-dc11983c96",
+      "text": "The kindest heart is the greatest treasure.",
+      "author": "Chris McKenna"
     },
     {
       "id": "quote-1d66de12d8",
@@ -6187,16 +5907,6 @@
       "author": "Kamand Kojouri"
     },
     {
-      "id": "quote-6065630b20",
-      "text": "The only reason that they say, 'Women and children first' is to test the strength of the lifeboats.",
-      "author": "Jean Kerr"
-    },
-    {
-      "id": "quote-777acf7613",
-      "text": "The only time a woman really succeeds in changing a man is when he is a baby.",
-      "author": "Natalie Wood"
-    },
-    {
       "id": "quote-6def1c3892",
       "text": "The only true test of friendship is the time your friend spends on you.",
       "author": "John Marsden"
@@ -6360,16 +6070,6 @@
       "id": "quote-0a6518178b",
       "text": "The secret of happiness is to admire without desiring.",
       "author": "Carl Sandburg"
-    },
-    {
-      "id": "quote-9416aa52bf",
-      "text": "The secret to a happy marriage is. separate bathrooms.",
-      "author": "Steve Doocy"
-    },
-    {
-      "id": "quote-cd913f26a0",
-      "text": "The seeds of marriage equality. were planted on MTV.",
-      "author": "Wilson Cruz"
     },
     {
       "id": "quote-0a8eccc1c1",
@@ -6642,6 +6342,11 @@
       "author": "Maggie Stiefvater"
     },
     {
+      "id": "quote-dc45731647",
+      "text": "There is no exercise better for the heart than reaching down and lifting people up.",
+      "author": "John Holmes"
+    },
+    {
       "id": "quote-4c79e5d535",
       "text": "There is no force in the world better able to alter anything from its course than love.",
       "author": "Gregory Boyle"
@@ -6730,6 +6435,11 @@
       "id": "quote-02121599e9",
       "text": "There is nothing like puking with somebody to make you into old friends.",
       "author": "Sylvia Plath"
+    },
+    {
+      "id": "quote-a75e4fd821",
+      "text": "There is nothing like staying at home for real comfort.",
+      "author": "Jane Austen"
     },
     {
       "id": "quote-e7ef09c7d1",
@@ -6947,6 +6657,11 @@
       "author": "Euripides"
     },
     {
+      "id": "quote-a92d06bc77",
+      "text": "To be a queen of a household is a powerful thing.",
+      "author": "Jill Scott"
+    },
+    {
       "id": "quote-436458b2e3",
       "text": "To be able to say how much love, is love but little.",
       "author": "Petrarch"
@@ -7012,6 +6727,11 @@
       "author": "Sallust"
     },
     {
+      "id": "quote-27037cf6f6",
+      "text": "To live fully, we must learn to use things and love people, and not love things and use people.",
+      "author": "John Powell"
+    },
+    {
       "id": "quote-63097f3232",
       "text": "To live is like to love - all reason is against it, and all healthy instinct for it.",
       "author": "Samuel Butler"
@@ -7030,6 +6750,11 @@
       "id": "quote-e82a0a824e",
       "text": "To love one that is great, is almost to be great one's self.",
       "author": "Samuel Johnson"
+    },
+    {
+      "id": "quote-7349fc45f8",
+      "text": "To love oneself is the beginning of a lifelong romance.",
+      "author": "Oscar Wilde"
     },
     {
       "id": "quote-d7bd768ecc",
@@ -7107,6 +6832,11 @@
       "author": "Nicole Richie"
     },
     {
+      "id": "quote-b695bbc428",
+      "text": "True friends stab you in the front.",
+      "author": "Oscar Wilde"
+    },
+    {
       "id": "quote-607c4dc88e",
       "text": "True friendship can exist only between equals.",
       "author": "Plato"
@@ -7125,11 +6855,6 @@
       "id": "quote-1666e0d817",
       "text": "True happiness involves the full use of one's power and talents.",
       "author": "John W. Gardner"
-    },
-    {
-      "id": "quote-2ffeab07b5",
-      "text": "True happiness is. to enjoy the present, without anxious dependence upon the future.",
-      "author": "Lucius Annaeus Seneca"
     },
     {
       "id": "quote-4114db7674",
@@ -7257,11 +6982,6 @@
       "author": "M. C. Escher"
     },
     {
-      "id": "quote-4ba0025fab",
-      "text": "We all have our down days, but it's not hard to smile and say, 'Thank you.",
-      "author": "Yvette Nicole Brown"
-    },
-    {
       "id": "quote-c54132c4e7",
       "text": "We are all here for a spell, get all the good laughs you can.",
       "author": "Will Rogers"
@@ -7290,11 +7010,6 @@
       "id": "quote-f478e6ac26",
       "text": "We believed in our idea - a family park where parents and children could have fun- together.",
       "author": "Walt Disney"
-    },
-    {
-      "id": "quote-656c6ad32a",
-      "text": "We both have no home to go back to. so we can go anywhere at all.",
-      "author": "Kazuya Minekura"
     },
     {
       "id": "quote-300b9983e9",
@@ -7502,11 +7217,6 @@
       "author": "Claire Oshetsky"
     },
     {
-      "id": "quote-1aba7fa22d",
-      "text": "Wedding is destiny, and hanging likewise.",
-      "author": "John Heywood"
-    },
-    {
       "id": "quote-6a7e15c5ab",
       "text": "Weddings are important because they celebrate life and possibility.",
       "author": "Anne Hathaway"
@@ -7575,11 +7285,6 @@
       "id": "quote-8073af9ded",
       "text": "When a woman becomes her own best friend life is easier.",
       "author": "Diane Von Furstenberg"
-    },
-    {
-      "id": "quote-4ff47821f6",
-      "text": "When a woman isn't beautiful, people always say, 'You have lovely eyes, you have lovely hair.",
-      "author": "Anton Chekhov"
     },
     {
       "id": "quote-78a358b320",
@@ -7877,11 +7582,6 @@
       "author": "Ralph Waldo Emerson"
     },
     {
-      "id": "quote-5dd2c1c8d7",
-      "text": "Words have not only a definition. but also the felt quality of their own kind of sound.",
-      "author": "Mary Oliver"
-    },
-    {
       "id": "quote-893603fe61",
       "text": "Words of love, are works of love.",
       "author": "William R. Alger"
@@ -7975,11 +7675,6 @@
       "id": "quote-8613d58fdd",
       "text": "You cannot sacrifice the world for your children.",
       "author": "Patricia Briggs"
-    },
-    {
-      "id": "quote-f60fdb05d5",
-      "text": "You change your life by changing your heart.",
-      "author": "Max Lucado"
     },
     {
       "id": "quote-833201db97",
@@ -8170,6 +7865,11 @@
       "id": "quote-db2ff19fdb",
       "text": "Your happiness is at the intersection of your passions and learning from great people.",
       "author": "Scott Weiss"
+    },
+    {
+      "id": "quote-f99e5f7878",
+      "text": "Your smile will give you a positive countenance that will make people feel comfortable around you.",
+      "author": "Les Brown"
     },
     {
       "id": "quote-0a75c152e8",

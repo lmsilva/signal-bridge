@@ -599,9 +599,29 @@ test('a Word Scramble hold parks every queued page until the game clears', async
   assert.equal(await h.queue.tick(), null);
   assert.equal(h.queue.pending().length, 2);
   assert.equal(h.queue.state().holdKind, 'game');
+  assert.equal(h.queue.state().gameSource, 'word.scramble');
   h.queue.submit([frame('AIR NOW', 4)], { explicit: true, breakHold: true });
+  assert.equal(h.queue.pending().length, 3);
+  assert.equal(h.queue.pending()[2].status, 'held');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  assert.equal(h.transport.posts.length, 1);
+});
+
+test('queued pages air after a Word Scramble game lock clears', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{
+    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    dwellSeconds: 15,
+    holdSeconds: 30,
+  }]);
   assert.equal(await h.queue.tick(), 'posted');
-  assert.equal(h.transport.posts[1].layout[0][0], 4);
+  h.queue.submit([frame('MANUAL', 2)], { explicit: true, breakHold: true });
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  h.advance(30 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
 });
 
 test('an explicit snapshot may post after the rate window during a guest hold', async () => {

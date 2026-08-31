@@ -1841,6 +1841,33 @@ textarea.field-input.text-input-area {
 .trivia-check input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 .trivia-check.is-off > span { color: var(--muted); }
 
+/*
+ * Checkbox groups whose labels differ in length — genres, parts of speech.
+ * A flex row sizes every item to its own text, so the ticks stagger across the
+ * card and nothing lines up under anything. Fixed tracks put them in real
+ * columns, and a group above (levels) shares the column stops with the group
+ * below it.
+ *
+ * Track minimums are the widest label plus the 18px box and its 8px gap, so
+ * each group packs as many columns as its own longest word allows and no more.
+ * A settings column is 443px at the 980px content cap: parts of speech
+ * ("Adjective", 60px) run four across, genres ("Science Fiction", 96px) three.
+ */
+.check-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px 14px;
+}
+.check-columns-wide { grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); }
+.check-columns .trivia-check {
+  min-width: 0;
+  white-space: nowrap;
+}
+.check-columns .trivia-check > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 26 categories: a dense grid beats a 26-row list on a phone. */
 .trivia-category-grid {
   display: grid;
@@ -4327,8 +4354,10 @@ textarea.field-input.text-input-area {
 }
 .date-book-sheet .cn-compose {
   margin-bottom: 4px;
-  flex: 0 1 auto;
-  min-height: 0;
+  /* Never shrink — flex-shrink was clipping the compose row while the board
+     preview painted over the search box and event list beneath it. */
+  flex: 0 0 auto;
+  min-width: 0;
 }
 .date-book-sheet .cn-toolbar {
   margin-top: 4px;
@@ -4756,6 +4785,11 @@ textarea.field-input.text-input-area {
     grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
     align-items: stretch;
   }
+  /* Date Book's when-grid is taller than the preview — start keeps the board
+     in its column instead of stretching/overpainting the form beside it. */
+  .cn-manage-sheet.date-book-sheet .cn-compose {
+    align-items: start;
+  }
 }
 /* The board is taller than a short form. Stretch the form and grow the
    textarea so the Add button sits on the same baseline as the bezel. */
@@ -5002,7 +5036,6 @@ textarea.field-input.text-input-area {
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
-}
 }
 
 @media (min-width: 860px) {
