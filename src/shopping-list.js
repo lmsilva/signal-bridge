@@ -8,7 +8,11 @@ const SHOPPING_REMOVE_RE = /\b(?:remove|delete|take)\s+(.+?)\s+(?:from|off)\s+(?
 const SHOPPING_REMOVE_SHORT_RE = /\b(?:remove|delete)\s+(.+?)(?:\?|[.!]|$)/i;
 const SHOPPING_SPOKEN_REMOVE_RE = /\b(?:removed|deleted|took)\s+(.+?)\s+(?:from|off)\s+(?:your|my|the)\s+(?:(?:shopping|grocery)\s+)?list\b/i;
 const LIST_VERB_RE = '(?:add|put|remove|delete|take)';
-const SHOPPING_SHOW_RE = /\b(?:show|read|list|what(?:'s|\s+is)\s+(?:on|in))\b.*\b(?:shopping|grocery)\s+list\b|\b(?:shopping|grocery)\s+list\b.*\b(?:show|read|list)\b/i;
+// Natural asks are "what's my shopping list" / "whats my shopping list" —
+// not only the older "what's on my shopping list". Optional apostrophe so
+// ASR without one still matches; bare "what … shopping list" covers
+// "what do I have on my shopping list".
+const SHOPPING_SHOW_RE = /\b(?:show|read|list|what(?:'?s|\s+is)?)\b.*\b(?:shopping|grocery)\s+list\b|\b(?:shopping|grocery)\s+list\b.*\b(?:show|read|list)\b/i;
 const SHOPPING_SPOKEN_ADD_RE = /\b(?:added|put)\s+(.+?)\s+(?:to|on)\s+(?:your|my|the)\s+(?:shopping|grocery)\s+list\b/i;
 const SHOPPING_SPOKEN_ITEMS_RE = /\b(?:you have|there(?:'s| is| are))\s+(.+?)\s+(?:on|in)\s+(?:your|my|the)\s+(?:shopping|grocery)\s+list\b/i;
 const SHOPPING_SPOKEN_COUNT_FIRST_RE = /\b(?:you have|there(?:'s| is| are))\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+items?\s+(?:on|in)\s+(?:your|my|the)\s+(?:shopping|grocery)\s+list\b[,:\s]+(.+)/i;

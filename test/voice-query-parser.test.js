@@ -217,6 +217,16 @@ test('voice query parser detects shopping list show command', () => {
   assert.equal(event?.trigger, 'shopping-list-show');
 });
 
+test('voice query parser detects natural whats-my shopping list ask', () => {
+  const parser = createVoiceQueryParser();
+  const event = parser.parse(activity(
+    'whats my shopping list',
+    'You have milk and eggs on your shopping list',
+  ));
+  assert.equal(event?.kind, 'shopping-list');
+  assert.equal(event?.trigger, 'shopping-list-show');
+});
+
 test('voice query parser detects shopping list add command', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('add milk to shopping list', 'I added milk'));

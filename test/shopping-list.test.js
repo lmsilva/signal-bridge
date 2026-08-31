@@ -24,6 +24,23 @@ test('matchesShoppingListQuery detects show and add phrases', () => {
   assert.equal(matchesShoppingListQuery('what is the weather'), false);
 });
 
+test('matchesShoppingListQuery accepts natural whats-my-list phrasing', () => {
+  for (const query of [
+    'whats my shopping list',
+    "what's my shopping list",
+    'what is my shopping list',
+    'alexa whats my shopping list',
+    'whats on my shopping list',
+    "what's on my shopping list",
+    'what is on my shopping list',
+    'what do I have on my shopping list',
+    'read my grocery list',
+  ]) {
+    assert.equal(matchesShoppingListQuery(query), true, query);
+    assert.equal(shoppingListTrigger(query), 'shopping-list-show', query);
+  }
+});
+
 test('matchesShoppingListQuery detects short add when Alexa confirms shopping list', () => {
   assert.equal(
     matchesShoppingListQuery('add milk', "Okay, I've added milk to your shopping list"),
