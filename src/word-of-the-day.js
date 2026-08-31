@@ -1,7 +1,8 @@
 /**
  * Word of the Day — pick a vocabulary entry for the board.
  *
- * All words ship in local JSON. No network at runtime.
+ * All words ship in local JSON (already board-fit). No network at runtime.
+ * Never run `fitsBoard` over the whole list — that freezes the process.
  */
 
 const SHIPPED = require('./word-of-the-day-words.json');
@@ -12,6 +13,18 @@ const TYPE = 'word.day';
 
 function loadShipped() {
   return Array.isArray(SHIPPED?.words) ? SHIPPED.words : [];
+}
+
+const BY_ID = new Map();
+const BY_WORD = new Map();
+for (const entry of loadShipped()) {
+  if (entry?.id) {
+    BY_ID.set(String(entry.id).toLowerCase(), entry);
+  }
+  const word = String(entry?.word || '').trim().toLowerCase();
+  if (word && !BY_WORD.has(word)) {
+    BY_WORD.set(word, entry);
+  }
 }
 
 function loadPartsOfSpeech() {
@@ -31,36 +44,62 @@ function loadPartsOfSpeech() {
     .map(([id, count]) => ({ id, label: id, count }));
 }
 
+function allowedPos(settings = {}) {
+  return new Set(
+    (settings.partsOfSpeech || []).map((value) => String(value).trim()).filter(Boolean),
+  );
+}
+
+function matchesFilter(entry, settings = {}) {
+  if (!entry) {
+    return false;
+  }
+  const allowed = allowedPos(settings);
+  return !allowed.size || allowed.has(entry.pos);
+}
+
+/**
+ * The shipped list is already board-fit (see the build tool). Do not run
+ * `fitsBoard` here — 160k layout passes freeze the event loop and can OOM
+ * the process, which drops the simulator SSE and marks the bridge offline.
+ */
 function resolveWords(settings = {}) {
-  const allowed = new Set((settings.partsOfSpeech || []).map((value) => String(value).trim()).filter(Boolean));
-  return loadShipped().filter((entry) => {
-    if (allowed.size && !allowed.has(entry.pos)) {
-      return false;
-    }
-    return fitsBoard(entry.word, entry.pos, entry.definition);
-  });
+  const allowed = allowedPos(settings);
+  const all = loadShipped();
+  if (!allowed.size) {
+    return all;
+  }
+  return all.filter((entry) => allowed.has(entry.pos));
 }
 
 function countAvailable(settings = {}) {
-  return resolveWords(settings).length;
+  const allowed = allowedPos(settings);
+  if (!allowed.size) {
+    return Number(SHIPPED?.wordCount) || loadShipped().length;
+  }
+  const parts = loadPartsOfSpeech();
+  let total = 0;
+  let known = 0;
+  for (const row of parts) {
+    if (allowed.has(row.id)) {
+      total += row.count;
+      known += 1;
+    }
+  }
+  return known === allowed.size ? total : resolveWords(settings).length;
 }
 
 function findWord({ id, word } = {}) {
   const key = String(id || word || '').trim().toLowerCase();
-  return loadShipped().find((entry) => {
-    if (key && entry.id === key) {
-      return true;
-    }
-    if (key && entry.word === key) {
-      return true;
-    }
-    return false;
-  }) || null;
+  if (!key) {
+    return null;
+  }
+  return BY_ID.get(key) || BY_WORD.get(key) || null;
 }
 
 function pickWord(settings = {}, { random = Math.random, id, word } = {}) {
   const chosen = findWord({ id, word });
-  if (chosen && resolveWords(settings).some((row) => row.id === chosen.id)) {
+  if (matchesFilter(chosen, settings)) {
     return chosen;
   }
   const pool = resolveWords(settings);
