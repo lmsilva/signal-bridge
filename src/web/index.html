@@ -2,71 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Guest Snaps">
-  <title>Guest Snaps</title>
+  <meta name="apple-mobile-web-app-title" content="Signal">
+  <meta name="description" content="Games, photos and the guest book for the house board.">
+  <title>Signal</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="booth.css?v=3">
+  <link rel="stylesheet" href="landing.css?v=1">
 </head>
 <body>
-  <header class="booth-header">
-    <img class="booth-logo" src="/logo.png" width="36" height="36" alt="">
-    <div>
-      <h1>Guest Snaps</h1>
-      <p id="booth-subtitle">Share a photo with us</p>
-    </div>
-  </header>
+  <div class="ln-shell">
+    <header class="ln-hero">
+      <img class="ln-logo" src="/logo.svg" width="88" height="88" alt=""
+           onerror="this.onerror=null;this.src='/logo.png'">
+      <h1 class="ln-title">Signal</h1>
+      <p class="ln-tagline">Everything on the board, from your phone.</p>
+    </header>
 
-  <main class="booth-main" id="booth-login">
-    <p class="booth-hint" id="login-hint">Enter the 6-digit PIN shown on the display.</p>
-    <input id="guest-pin-input" class="booth-pin-input" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="••••••" aria-label="Guest Snaps PIN">
-    <p class="booth-status" id="login-status" role="status"></p>
-    <button type="button" class="booth-send" id="btn-guest-unlock">Unlock</button>
-    <button type="button" class="booth-secondary" id="btn-request-pin">Request PIN</button>
-    <p class="booth-hint" id="request-pin-hint">Have the display nearby? Request PIN shows the Guest Snaps page with the current code.</p>
-  </main>
+    <nav class="ln-grid" aria-label="Where to go">
+      <a class="ln-tile ln-tile-games" href="/games/">
+        <span class="ln-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="6.5" width="19" height="11" rx="4"></rect>
+            <path d="M7 10v4M5 12h4M15.5 11h.01M18 13.5h.01"></path>
+          </svg>
+        </span>
+        <span class="ln-label">Games</span>
+        <span class="ln-note">Join Word Scramble with the board's code</span>
+      </a>
 
-  <main class="booth-main" id="booth-app" hidden>
-    <label class="booth-label" for="display-select">Show on</label>
-    <select id="display-select" class="booth-select" aria-label="Target display">
-      <option value="">Looking for displays…</option>
-    </select>
-    <p class="booth-hint" id="display-hint">Pick a display, or send to all of them.</p>
+      <a class="ln-tile ln-tile-snaps" href="/guestsnaps/">
+        <span class="ln-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7l1.2-2h6.2l1.2 2h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"></path>
+            <circle cx="12" cy="12" r="3.4"></circle>
+          </svg>
+        </span>
+        <span class="ln-label">Guest Snaps</span>
+        <span class="ln-note">Put a photo up on the screen</span>
+      </a>
 
-    <div class="booth-queue" id="photo-queue" hidden>
-      <div class="booth-queue-head">
-        <p class="booth-queue-count" id="photo-queue-count">0 photos</p>
-        <button type="button" class="booth-queue-clear" id="btn-photo-clear">Clear all</button>
-      </div>
-      <div class="booth-queue-grid" id="photo-queue-grid"></div>
-    </div>
+      <a class="ln-tile ln-tile-book" href="/guestbook/" id="ln-guestbook" hidden>
+        <span class="ln-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5.5A1.5 1.5 0 0 1 4 19.5z"></path>
+            <path d="M8 8h8M8 12h8M8 16h5"></path>
+          </svg>
+        </span>
+        <span class="ln-label">Guest Book</span>
+        <span class="ln-note">Leave a message for the wall</span>
+      </a>
 
-    <!-- No capture=… — that forces the camera on phones and blocks the camera roll. -->
-    <input id="photo-file" type="file" accept="image/*" multiple hidden>
+      <a class="ln-tile ln-tile-admin" href="/admin/">
+        <span class="ln-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+            <circle cx="9" cy="6" r="2"></circle>
+            <circle cx="15" cy="12" r="2"></circle>
+            <circle cx="8" cy="18" r="2"></circle>
+          </svg>
+        </span>
+        <span class="ln-label">Admin</span>
+        <span class="ln-note">Settings, pushes and the board</span>
+      </a>
+    </nav>
+  </div>
 
-    <button type="button" class="booth-pick" id="btn-pick-photo">
-      <span class="booth-pick-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
-          <circle cx="12" cy="13" r="3.5"/>
-        </svg>
-      </span>
-      <span id="btn-pick-photo-label">Take or choose photos</span>
-    </button>
-
-    <button type="button" class="booth-send" id="btn-send" disabled>Send to display</button>
-    <button type="button" class="booth-secondary" id="btn-guest-lock">Lock booth</button>
-    <p class="booth-status" id="booth-status" role="status"></p>
-  </main>
-
-  <footer class="booth-footer">
-    Photos are saved to the party slideshow for the host. Send more than one and they play as a short slideshow.
-  </footer>
-
-  <script src="booth.js?v=3"></script>
+  <script>
+    // The guest book is only a destination when the house has it switched on.
+    fetch('/api/guestbook/status', { credentials: 'same-origin' })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data && data.enabled) document.getElementById('ln-guestbook').hidden = false;
+      })
+      .catch(() => {});
+  </script>
 </body>
 </html>

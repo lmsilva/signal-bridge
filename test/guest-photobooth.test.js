@@ -106,8 +106,8 @@ test('publicBaseUrl wins over GUEST_PHOTOBOOTH_URL for booth and slideshow origi
       ...config,
       guestPhotobooth: { wifiSsid: 'Party', wifiPassword: 'secret' },
     });
-    assert.equal(settings.boothUrl, 'https://signal.wittydigital.com/');
-    assert.equal(defaultGuestPhotoboothUrl(config), 'https://signal.wittydigital.com/');
+    assert.equal(settings.boothUrl, 'https://signal.wittydigital.com/guestsnaps/');
+    assert.equal(defaultGuestPhotoboothUrl(config), 'https://signal.wittydigital.com/guestsnaps/');
     const entries = photosToSlideshowEntries(
       [{ path: '/qr-images/abc.jpg', createdAt: '2026-07-26T12:00:00.000Z' }],
       config,
@@ -125,7 +125,7 @@ test('defaultGuestPhotoboothUrl uses proxy IP and web port', () => {
       proxyOwnIp: '192.168.1.50',
       webServer: { port: 47810, https: true },
     }),
-    'https://192.168.1.50:47810/',
+    'https://192.168.1.50:47810/guestsnaps/',
   );
   assert.equal(
     defaultGuestPhotoboothUrl({ proxyOwnIp: '127.0.0.1', webServer: { port: 47810 } }),
@@ -151,7 +151,8 @@ test('resolveGuestPhotoboothSettings reads env overrides', () => {
     });
     assert.equal(settings.ssid, 'PartyNet');
     assert.equal(settings.password, 'secret;pass');
-    assert.equal(settings.boothUrl, 'https://192.168.1.50:47810/');
+    // GUEST_PHOTOBOOTH_URL is an origin; the page itself moved under it.
+    assert.equal(settings.boothUrl, 'https://192.168.1.50:47810/guestsnaps/');
     assert.equal(settings.configured, true);
   } finally {
     if (prev.ssid == null) delete process.env.GUEST_WIFI_SSID;
@@ -189,7 +190,7 @@ test('resolveGuestPhotoboothSettings reads data/guest-photobooth.json', () => {
     const settings = resolveGuestPhotoboothSettings({ ROOT: root });
     assert.equal(settings.ssid, 'FromFile');
     assert.equal(settings.password, 'file-pass');
-    assert.equal(settings.boothUrl, 'https://10.0.0.9:47810/');
+    assert.equal(settings.boothUrl, 'https://10.0.0.9:47810/guestsnaps/');
     assert.equal(settings.configured, true);
   } finally {
     if (prev.ssid == null) delete process.env.GUEST_WIFI_SSID;

@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { publicUrl, resolvePublicOrigin } = require('./public-url');
-const { publicTinyUrl, flapLabel } = require('./shortlinks');
+const { publicTinyUrl, flapLabel, GUESTSNAPS_PATH: BOOTH_PATH } = require('./shortlinks');
 
 // Primary brand phrase — "Alexa, open guest snaps" (welcome / how to connect)
 const GUEST_SNAPS_RE = /\b(?:open|show|start|launch|display)?\s*(?:the\s+)?guest\s*snaps?\b/i;
@@ -214,7 +214,7 @@ function resolveGuestPhotoboothSettings(config = {}) {
     fileEnv,
     boothUrl: firstNonEmpty(guest.boothUrl, guest.url),
   });
-  const boothUrl = origin ? `${origin}/` : '';
+  const boothUrl = origin ? `${origin}${BOOTH_PATH}` : '';
 
   const displaySeconds = Number(
     firstNonEmpty(
@@ -239,7 +239,7 @@ function resolveGuestPhotoboothSettings(config = {}) {
 
 function defaultGuestPhotoboothUrl(config = {}) {
   const origin = resolvePublicOrigin(config, boothOriginExtras(config));
-  return origin ? `${origin}/` : '';
+  return origin ? `${origin}${BOOTH_PATH}` : '';
 }
 
 /**

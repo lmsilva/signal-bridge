@@ -23,8 +23,10 @@ const {
   lobbyRows,
   roundRows,
   scoresRows,
+  intermissionRows,
   bestRows,
   roundFrames,
+  finalFrames,
   roundLabel,
 } = require('../src/vestaboard/formatters/games');
 
@@ -57,10 +59,23 @@ function mulberry32(seed) {
 
 test('the shipped ENABLE1 list is sorted and long enough for a real game', () => {
   const words = loadWords();
-  assert.ok(words.length > 10000);
+  assert.ok(words.length > 150000, `only ${words.length} words shipped`);
   for (let i = 1; i < 200; i += 1) {
     assert.ok(words[i - 1] < words[i], 'list must stay sorted for binary search');
   }
+});
+
+test('the list reaches as far as the board can spell', () => {
+  const words = loadWords();
+  // A path may cross all sixteen cells, so a nine-letter ceiling used to make
+  // the best find on a grid impossible to submit.
+  const longest = words.reduce((most, word) => Math.max(most, word.length), 0);
+  assert.ok(longest >= 15, `longest word is only ${longest} letters`);
+  assert.equal(hasWord(words, 'lighthouses'), true);
+  assert.equal(hasWord(words, 'considerate'), true);
+  // Still no room for anything a 4x4 could never hold.
+  assert.equal(words.some((word) => word.length > 16), false);
+  assert.equal(words.some((word) => word.length < 3), false);
 });
 
 test('binary search finds words and prefixes', () => {
@@ -164,15 +179,56 @@ test('invite frame matches the marketplace drawing, title centred between the ch
   ], 'word-scramble invite');
 });
 
-test('lobby frame shows the player count and code', () => {
-  assertLayout(lobbyRows({ code: 'SLNG', playerCount: 2 }), [
+test('lobby frame keeps the invite and fills in the player count', () => {
+  assertLayout(lobbyRows({ code: 'SLNG', alias: 'WITTYGAME', playerCount: 2 }), [
     'gg  WORD SCRAMBLE   gg',
     '       2 PLAYERS',
-    '       GAME CODE',
-    '         SLNG',
-    '   WAITING TO START',
+    '  JOIN THE NEXT GAME',
+    ' TINYURL.COM/WITTYGAME',
+    '    GAME CODE: SLNG',
     '',
   ], 'word-scramble lobby');
+  assertLayout(lobbyRows({ code: 'SLNG', alias: 'WITTYGAME', playerCount: 1 }), [
+    'gg  WORD SCRAMBLE   gg',
+    '       1 PLAYER',
+    '  JOIN THE NEXT GAME',
+    ' TINYURL.COM/WITTYGAME',
+    '    GAME CODE: SLNG',
+    '',
+  ], 'word-scramble lobby solo');
+});
+
+test('intermission frame shows the round winner and running total', () => {
+  assertLayout(intermissionRows({
+    roundIndex: 2,
+    rounds: 3,
+    roundWinner: { name: 'Luis', score: 3 },
+    scores: [{ name: 'Luis', score: 5 }, { name: 'Ada', score: 2 }],
+  }), [
+    '  ROUND 2 OF 3 WINNER',
+    'LUIS ................3',
+    '',
+    '     RUNNING TOTAL',
+    'LUIS ................5',
+    'ADA .................2',
+  ], 'word-scramble intermission');
+});
+
+test('final frame sequences high scores before best word', () => {
+  const frames = finalFrames({
+    phase: 'final',
+    card: 'final',
+    scores: [{ name: 'Luis', score: 12 }, { name: 'Ada', score: 9 }],
+    word: 'scrambled',
+    name: 'Luis',
+    points: 15,
+    holdSeconds: 10,
+  });
+  assert.equal(frames.length, 2);
+  assert.equal(frames[0].label, 'Final scores');
+  assert.equal(frames[1].label, 'Best word');
+  assert.equal(frames[0].holdSeconds, 10);
+  assert.equal(frames[1].holdSeconds, 10);
 });
 
 test('round frame frames the 4x4 in yellow and holds the remaining seconds', () => {
@@ -263,4 +319,14 @@ test('the scores card trades its fifth row for the code so latecomers can join',
     '',
     '    GAME CODE: SLNG',
   ], 'word-scramble final scores with the code');
+});
+
+test('a closed game blanks the board rather than leaving the lobby up', () => {
+  const { clearedRows, clearFrames, framesFor } = require('../src/vestaboard/formatters/games');
+  assertLayout(clearedRows(), ['', '', '', '', '', ''], 'word-scramble clear');
+  assert.equal(clearFrames()[0].source, 'word.scramble');
+  assert.deepEqual(
+    framesFor({ phase: 'closed', card: 'clear' })[0].rows,
+    clearedRows(),
+  );
 });

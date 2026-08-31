@@ -463,6 +463,11 @@ function createYoutubeNowPlaying({
     if (!started || typeof lounge.pollNowPlaying !== 'function') {
       return;
     }
+    // Before asking for fresh state, retire anything the device has gone quiet
+    // on — otherwise a TV that vanished mid-video stays "playing" forever.
+    if (typeof lounge.sweepIdleSessions === 'function') {
+      lounge.sweepIdleSessions();
+    }
     let result;
     try {
       result = await lounge.pollNowPlaying();
@@ -682,6 +687,20 @@ function createYoutubeNowPlaying({
   // ------------------------------------------------------------- pushing
 
   /** Which device wins when two rooms are playing at once (§7). */
+  /**
+   * Is this row something someone is watching right now?
+   *
+   * `currentPlayback()` deliberately reports whatever is on the TV, including
+   * Paused, Stopped and unconfirmed videos, so that the manual push does not
+   * air days-old history while a video sits on screen. That makes it the right
+   * thing to *show* and the wrong thing to call "now playing": a card in that
+   * mode draws a NOW PLAYING badge and an elapsed clock that counts up from
+   * `startedAt` forever. Only a live Playing tick earns that.
+   */
+  function isLivePlayback(session) {
+    return Boolean(session) && String(session.state || '') === 'Playing';
+  }
+
   function pickSession(sessions, requestedDeviceId = null) {
     if (!sessions.length) {
       return null;
@@ -753,7 +772,7 @@ function createYoutubeNowPlaying({
         || pickSession(lounge.activeSessions(), deviceId);
       targetVideoId = session?.videoId || null;
       targetDeviceId = session?.deviceId || deviceId;
-      if (!targetVideoId && requestedMode === 'now-playing') {
+      if (requestedMode === 'now-playing' && !isLivePlayback(session)) {
         return { ok: false, error: 'Nothing is playing on YouTube right now' };
       }
     }
@@ -781,8 +800,13 @@ function createYoutubeNowPlaying({
       targetVideoId = previous.videoId;
       targetDeviceId = previous.deviceId;
       session = previous;
-    } else if (session?.provisional && requestedMode !== 'last-played') {
-      mode = 'playing';
+    } else if (requestedMode !== 'last-played' && !isLivePlayback(session)) {
+      // The video is still on the TV but nothing is running — a paused, stopped
+      // or merely announced video. Record what was watched and label the card
+      // honestly rather than starting a clock against a session that is over.
+      seedHistoryFromPlayback(session);
+      mode = 'last-played';
+      session = store.lastPlayed(targetDeviceId) || session;
     }
 
     let video;

@@ -59,7 +59,7 @@ const { GUESTSNAPS_NAME } = require('./shortlinks');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { createQrImageCache } = require('./qr-image-cache');
 const { createSlideshowSettings } = require('./slideshow-settings');
-const { fetchShoppingList, extractShoppingListItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech } = require('./shopping-list');
+const { fetchShoppingList, extractShoppingListItem, resolveShoppingList, loadShoppingListCache, saveShoppingListCache, matchesShoppingListSpeech, planShoppingListChangePush } = require('./shopping-list');
 const { buildTeslaBatteryReading } = require('./tesla-battery');
 const { fetchTeslaBattery, fetchTeslaDashboard, isFleetConfigured, buildErrorReading } = require('./tesla-fleet-client');
 const { createTeslaSessionKeepAlive } = require('./tesla-session-keepalive');
@@ -287,6 +287,7 @@ function createListener({
     saveBridgeState(config.bridgeStatePath, parser.getState());
   }
   let volumePollTimer = null;
+  let shoppingListSyncTimer = null;
   let historyPollInFlight = false;
   let periodicPollTimer = null;
   let healthTimer = null;
@@ -827,7 +828,7 @@ function createListener({
     if (event.kind === 'time') {
       payload = buildTimeQueryPayload(event, config);
     } else if (event.kind === 'shopping-list') {
-      const addedItem = extractShoppingListItem(
+      const addedItem = event.addedItem || extractShoppingListItem(
         event.query,
         event.spokenResponse,
         event.trigger,
@@ -2020,6 +2021,85 @@ function createListener({
     volumePollTimer = setTimeout(() => pollRecentHistory(reason, HISTORY_LOOKBACK_MS), VOLUME_POLL_DELAY_MS);
   }
 
+  /**
+   * Amazon often adds to the shopping list without storing usable ASR (wake-only
+   * / arbitration / discarded-intent rows). PUSH_LIST_ITEM_CHANGE still fires —
+   * fetch the live list, diff against cache, and air a card when something moved.
+   * Debounced past the history poll so a normal ASR capture wins when present.
+   */
+  function scheduleShoppingListSync(change) {
+    clearTimeout(shoppingListSyncTimer);
+    shoppingListSyncTimer = setTimeout(() => {
+      shoppingListSyncTimer = null;
+      syncShoppingListFromPush(change).catch((error) => {
+        log.warn('Shopping list change sync failed', error?.message || error);
+      });
+    }, VOLUME_POLL_DELAY_MS + 500);
+  }
+
+  async function syncShoppingListFromPush(change = {}) {
+    if (!voiceSettings.enabled || !voiceSettings.shoppingListQueries) {
+      return;
+    }
+    if (!alexa) {
+      return;
+    }
+
+    const cachedItems = loadShoppingListCache(config.shoppingListCachePath);
+    let fetched = null;
+    try {
+      fetched = await fetchShoppingList(alexa);
+    } catch (error) {
+      log.warn('Shopping list change fetch failed', error?.message || error);
+      return;
+    }
+    if (!fetched) {
+      return;
+    }
+
+    const plan = planShoppingListChangePush({
+      cachedItems,
+      fetched,
+      change,
+    });
+    // Always keep the cache current — even when we skip the card (other list,
+    // or a voice capture already wrote the same items).
+    saveShoppingListCache(config.shoppingListCachePath, fetched.items);
+    if (!plan) {
+      return;
+    }
+
+    const eventType = String(change.eventType || 'itemUpdated');
+    const addedItem = plan.addedItem || null;
+    const query = addedItem
+      ? (plan.trigger === 'shopping-list-remove'
+        ? `remove ${addedItem}`
+        : `add ${addedItem} to shopping list`)
+      : 'shopping list updated';
+
+    log.info('Shopping list changed without usable ASR — pushing snapshot', {
+      eventType,
+      trigger: plan.trigger,
+      addedItem,
+      listItemId: change.listItemId || null,
+      items: fetched.items.length,
+    });
+
+    const activityId = change.listItemId
+      ? `list-change:${change.listItemId}:${eventType}`
+      : `list-change:${Date.now()}`;
+    handleVoiceEvent({
+      kind: 'shopping-list',
+      trigger: plan.trigger,
+      device: 'Alexa',
+      query,
+      spokenResponse: null,
+      addedItem,
+      timestamp: Date.now(),
+      activityId,
+    }, activityId, 'list-change');
+  }
+
   function wireEvents() {
     alexa.on('cookie', () => {
       const existingSession = loadSession(config.sessionPath) || {};
@@ -2114,6 +2194,8 @@ function createListener({
     alexa.on('ws-todo-change', (change) => {
       log.debug('Shopping/todo list change detected', change);
       scheduleHistoryPoll('todo-change');
+      // History often has no ASR for list edits — sync the live list directly.
+      scheduleShoppingListSync(change || {});
     });
 
     alexa.on('ws-content-focus-change', () => {

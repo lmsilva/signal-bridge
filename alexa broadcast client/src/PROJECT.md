@@ -159,7 +159,7 @@ python test/send_test.py --type web-close
 python test/send_test.py --type system-reboot         # careful: actually reboots
 python test/send_test.py --type qr-url --url https://example.com
 python test/send_test.py --type qr-wifi
-python test/send_test.py --type guest-photobooth --url https://192.168.1.10:47810/
+python test/send_test.py --type guest-photobooth --url https://192.168.1.10:47810/guestsnaps/
 python test/send_test.py --type input-text --text "hunter2" --press-enter
 python test/send_test.py --type photo-slideshow
 python test/send_test.py --type music              # check bigger album art, portrait + landscape

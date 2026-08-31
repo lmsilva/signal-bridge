@@ -59,18 +59,20 @@ function inviteRows({ code = '', alias = 'WITTYGAME' } = {}) {
   ], 'word-scramble-invite');
 }
 
-function lobbyRows({ code = '', playerCount = 0 } = {}) {
-  const pin = String(code || '').trim().toUpperCase().slice(0, 4);
+/**
+ * Lobby keeps the invite card so the URL and code stay readable. Only the
+ * blank row fills in with the seat count — a full rewrite used to cascade
+ * across every flap and briefly read as "2         s" while PLAYERS was
+ * still flipping and JOIN THE NEXT GAME had not yet become GAME CODE.
+ */
+function lobbyRows({ code = '', alias = 'WITTYGAME', playerCount = 0 } = {}) {
   const n = Math.max(0, Number(playerCount) || 0);
-  const who = n === 1 ? '1 PLAYER' : `${n} PLAYERS`;
-  return assertValidLayout([
-    titleRow(),
-    centered(fold(who), { from: 0, width: COLS }),
-    centered(fold('GAME CODE'), { from: 0, width: COLS }),
-    centered(fold(pin), { from: 0, width: COLS }),
-    centered(fold('WAITING TO START'), { from: 0, width: COLS }),
-    blankRow(COLS),
-  ], 'word-scramble-lobby');
+  const who = n <= 0 ? '' : n === 1 ? '1 PLAYER' : `${n} PLAYERS`;
+  const rows = inviteRows({ code, alias });
+  if (who) {
+    rows[1] = centered(fold(who), { from: 0, width: COLS });
+  }
+  return assertValidLayout(rows, 'word-scramble-lobby');
 }
 
 /**
@@ -150,6 +152,39 @@ function scoresRows({
   return assertValidLayout(rows, 'word-scramble-scores');
 }
 
+/**
+ * Between rounds: who won the round just played, then the running total.
+ */
+function intermissionRows({
+  roundIndex = 0,
+  rounds = 0,
+  roundWinner = null,
+  roundScores = [],
+  scores = [],
+} = {}) {
+  const title = roundLabel(roundIndex, rounds)
+    ? `${roundLabel(roundIndex, rounds)} WINNER`
+    : 'ROUND WINNER';
+  const rows = [
+    centered(fold(title), { from: 0, width: COLS }),
+  ];
+  if (roundWinner) {
+    rows.push(placeText(blankRow(COLS), leaderDots(roundWinner.name, roundWinner.score), 0));
+  } else {
+    rows.push(centered(fold('NO POINTS'), { from: 0, width: COLS }));
+  }
+  rows.push(blankRow(COLS));
+  rows.push(centered(fold('RUNNING TOTAL'), { from: 0, width: COLS }));
+  const top = (scores || roundScores || []).slice(0, 2);
+  for (let i = 0; i < 2; i += 1) {
+    const entry = top[i];
+    rows.push(entry
+      ? placeText(blankRow(COLS), leaderDots(entry.name, entry.score), 0)
+      : blankRow(COLS));
+  }
+  return assertValidLayout(rows, 'word-scramble-intermission');
+}
+
 function bestRows({ word = '', name = '', points = 0 } = {}) {
   return assertValidLayout([
     centered(fold('BEST WORD'), { from: 0, width: COLS }),
@@ -161,6 +196,18 @@ function bestRows({ word = '', name = '', points = 0 } = {}) {
   ], 'word-scramble-best');
 }
 
+/**
+ * The game is over. Blank rather than a sign-off card: whatever airs next
+ * should own the board, and a card reading "waiting to start" for a session
+ * nobody can join any more is worse than an empty wall for a minute.
+ */
+function clearedRows() {
+  return assertValidLayout(
+    Array.from({ length: 6 }, () => blankRow(COLS)),
+    'word-scramble-clear',
+  );
+}
+
 function withHold(frame, holdSeconds) {
   const seconds = Number(holdSeconds);
   if (Number.isFinite(seconds) && seconds > 0) {
@@ -170,11 +217,17 @@ function withHold(frame, holdSeconds) {
 }
 
 function inviteFrames(payload = {}) {
-  return [snapshotFrame(inviteRows(payload), 'Word Scramble', SOURCE)];
+  return [withHold(
+    snapshotFrame(inviteRows(payload), 'Word Scramble', SOURCE),
+    payload.holdSeconds || payload.remainingSeconds,
+  )];
 }
 
 function lobbyFrames(payload = {}) {
-  return [snapshotFrame(lobbyRows(payload), 'Word Scramble lobby', SOURCE)];
+  return [withHold(
+    snapshotFrame(lobbyRows(payload), 'Word Scramble lobby', SOURCE),
+    payload.holdSeconds || payload.remainingSeconds,
+  )];
 }
 
 function roundFrames(payload = {}) {
@@ -187,19 +240,54 @@ function roundFrames(payload = {}) {
 
 function scoresFrames(payload = {}) {
   const final = payload.final != null ? payload.final : payload.phase === 'final';
-  return [snapshotFrame(
-    scoresRows({ ...payload, final }),
-    final ? 'Final scores' : 'High scores',
-    SOURCE,
+  return [withHold(
+    snapshotFrame(
+      scoresRows({ ...payload, final }),
+      final ? 'Final scores' : 'High scores',
+      SOURCE,
+    ),
+    payload.holdSeconds || payload.remainingSeconds,
+  )];
+}
+
+function intermissionFrames(payload = {}) {
+  return [withHold(
+    snapshotFrame(intermissionRows(payload), 'Round winner', SOURCE),
+    payload.holdSeconds || payload.remainingSeconds,
   )];
 }
 
 function bestFrames(payload = {}) {
-  return [snapshotFrame(bestRows(payload), 'Best word', SOURCE)];
+  return [withHold(
+    snapshotFrame(bestRows(payload), 'Best word', SOURCE),
+    payload.holdSeconds || payload.remainingSeconds,
+  )];
+}
+
+function finalFrames(payload = {}) {
+  const hold = payload.holdSeconds || payload.remainingSeconds;
+  const out = scoresFrames({ ...payload, final: true, card: 'scores' });
+  if (payload.word && payload.name) {
+    out.push(...bestFrames(payload));
+  }
+  for (const frame of out) {
+    withHold(frame, hold);
+  }
+  return out;
+}
+
+function clearFrames() {
+  return [snapshotFrame(clearedRows(), 'Game over', SOURCE)];
 }
 
 function framesFor(payload = {}) {
-  switch (payload.phase || payload.card) {
+  if (payload.card === 'clear') {
+    return clearFrames(payload);
+  }
+  // Prefer `card` — that is what pushPhase asked for. `phase` can lag a tick
+  // behind on the way into a new stage and would otherwise paint the wrong
+  // layout (invite body with a half-written player line).
+  switch (payload.card || payload.phase) {
     case 'invite':
     case 'invited':
       return inviteFrames(payload);
@@ -207,12 +295,16 @@ function framesFor(payload = {}) {
       return lobbyFrames(payload);
     case 'round':
       return roundFrames(payload);
-    case 'scores':
     case 'intermission':
+      return intermissionFrames(payload);
     case 'final':
-      return payload.card === 'best' ? bestFrames(payload) : scoresFrames(payload);
+      return finalFrames(payload);
+    case 'scores':
+      return scoresFrames(payload);
     case 'best':
       return bestFrames(payload);
+    case 'closed':
+      return clearFrames(payload);
     default:
       return inviteFrames(payload);
   }
@@ -223,8 +315,11 @@ const FORMATTERS = {
   'word.scramble.invite': inviteFrames,
   'word.scramble.lobby': lobbyFrames,
   'word.scramble.round': roundFrames,
+  'word.scramble.intermission': intermissionFrames,
   'word.scramble.scores': scoresFrames,
   'word.scramble.best': bestFrames,
+  'word.scramble.final': finalFrames,
+  'word.scramble.clear': clearFrames,
 };
 
 module.exports = {
@@ -236,10 +331,15 @@ module.exports = {
   lobbyRows,
   roundRows,
   scoresRows,
+  intermissionRows,
   bestRows,
+  clearedRows,
   inviteFrames,
   lobbyFrames,
   roundFrames,
+  intermissionFrames,
   scoresFrames,
   bestFrames,
+  finalFrames,
+  clearFrames,
 };

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -8,7 +8,7 @@
   <title>Signal Bridge — Admin login</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="styles.css?v=signal195">
+  <link rel="stylesheet" href="styles.css?v=signal202">
   <style>
     .login-shell {
       min-height: 100dvh;
@@ -70,14 +70,28 @@
       flex-wrap: wrap;
       gap: 6px 18px;
     }
-    .login-note-links a {
+    /* One colour in every state, visited included. Left to the browser these
+       fall back to the 1994 blue-then-purple defaults, which reads as broken
+       styling rather than as useful history. Hover carries the affordance. */
+    .login-note-links a,
+    .login-note-links a:visited {
+      color: var(--text);
       font-size: 0.9rem;
       font-weight: 600;
       text-decoration: none;
+      border-radius: 6px;
     }
-    .login-note-links a:hover {
+    .login-note-links a:hover,
+    .login-note-links a:focus-visible {
+      color: var(--accent);
       text-decoration: underline;
+      text-underline-offset: 3px;
     }
+    .login-note-links a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    .login-note-links a:active { color: var(--accent-press); }
   </style>
 </head>
 <body>
@@ -103,7 +117,9 @@
       <div class="login-note">
         <span class="login-note-label">Guests</span>
         <div class="login-note-links">
-          <a href="/">Photo booth</a>
+          <a href="/">Home</a>
+          <a href="/guestsnaps/">Photo booth</a>
+          <a href="/games/">Games</a>
           <span id="guest-book-quicklink" hidden><a href="/guestbook/">Guest book</a></span>
         </div>
       </div>

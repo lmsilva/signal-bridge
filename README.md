@@ -17,7 +17,7 @@ The companion [**Windows display client**](alexa%20broadcast%20client/README.md)
 | Area | What you get |
 |------|----------------|
 | **Voice → display** | Announcements, time, weather, indoor temp, air quality, timers, reminders, alarms, shopping list, music, smart home, Tesla, Vivint, notifications |
-| **Signal (web UI)** | Guest photo booth at `https://<NAS_IP>:47810/` — PIN-gated (6-digit code rotates every 24h; shown on the Guest Snaps display overlay; Request PIN pushes that overlay). Full admin UI at `https://<NAS_IP>:47810/admin/` (password from `ADMIN_PASSWORD` in `.env`) — push Tesla/URL, manage Roll Credits, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth, Slideshow Manager |
+| **Signal (web UI)** | Landing page at `https://<NAS_IP>:47810/` linking games, photos, guest book and admin. Guest photo booth at `/guestsnaps/` — PIN-gated (6-digit code rotates every 24h; shown on the Guest Snaps display overlay; Request PIN pushes that overlay). Full admin UI at `https://<NAS_IP>:47810/admin/` (password from `ADMIN_PASSWORD` in `.env`) — push Tesla/URL, manage Roll Credits, close browser, reboot/power off, touchpad + keyboard, Alexa/Tesla re-auth, Slideshow Manager |
 | **Display discovery** | Each Windows client **advertises** itself (`display.announce` on UDP `:47833`); Signal lists them live and can target one or all. Duplicate names are OK — each PC has a unique id; the picker shows `Name · ab12` when names collide |
 | **In-browser on the display** | Push any URL → fullscreen **WebView2** browser on the poster PC until you close it |
 | **Remote input (PIN unlock)** | Mouse / keyboard / reboot / power-off require unlocking the selected display: a 6-digit PIN appears on that screen; enter it on the phone to unlock for ~1 hour |
@@ -91,10 +91,13 @@ Accept the self-signed certificate once. Optional HTTP redirect: `:47811` → HT
 
 | URL | Who | What |
 |-----|-----|------|
-| `https://<NAS_IP>:47810/` | Guests | Photo booth — pick a display and share a photo (saved to the party slideshow) |
+| `https://<NAS_IP>:47810/` | Everyone | Landing page — quick links to games, photos, the guest book and admin |
+| `https://<NAS_IP>:47810/guestsnaps/` | Guests | Photo booth — pick a display and share a photo (saved to the party slideshow) |
+| `https://<NAS_IP>:47810/guestbook/` | Guests | Guest book — leave a message for the Vestaboard |
+| `https://<NAS_IP>:47810/games/` | Guests | Word Scramble — join with the code on the board |
 | `https://<NAS_IP>:47810/admin/` | Host | Full control UI (password from `ADMIN_PASSWORD` in `.env`) |
 
-**Alexa “Guest Snaps”:** say *Alexa, open guest snaps* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Say *Alexa, open guest snaps slideshow* to play every stored guest photo on all displays. Prefer these over “photobooth” — Alexa reserves that word. Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/`).
+**Alexa “Guest Snaps”:** say *Alexa, open guest snaps* to put a dual-QR welcome on every display (join home Wi‑Fi, then open the booth). Say *Alexa, open guest snaps slideshow* to play every stored guest photo on all displays. Prefer these over “photobooth” — Alexa reserves that word. Set `GUEST_WIFI_SSID` / `GUEST_WIFI_PASSWORD` in `.env` (booth URL defaults to `https://<PROXY_OWN_IP>:47810/guestsnaps/`).
 
 Admin tabs after login:
 

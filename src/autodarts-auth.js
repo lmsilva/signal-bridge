@@ -3,6 +3,12 @@
  * Tokens are encrypted at rest; passwords are never persisted.
  *
  * Uses api.autodarts.io/auth/v1 (Keycloak at login.autodarts.io is shut down).
+ *
+ * Access tokens last ~15 minutes. Refresh tokens last a few days and Autodarts
+ * rotates them on each refresh — so an idle bridge that never calls the API
+ * will eventually hold a dead refresh token and need a manual re-link. The
+ * keep-alive below refreshes on a timer so the refresh token stays alive for
+ * as long as the container is running.
  */
 
 const {
@@ -10,6 +16,19 @@ const {
   DEFAULT_DEVICE_LINK_URI,
   normalizeClientId,
 } = require('./autodarts-api');
+
+/** How far ahead of access-token expiry to refresh (seconds). */
+const ACCESS_REFRESH_SKEW_SECONDS = 90;
+/**
+ * Fallback keep-alive when Autodarts does not report refresh_expires_in.
+ * Access tokens are ~15 minutes; refreshing every 10 minutes rotates the
+ * refresh token well before a multi-day idle expiry.
+ */
+const DEFAULT_KEEPALIVE_MS = 10 * 60 * 1000;
+/** Never poll more often than this even if the access token is short-lived. */
+const MIN_KEEPALIVE_MS = 60 * 1000;
+/** Cap so a very long refresh_expires_in still gets periodic rotation. */
+const MAX_KEEPALIVE_MS = 6 * 60 * 60 * 1000;
 
 function pickTokenFields(json = {}) {
   return {
@@ -37,6 +56,15 @@ function authErrorDetail(json, text, fallback = 'Request failed') {
   return fallback;
 }
 
+function isInvalidRefreshError(json, text) {
+  const detail = authErrorDetail(json, text, '').toLowerCase();
+  const code = typeof json?.error === 'string'
+    ? json.error
+    : (json?.error?.code || '');
+  return /invalid|expired|revoked/.test(detail)
+    || /invalid_grant|invalid_token/.test(String(code));
+}
+
 function createAutodartsAuth({
   credentials,
   api,
@@ -44,10 +72,15 @@ function createAutodartsAuth({
   env = process.env,
   now = () => Date.now(),
   log = console,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
 } = {}) {
   let memoryAccessToken = null;
   let accessExpiresAt = 0;
   let devicePoll = null;
+  let keepAliveTimer = null;
+  let keepAliveStarted = false;
+  let refreshInFlight = null;
 
   function clientConfig() {
     const resolved = credentials.resolveOauthClient
@@ -66,20 +99,28 @@ function createAutodartsAuth({
     const stored = credentials.load();
     const envCreds = credentials.envPasswordCredentials();
     const oauth = credentials.oauthStatus ? credentials.oauthStatus() : null;
+    // A refresh token that Autodarts has already rejected is not a working
+    // link — treating it as linked hid the device-code UI and made Re-link
+    // toast "Autodarts linked" without ever showing the approval code.
+    const hasSession = Boolean(stored.refreshToken) || (envCreds.present && Boolean(stored.userId));
+    const needsRelink = stored.needsRelink === true;
     return {
-      linked: Boolean(stored.refreshToken || (envCreds.present && stored.userId)),
+      linked: hasSession && !needsRelink,
+      hasCredentials: hasSession,
       source: envCreds.present ? 'env' : (stored.refreshToken ? 'session' : null),
       userId: stored.userId || null,
       userName: stored.userName || null,
       boardId: stored.boardId || null,
       boardName: stored.boardName || null,
       linkedAt: stored.linkedAt || null,
-      needsRelink: stored.needsRelink === true,
+      refreshExpiresAt: stored.refreshExpiresAt || null,
+      needsRelink,
       unavailableReason: stored.unavailableReason || null,
       deviceLinkPending: Boolean(devicePoll),
       deviceUserCode: devicePoll?.userCode || null,
       deviceVerificationUri: devicePoll?.verificationUri || null,
       envBlocksOverwrite: envCreds.present,
+      keepAlive: keepAliveStarted,
       oauth,
     };
   }
@@ -91,7 +132,11 @@ function createAutodartsAuth({
     }
     memoryAccessToken = tokens.accessToken || memoryAccessToken;
     if (tokens.expiresIn > 0) {
-      accessExpiresAt = now() + Math.max(30, tokens.expiresIn - 60) * 1000;
+      accessExpiresAt = now() + Math.max(30, tokens.expiresIn - ACCESS_REFRESH_SKEW_SECONDS) * 1000;
+    }
+    let refreshExpiresAt = extra.refreshExpiresAt || null;
+    if (tokens.refreshExpiresIn > 0) {
+      refreshExpiresAt = new Date(now() + tokens.refreshExpiresIn * 1000).toISOString();
     }
     let userId = extra.userId || '';
     let userName = extra.userName || '';
@@ -119,70 +164,185 @@ function createAutodartsAuth({
       boardId: existing.boardId,
       boardName: existing.boardName,
       linkedAt: existing.linkedAt || new Date(now()).toISOString(),
+      refreshExpiresAt: refreshExpiresAt || existing.refreshExpiresAt || null,
       needsRelink: false,
       unavailableReason: null,
     });
+    scheduleKeepAlive();
     return statusSnapshot();
   }
 
-  async function refreshAccessToken() {
-    const stored = credentials.load();
+  async function tryPasswordRecovery(reason) {
     const envCreds = credentials.envPasswordCredentials();
+    if (!envCreds.present) return false;
     const oauth = clientConfig();
-    if (!stored.refreshToken && envCreds.present) {
-      const login = api.passwordLogin || api.keycloakPasswordGrant;
-      const result = await login.call(api, {
+    const login = api.passwordLogin || api.keycloakPasswordGrant;
+    log?.info?.('Autodarts refresh failed — trying env email/password recovery');
+    let result;
+    try {
+      result = await login.call(api, {
         email: envCreds.email,
         password: envCreds.password,
         ...oauth,
       });
-      if (!result.ok) {
-        credentials.markNeedsRelink(authErrorDetail(result.json, result.text, 'Password login failed'));
-        throw new Error(authErrorDetail(result.json, result.text, 'Autodarts password login failed'));
-      }
-      await persistTokens(result.json);
-      return memoryAccessToken;
+    } catch (error) {
+      log?.warn?.('Autodarts password recovery failed', error?.message || error);
+      return false;
     }
-    if (!stored.refreshToken) {
-      throw new Error('Autodarts is not linked');
-    }
-    const result = await api.refreshWithAutodarts(stored.refreshToken, oauth);
     if (!result.ok) {
-      const rateLimited = result.rateLimited
-        || rateLimit?.isRateLimitedStatus?.(result.status, result.json, result.text);
-      if (rateLimited) {
-        rateLimit?.noteResponse?.(result);
+      log?.warn?.(
+        'Autodarts password recovery rejected',
+        authErrorDetail(result.json, result.text, reason || 'login failed'),
+      );
+      return false;
+    }
+    await persistTokens(result.json);
+    log?.info?.('Autodarts recovered via env email/password');
+    return true;
+  }
+
+  async function refreshAccessToken() {
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      const stored = credentials.load();
+      const envCreds = credentials.envPasswordCredentials();
+      const oauth = clientConfig();
+      if (!stored.refreshToken && envCreds.present) {
+        const login = api.passwordLogin || api.keycloakPasswordGrant;
+        const result = await login.call(api, {
+          email: envCreds.email,
+          password: envCreds.password,
+          ...oauth,
+        });
+        if (!result.ok) {
+          credentials.markNeedsRelink(authErrorDetail(result.json, result.text, 'Password login failed'));
+          throw new Error(authErrorDetail(result.json, result.text, 'Autodarts password login failed'));
+        }
+        await persistTokens(result.json);
+        return memoryAccessToken;
+      }
+      if (!stored.refreshToken) {
+        throw new Error('Autodarts is not linked');
+      }
+      const result = await api.refreshWithAutodarts(stored.refreshToken, oauth);
+      if (!result.ok) {
+        const rateLimited = result.rateLimited
+          || rateLimit?.isRateLimitedStatus?.(result.status, result.json, result.text);
+        if (rateLimited) {
+          rateLimit?.noteResponse?.(result);
+          memoryAccessToken = null;
+          accessExpiresAt = 0;
+          throw new Error(
+            rateLimit?.snapshot?.()?.reason
+            || authErrorDetail(result.json, result.text, 'Too many requests — try again later'),
+          );
+        }
+        // Transient network / 5xx: keep the session and retry later.
+        if (result.status >= 500 || result.status === 0 || result.status === 408 || result.status === 522) {
+          memoryAccessToken = null;
+          accessExpiresAt = 0;
+          scheduleKeepAlive(Math.min(MAX_KEEPALIVE_MS, 60_000));
+          throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed'));
+        }
+        if (isInvalidRefreshError(result.json, result.text)) {
+          if (await tryPasswordRecovery(authErrorDetail(result.json, result.text))) {
+            return memoryAccessToken;
+          }
+        }
+        credentials.markNeedsRelink(
+          authErrorDetail(result.json, result.text, 'Refresh failed — re-link Autodarts'),
+        );
         memoryAccessToken = null;
         accessExpiresAt = 0;
-        throw new Error(
-          rateLimit?.snapshot?.()?.reason
-          || authErrorDetail(result.json, result.text, 'Too many requests — try again later'),
-        );
+        stopKeepAlive();
+        throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed — re-link in Settings'));
       }
-      credentials.markNeedsRelink(
-        authErrorDetail(result.json, result.text, 'Refresh failed — re-link Autodarts'),
-      );
-      memoryAccessToken = null;
-      accessExpiresAt = 0;
-      throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed — re-link in Settings'));
+      await persistTokens(result.json, {
+        userId: stored.userId,
+        userName: stored.userName,
+      });
+      return memoryAccessToken;
+    })();
+    try {
+      return await refreshInFlight;
+    } finally {
+      refreshInFlight = null;
     }
-    await persistTokens(result.json, {
-      userId: stored.userId,
-      userName: stored.userName,
-    });
-    return memoryAccessToken;
   }
 
   async function getAccessToken() {
+    const stored = credentials.load();
+    if (stored.needsRelink) {
+      throw new Error(stored.unavailableReason || 'Autodarts needs re-linking');
+    }
     if (memoryAccessToken && now() < accessExpiresAt) {
       return memoryAccessToken;
     }
-    const stored = credentials.load();
     if (stored.accessToken && now() < accessExpiresAt) {
       memoryAccessToken = stored.accessToken;
       return memoryAccessToken;
     }
     return refreshAccessToken();
+  }
+
+  function nextKeepAliveDelayMs() {
+    const stored = credentials.load();
+    if (stored.needsRelink || !stored.refreshToken) return null;
+    const candidates = [DEFAULT_KEEPALIVE_MS];
+    if (accessExpiresAt > now()) {
+      candidates.push(Math.max(MIN_KEEPALIVE_MS, accessExpiresAt - now()));
+    }
+    if (stored.refreshExpiresAt) {
+      const refreshMs = Date.parse(stored.refreshExpiresAt);
+      if (Number.isFinite(refreshMs)) {
+        // Refresh at 60% of remaining refresh lifetime, never later than MAX.
+        const remaining = refreshMs - now();
+        if (remaining > 0) {
+          candidates.push(Math.min(MAX_KEEPALIVE_MS, Math.max(MIN_KEEPALIVE_MS, Math.floor(remaining * 0.4))));
+        }
+      }
+    }
+    return Math.min(...candidates);
+  }
+
+  function stopKeepAlive() {
+    if (keepAliveTimer) clearTimer(keepAliveTimer);
+    keepAliveTimer = null;
+    keepAliveStarted = false;
+  }
+
+  function scheduleKeepAlive(overrideMs = null) {
+    if (!keepAliveStarted) return;
+    if (keepAliveTimer) clearTimer(keepAliveTimer);
+    const delay = overrideMs != null ? overrideMs : nextKeepAliveDelayMs();
+    if (delay == null) {
+      keepAliveTimer = null;
+      return;
+    }
+    keepAliveTimer = setTimer(async () => {
+      keepAliveTimer = null;
+      try {
+        await refreshAccessToken();
+        log?.debug?.('Autodarts token keep-alive refreshed');
+      } catch (error) {
+        log?.warn?.('Autodarts token keep-alive failed', error?.message || error);
+      } finally {
+        if (keepAliveStarted && !credentials.load().needsRelink) {
+          scheduleKeepAlive();
+        }
+      }
+    }, Math.max(MIN_KEEPALIVE_MS, delay));
+    keepAliveTimer?.unref?.();
+  }
+
+  function startKeepAlive() {
+    keepAliveStarted = true;
+    const stored = credentials.load();
+    if (stored.refreshToken && !stored.needsRelink) {
+      // Kick a refresh soon after boot so a multi-day idle container does not
+      // sit on a refresh token that is already hours from expiry.
+      scheduleKeepAlive(Math.min(DEFAULT_KEEPALIVE_MS, 15_000));
+    }
   }
 
   async function loginWithPassword({ email, password } = {}) {
@@ -276,6 +436,9 @@ function createAutodartsAuth({
       timer: null,
     };
     await tickDevicePoll();
+    // Never claim "linked" from a stale refresh token still on disk — only
+    // report linked after THIS device poll actually persisted fresh tokens.
+    const snap = statusSnapshot();
     return {
       ok: true,
       userCode: devicePoll?.userCode || json.user_code,
@@ -286,14 +449,15 @@ function createAutodartsAuth({
       expiresIn: devicePoll
         ? Math.round((devicePoll.expiresAt - now()) / 1000)
         : Math.max(60, Number(json.expires_in) || 600),
-      linked: Boolean(credentials.load().refreshToken),
+      linked: snap.linked && !snap.needsRelink && !devicePoll,
+      deviceLinkPending: Boolean(devicePoll),
     };
   }
 
   function scheduleDevicePoll() {
     if (!devicePoll) return;
-    if (devicePoll.timer) clearTimeout(devicePoll.timer);
-    devicePoll.timer = setTimeout(async () => {
+    if (devicePoll.timer) clearTimer(devicePoll.timer);
+    devicePoll.timer = setTimer(async () => {
       try {
         await tickDevicePoll();
       } catch (error) {
@@ -330,12 +494,13 @@ function createAutodartsAuth({
   }
 
   function stopDevicePoll() {
-    if (devicePoll?.timer) clearTimeout(devicePoll.timer);
+    if (devicePoll?.timer) clearTimer(devicePoll.timer);
     devicePoll = null;
   }
 
   async function unlink() {
     stopDevicePoll();
+    stopKeepAlive();
     memoryAccessToken = null;
     accessExpiresAt = 0;
     if (credentials.envPasswordCredentials().present) {
@@ -358,6 +523,8 @@ function createAutodartsAuth({
     stopDevicePoll,
     unlink,
     persistTokens,
+    startKeepAlive,
+    stopKeepAlive,
   };
 }
 
@@ -365,4 +532,6 @@ module.exports = {
   createAutodartsAuth,
   pickTokenFields,
   authErrorDetail,
+  DEFAULT_KEEPALIVE_MS,
+  ACCESS_REFRESH_SKEW_SECONDS,
 };

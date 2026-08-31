@@ -315,6 +315,18 @@ function createVestaboardHub({
     return { ok: outcome.accepted > 0, ...outcome };
   }
 
+  /** Drop matching pending pages on every board, or on one when named. */
+  function dropPending(predicate, { boardId = '' } = {}) {
+    const entries = boardId
+      ? [boards.get(String(boardId))].filter(Boolean)
+      : [...boards.values()];
+    let dropped = 0;
+    for (const entry of entries) {
+      dropped += entry.queue.dropPending?.(predicate) || 0;
+    }
+    return dropped;
+  }
+
   async function testFlip(boardId) {
     const entry = boards.get(String(boardId));
     if (!entry) {
@@ -363,6 +375,7 @@ function createVestaboardHub({
     queueFor,
     pushEvent,
     submit,
+    dropPending,
     testFlip,
     boards: () => [...boards.values()].map((entry) => ({ ...entry.board })),
     onChange(listener) {

@@ -291,7 +291,9 @@ test('confirm timer starts a session without a later Lounge tick', () => {
   assert.equal(h.events.started[0].videoId, 'abc');
 });
 
-test('Buffering past the confirm window still starts a session', () => {
+test('Buffering that never moves the scrubber does not start a session', () => {
+  // A TV parked on a finished video announces it exactly like this: confirmable
+  // state, standstill scrubber. That used to open a session and air a card.
   const h = harness({ confirmSeconds: 5 });
   h.lounge.start();
 
@@ -300,8 +302,65 @@ test('Buffering past the confirm window still starts a session', () => {
     position: 0, durationSeconds: 600, state: 'Buffering',
   });
   h.advance(5);
+  assert.equal(h.events.started.length, 0);
+});
+
+test('Buffering starts a session once the scrubber actually advances', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'abc',
+    position: 0, durationSeconds: 600, state: 'Buffering',
+  });
+  h.advance(5);
+  assert.equal(h.events.started.length, 0, 'buffering alone is not playback');
+
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Buffering', position: 12 });
   assert.equal(h.events.started.length, 1);
   assert.equal(h.events.started[0].videoId, 'abc');
+});
+
+test('a TV re-announcing a finished video never opens a session', () => {
+  // The production bug: after a real watch ended, the Apple TV kept answering
+  // the 45s keep-alive with the same video at position 0. Twelve of those in
+  // one evening each confirmed a session and pushed a NOW PLAYING card.
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'done',
+    position: 0, durationSeconds: 9304, state: 'Buffering',
+  });
+  h.advance(5);
+  for (let poll = 0; poll < 12; poll += 1) {
+    h.feed({
+      event: 'now-playing', deviceId: 'tv-1', videoId: 'done',
+      position: 0, durationSeconds: 9304, state: 'Starting',
+    });
+    h.advance(45);
+  }
+  assert.equal(h.events.started.length, 0, 'a standstill must never look like playback');
+});
+
+test('an idle sweep closes a session whose TV went silent', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'abc',
+    position: 10, durationSeconds: 600, state: 'Playing',
+  });
+  h.advance(5);
+  assert.equal(h.events.started.length, 1);
+
+  assert.deepEqual(h.lounge.sweepIdleSessions(), [], 'a fresh session is not idle');
+
+  h.advance(11 * 60);
+  assert.deepEqual(h.lounge.sweepIdleSessions(), ['tv-1']);
+  assert.equal(h.events.stopped.length, 1);
+  assert.equal(h.events.stopped[0].reason, 'idle');
+  assert.equal(h.lounge.activeSessions().length, 0);
 });
 
 // -------------------------------------------------------- ad suppression

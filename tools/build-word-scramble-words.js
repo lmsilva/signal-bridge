@@ -5,8 +5,9 @@
  *   node tools/build-word-scramble-words.js
  *
  * Downloads https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt
- * unless tools/.enable1/enable1.txt already exists. Keeps 3–9 letter A–Z words,
- * sorted, so the solver can binary-search.
+ * unless tools/.enable1/enable1.txt already exists. Keeps A–Z words from three
+ * letters up to the sixteen a 4x4 board can spell, sorted so the solver can
+ * binary-search.
  */
 
 'use strict';
@@ -39,12 +40,19 @@ function download(url) {
   });
 }
 
+/**
+ * Sixteen, not nine: a path may use every cell, so capping shorter than the
+ * board can spell quietly makes the best finds on a grid unplayable.
+ */
+const MAX_LETTERS = 16;
+
 function filterWords(text) {
   const seen = new Set();
   const out = [];
+  const shape = new RegExp(`^[a-z]{3,${MAX_LETTERS}}$`);
   for (const raw of String(text || '').split(/\r?\n/)) {
     const word = raw.trim().toLowerCase();
-    if (!/^[a-z]{3,9}$/.test(word)) continue;
+    if (!shape.test(word)) continue;
     if (seen.has(word)) continue;
     seen.add(word);
     out.push(word);

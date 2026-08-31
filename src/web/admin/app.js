@@ -898,6 +898,7 @@
     'weather-alerts-settings-card': ['vestaboard'],
     'world-population-settings-card': ['vestaboard'],
     'calendar-clock-settings-card': ['vestaboard'],
+    'word-clock-settings-card': ['vestaboard'],
     'red-letter-settings-card': ['vestaboard'],
     'youtube-settings-card': ['full'],
     'upside-news-settings-card': ['full', 'vestaboard'],
@@ -908,6 +909,10 @@
     'learn-german-settings-card': ['vestaboard'],
     'learn-italian-settings-card': ['vestaboard'],
     'chuck-norris-settings-card': ['vestaboard'],
+    'roast-me-settings-card': ['vestaboard'],
+    'family-quotes-settings-card': ['vestaboard'],
+    'dad-jokes-settings-card': ['vestaboard'],
+    'us-weather-map-settings-card': ['vestaboard'],
     'amazing-facts-settings-card': ['vestaboard'],
     'world-geography-facts-settings-card': ['vestaboard'],
     'conversation-starters-settings-card': ['vestaboard'],
@@ -1604,6 +1609,11 @@
     currency: '<circle cx="12" cy="12" r="9"/><path d="M12 6v12M9.5 9.5c.6-1 1.6-1.5 2.5-1.5 1.4 0 2.5.9 2.5 2s-1.1 2-2.5 2h-1c-1.4 0-2.5.9-2.5 2s1.1 2 2.5 2c.9 0 1.9-.5 2.5-1.5"/>',
     world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 3.2 2.8 14.8 0 18M12 3c-2.8 3.2-2.8 14.8 0 18"/><path d="M5.5 7.5c2 .8 4 .8 6.5.8s4.5 0 6.5-.8M5.5 16.5c2-.8 4-.8 6.5-.8s4.5 0 6.5.8"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/>',
+    'word-clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/>',
+    roast: '<path d="M12 3c2.8 3 4.2 5.3 4.2 7a4.2 4.2 0 0 1-8.4 0c0-1.7 1.4-4 4.2-7z"/><path d="M6.5 14.5c-.9 1.2-1.4 2.4-1.4 3.4C5.1 20.2 8 22 12 22s6.9-1.8 6.9-4.1c0-1-.5-2.2-1.4-3.4"/>',
+    'family-quotes': '<path d="M12 20.5S4 15.8 4 10.2A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 8 2.2c0 5.6-8 10.3-8 10.3z"/>',
+    'dad-jokes': '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01"/>',
+    'us-weather-map': '<path d="M3 7h11l2 2h5v6l-3 3H9l-3-2H3z"/><path d="M9 7v9M14 9v9"/>',
     'quiet-hours': '<path d="M14.5 4.5A7.5 7.5 0 1 0 19.5 16 6.2 6.2 0 0 1 14.5 4.5Z"/><path d="M16.2 6.2 17 4.4M18.4 8.8l1.6-.6M19.2 12l1.8.2"/>',
     sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
     iss: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M3 12h4M17 12h4M12 3v4M12 17v4"/><path d="M7.5 7.5l2 2M14.5 14.5l2 2M16.5 7.5l-2 2M9.5 14.5l-2 2"/>',
@@ -1751,8 +1761,8 @@
   }
 
   function openGuestPhotoBooth() {
-    // Root-absolute `/` (guest upload page) — ignores <base href="/admin/…">.
-    window.open('/', '_blank', 'noopener,noreferrer');
+    // Root-absolute (guest upload page) — ignores <base href="/admin/…">.
+    window.open('/guestsnaps/', '_blank', 'noopener,noreferrer');
   }
 
   // One delegated listener rather than one per tile — tiles are re-rendered
@@ -7072,6 +7082,94 @@
     loadCalendarClockSettings();
   }, 15000);
 
+  // ----------------------------------------------- Settings → Word Clock
+
+  function renderWordClockSettings(data = {}) {
+    const settings = data.settings || {};
+    const payload = data.payload || {};
+    setSegmented('word-clock-rounding', 'data-rounding', settings.rounding === 'exact' ? 'exact' : 'five');
+    const dayPart = $('word-clock-day-part');
+    if (dayPart) dayPart.checked = settings.dayPart !== false;
+    const pill = $('word-clock-status-pill');
+    if (pill) {
+      const ready = Boolean(payload.text);
+      pill.textContent = ready ? 'Ready' : '…';
+      pill.className = `status-pill ${ready ? 'is-ok' : ''}`;
+    }
+    const detail = $('word-clock-status-detail');
+    if (detail) {
+      detail.textContent = payload.text
+        ? `Right now the board would read “${payload.text}”`
+        : 'The time spelled out as a sentence, centred on the board.';
+    }
+    const host = $('word-clock-preview');
+    if (host) renderVbGrid(host, data.boardRows || blankDesignerCells());
+  }
+
+  async function loadWordClockSettings() {
+    try {
+      renderWordClockSettings(await apiGet('/api/word-clock/settings'));
+    } catch {
+      renderWordClockSettings({});
+    }
+  }
+
+  async function saveWordClockSettings(patch) {
+    try {
+      renderWordClockSettings(await apiPost('/api/word-clock/settings', patch));
+    } catch (error) {
+      toast(error?.message || 'Could not save Word Clock settings', 'bad');
+      loadWordClockSettings();
+    }
+  }
+
+  $('word-clock-rounding')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-rounding]');
+    if (!button) return;
+    saveWordClockSettings({ rounding: button.dataset.rounding });
+  });
+
+  $('word-clock-day-part')?.addEventListener('change', (event) => {
+    saveWordClockSettings({ dayPart: event.target.checked });
+  });
+
+  $('btn-word-clock-reset')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      renderWordClockSettings(await apiPost('/api/word-clock/settings', { reset: true }));
+      toast('Word Clock defaults restored', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset Word Clock', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-word-clock-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/word-clock', withTarget());
+      toast(result.text || 'Word Clock on the board', 'good');
+    } catch (error) {
+      toast(error?.message || 'Word Clock push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadWordClockSettings();
+  // A clock preview that lags the wall is worse than none, so it re-reads on
+  // the same cadence as the Calendar Clock card.
+  window.setInterval(() => {
+    if (document.hidden) return;
+    if (!$('word-clock-settings-card')) return;
+    const view = typeof currentSettingsView === 'function' ? currentSettingsView() : 'global';
+    if (view !== 'global' && view !== 'all') return;
+    loadWordClockSettings();
+  }, 15000);
+
   // -------------------------------- Settings → Red Letter and the Date Book
 
   // Flap codes, in board order: blank, A-Z, 1-9, 0, then punctuation. The gaps
@@ -8530,11 +8628,12 @@
       .trim();
   }
 
-  function wrapPreview(text, width) {
+  function wrapPreview(text, width, { orphans = true } = {}) {
     const words = foldPreview(text).split(' ').filter(Boolean);
     const lines = [];
     let line = '';
-    const isOrphanCandidate = (word) => word
+    const isOrphanCandidate = (word) => orphans
+      && word
       && word.length <= 2
       && /[A-Z0-9]/.test(word);
     for (const word of words) {
@@ -8805,6 +8904,710 @@
   });
 
   loadChuckNorrisStatus();
+
+  // ------------------------------------------------ Settings → Roast Me!
+
+  const ROAST_PAGE_SIZE = 12;
+  let roastMePage = 1;
+  let roastMeTimer = 0;
+
+  function roastMeCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} roasts ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderRoastMeCard(data = {}) {
+    const pill = $('roast-me-status-pill');
+    const detail = $('roast-me-status-detail');
+    const summary = $('roast-me-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${roastMeCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit roasts. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? roastMeCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderRoastMePreview(text) {
+    const host = $('roast-me-preview');
+    if (!host) {
+      return;
+    }
+    // No title row and a greedy wrap, same as the board: the block is centred
+    // down the six rows rather than starting at the top.
+    const wrapped = wrapPreview(text, 22, { orphans: false });
+    const chunk = wrapped.slice(0, 6);
+    const top = Math.floor((6 - chunk.length) / 2);
+    const lines = [];
+    for (let row = 0; row < 6; row += 1) {
+      lines.push(chunk[row - top] || '');
+    }
+    paintPreviewLines(host, lines);
+    const hint = $('roast-me-fit-hint');
+    if (hint) {
+      hint.textContent = text
+        ? (wrapped.length <= 6
+          ? `Fits in ${wrapped.length} row${wrapped.length === 1 ? '' : 's'}`
+          : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function renderRoastMeSettings(data = {}) {
+    renderRoastMeCard(data);
+    const list = $('roast-me-roast-list');
+    if (list) {
+      const roasts = data.roasts || [];
+      if (!roasts.length) {
+        list.innerHTML = '<p class="hint">No roasts match that search.</p>';
+      } else {
+        list.innerHTML = roasts.map((roast) => `
+          <article class="cn-fact${roast.hidden ? ' is-hidden' : ''}${roast.custom ? ' is-custom' : ''}" data-roast-id="${escapeHtml(roast.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(roast.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${roast.custom ? 'Yours' : 'Shipped'} · ${roast.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: roast.hidden,
+                  custom: roast.custom,
+                  saveAttr: 'data-roast-save',
+                  hideAttr: 'data-roast-hide',
+                  removeAttr: 'data-roast-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('roast-me-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    roastMePage = data.page || 1;
+    const prev = $('btn-roast-me-prev');
+    const next = $('btn-roast-me-next');
+    if (prev) prev.disabled = roastMePage <= 1;
+    if (next) next.disabled = roastMePage >= (data.pages || 1);
+  }
+
+  async function loadRoastMeStatus() {
+    try {
+      renderRoastMeCard(await apiGet('/api/roast-me/roasts?page=1&pageSize=1'));
+    } catch {
+      renderRoastMeCard({});
+    }
+  }
+
+  async function loadRoastMeRoasts(page = roastMePage) {
+    const query = $('roast-me-search')?.value || '';
+    const hidden = Boolean($('roast-me-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(ROAST_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      renderRoastMeSettings(await apiGet(`/api/roast-me/roasts?${params}`));
+    } catch {
+      renderRoastMeSettings({});
+    }
+  }
+
+  function openRoastMeManageSheet() {
+    const sheet = $('roast-me-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    renderRoastMePreview($('roast-me-new')?.value || '');
+    loadRoastMeRoasts(1);
+  }
+
+  function closeRoastMeManageSheet() {
+    const sheet = $('roast-me-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadRoastMeStatus();
+  }
+
+  $('btn-roast-me-manage')?.addEventListener('click', () => openRoastMeManageSheet());
+  $('btn-roast-me-manage-close')?.addEventListener('click', () => closeRoastMeManageSheet());
+  registerSheetDismiss('roast-me-manage-sheet', () => closeRoastMeManageSheet());
+
+  $('btn-roast-me-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/roast-me', withTarget());
+      toast(String(result.roast?.text || 'Roast on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Roast Me!', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-roast-me-add')?.addEventListener('click', async () => {
+    const input = $('roast-me-new');
+    const text = input?.value || '';
+    try {
+      await apiPost('/api/roast-me/roasts', { text });
+      if (input) input.value = '';
+      renderRoastMePreview('');
+      toast('Roast added', 'good');
+      await loadRoastMeRoasts(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that roast', 'bad');
+    }
+  });
+
+  $('roast-me-new')?.addEventListener('input', (event) => {
+    renderRoastMePreview(event.target.value);
+  });
+
+  $('roast-me-search')?.addEventListener('input', () => {
+    window.clearTimeout(roastMeTimer);
+    roastMeTimer = window.setTimeout(() => {
+      loadRoastMeRoasts(1);
+    }, 250);
+  });
+
+  $('roast-me-show-hidden')?.addEventListener('change', () => loadRoastMeRoasts(1));
+  $('btn-roast-me-prev')?.addEventListener('click', () => loadRoastMeRoasts(roastMePage - 1));
+  $('btn-roast-me-next')?.addEventListener('click', () => loadRoastMeRoasts(roastMePage + 1));
+
+  $('roast-me-roast-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-roast-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-roast-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    try {
+      if (event.target.closest('[data-roast-save]')) {
+        await apiPost('/api/roast-me/roasts', { id, text });
+        toast('Roast saved', 'good');
+      } else if (event.target.closest('[data-roast-remove]')) {
+        if (!confirmCorpusRemove('roast', text)) {
+          return;
+        }
+        await apiPost('/api/roast-me/roasts', { id, remove: true });
+        toast('Roast removed', 'good');
+      } else if (event.target.closest('[data-roast-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/roast-me/roasts', { id, hidden: !restore });
+        toast(restore ? 'Roast restored' : 'Roast hidden', 'good');
+      } else {
+        return;
+      }
+      await loadRoastMeRoasts(roastMePage);
+    } catch (error) {
+      toast(error.message || 'Could not update that roast', 'bad');
+    }
+  });
+
+  loadRoastMeStatus();
+
+  // -------------------------------------------- Settings → Family Quotes
+
+  const FQ_PAGE_SIZE = 12;
+  const FQ_WIDTH = 21;
+  let familyQuotesPage = 1;
+  let familyQuotesTimer = 0;
+
+  // Mirrors quoteLines() in src/family-quotes.js: a row per sentence, wrapped
+  // one column shy of the right edge, attribution glued to the last sentence.
+  function familyQuoteLines(text, author) {
+    const parts = [];
+    let buffer = '';
+    for (const piece of String(text || '').split(/(?<=[.!?])\s+/)) {
+      buffer = buffer ? `${buffer} ${piece}` : piece;
+      if (!/(?:\b(?:mr|mrs|ms|dr|st|jr|sr|prof|rev|gen|capt|lt|col|vs|etc)|\b[A-Za-z])\.$/i.test(buffer)) {
+        parts.push(buffer);
+        buffer = '';
+      }
+    }
+    if (buffer) parts.push(buffer);
+    const kept = parts.filter(Boolean);
+    if (!kept.length) {
+      return [];
+    }
+    const credit = String(author || '').trim();
+    if (credit) {
+      kept[kept.length - 1] = `${kept[kept.length - 1]} -${credit}`;
+    }
+    return kept.flatMap((part) => wrapPreview(part, FQ_WIDTH, { orphans: false }));
+  }
+
+  function familyQuotesCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} quotes ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderFamilyQuotesCard(data = {}) {
+    const pill = $('family-quotes-status-pill');
+    const detail = $('family-quotes-status-detail');
+    const summary = $('family-quotes-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${familyQuotesCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit family quotes. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? familyQuotesCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderFamilyQuotesPreview(text, author) {
+    const host = $('family-quotes-preview');
+    if (!host) {
+      return;
+    }
+    const wrapped = familyQuoteLines(text, author);
+    const chunk = wrapped.slice(0, 6);
+    const top = Math.floor((6 - chunk.length) / 2);
+    const lines = [];
+    for (let row = 0; row < 6; row += 1) {
+      lines.push(chunk[row - top] || '');
+    }
+    paintPreviewLines(host, lines);
+    const hint = $('family-quotes-fit-hint');
+    if (hint) {
+      hint.textContent = text
+        ? (wrapped.length <= 6
+          ? `Fits in ${wrapped.length} row${wrapped.length === 1 ? '' : 's'}`
+          : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function refreshFamilyQuotesPreview() {
+    renderFamilyQuotesPreview(
+      $('family-quotes-new')?.value || '',
+      $('family-quotes-new-author')?.value || '',
+    );
+  }
+
+  function renderFamilyQuotesSettings(data = {}) {
+    renderFamilyQuotesCard(data);
+    const list = $('family-quotes-quote-list');
+    if (list) {
+      const quotes = data.quotes || [];
+      if (!quotes.length) {
+        list.innerHTML = '<p class="hint">No quotes match that search.</p>';
+      } else {
+        list.innerHTML = quotes.map((quote) => `
+          <article class="cn-fact${quote.hidden ? ' is-hidden' : ''}${quote.custom ? ' is-custom' : ''}" data-fq-id="${escapeHtml(quote.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(quote.text)}</textarea>
+            <input type="text" class="field-input fq-author" maxlength="48" placeholder="Who said it" value="${escapeHtml(quote.author || '')}">
+            <div class="cn-fact-meta">
+              <span class="hint">${quote.custom ? 'Yours' : 'Shipped'} · ${quote.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: quote.hidden,
+                  custom: quote.custom,
+                  saveAttr: 'data-fq-save',
+                  hideAttr: 'data-fq-hide',
+                  removeAttr: 'data-fq-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('family-quotes-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    familyQuotesPage = data.page || 1;
+    const prev = $('btn-family-quotes-prev');
+    const next = $('btn-family-quotes-next');
+    if (prev) prev.disabled = familyQuotesPage <= 1;
+    if (next) next.disabled = familyQuotesPage >= (data.pages || 1);
+  }
+
+  async function loadFamilyQuotesStatus() {
+    try {
+      renderFamilyQuotesCard(await apiGet('/api/family-quotes/quotes?page=1&pageSize=1'));
+    } catch {
+      renderFamilyQuotesCard({});
+    }
+  }
+
+  async function loadFamilyQuotes(page = familyQuotesPage) {
+    const query = $('family-quotes-search')?.value || '';
+    const hidden = Boolean($('family-quotes-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(FQ_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      renderFamilyQuotesSettings(await apiGet(`/api/family-quotes/quotes?${params}`));
+    } catch {
+      renderFamilyQuotesSettings({});
+    }
+  }
+
+  function openFamilyQuotesManageSheet() {
+    const sheet = $('family-quotes-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    refreshFamilyQuotesPreview();
+    loadFamilyQuotes(1);
+  }
+
+  function closeFamilyQuotesManageSheet() {
+    const sheet = $('family-quotes-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadFamilyQuotesStatus();
+  }
+
+  $('btn-family-quotes-manage')?.addEventListener('click', () => openFamilyQuotesManageSheet());
+  $('btn-family-quotes-manage-close')?.addEventListener('click', () => closeFamilyQuotesManageSheet());
+  registerSheetDismiss('family-quotes-manage-sheet', () => closeFamilyQuotesManageSheet());
+
+  $('btn-family-quotes-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/family-quotes', withTarget());
+      toast(String(result.quote?.text || 'Family quote on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Family Quotes', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-family-quotes-add')?.addEventListener('click', async () => {
+    const input = $('family-quotes-new');
+    const authorInput = $('family-quotes-new-author');
+    try {
+      await apiPost('/api/family-quotes/quotes', {
+        text: input?.value || '',
+        author: authorInput?.value || '',
+      });
+      if (input) input.value = '';
+      if (authorInput) authorInput.value = '';
+      refreshFamilyQuotesPreview();
+      toast('Quote added', 'good');
+      await loadFamilyQuotes(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that quote', 'bad');
+    }
+  });
+
+  $('family-quotes-new')?.addEventListener('input', () => refreshFamilyQuotesPreview());
+  $('family-quotes-new-author')?.addEventListener('input', () => refreshFamilyQuotesPreview());
+
+  $('family-quotes-search')?.addEventListener('input', () => {
+    window.clearTimeout(familyQuotesTimer);
+    familyQuotesTimer = window.setTimeout(() => {
+      loadFamilyQuotes(1);
+    }, 250);
+  });
+
+  $('family-quotes-show-hidden')?.addEventListener('change', () => loadFamilyQuotes(1));
+  $('btn-family-quotes-prev')?.addEventListener('click', () => loadFamilyQuotes(familyQuotesPage - 1));
+  $('btn-family-quotes-next')?.addEventListener('click', () => loadFamilyQuotes(familyQuotesPage + 1));
+
+  $('family-quotes-quote-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-fq-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-fq-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    const author = article.querySelector('.fq-author')?.value;
+    try {
+      if (event.target.closest('[data-fq-save]')) {
+        await apiPost('/api/family-quotes/quotes', { id, text, author });
+        toast('Quote saved', 'good');
+      } else if (event.target.closest('[data-fq-remove]')) {
+        if (!confirmCorpusRemove('quote', text)) {
+          return;
+        }
+        await apiPost('/api/family-quotes/quotes', { id, remove: true });
+        toast('Quote removed', 'good');
+      } else if (event.target.closest('[data-fq-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/family-quotes/quotes', { id, hidden: !restore });
+        toast(restore ? 'Quote restored' : 'Quote hidden', 'good');
+      } else {
+        return;
+      }
+      await loadFamilyQuotes(familyQuotesPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that quote', 'bad');
+    }
+  });
+
+  loadFamilyQuotesStatus();
+
+  // ----------------------------------------------- Settings → Dad Jokes
+
+  const DJ_PAGE_SIZE = 12;
+  const DJ_WIDTH = 21;
+  let dadJokesPage = 1;
+  let dadJokesTimer = 0;
+
+  // Mirrors jokeLines() in src/dad-jokes-layout.js: setup, a blank row, then
+  // the punchline, each greedily wrapped one column shy of the right edge.
+  function dadJokeLines(setup, punchline) {
+    const top = wrapPreview(String(setup || '').trim(), DJ_WIDTH, { orphans: false });
+    const bottom = wrapPreview(String(punchline || '').trim(), DJ_WIDTH, { orphans: false });
+    if (!top.length) return bottom;
+    if (!bottom.length) return top;
+    return [...top, '', ...bottom];
+  }
+
+  function dadJokesCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} jokes ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderDadJokesCard(data = {}) {
+    const pill = $('dad-jokes-status-pill');
+    const detail = $('dad-jokes-status-detail');
+    const summary = $('dad-jokes-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${dadJokesCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit dad jokes. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? dadJokesCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderDadJokesPreview(setup, punchline) {
+    const host = $('dad-jokes-preview');
+    if (!host) {
+      return;
+    }
+    const wrapped = dadJokeLines(setup, punchline);
+    const chunk = wrapped.slice(0, 6);
+    const top = Math.floor((6 - chunk.length) / 2);
+    const lines = [];
+    for (let row = 0; row < 6; row += 1) {
+      lines.push(chunk[row - top] || '');
+    }
+    paintPreviewLines(host, lines);
+    const hint = $('dad-jokes-fit-hint');
+    if (hint) {
+      hint.textContent = setup
+        ? (wrapped.length <= 6
+          ? `Fits in ${wrapped.length} row${wrapped.length === 1 ? '' : 's'}`
+          : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function refreshDadJokesPreview() {
+    renderDadJokesPreview(
+      $('dad-jokes-new')?.value || '',
+      $('dad-jokes-new-punchline')?.value || '',
+    );
+  }
+
+  function renderDadJokesSettings(data = {}) {
+    renderDadJokesCard(data);
+    const list = $('dad-jokes-joke-list');
+    if (list) {
+      const jokes = data.jokes || [];
+      if (!jokes.length) {
+        list.innerHTML = '<p class="hint">No jokes match that search.</p>';
+      } else {
+        list.innerHTML = jokes.map((joke) => `
+          <article class="cn-fact${joke.hidden ? ' is-hidden' : ''}${joke.custom ? ' is-custom' : ''}" data-dj-id="${escapeHtml(joke.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="160">${escapeHtml(joke.setup)}</textarea>
+            <textarea class="field-input dj-punchline" rows="2" maxlength="160" placeholder="Punchline">${escapeHtml(joke.punchline || '')}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${joke.custom ? 'Yours' : 'Shipped'} · ${joke.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: joke.hidden,
+                  custom: joke.custom,
+                  saveAttr: 'data-dj-save',
+                  hideAttr: 'data-dj-hide',
+                  removeAttr: 'data-dj-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('dad-jokes-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    dadJokesPage = data.page || 1;
+    const prev = $('btn-dad-jokes-prev');
+    const next = $('btn-dad-jokes-next');
+    if (prev) prev.disabled = dadJokesPage <= 1;
+    if (next) next.disabled = dadJokesPage >= (data.pages || 1);
+  }
+
+  async function loadDadJokesStatus() {
+    try {
+      renderDadJokesCard(await apiGet('/api/dad-jokes/jokes?page=1&pageSize=1'));
+    } catch {
+      renderDadJokesCard({});
+    }
+  }
+
+  async function loadDadJokes(page = dadJokesPage) {
+    const query = $('dad-jokes-search')?.value || '';
+    const hidden = Boolean($('dad-jokes-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(DJ_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      renderDadJokesSettings(await apiGet(`/api/dad-jokes/jokes?${params}`));
+    } catch {
+      renderDadJokesSettings({});
+    }
+  }
+
+  function openDadJokesManageSheet() {
+    const sheet = $('dad-jokes-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    refreshDadJokesPreview();
+    loadDadJokes(1);
+  }
+
+  function closeDadJokesManageSheet() {
+    const sheet = $('dad-jokes-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadDadJokesStatus();
+  }
+
+  $('btn-dad-jokes-manage')?.addEventListener('click', () => openDadJokesManageSheet());
+  $('btn-dad-jokes-manage-close')?.addEventListener('click', () => closeDadJokesManageSheet());
+  registerSheetDismiss('dad-jokes-manage-sheet', () => closeDadJokesManageSheet());
+
+  $('btn-dad-jokes-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/dad-jokes', withTarget());
+      toast(String(result.joke?.setup || 'Dad joke on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Dad Jokes', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-dad-jokes-add')?.addEventListener('click', async () => {
+    const setupInput = $('dad-jokes-new');
+    const punchlineInput = $('dad-jokes-new-punchline');
+    try {
+      await apiPost('/api/dad-jokes/jokes', {
+        setup: setupInput?.value || '',
+        punchline: punchlineInput?.value || '',
+      });
+      if (setupInput) setupInput.value = '';
+      if (punchlineInput) punchlineInput.value = '';
+      refreshDadJokesPreview();
+      toast('Joke added', 'good');
+      await loadDadJokes(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that joke', 'bad');
+    }
+  });
+
+  $('dad-jokes-new')?.addEventListener('input', () => refreshDadJokesPreview());
+  $('dad-jokes-new-punchline')?.addEventListener('input', () => refreshDadJokesPreview());
+
+  $('dad-jokes-search')?.addEventListener('input', () => {
+    window.clearTimeout(dadJokesTimer);
+    dadJokesTimer = window.setTimeout(() => {
+      loadDadJokes(1);
+    }, 250);
+  });
+
+  $('dad-jokes-show-hidden')?.addEventListener('change', () => loadDadJokes(1));
+  $('btn-dad-jokes-prev')?.addEventListener('click', () => loadDadJokes(dadJokesPage - 1));
+  $('btn-dad-jokes-next')?.addEventListener('click', () => loadDadJokes(dadJokesPage + 1));
+
+  $('dad-jokes-joke-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-dj-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-dj-id');
+    const setup = article.querySelector('.cn-fact-text')?.value;
+    const punchline = article.querySelector('.dj-punchline')?.value;
+    try {
+      if (event.target.closest('[data-dj-save]')) {
+        await apiPost('/api/dad-jokes/jokes', { id, setup, punchline });
+        toast('Joke saved', 'good');
+      } else if (event.target.closest('[data-dj-remove]')) {
+        if (!confirmCorpusRemove('joke', setup)) {
+          return;
+        }
+        await apiPost('/api/dad-jokes/jokes', { id, remove: true });
+        toast('Joke removed', 'good');
+      } else if (event.target.closest('[data-dj-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/dad-jokes/jokes', { id, hidden: !restore });
+        toast(restore ? 'Joke restored' : 'Joke hidden', 'good');
+      } else {
+        return;
+      }
+      await loadDadJokes(dadJokesPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that joke', 'bad');
+    }
+  });
+
+  loadDadJokesStatus();
 
   // ------------------------------------------- Settings → Amazing Facts
 
@@ -10386,6 +11189,24 @@
     }
   }
 
+  /** Archived rows ticked for deletion, kept across a page turn. */
+  const wordScrambleHistPicked = new Set();
+
+  function syncWordScrambleHistPicks() {
+    const boxes = [...document.querySelectorAll('[data-ws-hist]')];
+    const button = $('btn-word-scramble-hist-delete');
+    if (button) {
+      button.disabled = wordScrambleHistPicked.size === 0;
+      button.textContent = wordScrambleHistPicked.size
+        ? `Delete ${wordScrambleHistPicked.size}`
+        : 'Delete';
+    }
+    const all = $('word-scramble-hist-all');
+    if (all) {
+      all.checked = boxes.length > 0 && boxes.every((box) => box.checked);
+    }
+  }
+
   async function loadWordScrambleHistory(offset = wordScrambleHistOffset) {
     const list = $('word-scramble-history-list');
     if (!list) return;
@@ -10402,13 +11223,25 @@
         const article = document.createElement('article');
         article.className = 'cn-fact';
         const when = String(row.endedAt || row.startedAt || '').slice(0, 16).replace('T', ' ');
-        const winner = row.winner?.name || '—';
-        const word = row.topWord?.word || '—';
-        article.innerHTML = `<div class="cn-fact-meta">${escapeHtml(when)} · ${row.players?.length || 0} players`
-          + ` · ${row.rounds || 0} rounds · ${escapeHtml(winner)} · ${escapeHtml(word)}`
-          + `${row.abandoned ? ' · abandoned' : ''}</div>`;
+        const players = row.players?.length || 0;
+        const rounds = row.rounds || 0;
+        // The bare winner and word used to read as two mystery columns.
+        const outcome = row.abandoned
+          ? 'Abandoned'
+          : `Won by ${row.winner?.name || 'nobody'}`;
+        const best = row.topWord?.word
+          ? ` · best word ${String(row.topWord.word).toUpperCase()}`
+          : '';
+        const id = String(row.sessionId || '');
+        article.innerHTML = '<label class="trivia-check">'
+          + `<input type="checkbox" data-ws-hist="${escapeHtml(id)}"`
+          + `${wordScrambleHistPicked.has(id) ? ' checked' : ''}>`
+          + `<span><strong>${escapeHtml(when)}</strong> · ${rounds} round${rounds === 1 ? '' : 's'}`
+          + ` · ${players} player${players === 1 ? '' : 's'}<br>`
+          + `<span class="hint">${escapeHtml(outcome)}${escapeHtml(best)}</span></span></label>`;
         list.appendChild(article);
       }
+      syncWordScrambleHistPicks();
       const label = $('word-scramble-hist-page');
       if (label) {
         const page = Math.floor(wordScrambleHistOffset / WS_HISTORY_PAGE) + 1;
@@ -10466,6 +11299,36 @@
   $('word-scramble-active-list')?.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-ws-end]');
     if (btn) openWordScrambleEnd(btn.getAttribute('data-ws-end'));
+  });
+  $('word-scramble-history-list')?.addEventListener('change', (event) => {
+    const box = event.target.closest('[data-ws-hist]');
+    if (!box) return;
+    const id = box.getAttribute('data-ws-hist');
+    if (box.checked) wordScrambleHistPicked.add(id);
+    else wordScrambleHistPicked.delete(id);
+    syncWordScrambleHistPicks();
+  });
+  $('word-scramble-hist-all')?.addEventListener('change', (event) => {
+    const on = event.target.checked;
+    for (const box of document.querySelectorAll('[data-ws-hist]')) {
+      box.checked = on;
+      const id = box.getAttribute('data-ws-hist');
+      if (on) wordScrambleHistPicked.add(id);
+      else wordScrambleHistPicked.delete(id);
+    }
+    syncWordScrambleHistPicks();
+  });
+  $('btn-word-scramble-hist-delete')?.addEventListener('click', async () => {
+    const ids = [...wordScrambleHistPicked];
+    if (!ids.length) return;
+    try {
+      const result = await apiPost('/api/game-sessions/history/delete', { sessionIds: ids });
+      wordScrambleHistPicked.clear();
+      toast(`Deleted ${result.removed || 0} game${result.removed === 1 ? '' : 's'}`, 'ok');
+      loadWordScrambleHistory(0);
+    } catch (error) {
+      toast(error.message || 'Could not delete those games', 'bad');
+    }
   });
   $('btn-word-scramble-hist-prev')?.addEventListener('click', () => {
     loadWordScrambleHistory(Math.max(0, wordScrambleHistOffset - WS_HISTORY_PAGE));
@@ -11387,6 +12250,146 @@
 
   loadCurrencyRatesSettings();
 
+  // -------------------------------------------- Settings → US Weather Map
+
+  // The silhouette is fixed, so the preview can draw the country before any
+  // reading arrives — a blank bezel would look like the card was broken.
+  const USWM_MASK = [
+    '###############.....##',
+    '################..###.',
+    '.###################..',
+    '..#################...',
+    '...###############....',
+    '..........#......#....',
+  ];
+  let usWeatherMapMode = 'temperature';
+  let usWeatherMapCells = null;
+
+  function usWeatherMapRows() {
+    const rows = Array.from({ length: 6 }, () => new Array(22).fill(0));
+    if (Array.isArray(usWeatherMapCells) && usWeatherMapCells.length) {
+      for (const cell of usWeatherMapCells) {
+        const row = Number(cell?.row);
+        const col = Number(cell?.col);
+        if (rows[row] && col >= 0 && col < 22) {
+          rows[row][col] = flapChipCode(cell?.chip);
+        }
+      }
+      return rows;
+    }
+    // No map yet: show the outline in black so the shape still reads.
+    USWM_MASK.forEach((line, row) => {
+      [...line].forEach((mark, col) => {
+        if (mark === '#') rows[row][col] = flapChipCode('black');
+      });
+    });
+    return rows;
+  }
+
+  function renderUsWeatherMapPreview() {
+    const host = $('us-weather-map-preview');
+    if (host) renderVbGrid(host, usWeatherMapRows());
+  }
+
+  function renderUsWeatherMapSettings(data = {}) {
+    const settings = data.settings || {};
+    usWeatherMapMode = settings.mode || 'temperature';
+
+    const pill = $('us-weather-map-status-pill');
+    if (pill) {
+      pill.textContent = data.hasMap
+        ? (data.mapAgeMinutes ? `${data.mapAgeMinutes}m old` : 'fresh')
+        : (data.lastError ? 'unavailable' : 'ready');
+    }
+    const detail = $('us-weather-map-status-detail');
+    if (detail && data.cellCount) {
+      detail.textContent = data.lastError
+        ? `Last fetch failed: ${data.lastError}`
+        : `A colour chip for each of ${data.cellCount} points across the continental US. No text — the whole board is the map. Free — no API key.`;
+    }
+
+    for (const button of document.querySelectorAll('#us-weather-map-mode-tabs .segmented-btn')) {
+      button.classList.toggle('active', button.dataset.mapMode === usWeatherMapMode);
+    }
+
+    const legend = $('us-weather-map-legend');
+    if (legend) {
+      legend.innerHTML = (data.legend || []).map((band) => `
+        <span class="uswm-swatch">
+          <i class="uswm-chip" data-chip="${flapChipCode(band.chip)}"></i>
+          ${escapeHtml(band.label)}
+        </span>
+      `).join('');
+    }
+
+    const refresh = $('us-weather-map-refresh');
+    if (refresh && settings.refreshMinutes != null) {
+      refresh.value = settings.refreshMinutes;
+    }
+    renderUsWeatherMapPreview();
+  }
+
+  async function loadUsWeatherMapSettings() {
+    try {
+      renderUsWeatherMapSettings(await apiGet('/api/us-weather-map/settings'));
+    } catch {
+      renderUsWeatherMapSettings({});
+    }
+  }
+
+  async function saveUsWeatherMapSettings(patch) {
+    try {
+      renderUsWeatherMapSettings(await apiPost('/api/us-weather-map/settings', patch));
+    } catch (error) {
+      toast(error.message || 'Could not save the map settings', 'bad');
+    }
+  }
+
+  for (const button of document.querySelectorAll('#us-weather-map-mode-tabs .segmented-btn')) {
+    button.addEventListener('click', () => {
+      // The chips mean something different in each mode, so a stale map would
+      // be a lie until the next fetch.
+      usWeatherMapCells = null;
+      saveUsWeatherMapSettings({ mode: button.dataset.mapMode });
+    });
+  }
+
+  $('btn-us-weather-map-save')?.addEventListener('click', () => saveUsWeatherMapSettings({
+    mode: usWeatherMapMode,
+    refreshMinutes: $('us-weather-map-refresh')?.value,
+  }));
+
+  $('btn-us-weather-map-reset')?.addEventListener('click', () => {
+    usWeatherMapCells = null;
+    saveUsWeatherMapSettings({ reset: true });
+  });
+
+  $('btn-us-weather-map-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    const hint = $('us-weather-map-hint');
+    if (hint) hint.textContent = 'Fetching the map…';
+    try {
+      const result = await apiPost('/api/push/us-weather-map', { ...withTarget(), force: true });
+      usWeatherMapCells = result.cells || null;
+      renderUsWeatherMapPreview();
+      if (hint) {
+        hint.textContent = result.range
+          ? `${result.range.minF}F to ${result.range.maxF}F across the map`
+          : 'Map on the board';
+      }
+      toast('Weather map on the board', 'good');
+      loadUsWeatherMapSettings();
+    } catch (error) {
+      if (hint) hint.textContent = 'Push Now fetches a fresh map and shows it here.';
+      toast(error?.message || 'Could not push the weather map', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadUsWeatherMapSettings();
+
   // ------------------------------------------- Settings → Starlink Tracker
 
   function renderStarlinkTrackerPreview(settings = {}) {
@@ -11962,13 +12965,16 @@
     const detail = $('autodarts-status-detail');
     const linked = Boolean(status.linked);
     const needsRelink = Boolean(status.needsRelink);
+    const devicePending = Boolean(status.deviceLinkPending);
     const ratePaused = Boolean(status.rateLimit?.paused || status.archive?.rateLimit?.paused);
     if (pill) {
-      pill.textContent = needsRelink ? 'Re-link needed' : (ratePaused ? 'Cloud paused' : (linked ? 'Linked' : 'Not linked'));
-      pill.className = `status-pill${needsRelink || ratePaused ? ' bad' : (linked ? ' good' : '')}`;
+      pill.textContent = devicePending ? 'Approve on phone' : (needsRelink ? 'Re-link needed' : (ratePaused ? 'Cloud paused' : (linked ? 'Linked' : 'Not linked')));
+      pill.className = `status-pill${(!devicePending && (needsRelink || ratePaused)) ? ' bad' : (linked || devicePending ? ' good' : '')}`;
     }
     if (detail) {
-      if (needsRelink) {
+      if (devicePending) {
+        detail.textContent = 'Open the link below, sign in, and enter the code — this page updates when Autodarts approves.';
+      } else if (needsRelink) {
         detail.textContent = status.unavailableReason || 'Re-link Autodarts in Settings';
       } else if (ratePaused) {
         detail.textContent = status.rateLimit?.reason
@@ -11988,20 +12994,24 @@
     const linkedActions = $('autodarts-linked-actions');
     const deviceBlock = $('autodarts-device-block');
     const linkBtn = $('btn-autodarts-link');
+    // A dead refresh token still has user/board metadata, but it is not a
+    // working link — show the device/password flow until a fresh token lands.
+    const showLinkedChrome = linked && !needsRelink && !devicePending;
 
-    if (linked) {
+    if (showLinkedChrome) {
       if (modeTabs) modeTabs.hidden = true;
       if ($('autodarts-device-mode')) $('autodarts-device-mode').hidden = true;
       if ($('autodarts-password-block')) $('autodarts-password-block').hidden = true;
       if (linkedActions) linkedActions.hidden = false;
     } else {
-      if (modeTabs) modeTabs.hidden = false;
+      if (modeTabs) modeTabs.hidden = devicePending;
       if (linkedActions) linkedActions.hidden = true;
-      if (status.deviceLinkPending) {
+      if (devicePending) {
         autodartsLinkMode = 'device';
         applyAutodartsLinkMode('device');
         if (deviceBlock) deviceBlock.hidden = false;
         if (linkBtn) linkBtn.hidden = true;
+        if ($('autodarts-password-block')) $('autodarts-password-block').hidden = true;
       } else {
         applyAutodartsLinkMode(autodartsLinkMode);
         if (deviceBlock) deviceBlock.hidden = true;
@@ -12032,12 +13042,14 @@
     if (syncBtn) {
       const syncReady = archive.enabled !== false;
       const ratePaused = Boolean(status.rateLimit?.paused || archive.rateLimit?.paused);
-      syncBtn.disabled = !syncReady || archive.running === true || ratePaused;
-      syncBtn.title = ratePaused
-        ? 'Autodarts cloud is rate-limited — wait for the cooldown before syncing again'
-        : (syncReady
-          ? 'Pull Match History from Autodarts (local archive is the offline cache)'
-          : 'History sync is disabled in settings');
+      syncBtn.disabled = !syncReady || archive.running === true || ratePaused || needsRelink || !linked;
+      syncBtn.title = needsRelink || !linked
+        ? 'Link Autodarts before syncing history'
+        : (ratePaused
+          ? 'Autodarts cloud is rate-limited — wait for the cooldown before syncing again'
+          : (syncReady
+            ? 'Pull Match History from Autodarts (local archive is the offline cache)'
+            : 'History sync is disabled in settings'));
     }
     const boardStatus = $('autodarts-board-status');
     if (boardStatus) {
@@ -12162,7 +13174,10 @@
           toast(result.error || 'Device link unavailable', 'bad');
           return;
         }
-        if (result.linked) {
+        // beginDeviceLink used to return linked:true whenever a (possibly
+        // expired) refresh token was still on disk — that toasted success and
+        // hid the approval code. Only celebrate after the poll actually lands.
+        if (result.linked && !result.deviceLinkPending) {
           toast('Autodarts linked', 'good');
         } else {
           toast('Approve the code on auth.autodarts.com', 'good');
@@ -12210,7 +13225,11 @@
       if ($('autodarts-mode-tabs')) $('autodarts-mode-tabs').hidden = false;
       if ($('autodarts-linked-actions')) $('autodarts-linked-actions').hidden = true;
       if ($('autodarts-device-mode')) $('autodarts-device-mode').hidden = false;
-      $('btn-autodarts-link')?.click();
+      if ($('autodarts-device-block')) $('autodarts-device-block').hidden = true;
+      if ($('btn-autodarts-link')) {
+        $('btn-autodarts-link').hidden = false;
+        $('btn-autodarts-link').click();
+      }
     });
     $('btn-autodarts-unlink')?.addEventListener('click', async () => {
       try {

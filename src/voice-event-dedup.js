@@ -3,7 +3,7 @@ const {
   parseNotificationsFromSpeech,
   parseDeliveryNotificationsFromSpeech,
 } = require('./alexa-notifications');
-const { parseShoppingListFromSpeech } = require('./shopping-list');
+const { parseShoppingListFromSpeech, extractShoppingListItem } = require('./shopping-list');
 const { parseSmartHomeCommand } = require('./smart-home-command');
 
 const DEFAULT_DEDUP_MS = 120000;
@@ -56,6 +56,20 @@ function voiceEventFingerprint(event) {
       ].join('|');
   }
 
+  // A silent PUSH_LIST_ITEM_CHANGE push and a later ASR capture of the same
+  // add share no activity id — key them by the item that moved so the board
+  // only flips once.
+  if (event?.kind === 'shopping-list') {
+    const trigger = String(event.trigger || 'shopping-list-show');
+    const moved = normalizePart(
+      event.addedItem
+      || extractShoppingListItem(event.query, event.spokenResponse, trigger),
+    );
+    if (moved && trigger !== 'shopping-list-show') {
+      return ['shopping-list', trigger, moved].join('|');
+    }
+  }
+
   if (!CONTENT_FINGERPRINT_KINDS.has(event?.kind)) {
     const activityId = normalizePart(event?.activityId);
     if (activityId) {
@@ -84,8 +98,19 @@ function contentSignature(event) {
   }
 
   if (event?.kind === 'shopping-list') {
+    // Fingerprint by the item that moved when we know it, so a silent
+    // PUSH_LIST_ITEM_CHANGE push and a later ASR capture of the same add
+    // collapse into one card instead of two.
+    const trigger = String(event.trigger || 'shopping-list-show');
+    const moved = normalizePart(
+      event.addedItem
+      || extractShoppingListItem(event.query, event.spokenResponse, trigger),
+    );
+    if (moved) {
+      return `${trigger}|${moved}`;
+    }
     const parsed = parseShoppingListFromSpeech(event?.spokenResponse, { query: event?.query });
-    return String(parsed?.items?.length ?? '');
+    return `${trigger}|count:${parsed?.items?.length ?? 0}`;
   }
 
   if (event?.kind === 'vivint-alarm') {
@@ -204,8 +229,15 @@ function createVoiceEventDedup({ dedupMs = DEFAULT_DEDUP_MS } = {}) {
         rememberInstant(instantKey, { at: now, hadResponse: true, signature });
         // For content-fingerprinted kinds the signature fully describes the
         // rendered panel; a spoken-response upgrade that changes nothing on
-        // screen would just replay the same display.
-        if (CONTENT_FINGERPRINT_KINDS.has(event?.kind) && signature && signature === lastSeen.signature) {
+        // screen would just replay the same display. Same for shopping-list
+        // add/remove keyed by the item that moved (silent list-change + ASR).
+        const shoppingItemKeyed = event?.kind === 'shopping-list'
+          && /add|remove/.test(String(event.trigger || ''));
+        if (
+          (CONTENT_FINGERPRINT_KINDS.has(event?.kind) || shoppingItemKeyed)
+          && signature
+          && signature === lastSeen.signature
+        ) {
           return false;
         }
         return true;

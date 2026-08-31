@@ -285,8 +285,20 @@ function createYoutubeStore({ config, secretBox = null, log = null } = {}) {
     return next[0];
   }
 
+  /**
+   * The newest row that represents an actual watch.
+   *
+   * A session is seeded the moment it opens, with nothing watched and the
+   * scrubber at zero, and is only filled in when it ends. A row still in that
+   * state is either a watch in progress or — as happened when a parked TV kept
+   * re-announcing a finished video — one that never happened at all. Either
+   * way it is not something to show as "last played", so skip past it.
+   */
   function lastPlayed(deviceId = null) {
-    return history({ limit: 1, deviceId })[0] || null;
+    const rows = history({ deviceId });
+    return rows.find((row) => (
+      (Number(row.watchedSeconds) || 0) > 0 || (Number(row.positionSeconds) || 0) > 0
+    )) || rows[0] || null;
   }
 
   function hasHistory(deviceId = null) {

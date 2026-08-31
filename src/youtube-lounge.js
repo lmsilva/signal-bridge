@@ -43,6 +43,26 @@ const CURRENT_STATES = new Set(['Playing', 'Starting', 'Buffering', 'Advertiseme
  * discarded every real tick and left `watchedSeconds` at 0 forever.
  */
 const MAX_PLAY_DELTA_SECONDS = 180;
+/**
+ * How far the scrubber must move before a non-Playing state counts as playback.
+ *
+ * Apple TV keeps announcing whatever is on screen long after a watch ends, and
+ * it reports those announcements as Buffering/Starting — which are confirmable.
+ * Position advancing is the only honest evidence that something is running, so
+ * a video parked at a standstill can no longer open a session.
+ */
+const PROGRESS_EPSILON_SECONDS = 1;
+/**
+ * Give up on an active session that has gone entirely silent.
+ *
+ * Every closer we have needs the device to say something — an explicit Stopped,
+ * a different video, a dropped task. A TV that is unplugged mid-video says none
+ * of them, and the session used to stay "playing" forever, which kept the
+ * scheduler's content check true and the card on the wall. The keep-alive poll
+ * runs every 45s and real ticks arrive every 30–90s, so ten minutes of nothing
+ * means the device is gone rather than slow.
+ */
+const SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 function createYoutubeLounge({
   config,
@@ -88,6 +108,9 @@ function createYoutubeLounge({
         deviceId,
         provisional: null,
         provisionalSince: null,
+        // Where the scrubber sat when this video first appeared, so confirm can
+        // tell real playback from a TV re-announcing a finished video.
+        provisionalPosition: 0,
         // Which provisional video we have already reported as held, so the 2s
         // confirm retry logs once rather than forever.
         confirmBlockedFor: null,
@@ -468,14 +491,23 @@ function createYoutubeLounge({
     // Never start a session on an ad: ads are not the video (§12.9).
     // Apple TV also parks in Stopped between sparse Playing ticks — retry soon.
     // Buffering/Starting count as confirmable; only true Stopped/Paused/Ad wait.
-    if (device.adPlaying || !CONFIRMABLE_STATES.has(device.state)) {
+    //
+    // Confirmable is not enough on its own. A TV left on a finished video keeps
+    // re-announcing it as Buffering/Starting at a standstill, and every one of
+    // those used to open a session and air a card nobody asked for. Require
+    // either a true Playing tick or a scrubber that has actually moved.
+    const advanced = Number(device.maxPosition || 0)
+      > Number(device.provisionalPosition || 0) + PROGRESS_EPSILON_SECONDS;
+    const reallyPlaying = PLAYING_STATES.has(device.state) || advanced;
+    if (device.adPlaying || !CONFIRMABLE_STATES.has(device.state) || !reallyPlaying) {
       // Said once per video, not every 2s: a provisional that never confirms is
       // invisible otherwise — no push, no history, no warning, just silence.
       if (device.confirmBlockedFor !== device.provisional) {
         device.confirmBlockedFor = device.provisional;
         log?.info?.(
           `YouTube holding ${device.provisional} on ${device.deviceId}`
-          + ` — state=${device.state}${device.adPlaying ? ' ad=yes' : ''}`,
+          + ` — state=${device.state}${device.adPlaying ? ' ad=yes' : ''}`
+          + `${reallyPlaying ? '' : ` parked at ${Math.round(device.position || 0)}s`}`,
         );
       }
       if (!device.confirmTimer) {
@@ -576,6 +608,8 @@ function createYoutubeLounge({
       device.provisionalSince = now();
       device.lastPosition = null;
       device.maxPosition = 0;
+      const seen = Number(message.position);
+      device.provisionalPosition = Number.isFinite(seen) && seen >= 0 ? seen : 0;
       // A new video means whatever ad preceded it has finished.
       device.adPlaying = false;
       device.adFromEvent = false;
@@ -650,6 +684,9 @@ function createYoutubeLounge({
     if (contentVideoId && !device.active && device.provisional !== contentVideoId) {
       device.provisional = contentVideoId;
       device.provisionalSince = now();
+      // A pre-roll means the content has not started, so the scrubber baseline
+      // is wherever it sits now — an ad must not look like progress.
+      device.provisionalPosition = Number(device.position) || 0;
       scheduleConfirm(device);
     }
     if (device.adPlaying && device.provisional) {
@@ -699,6 +736,40 @@ function createYoutubeLounge({
   }
 
   // ----------------------------------------------------------- public API
+
+  /**
+   * Close sessions whose device has stopped talking to us entirely.
+   *
+   * Called from the keep-alive poll rather than a timer of its own, so there is
+   * nothing extra to unref or tear down. Returns the device ids it closed.
+   */
+  function sweepIdleSessions() {
+    const closed = [];
+    for (const device of devices.values()) {
+      if (!device.active && !device.provisional) {
+        continue;
+      }
+      const silentFor = now() - (device.lastSeenAt || now());
+      if (silentFor < SESSION_IDLE_TIMEOUT_MS) {
+        continue;
+      }
+      log?.info?.(
+        `YouTube closing ${device.active?.videoId || device.provisional} on ${device.deviceId}`
+        + ` — silent for ${Math.round(silentFor / 1000)}s`,
+      );
+      clearConfirmTimer(device);
+      clearStopTimer(device);
+      device.provisional = null;
+      device.provisionalSince = null;
+      device.adPlaying = false;
+      device.adFromEvent = false;
+      if (device.active) {
+        finishSession(device, 'idle');
+      }
+      closed.push(device.deviceId);
+    }
+    return closed;
+  }
 
   /**
    * The card is only allowed to claim "now playing" for a confirmed session
@@ -824,6 +895,7 @@ function createYoutubeLounge({
     discover: (timeout = 5) => request({ cmd: 'discover', timeout }),
     refreshDevice: (device) => request({ cmd: 'refresh', device }),
     pollNowPlaying,
+    sweepIdleSessions,
     activeSessions,
     currentPlayback,
     snapshot,

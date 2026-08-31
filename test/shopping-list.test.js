@@ -401,3 +401,50 @@ test('short remove drops the item and still builds a display payload', () => {
   assert.equal(payload.addedItem, 'onion almonds');
   assert.deepEqual(payload.items.map((item) => item.value), ['Eggs']);
 });
+
+test('planShoppingListChangePush airs an add when cache is behind the live list', () => {
+  const {
+    planShoppingListChangePush,
+    diffShoppingListItems,
+  } = require('../src/shopping-list');
+
+  const cached = [{ value: 'diet coke' }, { value: 'ground beef' }];
+  const fetched = {
+    listId: 'shop-1',
+    name: 'Shopping List',
+    items: [
+      { value: 'pumpkin pie from WinCo' },
+      { value: 'diet coke' },
+      { value: 'ground beef' },
+    ],
+  };
+  const plan = planShoppingListChangePush({
+    cachedItems: cached,
+    fetched,
+    change: { listId: 'shop-1', eventType: 'itemCreated', listItemId: 'abc' },
+  });
+  assert.equal(plan.trigger, 'shopping-list-add');
+  assert.equal(plan.addedItem, 'pumpkin pie from WinCo');
+  assert.equal(plan.added.length, 1);
+
+  const noChange = planShoppingListChangePush({
+    cachedItems: fetched.items,
+    fetched,
+    change: { listId: 'shop-1', eventType: 'itemCreated' },
+  });
+  assert.equal(noChange, null);
+
+  const otherList = planShoppingListChangePush({
+    cachedItems: cached,
+    fetched,
+    change: { listId: 'todo-list', eventType: 'itemCreated' },
+  });
+  assert.equal(otherList, null);
+
+  const removed = diffShoppingListItems(
+    [{ value: 'milk' }, { value: 'eggs' }],
+    [{ value: 'eggs' }],
+  );
+  assert.deepEqual(removed.removed.map((item) => item.value), ['milk']);
+  assert.deepEqual(removed.added, []);
+});

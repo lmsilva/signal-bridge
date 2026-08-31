@@ -122,6 +122,26 @@ test('createVoiceEventDedup allows repeat commands with new activity ids', () =>
   assert.equal(dedup.shouldEmit({ ...base, activityId: 'a2' }, 2000), true);
 });
 
+test('createVoiceEventDedup collapses silent list-change and ASR for the same add', () => {
+  const dedup = createVoiceEventDedup({ dedupMs: 60000 });
+  assert.equal(dedup.shouldEmit({
+    kind: 'shopping-list',
+    trigger: 'shopping-list-add',
+    device: 'Alexa',
+    query: 'add pumpkin pie from winco to shopping list',
+    addedItem: 'pumpkin pie from WinCo',
+    activityId: 'list-change:abc:itemCreated',
+  }, 1000), true);
+  assert.equal(dedup.shouldEmit({
+    kind: 'shopping-list',
+    trigger: 'shopping-list-add',
+    device: 'Pantry Echo',
+    query: 'alexa add pumpkin pie from winco to shopping list',
+    spokenResponse: "Okay, I've added pumpkin pie from WinCo to your shopping list",
+    activityId: 'asr-activity-99',
+  }, 2500), false);
+});
+
 test('createVoiceEventDedup allows upgrade when spoken response arrives later', () => {
   const dedup = createVoiceEventDedup({ dedupMs: 60000 });
   const base = {

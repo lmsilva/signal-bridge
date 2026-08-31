@@ -531,6 +531,95 @@ function itemKey(value) {
   return sanitizeItemName(value).toLowerCase();
 }
 
+function shoppingListFingerprint(items) {
+  return (items || [])
+    .map((item) => itemKey(itemValue(item)))
+    .filter(Boolean)
+    .sort()
+    .join('|');
+}
+
+/**
+ * Diff two shopping-list snapshots by normalised item name.
+ * Used when Amazon pushes a list-item change with no usable ASR — we fetch the
+ * live list, compare to cache, and only air a card when something actually moved.
+ */
+function diffShoppingListItems(previousItems, nextItems) {
+  const previous = Array.isArray(previousItems) ? previousItems : [];
+  const next = Array.isArray(nextItems) ? nextItems : [];
+  const prevKeys = new Set(
+    previous.map((item) => itemKey(itemValue(item))).filter(Boolean),
+  );
+  const nextKeys = new Set(
+    next.map((item) => itemKey(itemValue(item))).filter(Boolean),
+  );
+  const added = next.filter((item) => {
+    const key = itemKey(itemValue(item));
+    return key && !prevKeys.has(key);
+  });
+  const removed = previous.filter((item) => {
+    const key = itemKey(itemValue(item));
+    return key && !nextKeys.has(key);
+  });
+  return { added, removed };
+}
+
+/**
+ * Decide whether a PUSH_LIST_ITEM_CHANGE should air a shopping-list card.
+ * Returns null when the change is for another list or the cache is already current.
+ */
+function planShoppingListChangePush({
+  cachedItems = [],
+  fetched = null,
+  change = null,
+} = {}) {
+  if (!fetched || !Array.isArray(fetched.items)) {
+    return null;
+  }
+  const changeListId = String(change?.listId || '').trim();
+  const fetchedListId = String(fetched.listId || '').trim();
+  if (changeListId && fetchedListId && changeListId !== fetchedListId) {
+    return null;
+  }
+
+  const diff = diffShoppingListItems(cachedItems, fetched.items);
+  if (!diff.added.length && !diff.removed.length) {
+    return null;
+  }
+
+  let trigger = 'shopping-list-show';
+  let addedItem = null;
+  if (diff.added.length && !diff.removed.length) {
+    trigger = 'shopping-list-add';
+    addedItem = itemValue(diff.added[0]) || null;
+  } else if (diff.removed.length && !diff.added.length) {
+    trigger = 'shopping-list-remove';
+    addedItem = itemValue(diff.removed[0]) || null;
+  } else if (diff.added.length) {
+    trigger = 'shopping-list-add';
+    addedItem = itemValue(diff.added[0]) || null;
+  }
+
+  const eventType = String(change?.eventType || '').toLowerCase();
+  if (!addedItem && eventType === 'itemcreated' && diff.added.length) {
+    addedItem = itemValue(diff.added[0]) || null;
+    trigger = 'shopping-list-add';
+  }
+  if (!addedItem && eventType === 'itemdeleted' && diff.removed.length) {
+    addedItem = itemValue(diff.removed[0]) || null;
+    trigger = 'shopping-list-remove';
+  }
+
+  return {
+    trigger,
+    addedItem,
+    list: fetched,
+    fingerprint: shoppingListFingerprint(fetched.items),
+    added: diff.added,
+    removed: diff.removed,
+  };
+}
+
 function matchesShoppingListSpeech(response, query) {
   const spoken = normalizeText(response);
   if (!spoken) {
@@ -710,9 +799,13 @@ module.exports = {
   mergeItems,
   normalizeItems,
   itemValue,
+  itemKey,
   isItemCompleted,
   sanitizeItemName,
   isValidShoppingItemName,
   splitItemNames,
   buildListFromNames,
+  shoppingListFingerprint,
+  diffShoppingListItems,
+  planShoppingListChangePush,
 };

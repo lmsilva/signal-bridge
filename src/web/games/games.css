@@ -191,7 +191,7 @@ html, body {
 .gm-board-wrap {
   container-type: inline-size;
   width: 100%;
-  max-width: min(520px, max(220px, calc(100dvh - 390px)));
+  max-width: min(520px, max(220px, calc(var(--gm-vh, 100dvh) - 390px)));
   margin-inline: auto;
 }
 /* Collapse the empty slot too, or its stage gaps leave a hole. */
@@ -205,13 +205,60 @@ html, body {
   aspect-ratio: 1;
   display: grid;
   place-items: center;
+  padding: 0;
+  border: 0;
   border-radius: clamp(10px, 3.5cqi, 20px);
   background: linear-gradient(180deg, #2c6ef0 0%, #1d4ed8 100%);
   box-shadow: inset 0 -3px 0 rgba(2, 6, 23, 0.35), 0 8px 18px rgba(2, 6, 23, 0.35);
+  color: var(--ink);
+  font: inherit;
   font-size: clamp(1.3rem, 11cqi, 3.4rem);
   font-weight: 800;
   letter-spacing: 0.02em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
+
+/* Spent letters go flat and grey, so nobody counts one twice. */
+.gm-cell.is-used {
+  background: #16233c;
+  color: #5b6b86;
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: default;
+}
+
+/* The letter just played stays lit — tap it again to take it back. */
+.gm-cell.is-last {
+  background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 100%);
+  color: #04283c;
+  box-shadow: inset 0 -3px 0 rgba(2, 6, 23, 0.3), 0 0 0 3px rgba(56, 189, 248, 0.35);
+}
+
+/* Out of reach of the word so far: still readable, clearly not a next step. */
+.gm-cell.is-far {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.gm-cell:disabled { pointer-events: none; }
+.gm-cell:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+@media (hover: hover) {
+  .gm-cell:not(:disabled):hover { filter: brightness(1.12); }
+}
+
+.gm-clear {
+  flex: none;
+  width: 46px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0e1b33;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.gm-clear:hover { color: var(--ink); border-color: #35507e; }
 
 /* On a phone the compose bar rides the bottom of the screen, in thumb reach. */
 .gm-compose {
@@ -250,6 +297,8 @@ html, body {
 }
 .gm-board li:last-child { border-bottom: 0; }
 .gm-board .gm-rank { flex: none; width: 1.6em; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* In the lobby there is no rank or score yet — don't reserve their columns. */
+.gm-board .gm-rank:empty, .gm-board .gm-points:empty { display: none; }
 .gm-board .gm-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gm-board .gm-points { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; }
 .gm-board li.is-you { color: #bfdbfe; }
@@ -300,7 +349,7 @@ html, body {
     grid-template-columns: minmax(0, 620px) minmax(300px, 400px);
     justify-content: center;
   }
-  .gm-board-wrap { max-width: min(620px, max(220px, calc(100dvh - 390px))); }
+  .gm-board-wrap { max-width: min(620px, max(220px, calc(var(--gm-vh, 100dvh) - 390px))); }
 
   /* Sticky, but it scrolls itself — a long word list must stay reachable. */
   .gm-side {
@@ -309,6 +358,34 @@ html, body {
     max-height: calc(100dvh - 48px);
     overflow-y: auto;
     padding-right: 4px;
+  }
+}
+
+/*
+ * The keyboard is up on a phone. It covers half the screen and the browser
+ * scrolls the input into view, which used to push the letters off the top —
+ * you were typing a word you could no longer see. So while the box has focus
+ * the page strips down to the board and the input, and the board resizes to
+ * whatever the visual viewport still has (`--gm-vh`, published by scramble.js).
+ */
+@media (max-width: 759px) {
+  body.gm-typing .gm-header,
+  body.gm-typing .gm-code-line,
+  body.gm-typing .gm-side {
+    display: none;
+  }
+  body.gm-typing .gm-shell { padding-top: 12px; }
+  body.gm-typing .gm-timer { font-size: 1.6rem; }
+  body.gm-typing .gm-board-wrap {
+    max-width: min(520px, max(140px, calc(var(--gm-vh, 100dvh) - 200px)));
+  }
+  /* Static, not stuck: iOS keeps the layout viewport full height behind the
+     keyboard, so a bottom-stuck bar would sit under it. */
+  body.gm-typing .gm-compose {
+    position: static;
+    margin: 0;
+    padding: 0;
+    background: none;
   }
 }
 
@@ -341,11 +418,11 @@ html, body {
   .gm-phase { font-size: 1rem; }
   .gm-code-line { padding: 7px 12px; }
   .gm-code-value { font-size: 1rem; }
-  .gm-board-wrap { max-width: max(180px, calc(100dvh - 210px)); }
+  .gm-board-wrap { max-width: max(180px, calc(var(--gm-vh, 100dvh) - 210px)); }
   .gm-compose { position: static; margin: 0; padding: 0; background: none; }
   .gm-side { position: static; max-height: none; overflow: visible; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .gm-cell { transition: transform 120ms ease; }
+  .gm-cell { transition: transform 120ms ease, background 120ms ease, color 120ms ease, opacity 120ms ease; }
 }

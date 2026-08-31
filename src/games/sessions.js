@@ -32,7 +32,24 @@ function mintCode(random, taken) {
 
 function firstName(value) {
   const cleaned = String(value || '').replace(/[^A-Za-z]/g, ' ').trim().split(/\s+/)[0] || '';
-  return cleaned.slice(0, 10);
+  // One casing for everyone, so "daddy" and "Daddy" read as the same person
+  // on a scoreboard that sits next to "Luis".
+  const trimmed = cleaned.slice(0, 10);
+  return trimmed ? trimmed[0].toUpperCase() + trimmed.slice(1).toLowerCase() : '';
+}
+
+/**
+ * Two people called Daddy is a real living-room case, and a scoreboard with
+ * the same name twice is unreadable. The second one becomes "Daddy (2)".
+ */
+function uniqueName(players = [], display = '') {
+  const taken = new Set(players.map((p) => String(p.name || '').toLowerCase()));
+  if (!taken.has(display.toLowerCase())) return display;
+  for (let n = 2; n < 100; n += 1) {
+    const candidate = `${display} (${n})`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return display;
 }
 
 function iso(ms) {
@@ -47,6 +64,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   const settingsApi = deps.gameSettings || createGameSettings(config, log);
   const archive = deps.archive || createGameArchive(config, log);
   const pushBoard = typeof deps.pushBoard === 'function' ? deps.pushBoard : () => {};
+  const dropPendingBoard = typeof deps.dropPendingBoard === 'function'
+    ? deps.dropPendingBoard
+    : () => 0;
   const getShortlink = typeof deps.getShortlink === 'function' ? deps.getShortlink : () => null;
   const gameOf = typeof deps.gameOf === 'function' ? deps.gameOf : defaultGameOf;
 
@@ -78,6 +98,48 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     };
   }
 
+  /**
+   * What the open round has earned each player so far. Submitted words were
+   * already checked against the board, so this only has to apply the
+   * duplicate rule — no need to re-solve the grid on every keystroke.
+   */
+  function pendingScores(session) {
+    const out = new Map();
+    const current = session.rounds[session.rounds.length - 1];
+    if (session.phase !== 'round' || !current) return out;
+    const claims = new Map();
+    for (const [id, words] of current.wordsByPlayer) {
+      for (const word of words) {
+        const list = claims.get(word) || [];
+        list.push(id);
+        claims.set(word, list);
+      }
+    }
+    const { duplicateRule } = settingsOf(session.gameType);
+    for (const [word, ids] of claims) {
+      const points = duplicateRule === 'cancel' && ids.length > 1 ? 0 : scoreWord(word);
+      for (const id of ids) out.set(id, (out.get(id) || 0) + points);
+    }
+    return out;
+  }
+
+  /**
+   * Everyone who has joined, banked score plus the open round, best first.
+   * Built fresh on every read so a phone sees its points the moment they land
+   * rather than waiting for the round to close.
+   */
+  function standings(session) {
+    const pending = pendingScores(session);
+    return session.players
+      .map((player) => ({
+        id: player.id,
+        name: player.name,
+        score: (player.score || 0) + (pending.get(player.id) || 0),
+        seated: player.seated !== false,
+      }))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  }
+
   /** What one player has found this round — never another player's list. */
   function playerWords(session, playerId) {
     const current = session.rounds[session.rounds.length - 1];
@@ -104,7 +166,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       remainingSeconds: remainingSeconds(session, at),
       playerCount: session.players.length,
       players: session.players.map(publicPlayer),
-      scores: session.scores || [],
+      scores: standings(session),
       best: session.best || null,
       grid: session.phase === 'round' ? current?.grid || null : null,
       lastRound: revealing ? session.lastRound || null : null,
@@ -137,29 +199,45 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     if (set.size) session.lastSseAt = now();
   }
 
-  function boardOptions(holdSeconds) {
+  function boardOptions(holdSeconds, { takeover = false } = {}) {
     return {
       targetId: 'vestaboard',
       explicit: true,
-      breakHold: true,
+      // Only the first invite should wrest the board from whatever was showing.
+      // Later game cards replace each other without briefly opening the queue.
+      breakHold: Boolean(takeover),
       quietHoursExempt: true,
       replaceSource: 'word.scramble',
       holdSeconds,
     };
   }
 
+  /**
+   * Drop the tail of a multi-page run another feature was airing — riddles,
+   * stocks, and the like — but leave single-page scheduler items waiting.
+   * They stay parked behind the game lock until the session closes.
+   */
+  function takeBoard() {
+    try {
+      dropPendingBoard((frame, item) => item?.priority !== 'alert'
+        && String(frame?.source || '') !== 'word.scramble'
+        && Boolean(item?.sequenceId));
+    } catch (error) {
+      log?.warn?.('Could not clear the board queue', error?.message || error);
+    }
+  }
+
   function pushPhase(session, card, extra = {}) {
     const game = gameOf(session.gameType);
     const settings = settingsOf(session.gameType);
     const hold = extra.holdSeconds != null ? extra.holdSeconds : remainingSeconds(session);
+    takeBoard();
     const payload = {
       type: 'word.scramble',
       source: game?.source || 'word.scramble',
       phase: session.phase,
       card,
       code: session.code,
-      // The board is the only place a latecomer can read the code, so it
-      // rides every card while joining mid-game is allowed.
       showCode: settings.allowLateJoin !== false,
       roundIndex: session.roundIndex,
       rounds: settings.rounds,
@@ -167,15 +245,20 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       alias: aliasOf(session),
       playerCount: session.players.length,
       grid: extra.grid || session.rounds[session.rounds.length - 1]?.grid || [],
-      scores: session.scores || [],
+      scores: extra.scores || standings(session),
+      roundWinner: extra.roundWinner || null,
+      roundScores: extra.roundScores || null,
       word: session.best?.word || '',
       name: session.best?.name || '',
       points: session.best?.points || 0,
       holdSeconds: hold,
       remainingSeconds: hold,
     };
+    const takeover = extra.takeover != null
+      ? Boolean(extra.takeover)
+      : card === 'invite' || session.phase === 'invited';
     try {
-      pushBoard(payload, boardOptions(hold));
+      pushBoard(payload, boardOptions(hold, { takeover }));
     } catch (error) {
       log?.warn?.('Game board push failed', error?.message || error);
     }
@@ -202,6 +285,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const abandoned = reason !== 'finished';
     session.phase = 'closed';
     session.phaseEndsAt = null;
+    // The board must stop advertising a game nobody can join. Pending game
+    // pages are swept too, or the lobby card lands after the game is gone.
+    pushPhase(session, 'clear', { holdSeconds: 0, takeover: true });
     archiveRow(session, { abandoned, reason });
     emit(session, 'closed');
     const set = listeners.get(session.id);
@@ -308,21 +394,36 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       };
     }
 
+    const roundOnly = seated
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        score: byId.get(p.id)?.score || 0,
+      }))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    const roundWinner = roundOnly[0] || null;
+
     const more = session.roundIndex < settings.rounds;
     if (more) {
       session.phase = 'intermission';
       session.phaseEndsAt = now() + settings.intermissionSeconds * 1000;
       seatWaiting(session);
-      pushPhase(session, 'scores');
+      pushPhase(session, 'intermission', {
+        roundWinner,
+        roundScores: roundOnly,
+        scores: session.scores,
+        holdSeconds: settings.intermissionSeconds,
+      });
       emit(session, 'intermission');
       return;
     }
     session.phase = 'final';
-    session.phaseEndsAt = now() + settings.intermissionSeconds * 1000;
-    pushPhase(session, 'scores');
-    if (session.best) {
-      pushPhase(session, 'best');
-    }
+    const cards = session.best ? 2 : 1;
+    session.phaseEndsAt = now() + settings.intermissionSeconds * 1000 * cards;
+    pushPhase(session, 'final', {
+      scores: session.scores,
+      holdSeconds: settings.intermissionSeconds,
+    });
     emit(session, 'final');
   }
 
@@ -371,7 +472,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     };
     sessions.set(session.id, session);
     byCode.set(code, session.id);
-    pushPhase(session, 'invite', { holdSeconds: settings.inviteTtlMinutes * 60 });
+    pushPhase(session, 'invite', { holdSeconds: settings.inviteTtlMinutes * 60, takeover: true });
     return publicSession(session);
   }
 
@@ -407,7 +508,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       }
       player = {
         id: crypto.randomUUID(),
-        name: display,
+        name: uniqueName(session.players, display),
         seated: session.phase !== 'round',
         score: 0,
       };
@@ -461,6 +562,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       points: result.points,
       liveScore: live,
       words: playerWords(session, playerId),
+      scores: standings(session),
     };
   }
 
@@ -468,6 +570,10 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const session = getById(sessionId);
     if (!session) return { ok: true };
     session.players = session.players.filter((p) => p.id !== playerId);
+    if (!session.players.length) {
+      closeSession(session, 'empty');
+      return { ok: true };
+    }
     emit(session, 'leave');
     return { ok: true };
   }
@@ -549,6 +655,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     listActive,
     end,
     history: (query) => archive.listPage(query),
+    forget: (sessionIds) => archive.remove(sessionIds),
     start,
     stop,
     COOKIE,
@@ -576,4 +683,5 @@ module.exports = {
   parseCookie,
   cookieHeader,
   firstName,
+  uniqueName,
 };

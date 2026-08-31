@@ -212,8 +212,12 @@ function decodeCodes(codes) {
  * Prefer:
  *   INSTRUMENTAL
  *   A CAPELLA.
+ *
+ * `orphans: false` turns that off and fills every line to the brim. A card
+ * whose whole job is one punchline would rather spend a flap on an orphan
+ * than a whole row on the word it pushed onto the next line.
  */
-function wrap(text, width) {
+function wrap(text, width, { orphans = true } = {}) {
   const limit = Math.max(2, Math.floor(width) || 0);
   const folded = fold(text);
   if (!folded) {
@@ -234,7 +238,7 @@ function wrap(text, width) {
     const token = String(word || '');
     // Articles and tiny glue words only — pulling 3-letter tokens changes too
     // many otherwise-fine greedy wraps.
-    if (!token || token.length > 2) {
+    if (!orphans || !token || token.length > 2) {
       return false;
     }
     // Keep punctuation-only tokens where they landed; move letter/digit glue.

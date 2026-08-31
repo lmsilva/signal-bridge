@@ -262,6 +262,31 @@ test('repeats for one device replace each other rather than stacking flips', asy
   assert.equal(h.transport.posts[1].layout[0][0], 3);
 });
 
+test('dropPending clears the pages one feature is taking the board from', async () => {
+  const h = makeQueue();
+  h.queue.submit([frame('RIDDLE 1', 1, { source: 'word.riddles' }),
+    frame('RIDDLE 2', 2, { source: 'word.riddles' })]);
+  h.queue.submit([frame('DOORBELL', 3, { source: 'ring.doorbell' })], { priority: 'alert' });
+  h.queue.submit([frame('STOCKS', 4, { source: 'stock.market' })]);
+
+  const before = h.queue.pending().length;
+  const dropped = h.queue.dropPending(
+    (item, entry) => entry.priority !== 'alert' && item.source !== 'ring.doorbell',
+  );
+
+  assert.equal(dropped, before - 1);
+  assert.deepEqual(h.queue.pending().map((item) => item.source), ['ring.doorbell']);
+  // Nothing was posted, so whatever is showing stays showing.
+  assert.equal(h.transport.posts.length, 0);
+});
+
+test('dropPending without a predicate leaves the queue alone', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('RIDDLE', 1, { source: 'word.riddles' })]);
+  assert.equal(h.queue.dropPending(null), 0);
+  assert.equal(h.queue.pending().length, 1);
+});
+
 test('a different device keeps its own place in the queue', async () => {
   const h = makeQueue();
   h.queue.submit([frame('KITCHEN', 1)], { coalesceKey: 'smart-home.command:kitchen' });
@@ -560,7 +585,7 @@ test('holdSeconds keeps the next snapshot off the board until the hold ends', as
   assert.equal(h.transport.posts.length, 2);
 });
 
-test('a Word Scramble hold parks a scheduler snapshot but not an explicit push', async () => {
+test('a Word Scramble hold parks every queued page until the game clears', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([{
     ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
@@ -569,11 +594,14 @@ test('a Word Scramble hold parks a scheduler snapshot but not an explicit push',
   }]);
   assert.equal(await h.queue.tick(), 'posted');
   h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  h.queue.submit([frame('CHUCK', 3, { source: 'chuck.facts' })]);
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), null);
-  h.queue.submit([frame('AIR NOW', 3)], { explicit: true, breakHold: true });
+  assert.equal(h.queue.pending().length, 2);
+  assert.equal(h.queue.state().holdKind, 'game');
+  h.queue.submit([frame('AIR NOW', 4)], { explicit: true, breakHold: true });
   assert.equal(await h.queue.tick(), 'posted');
-  assert.equal(h.transport.posts[1].layout[0][0], 3);
+  assert.equal(h.transport.posts[1].layout[0][0], 4);
 });
 
 test('an explicit snapshot may post after the rate window during a guest hold', async () => {

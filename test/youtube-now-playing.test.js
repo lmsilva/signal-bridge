@@ -579,6 +579,73 @@ test('a manual push prefers a provisional Lounge video over stale history', asyn
   assert.equal(sent[0].youtube.mode, 'playing');
 });
 
+test('a video still listed on a stopped TV is pushed as last played, not now playing', async () => {
+  // The reported bug: the Settings button aired a NOW PLAYING card with a
+  // running elapsed clock for a video that had finished hours earlier but was
+  // still sitting on the Apple TV screen.
+  const { service, lounge } = makeService();
+  lounge._current.push({
+    deviceId: 'tv-1',
+    videoId: 'finished',
+    startedAt: '2026-08-02T17:00:00.000Z',
+    provisional: true,
+    state: 'Stopped',
+    positionSeconds: 9304,
+    durationSeconds: 9304,
+    watchedSeconds: 9304,
+  });
+
+  const sent = [];
+  const result = await service.pushManualPreview({ send: (payload) => sent.push(payload) });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'last-played');
+  assert.equal(result.videoId, 'finished');
+  assert.equal(sent[0].youtube.mode, 'last-played');
+});
+
+test('a paused video is last played rather than a card with a ticking clock', async () => {
+  const { service, lounge } = makeService();
+  lounge._current.push({
+    deviceId: 'tv-1',
+    videoId: 'paused',
+    startedAt: '2026-08-02T19:00:00.000Z',
+    provisional: false,
+    state: 'Paused',
+    positionSeconds: 300,
+    durationSeconds: 600,
+    watchedSeconds: 300,
+  });
+
+  const sent = [];
+  const result = await service.pushManualPreview({ send: (payload) => sent.push(payload) });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'last-played');
+  assert.equal(sent[0].youtube.mode, 'last-played');
+});
+
+test('asking for now-playing while the TV sits on a stopped video is an error', async () => {
+  const { service, lounge } = makeService();
+  lounge._current.push({
+    deviceId: 'tv-1',
+    videoId: 'finished',
+    startedAt: '2026-08-02T17:00:00.000Z',
+    provisional: true,
+    state: 'Stopped',
+    positionSeconds: 9304,
+    durationSeconds: 9304,
+  });
+
+  const result = await service.pushManualPreview({
+    requestedMode: 'now-playing',
+    send: () => {},
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Nothing is playing/);
+});
+
 test('last-played prefers the TV current video over a days-old history row', async () => {
   const { service, store, lounge } = makeService();
   store.recordSession({

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Guest Snaps">
+  <title>Guest Snaps</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="booth.css?v=3">
+</head>
+<body>
+  <header class="booth-header">
+    <img class="booth-logo" src="/logo.png" width="36" height="36" alt="">
+    <div>
+      <h1>Guest Snaps</h1>
+      <p id="booth-subtitle">Share a photo with us</p>
+    </div>
+  </header>
+
+  <main class="booth-main" id="booth-login">
+    <p class="booth-hint" id="login-hint">Enter the 6-digit PIN shown on the display.</p>
+    <input id="guest-pin-input" class="booth-pin-input" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="••••••" aria-label="Guest Snaps PIN">
+    <p class="booth-status" id="login-status" role="status"></p>
+    <button type="button" class="booth-send" id="btn-guest-unlock">Unlock</button>
+    <button type="button" class="booth-secondary" id="btn-request-pin">Request PIN</button>
+    <p class="booth-hint" id="request-pin-hint">Have the display nearby? Request PIN shows the Guest Snaps page with the current code.</p>
+  </main>
+
+  <main class="booth-main" id="booth-app" hidden>
+    <label class="booth-label" for="display-select">Show on</label>
+    <select id="display-select" class="booth-select" aria-label="Target display">
+      <option value="">Looking for displays…</option>
+    </select>
+    <p class="booth-hint" id="display-hint">Pick a display, or send to all of them.</p>
+
+    <div class="booth-queue" id="photo-queue" hidden>
+      <div class="booth-queue-head">
+        <p class="booth-queue-count" id="photo-queue-count">0 photos</p>
+        <button type="button" class="booth-queue-clear" id="btn-photo-clear">Clear all</button>
+      </div>
+      <div class="booth-queue-grid" id="photo-queue-grid"></div>
+    </div>
+
+    <!-- No capture=… — that forces the camera on phones and blocks the camera roll. -->
+    <input id="photo-file" type="file" accept="image/*" multiple hidden>
+
+    <button type="button" class="booth-pick" id="btn-pick-photo">
+      <span class="booth-pick-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/>
+          <circle cx="12" cy="13" r="3.5"/>
+        </svg>
+      </span>
+      <span id="btn-pick-photo-label">Take or choose photos</span>
+    </button>
+
+    <button type="button" class="booth-send" id="btn-send" disabled>Send to display</button>
+    <button type="button" class="booth-secondary" id="btn-guest-lock">Lock booth</button>
+    <p class="booth-status" id="booth-status" role="status"></p>
+  </main>
+
+  <footer class="booth-footer">
+    Photos are saved to the party slideshow for the host. Send more than one and they play as a short slideshow.
+  </footer>
+
+  <script src="booth.js?v=3"></script>
+</body>
+</html>

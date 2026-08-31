@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
@@ -215,6 +215,8 @@ test('resolveStaticPath blocks path traversal', () => {
   assert.equal(resolveStaticPath(root, '/admin/login'), path.join(root, 'admin', 'login.html'));
   assert.equal(resolveStaticPath(root, '/guestbook'), path.join(root, 'guestbook', 'index.html'));
   assert.equal(resolveStaticPath(root, '/guestbook/'), path.join(root, 'guestbook', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/guestsnaps'), path.join(root, 'guestsnaps', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/guestsnaps/'), path.join(root, 'guestsnaps', 'index.html'));
   assert.equal(resolveStaticPath(root, '/games'), path.join(root, 'games', 'index.html'));
   assert.equal(resolveStaticPath(root, '/games/'), path.join(root, 'games', 'index.html'));
 });
@@ -378,7 +380,7 @@ test('serves real guest booth and admin SPA with cache-busted assets', async () 
   const realWebRoot = path.join(__dirname, '../src/web');
   const { webServer, base, cookie } = await startTestServer({ webRoot: realWebRoot });
   try {
-    const booth = await request(base + '/');
+    const booth = await request(base + '/guestsnaps/');
     assert.equal(booth.status, 200);
     assert.match(booth.text, /href="booth\.css\?v=\d+(?:\.\d+)?"/);
     assert.match(booth.text, /src="booth\.js\?v=\d+(?:\.\d+)?"/);
@@ -1195,6 +1197,99 @@ test('word riddles push delivers a riddle then settings can add one', async () =
   }
 });
 
+test('family quotes push delivers an attributed quote and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/family-quotes/quotes?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.equal(listed.body.quotes.length, 5);
+    assert.ok(listed.body.quotes.every((quote) => quote.author));
+    assert.ok(listed.body.quotes.every((quote) => quote.rows >= 1 && quote.rows <= 6));
+
+    const pushed = await postJson(base, '/api/push/family-quotes');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'family.quotes');
+    assert.ok(pushed.body.quote.text);
+    assert.ok(pushed.body.quote.author);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'family.quotes');
+
+    const added = await postJson(base, '/api/family-quotes/quotes', {
+      text: 'A tested house is a happy house.',
+      author: 'The Bridge',
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.customCount, 1);
+
+    const blank = await postJson(base, '/api/family-quotes/quotes', { text: '  ' });
+    assert.equal(blank.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('dad jokes push delivers a two-part joke and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/dad-jokes/jokes?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.equal(listed.body.jokes.length, 5);
+    assert.ok(listed.body.jokes.every((joke) => joke.punchline));
+    assert.ok(listed.body.jokes.every((joke) => joke.rows >= 1 && joke.rows <= 6));
+
+    const pushed = await postJson(base, '/api/push/dad-jokes');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'dad.jokes');
+    assert.ok(pushed.body.joke.setup);
+    assert.ok(pushed.body.joke.punchline);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'dad.jokes');
+
+    const added = await postJson(base, '/api/dad-jokes/jokes', {
+      setup: 'Why did the test suite cross the road?',
+      punchline: 'To get to the other side effects.',
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.customCount, 1);
+
+    const blank = await postJson(base, '/api/dad-jokes/jokes', { setup: '  ' });
+    assert.equal(blank.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('roast me push delivers a board-fit roast and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/roast-me/roasts?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.equal(listed.body.roasts.length, 5);
+    assert.ok(listed.body.roasts.every((roast) => roast.rows >= 1 && roast.rows <= 6));
+
+    const pushed = await postJson(base, '/api/push/roast-me');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'roast.me');
+    assert.ok(pushed.body.roast.text);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'roast.me');
+
+    const added = await postJson(base, '/api/roast-me/roasts', {
+      text: 'You are the only unit test this bridge cannot pass.',
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.customCount, 1);
+
+    const blank = await postJson(base, '/api/roast-me/roasts', { text: '  ' });
+    assert.equal(blank.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('chuck norris push delivers a board-fit fact and settings can add one', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -1382,6 +1477,43 @@ test('calendar clock push delivers a monthly grid and settings can change week s
     const reset = await postJson(base, '/api/calendar-clock/settings', { reset: true });
     assert.equal(reset.status, 200);
     assert.equal(reset.body.settings.weekStartsOn, 'sunday');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('word clock push spells the time out and the reading is a setting', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const status = await getJson(base, '/api/word-clock/settings');
+    assert.equal(status.status, 200);
+    assert.deepEqual(status.body.settings, { rounding: 'five', dayPart: true });
+    assert.equal(status.body.payload?.type, 'word.clock');
+    assert.match(String(status.body.payload?.text || ''), /^IT'S .*\.$/);
+    // The card paints these rows, so they have to be a real 6x22 board.
+    assert.equal(status.body.boardRows?.length, 6);
+    assert.equal(status.body.boardRows[0].length, 22);
+
+    const pushed = await postJson(base, '/api/push/word-clock');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'word.clock');
+    assert.match(String(pushed.body.text || ''), /^IT'S /);
+    assert.ok(Array.isArray(pushed.body.lines) && pushed.body.lines.length);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'word.clock');
+
+    const saved = await postJson(base, '/api/word-clock/settings', {
+      rounding: 'exact',
+      dayPart: false,
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body.settings, { rounding: 'exact', dayPart: false });
+    assert.equal(saved.body.payload.rounding, 'exact');
+    assert.doesNotMatch(String(saved.body.payload.text || ''), /IN THE|AT NIGHT/);
+
+    const reset = await postJson(base, '/api/word-clock/settings', { reset: true });
+    assert.equal(reset.status, 200);
+    assert.deepEqual(reset.body.settings, { rounding: 'five', dayPart: true });
   } finally {
     webServer.stop();
   }
@@ -1899,6 +2031,24 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(css, /font-size: clamp\([^)]*cqi/);
     assert.match(css, /\[hidden\] \{ display: none !important; \}/,
       'grid and flex panels would otherwise ignore the hidden attribute');
+
+    // Tap the letters instead of typing them: buttons, a legal path, and
+    // spent tiles greyed so nobody spends one twice.
+    const scramble = fs.readFileSync(path.join(realRoot, 'games', 'scramble.js'), 'utf8');
+    assert.match(scramble, /createElement\('button'\)/);
+    assert.match(scramble, /function pathFor/);
+    assert.match(scramble, /is-used/);
+    assert.match(css, /\.gm-cell\.is-used/);
+    assert.match(page.text, /id="btn-gm-clear"/);
+
+    // The keyboard must not bury the board it is there to spell from.
+    assert.match(scramble, /visualViewport/);
+    assert.match(scramble, /--gm-vh/);
+    assert.match(css, /body\.gm-typing/);
+
+    // And the name they typed last time is waiting for them.
+    assert.match(js, /localStorage\.getItem\(NAME_KEY\)/);
+    assert.match(js, /localStorage\.setItem\(NAME_KEY/);
   } finally {
     webServer.stop();
   }
@@ -1978,8 +2128,8 @@ test('guest snaps settings round-trip preferred alias and share the TinyURL toke
 
     const got = await getJson(base, '/api/guest-snaps/settings');
     assert.equal(got.status, 200);
-    assert.equal(got.body.targetPath, '/');
-    assert.equal(got.body.targetUrl, 'https://signal.wittydigital.com/');
+    assert.equal(got.body.targetPath, '/guestsnaps/');
+    assert.equal(got.body.targetUrl, 'https://signal.wittydigital.com/guestsnaps/');
     assert.equal(got.body.shortLinkReady, true);
 
     const saved = await postJson(base, '/api/guest-snaps/settings', {
@@ -2214,6 +2364,62 @@ test('stock market push delivers quotes and settings can retune the watchlist', 
     assert.equal(pushed.body.quotes.length, 2);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].type, 'stocks.market');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('us weather map push paints the country from one upstream call', async () => {
+  const calls = [];
+  const config = makeConfig({
+    usWeatherMapFetchImpl: async (url) => {
+      calls.push(url);
+      const lats = new URL(url).searchParams.get('latitude').split(',').map(Number);
+      return {
+        ok: true,
+        async json() {
+          // Cold up north, hot down south, so the board has a real gradient.
+          return lats.map((lat) => ({
+            current: { temperature_2m: 110 - lat, weather_code: 0 },
+          }));
+        },
+      };
+    },
+  });
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const settings = await getJson(base, '/api/us-weather-map/settings');
+    assert.equal(settings.status, 200);
+    assert.equal(settings.body.cellCount, 89);
+    assert.equal(settings.body.settings.mode, 'temperature');
+    assert.equal(settings.body.hasMap, false);
+    assert.ok(settings.body.legend.length >= 5);
+
+    const pushed = await postJson(base, '/api/push/us-weather-map');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'us.weather-map');
+    assert.equal(pushed.body.cells.length, 89);
+    assert.ok(pushed.body.range.maxF > pushed.body.range.minF);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'us.weather-map');
+    assert.equal(calls.length, 1, 'the whole map should cost one upstream call');
+
+    // A second push inside the refresh window reuses the readings.
+    await postJson(base, '/api/push/us-weather-map');
+    assert.equal(calls.length, 1);
+
+    const saved = await postJson(base, '/api/us-weather-map/settings', {
+      mode: 'conditions',
+      refreshMinutes: 45,
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.mode, 'conditions');
+    assert.equal(saved.body.settings.refreshMinutes, 45);
+    assert.equal(saved.body.hasMap, true);
+    assert.equal(saved.body.legend[0].label, 'Clear');
+
+    const reset = await postJson(base, '/api/us-weather-map/settings', { reset: true });
+    assert.equal(reset.body.settings.mode, 'temperature');
   } finally {
     webServer.stop();
   }
@@ -2559,9 +2765,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal195/);
-  assert.match(html, /settings-filter\.js\?v=signal195/);
-  assert.match(html, /app\.js\?v=signal195/);
+  assert.match(html, /styles\.css\?v=signal204/);
+  assert.match(html, /settings-filter\.js\?v=signal204/);
+  assert.match(html, /app\.js\?v=signal204/);
   assert.match(html, /id="tinyurl-settings-card"/);
   assert.match(html, /id="word-scramble-settings-card"/);
   assert.match(html, /id="word-scramble-sessions-sheet"/);
@@ -2596,8 +2802,11 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /ggyoyoyoyggg/);
   assert.match(js, /fgg\.bwbwbw/);
   assert.match(js, /royyoyr\.\./);
-  assert.match(css, /\.date-book-sheet,\s*\.rl-designer-sheet \{[^}]*max-height: min\(94dvh, 980px\)/);
-  assert.match(css, /\.date-book-sheet > \.cn-fact-list \{[^}]*min-height: min\(280px, 36dvh\)/);
+  assert.match(css, /\.date-book-sheet,\s*\.rl-designer-sheet \{[^}]*max-height: min\(92dvh, 980px\)/);
+  assert.match(css, /\.cn-manage-sheet\.date-book-sheet,\s*\.cn-manage-sheet\.rl-designer-sheet \{[^}]*overflow-y:\s*auto/);
+  assert.match(css, /\.date-book-sheet > \.cn-fact-list \{[^}]*min-height:\s*0/);
+  assert.match(css, /\.rl-designer-actions \{[^}]*position:\s*sticky/);
+  assert.match(css, /@media \(max-height: 900px\)/);
   assert.match(css, /\.rl-tools \{[^}]*margin-bottom: 16px/);
   assert.match(css, /\.rl-char-row \{[^}]*margin: 0 0 16px/);
   assert.match(css, /\.rl-designer-hint \{[^}]*margin: 0 0 16px/);
@@ -2642,6 +2851,24 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-chuck-norris-manage"/);
   assert.match(html, /id="btn-chuck-norris-push"/);
   assert.match(html, /id="chuck-norris-manage-sheet"/);
+  assert.match(html, /id="roast-me-settings-card"/);
+  assert.match(html, /id="btn-roast-me-manage"/);
+  assert.match(html, /id="btn-roast-me-push"/);
+  assert.match(html, /id="roast-me-manage-sheet"/);
+  assert.match(html, /id="family-quotes-settings-card"/);
+  assert.match(html, /id="btn-family-quotes-manage"/);
+  assert.match(html, /id="btn-family-quotes-push"/);
+  assert.match(html, /id="family-quotes-manage-sheet"/);
+  assert.match(html, /id="family-quotes-new-author"/);
+  assert.match(html, /id="dad-jokes-settings-card"/);
+  assert.match(html, /id="btn-dad-jokes-manage"/);
+  assert.match(html, /id="btn-dad-jokes-push"/);
+  assert.match(html, /id="dad-jokes-manage-sheet"/);
+  assert.match(html, /id="dad-jokes-new-punchline"/);
+  assert.match(html, /id="us-weather-map-settings-card"/);
+  assert.match(html, /id="btn-us-weather-map-push"/);
+  assert.match(html, /id="us-weather-map-legend"/);
+  assert.match(html, /id="us-weather-map-preview"/);
   assert.match(html, /id="amazing-facts-settings-card"/);
   assert.match(html, /id="btn-amazing-facts-manage"/);
   assert.match(html, /id="btn-amazing-facts-push"/);
@@ -2698,11 +2925,23 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="calendar-clock-settings-card"/);
   assert.match(html, /id="btn-calendar-clock-push"/);
   assert.match(html, /id="calendar-clock-week-start"/);
+  assert.match(html, /id="word-clock-settings-card"/);
+  assert.match(html, /id="btn-word-clock-push"/);
+  assert.match(html, /id="word-clock-rounding"/);
+  assert.match(html, /id="word-clock-day-part"/);
   assert.match(html, /id="weather-alerts-settings-card"/);
   assert.match(html, /id="btn-weather-alerts-push"/);
   assert.match(js, /quiet-hours/);
   assert.match(js, /\/api\/chuck-norris\/facts/);
   assert.match(js, /\/api\/push\/chuck-norris/);
+  assert.match(js, /\/api\/roast-me\/roasts/);
+  assert.match(js, /\/api\/push\/roast-me/);
+  assert.match(js, /\/api\/family-quotes\/quotes/);
+  assert.match(js, /\/api\/push\/family-quotes/);
+  assert.match(js, /\/api\/dad-jokes\/jokes/);
+  assert.match(js, /\/api\/push\/dad-jokes/);
+  assert.match(js, /\/api\/us-weather-map\/settings/);
+  assert.match(js, /\/api\/push\/us-weather-map/);
   assert.match(js, /\/api\/amazing-facts\/facts/);
   assert.match(js, /\/api\/push\/amazing-facts/);
   assert.match(js, /\/api\/world-geography-facts\/facts/);
@@ -2730,6 +2969,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/world-population/);
   assert.match(js, /\/api\/calendar-clock\/settings/);
   assert.match(js, /\/api\/push\/calendar-clock/);
+  assert.match(js, /\/api\/word-clock\/settings/);
+  assert.match(js, /\/api\/push\/word-clock/);
   assert.match(js, /\/api\/weather-alerts\/settings/);
   assert.match(js, /\/api\/push\/weather-alerts/);
   assert.match(css, /\.conversation-starters-settings-card/);
@@ -3744,14 +3985,24 @@ test('web server can be disabled via config', async () => {
   assert.equal(server, null);
 });
 
-test('guest booth is served at / and admin shell redirects without a session', async () => {
+test('the landing page and booth are public; the admin shell redirects', async () => {
   const realWebRoot = path.join(__dirname, '../src/web');
   const { webServer, base } = await startTestServer({
     webRoot: realWebRoot,
     autoLogin: false,
   });
   try {
-    const booth = await request(`${base}/`);
+    // The bare domain is now a front door, not the booth.
+    const landing = await request(`${base}/`);
+    assert.equal(landing.status, 200);
+    assert.match(landing.text, /href="\/games\/"/);
+    assert.match(landing.text, /href="\/guestsnaps\/"/);
+    assert.match(landing.text, /href="\/guestbook\/"/);
+    assert.match(landing.text, /href="\/admin\/"/);
+    assert.match(landing.text, /href="landing\.css\?v=\d+(?:\.\d+)?"/);
+    assert.doesNotMatch(landing.text, /booth\.js/);
+
+    const booth = await request(`${base}/guestsnaps/`);
     assert.equal(booth.status, 200);
     assert.match(booth.text, /Share a photo/i);
     assert.match(booth.text, /id="photo-queue"/);
@@ -3909,9 +4160,9 @@ test('guest snaps PIN login unlocks photo upload; request-pin pushes overlay', a
   }
 });
 
-test('guest booth HTML/JS exist at the web root', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
-  const js = fs.readFileSync(path.join(__dirname, '../src/web/booth.js'), 'utf8');
+test('guest booth HTML/JS live under /guestsnaps/', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/guestsnaps/index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/guestsnaps/booth.js'), 'utf8');
   assert.match(html, /id="display-select"/);
   assert.match(html, /id="btn-send"/);
   assert.match(html, /id="booth-login"/);
@@ -3930,7 +4181,7 @@ test('guest booth HTML/JS exist at the web root', () => {
 test('guest booth photo picker does not force camera capture', () => {
   // capture=environment opens the camera only on iOS/Android and skips the
   // camera-roll / Files chooser — contradicts "Take or choose photos".
-  const html = fs.readFileSync(path.join(__dirname, '../src/web/index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../src/web/guestsnaps/index.html'), 'utf8');
   assert.match(html, /id="photo-file"[^>]*type="file"/);
   assert.match(html, /id="photo-file"[^>]*accept="image\/\*"/);
   assert.match(html, /id="photo-file"[^>]*\bmultiple\b/);
@@ -3939,7 +4190,7 @@ test('guest booth photo picker does not force camera capture', () => {
 });
 
 test('guest booth queues photos and pushes a slideshow when more than one is sent', () => {
-  const js = fs.readFileSync(path.join(__dirname, '../src/web/booth.js'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/guestsnaps/booth.js'), 'utf8');
   assert.match(js, /MAX_QUEUE\s*=\s*20/);
   assert.match(js, /photoQueue/);
   assert.match(js, /mode:\s*'photo'/);
@@ -4022,7 +4273,7 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
 
   const sheets = [
-    'chuck-norris', 'amazing-facts', 'world-geography-facts',
+    'chuck-norris', 'roast-me', 'family-quotes', 'dad-jokes', 'amazing-facts', 'world-geography-facts',
     'conversation-starters', 'stoic-quotes', 'baking-inspiration',
     'date-book',
   ];
