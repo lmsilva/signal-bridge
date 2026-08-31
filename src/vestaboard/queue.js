@@ -15,11 +15,15 @@
 //     is worse than no snapshot. The window is household wall-clock
 //     (`timeZone`), not the process TZ, so a UTC container does not treat
 //     8pm Utah as 2am quiet.
+//   - during a live Vestaboard game (`holdKind: game`) every non-game snapshot
+//     waits in queue — manual Push, Air now, and scheduler ticks included.
+//     `breakHold` does not pierce a game lock; only alerts preempt.
 //
 // Time and the transport are injected so the whole thing can be tested
 // without waiting fifteen real seconds for anything.
 
 const { dateParts } = require('./clock');
+const { isGameBoardSource } = require('../games/registry');
 
 const DEFAULT_RATE_WINDOW_SECONDS = 15;
 const DEFAULT_DWELL_SECONDS = 15;
@@ -91,6 +95,8 @@ function createQueue({
     holdUntil: null,
     /** `game` parks every non-game page; `guest` parks scheduler pages only. */
     holdKind: null,
+    /** Which `frame.source` owns an active `holdKind: game` lock. */
+    gameSource: null,
     health: 'ok',
     healthReason: null,
     failures: 0,
@@ -135,11 +141,17 @@ function createQueue({
     }
   }
 
+  function gameLockActive(at = now()) {
+    return state.holdKind === 'game'
+      && state.holdUntil != null
+      && at < state.holdUntil;
+  }
+
   function itemHeld(item, at = now()) {
     if (item.priority === 'alert') return false;
     if (!state.holdUntil || at >= state.holdUntil) return false;
     if (state.holdKind === 'game') {
-      return String(item.frame?.source || '') !== 'word.scramble';
+      return String(item.frame?.source || '') !== state.gameSource;
     }
     return item.scheduler;
   }
@@ -276,12 +288,18 @@ function createQueue({
       return { accepted: 0, dropped: list.length, reason: 'quiet' };
     }
 
-    if (options.breakHold) {
-      const gameHandoff = options.replaceSource === 'word.scramble'
+    // Manual Push / Air now normally jump the line (`breakHold`). During a live
+    // Vestaboard game that must not happen — every non-game page, manual or
+    // scheduled, waits until the session clears. Alerts still preempt.
+    const mayBreakHold = Boolean(options.breakHold) && !gameLockActive(at);
+    if (mayBreakHold) {
+      const gameHandoff = state.gameSource
+        && options.replaceSource === state.gameSource
         && holdMsOf(list[0]) > 0;
       if (!gameHandoff) {
         state.holdUntil = null;
         state.holdKind = null;
+        state.gameSource = null;
       }
     }
 
@@ -303,7 +321,7 @@ function createQueue({
           }
         }
       }
-      if (options.breakHold) {
+      if (mayBreakHold) {
         const firstSnapshot = items.findIndex((item) => item.priority !== 'alert');
         if (firstSnapshot === -1) {
           items.push(...made);
@@ -349,11 +367,16 @@ function createQueue({
       const holdMs = holdMsOf(item.frame);
       state.holdUntil = holdMs ? at + holdMs : null;
       if (holdMs) {
-        state.holdKind = String(item.frame.source || '') === 'word.scramble'
-          ? 'game'
-          : 'guest';
+        if (isGameBoardSource(item.frame.source)) {
+          state.holdKind = 'game';
+          state.gameSource = String(item.frame.source || '');
+        } else {
+          state.holdKind = 'guest';
+          state.gameSource = null;
+        }
       } else {
         state.holdKind = null;
+        state.gameSource = null;
       }
     }
 
@@ -498,6 +521,7 @@ function createQueue({
       lastPostAt: state.lastPostAt,
       holdUntil: state.holdUntil,
       holdKind: state.holdKind,
+      gameSource: state.gameSource,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
     /**

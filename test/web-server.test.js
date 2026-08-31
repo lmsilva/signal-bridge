@@ -1561,7 +1561,10 @@ test('admin Settings has a Plex Top 10 card under Media with a genre picker', ()
   assert.match(html, /id="plex-top10-settings-card"[^>]*data-settings-group="media"/);
   assert.match(html, /data-plex-top10-source="library"/);
   assert.match(html, /data-plex-top10-source="global"/);
-  assert.match(html, /id="plex-top10-genres"/);
+  // Genre and part-of-speech ticks sit on a column grid, not a ragged flex row.
+  assert.match(html, /class="check-columns check-columns-wide" id="plex-top10-genres"/);
+  assert.match(html, /class="check-columns" id="learn-japanese-pos"/);
+  assert.equal((html.match(/class="check-columns"/g) || []).length, 12);
   assert.match(js, /\/api\/plex-top10\/settings/);
   assert.match(js, /\/api\/push\/plex-top10/);
   // The board is two frames of five, so the Media pane gained a tile.
@@ -2765,9 +2768,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal204/);
-  assert.match(html, /settings-filter\.js\?v=signal204/);
-  assert.match(html, /app\.js\?v=signal204/);
+  assert.match(html, /styles\.css\?v=signal206/);
+  assert.match(html, /settings-filter\.js\?v=signal206/);
+  assert.match(html, /app\.js\?v=signal206/);
   assert.match(html, /id="tinyurl-settings-card"/);
   assert.match(html, /id="word-scramble-settings-card"/);
   assert.match(html, /id="word-scramble-sessions-sheet"/);
@@ -2805,6 +2808,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.date-book-sheet,\s*\.rl-designer-sheet \{[^}]*max-height: min\(92dvh, 980px\)/);
   assert.match(css, /\.cn-manage-sheet\.date-book-sheet,\s*\.cn-manage-sheet\.rl-designer-sheet \{[^}]*overflow-y:\s*auto/);
   assert.match(css, /\.date-book-sheet > \.cn-fact-list \{[^}]*min-height:\s*0/);
+  assert.match(css, /\.date-book-sheet \.cn-compose \{[^}]*flex:\s*0\s+0\s+auto/);
   assert.match(css, /\.rl-designer-actions \{[^}]*position:\s*sticky/);
   assert.match(css, /@media \(max-height: 900px\)/);
   assert.match(css, /\.rl-tools \{[^}]*margin-bottom: 16px/);
