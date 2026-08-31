@@ -751,6 +751,35 @@ class SteamArtworkCacheTests(unittest.TestCase):
             self.assertIsNone(image)
             self.assertFalse(cache_file.exists(), "junk must not be served from disk forever")
 
+    def test_ensure_artwork_cached_writes_disk_without_decoding(self):
+        from src.steam_now_playing_panel import artwork_is_cached, ensure_artwork_cached
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            cache_file = tmp / "clip.webp"
+            url = "https://bridge/roll-credits-media/clip.preview.webp"
+            with mock.patch("src.steam_now_playing_panel.steam_image_cache_path", side_effect=lambda u: cache_file), \
+                    mock.patch("src.steam_now_playing_panel.urllib.request.urlopen") as urlopen:
+                response = mock.MagicMock()
+                response.read.return_value = b"webp-bytes"
+                response.__enter__.return_value = response
+                urlopen.return_value = response
+                self.assertTrue(ensure_artwork_cached(url))
+                self.assertTrue(artwork_is_cached(url))
+            self.assertEqual(cache_file.read_bytes(), b"webp-bytes")
+            self.assertFalse(cache_file.with_name("clip.webp.part").exists())
+
+    def test_ensure_artwork_cached_skips_a_download_when_the_file_is_already_there(self):
+        from src.steam_now_playing_panel import ensure_artwork_cached
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            cache_file = Path(tmp_name) / "out.webp"
+            cache_file.write_bytes(b"already")
+            with mock.patch("src.steam_now_playing_panel.steam_image_cache_path", return_value=cache_file), \
+                    mock.patch("src.steam_now_playing_panel.urllib.request.urlopen") as urlopen:
+                self.assertTrue(ensure_artwork_cached("https://bridge/clip.preview.webp"))
+            urlopen.assert_not_called()
+
 
 class ArtworkRetryTests(unittest.TestCase):
     """A card outlives a failed download, so the fetch has to outlive it too."""

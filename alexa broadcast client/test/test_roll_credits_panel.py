@@ -21,8 +21,10 @@ from src.roll_credits_panel import (
     HeroLoop,
     RollCreditsPanel,
     choose_counter_grid,
+    card_media_urls,
     choose_image_hero,
     choose_showcase_shots,
+    choose_still_hero,
     decode_animation,
     clip_text_to_lines,
     counters_layout,
@@ -83,6 +85,54 @@ class RollCreditsPayloadTests(unittest.TestCase):
         # The strip still carries the screenshots alongside the loop.
         self.assertEqual([s["url"] for s in choose_showcase_shots(card)], ["shot.jpg"])
 
+    def test_uncached_video_falls_down_to_the_poster_still(self):
+        hero = {
+            "kind": "video",
+            "url": "clip.preview.webp",
+            "thumbUrl": "clip.poster.jpg",
+            "animated": True,
+        }
+        still = {"kind": "video", "url": "clip.poster.jpg", "animated": False}
+        card = {"media": {"hero": hero, "still": still}}
+        self.assertEqual(choose_image_hero(card, cached=lambda url: False)["url"], "clip.poster.jpg")
+        self.assertFalse(choose_image_hero(card, cached=lambda url: False).get("animated"))
+        self.assertEqual(choose_image_hero(card, cached=lambda url: url == hero["url"]), hero)
+
+    def test_uncached_video_without_still_uses_the_thumb_then_a_screenshot(self):
+        hero = {
+            "kind": "video",
+            "url": "clip.preview.webp",
+            "thumbUrl": "clip.poster.jpg",
+            "animated": True,
+        }
+        self.assertEqual(
+            choose_image_hero({"media": {"hero": hero}}, cached=lambda url: False)["url"],
+            "clip.poster.jpg",
+        )
+        bare = {"kind": "video", "url": "clip.preview.webp", "animated": True}
+        card = {
+            "media": {
+                "hero": bare,
+                "screenshots": [{"kind": "screenshot", "url": "shot.jpg"}],
+            }
+        }
+        self.assertEqual(choose_image_hero(card, cached=lambda url: False)["url"], "shot.jpg")
+
+    def test_card_media_urls_puts_stills_ahead_of_the_loop(self):
+        urls = card_media_urls({
+            "media": {
+                "hero": {
+                    "url": "clip.preview.webp",
+                    "thumbUrl": "clip.poster.jpg",
+                    "animated": True,
+                },
+                "still": {"url": "clip.poster.jpg"},
+                "screenshots": [{"url": "shot.jpg"}],
+            }
+        })
+        self.assertEqual(urls, ["clip.poster.jpg", "shot.jpg", "clip.preview.webp"])
+        self.assertEqual(choose_still_hero({"media": {"still": {"url": "poster.jpg"}}})["url"], "poster.jpg")
+
     def test_cover_hero_keeps_screenshots_for_strip(self):
         card = {
             "media": {
@@ -127,14 +177,16 @@ class RollCreditsAnimatedHeroTests(unittest.TestCase):
         self.assertEqual(delay, 120)
         self.assertEqual(frames[0].mode, "RGB")
 
-    def test_long_animations_are_sampled_down_and_slowed_to_match(self):
-        count = LOOP_MAX_FRAMES * 3
-        frames, delay = decode_animation(make_animation(count, duration_ms=50))
-        self.assertLessEqual(len(frames), LOOP_MAX_FRAMES)
-        self.assertGreater(len(frames), 1)
-        # Dropping two frames of every three has to triple the gap or the loop
-        # would play three times too fast.
-        self.assertEqual(delay, 150)
+    def test_long_animations_are_not_preloaded(self):
+        # Longer than the RAM budget is seeked, not sampled down to a slideshow.
+        frames, delay = decode_animation(make_animation(30, duration_ms=42), max_frames=24)
+        self.assertEqual(frames, [])
+        self.assertEqual(delay, 0)
+
+    def test_a_24fps_clip_is_not_sampled(self):
+        frames, delay = decode_animation(make_animation(120, duration_ms=42))
+        self.assertEqual(len(frames), 120)
+        self.assertEqual(delay, 42)
 
     def test_a_still_image_yields_no_loop(self):
         buffer = io.BytesIO()
@@ -435,23 +487,21 @@ class RollCreditsPhaseTests(unittest.TestCase):
         RollCreditsPanel._store_card(panel, 1, "g1", {"id": "g1", "title": "B"})
         self.assertEqual(panel.drawn["title"], "B")
 
-    def test_playlist_apply_does_not_prefetch_during_dashboard(self):
+    def test_playlist_apply_warms_cards_during_dashboard(self):
+        # Card JSON + media files may download during the stats page; painting
+        # a showcase over it is still `_store_card`'s job to refuse.
         panel = RollCreditsPanel.__new__(RollCreditsPanel)
         panel._token = 7
         panel._phase = "dashboard"
         panel.visible = True
         panel._games = []
         panel._index = 0
-        panel.prefetched = False
-        panel._prefetch = lambda index: setattr(panel, "prefetched", True)
+        panel.warmed = None
+        panel._warm_ahead = lambda index, count=3: setattr(panel, "warmed", index)
 
         RollCreditsPanel._apply_playlist(panel, 7, [{"id": "a"}, {"id": "b"}])
         self.assertEqual([game["id"] for game in panel._games], ["a", "b"])
-        self.assertFalse(panel.prefetched)
-
-        panel._phase = "showcase"
-        RollCreditsPanel._apply_playlist(panel, 7, [{"id": "c"}])
-        self.assertTrue(panel.prefetched)
+        self.assertEqual(panel.warmed, 0)
 
     def test_start_games_waits_out_dashboard_deadline(self):
         import time

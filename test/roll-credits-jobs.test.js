@@ -110,3 +110,52 @@ test('a video download rebuilds the wall preview with the saved trim', async () 
   assert.equal(store.getGame(game.id).media[0].resolution, 1080);
   assert.match(store.getGame(game.id).media[0].path, /video-1080/);
 });
+
+test('rebuildWallPreviews re-encodes ready videos without downloading', async () => {
+  const renders = [];
+  const downloads = [];
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'roll-credits-rebuild-'));
+  const store = createRollCreditsStore({ rollCreditsPath: path.join(directory, 'store.json') });
+  const media = {
+    absolutePath: (relative) => path.join(directory, relative),
+    downloadUrlToFile: async (...args) => {
+      downloads.push(args);
+      return { path: args[1], thumbPath: null };
+    },
+    downloadYoutube: async (...args) => {
+      downloads.push(args);
+      return { path: 'nope.mp4', thumbPath: null };
+    },
+    renderVideoPreview: async (filePath, options) => {
+      renders.push([filePath, options]);
+      return {
+        posterPath: 'poster.jpg',
+        previewPath: 'clip.preview.webp',
+        durationSeconds: 40,
+        previewRevision: 7,
+        frameCount: 96,
+      };
+    },
+  };
+  const settings = { get: () => ({ limits: {}, youtube: {} }) };
+  const jobs = createRollCreditsJobs({ store, media, settings });
+  const game = store.createGame({
+    title: 'Rebuild',
+    system: 'pc',
+    media: [{
+      id: 'clip',
+      kind: 'video',
+      status: 'ready',
+      path: 'rc_x/video/clip.mp4',
+      trimStart: 2,
+      trimEnd: 40,
+    }],
+  });
+  assert.equal(jobs.rebuildWallPreviews(), 1);
+  await jobs.whenIdle();
+  assert.equal(downloads.length, 0);
+  assert.deepEqual(renders, [['rc_x/video/clip.mp4', { trimStart: 2, trimEnd: 40 }]]);
+  assert.equal(store.getGame(game.id).media[0].previewPath, 'clip.preview.webp');
+  assert.equal(store.getGame(game.id).media[0].previewRevision, 7);
+  assert.equal(store.getGame(game.id).media[0].status, 'ready');
+});

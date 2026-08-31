@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fold } = require('./vestaboard/encoder');
-const { fitsBoard, cleanChip } = require('./space-launch-alerts-layout');
+const { alertRows, fitsBoard, cleanChip } = require('./space-launch-alerts-layout');
 const {
   DEFAULT_SETTINGS,
   sanitiseSettings,
@@ -411,6 +411,7 @@ function createSpaceLaunchAlerts(config = {}, log = console) {
           countdown: launch.countdown,
           sentence: launch.sentence,
           pad: launch.pad || '',
+          rows: alertRows(launch.sentence, { chip: settings.chipColor }),
         })),
         lastError,
       };

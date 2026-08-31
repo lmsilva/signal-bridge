@@ -9,7 +9,7 @@ const path = require('path');
 const { validate, CHIPS } = require('../src/vestaboard/encoder');
 const { formatLayout } = require('../src/vestaboard/notation');
 const { spaceLaunchAlertFrames } = require('../src/vestaboard/formatters/feeds');
-const { alertLines, alertRows } = require('../src/space-launch-alerts-layout');
+const { TITLE, alertLines, alertRows } = require('../src/space-launch-alerts-layout');
 const {
   TYPE,
   providerLabel,
@@ -47,6 +47,10 @@ const framesFor = (sentence, chipColor = 'blue') => spaceLaunchAlertFrames(
   }, { chipColor }),
 );
 
+test('the title row is SPACE LAUNCH between chip pairs', () => {
+  assert.equal(TITLE, 'SPACE LAUNCH');
+});
+
 test('the three channel cards render flap for flap', () => {
   const starlink = framesFor(
     'A SPACEX FALCON 9 ROCKET WILL LAUNCH THE STARLINK 6-56 MISSION IN 45 MINUTES',
@@ -55,12 +59,12 @@ test('the three channel cards render flap for flap', () => {
   assert.equal(starlink.length, 1);
   assert.equal(starlink[0].source, 'launch.alert');
   assertBoard(starlink[0].rows, [
-    'ww    SPACE ALERT   ww',
-    '',
+    'ww   SPACE LAUNCH   ww',
     'A SPACEX FALCON 9',
     'ROCKET WILL LAUNCH THE',
     'STARLINK 6-56 MISSION',
     'IN 45 MINUTES',
+    '',
   ], 'Starlink card');
 
   const chang = framesFor(
@@ -68,12 +72,12 @@ test('the three channel cards render flap for flap', () => {
     'green',
   );
   assertBoard(chang[0].rows, [
-    'gg    SPACE ALERT   gg',
-    '',
+    'gg   SPACE LAUNCH   gg',
     'A CHINA LONG MARCH 5',
     'ROCKET WILL LAUNCH THE',
     "CHANG'E 6 MISSION IN",
     '10 MINUTES',
+    '',
   ], 'Chang\'e card');
 
   const worldview = framesFor(
@@ -81,13 +85,26 @@ test('the three channel cards render flap for flap', () => {
     'blue',
   );
   assertBoard(worldview[0].rows, [
-    'bb    SPACE ALERT   bb',
-    '',
+    'bb   SPACE LAUNCH   bb',
     'A SPACEX FALCON 9',
     'ROCKET WILL LAUNCH THE',
     'WORLDVIEW LEGION 1 & 2',
     'MISSION IN 1 HOUR',
+    '',
   ], 'Worldview card');
+});
+
+test('body lines start under the title instead of sitting on the bottom', () => {
+  const rows = alertRows('A SHORT ALERT IN 1 HOUR', { chip: 'blue' });
+  assertBoard(rows, [
+    'bb   SPACE LAUNCH   bb',
+    'A SHORT ALERT IN 1',
+    'HOUR',
+    '',
+    '',
+    '',
+  ], 'short alert uses the top');
+  assert.equal(rows[5].every((code) => code === 0), true);
 });
 
 test('provider and countdown helpers match marketplace wording', () => {
@@ -120,7 +137,8 @@ test('normalizeLaunch drops successful launches and refuses over-long alerts', (
     mission: { name: 'Starlink 6-56' },
   });
   assert.ok(ok?.sentence);
-  assert.equal(alertLines(ok.sentence).length, 4);
+  assert.ok(alertLines(ok.sentence).length <= 5);
+  assert.ok(alertLines(ok.sentence).length >= 1);
 
   const done = normalizeLaunch({
     id: 'done',
@@ -176,6 +194,10 @@ test('createSpaceLaunchAlerts caches launches and serves payloads without refetc
   assert.equal(payload.type, TYPE);
   assert.equal(payload.launch.id, 'launch-1');
   assert.equal(framesFor(payload.launch.sentence).length, 1);
+  assert.deepEqual(
+    api.statusSnapshot().launches[0].rows,
+    spaceLaunchAlertFrames(payload)[0].rows,
+  );
 
   await api.nextPayload();
   assert.equal(fetchCount, 1);

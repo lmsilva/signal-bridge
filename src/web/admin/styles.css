@@ -1904,6 +1904,24 @@ textarea.field-input.text-input-area {
   font-size: 0.82rem;
 }
 
+.us-state-facts-region-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 14px;
+  margin-top: 4px;
+}
+.us-state-facts-region-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+.us-state-facts-region-item .hint {
+  margin-left: auto;
+  font-size: 0.82rem;
+}
+
 .word-of-the-day-pos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -3233,6 +3251,7 @@ textarea.field-input.text-input-area {
   #tab-settings .wiki-ck-settings-card,
   #tab-settings .overhead-settings-card,
   #tab-settings .iss-tracker-settings-card,
+  #tab-settings .space-launch-alerts-settings-card,
   #tab-settings .starlink-tracker-settings-card,
   #tab-settings .flightplan-settings-card,
   #tab-settings .chuck-norris-settings-card,
@@ -3240,6 +3259,7 @@ textarea.field-input.text-input-area {
   #tab-settings .family-quotes-settings-card,
   #tab-settings .misheard-lyrics-settings-card,
   #tab-settings .periodic-table-settings-card,
+  #tab-settings .us-state-facts-settings-card,
   #tab-settings .word-of-the-day-settings-card,
   #tab-settings .dad-jokes-settings-card,
   #tab-settings .us-weather-map-settings-card,
@@ -4257,6 +4277,7 @@ textarea.field-input.text-input-area {
   .stock-market-settings-card .settings-columns,
   .currency-rates-settings-card .settings-columns,
   .starlink-tracker-settings-card .settings-columns,
+  .space-launch-alerts-settings-card .settings-columns,
   .iss-tracker-settings-card .settings-columns {
     grid-template-columns: minmax(0, 1.05fr) minmax(280px, 1fr);
     align-items: start;

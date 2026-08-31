@@ -915,6 +915,7 @@
     'daily-bucket-fillers-settings-card': ['vestaboard'],
     'misheard-lyrics-settings-card': ['vestaboard'],
     'periodic-table-settings-card': ['vestaboard'],
+    'us-state-facts-settings-card': ['vestaboard'],
     'word-of-the-day-settings-card': ['vestaboard'],
     'dad-jokes-settings-card': ['vestaboard'],
     'us-weather-map-settings-card': ['vestaboard'],
@@ -1622,6 +1623,7 @@
     'daily-bucket-fillers': '<path d="M7 8h10l-1.2 11H8.2L7 8z"/><path d="M6 8h12"/><path d="M9 8V6.5A3 3 0 0 1 15 6.5V8"/><path d="M10 12h4"/>',
     'misheard-lyrics': '<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="16" r="2.2"/><path d="M9 10l10-2"/>',
     'periodic-table': '<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="13" width="7" height="7" rx="1"/><rect x="14" y="13" width="7" height="7" rx="1"/>',
+    'state-facts': '<path d="M4 7h11l2 2h3v6l-3 3H8l-2-2H4z"/><path d="M8 9.5h.01M12 8.5h.01M15 11h.01M10 13h.01"/>',
     'word-of-the-day': '<path d="M4 5h16v3H4z"/><path d="M6 11h3v8H6z"/><path d="M11 11h3v8h-3z"/><path d="M16 11h3v8h-3z"/>',
     'dad-jokes': '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01"/>',
     'us-weather-map': '<path d="M3 7h11l2 2h5v6l-3 3H9l-3-2H3z"/><path d="M9 7v9M14 9v9"/>',
@@ -10303,6 +10305,187 @@
 
   loadPeriodicTableSettings();
 
+  // ----------------------------------------------- Settings → US State Facts
+
+  let usStateFactsState = { states: [], regions: [], settings: { regions: [] } };
+
+  function usStateFactsCountsLine(data = {}) {
+    const total = Number(data.total || 0);
+    const available = Number(data.available || 0);
+    const filtered = available < total;
+    return filtered
+      ? `${available} of ${total} states in rotation`
+      : `${total} states in rotation`;
+  }
+
+  function readUsStateFactsRegions() {
+    const grid = $('us-state-facts-region-grid');
+    if (!grid) {
+      return [];
+    }
+    return [...grid.querySelectorAll('input[type="checkbox"]:checked')]
+      .map((input) => input.value)
+      .filter(Boolean);
+  }
+
+  function renderUsStateFactsRegions(data = {}) {
+    const grid = $('us-state-facts-region-grid');
+    if (!grid) {
+      return;
+    }
+    const selected = new Set((data.settings?.regions || []).map((value) => String(value)));
+    const regions = Array.isArray(data.regions) ? data.regions : [];
+    grid.innerHTML = regions.map((row) => {
+      const id = String(row.id || '');
+      const checked = selected.has(id) ? ' checked' : '';
+      const count = Number(row.count) || 0;
+      const label = String(row.label || id);
+      return `<label class="us-state-facts-region-item"><input type="checkbox" value="${escapeHtml(id)}"${checked}> ${escapeHtml(label)} <span class="hint">(${count})</span></label>`;
+    }).join('');
+  }
+
+  function renderUsStateFactsStateSelect(data = {}, { filterRegions = null } = {}) {
+    const select = $('us-state-facts-state');
+    if (!select) {
+      return;
+    }
+    const selectedRegions = filterRegions
+      ?? (data.settings?.regions || []);
+    const allowed = selectedRegions.length
+      ? new Set(selectedRegions)
+      : null;
+    const states = (Array.isArray(data.states) ? data.states : [])
+      .filter((state) => !allowed || allowed.has(state.region));
+    const current = select.value;
+    select.innerHTML = states.map((state) => {
+      const label = state.name;
+      return `<option value="${escapeHtml(String(state.id))}">${escapeHtml(label)}</option>`;
+    }).join('');
+    if (current && [...select.options].some((option) => option.value === current)) {
+      select.value = current;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+    }
+    return states;
+  }
+
+  function renderUsStateFactsPreview(data = {}) {
+    const host = $('us-state-facts-preview');
+    if (!host) {
+      return;
+    }
+    const select = $('us-state-facts-state');
+    const id = String(select?.value || '');
+    const state = (Array.isArray(data.states) ? data.states : usStateFactsState.states || [])
+      .find((row) => row.id === id)
+      || usStateFactsState.states?.[0];
+    const rows = Array.isArray(state?.rows) ? state.rows : [];
+    if (rows.length) {
+      renderVbGrid(host, rows);
+      return;
+    }
+    paintPreviewLines(host, ['', '', '', '', '', '']);
+  }
+
+  function renderUsStateFactsSettings(data = {}) {
+    usStateFactsState = {
+      states: data.states || [],
+      regions: data.regions || [],
+      settings: data.settings || { regions: [] },
+      available: data.available,
+      total: data.total,
+    };
+    const pill = $('us-state-facts-status-pill');
+    const detail = $('us-state-facts-status-detail');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+      pill.className = `status-pill ${data.available ? 'is-ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${usStateFactsCountsLine(data)}. Filter by region or push a specific state to test.`
+        : 'All 50 states with capital, bird, and flower — chip-flanked name like the marketplace channel.';
+    }
+    renderUsStateFactsRegions(data);
+    const visible = renderUsStateFactsStateSelect(data);
+    renderUsStateFactsPreview({ ...data, states: visible });
+  }
+
+  async function loadUsStateFactsSettings() {
+    try {
+      renderUsStateFactsSettings(await apiGet('/api/us-state-facts/settings'));
+    } catch (_error) {
+      renderUsStateFactsSettings({});
+    }
+  }
+
+  $('us-state-facts-state')?.addEventListener('change', () => renderUsStateFactsPreview(usStateFactsState));
+  $('us-state-facts-region-grid')?.addEventListener('change', () => {
+    const visible = renderUsStateFactsStateSelect(usStateFactsState, {
+      filterRegions: readUsStateFactsRegions(),
+    });
+    renderUsStateFactsPreview({ ...usStateFactsState, states: visible });
+  });
+
+  $('btn-us-state-facts-save')?.addEventListener('click', async () => {
+    const button = $('btn-us-state-facts-save');
+    try {
+      button.disabled = true;
+      const result = await apiPost('/api/us-state-facts/settings', {
+        regions: readUsStateFactsRegions(),
+      });
+      renderUsStateFactsSettings(result);
+      toast('US State Facts filters saved', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not save filters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-us-state-facts-reset')?.addEventListener('click', async () => {
+    const button = $('btn-us-state-facts-reset');
+    try {
+      button.disabled = true;
+      const result = await apiPost('/api/us-state-facts/settings', { reset: true });
+      renderUsStateFactsSettings(result);
+      toast('US State Facts filters reset', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not reset filters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-us-state-facts-push-selected')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const id = $('us-state-facts-state')?.value;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/us-state-facts', withTarget({ id }));
+      toast(`Pushed ${result.state?.name || 'state'}`, 'good');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-us-state-facts-push-random')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/us-state-facts', withTarget());
+      toast(`Pushed ${result.state?.name || 'state'}`, 'good');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadUsStateFactsSettings();
+
   // ----------------------------------------------- Settings → Word of the Day
 
   let wordOfTheDayState = { words: [], partsOfSpeech: [], settings: { partsOfSpeech: [] } };
@@ -13625,18 +13808,19 @@
     if (!host) {
       return;
     }
-    const wrapped = wrapPreview(launch?.sentence || '', 22, { orphans: false }).slice(0, 4);
-    const lines = ['SPACE ALERT', '', ...wrapped];
-    while (lines.length < 6) {
-      lines.push('');
+    const rows = Array.isArray(launch?.rows) ? launch.rows.map((row) => [...row]) : [];
+    if (!rows.length) {
+      paintPreviewLines(host, ['', '', '', '', '', '']);
+      return;
     }
     const chip = spaceLaunchChipCode(chipColor);
-    paintPreviewLines(host, lines, (row, col) => {
-      if (row === 0 && (col === 0 || col === 1 || col === 20 || col === 21)) {
-        return chip;
-      }
-      return null;
-    });
+    if (rows[0]) {
+      rows[0][0] = chip;
+      rows[0][1] = chip;
+      rows[0][20] = chip;
+      rows[0][21] = chip;
+    }
+    renderVbGrid(host, rows);
   }
 
   function renderSpaceLaunchAlertsSettings(data = {}) {
@@ -18060,6 +18244,24 @@
         await loadCreditsSettings();
       } catch (error) {
         toast(error.message || 'Could not prune orphaned files', 'bad');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+    $('btn-credits-rebuild-previews')?.addEventListener('click', async () => {
+      const btn = $('btn-credits-rebuild-previews');
+      if (btn) btn.disabled = true;
+      try {
+        const result = await apiPost(`${CREDITS_ROUTE}/rebuild-previews`, {});
+        const queued = Number(result.queued || 0);
+        toast(
+          queued
+            ? `Rebuilding ${queued} wall preview${queued === 1 ? '' : 's'}…`
+            : 'No ready videos to rebuild',
+          'good',
+        );
+      } catch (error) {
+        toast(error.message || 'Could not rebuild wall previews', 'bad');
       } finally {
         if (btn) btn.disabled = false;
       }

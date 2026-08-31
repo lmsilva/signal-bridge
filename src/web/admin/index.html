@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal215">
+  <link rel="stylesheet" href="styles.css?v=signal218">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -154,7 +154,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="20" aria-busy="true"></div>
+               data-skeleton-count="21" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="language">
@@ -1890,6 +1890,40 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="news">US State Facts</div>
+        <div class="card us-state-facts-settings-card" id="us-state-facts-settings-card" data-settings-group="news" data-search-terms="us state facts capitals birds flowers oregon kentucky ohio education">
+          <div class="auth-head">
+            <div class="auth-name">Capitals, birds and flowers</div>
+            <span class="status-pill" id="us-state-facts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="us-state-facts-status-detail">
+            All 50 states with capital, bird, and flower — chip-flanked name like the marketplace channel.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Region filter</label>
+              <p class="hint" style="margin:0 0 8px">Leave all unchecked to rotate through every state.</p>
+              <div class="us-state-facts-region-grid" id="us-state-facts-region-grid"></div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-us-state-facts-save">Save filters</button>
+                <button type="button" class="btn btn-outline" id="btn-us-state-facts-reset">Reset filters</button>
+              </div>
+            </div>
+            <div class="settings-col board-preview-col">
+              <label class="field-label" for="us-state-facts-state">Preview state</label>
+              <select class="field-input" id="us-state-facts-state"></select>
+              <div class="vb-bezel preview-bezel" style="margin-top:12px" aria-hidden="true">
+                <div class="vb-grid" id="us-state-facts-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-us-state-facts-push-selected">Push selected</button>
+                <button type="button" class="btn btn-outline" id="btn-us-state-facts-push-random">Push random</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="news">Word of the Day</div>
         <div class="card word-of-the-day-settings-card" id="word-of-the-day-settings-card" data-settings-group="news" data-search-terms="word of the day vocabulary definition dictionary education">
           <div class="auth-head">
@@ -2272,30 +2306,40 @@
           </p>
           <div class="settings-columns">
             <div class="settings-col">
-              <label class="field-label" for="space-launch-hours-ahead">Look ahead</label>
-              <select id="space-launch-hours-ahead" class="field-input">
-                <option value="48">48 hours</option>
-                <option value="72">72 hours</option>
-                <option value="168" selected>7 days</option>
-                <option value="336">14 days</option>
-              </select>
-              <label class="field-label field-label-spaced" for="space-launch-chip-color">Alert chips</label>
-              <select id="space-launch-chip-color" class="field-input">
-                <option value="blue" selected>Blue</option>
-                <option value="green">Green</option>
-                <option value="white">White</option>
-              </select>
-              <label class="field-label field-label-spaced" for="space-launch-refresh-hours">Refresh cache every</label>
-              <select id="space-launch-refresh-hours" class="field-input">
-                <option value="3">3 hours</option>
-                <option value="6" selected>6 hours</option>
-                <option value="12">12 hours</option>
-                <option value="24">24 hours</option>
-              </select>
-              <label class="trivia-check field-label-spaced">
-                <input type="checkbox" id="space-launch-include-suborbital">
-                <span>Include suborbital launches</span>
-              </label>
+              <div class="field-grid field-grid-2">
+                <div class="field">
+                  <label class="field-label" for="space-launch-hours-ahead">Look ahead</label>
+                  <select id="space-launch-hours-ahead" class="field-input">
+                    <option value="48">48 hours</option>
+                    <option value="72">72 hours</option>
+                    <option value="168" selected>7 days</option>
+                    <option value="336">14 days</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="space-launch-chip-color">Alert chips</label>
+                  <select id="space-launch-chip-color" class="field-input">
+                    <option value="blue" selected>Blue</option>
+                    <option value="green">Green</option>
+                    <option value="white">White</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="space-launch-refresh-hours">Refresh cache every</label>
+                  <select id="space-launch-refresh-hours" class="field-input">
+                    <option value="3">3 hours</option>
+                    <option value="6" selected>6 hours</option>
+                    <option value="12">12 hours</option>
+                    <option value="24">24 hours</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="trivia-check">
+                    <input type="checkbox" id="space-launch-include-suborbital">
+                    <span>Include suborbital launches</span>
+                  </label>
+                </div>
+              </div>
               <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
                 <button type="button" class="btn btn-accent" id="btn-space-launch-alerts-save">Save</button>
                 <button type="button" class="btn btn-outline" id="btn-space-launch-alerts-reset">Reset defaults</button>
@@ -3131,7 +3175,8 @@
                 <span class="settings-group-title">Storage</span>
                 <strong id="credits-disk-usage">—</strong>
                 <button type="button" class="btn btn-outline btn-block" id="btn-credits-prune">Prune orphaned files</button>
-                <p class="hint credits-compact-hint">Removes media folders that no longer belong to any game.</p>
+                <button type="button" class="btn btn-outline btn-block" id="btn-credits-rebuild-previews">Rebuild wall previews</button>
+                <p class="hint credits-compact-hint">Prune removes media folders that no longer belong to any game. Rebuild re-encodes looping wall clips (24 fps, your full trim) without re-downloading.</p>
               </div>
             </div>
 
@@ -4597,7 +4642,7 @@
     </div>
   </div>
 
-  <script src="settings-filter.js?v=signal216"></script>
-  <script src="app.js?v=signal215"></script>
+  <script src="settings-filter.js?v=signal217"></script>
+  <script src="app.js?v=signal218"></script>
 </body>
 </html>

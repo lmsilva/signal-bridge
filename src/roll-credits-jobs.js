@@ -58,7 +58,39 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
     return `${item.gameId}/${stem}${suffix}`;
   }
 
+  async function applyPreview(item, videoPath) {
+    const preview = await media.renderVideoPreview(videoPath, {
+      trimStart: item.trimStart ?? null,
+      trimEnd: item.trimEnd ?? null,
+    });
+    return {
+      thumbPath: preview.posterPath || item.thumbPath || null,
+      previewPath: preview.previewPath || null,
+      durationSeconds: preview.durationSeconds || item.durationSeconds || null,
+      previewRevision: preview.previewRevision || Date.now(),
+      frameCount: preview.frameCount || null,
+      statusDetail: preview.previewPath
+        ? null
+        : `Saved, but the wall preview could not be built: ${preview.error || 'unknown reason'}`,
+    };
+  }
+
+  async function executePreview(job) {
+    const game = store.getGame(job.gameId);
+    const item = game?.media?.find((row) => row.id === job.mediaId);
+    if (!item) throw new Error('Media row no longer exists');
+    if (item.kind !== 'video' || !item.path) {
+      throw new Error('Preview rebuild needs a ready video file');
+    }
+    const patch = await applyPreview(item, item.path);
+    patchMedia(job.gameId, job.mediaId, patch);
+  }
+
   async function execute(job) {
+    if (job.kind === 'preview') {
+      await executePreview(job);
+      return;
+    }
     const game = store.getGame(job.gameId);
     const item = game?.media?.find((row) => row.id === job.mediaId);
     if (!item) throw new Error('Media row no longer exists');
@@ -96,16 +128,7 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
     // has a poster still and a looping preview. Failing that is not fatal — the
     // clip stays playable in the admin and the card falls back to cover art.
     if (item.kind === 'video' && typeof media.renderVideoPreview === 'function') {
-      const preview = await media.renderVideoPreview(patch.path, {
-        trimStart: item.trimStart ?? null,
-        trimEnd: item.trimEnd ?? null,
-      });
-      patch.thumbPath = preview.posterPath || patch.thumbPath;
-      patch.previewPath = preview.previewPath || null;
-      patch.durationSeconds = preview.durationSeconds || null;
-      if (!preview.previewPath) {
-        patch.statusDetail = `Saved, but the wall preview could not be built: ${preview.error || 'unknown reason'}`;
-      }
+      Object.assign(patch, await applyPreview(item, patch.path));
     }
     patchMedia(job.gameId, job.mediaId, patch);
   }
@@ -127,10 +150,12 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
           const detail = error?.message || String(error);
           job.state = 'failed';
           job.error = detail;
-          patchMedia(job.gameId, job.mediaId, {
-            status: 'failed',
-            statusDetail: detail,
-          });
+          if (job.kind !== 'preview') {
+            patchMedia(job.gameId, job.mediaId, {
+              status: 'failed',
+              statusDetail: detail,
+            });
+          }
         }
         notify();
       }
@@ -171,6 +196,42 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
     notify();
     queueMicrotask(() => drain());
     return { ...job };
+  }
+
+  function enqueuePreviewRebuild(gameId, mediaId) {
+    const id = String(gameId || '');
+    const itemId = String(mediaId || '');
+    if (!id || !itemId) throw new Error('Preview rebuild needs gameId and mediaId');
+    const existing = jobs.find((job) => (
+      job.gameId === id && job.mediaId === itemId
+      && (job.state === 'queued' || job.state === 'running')
+    ));
+    if (existing) return { ...existing };
+    const job = {
+      id: createJobId(),
+      gameId: id,
+      mediaId: itemId,
+      kind: 'preview',
+      state: 'queued',
+      error: null,
+    };
+    jobs.push(job);
+    notify();
+    queueMicrotask(() => drain());
+    return { ...job };
+  }
+
+  function rebuildWallPreviews() {
+    let queued = 0;
+    for (const game of store.getAllGames()) {
+      for (const item of game.media || []) {
+        if (item.kind !== 'video' || !item.path) continue;
+        if (item.status && item.status !== 'ready') continue;
+        enqueuePreviewRebuild(game.id, item.id);
+        queued += 1;
+      }
+    }
+    return queued;
   }
 
   function retry(jobOrId) {
@@ -219,6 +280,8 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
 
   return {
     enqueueDownload,
+    enqueuePreviewRebuild,
+    rebuildWallPreviews,
     restartPending,
     retry,
     getJobs: snapshot,

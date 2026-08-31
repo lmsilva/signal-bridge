@@ -68,6 +68,7 @@ const { fillerRows } = require('../../daily-bucket-fillers-layout');
 const { alertRows, cleanChip } = require('../../space-launch-alerts-layout');
 const { elementRows } = require('../../periodic-table-layout');
 const { wordRows } = require('../../word-of-the-day-layout');
+const { stateRows } = require('../../us-state-facts-layout');
 const { redLetterRows } = require('../../red-letter');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
@@ -1200,6 +1201,25 @@ function dailyBucketFillersFrames(payload = {}) {
 }
 
 /**
+ * US State Facts (marketplace State Capitals, Birds & Flowers):
+ * chip-flanked name, then CAPITAL / BIRD / FLOWER in two columns.
+ */
+function usStateFactsFrames(payload = {}) {
+  const state = payload.state || {};
+  const rows = Array.isArray(state.rows) && state.rows.length
+    ? state.rows
+    : stateRows(state);
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'us state facts'),
+    'US State Facts',
+    'state.facts',
+  )];
+}
+
+/**
  * Periodic Table (marketplace channel): title, blank, element headline,
  * blank, category, atomic weight — all centred on 22 columns.
  */
@@ -1819,8 +1839,8 @@ function starlinkTrackFrames(payload = {}) {
 }
 
 /**
- * Space Launch Alerts (marketplace): coloured `SPACE ALERT` chips, a blank
- * row, then up to four left-aligned body lines.
+ * Space Launch Alerts (marketplace): coloured `SPACE LAUNCH` chips, then
+ * up to five left-aligned body lines starting on the next row.
  */
 function spaceLaunchAlertFrames(payload = {}) {
   const sentence = fold(payload.launch?.sentence || payload.sentence || '');
@@ -1869,6 +1889,7 @@ const FORMATTERS = {
   'warm.fuzzies': warmFuzziesFrames,
   'bucket.fillers': dailyBucketFillersFrames,
   'periodic.table': periodicTableFrames,
+  'state.facts': usStateFactsFrames,
   'word.day': wordOfTheDayFrames,
   'dad.jokes': dadJokesFrames,
   'us.weather-map': usWeatherMapFrames,
@@ -1915,6 +1936,7 @@ module.exports = {
   warmFuzziesFrames,
   dailyBucketFillersFrames,
   periodicTableFrames,
+  usStateFactsFrames,
   wordOfTheDayFrames,
   dadJokesFrames,
   usWeatherMapFrames,

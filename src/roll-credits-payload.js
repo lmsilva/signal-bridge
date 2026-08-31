@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const fs = require('fs');
 const { resolveCardBaseUrl } = require('./steam-library-tour');
 
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
@@ -82,6 +83,21 @@ function createRollCreditsPayload({
     return item.kind === 'video' ? Boolean(item.previewPath) : Boolean(item.path);
   }
 
+  function cacheBust(url, item) {
+    if (!url) return url;
+    let revision = item?.previewRevision;
+    if (revision == null && item?.previewPath && typeof rollCredits.media.absolutePath === 'function') {
+      try {
+        revision = Math.round(fs.statSync(rollCredits.media.absolutePath(item.previewPath)).mtimeMs);
+      } catch {
+        revision = null;
+      }
+    }
+    if (revision == null && item?.frameCount) revision = item.frameCount;
+    if (revision == null) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}v=${revision}`;
+  }
+
   /** Videos travel as their WebP loop, with the poster still as the fallback. */
   function displayUrls(item, baseUrl) {
     if (item.kind !== 'video') {
@@ -92,7 +108,10 @@ function createRollCreditsPayload({
       };
     }
     return {
-      url: absoluteUrl(rollCredits.media.publicUrl(item.previewPath), baseUrl),
+      url: cacheBust(
+        absoluteUrl(rollCredits.media.publicUrl(item.previewPath), baseUrl),
+        item,
+      ),
       thumbUrl: item.thumbPath
         ? absoluteUrl(rollCredits.media.publicUrl(item.thumbPath), baseUrl)
         : null,
@@ -141,8 +160,33 @@ function createRollCreditsPayload({
         kind: heroItem.kind,
         ...displayUrls(heroItem, baseUrl),
       } : null,
+      // Poster / cover / first screenshot — the wall paints this until the
+      // looping WebP has a local copy. Never the source .mp4.
+      still: stillOf(heroItem, ready, baseUrl),
       screenshots,
     };
+  }
+
+  function stillOf(heroItem, ready, baseUrl) {
+    if (heroItem?.kind !== 'video') return null;
+    if (heroItem.thumbPath) {
+      return {
+        id: heroItem.id,
+        kind: 'video',
+        url: absoluteUrl(rollCredits.media.publicUrl(heroItem.thumbPath), baseUrl),
+        thumbUrl: null,
+        animated: false,
+      };
+    }
+    const cover = ready.find((item) => item.kind === 'cover');
+    if (cover) {
+      return { id: cover.id, kind: 'cover', ...displayUrls(cover, baseUrl) };
+    }
+    const shot = ready.find((item) => item.kind === 'screenshot');
+    if (shot) {
+      return { id: shot.id, kind: 'screenshot', ...displayUrls(shot, baseUrl) };
+    }
+    return null;
   }
 
   function cardFor(game, { baseUrl = '', settings = settingsSnapshot() } = {}) {

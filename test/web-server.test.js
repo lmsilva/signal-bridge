@@ -1356,6 +1356,37 @@ test('periodic table push delivers an element and settings can filter categories
   }
 });
 
+test('us state facts push delivers a state and settings can filter regions', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/us-state-facts/settings');
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.total, 50);
+    assert.ok(listed.body.available >= 50);
+    assert.equal(listed.body.states.length, 50);
+    assert.ok(listed.body.states.every((state) => state.rows?.length === 6));
+
+    const pushed = await postJson(base, '/api/push/us-state-facts', { id: 'or' });
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'state.facts');
+    assert.equal(pushed.body.state.id, 'or');
+    assert.ok(pushed.body.state.name);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'state.facts');
+
+    const filtered = await postJson(base, '/api/us-state-facts/settings', {
+      regions: ['west'],
+    });
+    assert.ok(filtered.body.available >= 10);
+    assert.ok(filtered.body.available < 50);
+
+    const reset = await postJson(base, '/api/us-state-facts/settings', { reset: true });
+    assert.equal(reset.body.available, 50);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('word of the day push delivers an entry and settings can filter parts of speech', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -2890,6 +2921,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'ring-doorbell-settings-card',
     'learn-japanese-settings-card',
     'learn-language-settings-card',
+    'space-launch-alerts-settings-card',
   ]) {
     assert.match(
       css,
@@ -2978,9 +3010,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal215/);
-  assert.match(html, /settings-filter\.js\?v=signal216/);
-  assert.match(html, /app\.js\?v=signal215/);
+  assert.match(html, /styles\.css\?v=signal218/);
+  assert.match(html, /settings-filter\.js\?v=signal217/);
+  assert.match(html, /app\.js\?v=signal218/);
   assert.match(html, /id="tinyurl-settings-card"/);
   assert.match(html, /id="word-scramble-settings-card"/);
   assert.match(html, /id="word-scramble-sessions-sheet"/);
@@ -3092,6 +3124,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-periodic-table-push-selected"/);
   assert.match(html, /id="btn-periodic-table-push-random"/);
   assert.match(html, /id="periodic-table-element"/);
+  assert.match(html, /id="us-state-facts-settings-card"/);
+  assert.match(html, /id="btn-us-state-facts-push-selected"/);
+  assert.match(html, /id="btn-us-state-facts-push-random"/);
+  assert.match(html, /id="us-state-facts-state"/);
   assert.match(html, /id="word-of-the-day-settings-card"/);
   assert.match(html, /id="btn-word-of-the-day-push-selected"/);
   assert.match(html, /id="btn-word-of-the-day-push-random"/);
@@ -3157,6 +3193,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="space-launch-alerts-settings-card"/);
   assert.match(html, /id="btn-space-launch-alerts-push-selected"/);
   assert.match(html, /id="space-launch-alerts-preview"/);
+  assert.match(html, /space-launch-alerts-settings-card[\s\S]*?field-grid field-grid-2/);
   assert.match(html, /id="btn-starlink-tracker-push"/);
   assert.match(html, /id="locale-currency"/);
   assert.match(html, /id="world-population-settings-card"/);
@@ -3754,6 +3791,27 @@ test('Roll Credits trim endpoint forwards the clip range to the service', async 
   const rejected = await postJson(base, '/api/roll-credits/games/rc_1/media/md_2/trim', {});
   assert.equal(rejected.status, 400);
   assert.match(rejected.body.error, /Only video media/);
+});
+
+test('Roll Credits rebuild-previews queues wall encodes', async (t) => {
+  const rollCredits = {
+    store: { getAllGames: () => [], getSystemById: () => null },
+    media: {
+      routePrefix: '/roll-credits-media/',
+      publicUrl: (value) => `/roll-credits-media/${value}`,
+      absolutePath: () => path.join(os.tmpdir(), 'missing-roll-credits-test-media'),
+    },
+    statusSnapshot: () => ({ gameCount: 0 }),
+    getSettings: () => ({ display: {}, limits: { maxImageBytes: 1024 } }),
+    rebuildWallPreviews: () => ({ queued: 3 }),
+    start: () => {},
+    close: () => {},
+  };
+  const { webServer, base } = await startTestServer({ rollCredits });
+  t.after(() => webServer.stop());
+  const result = await postJson(base, '/api/roll-credits/rebuild-previews', {});
+  assert.equal(result.status, 202);
+  assert.equal(result.body.queued, 3);
 });
 
 test('Roll Credits resolution endpoint re-queues a YouTube download', async (t) => {
@@ -4843,6 +4901,7 @@ test('Roll Credits media rows open a preview and videos expose clip trimming', (
   assert.match(html, /id="btn-credits-resolution-save"/);
   assert.match(html, /id="btn-credits-trim-save"/);
   assert.match(html, /id="btn-credits-trim-clear"/);
+  assert.match(html, /id="btn-credits-rebuild-previews"/);
   assert.match(js, /function openCreditsPreview\(/);
   assert.match(js, /function parseCreditsClock\(/);
   assert.match(js, /function creditsBindPreviewLoop\(/);

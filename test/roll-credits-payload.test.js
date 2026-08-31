@@ -77,7 +77,7 @@ test('display cards prefer cover hero when screenshots exist', () => {
   assert.ok(!JSON.stringify(card.media).includes('.mp4'));
 });
 
-function videoFixture({ previewPath, mediaPriority }) {
+function videoFixture({ previewPath, mediaPriority, thumbPath = 'rc_clip/thumbs/clip.poster.jpg' }) {
   const game = {
     id: 'rc_clip',
     title: 'Clip Test',
@@ -92,8 +92,9 @@ function videoFixture({ previewPath, mediaPriority }) {
         status: 'ready',
         order: 0,
         path: 'rc_clip/video/clip.mp4',
-        thumbPath: 'rc_clip/thumbs/clip.poster.jpg',
+        thumbPath,
         previewPath,
+        previewRevision: 99,
       },
       {
         id: 'c1', kind: 'cover', status: 'ready', order: 1, path: 'rc_clip/cover.jpg',
@@ -126,14 +127,38 @@ test('a top-priority video ships as its looping preview, never the source file',
   assert.equal(card.media.hero.animated, true);
   assert.equal(
     card.media.hero.url,
-    'https://bridge:47810/roll-credits-media/rc_clip/thumbs/clip.preview.webp',
+    'https://bridge:47810/roll-credits-media/rc_clip/thumbs/clip.preview.webp?v=99',
   );
-  // The poster still is what the wall paints until the loop is decoded.
+  // The poster still is what the wall paints until the loop is on disk.
   assert.equal(
     card.media.hero.thumbUrl,
     'https://bridge:47810/roll-credits-media/rc_clip/thumbs/clip.poster.jpg',
   );
+  assert.equal(card.media.still.kind, 'video');
+  assert.equal(card.media.still.animated, false);
+  assert.equal(
+    card.media.still.url,
+    'https://bridge:47810/roll-credits-media/rc_clip/thumbs/clip.poster.jpg',
+  );
   assert.ok(!JSON.stringify(card.media).includes('.mp4'));
+});
+
+test('a video without a poster still falls back to the cover', () => {
+  const tours = createRollCreditsPayload({
+    rollCredits: videoFixture({
+      previewPath: 'rc_clip/thumbs/clip.preview.webp',
+      mediaPriority: ['video', 'cover', 'screenshot'],
+      thumbPath: null,
+    }),
+  });
+  const card = tours.getCard('rc_clip', { baseUrl: 'https://bridge:47810' });
+  assert.equal(card.media.hero.animated, true);
+  assert.equal(card.media.still.kind, 'cover');
+  assert.equal(card.media.still.animated, false);
+  assert.equal(
+    card.media.still.url,
+    'https://bridge:47810/roll-credits-media/rc_clip/cover.jpg',
+  );
 });
 
 test('a video without a rendered preview is skipped rather than sent as video', () => {
