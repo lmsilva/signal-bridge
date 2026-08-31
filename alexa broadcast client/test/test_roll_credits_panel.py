@@ -27,6 +27,7 @@ from src.roll_credits_panel import (
     choose_still_hero,
     decode_animation,
     clip_text_to_lines,
+    fit_single_line,
     counters_layout,
     facts_card_layout,
     format_beaten,
@@ -427,6 +428,43 @@ class RollCreditsLayoutTests(unittest.TestCase):
         self.assertTrue(title_needs_marquee("Portal", 300, measure=wide))
         self.assertFalse(title_needs_marquee("Portal", 300, measure=lambda text: 40))
 
+    def test_latest_title_uses_real_glyph_width_not_em_squares(self):
+        """The wall showed "Contra…" with half the Latest Inducted card empty.
+
+        The old clip counted how many M glyphs fit, then cut the first word.
+        Real letters are narrower than M, so the full title must survive a
+        typical hero text column (~400px at 24pt).
+        """
+        title = "Contra Anniversary Collection"
+
+        def segoeish(text):
+            # 24pt bold on the 125% wall: an em is ~50px, real letters ~11px.
+            return sum(50 if ch == "M" else 11 for ch in str(text or ""))
+
+        self.assertLessEqual(segoeish(title), 400)
+        self.assertGreater(segoeish("M" * 9), 400)
+        self.assertEqual(
+            clip_text_to_lines(
+                title, width_px=400, font_size=24, max_lines=1, measure=segoeish,
+            ),
+            title,
+        )
+        self.assertEqual(fit_single_line(title, 400, segoeish), title)
+        self.assertFalse(title_needs_marquee(title, 400, measure=segoeish))
+
+    def test_overflowing_title_keeps_more_than_the_first_word(self):
+        def measure(text):
+            return len(str(text or "")) * 20
+
+        clipped = clip_text_to_lines(
+            "Contra Anniversary Collection",
+            width_px=200, font_size=24, max_lines=1, measure=measure,
+        )
+        self.assertTrue(clipped.endswith("…"))
+        self.assertNotEqual(clipped, "Contra…")
+        self.assertGreater(len(clipped), len("Contra…"))
+        self.assertLessEqual(measure(clipped), 200)
+
     def test_tour_chrome_matches_slideshow_language(self):
         self.assertEqual(next_in_label(12), "NEXT IN 12s")
         self.assertEqual(tour_counter_label(0, 29), "01 / 29")
@@ -522,6 +560,27 @@ class RollCreditsPhaseTests(unittest.TestCase):
         self.assertEqual(panel.scheduled[1], "_start_games")
         self.assertGreaterEqual(panel.scheduled[0], 10)
         self.assertFalse(hasattr(panel, "started"))
+
+    def test_latest_title_line_paints_the_full_contra_name(self):
+        painted = []
+        panel = RollCreditsPanel.__new__(RollCreditsPanel)
+        panel._marquees = []
+        panel._widgets = []
+        panel.root = MagicMock()
+        panel.canvas = MagicMock()
+        panel.canvas.create_text.side_effect = lambda *args, **kwargs: painted.append(
+            kwargs.get("text")
+        ) or 1
+        panel.canvas.create_window.side_effect = lambda *args, **kwargs: painted.append(
+            "window"
+        ) or 1
+        panel._track = lambda item: item
+        RollCreditsPanel._paint_title_line(
+            panel, 100, 80, 400, 40, "Contra Anniversary Collection",
+            font=("Segoe UI", 24, "bold"), fill="#fff",
+            measure=lambda text: 11 * len(str(text or "")),
+        )
+        self.assertEqual(painted, ["Contra Anniversary Collection"])
 
 
 if __name__ == "__main__":
