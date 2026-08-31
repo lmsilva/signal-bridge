@@ -19,7 +19,7 @@ const OUT = path.join(__dirname, '..', 'src', 'word-riddles-riddles.json');
 const CRAWSOME = 'https://raw.githubusercontent.com/crawsome/riddles/master/riddles.csv';
 const NKILM = 'https://raw.githubusercontent.com/nkilm/riddles-api/main/data/riddles.json';
 
-const RIDDLE_ROWS = 4;
+const RIDDLE_ROWS = 6;
 const ANSWER_ROWS = 2;
 const BODY_WIDTH = 22;
 const RIDDLE_MAX = 220;

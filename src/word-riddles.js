@@ -3,6 +3,8 @@
  *
  * Corpus is local JSON. No network at runtime. A round is three frames:
  * intro ("RIDDLE ME THIS..."), the riddle, then the answer after a delay.
+ * Riddle and answer use all six rows. The physical VESTABOARD wordmark
+ * lives on the bezel, not on the flaps.
  */
 
 const crypto = require('crypto');
@@ -29,9 +31,8 @@ const {
 } = require('./vestaboard/encoder');
 
 const TYPE = 'word.riddles';
-const RIDDLE_ROWS = 4;
-const ANSWER_ROWS = 5;
-const FOOTER = 'VESTABOARD';
+const RIDDLE_ROWS = 6;
+const ANSWER_ROWS = 6;
 const INTRO_DWELL_SECONDS = 8;
 const ANSWER_DWELL_SECONDS = 20;
 
@@ -176,11 +177,7 @@ function riddleRows(text) {
   if (!lines.length) {
     return [];
   }
-  return [
-    ...placeBlock(lines, RIDDLE_ROWS, { align: 'block' }),
-    blankRow(COLS),
-    centerLine(FOOTER),
-  ];
+  return placeBlock(lines, RIDDLE_ROWS, { align: 'block' });
 }
 
 function answerRows(text) {
@@ -188,10 +185,7 @@ function answerRows(text) {
   if (!lines.length) {
     return [];
   }
-  return [
-    ...placeBlock(lines, ANSWER_ROWS, { align: 'center' }),
-    centerLine(FOOTER),
-  ];
+  return placeBlock(lines, ANSWER_ROWS, { align: 'center' });
 }
 
 function newCustomId() {
@@ -471,7 +465,6 @@ module.exports = {
   TYPE,
   RIDDLE_ROWS,
   ANSWER_ROWS,
-  FOOTER,
   INTRO_DWELL_SECONDS,
   ANSWER_DWELL_SECONDS,
   ROWS,

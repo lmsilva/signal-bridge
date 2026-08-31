@@ -573,6 +573,43 @@ test('the board state reports whether quiet hours are running', () => {
   assert.equal(quiet.queue.state().quietHours, true);
 });
 
+test('board dwell keeps a rotation page up longer than the rate window', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60 });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('CLOCK', 2)]);
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null, 'the flaps are free; the page is not');
+  assert.equal(h.queue.pending().length, 1);
+  assert.ok(h.queue.state().snapshotCooldownMs > 40 * SECOND);
+  h.advance(44 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 2);
+});
+
+test('an alert does not wait out the board dwell', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60 });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })], { priority: 'alert' });
+  h.advance(2 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 9);
+  assert.equal(h.queue.state().snapshotUntil, null);
+});
+
+test('a live game card does not wait out the board dwell', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60 });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([frame('ROUND', 2, { source: 'word.scramble' })]);
+  h.advance(2 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.queue.state().snapshotUntil, null);
+});
+
 test('holdSeconds keeps the next snapshot off the board until the hold ends', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);
