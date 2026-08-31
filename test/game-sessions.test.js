@@ -196,14 +196,35 @@ test('idle timeout closes a started game and archives it as abandoned', () => {
   assert.equal(row.reason, 'idle');
 });
 
-test('an untouched invite expires without counting as a played game heartbeat', () => {
-  const { api, archive, advance } = makeApi();
+test('phones can still join before the lobby window runs out', () => {
+  const { api, advance, locks, pushes } = makeApi();
   const invited = api.create();
-  advance(61);
+  assert.equal(invited.remainingSeconds, 10);
+  assert.equal(pushes[0].payload.holdSeconds, 10);
+  assert.deepEqual(locks[0], { source: 'word.scramble', active: true });
+
+  advance(9);
+  assert.equal(api.getByCode(invited.code).phase, 'invited');
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  assert.equal(luis.ok, true);
+  assert.equal(luis.session.phase, 'lobby');
+});
+
+test('an empty invite ends after the lobby seconds and hands the board back', () => {
+  const { api, archive, advance, locks, pushes } = makeApi();
+  const invited = api.create();
+  advance(11);
   assert.equal(api.getByCode(invited.code), null);
+  assert.equal(api.join({ code: invited.code, name: 'Ada' }).ok, false);
   const row = archive.listAll()[0];
   assert.equal(row.reason, 'invite-expired');
   assert.equal(row.abandoned, true);
+  assert.deepEqual(locks[locks.length - 1], { source: 'word.scramble', active: false });
+  assert.equal(
+    pushes.some((row) => row.payload.card === 'final'),
+    false,
+    'nobody sat down, so there are no scores to leave up',
+  );
 });
 
 test('turning late joining off closes the door once the lobby breaks', () => {

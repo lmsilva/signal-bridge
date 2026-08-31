@@ -306,13 +306,14 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const abandoned = reason !== 'finished';
     const alreadyFinal = session.phase === 'final';
     const scores = session.scores?.length ? session.scores : standings(session);
+    const hadAGame = session.hadPlayer || scores.length > 0;
     session.phase = 'closed';
     session.phaseEndsAt = null;
-    // Scores stay up for every ending — finished, admin stop, idle, or the
-    // last player leaving. A blank clear used to wipe a game nobody can
-    // join; the house still wants to see how it finished. Skip a second
-    // flip when the final card is already on the board.
-    if (!alreadyFinal) {
+    // Scores stay up when someone actually sat down. An empty invite that
+    // times out should just drop the lock so rotation can continue — there
+    // is nothing to celebrate. Skip a second flip when the final card is
+    // already on the board.
+    if (!alreadyFinal && hadAGame) {
       const settings = settingsOf(session.gameType);
       pushPhase(session, 'final', {
         scores,
@@ -470,7 +471,15 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   function advance(session) {
+    if (session.phase === 'invited') {
+      closeSession(session, 'invite-expired');
+      return;
+    }
     if (session.phase === 'lobby') {
+      if (!session.players.length) {
+        closeSession(session, 'invite-expired');
+        return;
+      }
       startRound(session);
       return;
     }
@@ -494,14 +503,18 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     }
     const settings = settingsOf(gameType);
     const code = mintCode(random, byCode);
+    // Empty invite uses the lobby window, not the hour-long invite TTL.
+    // A push or schedule that nobody joins must let the board go after
+    // that many seconds; the first join then starts the real lobby.
+    const inviteExpiresAt = now() + settings.lobbySeconds * 1000;
     const session = {
       id: crypto.randomUUID(),
       gameType,
       code,
       phase: 'invited',
       createdAt: now(),
-      inviteExpiresAt: now() + settings.inviteTtlMinutes * 60 * 1000,
-      phaseEndsAt: null,
+      inviteExpiresAt,
+      phaseEndsAt: inviteExpiresAt,
       players: [],
       rounds: [],
       roundIndex: 0,
@@ -514,7 +527,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     };
     sessions.set(session.id, session);
     byCode.set(code, session.id);
-    pushPhase(session, 'invite', { holdSeconds: settings.inviteTtlMinutes * 60, takeover: true });
+    pushPhase(session, 'invite', { holdSeconds: settings.lobbySeconds, takeover: true });
     return publicSession(session);
   }
 
