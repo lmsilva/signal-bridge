@@ -406,23 +406,67 @@ test('an admin ending a session hands the board back', () => {
   assert.deepEqual(locks[locks.length - 1], { source: 'word.scramble', active: false });
 });
 
-test('when the last player leaves the session closes and clears the board', () => {
+test('leaving mid-round posts the live score, not a blank board', () => {
+  const { api, advance, pushes } = makeApi();
+  const invited = api.create();
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  advance(11);
+  const live = api.getByCode(invited.code);
+  api.submit({ sessionId: live.id, playerId: luis.player.id, payload: { word: 'cat' } });
+  pushes.length = 0;
+  api.leave({ sessionId: invited.sessionId, playerId: luis.player.id });
+  const last = pushes[pushes.length - 1];
+  assert.equal(last.payload.card, 'final');
+  assert.equal(last.payload.scores[0].name, 'Luis');
+  assert.ok(last.payload.scores[0].score > 0, 'open-round points must still show');
+});
+
+test('when the last player leaves the session closes on the scores', () => {
   const { api, pushes } = makeApi();
   const invited = api.create();
   const luis = api.join({ code: invited.code, name: 'Luis' });
   pushes.length = 0;
   api.leave({ sessionId: invited.sessionId, playerId: luis.player.id });
   assert.equal(api.getById(invited.sessionId), null);
-  assert.equal(pushes[pushes.length - 1].payload.card, 'clear');
+  const last = pushes[pushes.length - 1];
+  assert.equal(last.payload.card, 'final');
+  assert.equal(last.payload.final, true);
+  assert.equal(last.payload.showCode, false);
+  assert.equal(last.payload.scores[0].name, 'Luis');
+  assert.equal(last.options.replaceCard, 'final');
 });
 
-test('ending a session blanks the board instead of leaving the lobby up', () => {
+test('ending a session shows the scores instead of leaving the lobby up', () => {
   const { api, pushes } = makeApi();
   const invited = api.create();
   api.join({ code: invited.code, name: 'Luis' });
   pushes.length = 0;
   api.end(invited.sessionId);
   const last = pushes[pushes.length - 1];
-  assert.equal(last.payload.card, 'clear');
+  assert.equal(last.payload.card, 'final');
+  assert.equal(last.payload.scores[0].name, 'Luis');
   assert.equal(last.options.replaceSource, 'word.scramble');
+});
+
+test('a finished game keeps the final scores instead of blanking the board', () => {
+  const { api, advance, pushes } = makeApi();
+  const invited = api.create();
+  api.join({ code: invited.code, name: 'Luis' });
+  api.subscribe(invited.sessionId, { write() {}, end() {} });
+  advance(11);
+  advance(21);
+  advance(6);
+  advance(21);
+  advance(6);
+  advance(21);
+  assert.equal(api.getByCode(invited.code).phase, 'final');
+  const before = pushes.filter((row) => row.payload.card === 'final').length;
+  advance(6);
+  assert.equal(api.getByCode(invited.code), null);
+  assert.equal(
+    pushes.filter((row) => row.payload.card === 'final').length,
+    before,
+    'closing after the final card must not flip the board again',
+  );
+  assert.equal(pushes.some((row) => row.payload.card === 'clear'), false);
 });

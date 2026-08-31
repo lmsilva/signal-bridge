@@ -197,9 +197,8 @@ function bestRows({ word = '', name = '', points = 0 } = {}) {
 }
 
 /**
- * The game is over. Blank rather than a sign-off card: whatever airs next
- * should own the board, and a card reading "waiting to start" for a session
- * nobody can join any more is worse than an empty wall for a minute.
+ * Kept for older payloads that still ask for a blank. New sessions close
+ * on the final scores card instead — the house wants to see how it ended.
  */
 function clearedRows() {
   return assertValidLayout(
@@ -315,7 +314,7 @@ function framesFor(payload = {}) {
     case 'best':
       return bestFrames(payload);
     case 'closed':
-      return clearFrames(payload);
+      return finalFrames(payload);
     default:
       return inviteFrames(payload);
   }
