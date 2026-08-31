@@ -106,7 +106,25 @@
       cell.type = 'button';
       cell.className = 'gm-cell';
       cell.textContent = letter;
-      cell.addEventListener('click', () => tap(index));
+      // A tap on a letter while the keyboard is up must dismiss it and
+      // keep the letter — iOS would otherwise swallow the click as the
+      // keyboard animates down.
+      cell.addEventListener('pointerdown', (event) => {
+        if (document.activeElement !== input && !document.body.classList.contains('gm-keyboard')) {
+          return;
+        }
+        event.preventDefault();
+        leaveKeyboardMode();
+        tap(index);
+        cell.dataset.gmHandled = '1';
+      });
+      cell.addEventListener('click', () => {
+        if (cell.dataset.gmHandled === '1') {
+          delete cell.dataset.gmHandled;
+          return;
+        }
+        tap(index);
+      });
       gridEl.appendChild(cell);
       return cell;
     });
@@ -147,39 +165,79 @@
   }
 
   /*
-   * The on-screen keyboard eats most of a phone. Publishing the visible
-   * height lets the board shrink to what is left instead of scrolling off.
-   * Safari still scrolls a focused field to the top of the visual viewport,
-   * so we lock the page and push the scroll back to the board.
+   * Soft keyboards eat most of a phone or tablet. The board has to shrink
+   * into the visual viewport so the letters stay tappable. A hardware
+   * keyboard (desktop, docked iPad) must not shrink the board just because
+   * the field is focused.
    */
   const viewport = window.visualViewport;
   const stage = document.querySelector('.gm-stage');
   const meta = document.querySelector('.gm-meta');
   const status = document.getElementById('gm-play-status');
 
+  function visibleHeight() {
+    return viewport ? viewport.height : window.innerHeight;
+  }
+
+  function keyboardInset() {
+    if (!viewport) return 0;
+    return Math.max(0, window.innerHeight - viewport.height, viewport.offsetTop || 0);
+  }
+
+  function likelyPhone() {
+    return window.matchMedia('(max-width: 759px)').matches
+      && window.matchMedia('(hover: none)').matches;
+  }
+
+  function shouldCompactNow() {
+    if (keyboardInset() > 80) return true;
+    return likelyPhone();
+  }
+
   function publishViewport() {
-    const height = viewport ? viewport.height : window.innerHeight;
+    const height = visibleHeight();
+    const top = viewport ? viewport.offsetTop : 0;
     document.documentElement.style.setProperty('--gm-vh', `${Math.round(height)}px`);
-    if (!document.body.classList.contains('gm-typing')) return;
+    document.documentElement.style.setProperty('--gm-vv-top', `${Math.round(top)}px`);
+    if (!document.body.classList.contains('gm-keyboard')) return;
     const chrome = (meta?.offsetHeight || 0)
       + (form?.offsetHeight || 0)
       + (status?.offsetHeight || 0)
-      + 28;
-    const boardMax = Math.max(140, Math.round(height - chrome));
+      + 24;
+    const width = Math.round((viewport && viewport.width) || window.innerWidth) - 32;
+    const boardMax = Math.max(120, Math.min(Math.round(height - chrome), width));
     document.documentElement.style.setProperty('--gm-board-max', `${boardMax}px`);
   }
 
   function keepBoardInView() {
-    if (!document.body.classList.contains('gm-typing')) return;
+    if (!document.body.classList.contains('gm-keyboard')) return;
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
     stage?.scrollTo?.(0, 0);
   }
 
+  function syncKeyboardMode() {
+    const compact = document.activeElement === input && shouldCompactNow();
+    document.body.classList.toggle('gm-keyboard', compact);
+    if (!compact) {
+      document.documentElement.style.removeProperty('--gm-board-max');
+    }
+  }
+
   function afterKeyboard() {
+    syncKeyboardMode();
     publishViewport();
     keepBoardInView();
+  }
+
+  function leaveKeyboardMode() {
+    document.body.classList.remove('gm-keyboard');
+    document.body.classList.remove('gm-typing');
+    document.documentElement.style.removeProperty('--gm-board-max');
+    if (document.activeElement === input) {
+      input.blur();
+    }
   }
 
   if (viewport) {
@@ -190,16 +248,20 @@
 
   input?.addEventListener('focus', () => {
     document.body.classList.add('gm-typing');
+    if (shouldCompactNow()) document.body.classList.add('gm-keyboard');
     placeCaretAtEnd();
     afterKeyboard();
     requestAnimationFrame(() => {
       afterKeyboard();
       placeCaretAtEnd();
     });
+    // iOS raises the keyboard after focus; measure again when it settles.
+    window.setTimeout(afterKeyboard, 280);
   });
   input?.addEventListener('click', placeCaretAtEnd);
   input?.addEventListener('blur', () => {
     document.body.classList.remove('gm-typing');
+    document.body.classList.remove('gm-keyboard');
     document.documentElement.style.removeProperty('--gm-board-max');
   });
 })();

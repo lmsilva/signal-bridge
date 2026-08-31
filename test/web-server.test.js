@@ -2202,7 +2202,9 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(scramble, /keepBoardInView/);
     assert.match(scramble, /setSelectionRange/);
     assert.match(scramble, /--gm-board-max/);
-    assert.match(css, /body\.gm-typing/);
+    assert.match(scramble, /leaveKeyboardMode/);
+    assert.match(scramble, /gm-keyboard/);
+    assert.match(css, /body\.gm-keyboard/);
     assert.match(css, /position:\s*fixed/);
     assert.match(page.text, /interactive-widget=resizes-content/);
 
