@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-31 (Word Scramble empty invite ends after lobby seconds)
+**Last updated:** 2026-08-31 (Shopping list recognizes what’s-my-list asks)
 
 ---
 
@@ -867,6 +867,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-31: **Shopping list recognizes what’s-my-list asks** — `SHOPPING_SHOW_RE` only matched “what’s on/in … shopping list” / show / read, so “Alexa, what’s my shopping list” (and ASR without the apostrophe) never became a `shopping-list` voice event for the Windows overlay. The matcher now accepts those natural phrasings; a matched ask still fans out UDP + Vestaboard the same way as “show my shopping list”. Tests: `shopping-list`, `voice-query-parser`.
 - 2026-08-31: **Word Scramble empty invite ends after lobby seconds** — a manual or scheduled push that nobody joins used to hold the Vestaboard lock for `inviteTtlMinutes` (default 60). The empty invite now expires after Settings → **Lobby** (`lobbySeconds`); the first join still starts a fresh lobby. A no-show drops the lock without a scores card so rotation continues. Tests: `game-sessions`.
 - 2026-08-31: **Word Scramble close shows final scores** — last player leaving, admin stop, idle, and invite expiry used to push a blank `clear` card. Those endings now flip `FINAL SCORES` with whoever was seated and the points they had (including the open round). A game that already reached the final card is left on that card. Tests: `game-sessions`, `word-scramble`.
 
