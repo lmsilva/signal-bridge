@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 
 const { validate } = require('../src/vestaboard/encoder');
-const { parseLayout, formatLayout } = require('../src/vestaboard/notation');
+const { formatLayout } = require('../src/vestaboard/notation');
 const { wordRiddlesFrames } = require('../src/vestaboard/formatters/feeds');
 const {
   loadShipped,
@@ -24,12 +24,13 @@ const { sanitiseSettings, REVEAL_DEFAULT } = require('../src/word-riddles-settin
 
 function assertLayout(actual, drawing, label) {
   assert.equal(validate(actual).ok, true, `${label} failed validation`);
-  const expected = parseLayout(drawing.join('\n'), { label });
-  if (formatLayout(actual) !== formatLayout(expected)) {
+  const expected = drawing.join('\n');
+  const got = formatLayout(actual);
+  if (got !== expected) {
     assert.fail(
       `${label} does not match the spec drawing\n\n`
-      + `--- expected ---\n${formatLayout(expected)}\n\n`
-      + `--- actual ---\n${formatLayout(actual)}\n`,
+      + `--- expected ---\n${expected}\n\n`
+      + `--- actual ---\n${got}\n`,
     );
   }
 }
@@ -48,7 +49,7 @@ test('the shipped corpus is hundreds of board-fit riddles', () => {
     assert.ok(item.riddle);
     assert.ok(item.answer);
     assert.equal(fitsBoard(item.riddle, item.answer), true, item.riddle);
-    assert.ok(riddleLines(item.riddle).length <= 4, item.riddle);
+    assert.ok(riddleLines(item.riddle).length <= 6, item.riddle);
   }
 });
 
@@ -73,19 +74,44 @@ test('word riddle frames match the marketplace intro, riddle, and answer', () =>
     'bbbbbbbbbbbggggggggggg',
   ], 'word riddles intro');
   assertLayout(frames[1].rows, [
+    '',
     'I  AM  AN  ODD NUMBER.',
     'TAKE AWAY A LETTER AND',
     'I  BECOME  EVEN.  WHAT',
     'NUMBER  AM  I?',
     '',
-    '      VESTABOARD',
   ], 'word riddle body');
   assert.equal(validate(frames[2].rows).ok, true, 'word riddle answer failed validation');
   assert.equal(
     formatLayout(frames[2].rows),
-    ['', '', '      S E V E N', '', '', '      VESTABOARD'].join('\n'),
+    ['', '', '      S E V E N', '', '', ''].join('\n'),
     'word riddle answer',
   );
+});
+
+test('a one-line answer sits in the middle of the board, not on a VESTABOARD footer', () => {
+  const payload = buildWordRiddlesPayload({
+    id: 'demo-musicians',
+    riddle: 'Picasso painting of a trio',
+    answer: 'Three musicians',
+  }, { showIntro: false });
+  const frames = wordRiddlesFrames(payload);
+  assert.equal(frames.length, 2);
+  assertLayout(frames[1].rows, [
+    '',
+    '',
+    '   THREE MUSICIANS',
+    '',
+    '',
+    '',
+  ], 'one-line answer');
+  for (const frame of frames) {
+    assert.equal(
+      formatLayout(frame.rows).includes('VESTABOARD'),
+      false,
+      'the physical wordmark is not a flap row',
+    );
+  }
 });
 
 test('hiding the intro drops that frame and shortens the round', () => {

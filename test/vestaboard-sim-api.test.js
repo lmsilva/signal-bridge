@@ -634,6 +634,27 @@ test('the board settings surface is admin-only', async () => {
   }
 });
 
+test('the Next flip pill waits out Settings dwell, not only the flap window', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const queue = harness.hub.queueFor('sim');
+    queue.setConfig({
+      dwellSeconds: 60,
+      rateWindowSeconds: 0,
+      quietHours: { start: '22:00', end: '07:00', enabled: false },
+    });
+    queue.submit([identityFrame({ name: 'Vestaboard Simulator' })]);
+    assert.equal(await queue.tick(), 'posted');
+    const res = await request(`${harness.base}/api/vestaboard-sim`, { cookie: harness.cookie });
+    assert.ok(
+      res.body.state.cooldownMs >= 55_000,
+      `cooldown was ${res.body.state.cooldownMs}`,
+    );
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('with the simulator switched off in config the page is told so plainly', async () => {
   const harness = await startHarness({ withSimulator: false });
   try {

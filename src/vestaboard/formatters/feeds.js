@@ -743,7 +743,7 @@ function norrisChipRow(text) {
  */
 /**
  * Word Riddles (marketplace Entertainment): green/blue intro, airy
- * left-aligned riddle with a VESTABOARD footer, then a letter-spaced answer.
+ * left-aligned riddle centred on all six rows, then a letter-spaced answer.
  */
 function wordRiddlesFrames(payload = {}) {
   const riddle = payload.riddle?.riddle || payload.riddleText || '';

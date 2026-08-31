@@ -11844,7 +11844,7 @@
 
   function wrRiddleLines(text) {
     const lines = wrapPreview(text, 22);
-    if (!lines.length || lines.length > 4) return lines.slice(0, 4);
+    if (!lines.length || lines.length > 6) return lines.slice(0, 6);
     return lines.map((line) => wrExpandLine(line, 22));
   }
 
@@ -11872,12 +11872,6 @@
     return out;
   }
 
-  function wrCenter(text) {
-    const line = String(text || '');
-    const start = Math.floor((22 - line.length) / 2);
-    return `${' '.repeat(Math.max(0, start))}${line}`;
-  }
-
   function renderWordRiddlesPreview(riddle, answer) {
     const host = $('word-riddles-preview');
     if (!host) return;
@@ -11889,18 +11883,9 @@
         return null;
       });
     } else if (phase === 'answer') {
-      const lines = [
-        ...wrPadBlock(wrAnswerLines(answer), 5, 'center'),
-        wrCenter('VESTABOARD'),
-      ];
-      paintPreviewLines(host, lines);
+      paintPreviewLines(host, wrPadBlock(wrAnswerLines(answer), 6, 'center'));
     } else {
-      const lines = [
-        ...wrPadBlock(wrRiddleLines(riddle), 4, 'block'),
-        '',
-        wrCenter('VESTABOARD'),
-      ];
-      paintPreviewLines(host, lines);
+      paintPreviewLines(host, wrPadBlock(wrRiddleLines(riddle), 6, 'block'));
     }
     const hint = $('word-riddles-fit-hint');
     if (hint) {
@@ -11908,7 +11893,7 @@
       const aRows = wrAnswerLines(answer).length;
       if (!riddle && !answer) {
         hint.textContent = '';
-      } else if (qRows > 0 && qRows <= 4 && aRows > 0 && aRows <= 2) {
+      } else if (qRows > 0 && qRows <= 6 && aRows > 0 && aRows <= 2) {
         hint.textContent = `Fits · riddle ${qRows} row${qRows === 1 ? '' : 's'}`;
       } else {
         hint.textContent = 'Too long for the board';

@@ -6885,6 +6885,21 @@ function createWebServer({
     return vestaboardHub?.queueFor?.(SIMULATOR_ID)?.pending?.() || [];
   }
 
+  /**
+   * The Local API's own cooldown is the 15s flap window. The page's
+   * "Next flip" pill should also wait out Settings → Dwell, or it counts
+   * down from 15 while the queue still holds the current page.
+   */
+  function vestaboardSimPublicState(raw = null) {
+    const state = raw || vestaboardSimulator?.state?.() || {};
+    const queue = vestaboardHub?.queueFor?.(SIMULATOR_ID)?.state?.() || {};
+    const dwellLeft = Number(queue.snapshotCooldownMs) || 0;
+    return {
+      ...state,
+      cooldownMs: Math.max(Number(state.cooldownMs) || 0, dwellLeft),
+    };
+  }
+
   /** Everything the simulator page needs to draw itself from a cold start. */
   function handleVestaboardSimState(res) {
     if (!vestaboardSimulator) {
@@ -6893,7 +6908,7 @@ function createWebServer({
     }
     sendJson(res, 200, {
       ok: true,
-      state: vestaboardSimulator.state(),
+      state: vestaboardSimPublicState(),
       calls: vestaboardSimulator.calls(),
       queue: vestaboardSimQueue(),
       // The page owns no knowledge of the character set; it renders whatever
@@ -6929,18 +6944,27 @@ function createWebServer({
       }
     };
 
-    send('sim.state', vestaboardSimulator.state());
+    send('sim.state', vestaboardSimPublicState());
     send('sim.queue', { boardId: SIMULATOR_ID, items: vestaboardSimQueue() });
 
     const unsubscribeSim = vestaboardSimulator.onChange((event, detail) => {
-      if (event === 'state') send('sim.state', detail);
+      if (event === 'state') send('sim.state', vestaboardSimPublicState(detail));
       else if (event === 'flip') send('sim.flip', detail);
       else if (event === 'call') send('sim.call', detail);
     });
 
     const unsubscribeHub = vestaboardHub?.onChange?.((event, detail) => {
-      if (event === 'queue' && (!detail?.boardId || detail.boardId === SIMULATOR_ID)) {
+      if (detail?.boardId && detail.boardId !== SIMULATOR_ID) {
+        return;
+      }
+      if (event === 'queue') {
         send('sim.queue', detail);
+      }
+      // The Local API emits `state` during the POST, before the queue
+      // records dwell. Push a second state after `posted` so the pill
+      // counts down Settings → Dwell, not only the 15s flap window.
+      if (event === 'posted') {
+        send('sim.state', vestaboardSimPublicState());
       }
     }) || (() => {});
 

@@ -6,6 +6,9 @@
 //
 // The rules, in the order they bite:
 //   - never post faster than the board can move (rateWindowSeconds)
+//   - a rotation page stays for Settings → Dwell (dwellSeconds), even when
+//     the flaps could already take another flip; alerts and live game cards
+//     still wait only the rate window
 //   - an alert jumps the line and throws away the rotation it interrupted
 //   - repeats of the same thing replace each other instead of stacking
 //   - a layout identical to what is already showing is dropped, because the
@@ -133,6 +136,11 @@ function createQueue({
     failures: 0,
     retryNotBefore: null,
     restoreAfter: null,
+    /**
+     * When the current snapshot has had the board's configured dwell.
+     * Rotation pages wait for this; alerts and live game cards do not.
+     */
+    snapshotUntil: null,
   };
 
   const items = [];
@@ -155,6 +163,24 @@ function createQueue({
   function dwellMsOf(frame) {
     const seconds = Number(frame?.dwellSeconds);
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_DWELL_SECONDS) * 1000;
+  }
+
+  /** Board Settings → Dwell. Zero / missing means "rate window only". */
+  function boardDwellMs() {
+    const seconds = Number(config.dwellSeconds);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+  }
+
+  function snapshotDwellActive(at = now()) {
+    return Boolean(state.snapshotUntil && at < state.snapshotUntil);
+  }
+
+  /** How long until a rotation page may replace what is showing. */
+  function snapshotCooldownMs(at = now()) {
+    if (!state.snapshotUntil) {
+      return 0;
+    }
+    return Math.max(0, state.snapshotUntil - at);
   }
 
   function holdMsOf(frame) {
@@ -451,6 +477,9 @@ function createQueue({
       // Once the alert has had its time, the board should go back to what it
       // was showing rather than sitting on a stale warning.
       state.restoreAfter = at + dwellMsOf(item.frame);
+      // An alert is not a rotation page. Leave no leftover dwell that would
+      // park the restore (or the next snapshot) after the alert has finished.
+      state.snapshotUntil = null;
     } else {
       state.lastSnapshot = item.frame;
       state.restoreAfter = null;
@@ -463,6 +492,15 @@ function createQueue({
       const holdMs = ownedByGame(item) ? 0 : holdMsOf(item.frame);
       state.holdUntil = holdMs ? at + holdMs : null;
       state.holdKind = holdMs ? 'guest' : null;
+      // The Settings dwell is how long a rotation page stays. Game cards
+      // keep their own phase timing; do not stretch them to 60s, and do
+      // not leave a pre-game dwell that would park the next page after.
+      if (!ownedByGame(item)) {
+        const dwell = boardDwellMs();
+        state.snapshotUntil = dwell ? at + dwell : null;
+      } else {
+        state.snapshotUntil = null;
+      }
     }
 
     // Hand the next page of this sequence its turn.
@@ -536,6 +574,11 @@ function createQueue({
     if (item.notBefore && at < item.notBefore) return null;
     if (state.retryNotBefore && at < state.retryNotBefore) return null;
     if (state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
+    // Hardware can take another flip after the rate window; a 60s dwell
+    // still keeps the current page up. Alerts and the live game skip it.
+    if (item.priority !== 'alert' && !ownedByGame(item) && snapshotDwellActive(at)) {
+      return null;
+    }
 
     if (!item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
       dropAt(index, 'skip (quiet)', item);
@@ -611,6 +654,8 @@ function createQueue({
       lastPostAt: state.lastPostAt,
       holdUntil: state.holdUntil,
       holdKind: state.holdKind,
+      snapshotUntil: state.snapshotUntil,
+      snapshotCooldownMs: snapshotCooldownMs(),
       gameLock: state.gameLock ? { ...state.gameLock } : null,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
