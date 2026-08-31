@@ -67,6 +67,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   const dropPendingBoard = typeof deps.dropPendingBoard === 'function'
     ? deps.dropPendingBoard
     : () => 0;
+  const setGameLock = typeof deps.setGameLock === 'function' ? deps.setGameLock : () => {};
   const getShortlink = typeof deps.getShortlink === 'function' ? deps.getShortlink : () => null;
   const gameOf = typeof deps.gameOf === 'function' ? deps.gameOf : defaultGameOf;
 
@@ -199,15 +200,19 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     if (set.size) session.lastSseAt = now();
   }
 
-  function boardOptions(holdSeconds, { takeover = false } = {}) {
+  function boardOptions(holdSeconds, { takeover = false, card = '' } = {}) {
     return {
       targetId: 'vestaboard',
       explicit: true,
       // Only the first invite should wrest the board from whatever was showing.
-      // Later game cards replace each other without briefly opening the queue.
+      // Later cards stay in front of held non-game pages. `replaceCard` drops
+      // only stale phases at or below this one, so an unshown score card is
+      // not evicted when the next round starts.
       breakHold: Boolean(takeover),
       quietHoursExempt: true,
       replaceSource: 'word.scramble',
+      gameSource: 'word.scramble',
+      replaceCard: card && card !== 'clear' ? card : null,
       holdSeconds,
     };
   }
@@ -219,7 +224,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
    *
    * Vestaboard games register their `source` in `games/registry.js`. While a
    * session holds the board, manual Push / Air now / scheduler ticks must not
-   * interrupt — the queue enforces that via `holdKind: game`.
+   * interrupt — the board lock taken in `pushPhase` enforces that.
    */
   function takeBoard() {
     try {
@@ -235,6 +240,17 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const game = gameOf(session.gameType);
     const settings = settingsOf(session.gameType);
     const hold = extra.holdSeconds != null ? extra.holdSeconds : remainingSeconds(session);
+    const source = game?.source || 'word.scramble';
+    // Take (or renew) the board lock before the card is queued, so the gap
+    // between two phases never opens the line to everything parked behind us.
+    // `clear` is the last card of the session and releases instead.
+    if (card !== 'clear') {
+      try {
+        setGameLock(source, true);
+      } catch (error) {
+        log?.warn?.('Could not lock the board for the game', error?.message || error);
+      }
+    }
     takeBoard();
     const payload = {
       type: 'word.scramble',
@@ -262,7 +278,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       ? Boolean(extra.takeover)
       : card === 'invite' || session.phase === 'invited';
     try {
-      pushBoard(payload, boardOptions(hold, { takeover }));
+      pushBoard(payload, boardOptions(hold, { takeover, card }));
     } catch (error) {
       log?.warn?.('Game board push failed', error?.message || error);
     }
@@ -292,6 +308,14 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     // The board must stop advertising a game nobody can join. Pending game
     // pages are swept too, or the lobby card lands after the game is gone.
     pushPhase(session, 'clear', { holdSeconds: 0, takeover: true });
+    // Only now may the pages parked behind the game have the board. This is
+    // the one release point, so it has to cover every way a session ends:
+    // finished, stopped by an admin, invite expired, idle, or last player out.
+    try {
+      setGameLock(gameOf(session.gameType)?.source || 'word.scramble', false);
+    } catch (error) {
+      log?.warn?.('Could not release the board lock', error?.message || error);
+    }
     archiveRow(session, { abandoned, reason });
     emit(session, 'closed');
     const set = listeners.get(session.id);

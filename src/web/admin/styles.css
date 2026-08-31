@@ -1886,6 +1886,42 @@ textarea.field-input.text-input-area {
 /* Starvation is a number, not a silent failure at air time. */
 .trivia-category-count.is-starved { color: var(--warn, #f5c453); font-weight: 700; }
 
+.periodic-table-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 14px;
+  margin-top: 4px;
+}
+.periodic-table-category-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+.periodic-table-category-item .hint {
+  margin-left: auto;
+  font-size: 0.82rem;
+}
+
+.word-of-the-day-pos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 14px;
+  margin-top: 4px;
+}
+.word-of-the-day-pos-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+.word-of-the-day-pos-item .hint {
+  margin-left: auto;
+  font-size: 0.82rem;
+}
+
 /* ---------- YouTube ---------- */
 
 .yt-device-list {
@@ -3202,6 +3238,9 @@ textarea.field-input.text-input-area {
   #tab-settings .chuck-norris-settings-card,
   #tab-settings .roast-me-settings-card,
   #tab-settings .family-quotes-settings-card,
+  #tab-settings .misheard-lyrics-settings-card,
+  #tab-settings .periodic-table-settings-card,
+  #tab-settings .word-of-the-day-settings-card,
   #tab-settings .dad-jokes-settings-card,
   #tab-settings .us-weather-map-settings-card,
   #tab-settings .amazing-facts-settings-card,

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Build src/word-scramble-words.json from ENABLE1 (public domain).
+ * Build src/word-scramble-words.json from public-domain English lists.
  *
  *   node tools/build-word-scramble-words.js
  *
- * Downloads https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt
- * unless tools/.enable1/enable1.txt already exists. Keeps A–Z words from three
- * letters up to the sixteen a 4x4 board can spell, sorted so the solver can
- * binary-search.
+ * Merges ENABLE1 (tournament / Scrabble), 12dicts 2of12inf (everyday
+ * English and its inflections), and the public-domain words_alpha list
+ * so a thorough dictionary word the board can spell is not missing.
+ * Keeps A–Z words from three letters up to the sixteen a 4x4 board can
+ * spell, sorted so lookups stay a binary search.
  */
 
 'use strict';
@@ -17,19 +18,49 @@ const path = require('path');
 const https = require('https');
 
 const ROOT = path.resolve(__dirname, '..');
-const CACHE = path.join(__dirname, '.enable1', 'enable1.txt');
+const CACHE_DIR = path.join(__dirname, '.wordlists');
 const OUT = path.join(ROOT, 'src', 'word-scramble-words.json');
-const SOURCE = 'https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt';
 
-function download(url) {
+/**
+ * Sixteen, not nine: a path may use every cell, so capping shorter than the
+ * board can spell quietly makes the best finds on a grid unplayable.
+ */
+const MAX_LETTERS = 16;
+
+const SOURCES = [
+  {
+    id: 'enable1',
+    url: 'https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt',
+    // ENABLE1 is one word per line, already lowercase A–Z.
+    parse: (text) => text.split(/\r?\n/),
+  },
+  {
+    id: '2of12inf',
+    url: 'https://raw.githubusercontent.com/christianp/nulac/master/2of12inf.txt',
+    // 12dicts marks inflections with a trailing `%` and some variants with `#`.
+    parse: (text) => text.split(/\r?\n/).map((line) => line.replace(/[%#].*$/, '').trim()),
+  },
+  {
+    id: 'words-alpha',
+    url: 'https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt',
+    parse: (text) => text.split(/\r?\n/),
+  },
+];
+
+function download(url, hops = 0) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'signal-bridge-word-scramble' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        download(res.headers.location).then(resolve, reject);
+        if (hops >= 5) {
+          reject(new Error(`${url} redirected too many times`));
+          return;
+        }
+        const next = new URL(res.headers.location, url).href;
+        download(next, hops + 1).then(resolve, reject);
         return;
       }
       if (res.statusCode !== 200) {
-        reject(new Error(`ENABLE1 download failed (${res.statusCode})`));
+        reject(new Error(`${url} failed (${res.statusCode})`));
         return;
       }
       const chunks = [];
@@ -40,20 +71,27 @@ function download(url) {
   });
 }
 
-/**
- * Sixteen, not nine: a path may use every cell, so capping shorter than the
- * board can spell quietly makes the best finds on a grid unplayable.
- */
-const MAX_LETTERS = 16;
+async function loadSource(source) {
+  const cache = path.join(CACHE_DIR, `${source.id}.txt`);
+  let text = '';
+  if (fs.existsSync(cache)) {
+    text = fs.readFileSync(cache, 'utf8');
+  } else {
+    process.stderr.write(`Downloading ${source.id} from ${source.url}\n`);
+    text = await download(source.url);
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(cache, text);
+  }
+  return source.parse(text);
+}
 
-function filterWords(text) {
+function filterWords(lines) {
   const seen = new Set();
   const out = [];
   const shape = new RegExp(`^[a-z]{3,${MAX_LETTERS}}$`);
-  for (const raw of String(text || '').split(/\r?\n/)) {
-    const word = raw.trim().toLowerCase();
-    if (!shape.test(word)) continue;
-    if (seen.has(word)) continue;
+  for (const raw of lines) {
+    const word = String(raw || '').trim().toLowerCase();
+    if (!shape.test(word) || seen.has(word)) continue;
     seen.add(word);
     out.push(word);
   }
@@ -62,18 +100,15 @@ function filterWords(text) {
 }
 
 async function main() {
-  let text = '';
-  if (fs.existsSync(CACHE)) {
-    text = fs.readFileSync(CACHE, 'utf8');
-  } else {
-    process.stderr.write(`Downloading ENABLE1 from ${SOURCE}\n`);
-    text = await download(SOURCE);
-    fs.mkdirSync(path.dirname(CACHE), { recursive: true });
-    fs.writeFileSync(CACHE, text);
+  const lines = [];
+  for (const source of SOURCES) {
+    const part = await loadSource(source);
+    process.stderr.write(`  ${source.id}: ${part.length} lines\n`);
+    for (const line of part) lines.push(line);
   }
-  const words = filterWords(text);
+  const words = filterWords(lines);
   if (words.length < 1000) {
-    throw new Error(`ENABLE1 filter produced only ${words.length} words`);
+    throw new Error(`Word-list filter produced only ${words.length} words`);
   }
   fs.writeFileSync(OUT, `${JSON.stringify(words)}\n`);
   process.stderr.write(`Wrote ${words.length} words to ${path.relative(ROOT, OUT)}\n`);

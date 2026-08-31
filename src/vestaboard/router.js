@@ -74,6 +74,11 @@ const COMMAND_TO_TYPE = {
   'chuck.facts': 'chuck.facts',
   'roast.me': 'roast.me',
   'family.quotes': 'family.quotes',
+  'misheard.lyrics': 'misheard.lyrics',
+  'warm.fuzzies': 'warm.fuzzies',
+  'bucket.fillers': 'bucket.fillers',
+  'periodic.table': 'periodic.table',
+  'word.day': 'word.day',
   'dad.jokes': 'dad.jokes',
   'us.weather-map': 'us.weather-map',
   'word.riddles': 'word.riddles',
@@ -94,6 +99,7 @@ const COMMAND_TO_TYPE = {
   'fx.rates': 'fx.rates',
   'iss.track': 'iss.track',
   'starlink.track': 'starlink.track',
+  'launch.alert': 'launch.alert',
 };
 
 function typeOf(payload, commandId) {
@@ -171,6 +177,8 @@ function routeEvent({
   breakHold = null,
   quietHoursExempt = null,
   replaceSource: replaceSourceOpt = undefined,
+  replaceCard: replaceCardOpt = undefined,
+  gameSource: gameSourceOpt = undefined,
   ctx = {},
   now = () => Date.now(),
   submit,
@@ -242,6 +250,12 @@ function routeEvent({
         : undefined,
       coalesceKey: coalesceKeyFor(payload, type),
       replaceSource,
+      replaceCard: replaceCardOpt != null && replaceCardOpt !== ''
+        ? String(replaceCardOpt)
+        : undefined,
+      gameSource: gameSourceOpt != null && gameSourceOpt !== ''
+        ? String(gameSourceOpt)
+        : undefined,
       breakHold: breakHold != null
         ? Boolean(breakHold)
         : Boolean(explicit && !scheduler),

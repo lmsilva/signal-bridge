@@ -146,6 +146,11 @@ const { createLearnLanguages, languageOf } = require('./learn-language');
 const { createChuckNorris } = require('./chuck-norris');
 const { createRoastMe } = require('./roast-me');
 const { createFamilyQuotes } = require('./family-quotes');
+const { createMisheardLyrics } = require('./misheard-lyrics');
+const { createWarmFuzzies } = require('./warm-fuzzies');
+const { createDailyBucketFillers } = require('./daily-bucket-fillers');
+const { createPeriodicTable } = require('./periodic-table');
+const { createWordOfTheDay } = require('./word-of-the-day');
 const { createDadJokes } = require('./dad-jokes');
 const { createUsWeatherMap } = require('./us-weather-map');
 const { createWordRiddles } = require('./word-riddles');
@@ -167,6 +172,7 @@ const { createStockMarket } = require('./stock-market');
 const { createCurrencyRates } = require('./currency-rates');
 const { createIssTracker } = require('./iss-tracker');
 const { createStarlinkTracker } = require('./starlink-tracker');
+const { createSpaceLaunchAlerts } = require('./space-launch-alerts');
 const { createQuietHoursReminder } = require('./quiet-hours-reminder');
 
 const DEFAULT_PORT = 47810;
@@ -523,12 +529,18 @@ function createWebServer({
       return vestaboardHub.pushEvent(payload, options);
     },
     dropPendingBoard: (predicate) => vestaboardHub?.dropPending?.(predicate) || 0,
+    setGameLock: (source, active) => vestaboardHub?.setGameLock?.(source, active),
   });
   const learnJapanese = createLearnJapanese(config, log);
   const learnLanguages = createLearnLanguages(config, log);
   const chuckNorris = createChuckNorris(config, log);
   const roastMe = createRoastMe(config, log);
   const familyQuotes = createFamilyQuotes(config, log);
+  const misheardLyrics = createMisheardLyrics(config, log);
+  const warmFuzzies = createWarmFuzzies(config, log);
+  const dailyBucketFillers = createDailyBucketFillers(config, log);
+  const periodicTable = createPeriodicTable(config, log);
+  const wordOfTheDay = createWordOfTheDay(config, log);
   const dadJokes = createDadJokes(config, log);
   const usWeatherMap = createUsWeatherMap(config, log, {
     getLocaleSettings: () => localeSettings.get(),
@@ -563,6 +575,8 @@ function createWebServer({
   const currencyRates = createCurrencyRates(config, log);
   const issTracker = createIssTracker(config, log);
   const starlinkTracker = createStarlinkTracker(config, log);
+  const spaceLaunchAlerts = createSpaceLaunchAlerts(config, log);
+  spaceLaunchAlerts.ensureWarm();
   const ringDoorbellInstance = typeof ringDoorbell === 'function'
     ? ringDoorbell()
     : (ringDoorbell || createRingDoorbellService({
@@ -659,6 +673,11 @@ function createWebServer({
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
     getRoastMeStatus: () => roastMe.statusSnapshot(),
     getFamilyQuotesStatus: () => familyQuotes.statusSnapshot(),
+    getWarmFuzziesStatus: () => warmFuzzies.statusSnapshot(),
+    getDailyBucketFillersStatus: () => dailyBucketFillers.statusSnapshot(),
+    getMisheardLyricsStatus: () => misheardLyrics.statusSnapshot(),
+    getPeriodicTableStatus: () => periodicTable.statusSnapshot(),
+    getWordOfTheDayStatus: () => wordOfTheDay.statusSnapshot(),
     getDadJokesStatus: () => dadJokes.statusSnapshot(),
     getUsWeatherMapStatus: () => usWeatherMap.statusSnapshot(),
     getWordRiddlesStatus: () => wordRiddles.statusSnapshot(),
@@ -673,6 +692,7 @@ function createWebServer({
     getBakingInspirationStatus: () => bakingInspiration.statusSnapshot(),
     getStockMarketStatus: () => stockMarket.statusSnapshot(),
     getCurrencyRatesStatus: () => currencyRates.statusSnapshot(localeSettings.get()),
+    getSpaceLaunchAlertsStatus: () => spaceLaunchAlerts.statusSnapshot(),
     getPhotoCount: () => qrImageCache.list().length,
     getNotificationsCacheStatus: () => ({
       hasContent: hasCachedNotification(loadNotificationsCache(config)),
@@ -3436,6 +3456,83 @@ function createWebServer({
     });
   }
 
+  function handleSpaceLaunchAlertsSettingsGet(res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...spaceLaunchAlerts.statusSnapshot(),
+    });
+  }
+
+  async function handleSpaceLaunchAlertsSettingsPut(body, res) {
+    if (body?.reset) {
+      spaceLaunchAlerts.resetSettings();
+      handleSpaceLaunchAlertsSettingsGet(res);
+      return;
+    }
+    if (body?.refresh) {
+      try {
+        await spaceLaunchAlerts.refreshCache({ force: true });
+      } catch (error) {
+        sendJson(res, 502, { ok: false, error: error?.message || 'Could not refresh launch cache' });
+        return;
+      }
+    } else {
+      spaceLaunchAlerts.updateSettings({
+        hoursAhead: body?.hoursAhead,
+        refreshHours: body?.refreshHours,
+        chipColor: body?.chipColor,
+        includeSuborbital: body?.includeSuborbital,
+      });
+    }
+    handleSpaceLaunchAlertsSettingsGet(res);
+  }
+
+  async function handleSpaceLaunchAlertsPush(body, res) {
+    let payload = null;
+    try {
+      payload = await spaceLaunchAlerts.nextPayload({
+        launchId: body?.launchId || body?.id,
+        forceRefresh: Boolean(body?.refresh),
+      });
+    } catch (error) {
+      log.warn?.('Space Launch Alerts fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'Launch data is unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No upcoming launches fit the board — open Settings → Travel',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Space launch alert', {
+      targetId,
+      id: payload.launch?.id,
+      net: payload.launch?.net,
+      rocket: payload.launch?.rocket,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      launch: payload.launch,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleLearnJapaneseSettingsGet(res) {
     sendJson(res, 200, { ok: true, ...learnJapanese.statusSnapshot() });
   }
@@ -3737,6 +3834,268 @@ function createWebServer({
       type: payload.type,
       targetId,
       quote: payload.quote,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleMisheardLyricsGet(query, res) {
+    sendJson(res, 200, { ok: true, ...misheardLyrics.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleWarmFuzziesGet(query, res) {
+    sendJson(res, 200, { ok: true, ...warmFuzzies.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleWarmFuzzyPost(body, res) {
+    const result = warmFuzzies.addFuzzy(body?.text);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWarmFuzzyPut(body, res) {
+    const result = warmFuzzies.updateFuzzy(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleWarmFuzziesPush(body, res) {
+    const payload = warmFuzzies.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No warm fuzzies are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Warm fuzzy', { targetId, id: payload.fuzzy.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      fuzzy: payload.fuzzy,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleDailyBucketFillersGet(query, res) {
+    sendJson(res, 200, { ok: true, ...dailyBucketFillers.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleDailyBucketFillerPost(body, res) {
+    const result = dailyBucketFillers.addFiller(body?.text);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleDailyBucketFillerPut(body, res) {
+    const result = dailyBucketFillers.updateFiller(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleDailyBucketFillersPush(body, res) {
+    const payload = dailyBucketFillers.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No bucket fillers are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Daily bucket filler', { targetId, id: payload.filler.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      filler: payload.filler,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleMisheardLyricPost(body, res) {
+    const result = misheardLyrics.addLyric(body?.text, body?.artist);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleMisheardLyricPut(body, res) {
+    const result = misheardLyrics.updateLyric(body?.id, {
+      text: body?.text,
+      artist: body?.artist,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleMisheardLyricsPush(body, res) {
+    const payload = misheardLyrics.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No misheard lyrics are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Misheard lyric', { targetId, id: payload.lyric.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      lyric: payload.lyric,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handlePeriodicTableGet(_query, res) {
+    sendJson(res, 200, { ok: true, ...periodicTable.statusSnapshot() });
+  }
+
+  function handlePeriodicTableSettingsPost(body, res) {
+    if (body?.reset) {
+      periodicTable.updateSettings({ categories: [], recentIds: [] });
+      sendJson(res, 200, { ok: true, ...periodicTable.statusSnapshot() });
+      return;
+    }
+    periodicTable.updateSettings({
+      categories: body?.categories,
+    });
+    sendJson(res, 200, { ok: true, ...periodicTable.statusSnapshot() });
+  }
+
+  function handlePeriodicTablePush(body, res) {
+    const payload = periodicTable.nextPayload({
+      id: body?.id,
+      number: body?.number,
+      symbol: body?.symbol,
+    });
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No periodic table elements match your filters — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Periodic table element', { targetId, id: payload.element.id, number: payload.element.number });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      element: payload.element,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleWordOfTheDayGet(query, res) {
+    sendJson(res, 200, { ok: true, ...wordOfTheDay.statusSnapshot({
+      query: query?.q || query?.query,
+      limit: query?.limit,
+    }) });
+  }
+
+  function handleWordOfTheDaySettingsPost(body, res) {
+    if (body?.reset) {
+      wordOfTheDay.updateSettings({ partsOfSpeech: [], recentIds: [] });
+      sendJson(res, 200, { ok: true, ...wordOfTheDay.statusSnapshot() });
+      return;
+    }
+    wordOfTheDay.updateSettings({
+      partsOfSpeech: body?.partsOfSpeech,
+    });
+    sendJson(res, 200, { ok: true, ...wordOfTheDay.statusSnapshot() });
+  }
+
+  function handleWordOfTheDayPush(body, res) {
+    const payload = wordOfTheDay.nextPayload({
+      id: body?.id,
+      word: body?.word,
+    });
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Word of the Day entries match your filters — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Word of the Day', { targetId, id: payload.entry.id, word: payload.entry.word });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      entry: payload.entry,
       vestaboard: delivery?.vestaboard || null,
     });
   }
@@ -4955,6 +5314,8 @@ function createWebServer({
           await handleIssTrackerPush(body, res); break;
         case 'starlink.track':
           await handleStarlinkTrackerPush(body, res); break;
+        case 'launch.alert':
+          await handleSpaceLaunchAlertsPush(body, res); break;
         case 'japanese.learn':
           handleLearnJapanesePush(body, res); break;
         case 'portuguese.learn':
@@ -4977,6 +5338,16 @@ function createWebServer({
           handleRoastMePush(body, res); break;
         case 'family.quotes':
           handleFamilyQuotesPush(body, res); break;
+        case 'warm.fuzzies':
+          handleWarmFuzziesPush(body, res); break;
+        case 'bucket.fillers':
+          handleDailyBucketFillersPush(body, res); break;
+        case 'misheard.lyrics':
+          handleMisheardLyricsPush(body, res); break;
+        case 'periodic.table':
+          handlePeriodicTablePush(body, res); break;
+        case 'word.day':
+          handleWordOfTheDayPush(body, res); break;
         case 'dad.jokes':
           handleDadJokesPush(body, res); break;
         case 'us.weather-map':
@@ -8184,6 +8555,11 @@ function createWebServer({
           handleStarlinkTrackerSettingsGet(res);
           return;
         }
+        if (pathname === '/api/space-launch-alerts/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleSpaceLaunchAlertsSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/learn-japanese/settings') {
           if (!requireAdminSession(req, res)) return;
           handleLearnJapaneseSettingsGet(res);
@@ -8220,6 +8596,31 @@ function createWebServer({
         if (pathname === '/api/family-quotes/quotes') {
           if (!requireAdminSession(req, res)) return;
           handleFamilyQuotesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/warm-fuzzies/fuzzies') {
+          if (!requireAdminSession(req, res)) return;
+          handleWarmFuzziesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/daily-bucket-fillers/fillers') {
+          if (!requireAdminSession(req, res)) return;
+          handleDailyBucketFillersGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/misheard-lyrics/lyrics') {
+          if (!requireAdminSession(req, res)) return;
+          handleMisheardLyricsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/periodic-table/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handlePeriodicTableGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/word-of-the-day/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWordOfTheDayGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
         if (pathname === '/api/dad-jokes/jokes') {
@@ -8970,6 +9371,12 @@ function createWebServer({
           case '/api/starlink-tracker/settings':
             handleStarlinkTrackerSettingsPut(body, res);
             return;
+          case '/api/push/space-launch-alerts':
+            await handleSpaceLaunchAlertsPush(body, res);
+            return;
+          case '/api/space-launch-alerts/settings':
+            await handleSpaceLaunchAlertsSettingsPut(body, res);
+            return;
           case '/api/push/learn-japanese':
             handleLearnJapanesePush(body, res);
             return;
@@ -9029,6 +9436,48 @@ function createWebServer({
               handleFamilyQuotePut(body, res);
             } else {
               handleFamilyQuotePost(body, res);
+            }
+            return;
+          case '/api/push/warm-fuzzies':
+            handleWarmFuzziesPush(body, res);
+            return;
+          case '/api/warm-fuzzies/fuzzies':
+            if (body?.id) {
+              handleWarmFuzzyPut(body, res);
+            } else {
+              handleWarmFuzzyPost(body, res);
+            }
+            return;
+          case '/api/push/daily-bucket-fillers':
+            handleDailyBucketFillersPush(body, res);
+            return;
+          case '/api/daily-bucket-fillers/fillers':
+            if (body?.id) {
+              handleDailyBucketFillerPut(body, res);
+            } else {
+              handleDailyBucketFillerPost(body, res);
+            }
+            return;
+          case '/api/push/misheard-lyrics':
+            handleMisheardLyricsPush(body, res);
+            return;
+          case '/api/periodic-table/settings':
+            handlePeriodicTableSettingsPost(body, res);
+            return;
+          case '/api/push/periodic-table':
+            handlePeriodicTablePush(body, res);
+            return;
+          case '/api/word-of-the-day/settings':
+            handleWordOfTheDaySettingsPost(body, res);
+            return;
+          case '/api/push/word-of-the-day':
+            handleWordOfTheDayPush(body, res);
+            return;
+          case '/api/misheard-lyrics/lyrics':
+            if (body?.id) {
+              handleMisheardLyricPut(body, res);
+            } else {
+              handleMisheardLyricPost(body, res);
             }
             return;
           case '/api/push/dad-jokes':

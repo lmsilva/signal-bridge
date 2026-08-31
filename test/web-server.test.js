@@ -1,4 +1,4 @@
-﻿const test = require('node:test');
+const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
@@ -1229,6 +1229,158 @@ test('family quotes push delivers an attributed quote and settings can add one',
   }
 });
 
+test('warm fuzzies push delivers a compliment and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/warm-fuzzies/fuzzies?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.equal(listed.body.fuzzies.length, 5);
+    assert.ok(listed.body.fuzzies.every((fuzzy) => fuzzy.rows >= 1 && fuzzy.rows <= 6));
+
+    const pushed = await postJson(base, '/api/push/warm-fuzzies');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'warm.fuzzies');
+    assert.ok(pushed.body.fuzzy.text);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'warm.fuzzies');
+
+    const added = await postJson(base, '/api/warm-fuzzies/fuzzies', {
+      text: 'You make test kitchens feel like home.',
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.customCount, 1);
+
+    const blank = await postJson(base, '/api/warm-fuzzies/fuzzies', { text: '  ' });
+    assert.equal(blank.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('daily bucket fillers push delivers a challenge and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/daily-bucket-fillers/fillers?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.equal(listed.body.fillers.length, 5);
+    assert.ok(listed.body.fillers.every((filler) => filler.rows >= 1 && filler.rows <= 6));
+
+    const pushed = await postJson(base, '/api/push/daily-bucket-fillers');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'bucket.fillers');
+    assert.ok(pushed.body.filler.text);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'bucket.fillers');
+
+    const added = await postJson(base, '/api/daily-bucket-fillers/fillers', {
+      text: 'Leave a kind note on a neighbor porch.',
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.customCount, 1);
+
+    const blank = await postJson(base, '/api/daily-bucket-fillers/fillers', { text: '  ' });
+    assert.equal(blank.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('misheard lyrics push delivers an attributed lyric and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/misheard-lyrics/lyrics?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.equal(listed.body.lyrics.length, 5);
+    assert.ok(listed.body.lyrics.every((lyric) => lyric.artist));
+    assert.ok(listed.body.lyrics.every((lyric) => lyric.rows >= 1 && lyric.rows <= 6));
+
+    const pushed = await postJson(base, '/api/push/misheard-lyrics');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'misheard.lyrics');
+    assert.ok(pushed.body.lyric.text);
+    assert.ok(pushed.body.lyric.artist);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'misheard.lyrics');
+
+    const added = await postJson(base, '/api/misheard-lyrics/lyrics', {
+      text: 'Hold me closer, Tony Danza',
+      artist: 'The Bridge',
+    });
+    assert.equal(added.status, 200);
+    assert.equal(added.body.customCount, 1);
+
+    const blank = await postJson(base, '/api/misheard-lyrics/lyrics', { text: '  ' });
+    assert.equal(blank.status, 400);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('periodic table push delivers an element and settings can filter categories', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/periodic-table/settings');
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.total, 118);
+    assert.ok(listed.body.available >= 118);
+    assert.equal(listed.body.elements.length, 118);
+    assert.ok(listed.body.elements.every((element) => element.lines?.length === 6));
+
+    const pushed = await postJson(base, '/api/push/periodic-table', { number: 1 });
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'periodic.table');
+    assert.equal(pushed.body.element.number, 1);
+    assert.ok(pushed.body.element.name);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'periodic.table');
+
+    const filtered = await postJson(base, '/api/periodic-table/settings', {
+      categories: ['halogen'],
+    });
+    assert.ok(filtered.body.available >= 5);
+    assert.ok(filtered.body.available < 118);
+
+    const reset = await postJson(base, '/api/periodic-table/settings', { reset: true });
+    assert.equal(reset.body.available, 118);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('word of the day push delivers an entry and settings can filter parts of speech', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/word-of-the-day/settings');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.total >= 1200);
+    assert.ok(listed.body.available >= 1200);
+    assert.ok(listed.body.words.length >= 3);
+    assert.ok(listed.body.words.every((entry) => entry.lines?.length === 6));
+
+    const pushed = await postJson(base, '/api/push/word-of-the-day', { word: 'oracy' });
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'word.day');
+    assert.equal(pushed.body.entry.word, 'oracy');
+    assert.ok(pushed.body.entry.definition);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'word.day');
+
+    const filtered = await postJson(base, '/api/word-of-the-day/settings', {
+      partsOfSpeech: ['noun'],
+    });
+    assert.ok(filtered.body.available >= 1000);
+    assert.ok(filtered.body.available < filtered.body.total);
+
+    const reset = await postJson(base, '/api/word-of-the-day/settings', { reset: true });
+    assert.equal(reset.body.available, reset.body.total);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('dad jokes push delivers a two-part joke and settings can add one', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -2035,7 +2187,7 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(css, /\[hidden\] \{ display: none !important; \}/,
       'grid and flex panels would otherwise ignore the hidden attribute');
 
-    // Tap the letters instead of typing them: buttons, a legal path, and
+    // Tap the letters instead of typing them: buttons, any unused tile, and
     // spent tiles greyed so nobody spends one twice.
     const scramble = fs.readFileSync(path.join(realRoot, 'games', 'scramble.js'), 'utf8');
     assert.match(scramble, /createElement\('button'\)/);
@@ -2047,7 +2199,12 @@ test('games page and a live session join without an admin session', async () => 
     // The keyboard must not bury the board it is there to spell from.
     assert.match(scramble, /visualViewport/);
     assert.match(scramble, /--gm-vh/);
+    assert.match(scramble, /keepBoardInView/);
+    assert.match(scramble, /setSelectionRange/);
+    assert.match(scramble, /--gm-board-max/);
     assert.match(css, /body\.gm-typing/);
+    assert.match(css, /position:\s*fixed/);
+    assert.match(page.text, /interactive-widget=resizes-content/);
 
     // And the name they typed last time is waiting for them.
     assert.match(js, /localStorage\.getItem\(NAME_KEY\)/);
@@ -2608,6 +2765,51 @@ test('Starlink tracker push delivers the next pass over the house pin', async ()
   }
 });
 
+test('space launch alerts push delivers a cached launch and settings can refresh', async () => {
+  const future = new Date(Date.now() + 3 * 3600000).toISOString();
+  const config = makeConfig({
+    spaceLaunchAlertsFetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          results: [{
+            id: 'launch-test-1',
+            name: 'Falcon 9 | Starlink 6-56',
+            net: future,
+            status: { abbrev: 'Go' },
+            launch_service_provider: { name: 'SpaceX' },
+            rocket: { configuration: { full_name: 'Falcon 9' } },
+            mission: { name: 'Starlink 6-56' },
+          }],
+        };
+      },
+    }),
+  });
+
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const listed = await getJson(base, '/api/space-launch-alerts/settings');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available >= 1);
+    assert.ok(listed.body.launches.length >= 1);
+
+    const pushed = await postJson(base, '/api/push/space-launch-alerts', {
+      launchId: 'launch-test-1',
+    });
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'launch.alert');
+    assert.ok(pushed.body.launch.sentence);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'launch.alert');
+
+    const refreshed = await postJson(base, '/api/space-launch-alerts/settings', { refresh: true });
+    assert.equal(refreshed.status, 200);
+    assert.ok(refreshed.body.total >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('admin control PIN sheet expects a 6-digit code', () => {
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
@@ -2768,9 +2970,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal206/);
-  assert.match(html, /settings-filter\.js\?v=signal206/);
-  assert.match(html, /app\.js\?v=signal206/);
+  assert.match(html, /styles\.css\?v=signal212/);
+  assert.match(html, /settings-filter\.js\?v=signal212/);
+  assert.match(html, /app\.js\?v=signal212/);
   assert.match(html, /id="tinyurl-settings-card"/);
   assert.match(html, /id="word-scramble-settings-card"/);
   assert.match(html, /id="word-scramble-sessions-sheet"/);
@@ -2864,6 +3066,26 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-family-quotes-push"/);
   assert.match(html, /id="family-quotes-manage-sheet"/);
   assert.match(html, /id="family-quotes-new-author"/);
+  assert.match(html, /id="warm-fuzzies-settings-card"/);
+  assert.match(html, /id="daily-bucket-fillers-settings-card"/);
+  assert.match(html, /id="btn-daily-bucket-fillers-push"/);
+  assert.match(html, /id="daily-bucket-fillers-preview"/);
+  assert.match(html, /id="btn-warm-fuzzies-manage"/);
+  assert.match(html, /id="btn-warm-fuzzies-push"/);
+  assert.match(html, /id="warm-fuzzies-manage-sheet"/);
+  assert.match(html, /id="misheard-lyrics-settings-card"/);
+  assert.match(html, /id="btn-misheard-lyrics-manage"/);
+  assert.match(html, /id="btn-misheard-lyrics-push"/);
+  assert.match(html, /id="misheard-lyrics-manage-sheet"/);
+  assert.match(html, /id="misheard-lyrics-new-artist"/);
+  assert.match(html, /id="periodic-table-settings-card"/);
+  assert.match(html, /id="btn-periodic-table-push-selected"/);
+  assert.match(html, /id="btn-periodic-table-push-random"/);
+  assert.match(html, /id="periodic-table-element"/);
+  assert.match(html, /id="word-of-the-day-settings-card"/);
+  assert.match(html, /id="btn-word-of-the-day-push-selected"/);
+  assert.match(html, /id="btn-word-of-the-day-push-random"/);
+  assert.match(html, /id="word-of-the-day-search"/);
   assert.match(html, /id="dad-jokes-settings-card"/);
   assert.match(html, /id="btn-dad-jokes-manage"/);
   assert.match(html, /id="btn-dad-jokes-push"/);
@@ -2922,6 +3144,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="iss-tracker-settings-card"/);
   assert.match(html, /id="btn-iss-tracker-push"/);
   assert.match(html, /id="starlink-tracker-settings-card"/);
+  assert.match(html, /id="space-launch-alerts-settings-card"/);
+  assert.match(html, /id="btn-space-launch-alerts-push-selected"/);
+  assert.match(html, /id="space-launch-alerts-preview"/);
   assert.match(html, /id="btn-starlink-tracker-push"/);
   assert.match(html, /id="locale-currency"/);
   assert.match(html, /id="world-population-settings-card"/);
@@ -2942,6 +3167,18 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/roast-me/);
   assert.match(js, /\/api\/family-quotes\/quotes/);
   assert.match(js, /\/api\/push\/family-quotes/);
+  assert.match(js, /\/api\/warm-fuzzies\/fuzzies/);
+  assert.match(js, /\/api\/push\/warm-fuzzies/);
+  assert.match(js, /\/api\/daily-bucket-fillers\/fillers/);
+  assert.match(js, /\/api\/push\/daily-bucket-fillers/);
+  assert.match(js, /\/api\/space-launch-alerts\/settings/);
+  assert.match(js, /\/api\/push\/space-launch-alerts/);
+  assert.match(js, /\/api\/misheard-lyrics\/lyrics/);
+  assert.match(js, /\/api\/push\/misheard-lyrics/);
+  assert.match(js, /\/api\/periodic-table\/settings/);
+  assert.match(js, /\/api\/push\/periodic-table/);
+  assert.match(js, /\/api\/word-of-the-day\/settings/);
+  assert.match(js, /\/api\/push\/word-of-the-day/);
   assert.match(js, /\/api\/dad-jokes\/jokes/);
   assert.match(js, /\/api\/push\/dad-jokes/);
   assert.match(js, /\/api\/us-weather-map\/settings/);
@@ -4277,7 +4514,7 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
   const css = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
 
   const sheets = [
-    'chuck-norris', 'roast-me', 'family-quotes', 'dad-jokes', 'amazing-facts', 'world-geography-facts',
+    'chuck-norris', 'roast-me', 'family-quotes', 'warm-fuzzies', 'misheard-lyrics', 'dad-jokes', 'amazing-facts', 'world-geography-facts',
     'conversation-starters', 'stoic-quotes', 'baking-inspiration',
     'date-book',
   ];

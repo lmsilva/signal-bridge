@@ -12,52 +12,25 @@
 
   let letters = [];
   let cells = [];
-  /** Cell indices in tap order — always a legal path across the board. */
+  /** Cell indices in tap order — each tile at most once. */
   let picked = [];
 
-  const NEIGHBOURS = (() => {
-    const all = [];
-    for (let row = 0; row < SIZE; row += 1) {
-      for (let col = 0; col < SIZE; col += 1) {
-        const near = [];
-        for (let dr = -1; dr <= 1; dr += 1) {
-          for (let dc = -1; dc <= 1; dc += 1) {
-            if (!dr && !dc) continue;
-            const r = row + dr;
-            const c = col + dc;
-            if (r >= 0 && r < SIZE && c >= 0 && c < SIZE) near.push(r * SIZE + c);
-          }
-        }
-        all.push(near);
-      }
-    }
-    return all;
-  })();
-
   /**
-   * Any legal path spelling `word`, or null. Typing still lights up the cells
-   * a valid Boggle word would use; tapping is not restricted to adjacency.
+   * Tiles that spell `word` from the letters on the board, or null when a
+   * letter is missing. Order follows the word, not adjacency — any unused
+   * matching tile is fair game.
    */
   function pathFor(word) {
     if (!word || !letters.length) return null;
     const used = new Array(CELLS).fill(false);
     const path = [];
-    const walk = (at, depth) => {
-      if (letters[at] !== word[depth]) return false;
+    for (let i = 0; i < word.length; i += 1) {
+      const at = letters.findIndex((letter, index) => !used[index] && letter === word[i]);
+      if (at < 0) return null;
       used[at] = true;
       path.push(at);
-      if (depth === word.length - 1) return true;
-      for (const next of NEIGHBOURS[at]) {
-        if (!used[next] && walk(next, depth + 1)) return true;
-      }
-      used[at] = false;
-      path.pop();
-      return false;
-    };
-    for (let i = 0; i < CELLS; i += 1) {
-      if (walk(i, 0)) return path;
     }
-    return null;
+    return path;
   }
 
   const pickedWord = () => picked.map((i) => letters[i]).join('');
@@ -158,19 +131,75 @@
     input.focus();
   });
 
+  /**
+   * Tile taps fill the box without focusing it. When they then tap the field
+   * to keep going on the keyboard, the caret has to sit after the last letter
+   * — a tap in the empty half of the box would otherwise land at index 0.
+   */
+  function placeCaretAtEnd() {
+    if (!input) return;
+    const end = input.value.length;
+    try {
+      input.setSelectionRange(end, end);
+    } catch {
+      // Some mobile WebKits throw if the field is not yet a text control.
+    }
+  }
+
   /*
    * The on-screen keyboard eats most of a phone. Publishing the visible
    * height lets the board shrink to what is left instead of scrolling off.
+   * Safari still scrolls a focused field to the top of the visual viewport,
+   * so we lock the page and push the scroll back to the board.
    */
   const viewport = window.visualViewport;
-  if (viewport) {
-    const publish = () => {
-      document.documentElement.style.setProperty('--gm-vh', `${Math.round(viewport.height)}px`);
-    };
-    viewport.addEventListener('resize', publish);
-    viewport.addEventListener('scroll', publish);
-    publish();
+  const stage = document.querySelector('.gm-stage');
+  const meta = document.querySelector('.gm-meta');
+  const status = document.getElementById('gm-play-status');
+
+  function publishViewport() {
+    const height = viewport ? viewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--gm-vh', `${Math.round(height)}px`);
+    if (!document.body.classList.contains('gm-typing')) return;
+    const chrome = (meta?.offsetHeight || 0)
+      + (form?.offsetHeight || 0)
+      + (status?.offsetHeight || 0)
+      + 28;
+    const boardMax = Math.max(140, Math.round(height - chrome));
+    document.documentElement.style.setProperty('--gm-board-max', `${boardMax}px`);
   }
-  input?.addEventListener('focus', () => document.body.classList.add('gm-typing'));
-  input?.addEventListener('blur', () => document.body.classList.remove('gm-typing'));
+
+  function keepBoardInView() {
+    if (!document.body.classList.contains('gm-typing')) return;
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    stage?.scrollTo?.(0, 0);
+  }
+
+  function afterKeyboard() {
+    publishViewport();
+    keepBoardInView();
+  }
+
+  if (viewport) {
+    viewport.addEventListener('resize', afterKeyboard);
+    viewport.addEventListener('scroll', afterKeyboard);
+    publishViewport();
+  }
+
+  input?.addEventListener('focus', () => {
+    document.body.classList.add('gm-typing');
+    placeCaretAtEnd();
+    afterKeyboard();
+    requestAnimationFrame(() => {
+      afterKeyboard();
+      placeCaretAtEnd();
+    });
+  });
+  input?.addEventListener('click', placeCaretAtEnd);
+  input?.addEventListener('blur', () => {
+    document.body.classList.remove('gm-typing');
+    document.documentElement.style.removeProperty('--gm-board-max');
+  });
 })();

@@ -1,10 +1,11 @@
 /**
- * Word Scramble — Boggle on a 4×4 Vestaboard grid.
+ * Word Scramble — find English words in a 4×4 Vestaboard grid.
  *
  * Dice are the classic 16, minus Q (a flap is one letter; Qu needs a rule
- * nobody can read from across the room). The solver walks 8-way adjacency
- * without reusing a cell, pruning prefixes with a binary search on the
- * sorted ENABLE1 list. Scoring climbs with every extra letter.
+ * nobody can read from across the room). A word counts when every letter
+ * is on the board and no tile is spent twice — letters do not have to
+ * touch. The corpus is a merged public-domain English list, sorted so
+ * lookups stay a binary search. Scoring climbs with every extra letter.
  */
 
 const fs = require('fs');
@@ -23,24 +24,6 @@ const DICE = Object.freeze([
   'DENOSW', 'DKNOTU', 'EEFHIY', 'EGKLUY',
   'EGINTV', 'EHINPS', 'ELPSTU', 'GILRUW',
 ]);
-
-const NEIGHBORS = [];
-for (let row = 0; row < GRID; row += 1) {
-  for (let col = 0; col < GRID; col += 1) {
-    const next = [];
-    for (let dr = -1; dr <= 1; dr += 1) {
-      for (let dc = -1; dc <= 1; dc += 1) {
-        if (!dr && !dc) continue;
-        const r = row + dr;
-        const c = col + dc;
-        if (r >= 0 && r < GRID && c >= 0 && c < GRID) {
-          next.push(r * GRID + c);
-        }
-      }
-    }
-    NEIGHBORS.push(next);
-  }
-}
 
 let cachedWords = null;
 
@@ -103,35 +86,37 @@ function rollDice(random = Math.random) {
   return grid;
 }
 
-function letterAt(grid, index) {
-  const row = Math.floor(index / GRID);
-  const col = index % GRID;
-  return String(grid[row] || '')[col] || '';
+/** 26-slot bag for the letters on a grid (or any string of A–Z). */
+function letterBag(text) {
+  const bag = new Array(26).fill(0);
+  for (const ch of String(text || '').toLowerCase()) {
+    const code = ch.charCodeAt(0) - 97;
+    if (code >= 0 && code < 26) bag[code] += 1;
+  }
+  return bag;
+}
+
+/**
+ * True when `word` can be assembled from `bag` without spending a letter
+ * more times than it appears on the board.
+ */
+function canSpell(word, bag) {
+  const spent = bag.slice();
+  for (const ch of String(word || '')) {
+    const code = ch.charCodeAt(0) - 97;
+    if (code < 0 || code >= 26 || spent[code] <= 0) return false;
+    spent[code] -= 1;
+  }
+  return true;
 }
 
 function solveGrid(grid, words = loadWords()) {
-  const found = new Set();
-  const used = new Array(GRID * GRID).fill(false);
-
-  function walk(index, soFar) {
-    const next = soFar + letterAt(grid, index).toLowerCase();
-    if (next.length >= MIN_WORD && hasWord(words, next)) {
-      found.add(next);
-    }
-    if (!hasPrefix(words, next)) {
-      return;
-    }
-    used[index] = true;
-    for (const neighbor of NEIGHBORS[index]) {
-      if (!used[neighbor]) walk(neighbor, next);
-    }
-    used[index] = false;
+  const bag = letterBag((grid || []).join(''));
+  const found = [];
+  for (const word of words) {
+    if (word.length >= MIN_WORD && canSpell(word, bag)) found.push(word);
   }
-
-  for (let i = 0; i < GRID * GRID; i += 1) {
-    walk(i, '');
-  }
-  return [...found].sort();
+  return found;
 }
 
 /**
@@ -174,8 +159,7 @@ function validateWord(grid, word, words = loadWords()) {
   if (cleaned.length < MIN_WORD || !hasWord(words, cleaned)) {
     return { ok: false, reason: 'not-a-word' };
   }
-  const solutions = new Set(solveGrid(grid, words));
-  if (!solutions.has(cleaned)) {
+  if (!canSpell(cleaned, letterBag((grid || []).join('')))) {
     return { ok: false, reason: 'not-on-board' };
   }
   return { ok: true, word: cleaned, points: scoreWord(cleaned) };
@@ -244,6 +228,8 @@ module.exports = {
   loadWords,
   hasWord,
   hasPrefix,
+  letterBag,
+  canSpell,
   rollDice,
   solveGrid,
   scoreWord,

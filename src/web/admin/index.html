@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal206">
+  <link rel="stylesheet" href="styles.css?v=signal212">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -154,7 +154,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="15" aria-busy="true"></div>
+               data-skeleton-count="20" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="language">
@@ -166,7 +166,7 @@
         <div class="push-block" data-push-group="travel">
           <div class="section-label">Car &amp; sky</div>
           <div class="card-row card-row-quad" id="push-row-travel" data-push-category="travel"
-               data-skeleton-count="7" aria-busy="true"></div>
+               data-skeleton-count="8" aria-busy="true"></div>
         </div>
 
         <!-- Web Browser and QR Code lead the Share pane; registry tiles
@@ -1811,6 +1811,119 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="news">Warm Fuzzies</div>
+        <div class="card warm-fuzzies-settings-card" id="warm-fuzzies-settings-card" data-settings-group="news" data-search-terms="warm fuzzies compliments affirmations kindness praise">
+          <div class="auth-head">
+            <div class="auth-name">Spread a little kindness</div>
+            <span class="status-pill" id="warm-fuzzies-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="warm-fuzzies-status-detail">
+            Local board-fit compliments like the marketplace channel. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-warm-fuzzies-manage">Manage fuzzies</button>
+            <button type="button" class="btn btn-accent" id="btn-warm-fuzzies-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Daily Bucket Fillers</div>
+        <div class="card daily-bucket-fillers-settings-card" id="daily-bucket-fillers-settings-card" data-settings-group="news" data-search-terms="daily bucket fillers kindness challenges family kids acts of kindness">
+          <div class="auth-head">
+            <div class="auth-name">A kindness challenge for the family</div>
+            <span class="status-pill" id="daily-bucket-fillers-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="daily-bucket-fillers-status-detail">
+            Local board-fit kindness challenges like the marketplace channel. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-daily-bucket-fillers-manage">Manage fillers</button>
+            <button type="button" class="btn btn-accent" id="btn-daily-bucket-fillers-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Misheard Lyrics</div>
+        <div class="card misheard-lyrics-settings-card" id="misheard-lyrics-settings-card" data-settings-group="news" data-search-terms="misheard lyrics mondegreen wrong lyrics music songs artist">
+          <div class="auth-head">
+            <div class="auth-name">Belt out the wrong lyrics</div>
+            <span class="status-pill" id="misheard-lyrics-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="misheard-lyrics-status-detail">
+            Local board-fit misheard lyrics, each with its artist. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-misheard-lyrics-manage">Manage lyrics</button>
+            <button type="button" class="btn btn-accent" id="btn-misheard-lyrics-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Periodic Table</div>
+        <div class="card periodic-table-settings-card" id="periodic-table-settings-card" data-settings-group="news" data-search-terms="periodic table elements chemistry atomic weight symbol halogen metal">
+          <div class="auth-head">
+            <div class="auth-name">Element facts on the full board</div>
+            <span class="status-pill" id="periodic-table-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="periodic-table-status-detail">
+            All 118 elements with atomic number, name, symbol, category, and weight — centred like the marketplace channel.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Category filter</label>
+              <p class="hint" style="margin:0 0 8px">Leave all unchecked to rotate through every element.</p>
+              <div class="periodic-table-category-grid" id="periodic-table-category-grid"></div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-periodic-table-save">Save filters</button>
+                <button type="button" class="btn btn-outline" id="btn-periodic-table-reset">Reset filters</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label" for="periodic-table-element">Preview element</label>
+              <select class="field-input" id="periodic-table-element"></select>
+              <div class="vb-preview-wrap" style="margin-top:12px">
+                <div class="vb-grid" id="periodic-table-preview"></div>
+              </div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-periodic-table-push-selected">Push selected</button>
+                <button type="button" class="btn btn-outline" id="btn-periodic-table-push-random">Push random</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Word of the Day</div>
+        <div class="card word-of-the-day-settings-card" id="word-of-the-day-settings-card" data-settings-group="news" data-search-terms="word of the day vocabulary definition dictionary education">
+          <div class="auth-head">
+            <div class="auth-name">Expand your vocabulary</div>
+            <span class="status-pill" id="word-of-the-day-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="word-of-the-day-status-detail">
+            Local board-fit vocabulary entries with part of speech and a short definition — like the marketplace channel.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Part of speech filter</label>
+              <p class="hint" style="margin:0 0 8px">Leave all unchecked to rotate through every word type.</p>
+              <div class="word-of-the-day-pos-grid" id="word-of-the-day-pos-grid"></div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-word-of-the-day-save">Save filters</button>
+                <button type="button" class="btn btn-outline" id="btn-word-of-the-day-reset">Reset filters</button>
+              </div>
+            </div>
+            <div class="settings-col">
+              <label class="field-label" for="word-of-the-day-search">Find a word</label>
+              <input type="search" class="field-input" id="word-of-the-day-search" placeholder="Search words or definitions" autocomplete="off">
+              <label class="field-label field-label-spaced" for="word-of-the-day-word">Preview word</label>
+              <select class="field-input" id="word-of-the-day-word"></select>
+              <div class="vb-preview-wrap" style="margin-top:12px">
+                <div class="vb-grid" id="word-of-the-day-preview"></div>
+              </div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-word-of-the-day-push-selected">Push selected</button>
+                <button type="button" class="btn btn-outline" id="btn-word-of-the-day-push-random">Push random</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="news">Dad Jokes</div>
         <div class="card dad-jokes-settings-card" id="dad-jokes-settings-card" data-settings-group="news" data-search-terms="dad jokes puns groan corny setup punchline">
           <div class="auth-head">
@@ -2142,6 +2255,63 @@
                 <button class="btn btn-outline" id="btn-wiki-ck-poll">Refresh cache</button>
                 <button class="btn btn-outline" id="btn-wiki-ck-backfill">Backfill 7 days</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="travel">Space Launch Alerts</div>
+        <div class="card space-launch-alerts-settings-card" id="space-launch-alerts-settings-card" data-settings-group="travel" data-search-terms="space launch alerts rocket spacex falcon starlink nasa">
+          <div class="auth-head">
+            <div class="auth-name">Upcoming launches</div>
+            <span class="status-pill" id="space-launch-alerts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="space-launch-alerts-status-detail">
+            Cached upcoming launches from Launch Library 2 — free, no API key. Pick one to preview or push a test alert.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label" for="space-launch-hours-ahead">Look ahead</label>
+              <select id="space-launch-hours-ahead" class="field-input">
+                <option value="48">48 hours</option>
+                <option value="72">72 hours</option>
+                <option value="168" selected>7 days</option>
+                <option value="336">14 days</option>
+              </select>
+              <label class="field-label field-label-spaced" for="space-launch-chip-color">Alert chips</label>
+              <select id="space-launch-chip-color" class="field-input">
+                <option value="blue" selected>Blue</option>
+                <option value="green">Green</option>
+                <option value="white">White</option>
+              </select>
+              <label class="field-label field-label-spaced" for="space-launch-refresh-hours">Refresh cache every</label>
+              <select id="space-launch-refresh-hours" class="field-input">
+                <option value="3">3 hours</option>
+                <option value="6" selected>6 hours</option>
+                <option value="12">12 hours</option>
+                <option value="24">24 hours</option>
+              </select>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="space-launch-include-suborbital">
+                <span>Include suborbital launches</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-space-launch-alerts-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-space-launch-alerts-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-space-launch-alerts-refresh">Refresh cache</button>
+              </div>
+            </div>
+            <div class="settings-col board-preview-col">
+              <label class="field-label" for="space-launch-select">Preview launch</label>
+              <select id="space-launch-select" class="field-input"></select>
+              <div class="vb-bezel preview-bezel" style="margin-top:12px" aria-hidden="true">
+                <div class="vb-grid" id="space-launch-alerts-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-space-launch-alerts-push-selected">Push selected</button>
+                <button type="button" class="btn btn-outline" id="btn-space-launch-alerts-push-next">Push next launch</button>
+              </div>
+              <p class="hint" id="space-launch-alerts-cache-detail" style="margin-top:8px">Loading…</p>
             </div>
           </div>
         </div>
@@ -2608,7 +2778,7 @@
         <div class="section-label" data-settings-group="games">Word Scramble</div>
         <div class="card word-scramble-settings-card" id="word-scramble-settings-card" data-settings-group="games">
           <div class="auth-head">
-            <div class="auth-name">Boggle on the board</div>
+            <div class="auth-name">Word Scramble on the board</div>
             <span class="status-pill" id="word-scramble-status-pill">…</span>
           </div>
           <p class="auth-detail" id="word-scramble-status-detail">
@@ -3266,6 +3436,131 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-family-quotes-prev">Previous</button>
         <span class="hint" id="family-quotes-page-label"></span>
         <button type="button" class="btn btn-outline btn-sm" id="btn-family-quotes-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Warm Fuzzies manager -->
+  <div class="sheet-backdrop" id="warm-fuzzies-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="warm-fuzzies-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="warm-fuzzies-manage-title">Manage Warm Fuzzies</div>
+        <button type="button" class="credits-sheet-close" id="btn-warm-fuzzies-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="warm-fuzzies-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="warm-fuzzies-new">New warm fuzzy</label>
+          <textarea class="field-input cn-fact-input" id="warm-fuzzies-new" rows="3" maxlength="220" placeholder="You always pick the best karaoke song."></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-warm-fuzzies-add">Add fuzzy</button>
+            <span class="hint" id="warm-fuzzies-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="warm-fuzzies-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="warm-fuzzies-search" placeholder="Search fuzzies" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="warm-fuzzies-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="warm-fuzzies-fuzzy-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-warm-fuzzies-prev">Previous</button>
+        <span class="hint" id="warm-fuzzies-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-warm-fuzzies-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily Bucket Fillers manager -->
+  <div class="sheet-backdrop" id="daily-bucket-fillers-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="daily-bucket-fillers-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="daily-bucket-fillers-manage-title">Manage Daily Bucket Fillers</div>
+        <button type="button" class="credits-sheet-close" id="btn-daily-bucket-fillers-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="daily-bucket-fillers-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="daily-bucket-fillers-new">New bucket filler</label>
+          <textarea class="field-input cn-fact-input" id="daily-bucket-fillers-new" rows="3" maxlength="220" placeholder="Leave a kind note in a library book for the next reader."></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-daily-bucket-fillers-add">Add filler</button>
+            <span class="hint" id="daily-bucket-fillers-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="daily-bucket-fillers-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="daily-bucket-fillers-search" placeholder="Search fillers" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="daily-bucket-fillers-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="daily-bucket-fillers-filler-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-daily-bucket-fillers-prev">Previous</button>
+        <span class="hint" id="daily-bucket-fillers-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-daily-bucket-fillers-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Misheard lyrics manager -->
+  <div class="sheet-backdrop" id="misheard-lyrics-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="misheard-lyrics-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="misheard-lyrics-manage-title">Manage misheard lyrics</div>
+        <button type="button" class="credits-sheet-close" id="btn-misheard-lyrics-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="misheard-lyrics-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="misheard-lyrics-new">New misheard lyric</label>
+          <textarea class="field-input cn-fact-input" id="misheard-lyrics-new" rows="3" maxlength="160" placeholder="We built this city on sausage rolls"></textarea>
+          <label class="field-label" for="misheard-lyrics-new-artist">Artist</label>
+          <input type="text" class="field-input" id="misheard-lyrics-new-artist" maxlength="48" placeholder="Starship" autocomplete="off">
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-misheard-lyrics-add">Add lyric</button>
+            <span class="hint" id="misheard-lyrics-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="misheard-lyrics-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="misheard-lyrics-search" placeholder="Search lyrics or artists" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="misheard-lyrics-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="misheard-lyrics-lyric-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-misheard-lyrics-prev">Previous</button>
+        <span class="hint" id="misheard-lyrics-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-misheard-lyrics-next">Next</button>
       </div>
     </div>
   </div>
@@ -4299,7 +4594,7 @@
     </div>
   </div>
 
-  <script src="settings-filter.js?v=signal206"></script>
-  <script src="app.js?v=signal206"></script>
+  <script src="settings-filter.js?v=signal212"></script>
+  <script src="app.js?v=signal212"></script>
 </body>
 </html>

@@ -14,6 +14,7 @@ const {
   parseHhMm,
   RETRY_DELAYS_MS,
 } = require('../src/vestaboard/queue');
+const { framesFor: scrambleFrames } = require('../src/vestaboard/formatters/games');
 
 const SECOND = 1000;
 
@@ -585,8 +586,9 @@ test('holdSeconds keeps the next snapshot off the board until the hold ends', as
   assert.equal(h.transport.posts.length, 2);
 });
 
-test('a Word Scramble hold parks every queued page until the game clears', async () => {
+test('a Word Scramble lock parks every queued page until the game clears', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
   h.queue.submit([{
     ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
     dwellSeconds: 15,
@@ -598,8 +600,7 @@ test('a Word Scramble hold parks every queued page until the game clears', async
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), null);
   assert.equal(h.queue.pending().length, 2);
-  assert.equal(h.queue.state().holdKind, 'game');
-  assert.equal(h.queue.state().gameSource, 'word.scramble');
+  assert.equal(h.queue.state().gameLock.source, 'word.scramble');
   h.queue.submit([frame('AIR NOW', 4)], { explicit: true, breakHold: true });
   assert.equal(h.queue.pending().length, 3);
   assert.equal(h.queue.pending()[2].status, 'held');
@@ -608,20 +609,78 @@ test('a Word Scramble hold parks every queued page until the game clears', async
   assert.equal(h.transport.posts.length, 1);
 });
 
-test('queued pages air after a Word Scramble game lock clears', async () => {
+// The bug this covers: the lock used to be inferred from the last game
+// frame's `holdSeconds`. The lobby card's hold ran out at the moment the
+// round began, and everything parked behind the game rushed the board before
+// the round card — queued behind them — ever got its turn.
+test('the gap between two game phases does not open the line', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
   h.queue.submit([{
-    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    ...frame('LOBBY', 1, { source: 'word.scramble' }),
     dwellSeconds: 15,
-    holdSeconds: 30,
+    holdSeconds: 10,
   }]);
   assert.equal(await h.queue.tick(), 'posted');
-  h.queue.submit([frame('MANUAL', 2)], { explicit: true, breakHold: true });
+  h.queue.submit([frame('CHUCK', 2, { source: 'chuck.facts' })], { scheduler: true });
+
+  // The lobby hold has long since run out when round one starts.
+  h.advance(60 * SECOND);
+  h.queue.submit([{
+    ...frame('ROUND', 3, { source: 'word.scramble' }),
+    dwellSeconds: 15,
+    holdSeconds: 120,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 3, 'the round card, not the page behind it');
+  assert.equal(h.queue.pending().length, 1);
+});
+
+// Huupe live and Autodarts push `priority: alert`, which used to skip the
+// hold outright and wipe the pages the game was holding.
+test('an alert waits its turn behind a live game instead of taking the board', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([{
+    ...frame('ROUND', 1, { source: 'word.scramble' }),
+    dwellSeconds: 15,
+    holdSeconds: 120,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('RIDDLE', 2, { source: 'word.riddles' })], { explicit: true, breakHold: true });
+  h.queue.submit([frame('HUUPE', 3, { source: 'huupe.session' })], {
+    priority: 'alert',
+    quietHoursExempt: true,
+  });
+
+  // The riddle is still queued — an alert no longer discards it — and the
+  // board is still showing the round.
+  assert.equal(h.queue.pending().length, 2);
+  assert.equal(h.queue.pending().every((row) => row.status === 'held'), true);
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), null);
-  h.advance(30 * SECOND);
+  assert.equal(h.transport.posts.length, 1);
+
+  // Game over: the alert goes first, then the page it did not throw away.
+  h.queue.releaseGameLock('word.scramble');
   assert.equal(await h.queue.tick(), 'posted');
-  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.transport.posts[1].layout[0][0], 3, 'huupe alert');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[2].layout[0][0], 2, 'word riddle');
+});
+
+test('a game lock that is never released expires rather than wedging the board', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble', { ttlMs: 60 * SECOND });
+  h.queue.submit([frame('ROUND', 1, { source: 'word.scramble' })]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  h.advance(60 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.state().gameLock, null);
 });
 
 test('an explicit snapshot may post after the rate window during a guest hold', async () => {
@@ -684,4 +743,205 @@ test('an alert still preempts a guest hold', async () => {
   h.advance(16 * SECOND);
   h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })], { priority: 'alert' });
   assert.equal(await h.queue.tick(), 'posted');
+});
+
+test('a follow-up game card is owned even when the frame omits source', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([{
+    ...frame('ROUND', 1, { source: 'word.scramble' }),
+    holdSeconds: 180,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  h.advance(16 * SECOND);
+  h.queue.submit([frame('SCORES', 3)], {
+    replaceSource: 'word.scramble',
+    gameSource: 'word.scramble',
+    breakHold: false,
+    replaceCard: 'intermission',
+  });
+  assert.equal(h.queue.pending()[0].label, 'SCORES');
+  assert.equal(h.queue.pending()[0].status, 'waiting');
+  assert.equal(h.queue.pending()[1].status, 'held');
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 3);
+  assert.equal(h.queue.pending().length, 1);
+  assert.equal(h.queue.pending()[0].status, 'held');
+});
+
+test('round two does not evict an unshown intermission score card', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([{
+    ...frame('ROUND 1', 1, { source: 'word.scramble' }),
+    card: 'round',
+    holdSeconds: 180,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  h.queue.submit([frame('PSN', 3, { source: 'psn.now-playing' })]);
+
+  const scores = { ...frame('SCORES', 4, { source: 'word.scramble' }), card: 'intermission' };
+  h.queue.submit([scores], {
+    replaceSource: 'word.scramble',
+    gameSource: 'word.scramble',
+    replaceCard: 'intermission',
+    breakHold: false,
+  });
+  const nextRound = { ...frame('ROUND 2', 5, { source: 'word.scramble' }), card: 'round' };
+  h.queue.submit([nextRound], {
+    replaceSource: 'word.scramble',
+    gameSource: 'word.scramble',
+    replaceCard: 'round',
+    breakHold: false,
+  });
+
+  assert.deepEqual(h.queue.pending().map((row) => row.label), [
+    'SCORES',
+    'ROUND 2',
+    'WEATHER',
+    'PSN',
+  ]);
+  assert.equal(h.queue.pending()[0].status, 'waiting');
+  assert.equal(h.queue.pending()[1].status, 'waiting');
+  assert.equal(h.queue.pending()[2].status, 'held');
+  assert.equal(h.queue.pending()[3].status, 'held');
+
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 4, 'intermission scores first');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[2].layout[0][0], 5, 'then the next grid');
+  assert.equal(h.queue.pending().every((row) => row.status === 'held'), true);
+});
+
+test('a lobby refresh still replaces a pending lobby, not a later phase', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([
+    { ...frame('LOBBY 1', 1, { source: 'word.scramble' }), card: 'lobby' },
+  ], {
+    replaceSource: 'word.scramble',
+    replaceCard: 'lobby',
+    gameSource: 'word.scramble',
+  });
+  h.queue.submit([
+    { ...frame('LOBBY 2', 2, { source: 'word.scramble' }), card: 'lobby' },
+  ], {
+    replaceSource: 'word.scramble',
+    replaceCard: 'lobby',
+    gameSource: 'word.scramble',
+  });
+  assert.equal(h.queue.pending().length, 1);
+  assert.equal(h.queue.pending()[0].label, 'LOBBY 2');
+});
+
+test('formatter-built scramble follow-ups post while non-game pages stay held', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.acquireGameLock('word.scramble');
+  const round1 = scrambleFrames({
+    card: 'round',
+    phase: 'round',
+    code: 'FTEJ',
+    showCode: true,
+    roundIndex: 1,
+    rounds: 3,
+    grid: ['TEGP', 'TOEE', 'RABY', 'VMNO'],
+    holdSeconds: 180,
+  });
+  h.queue.submit(round1, {
+    replaceSource: 'word.scramble',
+    gameSource: 'word.scramble',
+    replaceCard: 'round',
+    breakHold: false,
+    quietHoursExempt: true,
+  });
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('BROADCAST', 9, { source: 'broadcast' })]);
+  h.queue.submit([frame('WEATHER MAP', 8, { source: 'us.weather-map' })], { scheduler: true });
+
+  h.advance(16 * SECOND);
+  const intermission = scrambleFrames({
+    card: 'intermission',
+    phase: 'intermission',
+    code: 'FTEJ',
+    showCode: true,
+    roundIndex: 1,
+    rounds: 3,
+    roundWinner: { name: 'Luis', score: 6 },
+    scores: [{ name: 'Luis', score: 6 }, { name: 'Luis (2)', score: 5 }],
+    holdSeconds: 20,
+  });
+  h.queue.submit(intermission, {
+    replaceSource: 'word.scramble',
+    gameSource: 'word.scramble',
+    replaceCard: 'intermission',
+    breakHold: false,
+    quietHoursExempt: true,
+  });
+  const round2 = scrambleFrames({
+    card: 'round',
+    phase: 'round',
+    code: 'FTEJ',
+    showCode: true,
+    roundIndex: 2,
+    rounds: 3,
+    grid: ['JYEI', 'TOUD', 'ITEP', 'EPSI'],
+    holdSeconds: 180,
+  });
+  h.queue.submit(round2, {
+    replaceSource: 'word.scramble',
+    gameSource: 'word.scramble',
+    replaceCard: 'round',
+    breakHold: false,
+    quietHoursExempt: true,
+  });
+
+  assert.equal(h.queue.pending()[0].label, 'Round winner');
+  assert.equal(h.queue.pending()[1].label, 'Word Scramble');
+  assert.equal(h.queue.pending().filter((row) => row.status === 'held').length, 2);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 3);
+  assert.equal(h.queue.pending().every((row) => row.status === 'held'), true);
+});
+
+test('an in-flight post does not splice a follow-up that replaced it in line', async () => {
+  let clock = 1_000_000;
+  let releasePost;
+  const inflight = new Promise((resolve) => { releasePost = resolve; });
+  const posts = [];
+  const queue = createQueue({
+    board: { id: 'sim', rateWindowSeconds: 1 },
+    now: () => clock,
+    transport: {
+      async post(layout) {
+        posts.push(layout);
+        if (posts.length === 1) {
+          await inflight;
+        }
+        return { ok: true, reason: 'ok', status: 200 };
+      },
+    },
+    log: silentLog(),
+  });
+
+  queue.acquireGameLock('word.scramble');
+  queue.submit([{ ...frame('SCORES', 1, { source: 'word.scramble' }), card: 'intermission' }]);
+  const first = queue.tick();
+  await Promise.resolve();
+  queue.submit(
+    [{ ...frame('ROUND 2', 2, { source: 'word.scramble' }), card: 'round' }],
+    { replaceSource: 'word.scramble', replaceCard: 'round', gameSource: 'word.scramble' },
+  );
+  assert.equal(queue.pending().some((row) => row.label === 'ROUND 2'), true);
+  releasePost();
+  assert.equal(await first, 'posted');
+  assert.equal(queue.pending()[0].label, 'ROUND 2');
+  clock += 16 * SECOND;
+  assert.equal(await queue.tick(), 'posted');
+  assert.equal(posts[1][0][0], 2);
 });

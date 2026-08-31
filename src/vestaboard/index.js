@@ -281,6 +281,8 @@ function createVestaboardHub({
       breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
       replaceSource: options.replaceSource,
+      replaceCard: options.replaceCard,
+      gameSource: options.gameSource,
       ctx,
       now,
       submit,
@@ -313,6 +315,24 @@ function createVestaboardHub({
     }
     const outcome = entry.queue.submit(frames, options);
     return { ok: outcome.accepted > 0, ...outcome };
+  }
+
+  /**
+   * A live Vestaboard game owns every board until its session ends. Called on
+   * each phase card (which also refreshes the safety deadline) and once more
+   * on close. See `src/games/registry.js` — every game must do this.
+   */
+  function setGameLock(source, active, { boardId = '' } = {}) {
+    const entries = boardId
+      ? [boards.get(String(boardId))].filter(Boolean)
+      : [...boards.values()];
+    for (const entry of entries) {
+      if (active) {
+        entry.queue.acquireGameLock?.(source);
+      } else {
+        entry.queue.releaseGameLock?.(source);
+      }
+    }
   }
 
   /** Drop matching pending pages on every board, or on one when named. */
@@ -376,6 +396,7 @@ function createVestaboardHub({
     pushEvent,
     submit,
     dropPending,
+    setGameLock,
     testFlip,
     boards: () => [...boards.values()].map((entry) => ({ ...entry.board })),
     onChange(listener) {
