@@ -362,68 +362,84 @@ html, body {
 }
 
 /*
- * The keyboard is up on a phone. It covers half the screen and Safari
- * scrolls the focused field to the top of the visual viewport, which
- * used to hide the letters above the fold. Lock the page to whatever
- * the visual viewport still has (`--gm-vh` / `--gm-board-max` from
- * scramble.js) so the board and the input stay in the same view.
+ * Soft keyboard is up (phone or tablet). Lock to the visual viewport
+ * (`--gm-vh` / `--gm-board-max` from scramble.js) and shrink the 4×4
+ * into a square that fits above the field. Desktop focus (`gm-typing`
+ * without `gm-keyboard`) leaves the board alone.
  */
-@media (max-width: 759px) {
-  html:has(body.gm-typing),
-  body.gm-typing {
-    overflow: hidden;
-  }
-  body.gm-typing {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: 0;
-    width: 100%;
-    height: var(--gm-vh, 100dvh);
-  }
-  body.gm-typing .gm-header,
-  body.gm-typing .gm-code-line,
-  body.gm-typing .gm-side {
-    display: none;
-  }
-  body.gm-typing .gm-shell {
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-  body.gm-typing .gm-play {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-  }
-  body.gm-typing .gm-stage {
-    height: 100%;
-    min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
-    align-content: stretch;
-  }
-  body.gm-typing .gm-timer { font-size: 1.6rem; }
-  body.gm-typing .gm-board-wrap {
-    max-width: min(520px, 100%, var(--gm-board-max, calc(var(--gm-vh, 100dvh) - 200px)));
-    height: 100%;
-    max-height: 100%;
-    display: grid;
-    place-items: center;
-  }
-  body.gm-typing .gm-grid { width: 100%; }
-  /* Static, not stuck: iOS keeps the layout viewport full height behind the
-     keyboard, so a bottom-stuck bar would sit under it. */
-  body.gm-typing .gm-compose {
-    position: static;
-    margin: 0;
-    padding: 0;
-    background: none;
-  }
+html:has(body.gm-keyboard),
+body.gm-keyboard {
+  overflow: hidden;
 }
+body.gm-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: calc(-1 * var(--gm-vv-top, 0px));
+  width: 100%;
+  height: var(--gm-vh, 100dvh);
+}
+body.gm-keyboard .gm-header,
+body.gm-keyboard .gm-code-line,
+body.gm-keyboard .gm-side,
+body.gm-keyboard .gm-score {
+  display: none;
+}
+body.gm-keyboard .gm-shell {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+body.gm-keyboard .gm-play {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-content: stretch !important;
+}
+body.gm-keyboard .gm-stage {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body.gm-keyboard .gm-meta { flex: 0 0 auto; }
+body.gm-keyboard .gm-timer { font-size: 1.35rem; }
+body.gm-keyboard .gm-phase { font-size: 0.95rem; }
+body.gm-keyboard .gm-board-wrap {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: min(100%, var(--gm-board-max, calc(var(--gm-vh, 50dvh) - 120px)));
+  height: min(100%, var(--gm-board-max, calc(var(--gm-vh, 50dvh) - 120px)));
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  margin-inline: auto;
+  display: grid;
+  place-items: center;
+}
+body.gm-keyboard .gm-grid {
+  width: 100%;
+  height: 100%;
+}
+body.gm-keyboard .gm-cell {
+  font-size: clamp(1.05rem, 16cqi, 2.2rem);
+}
+/* Static, not stuck: iOS keeps the layout viewport full height behind the
+   keyboard, so a bottom-stuck bar would sit under it. */
+body.gm-keyboard .gm-compose {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  background: none;
+}
+body.gm-keyboard .gm-status { flex: 0 0 auto; }
 
 /* No board on screen: lobby, intermission, the final. One centred column. */
 @media (min-width: 760px) {
