@@ -3,10 +3,9 @@
 /**
  * Settings catalog filter — shared by the admin page and Node tests.
  *
- * The page used to hide every section tab with zero hits and then ignore
- * clicks on `[hidden]` tabs. A search that scored nothing (or only scored
- * Media) made Global / Accounts / YouTube look broken. Tabs stay visible;
- * an explicit pane click is honored even when that pane has no hits.
+ * Push hides category tabs that have no hits for the current search; Settings
+ * does the same. Empty search keeps every tab. An explicit pane click is still
+ * honored, and the active tab stays visible even at zero hits.
  */
 
 const SETTINGS_VIEW_ORDER = Object.freeze([
@@ -290,10 +289,12 @@ function decideSettingsFilter({
   }
   const tabs = {};
   for (const name of views) {
+    const count = counts[name] || 0;
+    const active = name === view;
     tabs[name] = {
-      hidden: false,
-      count: counts[name] || 0,
-      active: name === view,
+      hidden: Boolean(q) && count === 0 && !active,
+      count,
+      active,
     };
   }
   return { view, total, tabs, empty: total === 0, query: q, kindFilter };

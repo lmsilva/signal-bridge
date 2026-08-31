@@ -7,6 +7,7 @@
   ALLOWED_NAME.add(' ');
 
   const CHIP_CODE = { R: 63, O: 64, Y: 65, G: 66, B: 67, V: 68, W: 69 };
+  const NAME_KEY = 'signal.guestbook.name';
 
   const $ = (id) => document.getElementById(id);
   const gridApi = () => window.FLAP_GRID || {};
@@ -186,24 +187,41 @@
     syncFooterButtons();
   }
 
-  function focusKeys() {
+  function rememberedName() {
+    try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; }
+  }
+
+  function rememberName(name) {
+    try {
+      if (name) localStorage.setItem(NAME_KEY, name);
+    } catch {
+      // A locked-down browser just means they type it again.
+    }
+  }
+
+  function fillRememberedName() {
+    const input = $('gb-name');
+    if (!input || input.value) return;
+    const saved = rememberedName();
+    if (saved) input.value = saved;
+  }
+
+  function dismissKeyboard() {
     const keys = $('gb-keys');
-    if (!keys) return;
-    keys.value = '';
-    keys.focus({ preventScroll: true });
+    if (keys && document.activeElement === keys) keys.blur();
+    if (keys) keys.value = '';
   }
 
   function focusBoard() {
     const preview = $('gb-preview');
     if (preview) preview.focus({ preventScroll: true });
-    const keys = $('gb-keys');
-    if (keys) keys.value = '';
+    dismissKeyboard();
   }
 
-  /** Phones still need the text field for the soft keyboard; PCs type on the board. */
+  /** The letter box is the only thing that should raise a phone keyboard. */
   function focusForTyping() {
     const coarse = window.matchMedia('(pointer: coarse)').matches;
-    if (coarse) focusKeys();
+    if (coarse) dismissKeyboard();
     else focusBoard();
   }
 
@@ -258,14 +276,10 @@
   }
 
   function setCell(code) {
-    if (state.caret.row >= editableRows()) {
-      focusForTyping();
-      return;
-    }
+    if (state.caret.row >= editableRows()) return;
     snapshot();
     state.rows[state.caret.row][state.caret.col] = code;
     advance();
-    focusForTyping();
   }
 
   function codeForChar(char) {
@@ -324,6 +338,7 @@
       return;
     }
     showPane('gb-compose');
+    fillRememberedName();
     if (!state.rows) resetBoard();
     else paint();
     focusForTyping();
@@ -361,6 +376,7 @@
       const who = state.status?.whoCanSend;
       await api('/api/guestbook/unlock', who === 'code' ? { code: value } : { password: value });
       showPane('gb-compose');
+      fillRememberedName();
       if (!state.rows) resetBoard();
       else paint();
       focusForTyping();
@@ -377,16 +393,16 @@
   $('gb-preview')?.addEventListener('pointerdown', (event) => {
     const cell = event.target.closest('[data-flap-row]');
     if (!cell) {
-      focusForTyping();
+      dismissKeyboard();
       return;
     }
     const row = Number(cell.getAttribute('data-flap-row'));
     if (row >= editableRows()) {
-      focusForTyping();
+      dismissKeyboard();
       return;
     }
     moveCaret(row, Number(cell.getAttribute('data-flap-col')));
-    focusForTyping();
+    dismissKeyboard();
   });
 
   function handleBoardKeydown(event) {
@@ -495,10 +511,14 @@
   });
 
   document.querySelectorAll('[data-chip]').forEach((button) => {
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+    });
     button.addEventListener('click', (event) => {
       event.preventDefault();
       const code = CHIP_CODE[button.getAttribute('data-chip')];
       if (code) setCell(code);
+      dismissKeyboard();
     });
   });
 
@@ -506,7 +526,7 @@
     snapshot();
     state.rows[state.caret.row][state.caret.col] = 0;
     paint();
-    focusForTyping();
+    dismissKeyboard();
   });
 
   $('btn-gb-undo')?.addEventListener('click', () => {
@@ -515,7 +535,7 @@
       state.rows = prev;
       paint();
     }
-    focusForTyping();
+    dismissKeyboard();
   });
 
   $('btn-gb-clear')?.addEventListener('click', () => {
@@ -528,7 +548,7 @@
     }
     state.rows = footerOptional() ? stampFooterIntoRows(next) : next;
     paint();
-    focusForTyping();
+    dismissKeyboard();
   });
 
   $('btn-gb-clear-footer')?.addEventListener('click', () => {
@@ -536,7 +556,7 @@
     snapshot();
     state.rows = clearFooterRows(state.rows);
     paint();
-    focusForTyping();
+    dismissKeyboard();
   });
 
   $('btn-gb-restore-footer')?.addEventListener('click', () => {
@@ -544,7 +564,7 @@
     snapshot();
     state.rows = stampFooterIntoRows(state.rows || blankRows());
     paint();
-    focusForTyping();
+    dismissKeyboard();
   });
 
   $('gb-name')?.addEventListener('input', (event) => {
@@ -564,9 +584,11 @@
       status.className = 'gb-status';
     }
     try {
+      const name = String($('gb-name')?.value || '').trim();
+      rememberName(name);
       const result = await api('/api/guestbook/send', {
         rows: state.rows,
-        name: $('gb-name')?.value || '',
+        name,
       });
       if (typeof window.renderFlapGrid === 'function') {
         window.renderFlapGrid($('gb-done-preview'), result.rows);
@@ -607,7 +629,7 @@
   });
 
   $('btn-gb-another')?.addEventListener('click', () => {
-    if ($('gb-name')) $('gb-name').value = '';
+    fillRememberedName();
     if ($('gb-send-status')) {
       $('gb-send-status').textContent = '';
       $('gb-send-status').className = 'gb-status';

@@ -1080,9 +1080,9 @@
       const on = name === view;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
-      // Zero-hit tabs stay clickable. Hiding them (and ignoring [hidden]
-      // clicks) is what made Global / Accounts / YouTube look dead.
-      btn.hidden = false;
+      // Same as Push: hide tabs with no hits for the typed search. Keep the
+      // active tab so a click onto an empty pane does not vanish the bar.
+      btn.hidden = Boolean(query) && count === 0 && !on;
       const badge = btn.querySelector('.settings-hit-count');
       if (badge) {
         badge.textContent = String(count);
