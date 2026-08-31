@@ -215,6 +215,7 @@ const SETTINGS_CARD_KINDS = Object.freeze({
   'daily-bucket-fillers-settings-card': ['vestaboard'],
   'misheard-lyrics-settings-card': ['vestaboard'],
   'periodic-table-settings-card': ['vestaboard'],
+  'us-state-facts-settings-card': ['vestaboard'],
   'word-of-the-day-settings-card': ['vestaboard'],
   'dad-jokes-settings-card': ['vestaboard'],
   'us-weather-map-settings-card': ['vestaboard'],

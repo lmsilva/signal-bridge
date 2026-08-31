@@ -225,6 +225,8 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
       thumbPath: preview.posterPath || row.thumbPath || null,
       previewPath: preview.previewPath || null,
       durationSeconds: preview.durationSeconds ?? row.durationSeconds ?? null,
+      previewRevision: preview.previewRevision || Date.now(),
+      frameCount: preview.frameCount ?? row.frameCount ?? null,
       statusDetail: preview.previewPath
         ? null
         : `Saved, but the wall preview could not be built: ${preview.error || 'unknown reason'}`,
@@ -252,6 +254,8 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
       thumbPath: saved.thumbPath,
       previewPath: saved.previewPath || null,
       durationSeconds: saved.durationSeconds || null,
+      previewRevision: saved.previewRevision || (saved.previewPath ? Date.now() : null),
+      frameCount: saved.frameCount || null,
       resolution: null,
       order: (game.media || []).filter((item) => item.kind === 'video').length,
       hidden: false,
@@ -363,6 +367,10 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     credentialsStatus,
     saveCredentials,
     pruneOrphans: () => media.pruneOrphans(store.getAllGames().map((game) => game.id)),
+    rebuildWallPreviews: () => {
+      const queued = jobs.rebuildWallPreviews();
+      return { queued };
+    },
     diskUsage: media.diskUsage,
     getSettings: settings.get,
     updateSettings,

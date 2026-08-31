@@ -1,16 +1,16 @@
 /**
  * Space Launch Alerts — marketplace layout.
  *
- * Row 1: coloured corner chips + centred `SPACE ALERT`
- * Row 2: blank spacer
- * Rows 3–6: up to four body lines, flush left at 22 columns
+ * Row 1: two coloured chips on each end + centred `SPACE LAUNCH`
+ * Rows 2–6: up to five body lines, flush left and top-aligned
  */
 
 const { fold, wrap, blankRow, placeText, COLS } = require('./vestaboard/encoder');
 const { chipCode, centered } = require('./vestaboard/frames');
 
-const BODY_ROWS = 4;
-const BODY_START = 2;
+const TITLE = 'SPACE LAUNCH';
+const BODY_ROWS = 5;
+const BODY_START = 1;
 const BOARD_ROWS = 6;
 const DEFAULT_CHIP = 'blue';
 
@@ -50,10 +50,7 @@ function alertRows(text, { chip = DEFAULT_CHIP } = {}) {
   if (!lines) {
     return [];
   }
-  const rows = [
-    alertChipRow('SPACE ALERT', chip),
-    blankRow(COLS),
-  ];
+  const rows = [alertChipRow(TITLE, chip)];
   for (let index = 0; index < BODY_ROWS; index += 1) {
     const row = blankRow(COLS);
     const line = lines[index];
@@ -70,6 +67,7 @@ function fitsBoard(text) {
 }
 
 module.exports = {
+  TITLE,
   BODY_ROWS,
   BODY_START,
   BOARD_ROWS,

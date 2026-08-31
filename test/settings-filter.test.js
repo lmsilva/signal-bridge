@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -160,7 +160,7 @@ test('decideSettingsFilter hides zero-hit tabs only while searching', () => {
 });
 
 test('the admin page loads the shared filter and hides zero-hit search tabs', () => {
-  assert.match(html, /settings-filter\.js\?v=signal216/);
+  assert.match(html, /settings-filter\.js\?v=signal217/);
   assert.match(html, /id="vb-settings-card"[^>]*data-search-terms="[^"]*quiet hours/);
   assert.match(html, /<div class="section-label" data-settings-group="media">Vestaboards<\/div>\s*<div class="card vb-settings-card"/);
   assert.match(appJs, /SignalSettingsFilter/);

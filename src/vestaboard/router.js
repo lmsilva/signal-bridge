@@ -78,6 +78,7 @@ const COMMAND_TO_TYPE = {
   'warm.fuzzies': 'warm.fuzzies',
   'bucket.fillers': 'bucket.fillers',
   'periodic.table': 'periodic.table',
+  'state.facts': 'state.facts',
   'word.day': 'word.day',
   'dad.jokes': 'dad.jokes',
   'us.weather-map': 'us.weather-map',

@@ -652,6 +652,24 @@ test('periodic.table is Vestaboard-only and needs a ready element', () => {
   assert.equal(ready.hasContent('periodic.table'), true);
 });
 
+test('state.facts is Vestaboard-only and needs a ready state', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'state.facts');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/us-state-facts');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getUsStateFactsStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('state.facts'), false);
+
+  const ready = createCommandRegistry({ getUsStateFactsStatus: () => ({ available: 50 }) });
+  assert.equal(ready.hasContent('state.facts'), true);
+});
+
 test('word.day is Vestaboard-only and needs a ready word', () => {
   const command = COMMANDS.find((entry) => entry.id === 'word.day');
   assert.ok(command);

@@ -71,6 +71,76 @@ def steam_image_cache_path(url: str) -> Path:
     return steam_image_cache_dir() / f"{digest}{ext}"
 
 
+def artwork_is_cached(url: str) -> bool:
+    """True when a non-empty file is already on disk for this URL."""
+    if not url:
+        return False
+    try:
+        cache_file = steam_image_cache_path(url)
+        return cache_file.is_file() and cache_file.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _download_artwork_bytes(url: str, timeout: float = 10):
+    """Fetch raw artwork bytes. SSL-verify failures fall back once, like `_fetch_photo`."""
+    global _unverified_ssl
+    if not url:
+        return None
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "alexa-broadcast-client/1.0"},
+    )
+
+    def download(context):
+        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+            return response.read()
+
+    context = (
+        ssl._create_unverified_context()
+        if _unverified_ssl
+        else ssl.create_default_context()
+    )
+    try:
+        return download(context)
+    except Exception as error:
+        if not _unverified_ssl and _is_ssl_failure(error):
+            data = download(ssl._create_unverified_context())
+            _unverified_ssl = True
+            return data
+        raise
+
+
+def ensure_artwork_cached(url: str, timeout: float = 30) -> bool:
+    """Download artwork to the local cache if missing. Does not decode it.
+
+    Roll Credits uses this so a looping WebP can finish over Wi‑Fi in the
+    background and only play once the whole file is on disk.
+    """
+    if not url:
+        return False
+    if artwork_is_cached(url):
+        return True
+    cache_file = steam_image_cache_path(url)
+    part_file = cache_file.with_name(f"{cache_file.name}.part")
+    try:
+        data = _download_artwork_bytes(url, timeout=timeout)
+    except Exception:
+        return artwork_is_cached(url)
+    if not data:
+        return False
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        part_file.write_bytes(data)
+        part_file.replace(cache_file)
+        return cache_file.is_file() and cache_file.stat().st_size > 0
+    except OSError:
+        try:
+            part_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return artwork_is_cached(url)
+
+
 def hero_aspect_hint(steam: dict | None) -> float:
     """
     Guess hero width/height from Steam CDN URL names before pixels land.
@@ -1203,7 +1273,6 @@ class SteamNowPlayingPanel(BasePanel):
         cls, url: str, max_w: int, max_h: int, force_network: bool = False,
         cover: bool = False, raw: bool = False,
     ):
-        global _unverified_ssl
         if not url or Image is None:
             return None
         if not force_network:
@@ -1211,31 +1280,13 @@ class SteamNowPlayingPanel(BasePanel):
             if cached is not None:
                 return cached
         try:
-            request = urllib.request.Request(
-                url, headers={"User-Agent": "alexa-broadcast-client/1.0"},
-            )
-
-            def download(context):
-                with urllib.request.urlopen(request, timeout=10, context=context) as response:
-                    return response.read()
-
-            context = (
-                ssl._create_unverified_context()
-                if _unverified_ssl
-                else ssl.create_default_context()
-            )
-            try:
-                data = download(context)
-            except Exception as error:
-                if not _unverified_ssl and _is_ssl_failure(error):
-                    data = download(ssl._create_unverified_context())
-                    _unverified_ssl = True
-                else:
-                    raise
+            data = _download_artwork_bytes(url, timeout=10)
         except Exception:
             # The network failed, which says nothing about the copy already on
             # disk. Deleting it here meant one blip during the background
             # refresh threw away good art and forced the next card to re-fetch.
+            return None
+        if not data:
             return None
 
         try:

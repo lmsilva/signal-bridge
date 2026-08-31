@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import queue
 import threading
 import time
 from datetime import datetime
@@ -50,6 +51,8 @@ from src.page_header import paint_page_header
 from src.shared_photos_page import next_in_seconds, rail_remaining_fraction
 from src.steam_now_playing_panel import (
     SteamNowPlayingPanel,
+    artwork_is_cached,
+    ensure_artwork_cached,
     fit_image_contain,
     fit_image_cover,
     steam_image_cache_path,
@@ -57,10 +60,16 @@ from src.steam_now_playing_panel import (
 from src.text_marquee import MarqueeLine
 
 TOUR_CHROME_H_U = 70
-# A clip arrives as an animated WebP. Every frame becomes a Tk PhotoImage held
-# in RAM, so the loop is sampled down rather than played frame-for-frame.
-LOOP_MAX_FRAMES = 24
-LOOP_MIN_DELAY_MS = 60
+# How many playlist cards (and their media files) to warm while the current
+# one is on screen — including during the dashboard, so game #1's WebP can
+# finish over Wi‑Fi before showcase starts.
+PREFETCH_AHEAD = 3
+# A clip arrives as an animated WebP. Short loops are preloaded as Tk
+# PhotoImages; longer trims seek the file one frame at a time so RAM stays
+# bounded. Do not sample a 24 fps file back down — that is the choppy loop.
+LOOP_PRELOAD_MAX = 360
+LOOP_MAX_FRAMES = LOOP_PRELOAD_MAX
+LOOP_MIN_DELAY_MS = 40
 RAIL_TRACK = "#3a4048"
 RAIL_DONE = "#6a7380"
 RAIL_SEGMENT_CAP = 20
@@ -78,8 +87,26 @@ def clamp_seconds(value, fallback, minimum=1, maximum=300):
         return fallback
 
 
-def decode_animation(source, max_frames: int = LOOP_MAX_FRAMES):
-    """Sample an animated image down to a few RGB frames and the delay between them."""
+def inspect_loop(source):
+    """Frame count and per-frame delay from an animated file, without loading pixels."""
+    if Image is None:
+        return 0, 0
+    try:
+        animation = Image.open(source)
+        count = int(getattr(animation, "n_frames", 1))
+        animation.seek(0)
+        frame_ms = int(animation.info.get("duration") or 0) or 42
+        return count, max(LOOP_MIN_DELAY_MS, frame_ms)
+    except Exception:
+        return 0, 0
+
+
+def decode_animation(source, max_frames: int = LOOP_PRELOAD_MAX):
+    """Load RGB frames when the file is short enough to hold in RAM.
+
+    Longer clips return no frames so ``HeroLoop`` can seek the file instead of
+    sampling it down (which used to turn 24 fps into a slideshow).
+    """
     if Image is None or ImageSequence is None or max_frames < 2:
         return [], 0
     try:
@@ -89,39 +116,45 @@ def decode_animation(source, max_frames: int = LOOP_MAX_FRAMES):
         return [], 0
     if count < 2:
         return [], 0
-    stride = max(1, math.ceil(count / max_frames))
+    if count > max_frames:
+        return [], 0
     frames = []
     # WebP only reports a frame's duration once it has been seeked to, so the
     # gap is read while walking rather than from the freshly opened file.
     frame_ms = 0
     try:
-        for index, frame in enumerate(ImageSequence.Iterator(animation)):
+        for frame in ImageSequence.Iterator(animation):
             if not frame_ms:
                 frame_ms = int(animation.info.get("duration") or 0)
-            if index % stride:
-                continue
             frames.append(frame.convert("RGB"))
-            if len(frames) >= max_frames:
-                break
     except Exception:
         return [], 0
     if len(frames) < 2:
         return [], 0
-    return frames, max(LOOP_MIN_DELAY_MS, (frame_ms or 100) * stride)
+    return frames, max(LOOP_MIN_DELAY_MS, frame_ms or 42)
 
 
-def load_hero_frames(url: str, width: int, height: int, max_frames: int = LOOP_MAX_FRAMES):
-    """Animated hero frames, fitted to the stage, read back from the artwork cache."""
+def load_hero_frames(url: str, width: int, height: int, max_frames: int = LOOP_PRELOAD_MAX):
+    """Preloaded hero frames, or a seek descriptor when the loop is too long."""
     try:
         cache_file = steam_image_cache_path(url)
         if not cache_file.exists():
-            return [], 0
+            return [], 0, None
     except Exception:
-        return [], 0
+        return [], 0, None
+    count, delay = inspect_loop(cache_file)
+    if count < 2:
+        return [], 0, None
+    if count > max_frames:
+        return [], delay, {
+            "path": cache_file, "count": count, "width": width, "height": height,
+        }
     frames, delay = decode_animation(cache_file, max_frames=max_frames)
     if not frames:
-        return [], 0
-    return [fit_image_contain(frame, width, height) for frame in frames], delay
+        return [], delay, {
+            "path": cache_file, "count": count, "width": width, "height": height,
+        }
+    return [fit_image_contain(frame, width, height) for frame in frames], delay, None
 
 
 class HeroLoop:
@@ -135,6 +168,9 @@ class HeroLoop:
         self._delay = 100
         self._canvas = None
         self._item_id = None
+        self._seek = None
+        self._seek_count = 0
+        self._seek_size = (40, 40)
 
     def start(self, canvas, item_id, frames, delay_ms):
         self.stop()
@@ -147,6 +183,27 @@ class HeroLoop:
         self._index = 0
         self._schedule()
 
+    def start_file(self, canvas, item_id, path, width, height, delay_ms, count):
+        """Seek a long WebP one frame at a time instead of preloading it."""
+        self.stop()
+        if item_id is None or Image is None or ImageTk is None or not path:
+            return
+        try:
+            animation = Image.open(path)
+            frames = int(count or getattr(animation, "n_frames", 1) or 1)
+        except Exception:
+            return
+        if frames < 2:
+            return
+        self._canvas = canvas
+        self._item_id = item_id
+        self._seek = animation
+        self._seek_count = frames
+        self._seek_size = (max(40, int(width)), max(40, int(height)))
+        self._delay = max(LOOP_MIN_DELAY_MS, int(delay_ms or 42))
+        self._index = 0
+        self._schedule()
+
     def _schedule(self):
         try:
             self._job = self.root.after(self._delay, self._tick)
@@ -155,6 +212,23 @@ class HeroLoop:
 
     def _tick(self):
         self._job = None
+        if self._seek is not None:
+            self._index = (self._index + 1) % self._seek_count
+            try:
+                self._seek.seek(self._index)
+                frame = fit_image_contain(
+                    self._seek.convert("RGB"), self._seek_size[0], self._seek_size[1],
+                )
+                photo = ImageTk.PhotoImage(frame)
+            except Exception:
+                return
+            self._frames = [photo]
+            try:
+                self._canvas.itemconfigure(self._item_id, image=photo)
+            except Exception:
+                return
+            self._schedule()
+            return
         if not self._frames:
             return
         self._index = (self._index + 1) % len(self._frames)
@@ -172,10 +246,49 @@ class HeroLoop:
                 pass
             self._job = None
         self._frames = []
+        if self._seek is not None:
+            try:
+                self._seek.close()
+            except Exception:
+                pass
+        self._seek = None
+        self._seek_count = 0
 
 
-def choose_image_hero(card: dict) -> dict | None:
-    """Prefer cover as hero when screenshots exist so the strip can show gameplay."""
+def choose_still_hero(card: dict) -> dict | None:
+    """Poster / cover / screenshot to paint while a clip is still downloading."""
+    media = (card or {}).get("media") or {}
+    still = media.get("still")
+    if isinstance(still, dict) and still.get("url"):
+        out = dict(still)
+        out["animated"] = False
+        return out
+    hero = media.get("hero") if isinstance(media.get("hero"), dict) else {}
+    thumb = hero.get("thumbUrl")
+    if thumb:
+        return {
+            "id": hero.get("id"),
+            "kind": hero.get("kind") or "video",
+            "url": thumb,
+            "thumbUrl": thumb,
+            "animated": False,
+        }
+    if hero.get("kind") in ("cover", "screenshot") and hero.get("url"):
+        return hero
+    for shot in media.get("screenshots") or []:
+        if isinstance(shot, dict) and shot.get("url"):
+            return shot
+    return None
+
+
+def choose_image_hero(card: dict, *, cached=None) -> dict | None:
+    """Prefer cover as hero when screenshots exist so the strip can show gameplay.
+
+    A looping WebP only plays once ``cached(url)`` is true. Pass ``cached=None``
+    (the default) to keep the old "always play the loop" behaviour — unit tests
+    that do not touch disk rely on that. The panel always passes
+    ``artwork_is_cached``.
+    """
     media = (card or {}).get("media") or {}
     hero = media.get("hero")
     shots = [shot for shot in (media.get("screenshots") or [])
@@ -184,7 +297,9 @@ def choose_image_hero(card: dict) -> dict | None:
     # bare video URL is still a file this panel cannot decode.
     if (isinstance(hero, dict) and hero.get("kind") == "video"
             and hero.get("url") and hero.get("animated")):
-        return hero
+        if cached is None or cached(hero.get("url")):
+            return hero
+        return choose_still_hero(card)
     if isinstance(hero, dict) and hero.get("kind") == "cover" and hero.get("url"):
         return hero
     # If the bridge still picked a screenshot as hero, keep it when no cover URL.
@@ -193,6 +308,28 @@ def choose_image_hero(card: dict) -> dict | None:
     for shot in shots:
         return shot
     return None
+
+
+def card_media_urls(card: dict) -> list:
+    """Artwork URLs to copy onto disk, stills first so they beat the WebP queue."""
+    seen = []
+
+    def add(url):
+        text = str(url or "").strip()
+        if text and text not in seen:
+            seen.append(text)
+
+    media = (card or {}).get("media") or {}
+    hero = media.get("hero") if isinstance(media.get("hero"), dict) else {}
+    still = media.get("still") if isinstance(media.get("still"), dict) else {}
+    add(still.get("url"))
+    add(hero.get("thumbUrl"))
+    for shot in media.get("screenshots") or []:
+        if isinstance(shot, dict):
+            add(shot.get("url"))
+            add(shot.get("thumbUrl"))
+    add(hero.get("url"))
+    return seen
 
 
 def choose_showcase_shots(card: dict, *, limit: int = 3) -> list:
@@ -708,6 +845,10 @@ class RollCreditsPanel(BasePanel):
         self._scale = 1.0
         self._px_per_pt = PX_PER_POINT
         self._font_cache = {}
+        self._cache_queue = queue.Queue()
+        self._cache_queued = set()
+        self._cache_lock = threading.Lock()
+        self._cache_worker_started = False
 
     def hide(self):
         self._cancel_chrome_tick()
@@ -758,6 +899,8 @@ class RollCreditsPanel(BasePanel):
         self._games = []
         self._cards = {}
         self._prefetching = set()
+        with self._cache_lock:
+            self._cache_queued = set()
         self._index = 0
         self._phase = "dashboard"
         # Absolute deadline so playlist/prefetch races cannot leave the stats page early
@@ -794,10 +937,9 @@ class RollCreditsPanel(BasePanel):
         if token != self._token or not self.visible or not isinstance(games, list):
             return
         self._games = [row for row in games if isinstance(row, dict) and row.get("id")]
-        # Prefetch only once showcase starts — early card fetches used to paint
-        # game #1 over the dashboard on fast LAN pushes.
-        if self._phase == "showcase":
-            self._prefetch(self._index)
+        # Card JSON + media files can warm during the dashboard; `_store_card`
+        # still refuses to paint a showcase over the stats page.
+        self._warm_ahead(0 if self._phase != "showcase" else self._index)
 
     def _paint_header(self):
         screen_w, screen_h = self._screen()
@@ -889,6 +1031,7 @@ class RollCreditsPanel(BasePanel):
                 continue
             self._card(box, accent=accents.get(name))
         portrait = is_portrait(screen_w, screen_h)
+        self._enqueue_card_media(latest)
         self._draw_latest(boxes["hero"], latest, stats, notes=not portrait)
         self._draw_counters(
             boxes["counters"], stats, notes_from_latest=portrait, latest=latest, portrait=portrait,
@@ -912,7 +1055,7 @@ class RollCreditsPanel(BasePanel):
         fs = layout["font_scale"]
         self._title(x0 + 18 * u, y0 + layout["header_y"], "LATEST INDUCTED", size=15, accent=WARN)
         ax0, ay0, ax1, ay1 = layout["art"]
-        self._draw_image_stage((x0 + ax0, y0 + ay0, x0 + ax1, y0 + ay1), choose_image_hero(latest))
+        self._draw_image_stage((x0 + ax0, y0 + ay0, x0 + ax1, y0 + ay1), self._hero_for(latest))
         tx = x0 + layout["text_x"]
         induction = latest.get("induction")
         right = x1 - 18 * u
@@ -1214,16 +1357,70 @@ class RollCreditsPanel(BasePanel):
         return f"{base}/api/roll-credits/card?id={game_id}"
 
     def _prefetch(self, index):
-        if not self._games or self._phase != "showcase":
+        self._warm_ahead(index)
+
+    def _hero_for(self, card):
+        return choose_image_hero(card, cached=artwork_is_cached)
+
+    def _ensure_cache_worker(self):
+        if self._cache_worker_started:
             return
-        for offset in (0, 1):
-            target = index + offset
-            if target >= len(self._games):
-                if self._tour.get("loop") is False:
+        self._cache_worker_started = True
+        threading.Thread(target=self._cache_worker, daemon=True).start()
+
+    def _cache_worker(self):
+        while True:
+            url = self._cache_queue.get()
+            try:
+                if url:
+                    ensure_artwork_cached(url)
+            except Exception:
+                pass
+            finally:
+                self._cache_queue.task_done()
+
+    def _enqueue_urls(self, urls):
+        if not hasattr(self, "_cache_lock"):
+            return
+        pending = []
+        with self._cache_lock:
+            for url in urls:
+                text = str(url or "").strip()
+                if not text or text in self._cache_queued:
                     continue
-                target %= len(self._games)
+                self._cache_queued.add(text)
+                pending.append(text)
+        to_fetch = [url for url in pending if not artwork_is_cached(url)]
+        if not to_fetch:
+            return
+        self._ensure_cache_worker()
+        for url in to_fetch:
+            self._cache_queue.put(url)
+
+    def _enqueue_card_media(self, card):
+        if not isinstance(card, dict):
+            return
+        self._enqueue_urls(card_media_urls(card))
+
+    def _warm_ahead(self, index, count=PREFETCH_AHEAD):
+        if not self._games:
+            return
+        n = len(self._games)
+        loop = (getattr(self, "_tour", None) or {}).get("loop") is not False
+        for offset in range(max(1, int(count or 1))):
+            target = index + offset
+            if target >= n:
+                if not loop:
+                    continue
+                target %= n
             game_id = str(self._games[target].get("id") or "")
-            if not game_id or game_id in self._cards or game_id in self._prefetching:
+            if not game_id:
+                continue
+            card = self._cards.get(game_id)
+            if card:
+                self._enqueue_card_media(card)
+                continue
+            if game_id in self._prefetching:
                 continue
             self._prefetching.add(game_id)
             token = self._token
@@ -1239,6 +1436,7 @@ class RollCreditsPanel(BasePanel):
         if token != self._token or not isinstance(card, dict):
             return
         self._cards[game_id] = card
+        self._enqueue_card_media(card)
         # Prefetch during the dashboard must never wipe the stats page.
         if self._phase != "showcase" or not self.visible or not self._games:
             return
@@ -1268,6 +1466,7 @@ class RollCreditsPanel(BasePanel):
             self._index = 0
             self._dashboard_until = time.monotonic() + self._tour["dashboardSeconds"]
             self._draw_dashboard()
+            self._warm_ahead(0)
             self._schedule(self._tour["dashboardSeconds"], self._show_game)
             return
         self._show_game()
@@ -1283,7 +1482,8 @@ class RollCreditsPanel(BasePanel):
         boxes = layout_boxes(
             screen_w, screen_h, timed=self._tour.get("loop") is False, shots=bool(shots),
         )
-        self._draw_image_stage(boxes["hero"], choose_image_hero(card))
+        self._enqueue_card_media(card)
+        self._draw_image_stage(boxes["hero"], self._hero_for(card))
         self._card(boxes["title"], accent=WARN)
         self._card(boxes["facts"])
         self._draw_title(boxes["title"], card)
@@ -1320,17 +1520,26 @@ class RollCreditsPanel(BasePanel):
 
     def _image_worker(self, token, url, box, animated=False):
         width, height = max(40, int(box[2] - box[0])), max(40, int(box[3] - box[1]))
-        image = SteamNowPlayingPanel._fetch_photo(url, width, height, raw=True)
-        frames, delay = [], 0
-        # _fetch_photo flattens to the first frame but leaves the bytes on disk,
-        # so the rest of the loop is read back from that cache entry.
-        if animated and image is not None:
-            frames, delay = load_hero_frames(url, max(40, width - 28), max(40, height - 28))
+        play_loop = bool(animated) and artwork_is_cached(url)
+        # Never pull an uncached WebP on the showcase path — that is the Wi‑Fi
+        # + decode hitch. The cache worker copies it in the background; the
+        # next visit plays from disk.
+        if animated and not play_loop:
+            image, frames, delay, seek = None, [], 0, None
+        else:
+            image = SteamNowPlayingPanel._fetch_photo(url, width, height, raw=True)
+            frames, delay, seek = [], 0, None
+            # _fetch_photo flattens to the first frame but leaves the bytes on
+            # disk, so the rest of the loop is read back from that cache entry.
+            if play_loop and image is not None:
+                frames, delay, seek = load_hero_frames(
+                    url, max(40, width - 28), max(40, height - 28),
+                )
         self.root.after(
-            0, lambda: self._apply_hero(token, image, width, height, frames, delay),
+            0, lambda: self._apply_hero(token, image, width, height, frames, delay, seek),
         )
 
-    def _apply_hero(self, token, image, width, height, frames=(), delay=0):
+    def _apply_hero(self, token, image, width, height, frames=(), delay=0, seek=None):
         if token != self._token or not self.visible or image is None or ImageTk is None:
             return
         try:
@@ -1344,6 +1553,15 @@ class RollCreditsPanel(BasePanel):
             self.canvas.itemconfigure(self._image_ids.get("hero"), image=fg_photo)
         except Exception:
             return
+        loop = HeroLoop(self.root)
+        if seek and seek.get("path"):
+            self._loops.append(loop)
+            loop.start_file(
+                self.canvas, self._image_ids.get("hero"),
+                seek["path"], seek.get("width") or width, seek.get("height") or height,
+                delay, seek.get("count"),
+            )
+            return
         if len(frames) < 2:
             return
         # Only the foreground cycles — the blurred backdrop stays on frame one so
@@ -1353,7 +1571,6 @@ class RollCreditsPanel(BasePanel):
         except Exception:
             return
         self._photo_refs.extend(photos)
-        loop = HeroLoop(self.root)
         self._loops.append(loop)
         loop.start(self.canvas, self._image_ids.get("hero"), photos, delay)
 

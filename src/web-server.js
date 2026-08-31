@@ -150,6 +150,7 @@ const { createMisheardLyrics } = require('./misheard-lyrics');
 const { createWarmFuzzies } = require('./warm-fuzzies');
 const { createDailyBucketFillers } = require('./daily-bucket-fillers');
 const { createPeriodicTable } = require('./periodic-table');
+const { createUsStateFacts } = require('./us-state-facts');
 const { createWordOfTheDay } = require('./word-of-the-day');
 const { createDadJokes } = require('./dad-jokes');
 const { createUsWeatherMap } = require('./us-weather-map');
@@ -540,6 +541,7 @@ function createWebServer({
   const warmFuzzies = createWarmFuzzies(config, log);
   const dailyBucketFillers = createDailyBucketFillers(config, log);
   const periodicTable = createPeriodicTable(config, log);
+  const usStateFacts = createUsStateFacts(config, log);
   const wordOfTheDay = createWordOfTheDay(config, log);
   const dadJokes = createDadJokes(config, log);
   const usWeatherMap = createUsWeatherMap(config, log, {
@@ -677,6 +679,7 @@ function createWebServer({
     getDailyBucketFillersStatus: () => dailyBucketFillers.statusSnapshot(),
     getMisheardLyricsStatus: () => misheardLyrics.statusSnapshot(),
     getPeriodicTableStatus: () => periodicTable.statusSnapshot(),
+    getUsStateFactsStatus: () => usStateFacts.statusSnapshot(),
     getWordOfTheDayStatus: () => wordOfTheDay.statusSnapshot(),
     getDadJokesStatus: () => dadJokes.statusSnapshot(),
     getUsWeatherMapStatus: () => usWeatherMap.statusSnapshot(),
@@ -4048,6 +4051,55 @@ function createWebServer({
     });
   }
 
+  function handleUsStateFactsGet(_query, res) {
+    sendJson(res, 200, { ok: true, ...usStateFacts.statusSnapshot() });
+  }
+
+  function handleUsStateFactsSettingsPost(body, res) {
+    if (body?.reset) {
+      usStateFacts.updateSettings({ regions: [], recentIds: [] });
+      sendJson(res, 200, { ok: true, ...usStateFacts.statusSnapshot() });
+      return;
+    }
+    usStateFacts.updateSettings({
+      regions: body?.regions,
+    });
+    sendJson(res, 200, { ok: true, ...usStateFacts.statusSnapshot() });
+  }
+
+  function handleUsStateFactsPush(body, res) {
+    const payload = usStateFacts.nextPayload({
+      id: body?.id,
+      name: body?.name,
+    });
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No US state facts match your filters — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('US State Facts', { targetId, id: payload.state.id, name: payload.state.name });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      state: payload.state,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleWordOfTheDayGet(query, res) {
     sendJson(res, 200, { ok: true, ...wordOfTheDay.statusSnapshot({
       query: query?.q || query?.query,
@@ -5346,6 +5398,8 @@ function createWebServer({
           handleMisheardLyricsPush(body, res); break;
         case 'periodic.table':
           handlePeriodicTablePush(body, res); break;
+        case 'state.facts':
+          handleUsStateFactsPush(body, res); break;
         case 'word.day':
           handleWordOfTheDayPush(body, res); break;
         case 'dad.jokes':
@@ -6665,6 +6719,10 @@ function createWebServer({
       }
       if (tail === 'prune-orphans') {
         sendJson(res, 200, { ok: true, ...rollCreditsInstance.pruneOrphans() });
+        return;
+      }
+      if (tail === 'rebuild-previews') {
+        sendJson(res, 202, { ok: true, ...rollCreditsInstance.rebuildWallPreviews() });
         return;
       }
       const rescrapeMatch = /^games\/([^/]+)\/rescrape$/.exec(tail);
@@ -8642,6 +8700,11 @@ function createWebServer({
           handlePeriodicTableGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
+        if (pathname === '/api/us-state-facts/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleUsStateFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
         if (pathname === '/api/word-of-the-day/settings') {
           if (!requireAdminSession(req, res)) return;
           handleWordOfTheDayGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
@@ -9490,6 +9553,12 @@ function createWebServer({
             return;
           case '/api/push/periodic-table':
             handlePeriodicTablePush(body, res);
+            return;
+          case '/api/us-state-facts/settings':
+            handleUsStateFactsSettingsPost(body, res);
+            return;
+          case '/api/push/us-state-facts':
+            handleUsStateFactsPush(body, res);
             return;
           case '/api/word-of-the-day/settings':
             handleWordOfTheDaySettingsPost(body, res);

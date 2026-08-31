@@ -9,11 +9,12 @@ const THUMB_MAX_EDGE = 360;
 // animated WebP it can loop inside the card, plus a poster still for fallback.
 const PREVIEW_MAX_EDGE = 512;
 const PREVIEW_SECONDS = 5;
-const PREVIEW_FPS = 10;
+const PREVIEW_FPS = 24;
 const PREVIEW_SKIP_SECONDS = 3;
-// A hand-picked trim may be longer than the default, but not unbounded: every
-// frame is held in memory as RGBA before it is encoded.
-const PREVIEW_MAX_SECONDS = 15;
+// Automatic snippets stay at PREVIEW_SECONDS. A hand-set start/end is the
+// whole range, with this only as a last-resort cap so a two-hour file cannot
+// become a wall flipbook.
+const PREVIEW_MAX_SECONDS = 600;
 const PREVIEW_MAX_RAW_BYTES = 96 * 1024 * 1024;
 const MIME_EXT = {
   'image/jpeg': '.jpg',
@@ -158,10 +159,15 @@ function previewWindow(durationSeconds, {
 
   if (trimmedStart !== null || trimmedEnd !== null) {
     const from = trimmedStart ?? 0;
-    const to = trimmedEnd !== null && trimmedEnd > from
-      ? trimmedEnd
-      : from + Math.min(seconds, maxSeconds);
-    const span = Math.min(to - from, maxSeconds);
+    let to;
+    if (trimmedEnd !== null && trimmedEnd > from) {
+      to = trimmedEnd;
+    } else {
+      // Start only (or a backwards end): default-length snippet from there.
+      to = from + seconds;
+    }
+    if (hasTotal) to = Math.min(to, total);
+    const span = Math.min(Math.max(0, to - from), maxSeconds);
     if (span > 0) return { start: from, seconds: span };
   }
 
@@ -395,6 +401,8 @@ function createRollCreditsMedia(config = {}, log = console, {
         thumbPath: preview.posterPath,
         previewPath: preview.previewPath,
         durationSeconds: preview.durationSeconds,
+        previewRevision: preview.previewRevision || null,
+        frameCount: preview.frameCount || null,
         previewError: preview.error,
         url: publicUrl(relative),
         mimeType: normalizedMime,
@@ -466,6 +474,45 @@ function createRollCreditsMedia(config = {}, log = console, {
   }
 
   /**
+   * Runs an ffmpeg/ffprobe command that writes a file (stdout ignored).
+   * Used for long wall previews so we never buffer every RGBA frame in RAM.
+   */
+  function runFfmpegToFile(name, args) {
+    const binary = ffmpegBinary(name);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let child;
+      try {
+        child = spawnImpl(binary, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      } catch (error) {
+        reject(new Error(`${name} could not start: ${error.message}`));
+        return;
+      }
+      let stderr = '';
+      child.stderr?.on?.('data', (chunk) => {
+        if (stderr.length < 4000) stderr += chunk;
+      });
+      child.once('error', (error) => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(error?.code === 'ENOENT'
+          ? `${name} is missing — rebuild the image with ./recreate.sh --build`
+          : `${name} failed: ${error.message}`));
+      });
+      child.once('close', (code) => {
+        if (settled) return;
+        settled = true;
+        if (code !== 0) {
+          const detail = String(stderr).trim().split(/\r?\n/).filter(Boolean).pop() || `exit ${code}`;
+          reject(new Error(`${name} failed: ${detail.slice(0, 240)}`));
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
    * Runs an ffmpeg/ffprobe command, buffering stdout. Rejects with a short
    * message so a broken clip never writes multi-KB of ffmpeg chatter into the
    * admin status line.
@@ -532,9 +579,13 @@ function createRollCreditsMedia(config = {}, log = console, {
 
   /**
    * Builds the wall-facing artefacts for a stored clip: a poster still and a
-   * short looping animated WebP. Never throws — a clip that cannot be decoded
+   * looping animated WebP. Never throws — a clip that cannot be decoded
    * simply keeps its cover art on the display, and the reason is returned for
    * the admin status line.
+   *
+   * Long trims write WebP with ffmpeg so every RGBA frame is not held in RAM.
+   * The old raw→sharp path is only the fallback when libwebp is missing and
+   * the window still fits PREVIEW_MAX_RAW_BYTES.
    */
   async function renderVideoPreview(relativeVideoPath, {
     seconds = PREVIEW_SECONDS,
@@ -546,7 +597,6 @@ function createRollCreditsMedia(config = {}, log = console, {
     const empty = {
       posterPath: null, previewPath: null, durationSeconds: null, frameCount: 0, error: null,
     };
-    if (!sharpImpl) return { ...empty, error: 'sharp is unavailable' };
     let relative;
     try {
       relative = cleanRelativePath(relativeVideoPath);
@@ -556,10 +606,98 @@ function createRollCreditsMedia(config = {}, log = console, {
     const source = absolutePath(relative);
     const gameId = relative.split('/')[0];
     const stem = path.basename(relative).replace(/\.[^.]+$/, '');
+    const posterPath = `${gameId}/thumbs/${stem}.poster.jpg`;
+    const previewPath = `${gameId}/thumbs/${stem}.preview.webp`;
     try {
       const probe = await probeVideo(source);
       const frame = previewFrameSize(probe.width, probe.height, maxEdge);
       const window = previewWindow(probe.durationSeconds, { seconds, trimStart, trimEnd });
+      const start = String(Math.round(window.start * 1000) / 1000);
+      const length = String(Math.round(window.seconds * 1000) / 1000);
+      fs.mkdirSync(path.dirname(absolutePath(posterPath)), { recursive: true });
+
+      let wrotePoster = false;
+      let wrotePreview = false;
+      try {
+        await runFfmpegToFile('ffmpeg', [
+          '-y', '-v', 'error',
+          '-ss', start, '-i', source, '-frames:v', '1',
+          '-vf', `scale=${THUMB_MAX_EDGE}:${THUMB_MAX_EDGE}:force_original_aspect_ratio=decrease`,
+          absolutePath(posterPath),
+        ]);
+        wrotePoster = fs.existsSync(absolutePath(posterPath));
+      } catch {
+        wrotePoster = false;
+      }
+
+      const webpArgs = (codec) => ([
+        '-y', '-v', 'error',
+        '-ss', start, '-i', source, '-t', length,
+        '-an',
+        '-vf', `fps=${fps},scale=${frame.width}:${frame.height}`,
+        '-loop', '0',
+        '-c:v', codec,
+        '-quality', '72',
+        absolutePath(previewPath),
+      ]);
+      for (const codec of ['libwebp', 'webp']) {
+        try {
+          await runFfmpegToFile('ffmpeg', webpArgs(codec));
+          wrotePreview = fs.existsSync(absolutePath(previewPath))
+            && fs.statSync(absolutePath(previewPath)).size > 0;
+          if (wrotePreview) break;
+        } catch {
+          wrotePreview = false;
+        }
+      }
+
+      if (!wrotePreview) {
+        const fallback = await renderVideoPreviewRaw(source, {
+          frame, window, fps, posterPath, previewPath, wrotePoster,
+        });
+        wrotePoster = fallback.wrotePoster;
+        wrotePreview = fallback.wrotePreview;
+        if (!wrotePreview && fallback.error) {
+          return {
+            ...empty,
+            posterPath: wrotePoster ? posterPath : null,
+            durationSeconds: probe.durationSeconds,
+            previewStart: window.start,
+            previewSeconds: window.seconds,
+            error: fallback.error,
+          };
+        }
+      }
+
+      return {
+        posterPath: wrotePoster ? posterPath : null,
+        previewPath: wrotePreview ? previewPath : null,
+        durationSeconds: probe.durationSeconds,
+        previewStart: window.start,
+        previewSeconds: window.seconds,
+        previewRevision: Date.now(),
+        frameCount: Math.max(2, Math.round(window.seconds * Math.max(1, fps))),
+        error: wrotePoster || wrotePreview ? null : 'preview encoding failed',
+      };
+    } catch (error) {
+      return { ...empty, error: error?.message || String(error) };
+    }
+  }
+
+  async function renderVideoPreviewRaw(source, {
+    frame, window, fps, posterPath, previewPath, wrotePoster,
+  }) {
+    if (!sharpImpl) return { wrotePoster, wrotePreview: false, error: 'sharp is unavailable' };
+    const frameBytes = frame.width * frame.height * 4;
+    const estimated = frameBytes * Math.max(2, Math.round(window.seconds * Math.max(1, fps)));
+    if (estimated > PREVIEW_MAX_RAW_BYTES) {
+      return {
+        wrotePoster,
+        wrotePreview: false,
+        error: 'clip is too long for the in-memory preview fallback',
+      };
+    }
+    try {
       const raw = await runFfmpeg('ffmpeg', [
         '-v', 'error',
         '-ss', String(Math.round(window.start * 1000) / 1000),
@@ -572,38 +710,22 @@ function createRollCreditsMedia(config = {}, log = console, {
         '-',
       ]);
       const frames = splitRawFrames(raw, frame.width, frame.height);
-      if (!frames.length) {
-        return { ...empty, durationSeconds: probe.durationSeconds, error: 'no frames decoded' };
+      if (!frames.length) return { wrotePoster, wrotePreview: false, error: 'no frames decoded' };
+      if (!wrotePoster) {
+        const poster = await encodeRawPoster(frames[0], frame, sharpImpl);
+        if (poster) {
+          fs.writeFileSync(absolutePath(posterPath), poster);
+          wrotePoster = true;
+        }
       }
-      fs.mkdirSync(path.dirname(absolutePath(`${gameId}/thumbs/${stem}.jpg`)), { recursive: true });
-
-      let posterPath = null;
-      const poster = await encodeRawPoster(frames[0], frame, sharpImpl);
-      if (poster) {
-        posterPath = `${gameId}/thumbs/${stem}.poster.jpg`;
-        fs.writeFileSync(absolutePath(posterPath), poster);
-      }
-
-      let previewPath = null;
       const animation = await encodeAnimatedWebp(
         frames, { ...frame, delayMs: 1000 / Math.max(1, fps) }, sharpImpl,
       );
-      if (animation) {
-        previewPath = `${gameId}/thumbs/${stem}.preview.webp`;
-        fs.writeFileSync(absolutePath(previewPath), animation);
-      }
-
-      return {
-        posterPath,
-        previewPath,
-        durationSeconds: probe.durationSeconds,
-        previewStart: window.start,
-        previewSeconds: window.seconds,
-        frameCount: frames.length,
-        error: posterPath || previewPath ? null : 'preview encoding failed',
-      };
+      if (!animation) return { wrotePoster, wrotePreview: false, error: 'preview encoding failed' };
+      fs.writeFileSync(absolutePath(previewPath), animation);
+      return { wrotePoster, wrotePreview: true, error: null };
     } catch (error) {
-      return { ...empty, error: error?.message || String(error) };
+      return { wrotePoster, wrotePreview: false, error: error?.message || String(error) };
     }
   }
 

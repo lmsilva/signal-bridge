@@ -96,11 +96,16 @@ test('a hand-picked clip range wins over the automatic window', () => {
   assert.deepEqual(previewWindow(120, { trimStart: 42, trimEnd: 50 }), { start: 42, seconds: 8 });
   // Start only: take the default length from there rather than the intro skip.
   assert.deepEqual(previewWindow(120, { trimStart: 42 }), { start: 42, seconds: PREVIEW_SECONDS });
-  // The range is clamped to the clip and to the memory ceiling.
-  assert.deepEqual(previewWindow(30, { trimStart: 10, trimEnd: 900 }), { start: 10, seconds: 15 });
+  // The range is clamped to the real file, not a 15s wall snippet.
+  assert.deepEqual(previewWindow(30, { trimStart: 10, trimEnd: 900 }), { start: 10, seconds: 20 });
   assert.deepEqual(previewWindow(30, { trimStart: 22, trimEnd: 900 }), { start: 22, seconds: 8 });
   assert.deepEqual(
     previewWindow(600, { trimStart: 0, trimEnd: 500 }),
+    { start: 0, seconds: 500 },
+  );
+  // A last-resort cap still stops a feature-length file becoming a flipbook.
+  assert.deepEqual(
+    previewWindow(2000, { trimStart: 0, trimEnd: 1800 }),
     { start: 0, seconds: PREVIEW_MAX_SECONDS },
   );
   // A backwards range falls back to the automatic window.
