@@ -51,6 +51,7 @@ function makeApi(overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'games-'));
   let nowMs = Date.parse('2026-08-30T18:00:00Z');
   const pushes = [];
+  const locks = [];
   // Stands in for the board queue: pages other features are still waiting on.
   const queued = [
     { frame: { source: 'word.riddles' }, priority: 'snapshot' },
@@ -86,12 +87,14 @@ function makeApi(overrides = {}) {
       }
       return dropped;
     },
+    setGameLock: (source, active) => locks.push({ source, active }),
   });
   return {
     api,
     archive,
     pushes,
     queued,
+    locks,
     advance(seconds) {
       nowMs += seconds * 1000;
       api.tick(nowMs);
@@ -148,6 +151,8 @@ test('the phase machine walks lobby, three rounds, intermission, final, then arc
   assert.equal(pushes[0].options.breakHold, true);
   assert.equal(pushes[0].options.explicit, true);
   assert.equal(pushes[0].options.replaceSource, 'word.scramble');
+  assert.equal(pushes[0].options.replaceCard, 'invite');
+  assert.equal(pushes[0].options.gameSource, 'word.scramble');
 
   api.join({ code: invited.code, name: 'Luis' });
   const sink = { write() {}, end() {} };
@@ -158,7 +163,9 @@ test('the phase machine walks lobby, three rounds, intermission, final, then arc
 
   advance(21);
   assert.equal(api.getByCode(invited.code).phase, 'intermission');
-  assert.ok(pushes.some((row) => row.payload.card === 'intermission'));
+  assert.ok(pushes.some((row) => row.payload.card === 'intermission'
+    && row.options.replaceCard === 'intermission'
+    && row.options.breakHold === false));
   advance(6);
   assert.equal(api.getByCode(invited.code).phase, 'round');
   advance(21);
@@ -367,6 +374,36 @@ test('a starting game drops multi-page runs but keeps other queued pages', () =>
     'word.riddles',
     'word.scramble',
   ]);
+});
+
+test('the board is locked from the invite and released only when the game ends', () => {
+  const { api, advance, locks } = makeApi();
+  const invited = api.create();
+  assert.deepEqual(locks[0], { source: 'word.scramble', active: true });
+
+  api.join({ code: invited.code, name: 'Luis' });
+  api.subscribe(invited.sessionId, { write() {}, end() {} });
+  // Every phase card renews the lock; none of them lets it go mid-game.
+  const seen = new Set();
+  while (api.getByCode(invited.code)) {
+    seen.add(api.getByCode(invited.code).phase);
+    assert.equal(
+      locks.some((row) => row.active === false),
+      false,
+      'the lock must survive lobby, rounds, intermissions and the final card',
+    );
+    advance(6);
+  }
+  assert.deepEqual([...seen].sort(), ['final', 'intermission', 'lobby', 'round']);
+  assert.deepEqual(locks[locks.length - 1], { source: 'word.scramble', active: false });
+});
+
+test('an admin ending a session hands the board back', () => {
+  const { api, locks } = makeApi();
+  const invited = api.create();
+  api.join({ code: invited.code, name: 'Luis' });
+  api.end(invited.sessionId);
+  assert.deepEqual(locks[locks.length - 1], { source: 'word.scramble', active: false });
 });
 
 test('when the last player leaves the session closes and clears the board', () => {

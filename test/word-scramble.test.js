@@ -57,11 +57,16 @@ function mulberry32(seed) {
   };
 }
 
-test('the shipped ENABLE1 list is sorted and long enough for a real game', () => {
+test('the shipped English list is sorted and long enough for a real game', () => {
   const words = loadWords();
-  assert.ok(words.length > 150000, `only ${words.length} words shipped`);
+  assert.ok(words.length > 300000, `only ${words.length} words shipped`);
   for (let i = 1; i < 200; i += 1) {
     assert.ok(words[i - 1] < words[i], 'list must stay sorted for binary search');
+  }
+  // Everyday words that a Boggle-only list still had, plus ones people
+  // actually type: if the letters are on the board, these must be words.
+  for (const word of ['cat', 'tar', 'the', 'and', 'fire', 'sat']) {
+    assert.equal(hasWord(words, word), true, `${word} must be in the corpus`);
   }
 });
 
@@ -95,14 +100,27 @@ test('a seeded roll is stable and never prints Q', () => {
   assert.equal(DICE.some((die) => die.includes('Q')), false);
 });
 
-test('the solver walks 8-way adjacency and does not reuse a cell', () => {
+test('the solver accepts any dictionary word the letters can spell', () => {
   const grid = ['CATE', 'ORWX', 'WIND', 'LEAP'];
   const found = solveGrid(grid, WORDS);
   assert.ok(found.includes('cat'));
   assert.ok(found.includes('ate'));
   assert.ok(found.includes('wind'));
   assert.ok(found.includes('leap'));
+  // Letters do not have to touch — CARE uses C, A, R, E scattered on the grid.
+  assert.ok(found.includes('care'));
   assert.equal(found.includes('cccc'), false);
+});
+
+test('a word assembled from the tiles is accepted even when they do not touch', () => {
+  // The board from a live round: C/A/T and T/A/R are all present, but no
+  // 8-way path spells either word. Letter-pool rules must still take them.
+  const grid = ['CBET', 'BSAZ', 'KIGA', 'REFA'];
+  const words = loadWords();
+  assert.equal(validateWord(grid, 'cat', words).ok, true);
+  assert.equal(validateWord(grid, 'tar', words).ok, true);
+  assert.equal(validateWord(grid, 'zzzz', words).reason, 'not-a-word');
+  assert.equal(validateWord(grid, 'quiz', words).reason, 'not-on-board');
 });
 
 test('every extra letter is worth more than the last', () => {

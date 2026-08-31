@@ -3,9 +3,11 @@
  * today; Wheel of Fortune drops in here later without touching the shell.
  *
  * **Vestaboard requirement:** any game that takes the board must register its
- * `source` here. While a session holds the board (`holdKind: game` in
- * `vestaboard/queue.js`), every manual Push, scheduler tick, and other
- * snapshot waits in queue until the session ends — only alerts preempt.
+ * `source` here and route its cards through `games/sessions.js`, which takes
+ * a board lock (`hub.setGameLock`) on the first card and releases it only
+ * when the session ends — finished, stopped by an admin, or abandoned by the
+ * last player. While that lock is held every other page waits in queue:
+ * manual Push, Air now, scheduler ticks, and alerts alike.
  */
 
 const scramble = require('../word-scramble');
@@ -49,13 +51,8 @@ const BOARD_SOURCES = Object.freeze(
   new Set(Object.values(GAME_TYPES).map((row) => row.source).filter(Boolean)),
 );
 
-function isGameBoardSource(source) {
-  return BOARD_SOURCES.has(String(source || ''));
-}
-
 module.exports = {
   GAME_TYPES,
   gameOf,
   BOARD_SOURCES,
-  isGameBoardSource,
 };

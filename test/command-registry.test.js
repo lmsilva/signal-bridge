@@ -425,6 +425,24 @@ test('starlink.track is Vestaboard-only and needs a house pin', () => {
   assert.equal(registry.hasContent('starlink.track'), true);
 });
 
+test('launch.alert is Vestaboard-only and needs cached launches', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'launch.alert');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'travel');
+  assert.equal(command.route, '/api/push/space-launch-alerts');
+  assert.equal(command.defaultDurationSeconds, 35);
+
+  const empty = createCommandRegistry({ getSpaceLaunchAlertsStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('launch.alert'), false);
+
+  const ready = createCommandRegistry({ getSpaceLaunchAlertsStatus: () => ({ available: 12 }) });
+  assert.equal(ready.hasContent('launch.alert'), true);
+});
+
 test('japanese.learn is Vestaboard-only and needs a matching word', () => {
   const command = COMMANDS.find((entry) => entry.id === 'japanese.learn');
   assert.ok(command);
@@ -560,6 +578,96 @@ test('family.quotes is Vestaboard-only and needs a ready quote', () => {
 
   const ready = createCommandRegistry({ getFamilyQuotesStatus: () => ({ available: 300 }) });
   assert.equal(ready.hasContent('family.quotes'), true);
+});
+
+test('warm.fuzzies is Vestaboard-only and needs a ready fuzzy', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'warm.fuzzies');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/warm-fuzzies');
+  assert.equal(command.defaultDurationSeconds, 25);
+
+  const empty = createCommandRegistry({ getWarmFuzziesStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('warm.fuzzies'), false);
+
+  const ready = createCommandRegistry({ getWarmFuzziesStatus: () => ({ available: 280 }) });
+  assert.equal(ready.hasContent('warm.fuzzies'), true);
+});
+
+test('bucket.fillers is Vestaboard-only and needs a ready filler', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'bucket.fillers');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/daily-bucket-fillers');
+  assert.equal(command.defaultDurationSeconds, 25);
+
+  const empty = createCommandRegistry({ getDailyBucketFillersStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('bucket.fillers'), false);
+
+  const ready = createCommandRegistry({ getDailyBucketFillersStatus: () => ({ available: 500 }) });
+  assert.equal(ready.hasContent('bucket.fillers'), true);
+});
+
+test('misheard.lyrics is Vestaboard-only and needs a ready lyric', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'misheard.lyrics');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/misheard-lyrics');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getMisheardLyricsStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('misheard.lyrics'), false);
+
+  const ready = createCommandRegistry({ getMisheardLyricsStatus: () => ({ available: 400 }) });
+  assert.equal(ready.hasContent('misheard.lyrics'), true);
+});
+
+test('periodic.table is Vestaboard-only and needs a ready element', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'periodic.table');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/periodic-table');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getPeriodicTableStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('periodic.table'), false);
+
+  const ready = createCommandRegistry({ getPeriodicTableStatus: () => ({ available: 118 }) });
+  assert.equal(ready.hasContent('periodic.table'), true);
+});
+
+test('word.day is Vestaboard-only and needs a ready word', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'word.day');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/word-of-the-day');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getWordOfTheDayStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('word.day'), false);
+
+  const ready = createCommandRegistry({ getWordOfTheDayStatus: () => ({ available: 1200 }) });
+  assert.equal(ready.hasContent('word.day'), true);
 });
 
 test('dad.jokes is Vestaboard-only and needs a ready joke', () => {

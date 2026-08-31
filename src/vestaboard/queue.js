@@ -15,15 +15,16 @@
 //     is worse than no snapshot. The window is household wall-clock
 //     (`timeZone`), not the process TZ, so a UTC container does not treat
 //     8pm Utah as 2am quiet.
-//   - during a live Vestaboard game (`holdKind: game`) every non-game snapshot
-//     waits in queue — manual Push, Air now, and scheduler ticks included.
-//     `breakHold` does not pierce a game lock; only alerts preempt.
+//   - a live Vestaboard game owns the board outright until its session ends.
+//     Manual Push, Air now, scheduler ticks and alerts all wait. The lock is
+//     held explicitly by the game service (`acquireGameLock`), not inferred
+//     from a frame's `holdSeconds` — a gap between two phase cards used to
+//     let everything parked behind the game rush the board.
 //
 // Time and the transport are injected so the whole thing can be tested
 // without waiting fifteen real seconds for anything.
 
 const { dateParts } = require('./clock');
-const { isGameBoardSource } = require('../games/registry');
 
 const DEFAULT_RATE_WINDOW_SECONDS = 15;
 const DEFAULT_DWELL_SECONDS = 15;
@@ -39,6 +40,32 @@ const FAILURES_BEFORE_UNHEALTHY = 3;
 
 // The only things worth waking the house for.
 const QUIET_HOURS_EXEMPT = new Set(['alarm.fired', 'timer.fired']);
+
+// A game session releases its own lock. This only bounds the damage when a
+// session dies without closing (crash, lost tick) so the board cannot wedge
+// forever; every phase card pushes the deadline back out.
+const GAME_LOCK_TTL_MS = 15 * 60 * 1000;
+
+// Later phases may sit behind an earlier one that has not flipped yet
+// (scores before the next grid). A new card only drops pending pages at
+// this rank or below — round 2 must not evict an unshown intermission.
+const GAME_CARD_RANK = Object.freeze({
+  invite: 1,
+  invited: 1,
+  lobby: 2,
+  round: 3,
+  intermission: 4,
+  scores: 4,
+  final: 5,
+  best: 5,
+  clear: 6,
+  closed: 6,
+});
+
+function gameCardRank(card) {
+  const rank = GAME_CARD_RANK[String(card || '')];
+  return rank != null ? rank : 0;
+}
 
 function sameLayout(a, b) {
   if (!a || !b) return false;
@@ -93,10 +120,14 @@ function createQueue({
     lastPostAt: null,
     lastSchedulerFlipAt: null,
     holdUntil: null,
-    /** `game` parks every non-game page; `guest` parks scheduler pages only. */
+    /** `guest` parks scheduler pages only, for the length of `holdUntil`. */
     holdKind: null,
-    /** Which `frame.source` owns an active `holdKind: game` lock. */
-    gameSource: null,
+    /**
+     * A live game owns the board: `{ source, expiresAt }`. Held by the game
+     * service from the first invite until the session ends — finished,
+     * stopped by an admin, or abandoned by the last player.
+     */
+    gameLock: null,
     health: 'ok',
     healthReason: null,
     failures: 0,
@@ -142,17 +173,29 @@ function createQueue({
   }
 
   function gameLockActive(at = now()) {
-    return state.holdKind === 'game'
-      && state.holdUntil != null
-      && at < state.holdUntil;
+    if (!state.gameLock) return false;
+    if (at >= state.gameLock.expiresAt) {
+      log?.warn?.(`Vestaboard ${config.id} game lock expired without a close`);
+      state.gameLock = null;
+      return false;
+    }
+    return true;
+  }
+
+  /** Is this page the live game's own card? */
+  function ownedByGame(item) {
+    if (!state.gameLock) return false;
+    const lock = state.gameLock.source;
+    return String(item.frame?.source || '') === lock
+      || String(item.ownerSource || '') === lock;
   }
 
   function itemHeld(item, at = now()) {
+    // A game in progress owns the board. Everything else waits — manual Push,
+    // Air now, scheduler ticks, and alerts alike — until the session ends.
+    if (gameLockActive(at)) return !ownedByGame(item);
     if (item.priority === 'alert') return false;
     if (!state.holdUntil || at >= state.holdUntil) return false;
-    if (state.holdKind === 'game') {
-      return String(item.frame?.source || '') !== state.gameSource;
-    }
     return item.scheduler;
   }
 
@@ -270,6 +313,7 @@ function createQueue({
     }
 
     const sequenceId = `s${nextItemId}`;
+    const ownerSource = options.gameSource || options.replaceSource || null;
     const made = list.map((frame) => ({
       id: `i${nextItemId++}`,
       frame,
@@ -281,6 +325,7 @@ function createQueue({
       coalesceKey: options.coalesceKey || null,
       quietHoursExempt: isExempt(frame, options.quietHoursExempt),
       scheduler: Boolean(options.scheduler),
+      ownerSource: ownerSource ? String(ownerSource) : null,
     }));
 
     if (!made[0].quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
@@ -288,23 +333,57 @@ function createQueue({
       return { accepted: 0, dropped: list.length, reason: 'quiet' };
     }
 
-    // Manual Push / Air now normally jump the line (`breakHold`). During a live
-    // Vestaboard game that must not happen — every non-game page, manual or
-    // scheduled, waits until the session clears. Alerts still preempt.
-    const mayBreakHold = Boolean(options.breakHold) && !gameLockActive(at);
+    // A live game owns the board: only its own cards may take it. Everything
+    // else — manual Push, Air now, scheduler ticks, alerts — queues behind.
+    // Match the lock on the frame, or on replaceSource / gameSource, so a
+    // follow-up cannot fall through to "held" if the formatter omits source.
+    const locked = gameLockActive(at);
+    const offeredSource = String(
+      options.gameSource || list[0].source || options.replaceSource || '',
+    );
+    const mine = locked && offeredSource === state.gameLock.source;
+    const takesBoard = !locked || mine;
+
+    // Manual Push / Air now normally jump the line (`breakHold`).
+    const mayBreakHold = Boolean(options.breakHold) && takesBoard;
     if (mayBreakHold) {
-      const gameHandoff = state.gameSource
-        && options.replaceSource === state.gameSource
-        && holdMsOf(list[0]) > 0;
-      if (!gameHandoff) {
-        state.holdUntil = null;
-        state.holdKind = null;
-        state.gameSource = null;
+      state.holdUntil = null;
+      state.holdKind = null;
+    }
+
+    /** Put these pages ahead of the ones already parked, keeping their order. */
+    function queueInFront() {
+      const firstSnapshot = items.findIndex((item) => item.priority !== 'alert');
+      if (firstSnapshot === -1) {
+        items.push(...made);
+      } else {
+        items.splice(firstSnapshot, 0, ...made);
       }
     }
 
+    /**
+     * A later game phase sits behind earlier game pages that have not flipped
+     * yet (intermission scores, then the next grid) and still ahead of every
+     * non-game page the lock is holding.
+     */
+    function queueAfterGame() {
+      let insertAt = 0;
+      for (let i = 0; i < items.length; i += 1) {
+        if (items[i].priority === 'alert') {
+          insertAt = i + 1;
+          continue;
+        }
+        if (ownedByGame(items[i])) {
+          insertAt = i + 1;
+          continue;
+        }
+        break;
+      }
+      items.splice(insertAt, 0, ...made);
+    }
+
     let dropped = 0;
-    if (priority === 'alert') {
+    if (priority === 'alert' && takesBoard) {
       const heldAlerts = items.filter((item) => item.priority === 'alert');
       dropped = items.length - heldAlerts.length;
       items.length = 0;
@@ -314,20 +393,34 @@ function createQueue({
       }
     } else {
       const replaceSource = options.replaceSource ? String(options.replaceSource) : '';
+      const replaceCard = options.replaceCard != null && options.replaceCard !== ''
+        ? String(options.replaceCard)
+        : '';
       if (replaceSource) {
+        const newRank = replaceCard ? gameCardRank(replaceCard) : null;
         for (let i = items.length - 1; i >= 0; i -= 1) {
-          if (String(items[i].frame.source || '') === replaceSource) {
+          if (String(items[i].frame.source || '') !== replaceSource
+            && String(items[i].ownerSource || '') !== replaceSource) {
+            continue;
+          }
+          if (newRank == null) {
+            items.splice(i, 1);
+            continue;
+          }
+          if (gameCardRank(items[i].frame.card) <= newRank) {
             items.splice(i, 1);
           }
         }
       }
-      if (mayBreakHold) {
-        const firstSnapshot = items.findIndex((item) => item.priority !== 'alert');
-        if (firstSnapshot === -1) {
-          items.push(...made);
-        } else {
-          items.splice(firstSnapshot, 0, ...made);
-        }
+      if (priority === 'alert') {
+        // Parked behind a game. Keep alert precedence for when the lock lifts
+        // rather than discarding the pages the game is holding.
+        queueInFront();
+      } else if (mine && !mayBreakHold) {
+        queueAfterGame();
+      } else if (mine || mayBreakHold) {
+        // Invite takeover jumps to the head of the line it is about to hold.
+        queueInFront();
       } else {
         items.push(...made);
       }
@@ -364,20 +457,12 @@ function createQueue({
       if (item.scheduler) {
         state.lastSchedulerFlipAt = at;
       }
-      const holdMs = holdMsOf(item.frame);
+      // A game card's own `holdSeconds` is not what parks the queue — the
+      // session lock does that — so it must not leave a guest hold behind
+      // that outlives the game.
+      const holdMs = ownedByGame(item) ? 0 : holdMsOf(item.frame);
       state.holdUntil = holdMs ? at + holdMs : null;
-      if (holdMs) {
-        if (isGameBoardSource(item.frame.source)) {
-          state.holdKind = 'game';
-          state.gameSource = String(item.frame.source || '');
-        } else {
-          state.holdKind = 'guest';
-          state.gameSource = null;
-        }
-      } else {
-        state.holdKind = null;
-        state.gameSource = null;
-      }
+      state.holdKind = holdMs ? 'guest' : null;
     }
 
     // Hand the next page of this sequence its turn.
@@ -418,8 +503,10 @@ function createQueue({
     const at = now();
 
     if (!items.length) {
-      // Nothing waiting: put back whatever the alert covered up.
+      // Nothing waiting: put back whatever the alert covered up — unless a
+      // game has taken the board since, in which case its card stays.
       if (state.restoreAfter && at >= state.restoreAfter && state.lastSnapshot
+        && !gameLockActive(at)
         && !sameLayout(state.lastSnapshot.rows, state.current)) {
         state.restoreAfter = null;
         submit([state.lastSnapshot], { priority: 'snapshot' });
@@ -432,7 +519,8 @@ function createQueue({
     }
 
     // A guest dwell parks scheduler pages, not the whole line. Air now / Push
-    // sitting behind a held invite must still be able to reach the board.
+    // sitting behind a held invite must still be able to reach the board. A
+    // game lock parks everything, so nothing is found and the board sits.
     let index = 0;
     while (index < items.length && itemHeld(items[index], at)) {
       if (sameLayout(items[index].frame.rows, state.current)) {
@@ -461,6 +549,7 @@ function createQueue({
     }
 
     posting = true;
+    const itemId = item.id;
     let outcome;
     try {
       outcome = await transport.post(item.frame.rows, {
@@ -473,7 +562,8 @@ function createQueue({
     }
 
     if (outcome.ok) {
-      items.splice(index, 1);
+      const atPosted = items.findIndex((row) => row.id === itemId);
+      if (atPosted >= 0) items.splice(atPosted, 1);
       onPosted(item, now());
       announceQueue();
       emit('posted', { boardId: config.id, frame: item.frame });
@@ -521,9 +611,31 @@ function createQueue({
       lastPostAt: state.lastPostAt,
       holdUntil: state.holdUntil,
       holdKind: state.holdKind,
-      gameSource: state.gameSource,
+      gameLock: state.gameLock ? { ...state.gameLock } : null,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
+    /**
+     * A live game takes the board until it says otherwise. Re-acquiring is how
+     * the session pushes the safety deadline out, so this is called on every
+     * phase card rather than only on the first one.
+     */
+    acquireGameLock(source, { ttlMs = GAME_LOCK_TTL_MS } = {}) {
+      const owner = String(source || '');
+      if (!owner) return false;
+      const fresh = state.gameLock?.source !== owner;
+      state.gameLock = { source: owner, expiresAt: now() + ttlMs };
+      if (fresh) announceQueue();
+      return true;
+    },
+    /** The session ended — finished, stopped, or abandoned. */
+    releaseGameLock(source = '') {
+      const owner = String(source || '');
+      if (!state.gameLock) return false;
+      if (owner && state.gameLock.source !== owner) return false;
+      state.gameLock = null;
+      announceQueue();
+      return true;
+    },
     /**
      * Honour a flip the process did not itself post — a simulator that
      * persisted `lastAcceptedAt`, or this queue's own last post after a

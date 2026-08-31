@@ -47,6 +47,9 @@ client-test-log.txt
 # WikDict SQLite caches used by tools/build-learn-language-words.js
 tools/.wikdict/
 tools/.enable1/
+tools/.wordlists/
+tools/.misheard-lyrics/
+tools/.word-of-the-day/
 
 # OS / editor
 .DS_Store

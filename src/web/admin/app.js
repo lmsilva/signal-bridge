@@ -911,6 +911,11 @@
     'chuck-norris-settings-card': ['vestaboard'],
     'roast-me-settings-card': ['vestaboard'],
     'family-quotes-settings-card': ['vestaboard'],
+    'warm-fuzzies-settings-card': ['vestaboard'],
+    'daily-bucket-fillers-settings-card': ['vestaboard'],
+    'misheard-lyrics-settings-card': ['vestaboard'],
+    'periodic-table-settings-card': ['vestaboard'],
+    'word-of-the-day-settings-card': ['vestaboard'],
     'dad-jokes-settings-card': ['vestaboard'],
     'us-weather-map-settings-card': ['vestaboard'],
     'amazing-facts-settings-card': ['vestaboard'],
@@ -924,6 +929,7 @@
     'plex-top10-settings-card': ['vestaboard'],
     'wiki-ck-settings-card': ['full', 'vestaboard'],
     'starlink-tracker-settings-card': ['vestaboard'],
+    'space-launch-alerts-settings-card': ['vestaboard'],
     'iss-tracker-settings-card': ['vestaboard'],
     'overhead-settings-card': ['full', 'vestaboard'],
     'flightplan-settings-card': ['full', 'vestaboard'],
@@ -1612,12 +1618,18 @@
     'word-clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/>',
     roast: '<path d="M12 3c2.8 3 4.2 5.3 4.2 7a4.2 4.2 0 0 1-8.4 0c0-1.7 1.4-4 4.2-7z"/><path d="M6.5 14.5c-.9 1.2-1.4 2.4-1.4 3.4C5.1 20.2 8 22 12 22s6.9-1.8 6.9-4.1c0-1-.5-2.2-1.4-3.4"/>',
     'family-quotes': '<path d="M12 20.5S4 15.8 4 10.2A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 8 2.2c0 5.6-8 10.3-8 10.3z"/>',
+    'warm-fuzzies': '<path d="M12 20.5S4 15.8 4 10.2A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 8 2.2c0 5.6-8 10.3-8 10.3z"/><path d="M8.5 10.5c1.2-1.5 3-2.2 3.5-.5.5-1.7 2.3-1 3.5.5"/>',
+    'daily-bucket-fillers': '<path d="M7 8h10l-1.2 11H8.2L7 8z"/><path d="M6 8h12"/><path d="M9 8V6.5A3 3 0 0 1 15 6.5V8"/><path d="M10 12h4"/>',
+    'misheard-lyrics': '<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="16" r="2.2"/><path d="M9 10l10-2"/>',
+    'periodic-table': '<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="13" width="7" height="7" rx="1"/><rect x="14" y="13" width="7" height="7" rx="1"/>',
+    'word-of-the-day': '<path d="M4 5h16v3H4z"/><path d="M6 11h3v8H6z"/><path d="M11 11h3v8h-3z"/><path d="M16 11h3v8h-3z"/>',
     'dad-jokes': '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01"/>',
     'us-weather-map': '<path d="M3 7h11l2 2h5v6l-3 3H9l-3-2H3z"/><path d="M9 7v9M14 9v9"/>',
     'quiet-hours': '<path d="M14.5 4.5A7.5 7.5 0 1 0 19.5 16 6.2 6.2 0 0 1 14.5 4.5Z"/><path d="M16.2 6.2 17 4.4M18.4 8.8l1.6-.6M19.2 12l1.8.2"/>',
     sky: '<circle cx="12" cy="12" r="9"/><path d="M8 14h8"/><path d="m12 8 2 2-2 2-2-2 2-2Z" fill="currentColor" stroke="none"/><path d="M6 10h2M16 10h2"/>',
     iss: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2"/><path d="M3 12h4M17 12h4M12 3v4M12 17v4"/><path d="M7.5 7.5l2 2M14.5 14.5l2 2M16.5 7.5l-2 2M9.5 14.5l-2 2"/>',
     starlink: '<circle cx="12" cy="12" r="9"/><path d="M5 12h14M12 5v14"/><circle cx="7" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="0.9" fill="currentColor" stroke="none"/>',
+    'launch-alert': '<path d="M12 3l8 14H4L12 3z"/><path d="M12 10v4M12 17h.01"/>',
     youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10.2 9.6v4.8l4.3-2.4-4.3-2.4Z" fill="currentColor" stroke="none"/>',
     steam: '<circle cx="12" cy="12" r="9"/><circle cx="15" cy="9.5" r="2.4"/><path d="M3.3 15.2 8 17.1"/><circle cx="9" cy="15.6" r="2.1"/>',
     psn: '<path d="M10 4.5 15 6v12.5l-2.6-.9V8.2L10 7.5Z" fill="currentColor" stroke="none"/><path d="M4 15.2c2-1.1 4.4-1.5 4.4-1.5v2s-2.1.4-3 .9c-.4.2-.3.5.2.5"/><path d="M20 14.4c-1.6-.9-4-.7-4-.7v1.9s1.9-.3 2.8 0"/>',
@@ -9372,6 +9384,1115 @@
 
   loadFamilyQuotesStatus();
 
+  // -------------------------------------------- Settings → Warm Fuzzies
+
+  const WF_PAGE_SIZE = 12;
+  const WF_COLS = 22;
+  const WF_INDENT = 2;
+  const WF_BODY_WIDTH = WF_COLS - WF_INDENT;
+  let warmFuzziesPage = 1;
+  let warmFuzziesTimer = 0;
+
+  function centerPreviewLine(line, width = WF_COLS) {
+    const trimmed = String(line || '');
+    if (!trimmed) {
+      return '';
+    }
+    const pad = Math.max(0, Math.floor((width - trimmed.length) / 2));
+    return `${' '.repeat(pad)}${trimmed}`;
+  }
+
+  // Mirrors fuzzyLines() in src/warm-fuzzies-layout.js.
+  function warmFuzzyPreviewLines(text) {
+    const folded = foldPreview(text);
+    if (!folded) {
+      return [];
+    }
+    const full = wrapPreview(folded, WF_COLS, { orphans: false });
+    if (!full.length || full.length > 6) {
+      return [];
+    }
+    if (full.length <= 2 && full.every((line) => line.length <= 20)) {
+      return full.map((line) => centerPreviewLine(line));
+    }
+    let lines = full;
+    let mode = 'flush';
+    if (!full.some((line) => line.length >= WF_COLS)) {
+      const sentences = String(folded).split(/(?<=[.!?])\s+/).filter(Boolean);
+      const indented = [];
+      for (const sentence of sentences) {
+        indented.push(...wrapPreview(sentence, WF_BODY_WIDTH, { orphans: false }));
+      }
+      if (indented.length && indented.length <= 6
+        && indented.every((line) => line.length <= WF_BODY_WIDTH)) {
+        lines = indented;
+        mode = 'indent';
+      }
+    }
+    return lines.map((line) => {
+      if (mode === 'indent') {
+        return `${' '.repeat(WF_INDENT)}${line}`;
+      }
+      return line;
+    });
+  }
+
+  function warmFuzziesCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} fuzzies ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderWarmFuzziesCard(data = {}) {
+    const pill = $('warm-fuzzies-status-pill');
+    const detail = $('warm-fuzzies-status-detail');
+    const summary = $('warm-fuzzies-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${warmFuzziesCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit compliments like the marketplace channel. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? warmFuzziesCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderWarmFuzziesPreview(text) {
+    const host = $('warm-fuzzies-preview');
+    if (!host) {
+      return;
+    }
+    const wrapped = warmFuzzyPreviewLines(text);
+    const chunk = wrapped.slice(0, 6);
+    const top = Math.floor((6 - chunk.length) / 2);
+    const lines = [];
+    for (let row = 0; row < 6; row += 1) {
+      lines.push(chunk[row - top] || '');
+    }
+    paintPreviewLines(host, lines);
+    const hint = $('warm-fuzzies-fit-hint');
+    if (hint) {
+      hint.textContent = text
+        ? (wrapped.length <= 6
+          ? `Fits in ${wrapped.length} row${wrapped.length === 1 ? '' : 's'}`
+          : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function renderWarmFuzziesSettings(data = {}) {
+    renderWarmFuzziesCard(data);
+    const list = $('warm-fuzzies-fuzzy-list');
+    if (list) {
+      const fuzzies = data.fuzzies || [];
+      if (!fuzzies.length) {
+        list.innerHTML = '<p class="hint">No fuzzies match that search.</p>';
+      } else {
+        list.innerHTML = fuzzies.map((fuzzy) => `
+          <article class="cn-fact${fuzzy.hidden ? ' is-hidden' : ''}${fuzzy.custom ? ' is-custom' : ''}" data-wf-id="${escapeHtml(fuzzy.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(fuzzy.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${fuzzy.custom ? 'Yours' : 'Shipped'} · ${fuzzy.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: fuzzy.hidden,
+                  custom: fuzzy.custom,
+                  saveAttr: 'data-wf-save',
+                  hideAttr: 'data-wf-hide',
+                  removeAttr: 'data-wf-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('warm-fuzzies-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page || 1} of ${data.pages}` : '';
+    }
+    warmFuzziesPage = data.page || 1;
+    const prev = $('btn-warm-fuzzies-prev');
+    const next = $('btn-warm-fuzzies-next');
+    if (prev) prev.disabled = warmFuzziesPage <= 1;
+    if (next) next.disabled = warmFuzziesPage >= (data.pages || 1);
+  }
+
+  async function loadWarmFuzziesStatus() {
+    try {
+      renderWarmFuzziesCard(await apiGet('/api/warm-fuzzies/fuzzies?page=1&pageSize=1'));
+    } catch {
+      renderWarmFuzziesCard({});
+    }
+  }
+
+  async function loadWarmFuzzies(page = warmFuzziesPage) {
+    const query = $('warm-fuzzies-search')?.value || '';
+    const hidden = Boolean($('warm-fuzzies-show-hidden')?.checked);
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(WF_PAGE_SIZE),
+    });
+    if (query) params.set('q', query);
+    if (hidden) params.set('hidden', '1');
+    try {
+      renderWarmFuzziesSettings(await apiGet(`/api/warm-fuzzies/fuzzies?${params}`));
+    } catch {
+      renderWarmFuzziesSettings({});
+    }
+  }
+
+  function openWarmFuzziesManageSheet() {
+    const sheet = $('warm-fuzzies-manage-sheet');
+    if (sheet) {
+      sheet.hidden = false;
+    }
+    renderWarmFuzziesPreview($('warm-fuzzies-new')?.value || '');
+    loadWarmFuzzies(1);
+  }
+
+  function closeWarmFuzziesManageSheet() {
+    const sheet = $('warm-fuzzies-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadWarmFuzziesStatus();
+  }
+
+  $('btn-warm-fuzzies-manage')?.addEventListener('click', () => openWarmFuzziesManageSheet());
+  $('btn-warm-fuzzies-manage-close')?.addEventListener('click', () => closeWarmFuzziesManageSheet());
+  registerSheetDismiss('warm-fuzzies-manage-sheet', () => closeWarmFuzziesManageSheet());
+
+  $('btn-warm-fuzzies-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/warm-fuzzies', withTarget());
+      toast(String(result.fuzzy?.text || 'Warm fuzzy on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Warm Fuzzies', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-warm-fuzzies-add')?.addEventListener('click', async () => {
+    const input = $('warm-fuzzies-new');
+    try {
+      await apiPost('/api/warm-fuzzies/fuzzies', { text: input?.value || '' });
+      if (input) input.value = '';
+      renderWarmFuzziesPreview('');
+      toast('Fuzzy added', 'good');
+      await loadWarmFuzzies(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that fuzzy', 'bad');
+    }
+  });
+
+  $('warm-fuzzies-new')?.addEventListener('input', (event) => {
+    renderWarmFuzziesPreview(event.currentTarget.value || '');
+  });
+
+  $('warm-fuzzies-search')?.addEventListener('input', () => {
+    window.clearTimeout(warmFuzziesTimer);
+    warmFuzziesTimer = window.setTimeout(() => {
+      loadWarmFuzzies(1);
+    }, 250);
+  });
+
+  $('warm-fuzzies-show-hidden')?.addEventListener('change', () => loadWarmFuzzies(1));
+  $('btn-warm-fuzzies-prev')?.addEventListener('click', () => loadWarmFuzzies(warmFuzziesPage - 1));
+  $('btn-warm-fuzzies-next')?.addEventListener('click', () => loadWarmFuzzies(warmFuzziesPage + 1));
+
+  $('warm-fuzzies-fuzzy-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-wf-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-wf-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    try {
+      if (event.target.closest('[data-wf-save]')) {
+        await apiPost('/api/warm-fuzzies/fuzzies', { id, text });
+        toast('Fuzzy saved', 'good');
+      } else if (event.target.closest('[data-wf-remove]')) {
+        if (!confirmCorpusRemove('fuzzy', text)) {
+          return;
+        }
+        await apiPost('/api/warm-fuzzies/fuzzies', { id, remove: true });
+        toast('Fuzzy removed', 'good');
+      } else if (event.target.closest('[data-wf-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/warm-fuzzies/fuzzies', { id, hidden: !restore });
+        toast(restore ? 'Fuzzy restored' : 'Fuzzy hidden', 'good');
+      } else {
+        return;
+      }
+      await loadWarmFuzzies(warmFuzziesPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that fuzzy', 'bad');
+    }
+  });
+
+  loadWarmFuzziesStatus();
+
+  // ------------------------------------------- Settings → Daily Bucket Fillers
+
+  const BF_PAGE_SIZE = 12;
+  const BF_COLS = 22;
+  const BF_INDENT = 2;
+  const BF_TIGHT = 18;
+  let dailyBucketFillersPage = 1;
+  let dailyBucketFillersTimer = 0;
+
+  // Mirrors fillerLines() in src/daily-bucket-fillers-layout.js.
+  function dailyBucketFillerPreviewLines(text) {
+    const folded = foldPreview(text);
+    if (!folded) {
+      return [];
+    }
+    const full = wrapPreview(folded, BF_COLS, { orphans: true });
+    if (!full.length || full.length > 6) {
+      return [];
+    }
+    if (full.length <= 2 && full.every((line) => line.length <= 20)) {
+      return full.map((line) => centerPreviewLine(line));
+    }
+    const tight = wrapPreview(folded, BF_TIGHT, { orphans: true });
+    if (tight.length && tight.length <= 6 && tight.every((line) => line.length <= BF_TIGHT)) {
+      return tight.map((line) => `${' '.repeat(BF_INDENT)}${line}`);
+    }
+    const indented = wrapPreview(folded, BF_COLS - BF_INDENT, { orphans: true });
+    if (indented.length && indented.length <= 6
+      && indented.every((line) => line.length <= BF_COLS - BF_INDENT)) {
+      return indented.map((line) => `${' '.repeat(BF_INDENT)}${line}`);
+    }
+    return full;
+  }
+
+  function dailyBucketFillersCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} fillers ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderDailyBucketFillersCard(data = {}) {
+    const pill = $('daily-bucket-fillers-status-pill');
+    const detail = $('daily-bucket-fillers-status-detail');
+    const summary = $('daily-bucket-fillers-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${dailyBucketFillersCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit kindness challenges like the marketplace channel. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? dailyBucketFillersCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderDailyBucketFillersPreview(text) {
+    const host = $('daily-bucket-fillers-preview');
+    if (!host) {
+      return;
+    }
+    const wrapped = dailyBucketFillerPreviewLines(text);
+    const chunk = wrapped.slice(0, 6);
+    const top = Math.floor((6 - chunk.length) / 2);
+    const lines = [];
+    for (let row = 0; row < 6; row += 1) {
+      lines.push(chunk[row - top] || '');
+    }
+    paintPreviewLines(host, lines);
+    const hint = $('daily-bucket-fillers-fit-hint');
+    if (hint) {
+      hint.textContent = text
+        ? (wrapped.length <= 6
+          ? `Fits in ${wrapped.length} row${wrapped.length === 1 ? '' : 's'}`
+          : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function renderDailyBucketFillersSettings(data = {}) {
+    renderDailyBucketFillersCard(data);
+    const list = $('daily-bucket-fillers-filler-list');
+    if (list) {
+      const fillers = data.fillers || [];
+      if (!fillers.length) {
+        list.innerHTML = '<p class="hint">No fillers match that search.</p>';
+      } else {
+        list.innerHTML = fillers.map((filler) => `
+          <article class="cn-fact${filler.hidden ? ' is-hidden' : ''}${filler.custom ? ' is-custom' : ''}" data-bf-id="${escapeHtml(filler.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(filler.text)}</textarea>
+            <div class="cn-fact-meta">
+              <span class="hint">${filler.custom ? 'Yours' : 'Shipped'} · ${filler.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: filler.hidden,
+                  custom: filler.custom,
+                  saveAttr: 'data-bf-save',
+                  hideAttr: 'data-bf-hide',
+                  removeAttr: 'data-bf-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('daily-bucket-fillers-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page || 1} of ${data.pages}` : '';
+    }
+    dailyBucketFillersPage = data.page || 1;
+    const prev = $('btn-daily-bucket-fillers-prev');
+    const next = $('btn-daily-bucket-fillers-next');
+    if (prev) prev.disabled = dailyBucketFillersPage <= 1;
+    if (next) next.disabled = dailyBucketFillersPage >= (data.pages || 1);
+  }
+
+  async function loadDailyBucketFillersStatus() {
+    try {
+      renderDailyBucketFillersCard(await apiGet('/api/daily-bucket-fillers/fillers?page=1&pageSize=1'));
+    } catch {
+      renderDailyBucketFillersCard({});
+    }
+  }
+
+  async function loadDailyBucketFillers(page = dailyBucketFillersPage) {
+    const query = $('daily-bucket-fillers-search')?.value || '';
+    const hidden = Boolean($('daily-bucket-fillers-show-hidden')?.checked);
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(BF_PAGE_SIZE),
+    });
+    if (query) params.set('q', query);
+    if (hidden) params.set('hidden', '1');
+    try {
+      renderDailyBucketFillersSettings(await apiGet(`/api/daily-bucket-fillers/fillers?${params}`));
+    } catch {
+      renderDailyBucketFillersSettings({});
+    }
+  }
+
+  function openDailyBucketFillersManageSheet() {
+    const sheet = $('daily-bucket-fillers-manage-sheet');
+    if (sheet) {
+      sheet.hidden = false;
+    }
+    renderDailyBucketFillersPreview($('daily-bucket-fillers-new')?.value || '');
+    loadDailyBucketFillers(1);
+  }
+
+  function closeDailyBucketFillersManageSheet() {
+    const sheet = $('daily-bucket-fillers-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadDailyBucketFillersStatus();
+  }
+
+  $('btn-daily-bucket-fillers-manage')?.addEventListener('click', () => openDailyBucketFillersManageSheet());
+  $('btn-daily-bucket-fillers-manage-close')?.addEventListener('click', () => closeDailyBucketFillersManageSheet());
+  registerSheetDismiss('daily-bucket-fillers-manage-sheet', () => closeDailyBucketFillersManageSheet());
+
+  $('btn-daily-bucket-fillers-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/daily-bucket-fillers', withTarget());
+      toast(String(result.filler?.text || 'Bucket filler on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Daily Bucket Fillers', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-daily-bucket-fillers-add')?.addEventListener('click', async () => {
+    const input = $('daily-bucket-fillers-new');
+    try {
+      await apiPost('/api/daily-bucket-fillers/fillers', { text: input?.value || '' });
+      if (input) input.value = '';
+      renderDailyBucketFillersPreview('');
+      toast('Filler added', 'good');
+      await loadDailyBucketFillers(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that filler', 'bad');
+    }
+  });
+
+  $('daily-bucket-fillers-new')?.addEventListener('input', (event) => {
+    renderDailyBucketFillersPreview(event.currentTarget.value || '');
+  });
+
+  $('daily-bucket-fillers-search')?.addEventListener('input', () => {
+    window.clearTimeout(dailyBucketFillersTimer);
+    dailyBucketFillersTimer = window.setTimeout(() => {
+      loadDailyBucketFillers(1);
+    }, 250);
+  });
+
+  $('daily-bucket-fillers-show-hidden')?.addEventListener('change', () => loadDailyBucketFillers(1));
+  $('btn-daily-bucket-fillers-prev')?.addEventListener('click', () => loadDailyBucketFillers(dailyBucketFillersPage - 1));
+  $('btn-daily-bucket-fillers-next')?.addEventListener('click', () => loadDailyBucketFillers(dailyBucketFillersPage + 1));
+
+  $('daily-bucket-fillers-filler-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-bf-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-bf-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    try {
+      if (event.target.closest('[data-bf-save]')) {
+        await apiPost('/api/daily-bucket-fillers/fillers', { id, text });
+        toast('Filler saved', 'good');
+      } else if (event.target.closest('[data-bf-remove]')) {
+        if (!confirmCorpusRemove('filler', text)) {
+          return;
+        }
+        await apiPost('/api/daily-bucket-fillers/fillers', { id, remove: true });
+        toast('Filler removed', 'good');
+      } else if (event.target.closest('[data-bf-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/daily-bucket-fillers/fillers', { id, hidden: !restore });
+        toast(restore ? 'Filler restored' : 'Filler hidden', 'good');
+      } else {
+        return;
+      }
+      await loadDailyBucketFillers(dailyBucketFillersPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that filler', 'bad');
+    }
+  });
+
+  loadDailyBucketFillersStatus();
+
+  // ------------------------------------------- Settings → Misheard Lyrics
+
+  const ML_PAGE_SIZE = 12;
+  const ML_WIDTH = 20;
+  let misheardLyricsPage = 1;
+  let misheardLyricsTimer = 0;
+
+  // Mirrors lyricLines() in src/misheard-lyrics-layout.js: wrap at 20
+  // (house orphan pull so "A SOAPLESS PLACE" stays together), period on
+  // the lyric, then `- ARTIST` on its own line(s). Two columns of air.
+  function misheardLyricLines(text, artist) {
+    const lyric = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!lyric) {
+      return [];
+    }
+    const stopped = /[.!?]$/.test(lyric) ? lyric : `${lyric}.`;
+    const body = wrapPreview(stopped, ML_WIDTH);
+    const credit = String(artist || '').replace(/\s+/g, ' ').trim();
+    if (credit) {
+      body.push(...wrapPreview(`- ${credit}`, ML_WIDTH));
+    }
+    return body.map((line) => `  ${line}`);
+  }
+
+  function misheardLyricsCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} lyrics ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderMisheardLyricsCard(data = {}) {
+    const pill = $('misheard-lyrics-status-pill');
+    const detail = $('misheard-lyrics-status-detail');
+    const summary = $('misheard-lyrics-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${misheardLyricsCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local board-fit misheard lyrics. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? misheardLyricsCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderMisheardLyricsPreview(text, artist) {
+    const host = $('misheard-lyrics-preview');
+    if (!host) {
+      return;
+    }
+    const wrapped = misheardLyricLines(text, artist);
+    const chunk = wrapped.slice(0, 6);
+    const top = Math.floor((6 - chunk.length) / 2);
+    const lines = [];
+    for (let row = 0; row < 6; row += 1) {
+      lines.push(chunk[row - top] || '');
+    }
+    paintPreviewLines(host, lines);
+    const hint = $('misheard-lyrics-fit-hint');
+    if (hint) {
+      hint.textContent = text
+        ? (wrapped.length <= 6
+          ? `Fits in ${wrapped.length} row${wrapped.length === 1 ? '' : 's'}`
+          : 'Too long for one frame')
+        : '';
+    }
+  }
+
+  function refreshMisheardLyricsPreview() {
+    renderMisheardLyricsPreview(
+      $('misheard-lyrics-new')?.value || '',
+      $('misheard-lyrics-new-artist')?.value || '',
+    );
+  }
+
+  function renderMisheardLyricsSettings(data = {}) {
+    renderMisheardLyricsCard(data);
+    const list = $('misheard-lyrics-lyric-list');
+    if (list) {
+      const lyrics = data.lyrics || [];
+      if (!lyrics.length) {
+        list.innerHTML = '<p class="hint">No lyrics match that search.</p>';
+      } else {
+        list.innerHTML = lyrics.map((lyric) => `
+          <article class="cn-fact${lyric.hidden ? ' is-hidden' : ''}${lyric.custom ? ' is-custom' : ''}" data-ml-id="${escapeHtml(lyric.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="160">${escapeHtml(lyric.text)}</textarea>
+            <input type="text" class="field-input ml-artist" maxlength="48" placeholder="Artist" value="${escapeHtml(lyric.artist || '')}">
+            <div class="cn-fact-meta">
+              <span class="hint">${lyric.custom ? 'Yours' : 'Shipped'} · ${lyric.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: lyric.hidden,
+                  custom: lyric.custom,
+                  saveAttr: 'data-ml-save',
+                  hideAttr: 'data-ml-hide',
+                  removeAttr: 'data-ml-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('misheard-lyrics-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    misheardLyricsPage = data.page || 1;
+    const prev = $('btn-misheard-lyrics-prev');
+    const next = $('btn-misheard-lyrics-next');
+    if (prev) prev.disabled = misheardLyricsPage <= 1;
+    if (next) next.disabled = misheardLyricsPage >= (data.pages || 1);
+  }
+
+  async function loadMisheardLyricsStatus() {
+    try {
+      renderMisheardLyricsCard(await apiGet('/api/misheard-lyrics/lyrics?page=1&pageSize=1'));
+    } catch {
+      renderMisheardLyricsCard({});
+    }
+  }
+
+  async function loadMisheardLyrics(page = misheardLyricsPage) {
+    const query = $('misheard-lyrics-search')?.value || '';
+    const hidden = Boolean($('misheard-lyrics-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(ML_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      renderMisheardLyricsSettings(await apiGet(`/api/misheard-lyrics/lyrics?${params}`));
+    } catch {
+      renderMisheardLyricsSettings({});
+    }
+  }
+
+  function openMisheardLyricsManageSheet() {
+    const sheet = $('misheard-lyrics-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    refreshMisheardLyricsPreview();
+    loadMisheardLyrics(1);
+  }
+
+  function closeMisheardLyricsManageSheet() {
+    const sheet = $('misheard-lyrics-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadMisheardLyricsStatus();
+  }
+
+  $('btn-misheard-lyrics-manage')?.addEventListener('click', () => openMisheardLyricsManageSheet());
+  $('btn-misheard-lyrics-manage-close')?.addEventListener('click', () => closeMisheardLyricsManageSheet());
+  registerSheetDismiss('misheard-lyrics-manage-sheet', () => closeMisheardLyricsManageSheet());
+
+  $('btn-misheard-lyrics-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/misheard-lyrics', withTarget());
+      toast(String(result.lyric?.text || 'Misheard lyric on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Misheard Lyrics', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-misheard-lyrics-add')?.addEventListener('click', async () => {
+    const input = $('misheard-lyrics-new');
+    const artistInput = $('misheard-lyrics-new-artist');
+    try {
+      await apiPost('/api/misheard-lyrics/lyrics', {
+        text: input?.value || '',
+        artist: artistInput?.value || '',
+      });
+      if (input) input.value = '';
+      if (artistInput) artistInput.value = '';
+      refreshMisheardLyricsPreview();
+      toast('Lyric added', 'good');
+      await loadMisheardLyrics(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that lyric', 'bad');
+    }
+  });
+
+  $('misheard-lyrics-new')?.addEventListener('input', () => refreshMisheardLyricsPreview());
+  $('misheard-lyrics-new-artist')?.addEventListener('input', () => refreshMisheardLyricsPreview());
+
+  $('misheard-lyrics-search')?.addEventListener('input', () => {
+    window.clearTimeout(misheardLyricsTimer);
+    misheardLyricsTimer = window.setTimeout(() => {
+      loadMisheardLyrics(1);
+    }, 250);
+  });
+
+  $('misheard-lyrics-show-hidden')?.addEventListener('change', () => loadMisheardLyrics(1));
+  $('btn-misheard-lyrics-prev')?.addEventListener('click', () => loadMisheardLyrics(misheardLyricsPage - 1));
+  $('btn-misheard-lyrics-next')?.addEventListener('click', () => loadMisheardLyrics(misheardLyricsPage + 1));
+
+  $('misheard-lyrics-lyric-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-ml-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-ml-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    const artist = article.querySelector('.ml-artist')?.value;
+    try {
+      if (event.target.closest('[data-ml-save]')) {
+        await apiPost('/api/misheard-lyrics/lyrics', { id, text, artist });
+        toast('Lyric saved', 'good');
+      } else if (event.target.closest('[data-ml-remove]')) {
+        if (!confirmCorpusRemove('lyric', text)) {
+          return;
+        }
+        await apiPost('/api/misheard-lyrics/lyrics', { id, remove: true });
+        toast('Lyric removed', 'good');
+      } else if (event.target.closest('[data-ml-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/misheard-lyrics/lyrics', { id, hidden: !restore });
+        toast(restore ? 'Lyric restored' : 'Lyric hidden', 'good');
+      } else {
+        return;
+      }
+      await loadMisheardLyrics(misheardLyricsPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that lyric', 'bad');
+    }
+  });
+
+  loadMisheardLyricsStatus();
+
+  // ----------------------------------------------- Settings → Periodic Table
+
+  let periodicTableState = { elements: [], categories: [], settings: { categories: [] } };
+
+  function periodicTableCountsLine(data = {}) {
+    const total = Number(data.total || 0);
+    const available = Number(data.available || 0);
+    const filtered = available < total;
+    return filtered
+      ? `${available} of ${total} elements in rotation`
+      : `${total} elements in rotation`;
+  }
+
+  function readPeriodicTableCategories() {
+    const grid = $('periodic-table-category-grid');
+    if (!grid) {
+      return [];
+    }
+    return [...grid.querySelectorAll('input[type="checkbox"]:checked')]
+      .map((input) => input.value)
+      .filter(Boolean);
+  }
+
+  function renderPeriodicTableCategories(data = {}) {
+    const grid = $('periodic-table-category-grid');
+    if (!grid) {
+      return;
+    }
+    const selected = new Set((data.settings?.categories || []).map((value) => String(value)));
+    const categories = Array.isArray(data.categories) ? data.categories : [];
+    grid.innerHTML = categories.map((row) => {
+      const id = String(row.id || '');
+      const checked = selected.has(id) ? ' checked' : '';
+      const count = Number(row.count) || 0;
+      const label = String(row.label || id);
+      return `<label class="periodic-table-category-item"><input type="checkbox" value="${escapeHtml(id)}"${checked}> ${escapeHtml(label)} <span class="hint">(${count})</span></label>`;
+    }).join('');
+  }
+
+  function renderPeriodicTableElementSelect(data = {}, { filterCategories = null } = {}) {
+    const select = $('periodic-table-element');
+    if (!select) {
+      return;
+    }
+    const selectedCategories = filterCategories
+      ?? (data.settings?.categories || []);
+    const allowed = selectedCategories.length
+      ? new Set(selectedCategories)
+      : null;
+    const elements = (Array.isArray(data.elements) ? data.elements : [])
+      .filter((element) => !allowed || allowed.has(element.category));
+    const current = select.value;
+    select.innerHTML = elements.map((element) => {
+      const label = `${element.number} · ${element.name} (${element.symbol})`;
+      return `<option value="${escapeHtml(String(element.number))}">${escapeHtml(label)}</option>`;
+    }).join('');
+    if (current && [...select.options].some((option) => option.value === current)) {
+      select.value = current;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+    }
+    return elements;
+  }
+
+  function renderPeriodicTablePreview(data = {}) {
+    const host = $('periodic-table-preview');
+    if (!host) {
+      return;
+    }
+    const select = $('periodic-table-element');
+    const number = Number(select?.value);
+    const element = (Array.isArray(data.elements) ? data.elements : periodicTableState.elements || [])
+      .find((row) => row.number === number)
+      || periodicTableState.elements?.[0];
+    const lines = Array.isArray(element?.lines) ? element.lines : [];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    paintPreviewLines(host, lines.slice(0, 6));
+  }
+
+  function renderPeriodicTableSettings(data = {}) {
+    periodicTableState = {
+      elements: data.elements || [],
+      categories: data.categories || [],
+      settings: data.settings || { categories: [] },
+      available: data.available,
+      total: data.total,
+    };
+    const pill = $('periodic-table-status-pill');
+    const detail = $('periodic-table-status-detail');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+      pill.className = `status-pill ${data.available ? 'is-ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${periodicTableCountsLine(data)}. Filter by category or push a specific element to test.`
+        : 'All 118 elements with atomic number, name, symbol, category, and weight — centred like the marketplace channel.';
+    }
+    renderPeriodicTableCategories(data);
+    const visible = renderPeriodicTableElementSelect(data);
+    renderPeriodicTablePreview({ ...data, elements: visible });
+  }
+
+  async function loadPeriodicTableSettings() {
+    try {
+      renderPeriodicTableSettings(await apiGet('/api/periodic-table/settings'));
+    } catch (_error) {
+      renderPeriodicTableSettings({});
+    }
+  }
+
+  $('periodic-table-element')?.addEventListener('change', () => renderPeriodicTablePreview(periodicTableState));
+  $('periodic-table-category-grid')?.addEventListener('change', () => {
+    const visible = renderPeriodicTableElementSelect(periodicTableState, {
+      filterCategories: readPeriodicTableCategories(),
+    });
+    renderPeriodicTablePreview({ ...periodicTableState, elements: visible });
+  });
+
+  $('btn-periodic-table-save')?.addEventListener('click', async () => {
+    const button = $('btn-periodic-table-save');
+    try {
+      button.disabled = true;
+      const result = await apiPost('/api/periodic-table/settings', {
+        categories: readPeriodicTableCategories(),
+      });
+      renderPeriodicTableSettings(result);
+      toast('Periodic table filters saved', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not save filters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-periodic-table-reset')?.addEventListener('click', async () => {
+    const button = $('btn-periodic-table-reset');
+    try {
+      button.disabled = true;
+      const result = await apiPost('/api/periodic-table/settings', { reset: true });
+      renderPeriodicTableSettings(result);
+      toast('Periodic table filters reset', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not reset filters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-periodic-table-push-selected')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const number = Number($('periodic-table-element')?.value);
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/periodic-table', withTarget({ number }));
+      toast(`Pushed ${result.element?.name || 'element'}`, 'good');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-periodic-table-push-random')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/periodic-table', withTarget());
+      toast(`Pushed ${result.element?.name || 'element'}`, 'good');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadPeriodicTableSettings();
+
+  // ----------------------------------------------- Settings → Word of the Day
+
+  let wordOfTheDayState = { words: [], partsOfSpeech: [], settings: { partsOfSpeech: [] } };
+  let wordOfTheDayTimer = 0;
+
+  function wordOfTheDayCountsLine(data = {}) {
+    const total = Number(data.total || 0);
+    const available = Number(data.available || 0);
+    const filtered = available < total;
+    return filtered
+      ? `${available} of ${total} words in rotation`
+      : `${total.toLocaleString()} words in rotation`;
+  }
+
+  function readWordOfTheDayPos() {
+    const grid = $('word-of-the-day-pos-grid');
+    if (!grid) {
+      return [];
+    }
+    return [...grid.querySelectorAll('input[type="checkbox"]:checked')]
+      .map((input) => input.value)
+      .filter(Boolean);
+  }
+
+  function renderWordOfTheDayPos(data = {}) {
+    const grid = $('word-of-the-day-pos-grid');
+    if (!grid) {
+      return;
+    }
+    const selected = new Set((data.settings?.partsOfSpeech || []).map((value) => String(value)));
+    const parts = Array.isArray(data.partsOfSpeech) ? data.partsOfSpeech : [];
+    grid.innerHTML = parts.map((row) => {
+      const id = String(row.id || '');
+      const checked = selected.has(id) ? ' checked' : '';
+      const count = Number(row.count) || 0;
+      const label = String(row.label || id);
+      return `<label class="word-of-the-day-pos-item"><input type="checkbox" value="${escapeHtml(id)}"${checked}> ${escapeHtml(label)} <span class="hint">(${count.toLocaleString()})</span></label>`;
+    }).join('');
+  }
+
+  function renderWordOfTheDaySelect(data = {}) {
+    const select = $('word-of-the-day-word');
+    if (!select) {
+      return;
+    }
+    const words = Array.isArray(data.words) ? data.words : [];
+    const current = select.value;
+    select.innerHTML = words.map((entry) => {
+      const label = `${entry.word} · ${entry.posLabel || entry.pos}`;
+      return `<option value="${escapeHtml(entry.id)}">${escapeHtml(label)}</option>`;
+    }).join('');
+    if (current && [...select.options].some((option) => option.value === current)) {
+      select.value = current;
+    } else if (select.options.length) {
+      select.selectedIndex = 0;
+    }
+    return words;
+  }
+
+  function renderWordOfTheDayPreview() {
+    const host = $('word-of-the-day-preview');
+    if (!host) {
+      return;
+    }
+    const select = $('word-of-the-day-word');
+    const id = select?.value;
+    const entry = (wordOfTheDayState.words || []).find((row) => row.id === id)
+      || wordOfTheDayState.words?.[0];
+    const lines = Array.isArray(entry?.lines) ? [...entry.lines] : [];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    paintPreviewLines(host, lines.slice(0, 6));
+  }
+
+  function renderWordOfTheDaySettings(data = {}) {
+    wordOfTheDayState = {
+      words: data.words || [],
+      partsOfSpeech: data.partsOfSpeech || [],
+      settings: data.settings || { partsOfSpeech: [] },
+      available: data.available,
+      total: data.total,
+    };
+    const pill = $('word-of-the-day-status-pill');
+    const detail = $('word-of-the-day-status-detail');
+    if (pill) {
+      pill.textContent = data.available != null ? `${Number(data.available).toLocaleString()} ready` : '…';
+      pill.className = `status-pill ${data.available ? 'is-ok' : ''}`;
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${wordOfTheDayCountsLine(data)}. Search for a word or push a random one to test.`
+        : 'Local board-fit vocabulary entries with part of speech and a short definition — like the marketplace channel.';
+    }
+    renderWordOfTheDayPos(data);
+    renderWordOfTheDaySelect(data);
+    renderWordOfTheDayPreview();
+  }
+
+  async function loadWordOfTheDaySettings(query = '') {
+    try {
+      const params = new URLSearchParams();
+      if (query) {
+        params.set('q', query);
+      }
+      const suffix = params.toString() ? `?${params}` : '';
+      renderWordOfTheDaySettings(await apiGet(`/api/word-of-the-day/settings${suffix}`));
+    } catch (_error) {
+      renderWordOfTheDaySettings({});
+    }
+  }
+
+  $('word-of-the-day-search')?.addEventListener('input', () => {
+    window.clearTimeout(wordOfTheDayTimer);
+    wordOfTheDayTimer = window.setTimeout(() => {
+      loadWordOfTheDaySettings($('word-of-the-day-search')?.value || '');
+    }, 250);
+  });
+  $('word-of-the-day-word')?.addEventListener('change', () => renderWordOfTheDayPreview());
+  $('word-of-the-day-pos-grid')?.addEventListener('change', () => {
+    const visible = renderWordOfTheDaySelect({
+      ...wordOfTheDayState,
+      words: (wordOfTheDayState.words || []).filter((entry) => {
+        const allowed = readWordOfTheDayPos();
+        return !allowed.length || allowed.includes(entry.pos);
+      }),
+    });
+    wordOfTheDayState.words = visible;
+    renderWordOfTheDayPreview();
+  });
+
+  $('btn-word-of-the-day-save')?.addEventListener('click', async () => {
+    const button = $('btn-word-of-the-day-save');
+    try {
+      button.disabled = true;
+      const result = await apiPost('/api/word-of-the-day/settings', {
+        partsOfSpeech: readWordOfTheDayPos(),
+      });
+      renderWordOfTheDaySettings(result);
+      toast('Word of the Day filters saved', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not save filters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-word-of-the-day-reset')?.addEventListener('click', async () => {
+    const button = $('btn-word-of-the-day-reset');
+    try {
+      button.disabled = true;
+      const result = await apiPost('/api/word-of-the-day/settings', { reset: true });
+      renderWordOfTheDaySettings(result);
+      toast('Word of the Day filters reset', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not reset filters', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-word-of-the-day-push-selected')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const id = $('word-of-the-day-word')?.value;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/word-of-the-day', withTarget({ id }));
+      toast(`Pushed ${result.entry?.word || 'word'}`, 'good');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-word-of-the-day-push-random')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/word-of-the-day', withTarget());
+      toast(`Pushed ${result.entry?.word || 'word'}`, 'good');
+    } catch (error) {
+      toast(error.message || 'Push failed', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadWordOfTheDaySettings();
+
   // ----------------------------------------------- Settings → Dad Jokes
 
   const DJ_PAGE_SIZE = 12;
@@ -12504,6 +13625,197 @@
   });
 
   loadStarlinkTrackerSettings();
+
+  // ------------------------------------------- Settings → Space Launch Alerts
+
+  let spaceLaunchAlertsState = { settings: {}, launches: [] };
+
+  function spaceLaunchChipCode(name) {
+    const index = FLAP_CHIPS.indexOf(String(name || 'blue').toLowerCase());
+    return index >= 0 ? 63 + index : 63 + FLAP_CHIPS.indexOf('blue');
+  }
+
+  function renderSpaceLaunchAlertsPreview(launch, chipColor = 'blue') {
+    const host = $('space-launch-alerts-preview');
+    if (!host) {
+      return;
+    }
+    const wrapped = wrapPreview(launch?.sentence || '', 22, { orphans: false }).slice(0, 4);
+    const lines = ['SPACE ALERT', '', ...wrapped];
+    while (lines.length < 6) {
+      lines.push('');
+    }
+    const chip = spaceLaunchChipCode(chipColor);
+    paintPreviewLines(host, lines, (row, col) => {
+      if (row === 0 && (col === 0 || col === 1 || col === 20 || col === 21)) {
+        return chip;
+      }
+      return null;
+    });
+  }
+
+  function renderSpaceLaunchAlertsSettings(data = {}) {
+    spaceLaunchAlertsState = {
+      settings: data.settings || {},
+      launches: data.launches || [],
+    };
+    const settings = data.settings || {};
+    const hours = $('space-launch-hours-ahead');
+    const refresh = $('space-launch-refresh-hours');
+    const chip = $('space-launch-chip-color');
+    if (hours && document.activeElement !== hours) {
+      hours.value = String(settings.hoursAhead || 168);
+    }
+    if (refresh && document.activeElement !== refresh) {
+      refresh.value = String(settings.refreshHours || 6);
+    }
+    if (chip && document.activeElement !== chip) {
+      chip.value = settings.chipColor || 'blue';
+    }
+    setChecked('space-launch-include-suborbital', Boolean(settings.includeSuborbital));
+    const pill = $('space-launch-alerts-status-pill');
+    const detail = $('space-launch-alerts-status-detail');
+    const cacheDetail = $('space-launch-alerts-cache-detail');
+    const available = Number(data.available || 0);
+    if (pill) {
+      pill.textContent = available ? `${available} ready` : 'No launches';
+      pill.className = `status-pill ${available ? 'is-ok' : 'is-warn'}`;
+    }
+    if (detail) {
+      detail.textContent = available
+        ? `${available} board-fit launch${available === 1 ? '' : 'es'} in cache. Pick one to preview or push a test alert.`
+        : 'No upcoming launches fit the board yet — try Refresh cache or widen the look-ahead window.';
+    }
+    if (cacheDetail) {
+      const age = data.cacheAgeMinutes != null ? `${data.cacheAgeMinutes} min ago` : 'never';
+      cacheDetail.textContent = data.fetchedAt
+        ? `Cached ${data.total || 0} launches · updated ${age} · ${data.source || 'Launch Library 2'}`
+        : 'Cache empty — Refresh cache to fetch upcoming launches.';
+    }
+    const select = $('space-launch-select');
+    const launches = data.launches || [];
+    const previous = select?.value || '';
+    if (select) {
+      select.innerHTML = launches.length
+        ? launches.map((launch) => (
+          `<option value="${escapeHtml(launch.id)}">${escapeHtml(launch.name)} · ${escapeHtml(launch.countdown || '')}</option>`
+        )).join('')
+        : '<option value="">No launches in cache</option>';
+      if (previous && launches.some((launch) => launch.id === previous)) {
+        select.value = previous;
+      }
+    }
+    const selected = launches.find((launch) => launch.id === select?.value) || launches[0];
+    renderSpaceLaunchAlertsPreview(selected, settings.chipColor || 'blue');
+  }
+
+  async function loadSpaceLaunchAlertsSettings() {
+    try {
+      renderSpaceLaunchAlertsSettings(await apiGet('/api/space-launch-alerts/settings'));
+    } catch {
+      renderSpaceLaunchAlertsSettings({});
+    }
+  }
+
+  function spaceLaunchSettingsFromForm() {
+    return {
+      hoursAhead: Number($('space-launch-hours-ahead')?.value || 168),
+      refreshHours: Number($('space-launch-refresh-hours')?.value || 6),
+      chipColor: $('space-launch-chip-color')?.value || 'blue',
+      includeSuborbital: Boolean($('space-launch-include-suborbital')?.checked),
+    };
+  }
+
+  ['space-launch-hours-ahead', 'space-launch-refresh-hours', 'space-launch-chip-color', 'space-launch-include-suborbital']
+    .forEach((id) => {
+      $(id)?.addEventListener('change', () => {
+        const launch = spaceLaunchAlertsState.launches.find(
+          (row) => row.id === $('space-launch-select')?.value,
+        ) || spaceLaunchAlertsState.launches[0];
+        renderSpaceLaunchAlertsPreview(launch, spaceLaunchSettingsFromForm().chipColor);
+      });
+    });
+
+  $('space-launch-select')?.addEventListener('change', () => {
+    const launch = spaceLaunchAlertsState.launches.find(
+      (row) => row.id === $('space-launch-select')?.value,
+    );
+    renderSpaceLaunchAlertsPreview(launch, spaceLaunchSettingsFromForm().chipColor);
+  });
+
+  $('btn-space-launch-alerts-save')?.addEventListener('click', async () => {
+    const button = $('btn-space-launch-alerts-save');
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/space-launch-alerts/settings', spaceLaunchSettingsFromForm());
+      renderSpaceLaunchAlertsSettings(result);
+      toast('Space Launch Alerts settings saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save settings', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-space-launch-alerts-reset')?.addEventListener('click', async () => {
+    const button = $('btn-space-launch-alerts-reset');
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/space-launch-alerts/settings', { reset: true });
+      renderSpaceLaunchAlertsSettings(result);
+      toast('Defaults restored', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not reset settings', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-space-launch-alerts-refresh')?.addEventListener('click', async () => {
+    const button = $('btn-space-launch-alerts-refresh');
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/space-launch-alerts/settings', {
+        ...spaceLaunchSettingsFromForm(),
+        refresh: true,
+      });
+      renderSpaceLaunchAlertsSettings(result);
+      toast('Launch cache refreshed', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not refresh launch cache', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-space-launch-alerts-push-selected')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const launchId = $('space-launch-select')?.value;
+      const result = await apiPost('/api/push/space-launch-alerts', withTarget({ launchId }));
+      toast(String(result.launch?.rocket || 'Launch alert on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push launch alert', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('btn-space-launch-alerts-push-next')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/space-launch-alerts', withTarget());
+      toast(String(result.launch?.rocket || 'Launch alert on the board').slice(0, 60), 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push launch alert', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  loadSpaceLaunchAlertsSettings();
 
   // ------------------------------------------- Settings → ISS Tracker
 

@@ -62,6 +62,12 @@ const { calendarClockRows } = require('../../calendar-clock');
 const { wordClockRows } = require('../../word-clock');
 const { quoteLines } = require('../../family-quotes-layout');
 const { jokeLines } = require('../../dad-jokes-layout');
+const { lyricRows } = require('../../misheard-lyrics-layout');
+const { fuzzyRows } = require('../../warm-fuzzies-layout');
+const { fillerRows } = require('../../daily-bucket-fillers-layout');
+const { alertRows, cleanChip } = require('../../space-launch-alerts-layout');
+const { elementRows } = require('../../periodic-table-layout');
+const { wordRows } = require('../../word-of-the-day-layout');
 const { redLetterRows } = require('../../red-letter');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
@@ -1140,6 +1146,95 @@ function familyQuotesFrames(payload = {}) {
 }
 
 /**
+ * Misheard Lyrics (marketplace channel): lyric first, artist under it.
+ *
+ * Two columns of air on the left, vertically centred, no title row. The
+ * lyric ends with a period; the credit is `- NAME` on its own line(s).
+ * One frame only — a mondegreen that does not fit is dropped upstream.
+ */
+function misheardLyricsFrames(payload = {}) {
+  const rows = lyricRows(
+    payload.lyric?.text || payload.text || '',
+    payload.lyric?.artist || payload.artist || '',
+  );
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'misheard lyrics'),
+    'Misheard Lyrics',
+    'misheard.lyrics',
+  )];
+}
+
+/**
+ * Warm Fuzzies (marketplace channel): a compliment on the full six rows —
+ * centred short lines, indented medium blocks, or flush-left long wraps.
+ */
+function warmFuzziesFrames(payload = {}) {
+  const rows = fuzzyRows(payload.fuzzy?.text || payload.text || '');
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'warm fuzzies'),
+    'Warm Fuzzies',
+    'warm.fuzzies',
+  )];
+}
+
+/**
+ * Daily Bucket Fillers (marketplace channel): a kindness challenge on
+ * the full six rows — centred short lines or indented longer wraps.
+ */
+function dailyBucketFillersFrames(payload = {}) {
+  const rows = fillerRows(payload.filler?.text || payload.text || '');
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'daily bucket fillers'),
+    'Daily Bucket Fillers',
+    'bucket.fillers',
+  )];
+}
+
+/**
+ * Periodic Table (marketplace channel): title, blank, element headline,
+ * blank, category, atomic weight — all centred on 22 columns.
+ */
+function periodicTableFrames(payload = {}) {
+  const element = payload.element || {};
+  const rows = elementRows(element);
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'periodic table'),
+    'Periodic Table',
+    'periodic.table',
+  )];
+}
+
+/**
+ * Word of the Day (marketplace education): yellow WORD OF THE DAY chips,
+ * centred word + part of speech, blank row, then an indented definition
+ * block vertically centred in the last three rows.
+ */
+function wordOfTheDayFrames(payload = {}) {
+  const entry = payload.entry || {};
+  const rows = wordRows(entry.word, entry.pos, entry.definition);
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'word of the day'),
+    'Word of the Day',
+    'word.day',
+  )];
+}
+
+/**
  * US Weather Map (marketplace channel): the lower 48 in colour chips.
  *
  * No text anywhere — every flap the map claims is a chip and everything else
@@ -1723,6 +1818,26 @@ function starlinkTrackFrames(payload = {}) {
   )];
 }
 
+/**
+ * Space Launch Alerts (marketplace): coloured `SPACE ALERT` chips, a blank
+ * row, then up to four left-aligned body lines.
+ */
+function spaceLaunchAlertFrames(payload = {}) {
+  const sentence = fold(payload.launch?.sentence || payload.sentence || '');
+  if (!sentence) {
+    return [];
+  }
+  const rows = alertRows(sentence, { chip: cleanChip(payload.chipColor) });
+  if (!rows.length) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'space launch alert'),
+    'Space Launch Alerts',
+    'launch.alert',
+  )];
+}
+
 const FORMATTERS = {
   'youtube.now-playing': youtubeFrames,
   'upside-news.round': upsideFrames,
@@ -1750,6 +1865,11 @@ const FORMATTERS = {
   'word.clock': wordClockFrames,
   'roast.me': roastMeFrames,
   'family.quotes': familyQuotesFrames,
+  'misheard.lyrics': misheardLyricsFrames,
+  'warm.fuzzies': warmFuzziesFrames,
+  'bucket.fillers': dailyBucketFillersFrames,
+  'periodic.table': periodicTableFrames,
+  'word.day': wordOfTheDayFrames,
   'dad.jokes': dadJokesFrames,
   'us.weather-map': usWeatherMapFrames,
   'red-letter.card': redLetterFrames,
@@ -1758,6 +1878,7 @@ const FORMATTERS = {
   'plex.top10': plexTop10Frames,
   'iss.track': issTrackFrames,
   'starlink.track': starlinkTrackFrames,
+  'launch.alert': spaceLaunchAlertFrames,
 };
 
 function framesFor(payload, ctx = {}) {
@@ -1790,6 +1911,11 @@ module.exports = {
   wordClockFrames,
   roastMeFrames,
   familyQuotesFrames,
+  misheardLyricsFrames,
+  warmFuzziesFrames,
+  dailyBucketFillersFrames,
+  periodicTableFrames,
+  wordOfTheDayFrames,
   dadJokesFrames,
   usWeatherMapFrames,
   redLetterFrames,
@@ -1799,6 +1925,7 @@ module.exports = {
   plexTop10Title,
   issTrackFrames,
   starlinkTrackFrames,
+  spaceLaunchAlertFrames,
   triviaGate,
   youtubeStatsLine,
 };

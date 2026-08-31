@@ -208,11 +208,12 @@ function clearedRows() {
   );
 }
 
-function withHold(frame, holdSeconds) {
+function withHold(frame, holdSeconds, card) {
   const seconds = Number(holdSeconds);
   if (Number.isFinite(seconds) && seconds > 0) {
     frame.holdSeconds = seconds;
   }
+  if (card) frame.card = card;
   return frame;
 }
 
@@ -220,6 +221,7 @@ function inviteFrames(payload = {}) {
   return [withHold(
     snapshotFrame(inviteRows(payload), 'Word Scramble', SOURCE),
     payload.holdSeconds || payload.remainingSeconds,
+    'invite',
   )];
 }
 
@@ -227,6 +229,7 @@ function lobbyFrames(payload = {}) {
   return [withHold(
     snapshotFrame(lobbyRows(payload), 'Word Scramble lobby', SOURCE),
     payload.holdSeconds || payload.remainingSeconds,
+    'lobby',
   )];
 }
 
@@ -235,6 +238,7 @@ function roundFrames(payload = {}) {
   return [withHold(
     snapshotFrame(roundRows(payload), 'Word Scramble', SOURCE),
     hold,
+    'round',
   )];
 }
 
@@ -247,6 +251,7 @@ function scoresFrames(payload = {}) {
       SOURCE,
     ),
     payload.holdSeconds || payload.remainingSeconds,
+    final ? 'final' : 'scores',
   )];
 }
 
@@ -254,6 +259,7 @@ function intermissionFrames(payload = {}) {
   return [withHold(
     snapshotFrame(intermissionRows(payload), 'Round winner', SOURCE),
     payload.holdSeconds || payload.remainingSeconds,
+    'intermission',
   )];
 }
 
@@ -261,6 +267,7 @@ function bestFrames(payload = {}) {
   return [withHold(
     snapshotFrame(bestRows(payload), 'Best word', SOURCE),
     payload.holdSeconds || payload.remainingSeconds,
+    'best',
   )];
 }
 
@@ -271,13 +278,17 @@ function finalFrames(payload = {}) {
     out.push(...bestFrames(payload));
   }
   for (const frame of out) {
-    withHold(frame, hold);
+    withHold(frame, hold, 'final');
   }
   return out;
 }
 
 function clearFrames() {
-  return [snapshotFrame(clearedRows(), 'Game over', SOURCE)];
+  return [withHold(
+    snapshotFrame(clearedRows(), 'Game over', SOURCE),
+    0,
+    'clear',
+  )];
 }
 
 function framesFor(payload = {}) {

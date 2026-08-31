@@ -1,0 +1,2131 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-31T05:13:41.729Z",
+  "count": 531,
+  "fillers": [
+    {
+      "id": "f88c6594cf",
+      "text": "Leave a kind note in a library book for the next reader."
+    },
+    {
+      "id": "92a5f59972",
+      "text": "Make a feel good playlist and share it with someone."
+    },
+    {
+      "id": "201a51e318",
+      "text": "Donate toys you no longer use."
+    },
+    {
+      "id": "19a50aa142",
+      "text": "Hold the door for the next person."
+    },
+    {
+      "id": "8d843924b3",
+      "text": "Write a thank you note to someone who helped you."
+    },
+    {
+      "id": "3d27fb760c",
+      "text": "Call a grandparent just to say hello."
+    },
+    {
+      "id": "6dae4fd4f4",
+      "text": "Smile at five people today."
+    },
+    {
+      "id": "b5bb84c690",
+      "text": "Let someone go ahead of you in line."
+    },
+    {
+      "id": "287cdc77ce",
+      "text": "Compliment a classmate on their work."
+    },
+    {
+      "id": "67a8890351",
+      "text": "Pick up litter you did not drop."
+    },
+    {
+      "id": "766b611298",
+      "text": "Share your snack with a friend."
+    },
+    {
+      "id": "877e83ba22",
+      "text": "Make someone laugh on purpose."
+    },
+    {
+      "id": "265656d017",
+      "text": "Say good morning to everyone you see."
+    },
+    {
+      "id": "b6f9540085",
+      "text": "Help set the table without being asked."
+    },
+    {
+      "id": "d266730d1e",
+      "text": "Leave the nicer seat for someone else."
+    },
+    {
+      "id": "5f8439c171",
+      "text": "Water a plant that is not yours."
+    },
+    {
+      "id": "c81e5f720a",
+      "text": "Return a stray cart at the store."
+    },
+    {
+      "id": "496a299084",
+      "text": "Wave to a neighbor you usually pass."
+    },
+    {
+      "id": "db905f0245",
+      "text": "Tell a sibling you are proud of them."
+    },
+    {
+      "id": "f69003fe6b",
+      "text": "Draw a picture and give it away."
+    },
+    {
+      "id": "9d01a8bab6",
+      "text": "Leave extra change in a vending machine."
+    },
+    {
+      "id": "7175c9fc4a",
+      "text": "Read a story to someone younger."
+    },
+    {
+      "id": "a3166b8b4f",
+      "text": "Teach someone a skill you know well."
+    },
+    {
+      "id": "0d8f40705e",
+      "text": "Write a joke on a sticky note for a friend."
+    },
+    {
+      "id": "832871df7f",
+      "text": "Let a friend pick the game tonight."
+    },
+    {
+      "id": "a70ca279e7",
+      "text": "Send a voice message that just says thanks."
+    },
+    {
+      "id": "8ee3d31616",
+      "text": "Make a card for the mail carrier."
+    },
+    {
+      "id": "b668bbea3d",
+      "text": "Offer to walk a neighbor’s dog."
+    },
+    {
+      "id": "e209a1b1bf",
+      "text": "Help unload the groceries."
+    },
+    {
+      "id": "1605a854ce",
+      "text": "Put away someone else’s dishes."
+    },
+    {
+      "id": "53d383ac5c",
+      "text": "Leave a book you loved for a friend."
+    },
+    {
+      "id": "05a6a91fbc",
+      "text": "Cheer for a teammate who missed a shot."
+    },
+    {
+      "id": "9cb23f88d3",
+      "text": "Sit with someone who is sitting alone."
+    },
+    {
+      "id": "267a6aa909",
+      "text": "Give your teacher a genuine thank you."
+    },
+    {
+      "id": "a1b8fa89e3",
+      "text": "Hold the elevator for someone rushing."
+    },
+    {
+      "id": "030492931e",
+      "text": "Share your umbrella on a rainy walk."
+    },
+    {
+      "id": "1bda7db409",
+      "text": "Leave a kind review for a small shop."
+    },
+    {
+      "id": "ed77a850e4",
+      "text": "Pick flowers and give them to someone."
+    },
+    {
+      "id": "174a6243b1",
+      "text": "Write a note and hide it in a lunchbox."
+    },
+    {
+      "id": "3fe843202b",
+      "text": "Let someone else have the last cookie."
+    },
+    {
+      "id": "590c383ba2",
+      "text": "Help a younger kid tie their shoes."
+    },
+    {
+      "id": "748f1587b3",
+      "text": "Say please and thank you extra today."
+    },
+    {
+      "id": "d3862cb05c",
+      "text": "Invite someone new to join your group."
+    },
+    {
+      "id": "a545401b43",
+      "text": "Give a genuine high five."
+    },
+    {
+      "id": "c300787db7",
+      "text": "Tell a parent one thing you appreciate."
+    },
+    {
+      "id": "b8d0d4d1ac",
+      "text": "Feed the birds in the yard."
+    },
+    {
+      "id": "87a5c83b69",
+      "text": "Leave a painted rock on a walking path."
+    },
+    {
+      "id": "ac66ce74b6",
+      "text": "Offer your seat on the bus."
+    },
+    {
+      "id": "aa9e3c83e3",
+      "text": "Help fold the laundry."
+    },
+    {
+      "id": "358c4c90ad",
+      "text": "Make breakfast for someone else."
+    },
+    {
+      "id": "48e95494b7",
+      "text": "Text a friend a favorite memory."
+    },
+    {
+      "id": "2713d9d5a9",
+      "text": "Clap for someone who tried something hard."
+    },
+    {
+      "id": "5f5e8fc0e4",
+      "text": "Share your crayons without being asked."
+    },
+    {
+      "id": "2a340025aa",
+      "text": "Leave the swing for the next kid."
+    },
+    {
+      "id": "f8630069c7",
+      "text": "Help carry a heavy bag."
+    },
+    {
+      "id": "7069371014",
+      "text": "Say I missed you to someone you did."
+    },
+    {
+      "id": "7e67cc3174",
+      "text": "Give away a coat you outgrew."
+    },
+    {
+      "id": "21a4972d95",
+      "text": "Write a poem for someone you love."
+    },
+    {
+      "id": "5dac630b43",
+      "text": "Turn down your music for the house."
+    },
+    {
+      "id": "d9de95355c",
+      "text": "Leave the last ice cream for a sibling."
+    },
+    {
+      "id": "03ee2f0455",
+      "text": "Ask someone how their day really was."
+    },
+    {
+      "id": "64e5b47df6",
+      "text": "Listen without interrupting."
+    },
+    {
+      "id": "3ff2590cee",
+      "text": "Give someone else the remote."
+    },
+    {
+      "id": "4a3556b476",
+      "text": "Help clean a room you did not mess up."
+    },
+    {
+      "id": "a12054e2c5",
+      "text": "Leave a thank you on a sticky note."
+    },
+    {
+      "id": "a702d70eff",
+      "text": "Bring a neighbor their newspaper."
+    },
+    {
+      "id": "40c05522b8",
+      "text": "Share your fries."
+    },
+    {
+      "id": "bae2be87a1",
+      "text": "Let someone else choose the movie."
+    },
+    {
+      "id": "8635cb7275",
+      "text": "High five the person who lost."
+    },
+    {
+      "id": "67b5437d71",
+      "text": "Tell a joke that is kind, not mean."
+    },
+    {
+      "id": "47a785f6e8",
+      "text": "Save a seat for someone late."
+    },
+    {
+      "id": "6a8795e753",
+      "text": "Help a friend practice a speech."
+    },
+    {
+      "id": "dc881573bd",
+      "text": "Return a lost item to the office."
+    },
+    {
+      "id": "0e5c6bc2cf",
+      "text": "Write a letter to your future self about kindness."
+    },
+    {
+      "id": "65e331da5a",
+      "text": "Give someone else the bigger half."
+    },
+    {
+      "id": "c7975a355f",
+      "text": "Hold the flashlight while someone works."
+    },
+    {
+      "id": "9e8fd5d9d5",
+      "text": "Say after you to someone at a door."
+    },
+    {
+      "id": "0e57fa4fc2",
+      "text": "Leave extra napkins at a picnic table."
+    },
+    {
+      "id": "93e7651649",
+      "text": "Help a sibling with homework."
+    },
+    {
+      "id": "bfe0925a84",
+      "text": "Pack a lunch for someone else."
+    },
+    {
+      "id": "41455434d7",
+      "text": "Leave a kind comment, not a joke."
+    },
+    {
+      "id": "0f419af72b",
+      "text": "Give a compliment that is specific."
+    },
+    {
+      "id": "3bf82472e1",
+      "text": "Open a jar for someone who cannot."
+    },
+    {
+      "id": "09aa6d7f56",
+      "text": "Share your markers at the table."
+    },
+    {
+      "id": "74f893e0c8",
+      "text": "Wait patiently without sighing."
+    },
+    {
+      "id": "91eee969d8",
+      "text": "Help someone find a lost toy."
+    },
+    {
+      "id": "a53a7abad7",
+      "text": "Leave a flower on a doorstep."
+    },
+    {
+      "id": "0572a64270",
+      "text": "Say you go first at the drinking fountain."
+    },
+    {
+      "id": "ffdda6ca6a",
+      "text": "Help zip a coat that is stuck."
+    },
+    {
+      "id": "45df65236c",
+      "text": "Give away stickers you love."
+    },
+    {
+      "id": "cc06fbbe2f",
+      "text": "Write a welcome note for a new kid."
+    },
+    {
+      "id": "136fa72652",
+      "text": "Let someone else blow out a candle."
+    },
+    {
+      "id": "e0748e7247",
+      "text": "Offer a bandaid without being asked."
+    },
+    {
+      "id": "73be37be4b",
+      "text": "Share your headphones for one song."
+    },
+    {
+      "id": "fc51d06182",
+      "text": "Help push a stroller up a ramp."
+    },
+    {
+      "id": "8fcfb1478e",
+      "text": "Leave a kind message on a foggy window."
+    },
+    {
+      "id": "60789160f0",
+      "text": "Thank the crossing guard by name."
+    },
+    {
+      "id": "f89db66354",
+      "text": "Give a coach a handwritten thank you."
+    },
+    {
+      "id": "7e4364c48b",
+      "text": "Help stack chairs after class."
+    },
+    {
+      "id": "1e4b33b1ed",
+      "text": "Leave the nicer crayon for a friend."
+    },
+    {
+      "id": "2993d023d6",
+      "text": "Say I believe in you before a test."
+    },
+    {
+      "id": "b7eea6101c",
+      "text": "Hold a door with both hands and wait."
+    },
+    {
+      "id": "282e179a37",
+      "text": "Share your popcorn at the movie."
+    },
+    {
+      "id": "f9ecbac5d0",
+      "text": "Help someone pick up dropped papers."
+    },
+    {
+      "id": "0e78bdc511",
+      "text": "Give a shy person an easy hello."
+    },
+    {
+      "id": "51fca936a0",
+      "text": "Leave a kind bookmark in a library book."
+    },
+    {
+      "id": "37ce1a73d4",
+      "text": "Offer to take a family photo for strangers."
+    },
+    {
+      "id": "1a9cdd5343",
+      "text": "Let someone else have the window seat."
+    },
+    {
+      "id": "a89d5af128",
+      "text": "Help carry in the recycling."
+    },
+    {
+      "id": "0d4e97a948",
+      "text": "Write a thank you to a librarian."
+    },
+    {
+      "id": "1ba440250b",
+      "text": "Give someone else the first turn."
+    },
+    {
+      "id": "a5041c7508",
+      "text": "Share your sidewalk chalk."
+    },
+    {
+      "id": "de9faf530c",
+      "text": "Leave a kind note on a bathroom mirror."
+    },
+    {
+      "id": "2c3b2b1720",
+      "text": "Help a friend find their lost hat."
+    },
+    {
+      "id": "218f2ae997",
+      "text": "Say nice shoes and mean it."
+    },
+    {
+      "id": "1cc293d9dc",
+      "text": "Give away a puzzle you finished."
+    },
+    {
+      "id": "c41dc62922",
+      "text": "Leave extra birdseed in the feeder."
+    },
+    {
+      "id": "4d4296df7b",
+      "text": "Help someone reach a high shelf."
+    },
+    {
+      "id": "6e9ce37468",
+      "text": "Write a joke and leave it on a desk."
+    },
+    {
+      "id": "e8b4ad37dc",
+      "text": "Offer your scarf on a cold walk."
+    },
+    {
+      "id": "e162a63ff5",
+      "text": "Let a younger kid win a race, once."
+    },
+    {
+      "id": "fb96893d17",
+      "text": "Thank the person who cooked dinner."
+    },
+    {
+      "id": "b127c98201",
+      "text": "Help wipe a table after lunch."
+    },
+    {
+      "id": "8195f9b841",
+      "text": "Leave a kind note in a coat pocket."
+    },
+    {
+      "id": "197485e9d5",
+      "text": "Share your best sticker."
+    },
+    {
+      "id": "673ed3a529",
+      "text": "Give someone a drawing of themselves."
+    },
+    {
+      "id": "54f6b28778",
+      "text": "Help put away sports gear."
+    },
+    {
+      "id": "1ddb22a1a4",
+      "text": "Say you did great after a small try."
+    },
+    {
+      "id": "9ab27dead8",
+      "text": "Leave a thank you for the bus driver."
+    },
+    {
+      "id": "878184226b",
+      "text": "Offer to refill someone’s water."
+    },
+    {
+      "id": "3aeafbbc82",
+      "text": "Help a neighbor take in their bins."
+    },
+    {
+      "id": "efd98d1665",
+      "text": "Write a note to a cousin you miss."
+    },
+    {
+      "id": "07eacb0b62",
+      "text": "Give someone else the comfy chair."
+    },
+    {
+      "id": "cdd4c5a87f",
+      "text": "Share your best joke, then listen to theirs."
+    },
+    {
+      "id": "e81677120f",
+      "text": "Leave a painted kindness stone outside."
+    },
+    {
+      "id": "ac3bbb3a79",
+      "text": "Help someone learn a new app."
+    },
+    {
+      "id": "1da2f8abe4",
+      "text": "Say I am glad you are here."
+    },
+    {
+      "id": "8ae4ec0e48",
+      "text": "Give away a book you already loved."
+    },
+    {
+      "id": "46a10b22bf",
+      "text": "Hold the gate for the next bike."
+    },
+    {
+      "id": "62de59c499",
+      "text": "Help a friend braid or fix their hair."
+    },
+    {
+      "id": "162539505f",
+      "text": "Leave a kind note on a fridge."
+    },
+    {
+      "id": "1504bfb080",
+      "text": "Offer your extra pencil."
+    },
+    {
+      "id": "636076cd04",
+      "text": "Thank a nurse or doctor if you see one."
+    },
+    {
+      "id": "511df13150",
+      "text": "Help someone find the right classroom."
+    },
+    {
+      "id": "fb6c6d6371",
+      "text": "Share your best coloring page."
+    },
+    {
+      "id": "818f65a9e9",
+      "text": "Leave a treat for the mail carrier."
+    },
+    {
+      "id": "5ad1283967",
+      "text": "Give a real apology if you were sharp."
+    },
+    {
+      "id": "f3a6b4eef3",
+      "text": "Help fold someone else’s blanket."
+    },
+    {
+      "id": "9119d3a38a",
+      "text": "Say after you at the microwave."
+    },
+    {
+      "id": "43c2f2d9b1",
+      "text": "Leave a kind review for a local baker."
+    },
+    {
+      "id": "3f970f1fea",
+      "text": "Offer to play the game someone else likes."
+    },
+    {
+      "id": "44652ec21a",
+      "text": "Help a sibling find matching socks."
+    },
+    {
+      "id": "c483b2a2a6",
+      "text": "Write a note that says you matter."
+    },
+    {
+      "id": "ea99fa64c9",
+      "text": "Give someone else the last pancake."
+    },
+    {
+      "id": "8bb1c5d5bf",
+      "text": "Share your best marker without asking for it back."
+    },
+    {
+      "id": "014c9cef70",
+      "text": "Leave a thank you in a restaurant tip jar."
+    },
+    {
+      "id": "d2ebf533b2",
+      "text": "Help someone carry art supplies."
+    },
+    {
+      "id": "2c8f2309af",
+      "text": "Say I like how you think."
+    },
+    {
+      "id": "babd7d5faf",
+      "text": "Give a neighbor homemade cookies."
+    },
+    {
+      "id": "788b5309d4",
+      "text": "Hold the door for a delivery person."
+    },
+    {
+      "id": "39a74a8fc6",
+      "text": "Help pick up after a family meal."
+    },
+    {
+      "id": "dbb884eb26",
+      "text": "Leave a kind note in a video game case."
+    },
+    {
+      "id": "c5ce306607",
+      "text": "Offer your extra glue stick."
+    },
+    {
+      "id": "f17a9829ab",
+      "text": "Thank the person who drives you places."
+    },
+    {
+      "id": "0d69e6f8e5",
+      "text": "Help a friend rehearse lines."
+    },
+    {
+      "id": "7c8cb5d7b8",
+      "text": "Share your favorite quiet spot."
+    },
+    {
+      "id": "e424e782e9",
+      "text": "Leave a flower on a teacher’s desk."
+    },
+    {
+      "id": "3e87d44b4e",
+      "text": "Give someone else the better controller."
+    },
+    {
+      "id": "e242ddca13",
+      "text": "Help a younger kid reach the sink."
+    },
+    {
+      "id": "e753bcdc8e",
+      "text": "Say take your time to someone rushing."
+    },
+    {
+      "id": "fcd9734683",
+      "text": "Leave extra soap at a campsite sink."
+    },
+    {
+      "id": "6a60b31026",
+      "text": "Offer to take notes for a friend who is out."
+    },
+    {
+      "id": "02ce63490e",
+      "text": "Help someone name their drawing."
+    },
+    {
+      "id": "c140b23620",
+      "text": "Write a thank you to a coach’s helper."
+    },
+    {
+      "id": "f5a3bdd62f",
+      "text": "Give away a stuffed animal you outgrew."
+    },
+    {
+      "id": "202a59d21f",
+      "text": "Share your best sidewalk square."
+    },
+    {
+      "id": "439ca9b051",
+      "text": "Leave a kind note in a locker."
+    },
+    {
+      "id": "35fd24e5b6",
+      "text": "Offer your extra hair tie."
+    },
+    {
+      "id": "69ac0e8a45",
+      "text": "Thank the person who does laundry."
+    },
+    {
+      "id": "3fdd11420a",
+      "text": "Help a friend zip a backpack."
+    },
+    {
+      "id": "53d49270a5",
+      "text": "Say I saved you a seat."
+    },
+    {
+      "id": "80cd5920ed",
+      "text": "Leave a painted rock that says be kind."
+    },
+    {
+      "id": "4443c561e2",
+      "text": "Give someone a second chance today."
+    },
+    {
+      "id": "91a7fffd7e",
+      "text": "Help wipe muddy paws at the door."
+    },
+    {
+      "id": "f87b58693a",
+      "text": "Share your extra granola bar."
+    },
+    {
+      "id": "0b7c47db14",
+      "text": "Leave a thank you for a substitute teacher."
+    },
+    {
+      "id": "0aac63e69d",
+      "text": "Offer to be the one who goes last."
+    },
+    {
+      "id": "0575473805",
+      "text": "Help a sibling pack their bag."
+    },
+    {
+      "id": "c4cc0016b4",
+      "text": "Write a note that says I noticed you."
+    },
+    {
+      "id": "0fe856a4d8",
+      "text": "Give someone else the first scoop."
+    },
+    {
+      "id": "f1a8a60647",
+      "text": "Share your favorite song out loud."
+    },
+    {
+      "id": "600cc802b8",
+      "text": "Leave a kind note on a bedroom door."
+    },
+    {
+      "id": "a5a8069db0",
+      "text": "Offer your extra napkin."
+    },
+    {
+      "id": "6de40fd998",
+      "text": "Thank a crossing guard with a wave and a smile."
+    },
+    {
+      "id": "313ed266b3",
+      "text": "Help someone pick up spilled crayons."
+    },
+    {
+      "id": "fe2ae39b3c",
+      "text": "Say you can go first on the slide."
+    },
+    {
+      "id": "d939081ffb",
+      "text": "Leave a book in a little free library."
+    },
+    {
+      "id": "898b20e4ba",
+      "text": "Give a friend the better half of a sandwich."
+    },
+    {
+      "id": "d6f25cfc69",
+      "text": "Help a neighbor water their flowers."
+    },
+    {
+      "id": "5b5c021403",
+      "text": "Share your best joke with a shy kid."
+    },
+    {
+      "id": "a3751fbf82",
+      "text": "Leave a thank you on a pizza box for the driver."
+    },
+    {
+      "id": "7423ab7b36",
+      "text": "Offer to hold someone’s place in line."
+    },
+    {
+      "id": "8243b65f22",
+      "text": "Help put names on cups at a party."
+    },
+    {
+      "id": "4143fc07a3",
+      "text": "Write a note to a pet sitter saying thanks."
+    },
+    {
+      "id": "1c51266289",
+      "text": "Give someone else the last turn at bat."
+    },
+    {
+      "id": "155bb9596a",
+      "text": "Share your extra sidewalk chalk colors."
+    },
+    {
+      "id": "dc6b8fd416",
+      "text": "Leave a kind note in a cereal box."
+    },
+    {
+      "id": "974a58af3e",
+      "text": "Offer your extra eraser."
+    },
+    {
+      "id": "48c983f9c8",
+      "text": "Thank the person who makes your bed sometimes."
+    },
+    {
+      "id": "52da076bbe",
+      "text": "Help a friend find a lost shoe."
+    },
+    {
+      "id": "b02df13345",
+      "text": "Say I am on your team today."
+    },
+    {
+      "id": "1b77db9696",
+      "text": "Leave a painted kindness heart on a fence."
+    },
+    {
+      "id": "1cb72b10ec",
+      "text": "Give someone a genuine you got this."
+    },
+    {
+      "id": "071080b11d",
+      "text": "Help carry chairs for a family event."
+    },
+    {
+      "id": "82abb3f8b3",
+      "text": "Share your favorite quiet book."
+    },
+    {
+      "id": "575188003f",
+      "text": "Leave a thank you for the night nurse."
+    },
+    {
+      "id": "4083719c72",
+      "text": "Offer to be the one who cleans the brushes."
+    },
+    {
+      "id": "cc6776878e",
+      "text": "Help a sibling choose an outfit."
+    },
+    {
+      "id": "aff3fdb5f6",
+      "text": "Write a note that says dinner was great."
+    },
+    {
+      "id": "e9b4d75f08",
+      "text": "Give someone else the window on a car ride."
+    },
+    {
+      "id": "ba67f4a6cf",
+      "text": "Share your extra tape."
+    },
+    {
+      "id": "cfed4eca83",
+      "text": "Leave a kind note under a pillow."
+    },
+    {
+      "id": "da1e85241a",
+      "text": "Offer your extra balloon."
+    },
+    {
+      "id": "41e856d4db",
+      "text": "Thank a librarian for a book they recommended."
+    },
+    {
+      "id": "775c4f68f3",
+      "text": "Help someone learn to skip a rock."
+    },
+    {
+      "id": "ec29f3c508",
+      "text": "Say I like playing with you."
+    },
+    {
+      "id": "a825181f4d",
+      "text": "Leave a flower in a library return slot."
+    },
+    {
+      "id": "9a063cb825",
+      "text": "Give a friend your extra sticker sheet."
+    },
+    {
+      "id": "7b301a6fcb",
+      "text": "Help a neighbor bring in packages."
+    },
+    {
+      "id": "ad79c3c7ca",
+      "text": "Share your best paper airplane."
+    },
+    {
+      "id": "6e1c3ee15f",
+      "text": "Leave a thank you on a coffee sleeve."
+    },
+    {
+      "id": "13e7375ed4",
+      "text": "Offer to take the dog out first."
+    },
+    {
+      "id": "154217d670",
+      "text": "Help a friend practice a song."
+    },
+    {
+      "id": "7aa5c773a6",
+      "text": "Write a note that says you make this house fun."
+    },
+    {
+      "id": "55e2d0a600",
+      "text": "Give someone else the last marshmallow."
+    },
+    {
+      "id": "d06db7fb7b",
+      "text": "Share your extra glow stick."
+    },
+    {
+      "id": "0ffc1a1ed0",
+      "text": "Leave a kind note in a lunch bag."
+    },
+    {
+      "id": "e724b49cd7",
+      "text": "Offer your extra straw."
+    },
+    {
+      "id": "35784d1b4b",
+      "text": "Thank the person who packs snacks."
+    },
+    {
+      "id": "85b5f4eeb7",
+      "text": "Help someone find the lost remote."
+    },
+    {
+      "id": "4b11c1ee43",
+      "text": "Say I am happy you came."
+    },
+    {
+      "id": "0adae0c072",
+      "text": "Leave a painted rock near a school garden."
+    },
+    {
+      "id": "3540e6e47e",
+      "text": "Give a shy reader the first turn to share."
+    },
+    {
+      "id": "d90b248896",
+      "text": "Help wipe the whiteboard after class."
+    },
+    {
+      "id": "75578e2a8f",
+      "text": "Share your favorite park bench."
+    },
+    {
+      "id": "54893f69c1",
+      "text": "Leave a thank you for a crossing guard’s helper."
+    },
+    {
+      "id": "4bd93f67d7",
+      "text": "Offer to be the one who holds the leash."
+    },
+    {
+      "id": "f7b2955e61",
+      "text": "Help a sibling find a missing toy part."
+    },
+    {
+      "id": "0c18929757",
+      "text": "Write a note that says your laugh is my favorite."
+    },
+    {
+      "id": "10f3c9403c",
+      "text": "Give someone else the first pancake."
+    },
+    {
+      "id": "792d1dafa1",
+      "text": "Share your extra clothespin."
+    },
+    {
+      "id": "6117698d79",
+      "text": "Leave a kind note on a bathroom stall that is kind, not silly."
+    },
+    {
+      "id": "3bb40ee7c4",
+      "text": "Offer your extra bandage."
+    },
+    {
+      "id": "8295c607ff",
+      "text": "Thank a coach for staying late."
+    },
+    {
+      "id": "6043704216",
+      "text": "Help someone tie a balloon."
+    },
+    {
+      "id": "e86ad1ba12",
+      "text": "Say after you at the copy machine."
+    },
+    {
+      "id": "ee10ea0c48",
+      "text": "Leave a book you loved on a friend’s porch."
+    },
+    {
+      "id": "e68ced0779",
+      "text": "Give a neighbor a homemade card."
+    },
+    {
+      "id": "248f7808c7",
+      "text": "Help carry art to the car."
+    },
+    {
+      "id": "67af49ed55",
+      "text": "Share your best jump rope."
+    },
+    {
+      "id": "b884c5543d",
+      "text": "Leave a thank you for a cafeteria worker."
+    },
+    {
+      "id": "418d2e1ad3",
+      "text": "Offer to refill the pet water bowl."
+    },
+    {
+      "id": "09152de55f",
+      "text": "Help a friend pick up dropped lunch."
+    },
+    {
+      "id": "136ebdd179",
+      "text": "Write a note that says I like your ideas."
+    },
+    {
+      "id": "e16a6a2d53",
+      "text": "Share your extra rubber band."
+    },
+    {
+      "id": "b2a813a050",
+      "text": "Leave a kind note in a piano bench."
+    },
+    {
+      "id": "288b5dfa78",
+      "text": "Offer your extra paper clip."
+    },
+    {
+      "id": "bf30551c8a",
+      "text": "Thank the person who walks you to school."
+    },
+    {
+      "id": "9adacc565d",
+      "text": "Help someone learn a card trick."
+    },
+    {
+      "id": "7a1342c351",
+      "text": "Say you can have the good seat."
+    },
+    {
+      "id": "81afdd1281",
+      "text": "Leave a painted kindness star on a trail."
+    },
+    {
+      "id": "aa453d180f",
+      "text": "Give a teammate credit out loud."
+    },
+    {
+      "id": "fdbbd7d451",
+      "text": "Help stack books at the library."
+    },
+    {
+      "id": "1a3d1b1e5a",
+      "text": "Share your favorite quiet game."
+    },
+    {
+      "id": "719ae8e27d",
+      "text": "Leave a thank you for a substitute bus driver."
+    },
+    {
+      "id": "4bedef3e23",
+      "text": "Offer to be the one who sweeps."
+    },
+    {
+      "id": "6def6ea362",
+      "text": "Help a sibling zip a suitcase."
+    },
+    {
+      "id": "0e51746833",
+      "text": "Write a note that says you helped more than you know."
+    },
+    {
+      "id": "eb415f7ff7",
+      "text": "Give someone else the first cookie from the batch."
+    },
+    {
+      "id": "7e5e35d58d",
+      "text": "Share your extra magnet."
+    },
+    {
+      "id": "9a36d5f352",
+      "text": "Leave a kind note on a fridge photo."
+    },
+    {
+      "id": "1bae8de613",
+      "text": "Offer your extra thumbtack, carefully."
+    },
+    {
+      "id": "0b37816631",
+      "text": "Thank a music teacher after practice."
+    },
+    {
+      "id": "4cd90b3398",
+      "text": "Help someone find middle C."
+    },
+    {
+      "id": "d4866b475a",
+      "text": "Say I like how kind you were today."
+    },
+    {
+      "id": "91b2e9a668",
+      "text": "Leave a flower for a crossing guard."
+    },
+    {
+      "id": "7d6d498080",
+      "text": "Give a friend your extra friendship bracelet."
+    },
+    {
+      "id": "22f60071d7",
+      "text": "Help a neighbor bring in garden tools."
+    },
+    {
+      "id": "1c6ac348d6",
+      "text": "Share your best hula hoop."
+    },
+    {
+      "id": "cb5f4bad97",
+      "text": "Leave a thank you for a dentist’s helper."
+    },
+    {
+      "id": "3282a47f7b",
+      "text": "Offer to put away the board game first."
+    },
+    {
+      "id": "1120ebf955",
+      "text": "Help a friend find a lost library card."
+    },
+    {
+      "id": "c9468138c4",
+      "text": "Write a note that says this house is better with you."
+    },
+    {
+      "id": "d06d156f54",
+      "text": "Give someone else the last orange slice."
+    },
+    {
+      "id": "24c66b37ca",
+      "text": "Share your extra hair clip."
+    },
+    {
+      "id": "20e778e589",
+      "text": "Leave a kind note in a cookbook."
+    },
+    {
+      "id": "ee286f55a9",
+      "text": "Offer your extra stamp."
+    },
+    {
+      "id": "45f1067e11",
+      "text": "Thank the person who remembers your favorite snack."
+    },
+    {
+      "id": "d8ec32efe7",
+      "text": "Help someone learn to whistle."
+    },
+    {
+      "id": "0e24a6f116",
+      "text": "Say I saved the last swing for you."
+    },
+    {
+      "id": "af693bdcbb",
+      "text": "Leave a painted kindness sun on a stoop."
+    },
+    {
+      "id": "18949d2f6f",
+      "text": "Give a quiet kid the first chance to talk."
+    },
+    {
+      "id": "d8585dab66",
+      "text": "Help wipe muddy shoes at the door."
+    },
+    {
+      "id": "1f272f318b",
+      "text": "Share your favorite bedtime story."
+    },
+    {
+      "id": "1dae89a44b",
+      "text": "Leave a thank you for a night custodian."
+    },
+    {
+      "id": "f593791d4b",
+      "text": "Offer to be the one who turns out lights."
+    },
+    {
+      "id": "b2c066d766",
+      "text": "Help a sibling find a missing homework page."
+    },
+    {
+      "id": "6b5252adf5",
+      "text": "Write a note that says I like doing nothing with you too."
+    },
+    {
+      "id": "a3a5285347",
+      "text": "Give someone else the first turn on the trampoline."
+    },
+    {
+      "id": "1ed65cdc3c",
+      "text": "Share your extra sidewalk stamp."
+    },
+    {
+      "id": "16c5b3cbc0",
+      "text": "Leave a kind note in a sock drawer, just for fun."
+    },
+    {
+      "id": "678a55046d",
+      "text": "Offer your extra safety pin."
+    },
+    {
+      "id": "fff65bab55",
+      "text": "Thank a crossing guard on a rainy day."
+    },
+    {
+      "id": "b5df22e7e7",
+      "text": "Help someone carry a science fair board."
+    },
+    {
+      "id": "c4b4aba411",
+      "text": "Say you can have my extra high five."
+    },
+    {
+      "id": "c1d2689db7",
+      "text": "Leave a book in a waiting room for the next family."
+    },
+    {
+      "id": "fcb1002f80",
+      "text": "Give a neighbor a drawing of their house."
+    },
+    {
+      "id": "8bfa79930e",
+      "text": "Help carry folding chairs back inside."
+    },
+    {
+      "id": "827fbddc81",
+      "text": "Share your best bubble wand."
+    },
+    {
+      "id": "268a8dd253",
+      "text": "Leave a thank you for a school secretary."
+    },
+    {
+      "id": "f3625d7340",
+      "text": "Offer to refill the birdbath."
+    },
+    {
+      "id": "9b4b5a0d23",
+      "text": "Help a friend pick up spilled glitter, even the tiny bits."
+    },
+    {
+      "id": "76f4a1439f",
+      "text": "Write a note that says you make ordinary days better."
+    },
+    {
+      "id": "a952353a6f",
+      "text": "Give someone else the last pretzels."
+    },
+    {
+      "id": "75fe93eaa8",
+      "text": "Share your extra button."
+    },
+    {
+      "id": "9c2d59f386",
+      "text": "Leave a kind note in a raincoat pocket."
+    },
+    {
+      "id": "f25ec3fb78",
+      "text": "Offer your extra tissue."
+    },
+    {
+      "id": "a08fc565e4",
+      "text": "Thank the person who finds lost things."
+    },
+    {
+      "id": "25b166ee11",
+      "text": "Help someone learn to snap."
+    },
+    {
+      "id": "8960a15e54",
+      "text": "Say I like your questions."
+    },
+    {
+      "id": "fd58d804cd",
+      "text": "Leave a painted kindness moon on a windowsill."
+    },
+    {
+      "id": "072769a282",
+      "text": "Give a new kid a tour of the playground."
+    },
+    {
+      "id": "fc4afc35d1",
+      "text": "Help stack lunch trays."
+    },
+    {
+      "id": "07c0580a6a",
+      "text": "Share your favorite quiet corner."
+    },
+    {
+      "id": "2acd70fb73",
+      "text": "Leave a thank you for a volunteer coach."
+    },
+    {
+      "id": "77c9d58938",
+      "text": "Offer to be the one who collects the balls."
+    },
+    {
+      "id": "29a0c4a19a",
+      "text": "Help a sibling find a missing puzzle piece."
+    },
+    {
+      "id": "68d51a01aa",
+      "text": "Write a note that says I am glad we are a team."
+    },
+    {
+      "id": "1f9af1e4e1",
+      "text": "Give someone else the first s’more."
+    },
+    {
+      "id": "aa2e573a14",
+      "text": "Share your extra glow bracelet."
+    },
+    {
+      "id": "6078da3e12",
+      "text": "Leave a kind note in a backpack pocket."
+    },
+    {
+      "id": "0a2f4db090",
+      "text": "Offer your extra rubber glove for dishes."
+    },
+    {
+      "id": "93f40f7cd7",
+      "text": "Thank a crossing guard’s partner too."
+    },
+    {
+      "id": "eb259c7ded",
+      "text": "Help someone carry a potluck dish."
+    },
+    {
+      "id": "5936a6877f",
+      "text": "Say I like how you include people."
+    },
+    {
+      "id": "f47a86d0c0",
+      "text": "Leave a flower in a little free library."
+    },
+    {
+      "id": "1bfa342ff4",
+      "text": "Give a friend your extra friendship pin."
+    },
+    {
+      "id": "6c6790b1a3",
+      "text": "Help a neighbor sweep their walk once."
+    },
+    {
+      "id": "6e5803d57c",
+      "text": "Share your best jump-rope rhyme."
+    },
+    {
+      "id": "957d26090c",
+      "text": "Leave a thank you for a school nurse."
+    },
+    {
+      "id": "70b5ea29d2",
+      "text": "Offer to put names on leftover containers."
+    },
+    {
+      "id": "c72abdf411",
+      "text": "Help a friend find a lost water bottle."
+    },
+    {
+      "id": "e96a817b3b",
+      "text": "Write a note that says your ideas make room for mine."
+    },
+    {
+      "id": "26a521f401",
+      "text": "Give someone else the last strawberry."
+    },
+    {
+      "id": "1073d1106d",
+      "text": "Share your extra clothespin for art."
+    },
+    {
+      "id": "bbae9993e0",
+      "text": "Leave a kind note on a music stand."
+    },
+    {
+      "id": "00174958c7",
+      "text": "Offer your extra reed or pick, if you have one."
+    },
+    {
+      "id": "1b6596dd90",
+      "text": "Thank the person who remembers birthdays."
+    },
+    {
+      "id": "b7f0a4d348",
+      "text": "Help someone learn a clap game."
+    },
+    {
+      "id": "3b10b7c689",
+      "text": "Say I like sitting next to you."
+    },
+    {
+      "id": "3737ec40ce",
+      "text": "Leave a painted kindness heart on a mailbox, if that is allowed."
+    },
+    {
+      "id": "2b662809a3",
+      "text": "Give a quiet teammate the first compliment after the game."
+    },
+    {
+      "id": "92f1ef94fc",
+      "text": "Help wipe the kitchen counters after someone else cooked."
+    },
+    {
+      "id": "67fc56b726",
+      "text": "Share your favorite rainy-day game."
+    },
+    {
+      "id": "4f733f05d4",
+      "text": "Leave a thank you for a weekend librarian."
+    },
+    {
+      "id": "30354ea59b",
+      "text": "Offer to be the one who puts the game back in the box."
+    },
+    {
+      "id": "98816d4958",
+      "text": "Help a sibling find a missing charger."
+    },
+    {
+      "id": "64f8ee5964",
+      "text": "Write a note that says this day was better because of you."
+    },
+    {
+      "id": "ed22390d8a",
+      "text": "Write a kind note for a friend who had a hard day."
+    },
+    {
+      "id": "ba11875d21",
+      "text": "Write a joke on a sticky note for someone you love."
+    },
+    {
+      "id": "5e0ccd7e05",
+      "text": "Write a welcome note for someone new."
+    },
+    {
+      "id": "c1e172bce6",
+      "text": "Write a compliment and hide it in a lunchbox."
+    },
+    {
+      "id": "65a8c0d954",
+      "text": "Write a thank you to the person who cooked."
+    },
+    {
+      "id": "720b585219",
+      "text": "Write a note that just says I noticed you."
+    },
+    {
+      "id": "a6075275f7",
+      "text": "Write a letter to a grandparent you miss."
+    },
+    {
+      "id": "cd83b2def3",
+      "text": "Write a kind bookmark and leave it in a library book."
+    },
+    {
+      "id": "11c7f46fbf",
+      "text": "Write a card for the mail carrier."
+    },
+    {
+      "id": "d7a2daa5c3",
+      "text": "Write a poem for someone in this house."
+    },
+    {
+      "id": "784aaff5da",
+      "text": "Share your snack with someone who forgot theirs."
+    },
+    {
+      "id": "a5d22eed35",
+      "text": "Share your best stickers without asking for them back."
+    },
+    {
+      "id": "49e10e89aa",
+      "text": "Share your favorite song with someone who needs it."
+    },
+    {
+      "id": "e2f5f2bdd6",
+      "text": "Share your fries and the nicer half."
+    },
+    {
+      "id": "8f79a75ab6",
+      "text": "Share your quiet book with a younger kid."
+    },
+    {
+      "id": "a1ec81195a",
+      "text": "Share your sidewalk chalk with the next kid."
+    },
+    {
+      "id": "c2410d6a21",
+      "text": "Share your extra pencil with someone who needs one."
+    },
+    {
+      "id": "6d46f71111",
+      "text": "Share your favorite playlist with a friend."
+    },
+    {
+      "id": "47d55a3e57",
+      "text": "Share your last good seat if someone else wants it."
+    },
+    {
+      "id": "56f742ee02",
+      "text": "Help a friend find a lost hat."
+    },
+    {
+      "id": "1703dc29c9",
+      "text": "Help someone learn a skill you know well."
+    },
+    {
+      "id": "b501d626ff",
+      "text": "Leave a kind note in a library book."
+    },
+    {
+      "id": "5bbdf37bc7",
+      "text": "Leave a kind note in a lunchbox."
+    },
+    {
+      "id": "770d2bc5f0",
+      "text": "Leave a kind bookmark for the next reader."
+    },
+    {
+      "id": "5ca32b2f0a",
+      "text": "Leave a book you loved in a little free library."
+    },
+    {
+      "id": "0e978ec2e5",
+      "text": "Thank the librarian for a good recommendation."
+    },
+    {
+      "id": "183bc11544",
+      "text": "Thank the person who does the laundry."
+    },
+    {
+      "id": "2c87d37d9e",
+      "text": "Thank the coach who stayed late."
+    },
+    {
+      "id": "195fde8a68",
+      "text": "Thank the mail carrier with a wave and a smile."
+    },
+    {
+      "id": "5771ea302c",
+      "text": "Thank the person who packed the snacks."
+    },
+    {
+      "id": "57c25b508a",
+      "text": "Thank the substitute teacher with a real thank you."
+    },
+    {
+      "id": "8272ad8caf",
+      "text": "Thank the night custodian if you see them."
+    },
+    {
+      "id": "49c88edf8d",
+      "text": "Thank the volunteer who showed up."
+    },
+    {
+      "id": "caf4f16866",
+      "text": "Give someone else the last cookie."
+    },
+    {
+      "id": "e7e92dfcf0",
+      "text": "Give someone the nicer seat."
+    },
+    {
+      "id": "1b905b6f83",
+      "text": "Give a friend the better half."
+    },
+    {
+      "id": "b1c574a22b",
+      "text": "Give someone the window seat."
+    },
+    {
+      "id": "9a500cbeb2",
+      "text": "Give someone a drawing you made for them."
+    },
+    {
+      "id": "f7cf4b8bdf",
+      "text": "Let someone else pick the game tonight."
+    },
+    {
+      "id": "9f54c5fa1b",
+      "text": "Let someone else have the last ice cream."
+    },
+    {
+      "id": "2d3a6e115d",
+      "text": "Let someone else have the comfy chair."
+    },
+    {
+      "id": "78d64bec89",
+      "text": "Let someone new join your group."
+    },
+    {
+      "id": "068a52948e",
+      "text": "Let someone else have the first pancake."
+    },
+    {
+      "id": "6a852ac8cc",
+      "text": "Let someone else have the last marshmallow."
+    },
+    {
+      "id": "68abb3a639",
+      "text": "Let someone younger go first on the slide."
+    },
+    {
+      "id": "dc2353d564",
+      "text": "Let someone else have the better controller."
+    },
+    {
+      "id": "ff3933cb7e",
+      "text": "Offer to put the game back in the box."
+    },
+    {
+      "id": "863ed96e74",
+      "text": "Offer to turn out the extra lights."
+    },
+    {
+      "id": "6699a35d47",
+      "text": "Offer to collect the balls after the game."
+    },
+    {
+      "id": "f6cc1d2218",
+      "text": "Donate a coat you outgrew."
+    },
+    {
+      "id": "69ff5192ba",
+      "text": "Donate books you already loved."
+    },
+    {
+      "id": "e653390e16",
+      "text": "Donate puzzles you finished."
+    },
+    {
+      "id": "fc56d10784",
+      "text": "Donate art supplies you have extras of."
+    },
+    {
+      "id": "d3063dd276",
+      "text": "Donate a stuffed animal you outgrew."
+    },
+    {
+      "id": "9d9bc18244",
+      "text": "Donate games you do not play anymore."
+    },
+    {
+      "id": "0c317c5a07",
+      "text": "Donate clothes that still have life in them."
+    },
+    {
+      "id": "5fdcdf3758",
+      "text": "Make a feel good playlist and share it."
+    },
+    {
+      "id": "e067029725",
+      "text": "Make a card for someone who helped you."
+    },
+    {
+      "id": "663e8ab188",
+      "text": "Make a breakfast for someone else."
+    },
+    {
+      "id": "d4b66f21f8",
+      "text": "Make a drawing and give it away."
+    },
+    {
+      "id": "6c69ae5a7f",
+      "text": "Make a kindness stone and leave it on a path."
+    },
+    {
+      "id": "aaf73bfe8b",
+      "text": "Make a thank you video for a grandparent."
+    },
+    {
+      "id": "92c0574532",
+      "text": "Make a list of things you like about a sibling."
+    },
+    {
+      "id": "028e0f7165",
+      "text": "Make a welcome sign for a guest."
+    },
+    {
+      "id": "e4af7a22f8",
+      "text": "Pick up someone else’s dropped papers."
+    },
+    {
+      "id": "67ca0d13b2",
+      "text": "Pick up toys you did not take out."
+    },
+    {
+      "id": "823e891f21",
+      "text": "Pick up spilled crayons without being asked."
+    },
+    {
+      "id": "51164ac711",
+      "text": "Pick up a neighbor’s bins if they forgot."
+    },
+    {
+      "id": "9b4efe65a8",
+      "text": "Pick up the game pieces after someone else played."
+    },
+    {
+      "id": "3a93df1395",
+      "text": "Sit with a new kid at lunch."
+    },
+    {
+      "id": "649a6951b4",
+      "text": "Sit with a younger sibling during a hard moment."
+    },
+    {
+      "id": "f02502c765",
+      "text": "Sit with someone who looks left out."
+    },
+    {
+      "id": "80a503c6c3",
+      "text": "Invite a shy friend to play first."
+    },
+    {
+      "id": "d030b62c51",
+      "text": "Invite a neighbor kid to draw on the sidewalk."
+    },
+    {
+      "id": "4d7df91a75",
+      "text": "Invite someone who was left out last time."
+    },
+    {
+      "id": "a37adaa98e",
+      "text": "Hold the door for the next person and wait."
+    },
+    {
+      "id": "60cf22c3a1",
+      "text": "Listen without interrupting once today."
+    },
+    {
+      "id": "2157c53f14",
+      "text": "Share your umbrella if it starts to rain."
+    },
+    {
+      "id": "2271d6b077",
+      "text": "Let a friend pick the playlist."
+    },
+    {
+      "id": "f2d6f36709",
+      "text": "Be the first to say hello."
+    },
+    {
+      "id": "1c02b0c1eb",
+      "text": "Include the person standing at the edge."
+    },
+    {
+      "id": "f7f1fbc8cd",
+      "text": "Do a chore that is usually someone else’s."
+    },
+    {
+      "id": "b2c51f8257",
+      "text": "Leave extra change in a kind place."
+    },
+    {
+      "id": "421fa37845",
+      "text": "Be patient with someone who is learning."
+    },
+    {
+      "id": "c1e1bc05bd",
+      "text": "Forgive a small mistake today."
+    },
+    {
+      "id": "cf853e91b6",
+      "text": "Give someone a real apology if you were sharp."
+    },
+    {
+      "id": "13761bdce2",
+      "text": "Notice who is left out and invite them in."
+    },
+    {
+      "id": "d4659f16ba",
+      "text": "Use someone’s name when you thank them."
+    },
+    {
+      "id": "67f6f304cb",
+      "text": "Look up from your screen when someone talks."
+    },
+    {
+      "id": "7796c597d3",
+      "text": "Put your phone away at dinner."
+    },
+    {
+      "id": "ab01b0b031",
+      "text": "Let someone else have the last word, kindly."
+    },
+    {
+      "id": "108e3fd250",
+      "text": "Celebrate someone else’s good news first."
+    },
+    {
+      "id": "0b15e22474",
+      "text": "Pass along a compliment you heard about them."
+    },
+    {
+      "id": "17b7c2525e",
+      "text": "Remind someone they are good at something."
+    },
+    {
+      "id": "119b0bc485",
+      "text": "Help without announcing that you helped."
+    },
+    {
+      "id": "fd17cd231e",
+      "text": "Do the small job nobody wants."
+    },
+    {
+      "id": "1c5763df1c",
+      "text": "Be the person who puts the lid back on."
+    },
+    {
+      "id": "e5bc38637e",
+      "text": "Refill something you did not empty."
+    },
+    {
+      "id": "47c7aead52",
+      "text": "Leave a place nicer than you found it."
+    },
+    {
+      "id": "8b1144ef69",
+      "text": "Say after you and mean it."
+    },
+    {
+      "id": "c01f2bb4e9",
+      "text": "Walk on the outside of the sidewalk."
+    },
+    {
+      "id": "0655e743f8",
+      "text": "Carry the heavier bag on purpose."
+    },
+    {
+      "id": "0879844b20",
+      "text": "Take the worse seat on purpose."
+    },
+    {
+      "id": "be048e783d",
+      "text": "Be early so someone else can be late."
+    },
+    {
+      "id": "d873bd77f5",
+      "text": "Wait for the slowest person without rushing them."
+    },
+    {
+      "id": "5f4161a056",
+      "text": "Learn one fact about someone you see every day."
+    },
+    {
+      "id": "26a8f840e1",
+      "text": "Remember a detail someone told you last week."
+    },
+    {
+      "id": "2e7698fe86",
+      "text": "Ask a follow-up question and listen."
+    },
+    {
+      "id": "809a879a80",
+      "text": "Keep a secret that is safe to keep."
+    },
+    {
+      "id": "09ff1f0c1f",
+      "text": "Defend someone who is not in the room."
+    },
+    {
+      "id": "379d39fd24",
+      "text": "Change the subject when gossip starts."
+    },
+    {
+      "id": "c821626d06",
+      "text": "Include the new person in the photo."
+    },
+    {
+      "id": "3d6e062cfa",
+      "text": "Save the last swing for someone else."
+    },
+    {
+      "id": "e943794698",
+      "text": "Be kind when you win."
+    },
+    {
+      "id": "c874173192",
+      "text": "Be kind when you lose."
+    },
+    {
+      "id": "8d7a49ccb8",
+      "text": "Cheer like it matters even if it is practice."
+    },
+    {
+      "id": "0e481b5608",
+      "text": "Thank the referee or the judge."
+    },
+    {
+      "id": "276e12b2cc",
+      "text": "Help clean the field after the game."
+    },
+    {
+      "id": "8033ce3489",
+      "text": "Shake hands like you mean it."
+    },
+    {
+      "id": "11a168e2ca",
+      "text": "Tell the cook the food was good."
+    },
+    {
+      "id": "45aa62e312",
+      "text": "Clear your own place and one extra."
+    },
+    {
+      "id": "42ba49ce01",
+      "text": "Start the dishwasher if it is full."
+    },
+    {
+      "id": "4db3c8c07b",
+      "text": "Take out trash that is not only yours."
+    },
+    {
+      "id": "5a1d4c3765",
+      "text": "Bring in the bins before you are asked."
+    },
+    {
+      "id": "582a52b10c",
+      "text": "Wipe the sink after you use it."
+    },
+    {
+      "id": "bc93d08877",
+      "text": "Hang up a towel that is not yours."
+    },
+    {
+      "id": "0f2dcb72f4",
+      "text": "Make the guest bed extra nice."
+    },
+    {
+      "id": "7de9642a34",
+      "text": "Leave a light on for someone coming home late."
+    },
+    {
+      "id": "73da83834a",
+      "text": "Save the last cookie and then give it away."
+    },
+    {
+      "id": "c0aa728d39",
+      "text": "Split the good snack evenly."
+    },
+    {
+      "id": "888af93258",
+      "text": "Trade if someone got the smaller half."
+    },
+    {
+      "id": "76bc013ea6",
+      "text": "Let a younger kid explain the rules."
+    },
+    {
+      "id": "a0733ab4ef",
+      "text": "Play the game the youngest person wants."
+    },
+    {
+      "id": "805c216dfb",
+      "text": "Lose on purpose once if it makes someone’s day."
+    },
+    {
+      "id": "e7d396fdd7",
+      "text": "Teach a rule without making anyone feel small."
+    },
+    {
+      "id": "1cdbc7a446",
+      "text": "Wait your turn like it is easy."
+    },
+    {
+      "id": "5b0d3eb4a2",
+      "text": "Return what you borrowed in better shape."
+    },
+    {
+      "id": "4e249b352e",
+      "text": "Write the name on the leftover container."
+    },
+    {
+      "id": "c21851715e",
+      "text": "Offer the charger before you are asked."
+    },
+    {
+      "id": "5a089c43c2",
+      "text": "Share the outlet."
+    },
+    {
+      "id": "6bef53a90c",
+      "text": "Give someone else the better headphones."
+    },
+    {
+      "id": "6251a67505",
+      "text": "Pause the show if someone walks in."
+    },
+    {
+      "id": "b9553b598e",
+      "text": "Explain the joke to the person who missed it."
+    },
+    {
+      "id": "f23586a43c",
+      "text": "Translate if someone is left out of the language."
+    },
+    {
+      "id": "9c4a155648",
+      "text": "Save a snack for the person who is still traveling."
+    },
+    {
+      "id": "84a22b8138",
+      "text": "Text the person who could not come."
+    },
+    {
+      "id": "bdff48ed54",
+      "text": "Send photos to the person who missed it."
+    },
+    {
+      "id": "2d50aefbb1",
+      "text": "Introduce two people who would like each other."
+    },
+    {
+      "id": "c404ea28a3",
+      "text": "Remember someone’s allergy without being reminded."
+    },
+    {
+      "id": "6ac935fd98",
+      "text": "Make space on the bench."
+    },
+    {
+      "id": "babb0d6a27",
+      "text": "Scoot over without being asked."
+    },
+    {
+      "id": "f6f8c7fe00",
+      "text": "Keep the sidewalk clear after you play."
+    },
+    {
+      "id": "9bb86dd283",
+      "text": "Put the balls back in the bin."
+    },
+    {
+      "id": "152bc41d1f",
+      "text": "Leave the park cleaner than you found it."
+    },
+    {
+      "id": "80dd94f55a",
+      "text": "Thank the person who organized the day."
+    },
+    {
+      "id": "8094f08dee",
+      "text": "Be the one who writes the thank you later."
+    },
+    {
+      "id": "5d1e48a853",
+      "text": "Mail a real letter to someone you miss."
+    },
+    {
+      "id": "22b20149b4",
+      "text": "Draw a map to your favorite tree and share it."
+    },
+    {
+      "id": "e330161cfd",
+      "text": "Show someone the best view from the yard."
+    },
+    {
+      "id": "aee6c84862",
+      "text": "Point out a kind thing someone else did."
+    },
+    {
+      "id": "ec3ede49d1",
+      "text": "Name the kindness when you see it."
+    },
+    {
+      "id": "5aae0697f2",
+      "text": "Fill a bucket on purpose before noon."
+    },
+    {
+      "id": "990a5713b1",
+      "text": "Fill someone else’s bucket before your own."
+    }
+  ]
+}

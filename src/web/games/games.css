@@ -362,23 +362,59 @@ html, body {
 }
 
 /*
- * The keyboard is up on a phone. It covers half the screen and the browser
- * scrolls the input into view, which used to push the letters off the top —
- * you were typing a word you could no longer see. So while the box has focus
- * the page strips down to the board and the input, and the board resizes to
- * whatever the visual viewport still has (`--gm-vh`, published by scramble.js).
+ * The keyboard is up on a phone. It covers half the screen and Safari
+ * scrolls the focused field to the top of the visual viewport, which
+ * used to hide the letters above the fold. Lock the page to whatever
+ * the visual viewport still has (`--gm-vh` / `--gm-board-max` from
+ * scramble.js) so the board and the input stay in the same view.
  */
 @media (max-width: 759px) {
+  html:has(body.gm-typing),
+  body.gm-typing {
+    overflow: hidden;
+  }
+  body.gm-typing {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+    height: var(--gm-vh, 100dvh);
+  }
   body.gm-typing .gm-header,
   body.gm-typing .gm-code-line,
   body.gm-typing .gm-side {
     display: none;
   }
-  body.gm-typing .gm-shell { padding-top: 12px; }
+  body.gm-typing .gm-shell {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  body.gm-typing .gm-play {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body.gm-typing .gm-stage {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    align-content: stretch;
+  }
   body.gm-typing .gm-timer { font-size: 1.6rem; }
   body.gm-typing .gm-board-wrap {
-    max-width: min(520px, max(140px, calc(var(--gm-vh, 100dvh) - 200px)));
+    max-width: min(520px, 100%, var(--gm-board-max, calc(var(--gm-vh, 100dvh) - 200px)));
+    height: 100%;
+    max-height: 100%;
+    display: grid;
+    place-items: center;
   }
+  body.gm-typing .gm-grid { width: 100%; }
   /* Static, not stuck: iOS keeps the layout viewport full height behind the
      keyboard, so a bottom-stuck bar would sit under it. */
   body.gm-typing .gm-compose {

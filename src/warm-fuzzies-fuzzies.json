@@ -1,0 +1,1136 @@
+{
+  "fuzzies": [
+    {
+      "id": "wf-8a26acd642",
+      "text": "Great job."
+    },
+    {
+      "id": "wf-e629a86bac",
+      "text": "Impressive work."
+    },
+    {
+      "id": "wf-611f4f354c",
+      "text": "Keep being awesome."
+    },
+    {
+      "id": "wf-b610ba2f63",
+      "text": "Nice work today."
+    },
+    {
+      "id": "wf-5ef9faf898",
+      "text": "People are lucky to know you."
+    },
+    {
+      "id": "wf-b5308742e1",
+      "text": "Thank you for being reliable."
+    },
+    {
+      "id": "wf-1496fd9e5c",
+      "text": "Thank you for being you."
+    },
+    {
+      "id": "wf-40400737e0",
+      "text": "Thank you for caring."
+    },
+    {
+      "id": "wf-12b1f2127c",
+      "text": "Thank you for helping."
+    },
+    {
+      "id": "wf-0b8fda2188",
+      "text": "Thank you for keeping us grounded."
+    },
+    {
+      "id": "wf-1624bf37c6",
+      "text": "Thank you for listening."
+    },
+    {
+      "id": "wf-c08b18e29f",
+      "text": "Thank you for making time."
+    },
+    {
+      "id": "wf-399e5df8db",
+      "text": "Thank you for showing up."
+    },
+    {
+      "id": "wf-acf23cf47c",
+      "text": "Thank you for the calm presence."
+    },
+    {
+      "id": "wf-0977d6ff73",
+      "text": "Thank you for the encouragement."
+    },
+    {
+      "id": "wf-4421cfbee8",
+      "text": "Thank you for the extra effort."
+    },
+    {
+      "id": "wf-e773fc0e98",
+      "text": "Thank you for the good energy."
+    },
+    {
+      "id": "wf-e61d17da71",
+      "text": "Thank you for the great idea."
+    },
+    {
+      "id": "wf-9bd8e73d25",
+      "text": "Thank you for the honest feedback."
+    },
+    {
+      "id": "wf-228a80818f",
+      "text": "Thank you for the laugh."
+    },
+    {
+      "id": "wf-feee5ab278",
+      "text": "Thank you for the support."
+    },
+    {
+      "id": "wf-ac9c2498f1",
+      "text": "Thank you for the thoughtful note."
+    },
+    {
+      "id": "wf-d1bd58b71b",
+      "text": "Thank you for the warm welcome."
+    },
+    {
+      "id": "wf-ce98c503cc",
+      "text": "Thank you for your kindness."
+    },
+    {
+      "id": "wf-fa569b0f5e",
+      "text": "Thank you for your patience."
+    },
+    {
+      "id": "wf-f92d0c7d8d",
+      "text": "That thing you do not like about yourself is what makes you really interesting."
+    },
+    {
+      "id": "wf-20170f26db",
+      "text": "That thing you don't like about yourself is what makes you really interesting."
+    },
+    {
+      "id": "wf-05f59c34b2",
+      "text": "That was a win."
+    },
+    {
+      "id": "wf-ae71f82e1c",
+      "text": "That was beautifully done."
+    },
+    {
+      "id": "wf-03ac9de511",
+      "text": "That was exactly right."
+    },
+    {
+      "id": "wf-d7643143ce",
+      "text": "That was excellent."
+    },
+    {
+      "id": "wf-7101557409",
+      "text": "That was smart thinking."
+    },
+    {
+      "id": "wf-03200a636f",
+      "text": "The care you put into details does not go unnoticed."
+    },
+    {
+      "id": "wf-24431f8732",
+      "text": "The kindness you give out always finds its way back."
+    },
+    {
+      "id": "wf-995b91dd22",
+      "text": "The way you listen is a real superpower."
+    },
+    {
+      "id": "wf-1a444f8d1c",
+      "text": "The way you show up for people says more than you realize."
+    },
+    {
+      "id": "wf-6c87597029",
+      "text": "The world is better because you are in it."
+    },
+    {
+      "id": "wf-b0fce67086",
+      "text": "The world needs more people who care the way you do."
+    },
+    {
+      "id": "wf-6f35c8f2ec",
+      "text": "Well done."
+    },
+    {
+      "id": "wf-04c300adba",
+      "text": "Who raised you? They deserve a medal for a job well done."
+    },
+    {
+      "id": "wf-770c830fa5",
+      "text": "You always bring the best snacks."
+    },
+    {
+      "id": "wf-8b105b05a1",
+      "text": "You always choose the perfect movie."
+    },
+    {
+      "id": "wf-b5bb5631ee",
+      "text": "You always find the best parking spot."
+    },
+    {
+      "id": "wf-3786161b63",
+      "text": "You always find the silver lining."
+    },
+    {
+      "id": "wf-d150b379a3",
+      "text": "You always keep the group chat fun."
+    },
+    {
+      "id": "wf-cc8ed465f7",
+      "text": "You always know the perfect song."
+    },
+    {
+      "id": "wf-3faa648c38",
+      "text": "You always know when someone needs help."
+    },
+    {
+      "id": "wf-768e1b82ae",
+      "text": "You always make a room feel brighter."
+    },
+    {
+      "id": "wf-84d84ddb0c",
+      "text": "You always make coffee taste better."
+    },
+    {
+      "id": "wf-46a018526d",
+      "text": "You always make everyone feel welcome."
+    },
+    {
+      "id": "wf-4cd95d6f61",
+      "text": "You always make hard days feel lighter."
+    },
+    {
+      "id": "wf-744c2aeb49",
+      "text": "You always make ordinary moments special."
+    },
+    {
+      "id": "wf-57c6effb5d",
+      "text": "You always make people laugh at the right time."
+    },
+    {
+      "id": "wf-45098f9449",
+      "text": "You always make plans people actually want to join."
+    },
+    {
+      "id": "wf-6861672cfe",
+      "text": "You always order for the whole table."
+    },
+    {
+      "id": "wf-a91b4fa3f1",
+      "text": "You always pick the best karaoke song."
+    },
+    {
+      "id": "wf-510ce49928",
+      "text": "You always pick the best playlist."
+    },
+    {
+      "id": "wf-b4739a10c1",
+      "text": "You always pick the best seat in the house."
+    },
+    {
+      "id": "wf-8ec13054fa",
+      "text": "You always remember the little things."
+    },
+    {
+      "id": "wf-7ba0157126",
+      "text": "You always show up when it counts."
+    },
+    {
+      "id": "wf-e0a31c85ed",
+      "text": "You are a brave voice."
+    },
+    {
+      "id": "wf-b18742373e",
+      "text": "You are a bright future in progress."
+    },
+    {
+      "id": "wf-b751f0712b",
+      "text": "You are a bright idea in human form."
+    },
+    {
+      "id": "wf-cd696840d1",
+      "text": "You are a bright light."
+    },
+    {
+      "id": "wf-dd9d53720a",
+      "text": "You are a bright mind and a kind heart."
+    },
+    {
+      "id": "wf-acb0a612d7",
+      "text": "You are a bright mind."
+    },
+    {
+      "id": "wf-503c7c889d",
+      "text": "You are a bright spot in any room."
+    },
+    {
+      "id": "wf-cf2d8fd8a6",
+      "text": "You are a calming presence."
+    },
+    {
+      "id": "wf-52faf12f2d",
+      "text": "You are a class act."
+    },
+    {
+      "id": "wf-8368bd7a60",
+      "text": "You are a creative thinker."
+    },
+    {
+      "id": "wf-8cb6490cd4",
+      "text": "You are a delight."
+    },
+    {
+      "id": "wf-1fff0be1f8",
+      "text": "You are a fun adventure buddy."
+    },
+    {
+      "id": "wf-3cd1591960",
+      "text": "You are a generous soul."
+    },
+    {
+      "id": "wf-5e9f52ad69",
+      "text": "You are a genuine good soul."
+    },
+    {
+      "id": "wf-77b23c7702",
+      "text": "You are a gift."
+    },
+    {
+      "id": "wf-0cce52a0d0",
+      "text": "You are a good influence."
+    },
+    {
+      "id": "wf-e7af94e09e",
+      "text": "You are a good memory waiting to happen."
+    },
+    {
+      "id": "wf-ceb1adae3e",
+      "text": "You are a good soul."
+    },
+    {
+      "id": "wf-2827304dab",
+      "text": "You are a great catch as a friend."
+    },
+    {
+      "id": "wf-b6633be003",
+      "text": "You are a great listener."
+    },
+    {
+      "id": "wf-aad0e7f781",
+      "text": "You are a joy to be around."
+    },
+    {
+      "id": "wf-da8e7cb621",
+      "text": "You are a joy."
+    },
+    {
+      "id": "wf-ffdee55dd7",
+      "text": "You are a keeper."
+    },
+    {
+      "id": "wf-3b776fd9d9",
+      "text": "You are a kind heart."
+    },
+    {
+      "id": "wf-f6b617c92d",
+      "text": "You are a loyal teammate."
+    },
+    {
+      "id": "wf-0589df02f5",
+      "text": "You are a natural leader."
+    },
+    {
+      "id": "wf-dcca2c19cf",
+      "text": "You are a patient teacher."
+    },
+    {
+      "id": "wf-b25c30bd5f",
+      "text": "You are a problem solver."
+    },
+    {
+      "id": "wf-30fa315736",
+      "text": "You are a quick learner."
+    },
+    {
+      "id": "wf-a0d7b9d9c7",
+      "text": "You are a quiet hero."
+    },
+    {
+      "id": "wf-60b083e4c7",
+      "text": "You are a reason to smile today."
+    },
+    {
+      "id": "wf-d195fac4af",
+      "text": "You are a reliable planner."
+    },
+    {
+      "id": "wf-54bb357776",
+      "text": "You are a star."
+    },
+    {
+      "id": "wf-93e24c9d4b",
+      "text": "You are a steady helper."
+    },
+    {
+      "id": "wf-6c57f220a2",
+      "text": "You are a steady light for others."
+    },
+    {
+      "id": "wf-c32cc3f158",
+      "text": "You are a thoughtful gift giver."
+    },
+    {
+      "id": "wf-61d2fdc239",
+      "text": "You are a treasure."
+    },
+    {
+      "id": "wf-2e91b32d7d",
+      "text": "You are a trusted advisor."
+    },
+    {
+      "id": "wf-fb7d714a79",
+      "text": "You are a warm hug in person form."
+    },
+    {
+      "id": "wf-246b0962c2",
+      "text": "You are a warm welcome."
+    },
+    {
+      "id": "wf-6ed5327085",
+      "text": "You are a wonderful addition to any plan."
+    },
+    {
+      "id": "wf-c3cb5e9146",
+      "text": "You are a wonderful anchor in busy days."
+    },
+    {
+      "id": "wf-84659534ce",
+      "text": "You are a wonderful bringer of good news."
+    },
+    {
+      "id": "wf-b61d4b317c",
+      "text": "You are a wonderful cheerleader."
+    },
+    {
+      "id": "wf-7348684797",
+      "text": "You are a wonderful cook of good vibes."
+    },
+    {
+      "id": "wf-97ebbb5845",
+      "text": "You are a wonderful example of showing up."
+    },
+    {
+      "id": "wf-ae1e3a9043",
+      "text": "You are a wonderful example."
+    },
+    {
+      "id": "wf-8adffff28d",
+      "text": "You are a wonderful friend and we are glad you are here."
+    },
+    {
+      "id": "wf-81e7cf8571",
+      "text": "You are a wonderful friend on good days and hard ones."
+    },
+    {
+      "id": "wf-19cc9d69d3",
+      "text": "You are a wonderful friend to have nearby."
+    },
+    {
+      "id": "wf-fa8996c7ec",
+      "text": "You are a wonderful heart in this house."
+    },
+    {
+      "id": "wf-1c79c78d61",
+      "text": "You are a wonderful helper."
+    },
+    {
+      "id": "wf-734f9ea3f6",
+      "text": "You are a wonderful host."
+    },
+    {
+      "id": "wf-7c400b67af",
+      "text": "You are a wonderful human being."
+    },
+    {
+      "id": "wf-e2ab5cb6d6",
+      "text": "You are a wonderful human."
+    },
+    {
+      "id": "wf-9fbfa5d4ca",
+      "text": "You are a wonderful keeper of secrets and snacks."
+    },
+    {
+      "id": "wf-c2f139534b",
+      "text": "You are a wonderful light in ordinary moments."
+    },
+    {
+      "id": "wf-74c2591226",
+      "text": "You are a wonderful listener and learner."
+    },
+    {
+      "id": "wf-5324028ba5",
+      "text": "You are a wonderful maker of comfort food and comfort vibes."
+    },
+    {
+      "id": "wf-fe78150b66",
+      "text": "You are a wonderful mix of fun and dependable."
+    },
+    {
+      "id": "wf-a7a8f6da9b",
+      "text": "You are a wonderful neighbor."
+    },
+    {
+      "id": "wf-d7fa077b4d",
+      "text": "You are a wonderful partner in any project."
+    },
+    {
+      "id": "wf-54f54ceeae",
+      "text": "You are a wonderful person and do not forget it."
+    },
+    {
+      "id": "wf-fbd7c600fc",
+      "text": "You are a wonderful person and today is lucky because of you."
+    },
+    {
+      "id": "wf-adcc9be220",
+      "text": "You are a wonderful person to have in your corner."
+    },
+    {
+      "id": "wf-e66441d02b",
+      "text": "You are a wonderful person to know."
+    },
+    {
+      "id": "wf-efc704d354",
+      "text": "You are a wonderful person to ride out a storm with."
+    },
+    {
+      "id": "wf-e1ac91f447",
+      "text": "You are a wonderful person to share a meal with."
+    },
+    {
+      "id": "wf-ffcf368e9c",
+      "text": "You are a wonderful person to share good news with."
+    },
+    {
+      "id": "wf-d096cd915c",
+      "text": "You are a wonderful planner of good times."
+    },
+    {
+      "id": "wf-696d2ccf7a",
+      "text": "You are a wonderful presence."
+    },
+    {
+      "id": "wf-cb0958ebc8",
+      "text": "You are a wonderful reason this place feels like home."
+    },
+    {
+      "id": "wf-62dff48e0a",
+      "text": "You are a wonderful reason to celebrate."
+    },
+    {
+      "id": "wf-f60a68b5d6",
+      "text": "You are a wonderful reminder that good exists."
+    },
+    {
+      "id": "wf-e743470cac",
+      "text": "You are a wonderful soul and we notice."
+    },
+    {
+      "id": "wf-f48333c85c",
+      "text": "You are a wonderful source of calm."
+    },
+    {
+      "id": "wf-e52f440f95",
+      "text": "You are a wonderful source of good advice."
+    },
+    {
+      "id": "wf-698109c694",
+      "text": "You are a wonderful source of laughter."
+    },
+    {
+      "id": "wf-165044f3e2",
+      "text": "You are a wonderful spark."
+    },
+    {
+      "id": "wf-cfbb3ce83d",
+      "text": "You are a wonderful storyteller of kindness."
+    },
+    {
+      "id": "wf-86f34d489d",
+      "text": "You are a wonderful surprise."
+    },
+    {
+      "id": "wf-18f87ed8c3",
+      "text": "You are a wonderful teammate."
+    },
+    {
+      "id": "wf-b56a90f016",
+      "text": "You are a wonderful voice of reason."
+    },
+    {
+      "id": "wf-c10eaf5d77",
+      "text": "You are an excellent friend."
+    },
+    {
+      "id": "wf-69db4eaea2",
+      "text": "You are better than you think."
+    },
+    {
+      "id": "wf-2e3152ef14",
+      "text": "You are deeply appreciated."
+    },
+    {
+      "id": "wf-26953f0460",
+      "text": "You are doing great."
+    },
+    {
+      "id": "wf-aa5bc657d0",
+      "text": "You are exactly what this team needed."
+    },
+    {
+      "id": "wf-16fc12ae6d",
+      "text": "You are on fire today."
+    },
+    {
+      "id": "wf-4feef25ed3",
+      "text": "You are one of a kind."
+    },
+    {
+      "id": "wf-0d99d9e537",
+      "text": "You are proof that good people exist."
+    },
+    {
+      "id": "wf-6b78ecd3ed",
+      "text": "You are quietly extraordinary."
+    },
+    {
+      "id": "wf-3cf658e8bc",
+      "text": "You are someone people can count on."
+    },
+    {
+      "id": "wf-effced5142",
+      "text": "You are someone worth celebrating."
+    },
+    {
+      "id": "wf-7247788d2a",
+      "text": "You are the friend everyone hopes for."
+    },
+    {
+      "id": "wf-65511d570d",
+      "text": "You are the kind of person stories get told about."
+    },
+    {
+      "id": "wf-4f9115cef7",
+      "text": "You are thoughtful in ways people remember."
+    },
+    {
+      "id": "wf-b6e8534938",
+      "text": "You bring out the best in people."
+    },
+    {
+      "id": "wf-a13c764b93",
+      "text": "You crushed it."
+    },
+    {
+      "id": "wf-89b96e3791",
+      "text": "You deserve more credit than you get."
+    },
+    {
+      "id": "wf-c8710605d4",
+      "text": "You handled that perfectly."
+    },
+    {
+      "id": "wf-9a969454af",
+      "text": "You have a gift for making others feel seen."
+    },
+    {
+      "id": "wf-a84ee336fc",
+      "text": "You have a gift for noticing what other people miss."
+    },
+    {
+      "id": "wf-64cd9d331d",
+      "text": "You have a heart of gold."
+    },
+    {
+      "id": "wf-3f9b3b3db2",
+      "text": "You have a talent for making other people feel capable."
+    },
+    {
+      "id": "wf-65c0a45b76",
+      "text": "You have a way of making people smile."
+    },
+    {
+      "id": "wf-687f270eb2",
+      "text": "You have a way of turning setbacks into stories worth telling."
+    },
+    {
+      "id": "wf-7543084fe8",
+      "text": "You have excellent taste in people."
+    },
+    {
+      "id": "wf-088a9baab2",
+      "text": "You have great instincts."
+    },
+    {
+      "id": "wf-96fff9bedb",
+      "text": "You made a difference today."
+    },
+    {
+      "id": "wf-d91ac84dd5",
+      "text": "You made that look easy."
+    },
+    {
+      "id": "wf-4b4bc1739d",
+      "text": "You make celebrations feel complete."
+    },
+    {
+      "id": "wf-4e55b31949",
+      "text": "You make every room feel warmer."
+    },
+    {
+      "id": "wf-6c6c82b23e",
+      "text": "You make generosity contagious."
+    },
+    {
+      "id": "wf-53d1c0bb33",
+      "text": "You make generosity look natural."
+    },
+    {
+      "id": "wf-eeb80a17bb",
+      "text": "You make good moments unforgettable."
+    },
+    {
+      "id": "wf-daa5b361c4",
+      "text": "You make good taste look effortless."
+    },
+    {
+      "id": "wf-2d701801a6",
+      "text": "You make gratitude feel easy."
+    },
+    {
+      "id": "wf-da027689d8",
+      "text": "You make hard conversations feel safe."
+    },
+    {
+      "id": "wf-63790e0ada",
+      "text": "You make hard work look graceful."
+    },
+    {
+      "id": "wf-3cf49551f7",
+      "text": "You make hope feel realistic."
+    },
+    {
+      "id": "wf-057c33caf9",
+      "text": "You make it easier for people to be honest with you."
+    },
+    {
+      "id": "wf-7bb3ea5238",
+      "text": "You make it safe for people to ask for help."
+    },
+    {
+      "id": "wf-ad11d43281",
+      "text": "You make kindness look effortless."
+    },
+    {
+      "id": "wf-2118b3c32d",
+      "text": "You make kindness look strong."
+    },
+    {
+      "id": "wf-bd2405316f",
+      "text": "You make life feel less lonely."
+    },
+    {
+      "id": "wf-620d59ed0b",
+      "text": "You make loyalty look cool."
+    },
+    {
+      "id": "wf-b90fc8b2f2",
+      "text": "You make optimism believable."
+    },
+    {
+      "id": "wf-559bb7838e",
+      "text": "You make ordinary days feel special."
+    },
+    {
+      "id": "wf-d6f719b258",
+      "text": "You make patience look powerful."
+    },
+    {
+      "id": "wf-2649df3a65",
+      "text": "You make people feel appreciated."
+    },
+    {
+      "id": "wf-2dd6208180",
+      "text": "You make people feel at ease."
+    },
+    {
+      "id": "wf-96435c12cf",
+      "text": "You make people feel capable."
+    },
+    {
+      "id": "wf-b883a927ab",
+      "text": "You make people feel cared for."
+    },
+    {
+      "id": "wf-6d90b76237",
+      "text": "You make people feel celebrated."
+    },
+    {
+      "id": "wf-e05e02c904",
+      "text": "You make people feel comfortable being themselves."
+    },
+    {
+      "id": "wf-9c7f2ba0de",
+      "text": "You make people feel confident."
+    },
+    {
+      "id": "wf-7fed08cd88",
+      "text": "You make people feel connected."
+    },
+    {
+      "id": "wf-d5ea075f98",
+      "text": "You make people feel encouraged."
+    },
+    {
+      "id": "wf-ecfed953e1",
+      "text": "You make people feel energized."
+    },
+    {
+      "id": "wf-1fd022b0fd",
+      "text": "You make people feel heard."
+    },
+    {
+      "id": "wf-dcfc9bccc4",
+      "text": "You make people feel hopeful."
+    },
+    {
+      "id": "wf-879546720c",
+      "text": "You make people feel important."
+    },
+    {
+      "id": "wf-81f4e2fa44",
+      "text": "You make people feel included."
+    },
+    {
+      "id": "wf-ee1acf640d",
+      "text": "You make people feel inspired."
+    },
+    {
+      "id": "wf-9ca99d5063",
+      "text": "You make people feel like family."
+    },
+    {
+      "id": "wf-4cc7e871e6",
+      "text": "You make people feel like good things are possible."
+    },
+    {
+      "id": "wf-f76981b02c",
+      "text": "You make people feel like their ideas matter."
+    },
+    {
+      "id": "wf-0a0119a1ca",
+      "text": "You make people feel like they are enough already."
+    },
+    {
+      "id": "wf-671b5be8e3",
+      "text": "You make people feel like they are enough."
+    },
+    {
+      "id": "wf-ca8a4148e7",
+      "text": "You make people feel like they are home."
+    },
+    {
+      "id": "wf-96ce4ba2a5",
+      "text": "You make people feel like they are not alone."
+    },
+    {
+      "id": "wf-2b9c73ce18",
+      "text": "You make people feel like they belong here."
+    },
+    {
+      "id": "wf-d20e2e06dc",
+      "text": "You make people feel like they belong."
+    },
+    {
+      "id": "wf-14bdb0de84",
+      "text": "You make people feel like they can ask anything."
+    },
+    {
+      "id": "wf-005fb3f8e0",
+      "text": "You make people feel like they can ask for help."
+    },
+    {
+      "id": "wf-b6b30125d3",
+      "text": "You make people feel like they can be brave."
+    },
+    {
+      "id": "wf-7ef46eb45a",
+      "text": "You make people feel like they can be grateful."
+    },
+    {
+      "id": "wf-f4c3ee5e2e",
+      "text": "You make people feel like they can be honest."
+    },
+    {
+      "id": "wf-606aecce53",
+      "text": "You make people feel like they can be hopeful."
+    },
+    {
+      "id": "wf-cc3573b8dd",
+      "text": "You make people feel like they can be kinder too."
+    },
+    {
+      "id": "wf-68f1e63976",
+      "text": "You make people feel like they can be proud."
+    },
+    {
+      "id": "wf-e32ae60c92",
+      "text": "You make people feel like they can be silly."
+    },
+    {
+      "id": "wf-3c7132c336",
+      "text": "You make people feel like they can be themselves."
+    },
+    {
+      "id": "wf-1274cc49b1",
+      "text": "You make people feel like they can breathe."
+    },
+    {
+      "id": "wf-e1645197da",
+      "text": "You make people feel like they can celebrate small wins."
+    },
+    {
+      "id": "wf-5e1e09aed0",
+      "text": "You make people feel like they can count on tomorrow."
+    },
+    {
+      "id": "wf-a0eb6a779b",
+      "text": "You make people feel like they can dream bigger."
+    },
+    {
+      "id": "wf-3be8829388",
+      "text": "You make people feel like they can keep being themselves."
+    },
+    {
+      "id": "wf-59c2c93586",
+      "text": "You make people feel like they can keep going."
+    },
+    {
+      "id": "wf-77a494b012",
+      "text": "You make people feel like they can laugh out loud."
+    },
+    {
+      "id": "wf-8577ce4232",
+      "text": "You make people feel like they can relax around you."
+    },
+    {
+      "id": "wf-f8dbcfed56",
+      "text": "You make people feel like they can rest easy."
+    },
+    {
+      "id": "wf-9cc3a2aefc",
+      "text": "You make people feel like they can start fresh."
+    },
+    {
+      "id": "wf-c784c593d8",
+      "text": "You make people feel like they can take a breath."
+    },
+    {
+      "id": "wf-b03e524d17",
+      "text": "You make people feel like they can trust the process."
+    },
+    {
+      "id": "wf-4998580cf5",
+      "text": "You make people feel like they can trust you."
+    },
+    {
+      "id": "wf-06341bebde",
+      "text": "You make people feel like they can try again."
+    },
+    {
+      "id": "wf-d7fd48fe48",
+      "text": "You make people feel like they matter."
+    },
+    {
+      "id": "wf-7800bd7a6e",
+      "text": "You make people feel like today is better."
+    },
+    {
+      "id": "wf-09f3d23302",
+      "text": "You make people feel like winners."
+    },
+    {
+      "id": "wf-8627823dac",
+      "text": "You make people feel lucky."
+    },
+    {
+      "id": "wf-11ec0f98e9",
+      "text": "You make people feel proud to know you."
+    },
+    {
+      "id": "wf-6db3cd6be7",
+      "text": "You make people feel relaxed."
+    },
+    {
+      "id": "wf-275d164d64",
+      "text": "You make people feel respected."
+    },
+    {
+      "id": "wf-efe4ed2bb9",
+      "text": "You make people feel safe to try."
+    },
+    {
+      "id": "wf-480cd88a34",
+      "text": "You make people feel seen and heard."
+    },
+    {
+      "id": "wf-7333b2ac09",
+      "text": "You make people feel supported."
+    },
+    {
+      "id": "wf-b47671a518",
+      "text": "You make people feel understood."
+    },
+    {
+      "id": "wf-ce80d7cc53",
+      "text": "You make people feel valued."
+    },
+    {
+      "id": "wf-6912317902",
+      "text": "You make people feel welcome instantly."
+    },
+    {
+      "id": "wf-feb7c4cb81",
+      "text": "You make teamwork feel easy."
+    },
+    {
+      "id": "wf-e8ff79a7c5",
+      "text": "You make the extra mile worth it."
+    },
+    {
+      "id": "wf-40fa30241a",
+      "text": "You nailed it."
+    },
+    {
+      "id": "wf-554d11c581",
+      "text": "You saved the day."
+    },
+    {
+      "id": "wf-0281fd0304",
+      "text": "You should be proud."
+    },
+    {
+      "id": "wf-2f045f9a62",
+      "text": "You turn small gestures into big comfort."
+    },
+    {
+      "id": "wf-29dc7a188c",
+      "text": "Your calm keeps everyone steady."
+    },
+    {
+      "id": "wf-45f0f7a0c8",
+      "text": "Your confidence is contagious in the best way."
+    },
+    {
+      "id": "wf-62f1a6b879",
+      "text": "Your courage encourages others to try."
+    },
+    {
+      "id": "wf-459b220071",
+      "text": "Your creativity makes life more colorful."
+    },
+    {
+      "id": "wf-b65935ece1",
+      "text": "Your curiosity makes conversations better."
+    },
+    {
+      "id": "wf-b590b517bd",
+      "text": "Your effort is one of the most inspiring things about you."
+    },
+    {
+      "id": "wf-320dfd0a5b",
+      "text": "Your empathy makes people feel safe."
+    },
+    {
+      "id": "wf-57a3abbbf5",
+      "text": "Your energy gets good things started."
+    },
+    {
+      "id": "wf-665946e91a",
+      "text": "Your enthusiasm makes work feel lighter."
+    },
+    {
+      "id": "wf-d0addff001",
+      "text": "Your focus helps teams finish strong."
+    },
+    {
+      "id": "wf-0b567649f0",
+      "text": "Your generosity makes people feel seen."
+    },
+    {
+      "id": "wf-8a3749d85e",
+      "text": "Your grace makes tough moments softer."
+    },
+    {
+      "id": "wf-0a9c1addc0",
+      "text": "Your grit inspires the people around you."
+    },
+    {
+      "id": "wf-5a4afbbda8",
+      "text": "Your honesty builds real trust."
+    },
+    {
+      "id": "wf-a235ff4d4e",
+      "text": "Your humor turns awkward into fun."
+    },
+    {
+      "id": "wf-93dcef21cb",
+      "text": "Your integrity makes you someone people trust."
+    },
+    {
+      "id": "wf-67c668e7f0",
+      "text": "Your kindness makes hard days easier."
+    },
+    {
+      "id": "wf-629285ec77",
+      "text": "Your laugh is one of the best sounds in the house."
+    },
+    {
+      "id": "wf-a833558a2e",
+      "text": "Your loyalty makes friendships last."
+    },
+    {
+      "id": "wf-21e263446c",
+      "text": "Your optimism pulls the room forward."
+    },
+    {
+      "id": "wf-5d4fa923b7",
+      "text": "Your patience helps everyone breathe."
+    },
+    {
+      "id": "wf-ce295ef47c",
+      "text": "Your presence makes everything warmer."
+    },
+    {
+      "id": "wf-b325ebcb6b",
+      "text": "Your smile lights up a room."
+    },
+    {
+      "id": "wf-33e9e9cee8",
+      "text": "Your thoughtfulness makes people feel valued."
+    },
+    {
+      "id": "wf-ec3bc97f9c",
+      "text": "Your warmth makes guests feel at home."
+    },
+    {
+      "id": "wf-1490fc5db2",
+      "text": "Your weird little hobbies are part of what makes you charming."
+    }
+  ]
+}
