@@ -144,6 +144,10 @@ const { buildWeeklyWeatherPayload } = require('./weekly-weather');
 const { createLearnJapanese } = require('./learn-japanese');
 const { createLearnLanguages, languageOf } = require('./learn-language');
 const { createChuckNorris } = require('./chuck-norris');
+const { createRoastMe } = require('./roast-me');
+const { createFamilyQuotes } = require('./family-quotes');
+const { createDadJokes } = require('./dad-jokes');
+const { createUsWeatherMap } = require('./us-weather-map');
 const { createWordRiddles } = require('./word-riddles');
 const { createAmazingFacts } = require('./amazing-facts');
 const { createWorldGeographyFacts } = require('./world-geography-facts');
@@ -153,6 +157,7 @@ const { createOnThisDay } = require('./on-this-day');
 const { createBakingInspiration } = require('./baking-inspiration');
 const { createWorldPopulation } = require('./world-population');
 const { createCalendarClock } = require('./calendar-clock');
+const { createWordClock } = require('./word-clock');
 const { createDateBook } = require('./date-book');
 const { createRedLetter } = require('./red-letter');
 const { createPlexTop10 } = require('./plex-top10');
@@ -264,6 +269,8 @@ function resolveStaticPath(webRoot, urlPathname) {
     pathname = '/admin/login.html';
   } else if (pathname === '/guestbook' || pathname === '/guestbook/') {
     pathname = '/guestbook/index.html';
+  } else if (pathname === '/guestsnaps' || pathname === '/guestsnaps/') {
+    pathname = '/guestsnaps/index.html';
   } else if (pathname === '/games' || pathname === '/games/') {
     pathname = '/games/index.html';
   }
@@ -515,10 +522,17 @@ function createWebServer({
       }
       return vestaboardHub.pushEvent(payload, options);
     },
+    dropPendingBoard: (predicate) => vestaboardHub?.dropPending?.(predicate) || 0,
   });
   const learnJapanese = createLearnJapanese(config, log);
   const learnLanguages = createLearnLanguages(config, log);
   const chuckNorris = createChuckNorris(config, log);
+  const roastMe = createRoastMe(config, log);
+  const familyQuotes = createFamilyQuotes(config, log);
+  const dadJokes = createDadJokes(config, log);
+  const usWeatherMap = createUsWeatherMap(config, log, {
+    getLocaleSettings: () => localeSettings.get(),
+  });
   const wordRiddles = createWordRiddles(config, log);
   const amazingFacts = createAmazingFacts(config, log);
   const worldGeographyFacts = createWorldGeographyFacts(config, log);
@@ -530,6 +544,7 @@ function createWebServer({
   const bakingInspiration = createBakingInspiration(config, log);
   const worldPopulation = createWorldPopulation(config, log);
   const calendarClock = createCalendarClock(config, log);
+  const wordClock = createWordClock(config, log);
   const dateBook = createDateBook(config, log);
   const redLetter = createRedLetter(config, log, { dateBook });
   const plexTop10 = createPlexTop10(config, log, {
@@ -642,6 +657,10 @@ function createWebServer({
     getLearnJapaneseStatus: () => learnJapanese.statusSnapshot(),
     getLearnLanguageStatus: (commandId) => learnLanguages[commandId]?.statusSnapshot() || null,
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
+    getRoastMeStatus: () => roastMe.statusSnapshot(),
+    getFamilyQuotesStatus: () => familyQuotes.statusSnapshot(),
+    getDadJokesStatus: () => dadJokes.statusSnapshot(),
+    getUsWeatherMapStatus: () => usWeatherMap.statusSnapshot(),
     getWordRiddlesStatus: () => wordRiddles.statusSnapshot(),
     getScrambleInviteStatus: () => ({
       inviteReady: Boolean(shortlinks.status(GAMES_NAME)?.alias),
@@ -2510,8 +2529,31 @@ function createWebServer({
   }
 
   function handleGameSessionsEnd(body, res) {
-    const result = gameSessions.end(body?.sessionId || body?.id);
-    sendJson(res, result.ok ? 200 : 404, result);
+    const ids = Array.isArray(body?.sessionIds)
+      ? body.sessionIds
+      : [body?.sessionId || body?.id];
+    const wanted = ids.map((id) => String(id || '').trim()).filter(Boolean);
+    if (!wanted.length) {
+      sendJson(res, 400, { ok: false, error: 'sessionId required' });
+      return;
+    }
+    let ended = 0;
+    for (const id of wanted) {
+      if (gameSessions.end(id).ok) ended += 1;
+    }
+    sendJson(res, ended ? 200 : 404, {
+      ok: ended > 0,
+      ended,
+      error: ended ? undefined : 'Session not found',
+    });
+  }
+
+  function handleGameSessionsForget(body, res) {
+    const ids = Array.isArray(body?.sessionIds)
+      ? body.sessionIds
+      : [body?.sessionId || body?.id];
+    const result = gameSessions.forget(ids.map((id) => String(id || '').trim()).filter(Boolean));
+    sendJson(res, 200, result);
   }
 
   function handleGamesSessionGet(query, res) {
@@ -3109,6 +3151,74 @@ function createWebServer({
     });
   }
 
+  function handleUsWeatherMapSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...usWeatherMap.statusSnapshot() });
+  }
+
+  function handleUsWeatherMapSettingsPut(body, res) {
+    if (body?.reset) {
+      usWeatherMap.resetSettings();
+      handleUsWeatherMapSettingsGet(res);
+      return;
+    }
+    usWeatherMap.updateSettings({
+      mode: body?.mode,
+      refreshMinutes: body?.refreshMinutes,
+    });
+    handleUsWeatherMapSettingsGet(res);
+  }
+
+  async function handleUsWeatherMapPush(body, res) {
+    let payload = null;
+    try {
+      payload = await usWeatherMap.nextPayload({
+        // The settings card's own test button asks for a fresh read; the
+        // scheduler is happy with whatever is cached.
+        force: body?.force === true,
+        mode: body?.mode,
+      });
+    } catch (error) {
+      log.warn?.('US Weather Map fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'The weather map is unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, {
+        ok: false,
+        error: 'The weather map came back incomplete — try again in a moment',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('US Weather Map', {
+      targetId,
+      mode: payload.mode,
+      cells: payload.cells?.length || 0,
+      range: payload.range ? `${payload.range.minF}-${payload.range.maxF}F` : null,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      mode: payload.mode,
+      unit: payload.unit,
+      range: payload.range,
+      cells: payload.cells,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleCurrencyRatesSettingsGet(res) {
     sendJson(res, 200, { ok: true, ...currencyRates.statusSnapshot(localeSettings.get()) });
   }
@@ -3520,6 +3630,167 @@ function createWebServer({
       type: payload.type,
       targetId,
       fact: payload.fact,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleRoastMeGet(query, res) {
+    sendJson(res, 200, { ok: true, ...roastMe.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleRoastMePost(body, res) {
+    const result = roastMe.addRoast(body?.text);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleRoastMePut(body, res) {
+    const result = roastMe.updateRoast(body?.id, {
+      text: body?.text,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleRoastMePush(body, res) {
+    const payload = roastMe.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No roasts are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Roast Me', { targetId, id: payload.roast.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      roast: payload.roast,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleFamilyQuotesGet(query, res) {
+    sendJson(res, 200, { ok: true, ...familyQuotes.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleFamilyQuotePost(body, res) {
+    const result = familyQuotes.addQuote(body?.text, body?.author);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleFamilyQuotePut(body, res) {
+    const result = familyQuotes.updateQuote(body?.id, {
+      text: body?.text,
+      author: body?.author,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleFamilyQuotesPush(body, res) {
+    const payload = familyQuotes.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No family quotes are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Family quote', { targetId, id: payload.quote.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      quote: payload.quote,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleDadJokesGet(query, res) {
+    sendJson(res, 200, { ok: true, ...dadJokes.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleDadJokePost(body, res) {
+    const result = dadJokes.addJoke(body?.setup, body?.punchline);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleDadJokePut(body, res) {
+    const result = dadJokes.updateJoke(body?.id, {
+      setup: body?.setup,
+      punchline: body?.punchline,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleDadJokesPush(body, res) {
+    const payload = dadJokes.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No dad jokes are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Dad joke', { targetId, id: payload.joke.id });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      joke: payload.joke,
       vestaboard: delivery?.vestaboard || null,
     });
   }
@@ -3989,6 +4260,59 @@ function createWebServer({
       day: payload.day,
       timeLabel: payload.timeLabel,
       showHeader: payload.showHeader,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
+  function handleWordClockSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...wordClock.statusSnapshot() });
+  }
+
+  function handleWordClockSettingsPut(body, res) {
+    if (body?.reset) {
+      const settings = wordClock.resetSettings();
+      sendJson(res, 200, { ok: true, ...wordClock.statusSnapshot(), settings });
+      return;
+    }
+    const settings = wordClock.updateSettings({
+      ...(body && Object.prototype.hasOwnProperty.call(body, 'rounding')
+        ? { rounding: body.rounding }
+        : {}),
+      ...(body && Object.prototype.hasOwnProperty.call(body, 'dayPart')
+        ? { dayPart: body.dayPart }
+        : {}),
+    });
+    sendJson(res, 200, { ok: true, ...wordClock.statusSnapshot(), settings });
+  }
+
+  function handleWordClockPush(body, res) {
+    const payload = wordClock.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'Word Clock could not read the house clock',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Word Clock', { targetId, text: payload.text });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      text: payload.text,
+      lines: payload.lines,
+      timeLabel: payload.timeLabel,
       vestaboard: delivery?.vestaboard || null,
     });
   }
@@ -4649,6 +4973,14 @@ function createWebServer({
           handleWordRiddlesPush(body, res); break;
         case 'chuck.facts':
           handleChuckNorrisPush(body, res); break;
+        case 'roast.me':
+          handleRoastMePush(body, res); break;
+        case 'family.quotes':
+          handleFamilyQuotesPush(body, res); break;
+        case 'dad.jokes':
+          handleDadJokesPush(body, res); break;
+        case 'us.weather-map':
+          await handleUsWeatherMapPush(body, res); break;
         case 'amazing.facts':
           handleAmazingFactsPush(body, res); break;
         case 'geo.facts':
@@ -4665,6 +4997,8 @@ function createWebServer({
           handleWorldPopulationPush(body, res); break;
         case 'calendar.clock':
           handleCalendarClockPush(body, res); break;
+        case 'word.clock':
+          handleWordClockPush(body, res); break;
         case 'guestbook.invite':
           handleGuestBookInvitePush(body, res); break;
         case 'ring.doorbell':
@@ -7372,6 +7706,7 @@ function createWebServer({
       const vGamesJs = assetVersionBeside(filePath, 'games.js');
       const vGamesCss = assetVersionBeside(filePath, 'games.css');
       const vScrambleJs = assetVersionBeside(filePath, 'scramble.js');
+      const vLandingCss = assetVersionBeside(filePath, 'landing.css');
       let vFlap = String(Date.now());
       let vBezel = String(Date.now());
       try {
@@ -7394,6 +7729,7 @@ function createWebServer({
         .replace(/(href="(?:\.\/)?games\.css)(?:\?[^"]*)?(")/, `$1?v=${vGamesCss}$2`)
         .replace(/(src="(?:\.\/)?games\.js)(?:\?[^"]*)?(")/, `$1?v=${vGamesJs}$2`)
         .replace(/(src="(?:\.\/)?scramble\.js)(?:\?[^"]*)?(")/, `$1?v=${vScrambleJs}$2`)
+        .replace(/(href="(?:\.\/)?landing\.css)(?:\?[^"]*)?(")/, `$1?v=${vLandingCss}$2`)
         .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`)
         .replace(/(href="(?:\/)?vestaboard-bezel\.css)(?:\?[^"]*)?(")/, `href="/vestaboard-bezel.css?v=${vBezel}"`);
       html = inlinePushCatalog(html);
@@ -7876,6 +8212,26 @@ function createWebServer({
           handleChuckNorrisFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
+        if (pathname === '/api/roast-me/roasts') {
+          if (!requireAdminSession(req, res)) return;
+          handleRoastMeGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/family-quotes/quotes') {
+          if (!requireAdminSession(req, res)) return;
+          handleFamilyQuotesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/dad-jokes/jokes') {
+          if (!requireAdminSession(req, res)) return;
+          handleDadJokesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
+        if (pathname === '/api/us-weather-map/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleUsWeatherMapSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/amazing-facts/facts') {
           if (!requireAdminSession(req, res)) return;
           handleAmazingFactsGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
@@ -7914,6 +8270,11 @@ function createWebServer({
         if (pathname === '/api/calendar-clock/settings') {
           if (!requireAdminSession(req, res)) return;
           handleCalendarClockSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/word-clock/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWordClockSettingsGet(res);
           return;
         }
         if (pathname === '/api/red-letter/settings') {
@@ -8522,6 +8883,9 @@ function createWebServer({
           case '/api/game-sessions/end':
             handleGameSessionsEnd(body, res);
             return;
+          case '/api/game-sessions/history/delete':
+            handleGameSessionsForget(body, res);
+            return;
           case '/api/push/word-scramble':
             await handleWordScramblePush(body, res);
             return;
@@ -8647,6 +9011,42 @@ function createWebServer({
               handleChuckNorrisFactPost(body, res);
             }
             return;
+          case '/api/push/roast-me':
+            handleRoastMePush(body, res);
+            return;
+          case '/api/roast-me/roasts':
+            if (body?.id) {
+              handleRoastMePut(body, res);
+            } else {
+              handleRoastMePost(body, res);
+            }
+            return;
+          case '/api/push/family-quotes':
+            handleFamilyQuotesPush(body, res);
+            return;
+          case '/api/family-quotes/quotes':
+            if (body?.id) {
+              handleFamilyQuotePut(body, res);
+            } else {
+              handleFamilyQuotePost(body, res);
+            }
+            return;
+          case '/api/push/dad-jokes':
+            handleDadJokesPush(body, res);
+            return;
+          case '/api/push/us-weather-map':
+            await handleUsWeatherMapPush(body, res);
+            return;
+          case '/api/us-weather-map/settings':
+            handleUsWeatherMapSettingsPut(body, res);
+            return;
+          case '/api/dad-jokes/jokes':
+            if (body?.id) {
+              handleDadJokePut(body, res);
+            } else {
+              handleDadJokePost(body, res);
+            }
+            return;
           case '/api/push/amazing-facts':
             handleAmazingFactsPush(body, res);
             return;
@@ -8718,6 +9118,12 @@ function createWebServer({
             return;
           case '/api/calendar-clock/settings':
             handleCalendarClockSettingsPut(body, res);
+            return;
+          case '/api/push/word-clock':
+            handleWordClockPush(body, res);
+            return;
+          case '/api/word-clock/settings':
+            handleWordClockSettingsPut(body, res);
             return;
           case '/api/push/red-letter':
             handleRedLetterPush(body, res);

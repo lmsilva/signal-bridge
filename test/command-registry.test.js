@@ -526,6 +526,90 @@ test('chuck.facts is Vestaboard-only and needs a ready fact', () => {
   assert.equal(ready.hasContent('chuck.facts'), true);
 });
 
+test('roast.me is Vestaboard-only and needs a ready roast', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'roast.me');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/roast-me');
+  assert.equal(command.defaultDurationSeconds, 20);
+
+  const empty = createCommandRegistry({ getRoastMeStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('roast.me'), false);
+
+  const ready = createCommandRegistry({ getRoastMeStatus: () => ({ available: 120 }) });
+  assert.equal(ready.hasContent('roast.me'), true);
+});
+
+test('family.quotes is Vestaboard-only and needs a ready quote', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'family.quotes');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/family-quotes');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getFamilyQuotesStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('family.quotes'), false);
+
+  const ready = createCommandRegistry({ getFamilyQuotesStatus: () => ({ available: 300 }) });
+  assert.equal(ready.hasContent('family.quotes'), true);
+});
+
+test('dad.jokes is Vestaboard-only and needs a ready joke', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'dad.jokes');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/dad-jokes');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getDadJokesStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('dad.jokes'), false);
+
+  const ready = createCommandRegistry({ getDadJokesStatus: () => ({ available: 400 }) });
+  assert.equal(ready.hasContent('dad.jokes'), true);
+});
+
+test('us.weather-map is a Vestaboard weather tile that survives a cold start', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'us.weather-map');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  // Files with the weekly forecast, not with the headlines.
+  assert.equal(pushCategoryOf(command), 'home');
+  assert.equal(command.route, '/api/push/us-weather-map');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  // Nothing fetched yet and nothing broken: it may still be scheduled.
+  const cold = createCommandRegistry({
+    getUsWeatherMapStatus: () => ({ hasMap: false, lastError: null }),
+  });
+  assert.equal(cold.hasContent('us.weather-map'), true);
+
+  const broken = createCommandRegistry({
+    getUsWeatherMapStatus: () => ({ hasMap: false, lastError: 'network down' }),
+  });
+  assert.equal(broken.hasContent('us.weather-map'), false);
+
+  // A stale map still beats a blank board.
+  const stale = createCommandRegistry({
+    getUsWeatherMapStatus: () => ({ hasMap: true, lastError: 'network down' }),
+  });
+  assert.equal(stale.hasContent('us.weather-map'), true);
+});
+
 test('amazing.facts is Vestaboard-only and needs a ready fact', () => {
   const command = COMMANDS.find((entry) => entry.id === 'amazing.facts');
   assert.ok(command);
@@ -661,6 +745,21 @@ test('calendar.clock is Vestaboard-only home and always has content', () => {
 
   const registry = createCommandRegistry({});
   assert.equal(registry.hasContent('calendar.clock'), true);
+});
+
+test('word.clock is Vestaboard-only home and always has content', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'word.clock');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, false);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'home');
+  assert.equal(command.route, '/api/push/word-clock');
+  assert.equal(command.defaultDurationSeconds, 60);
+
+  const registry = createCommandRegistry({});
+  assert.equal(registry.hasContent('word.clock'), true);
 });
 
 test('world.population is Vestaboard-only and always has content', () => {

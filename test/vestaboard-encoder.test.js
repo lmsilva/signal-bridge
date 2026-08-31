@@ -141,6 +141,24 @@ test('wrapping pulls short orphan words onto the next line', () => {
   assert.deepEqual(wrap('aaa bbb ccc', 7), ['AAA BBB', 'CCC']);
 });
 
+test('orphans: false fills every line to the brim', () => {
+  // Roast Me! spends the flap rather than the row: pulling the trailing "I"
+  // down would push this punchline onto a third line.
+  assert.deepEqual(
+    wrap("I treasure the time I don't spend with you.", 22, { orphans: false }),
+    ["I TREASURE THE TIME I", "DON'T SPEND WITH YOU."],
+  );
+  assert.deepEqual(
+    wrap('instrumental a capella.', 22, { orphans: false }),
+    ['INSTRUMENTAL A', 'CAPELLA.'],
+  );
+  // The default is unchanged.
+  assert.deepEqual(
+    wrap('instrumental a capella.', 22),
+    ['INSTRUMENTAL', 'A CAPELLA.'],
+  );
+});
+
 test('a word too long for the line splits with a trailing hyphen', () => {
   const lines = wrap('SUPERCALIFRAGILISTIC', 10);
   assert.deepEqual(lines, ['SUPERCALI-', 'FRAGILIST-', 'IC']);

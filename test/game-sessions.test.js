@@ -51,6 +51,13 @@ function makeApi(overrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'games-'));
   let nowMs = Date.parse('2026-08-30T18:00:00Z');
   const pushes = [];
+  // Stands in for the board queue: pages other features are still waiting on.
+  const queued = [
+    { frame: { source: 'word.riddles' }, priority: 'snapshot' },
+    { frame: { source: 'stock.market' }, priority: 'snapshot' },
+    { frame: { source: 'ring.doorbell' }, priority: 'alert' },
+    { frame: { source: 'word.scramble' }, priority: 'snapshot' },
+  ];
   const archive = createGameArchive({ ROOT: root, gameArchivePath: path.join(root, 'archive') });
   const api = createGameSessions({ ROOT: root }, { warn() {}, info() {} }, {
     now: () => nowMs,
@@ -69,11 +76,22 @@ function makeApi(overrides = {}) {
       pushes.push({ payload, options });
       return { boards: [] };
     },
+    dropPendingBoard: (predicate) => {
+      let dropped = 0;
+      for (let i = queued.length - 1; i >= 0; i -= 1) {
+        if (predicate(queued[i].frame, queued[i])) {
+          queued.splice(i, 1);
+          dropped += 1;
+        }
+      }
+      return dropped;
+    },
   });
   return {
     api,
     archive,
     pushes,
+    queued,
     advance(seconds) {
       nowMs += seconds * 1000;
       api.tick(nowMs);
@@ -140,6 +158,7 @@ test('the phase machine walks lobby, three rounds, intermission, final, then arc
 
   advance(21);
   assert.equal(api.getByCode(invited.code).phase, 'intermission');
+  assert.ok(pushes.some((row) => row.payload.card === 'intermission'));
   advance(6);
   assert.equal(api.getByCode(invited.code).phase, 'round');
   advance(21);
@@ -149,6 +168,7 @@ test('the phase machine walks lobby, three rounds, intermission, final, then arc
   advance(21);
   const final = api.getByCode(invited.code);
   assert.equal(final.phase, 'final');
+  assert.ok(pushes.some((row) => row.payload.card === 'final'));
   advance(6);
   assert.equal(api.getByCode(invited.code), null);
   assert.equal(archive.count(), 1);
@@ -275,4 +295,97 @@ test('end archives the session as abandoned', () => {
   assert.equal(api.end(invited.sessionId).ok, true);
   assert.equal(api.getById(invited.sessionId), null);
   assert.equal(archive.listAll()[0].reason, 'ended');
+});
+
+test('archived games can be forgotten one at a time or in a batch', () => {
+  const { api, archive } = makeApi();
+  const ids = [];
+  for (const name of ['Luis', 'Ada', 'Sam']) {
+    const invited = api.create();
+    api.join({ code: invited.code, name });
+    api.end(invited.sessionId);
+    ids.push(invited.sessionId);
+  }
+  assert.equal(archive.listAll().length, 3);
+
+  assert.deepEqual(api.forget(ids[0]), { ok: true, removed: 1 });
+  assert.deepEqual(archive.listAll().map((row) => row.sessionId).sort(), [ids[1], ids[2]].sort());
+
+  assert.deepEqual(api.forget([ids[1], ids[2], 'never-existed']), { ok: true, removed: 2 });
+  assert.equal(archive.listAll().length, 0);
+  assert.deepEqual(api.forget([]), { ok: true, removed: 0 });
+});
+
+test('a second Daddy joins as Daddy (2)', () => {
+  const { api } = makeApi();
+  const invited = api.create();
+  const first = api.join({ code: invited.code, name: 'Daddy' });
+  const second = api.join({ code: invited.code, name: 'daddy' });
+  const third = api.join({ code: invited.code, name: 'Daddy Long-Legs' });
+  assert.equal(first.player.name, 'Daddy');
+  assert.equal(second.player.name, 'Daddy (2)');
+  assert.equal(third.player.name, 'Daddy (3)');
+  // A returning player keeps their seat rather than collecting another suffix.
+  const again = api.join({ code: invited.code, name: 'Daddy', playerId: first.player.id });
+  assert.equal(again.player.name, 'Daddy');
+});
+
+test('the scoreboard carries every player and moves as words land', () => {
+  const { api, advance } = makeApi();
+  const invited = api.create();
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  const ada = api.join({ code: invited.code, name: 'Ada' });
+
+  // Nobody has scored yet, but both are already on the board.
+  const waiting = api.publicSession(api.getByCode(invited.code));
+  assert.deepEqual(waiting.scores.map((row) => [row.name, row.score]), [['Ada', 0], ['Luis', 0]]);
+
+  advance(11);
+  api.submit({
+    sessionId: invited.sessionId,
+    playerId: luis.player.id,
+    payload: { word: 'scrambled' },
+  });
+  // Mid-round, before any round has been banked.
+  const live = api.publicSession(api.getByCode(invited.code));
+  assert.equal(live.phase, 'round');
+  assert.deepEqual(live.scores.map((row) => [row.name, row.score]), [['Luis', 15], ['Ada', 0]]);
+  assert.equal(ada.player.score, 0);
+});
+
+test('a starting game drops multi-page runs but keeps other queued pages', () => {
+  const { api, queued } = makeApi();
+  queued.push(
+    { frame: { source: 'word.riddles' }, priority: 'snapshot', sequenceId: 's99' },
+    { frame: { source: 'word.riddles' }, priority: 'snapshot', sequenceId: 's99' },
+  );
+  api.create();
+  const sources = queued.map((item) => item.frame.source);
+  assert.deepEqual(sources.sort(), [
+    'ring.doorbell',
+    'stock.market',
+    'word.riddles',
+    'word.scramble',
+  ]);
+});
+
+test('when the last player leaves the session closes and clears the board', () => {
+  const { api, pushes } = makeApi();
+  const invited = api.create();
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  pushes.length = 0;
+  api.leave({ sessionId: invited.sessionId, playerId: luis.player.id });
+  assert.equal(api.getById(invited.sessionId), null);
+  assert.equal(pushes[pushes.length - 1].payload.card, 'clear');
+});
+
+test('ending a session blanks the board instead of leaving the lobby up', () => {
+  const { api, pushes } = makeApi();
+  const invited = api.create();
+  api.join({ code: invited.code, name: 'Luis' });
+  pushes.length = 0;
+  api.end(invited.sessionId);
+  const last = pushes[pushes.length - 1];
+  assert.equal(last.payload.card, 'clear');
+  assert.equal(last.options.replaceSource, 'word.scramble');
 });

@@ -64,6 +64,8 @@ function emptyStored() {
     boardId: '',
     boardName: '',
     linkedAt: null,
+    /** ISO timestamp when the refresh token itself is expected to expire. */
+    refreshExpiresAt: null,
     needsRelink: false,
     unavailableReason: null,
   };
@@ -83,6 +85,7 @@ function loadStored(credentialsPath, { secretBox = null, env = process.env } = {
     boardId: String(raw.boardId || '').trim(),
     boardName: String(raw.boardName || '').trim(),
     linkedAt: raw.linkedAt || null,
+    refreshExpiresAt: raw.refreshExpiresAt || null,
     needsRelink: raw.needsRelink === true,
     unavailableReason: raw.unavailableReason || null,
   };
@@ -110,6 +113,7 @@ function persistRecord(credentialsPath, record, { secretBox = null, env = proces
     boardId: String(record.boardId || '').trim() || null,
     boardName: String(record.boardName || '').trim() || null,
     linkedAt: record.linkedAt || null,
+    refreshExpiresAt: record.refreshExpiresAt || null,
     needsRelink: record.needsRelink === true,
     unavailableReason: record.unavailableReason || null,
     updatedAt: new Date().toISOString(),
@@ -145,6 +149,9 @@ function saveLinkedAccount(credentialsPath, payload, {
     boardId: payload?.boardId ?? existing.boardId,
     boardName: payload?.boardName ?? existing.boardName,
     linkedAt: payload?.linkedAt || existing.linkedAt || new Date().toISOString(),
+    refreshExpiresAt: Object.prototype.hasOwnProperty.call(payload || {}, 'refreshExpiresAt')
+      ? (payload.refreshExpiresAt || null)
+      : existing.refreshExpiresAt,
     needsRelink: payload?.needsRelink === true,
     unavailableReason: payload?.unavailableReason || null,
   }, { secretBox: box, env });

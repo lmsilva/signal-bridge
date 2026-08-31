@@ -218,6 +218,170 @@ test('failed refresh sets re-link flag', async () => {
   const auth = createAutodartsAuth({ credentials, api, env: {} });
   await assert.rejects(() => auth.refreshAccessToken());
   assert.equal(credentials.load().needsRelink, true);
+  assert.equal(auth.statusSnapshot().linked, false, 'a rejected refresh is not a working link');
+  assert.equal(auth.statusSnapshot().hasCredentials, true);
+});
+
+test('beginDeviceLink does not claim linked from a stale refresh token', async () => {
+  const root = tempRoot();
+  const credentials = createAutodartsCredentials({
+    ROOT: root,
+    autodartsCredentialsPath: path.join(root, 'creds.json'),
+    env: {},
+  });
+  credentials.save({
+    refreshToken: 'dead',
+    userId: 'u',
+    userName: 'trashpanda',
+    needsRelink: true,
+    unavailableReason: 'invalid or expired refresh token',
+  });
+  const api = {
+    startDeviceCode: async () => ({
+      ok: true,
+      status: 200,
+      json: {
+        device_code: 'dc',
+        user_code: 'WXYZ',
+        verification_uri: 'https://auth.autodarts.com/link',
+        interval: 5,
+        expires_in: 600,
+      },
+    }),
+    pollDeviceToken: async () => ({
+      ok: false,
+      status: 400,
+      json: { error: 'authorization_pending' },
+    }),
+    refreshWithAutodarts: async () => ({ ok: false }),
+    passwordLogin: async () => ({ ok: false }),
+    userInfo: async () => ({ ok: false }),
+  };
+  const auth = createAutodartsAuth({ credentials, api, env: {} });
+  const begin = await auth.beginDeviceLink();
+  assert.equal(begin.ok, true);
+  assert.equal(begin.linked, false);
+  assert.equal(begin.deviceLinkPending, true);
+  assert.equal(begin.userCode, 'WXYZ');
+  assert.equal(auth.statusSnapshot().deviceLinkPending, true);
+  auth.stopDevicePoll();
+});
+
+test('token keep-alive refreshes before the access token expires', async () => {
+  const root = tempRoot();
+  const credentials = createAutodartsCredentials({
+    ROOT: root,
+    autodartsCredentialsPath: path.join(root, 'creds.json'),
+    env: {},
+  });
+  credentials.save({
+    refreshToken: 'refresh-0',
+    userId: 'u',
+    userName: 'X',
+  });
+  let clock = Date.parse('2026-08-31T02:00:00Z');
+  const timers = [];
+  let refreshCount = 0;
+  const api = {
+    refreshWithAutodarts: async (token) => {
+      refreshCount += 1;
+      assert.equal(token, refreshCount === 1 ? 'refresh-0' : `refresh-${refreshCount - 1}`);
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          access_token: `access-${refreshCount}`,
+          refresh_token: `refresh-${refreshCount}`,
+          expires_in: 900,
+          refresh_expires_in: 3 * 24 * 60 * 60,
+        },
+      };
+    },
+    passwordLogin: async () => ({ ok: false }),
+    userInfo: async () => ({ ok: false }),
+    startDeviceCode: async () => ({ ok: false }),
+    pollDeviceToken: async () => ({ ok: false }),
+  };
+  const auth = createAutodartsAuth({
+    credentials,
+    api,
+    env: {},
+    now: () => clock,
+    setTimer: (fn, ms) => {
+      const timer = { fn, ms, cancelled: false };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer: (timer) => {
+      if (timer) timer.cancelled = true;
+    },
+  });
+  auth.startKeepAlive();
+  assert.equal(timers.length, 1, 'boot schedules a keep-alive');
+  await timers[0].fn();
+  assert.equal(refreshCount, 1);
+  assert.equal(credentials.load().refreshToken, 'refresh-1');
+  assert.equal(credentials.load().needsRelink, false);
+  assert.ok(credentials.load().refreshExpiresAt);
+  assert.ok(timers.some((t) => !t.cancelled), 'keep-alive reschedules after a successful refresh');
+  auth.stopKeepAlive();
+});
+
+test('env password recovers an expired refresh token without marking needsRelink', async () => {
+  const root = tempRoot();
+  const credentials = createAutodartsCredentials({
+    ROOT: root,
+    autodartsCredentialsPath: path.join(root, 'creds.json'),
+    env: {
+      AUTODARTS_EMAIL: 'a@b.c',
+      AUTODARTS_PASSWORD: 'secret',
+    },
+  });
+  credentials.save({
+    refreshToken: 'stale',
+    userId: 'u',
+    userName: 'X',
+  });
+  const api = {
+    refreshWithAutodarts: async () => ({
+      ok: false,
+      status: 401,
+      json: { error: { code: 'invalid_token', message: 'invalid or expired refresh token' } },
+    }),
+    passwordLogin: async ({ email, password }) => {
+      assert.equal(email, 'a@b.c');
+      assert.equal(password, 'secret');
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          access_token: 'access-new',
+          refresh_token: 'refresh-new',
+          expires_in: 900,
+        },
+      };
+    },
+    userInfo: async () => ({
+      ok: true,
+      status: 200,
+      json: { sub: 'u', preferred_username: 'X' },
+    }),
+    startDeviceCode: async () => ({ ok: false }),
+    pollDeviceToken: async () => ({ ok: false }),
+  };
+  const auth = createAutodartsAuth({
+    credentials,
+    api,
+    env: {
+      AUTODARTS_EMAIL: 'a@b.c',
+      AUTODARTS_PASSWORD: 'secret',
+    },
+  });
+  const token = await auth.refreshAccessToken();
+  assert.equal(token, 'access-new');
+  assert.equal(credentials.load().refreshToken, 'refresh-new');
+  assert.equal(credentials.load().needsRelink, false);
+  assert.equal(auth.statusSnapshot().linked, true);
 });
 
 test('auth/v1 password + device POSTs use JSON bodies on api.autodarts.io', async () => {

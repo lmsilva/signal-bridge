@@ -11,7 +11,8 @@ The listener container needs the saved session file. With **`network_mode: host`
 
 | Service | Address |
 |---------|---------|
-| Guest photo booth (HTTPS) | `https://<NAS_IP>:47810/` |
+| Landing page (HTTPS) | `https://<NAS_IP>:47810/` |
+| Guest photo booth (HTTPS) | `https://<NAS_IP>:47810/guestsnaps/` |
 | Admin UI (HTTPS) | `https://<NAS_IP>:47810/admin/` (set `ADMIN_PASSWORD` in `.env`) |
 | Optional HTTP→HTTPS | `http://<NAS_IP>:47811/` |
 | Overlay / commands UDP | `:47832` (outbound to displays) |

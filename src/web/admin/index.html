@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal195">
+  <link rel="stylesheet" href="styles.css?v=signal204">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -133,7 +133,7 @@
         <div class="push-block" data-push-group="home">
           <div class="section-label">Around the house</div>
           <div class="card-row card-row-quad" id="push-row-home" data-push-category="home"
-               data-skeleton-count="11" aria-busy="true"></div>
+               data-skeleton-count="14" aria-busy="true"></div>
         </div>
 
         <!-- Steam / PSN / YouTube / Autodarts / Huupe are one auto-mode tile
@@ -154,7 +154,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="12" aria-busy="true"></div>
+               data-skeleton-count="15" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="language">
@@ -788,35 +788,47 @@
           </p>
           <div class="settings-columns">
             <div class="settings-col">
-              <label class="field-label" for="locale-city">City</label>
-              <input type="text" id="locale-city" class="field-input" placeholder="Lehi, UT" spellcheck="false" autocomplete="off">
-              <label class="field-label field-label-spaced" for="locale-zip">ZIP code</label>
-              <input type="text" id="locale-zip" class="field-input" placeholder="84043" spellcheck="false" autocomplete="off" inputmode="numeric">
-              <label class="field-label field-label-spaced">Temperature</label>
-              <div class="segmented" id="locale-unit" role="group" aria-label="Temperature unit">
-                <button type="button" class="segmented-btn active" data-locale-unit="F">°F</button>
-                <button type="button" class="segmented-btn" data-locale-unit="C">°C</button>
+              <div class="field-grid field-grid-2">
+                <div class="field">
+                  <label class="field-label" for="locale-city">City</label>
+                  <input type="text" id="locale-city" class="field-input" placeholder="Lehi, UT" spellcheck="false" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="locale-zip">ZIP code</label>
+                  <input type="text" id="locale-zip" class="field-input" placeholder="84043" spellcheck="false" autocomplete="off" inputmode="numeric">
+                </div>
+                <div class="field">
+                  <span class="field-label">Temperature</span>
+                  <div class="segmented" id="locale-unit" role="group" aria-label="Temperature unit">
+                    <button type="button" class="segmented-btn active" data-locale-unit="F">°F</button>
+                    <button type="button" class="segmented-btn" data-locale-unit="C">°C</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="locale-currency">Base currency</label>
+                  <select id="locale-currency" class="field-input">
+                    <option value="USD">USD — US Dollar</option>
+                    <option value="EUR">EUR — Euro</option>
+                    <option value="GBP">GBP — British Pound</option>
+                    <option value="CAD">CAD — Canadian Dollar</option>
+                    <option value="MXN">MXN — Mexican Peso</option>
+                    <option value="JPY">JPY — Japanese Yen</option>
+                    <option value="AUD">AUD — Australian Dollar</option>
+                    <option value="CHF">CHF — Swiss Franc</option>
+                    <option value="CNY">CNY — Chinese Yuan</option>
+                    <option value="BRL">BRL — Brazilian Real</option>
+                    <option value="INR">INR — Indian Rupee</option>
+                  </select>
+                </div>
               </div>
-              <label class="field-label field-label-spaced" for="locale-currency">Base currency</label>
-              <select id="locale-currency" class="field-input">
-                <option value="USD">USD — US Dollar</option>
-                <option value="EUR">EUR — Euro</option>
-                <option value="GBP">GBP — British Pound</option>
-                <option value="CAD">CAD — Canadian Dollar</option>
-                <option value="MXN">MXN — Mexican Peso</option>
-                <option value="JPY">JPY — Japanese Yen</option>
-                <option value="AUD">AUD — Australian Dollar</option>
-                <option value="CHF">CHF — Swiss Franc</option>
-                <option value="CNY">CNY — Chinese Yuan</option>
-                <option value="BRL">BRL — Brazilian Real</option>
-                <option value="INR">INR — Indian Rupee</option>
-              </select>
-              <button type="button" class="btn btn-accent btn-block" id="btn-locale-save" style="margin-top:14px">Save location</button>
             </div>
             <div class="settings-col">
-              <label class="field-label">Resolved</label>
+              <span class="field-label">Resolved</span>
               <p class="hint" id="locale-resolved">Save a city or ZIP to pin the house here.</p>
             </div>
+          </div>
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-locale-save">Save location</button>
           </div>
         </div>
 
@@ -950,6 +962,43 @@
           </div>
         </div>
 
+        <div class="card word-clock-settings-card" id="word-clock-settings-card" data-settings-group="global" data-search-terms="word clock spelled out time o'clock quarter past half past">
+          <div class="auth-head">
+            <div class="auth-name">Word Clock</div>
+            <span class="status-pill" id="word-clock-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="word-clock-status-detail">
+            The time spelled out as a sentence, centred on the board.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">Read the minutes</label>
+              <div class="segmented" id="word-clock-rounding" role="group" aria-label="How precisely to read the minutes">
+                <button type="button" class="segmented-btn active" data-rounding="five" aria-pressed="true">Nearest five</button>
+                <button type="button" class="segmented-btn" data-rounding="exact" aria-pressed="false">Exact minute</button>
+              </div>
+              <label class="trivia-check field-label-spaced">
+                <input type="checkbox" id="word-clock-day-part" checked>
+                <span>Say which part of the day it is</span>
+              </label>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-outline" id="btn-word-clock-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-word-clock-push">Push Now</button>
+              </div>
+              <p class="hint" id="word-clock-hint" style="margin-top:12px">
+                Nearest five reads like a person would — "TEN PAST THREE". Exact spells the true minute. Midnight and noon are always named. The house timezone sets the clock.
+              </p>
+            </div>
+            <div class="settings-col">
+              <label class="field-label">Board preview</label>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="word-clock-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="global">Red Letter</div>
         <div class="card red-letter-settings-card" id="red-letter-settings-card" data-settings-group="global">
           <div class="auth-head">
@@ -1000,7 +1049,7 @@
             <span class="status-pill" id="guest-snaps-status-pill">…</span>
           </div>
           <p class="auth-detail" id="guest-snaps-status-detail">
-            Short link to the photo booth (Public base URL → /). Printed on the Vestaboard as TINYURL.COM/ALIAS so guests can type it.
+            Short link to the photo booth (Public base URL → /guestsnaps/). Printed on the Vestaboard as TINYURL.COM/ALIAS so guests can type it.
           </p>
           <div class="settings-columns">
             <div class="settings-col">
@@ -1122,68 +1171,90 @@
           <p class="auth-detail" id="ring-status-detail">
             Listen for Ring ding events and flip a Vestaboard alert. Sign in with your Ring account below.
           </p>
-          <div class="settings-columns">
+          <div class="settings-columns ring-columns">
             <div class="settings-col">
-              <label class="trivia-check">
-                <input type="checkbox" id="ring-enabled" checked>
-                <span>Enable Ring Doorbell</span>
-              </label>
-              <div id="ring-login-block">
-                <label class="field-label field-label-spaced" for="ring-email">Ring email</label>
-                <input class="field-input" id="ring-email" type="email" autocomplete="username" spellcheck="false" placeholder="you@example.com">
-                <label class="field-label field-label-spaced" for="ring-password">Password</label>
-                <input class="field-input" id="ring-password" type="password" autocomplete="current-password" spellcheck="false" placeholder="Ring password">
-                <div class="btn-row" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
-                  <button type="button" class="btn btn-accent" id="btn-ring-login">Sign in to Ring</button>
-                  <button type="button" class="btn btn-outline" id="btn-ring-reconnect">Reconnect</button>
-                  <button type="button" class="btn btn-outline" id="btn-ring-clear">Clear session</button>
+              <div class="settings-group">
+                <p class="settings-group-title">Account</p>
+                <label class="trivia-check">
+                  <input type="checkbox" id="ring-enabled" checked>
+                  <span>Enable Ring Doorbell</span>
+                </label>
+                <div id="ring-login-block">
+                  <div class="field-grid field-grid-2">
+                    <div class="field">
+                      <label class="field-label" for="ring-email">Ring email</label>
+                      <input class="field-input" id="ring-email" type="email" autocomplete="username" spellcheck="false" placeholder="you@example.com">
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="ring-password">Password</label>
+                      <input class="field-input" id="ring-password" type="password" autocomplete="current-password" spellcheck="false" placeholder="Ring password">
+                    </div>
+                  </div>
+                  <div class="btn-row ring-btn-row">
+                    <button type="button" class="btn btn-accent" id="btn-ring-login">Sign in to Ring</button>
+                    <button type="button" class="btn btn-outline" id="btn-ring-reconnect">Reconnect</button>
+                    <button type="button" class="btn btn-outline" id="btn-ring-clear">Clear session</button>
+                  </div>
                 </div>
-              </div>
-              <div id="ring-2fa-block" hidden>
-                <label class="field-label field-label-spaced" for="ring-2fa-code">Verification code</label>
-                <input class="field-input" id="ring-2fa-code" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="Code from SMS, email, or authenticator">
-                <p class="hint" id="ring-2fa-prompt">Enter the code Ring sent you.</p>
-                <div class="btn-row" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
-                  <button type="button" class="btn btn-accent" id="btn-ring-verify">Verify code</button>
-                  <button type="button" class="btn btn-outline" id="btn-ring-cancel-2fa">Cancel</button>
+                <div id="ring-2fa-block" hidden>
+                  <label class="field-label field-label-spaced" for="ring-2fa-code">Verification code</label>
+                  <input class="field-input" id="ring-2fa-code" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="Code from SMS, email, or authenticator">
+                  <p class="hint" id="ring-2fa-prompt">Enter the code Ring sent you.</p>
+                  <div class="btn-row ring-btn-row">
+                    <button type="button" class="btn btn-accent" id="btn-ring-verify">Verify code</button>
+                    <button type="button" class="btn btn-outline" id="btn-ring-cancel-2fa">Cancel</button>
+                  </div>
                 </div>
+                <details class="ring-advanced">
+                  <summary class="hint" style="cursor:pointer">Advanced: paste a refresh token</summary>
+                  <label class="field-label field-label-spaced" for="ring-token-input">Refresh token</label>
+                  <input class="field-input" id="ring-token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Optional — or set RING_REFRESH_TOKEN in .env">
+                  <p class="hint" id="ring-token-hint">Write-only. Stored encrypted. Prefer Sign in above. <code>RING_REFRESH_TOKEN</code> in .env wins if set.</p>
+                  <button type="button" class="btn btn-outline btn-block" id="btn-ring-auth" style="margin-top:8px">Save refresh token</button>
+                </details>
+                <p class="hint" id="ring-cameras">Cameras appear after a successful connect.</p>
               </div>
-              <details class="ring-advanced" style="margin-top:14px">
-                <summary class="hint" style="cursor:pointer">Advanced: paste a refresh token</summary>
-                <label class="field-label field-label-spaced" for="ring-token-input">Refresh token</label>
-                <input class="field-input" id="ring-token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Optional — or set RING_REFRESH_TOKEN in .env">
-                <p class="hint" id="ring-token-hint">Write-only. Stored encrypted. Prefer Sign in above. <code>RING_REFRESH_TOKEN</code> in .env wins if set.</p>
-                <button type="button" class="btn btn-outline btn-block" id="btn-ring-auth" style="margin-top:8px">Save refresh token</button>
-              </details>
-              <label class="field-label field-label-spaced" for="ring-title">Board title</label>
-              <input type="text" id="ring-title" class="field-input" maxlength="18" value="Ring Door Bell" spellcheck="false">
-              <label class="field-label field-label-spaced" for="ring-message">Board message</label>
-              <textarea id="ring-message" class="field-input" rows="2" maxlength="80">Someone is at your front door</textarea>
-              <label class="trivia-check field-label-spaced">
-                <input type="checkbox" id="ring-push-ding" checked>
-                <span>Push on doorbell press</span>
-              </label>
-              <label class="trivia-check">
-                <input type="checkbox" id="ring-push-motion">
-                <span>Push on motion</span>
-              </label>
-              <label class="trivia-check">
-                <input type="checkbox" id="ring-show-time" checked>
-                <span>Show the time on the board</span>
-              </label>
-              <label class="trivia-check">
-                <input type="checkbox" id="ring-quiet-exempt" checked>
-                <span>May wake the board during quiet hours</span>
-              </label>
-              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
-                <button type="button" class="btn btn-accent" id="btn-ring-save">Save</button>
-                <button type="button" class="btn btn-outline" id="btn-ring-reset">Reset defaults</button>
-                <button type="button" class="btn btn-outline" id="btn-ring-push">Push preview</button>
-              </div>
-              <p class="hint" id="ring-cameras" style="margin-top:12px">Cameras appear after a successful connect.</p>
             </div>
+
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Alert</p>
+                <div class="field-grid">
+                  <div class="field">
+                    <label class="field-label" for="ring-title">Board title</label>
+                    <input type="text" id="ring-title" class="field-input" maxlength="18" value="Ring Door Bell" spellcheck="false">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="ring-message">Board message</label>
+                    <textarea id="ring-message" class="field-input" rows="2" maxlength="80">Someone is at your front door</textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <p class="settings-group-title">When to flip</p>
+                <div class="check-grid check-grid-2">
+                  <label class="trivia-check">
+                    <input type="checkbox" id="ring-push-ding" checked>
+                    <span>Push on doorbell press</span>
+                  </label>
+                  <label class="trivia-check">
+                    <input type="checkbox" id="ring-push-motion">
+                    <span>Push on motion</span>
+                  </label>
+                  <label class="trivia-check">
+                    <input type="checkbox" id="ring-show-time" checked>
+                    <span>Show the time on the board</span>
+                  </label>
+                  <label class="trivia-check">
+                    <input type="checkbox" id="ring-quiet-exempt" checked>
+                    <span>May wake during quiet hours</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div class="settings-col board-preview-col">
-              <label class="field-label">Board preview</label>
+              <span class="field-label">Board preview</span>
               <div class="vb-bezel preview-bezel" aria-hidden="true">
                 <div class="vb-grid" id="ring-preview"></div>
                 <div class="vb-wordmark">VESTABOARD</div>
@@ -1192,6 +1263,11 @@
                 Red rails and a yellow bell. Title and message update as you type.
               </p>
             </div>
+          </div>
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-ring-save">Save</button>
+            <button type="button" class="btn btn-outline" id="btn-ring-reset">Reset defaults</button>
+            <button type="button" class="btn btn-outline" id="btn-ring-push">Push preview</button>
           </div>
         </div>
 
@@ -1720,6 +1796,51 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="news">Family Quotes</div>
+        <div class="card family-quotes-settings-card" id="family-quotes-settings-card" data-settings-group="news" data-search-terms="family quotes home love kindness parenting sayings">
+          <div class="auth-head">
+            <div class="auth-name">Home, love &amp; kindness</div>
+            <span class="status-pill" id="family-quotes-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="family-quotes-status-detail">
+            Local board-fit family quotes, each with its author. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-family-quotes-manage">Manage quotes</button>
+            <button type="button" class="btn btn-accent" id="btn-family-quotes-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Dad Jokes</div>
+        <div class="card dad-jokes-settings-card" id="dad-jokes-settings-card" data-settings-group="news" data-search-terms="dad jokes puns groan corny setup punchline">
+          <div class="auth-head">
+            <div class="auth-name">Setup, pause, groan</div>
+            <span class="status-pill" id="dad-jokes-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="dad-jokes-status-detail">
+            Local board-fit dad jokes. The setup sits above a blank row and the punchline lands underneath. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-dad-jokes-manage">Manage jokes</button>
+            <button type="button" class="btn btn-accent" id="btn-dad-jokes-push">Push Random</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">Roast Me!</div>
+        <div class="card roast-me-settings-card" id="roast-me-settings-card" data-settings-group="news" data-search-terms="roast burn insult comeback boom roasted">
+          <div class="auth-head">
+            <div class="auth-name">Clean burns</div>
+            <span class="status-pill" id="roast-me-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="roast-me-status-detail">
+            Local board-fit roasts, no title row — the punchline gets all six rows. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-roast-me-manage">Manage roasts</button>
+            <button type="button" class="btn btn-accent" id="btn-roast-me-push">Push Random</button>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="news">Amazing Facts</div>
         <div class="card amazing-facts-settings-card" id="amazing-facts-settings-card" data-settings-group="news">
           <div class="auth-head">
@@ -1868,6 +1989,47 @@
               </div>
               <p class="hint" id="stock-market-hint" style="margin-top:8px">
                 Defaults cover mega-cap tech plus SPY/QQQ/DIA. Indexes use Yahoo symbols like ^GSPC.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="news">US Weather Map</div>
+        <div class="card us-weather-map-settings-card" id="us-weather-map-settings-card" data-settings-group="news" data-search-terms="us weather map temperature heatmap conditions forecast america">
+          <div class="auth-head">
+            <div class="auth-name">The lower 48 in colour</div>
+            <span class="status-pill" id="us-weather-map-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="us-weather-map-status-detail">
+            A colour chip for each of 89 points across the continental US. No text — the whole board is the map. Free — no API key.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <label class="field-label">What the colours mean</label>
+              <div class="segmented us-weather-map-mode-tabs" id="us-weather-map-mode-tabs">
+                <button type="button" class="segmented-btn active" data-map-mode="temperature">Temperature</button>
+                <button type="button" class="segmented-btn" data-map-mode="conditions">Conditions</button>
+              </div>
+              <div class="us-weather-map-legend" id="us-weather-map-legend"></div>
+              <label class="field-label" for="us-weather-map-refresh" style="margin-top:14px">Refresh every (minutes)</label>
+              <input type="number" class="field-input" id="us-weather-map-refresh" min="10" max="360" step="5">
+              <p class="hint" style="margin-top:8px">
+                Readings come from Open-Meteo in one request and are cached for this long, so pushing repeatedly costs nothing.
+              </p>
+              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
+                <button type="button" class="btn btn-accent" id="btn-us-weather-map-save">Save</button>
+                <button type="button" class="btn btn-outline" id="btn-us-weather-map-reset">Reset defaults</button>
+                <button type="button" class="btn btn-outline" id="btn-us-weather-map-push">Push Now</button>
+              </div>
+            </div>
+            <div class="settings-col board-preview-col">
+              <label class="field-label">Board preview</label>
+              <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="us-weather-map-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+              <p class="hint" id="us-weather-map-hint" style="margin-top:8px">
+                Push Now fetches a fresh map and shows it here.
               </p>
             </div>
           </div>
@@ -2454,48 +2616,83 @@
           </p>
           <div class="settings-columns">
             <div class="settings-col">
-              <label class="field-label" for="word-scramble-lobby">Lobby seconds</label>
-              <input type="number" id="word-scramble-lobby" class="field-input" min="10" max="180" value="45">
-              <label class="field-label field-label-spaced" for="word-scramble-round">Round seconds</label>
-              <input type="number" id="word-scramble-round" class="field-input" min="30" max="600" value="180">
-              <label class="field-label field-label-spaced" for="word-scramble-intermission">Intermission seconds</label>
-              <input type="number" id="word-scramble-intermission" class="field-input" min="5" max="120" value="20">
-              <label class="field-label field-label-spaced" for="word-scramble-rounds">Rounds</label>
-              <input type="number" id="word-scramble-rounds" class="field-input" min="1" max="8" value="3">
-              <label class="field-label field-label-spaced" for="word-scramble-dup">Duplicate words</label>
-              <select id="word-scramble-dup" class="field-input">
-                <option value="everyone">Everyone scores</option>
-                <option value="cancel">Cancel if two find it</option>
-              </select>
-              <label class="trivia-check field-label-spaced">
-                <input type="checkbox" id="word-scramble-late-join" checked>
-                <span>Let phones join mid-game</span>
-              </label>
-              <p class="hint">The board keeps the code up all game so latecomers can read it. They play from the next round.</p>
-              <label class="field-label field-label-spaced" for="word-scramble-alias">Preferred alias</label>
-              <input type="text" id="word-scramble-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
-              <label class="field-label field-label-spaced" for="word-scramble-token">TinyURL token override</label>
-              <input type="password" id="word-scramble-token" class="field-input" placeholder="Optional — leave blank to use the global token" autocomplete="new-password" spellcheck="false">
-              <p class="hint" id="word-scramble-token-hint">Optional. Uses the global TinyURL token unless you paste one here.</p>
-              <label class="trivia-check">
-                <input type="checkbox" id="word-scramble-clear-override">
-                <span>Clear override</span>
-              </label>
-              <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
-                <button type="button" class="btn btn-accent" id="btn-word-scramble-save">Save</button>
-                <button type="button" class="btn btn-outline" id="btn-word-scramble-push">Push invite</button>
-                <button type="button" class="btn btn-outline" id="btn-word-scramble-sessions">Sessions</button>
+              <div class="settings-group">
+                <p class="settings-group-title">Round timing</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-lobby">Lobby seconds</label>
+                    <input type="number" id="word-scramble-lobby" class="field-input" min="10" max="180" value="45">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-round">Round seconds</label>
+                    <input type="number" id="word-scramble-round" class="field-input" min="30" max="600" value="180">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-intermission">Intermission</label>
+                    <input type="number" id="word-scramble-intermission" class="field-input" min="5" max="120" value="20">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-rounds">Rounds</label>
+                    <input type="number" id="word-scramble-rounds" class="field-input" min="1" max="8" value="3">
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <p class="settings-group-title">Play</p>
+                <div class="field-grid field-grid-2">
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-dup">Duplicate words</label>
+                    <select id="word-scramble-dup" class="field-input">
+                      <option value="everyone">Everyone scores</option>
+                      <option value="cancel">Cancel if two find it</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="trivia-check">
+                      <input type="checkbox" id="word-scramble-late-join" checked>
+                      <span>Let phones join mid-game</span>
+                    </label>
+                  </div>
+                  <p class="hint field-span-all">The board keeps the code up all game so latecomers can read it. They play from the next round.</p>
+                </div>
               </div>
             </div>
+
             <div class="settings-col">
-              <label class="field-label">Short link</label>
-              <div class="gb-shortlink-status" id="word-scramble-shortlink">
-                <span class="gb-dot" id="word-scramble-dot" aria-hidden="true"></span>
-                <p class="hint" id="word-scramble-shortlink-label">No short link yet.</p>
-                <p class="hint" id="word-scramble-shortlink-check">Last check —</p>
+              <div class="settings-group">
+                <p class="settings-group-title">Short link</p>
+                <div class="gb-shortlink-status" id="word-scramble-shortlink">
+                  <span class="gb-dot" id="word-scramble-dot" aria-hidden="true"></span>
+                  <p class="hint" id="word-scramble-shortlink-label">No short link yet.</p>
+                  <p class="hint" id="word-scramble-shortlink-check">Last check —</p>
+                </div>
+                <div class="field-grid field-grid-2">
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-alias">Preferred alias</label>
+                    <input type="text" id="word-scramble-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="word-scramble-token">TinyURL token override</label>
+                    <input type="password" id="word-scramble-token" class="field-input" placeholder="Optional — global token" autocomplete="new-password" spellcheck="false">
+                  </div>
+                  <div class="field field-span-all">
+                    <label class="trivia-check">
+                      <input type="checkbox" id="word-scramble-clear-override">
+                      <span>Clear override</span>
+                    </label>
+                    <p class="hint" id="word-scramble-token-hint">Optional. Uses the global TinyURL token unless you paste one here.</p>
+                  </div>
+                </div>
+                <p class="hint" id="word-scramble-target-hint">Target —</p>
               </div>
-              <p class="hint field-label-spaced" id="word-scramble-target-hint">Target —</p>
             </div>
+          </div>
+
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-word-scramble-save">Save</button>
+            <button type="button" class="btn btn-outline" id="btn-word-scramble-push">Push invite</button>
+            <button type="button" class="btn btn-outline" id="btn-word-scramble-sessions">Sessions</button>
           </div>
         </div>
 
@@ -2508,18 +2705,26 @@
           <p class="auth-detail" id="word-riddles-status-detail">
             Local word riddles for the Vestaboard. Pick the delay between the riddle and the reveal, manage the list, or push a random one.
           </p>
-          <label class="field-label" for="word-riddles-reveal-delay">Reveal delay</label>
-          <div class="slider-row">
-            <input type="range" id="word-riddles-reveal-delay" min="10" max="180" step="5" value="30" aria-label="Seconds between riddle and answer">
-            <span class="slider-value" id="word-riddles-reveal-delay-value">30s</span>
-          </div>
-          <label class="trivia-check">
-            <input type="checkbox" id="word-riddles-show-intro" checked>
-            <span>Show the green and blue intro card</span>
-          </label>
-          <div class="btn-row cn-settings-actions">
-            <button type="button" class="btn btn-outline" id="btn-word-riddles-manage">Manage riddles</button>
-            <button type="button" class="btn btn-accent" id="btn-word-riddles-push">Push Random</button>
+          <div class="field-grid field-grid-3 word-riddles-row">
+            <div class="field">
+              <label class="field-label" for="word-riddles-reveal-delay">Reveal delay</label>
+              <div class="slider-row">
+                <input type="range" id="word-riddles-reveal-delay" min="10" max="180" step="5" value="30" aria-label="Seconds between riddle and answer">
+                <span class="slider-value" id="word-riddles-reveal-delay-value">30s</span>
+              </div>
+            </div>
+            <div class="field">
+              <label class="trivia-check">
+                <input type="checkbox" id="word-riddles-show-intro" checked>
+                <span>Show the green and blue intro card</span>
+              </label>
+            </div>
+            <div class="field">
+              <div class="btn-row cn-settings-actions">
+                <button type="button" class="btn btn-outline" id="btn-word-riddles-manage">Manage riddles</button>
+                <button type="button" class="btn btn-accent" id="btn-word-riddles-push">Push Random</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2730,10 +2935,17 @@
           <p class="auth-detail" id="credits-settings-status">Loading settings…</p>
           <div class="settings-columns settings-columns-3">
             <div class="settings-col">
-              <label class="field-label" for="credits-client-id">IGDB client ID</label>
-              <input class="field-input" id="credits-client-id" autocomplete="off" spellcheck="false">
-              <label class="field-label field-label-spaced" for="credits-client-secret">IGDB client secret</label>
-              <input class="field-input" id="credits-client-secret" type="password" autocomplete="new-password" spellcheck="false">
+              <p class="settings-group-title">IGDB credentials</p>
+              <div class="field-grid">
+                <div class="field">
+                  <label class="field-label" for="credits-client-id">Client ID</label>
+                  <input class="field-input" id="credits-client-id" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="credits-client-secret">Client secret</label>
+                  <input class="field-input" id="credits-client-secret" type="password" autocomplete="new-password" spellcheck="false">
+                </div>
+              </div>
               <div class="credits-settings-actions">
                 <button type="button" class="btn btn-accent" id="btn-credits-credentials-save">Save</button>
                 <button type="button" class="btn btn-outline" id="btn-credits-credentials-test">Test</button>
@@ -2742,46 +2954,69 @@
                 <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">Open Twitch developer console</a>.
                 Twitch issues the free credentials used to reach IGDB.
               </p>
-              <label class="field-label field-label-spaced" for="credits-max-screenshots">Screenshots per game</label>
-              <input class="field-input" id="credits-max-screenshots" type="number" min="1" max="12" value="6">
-              <label class="trivia-check"><input type="checkbox" id="credits-download-screenshots" checked disabled><span>Download screenshots</span></label>
-              <p class="hint credits-compact-hint">The server currently downloads 1–12 screenshots; zero is not supported.</p>
-              <label class="trivia-check"><input type="checkbox" id="credits-download-video"><span>Download provider video</span></label>
-            </div>
 
-            <div class="settings-col">
-              <label class="field-label">Media priority</label>
-              <p class="hint credits-compact-hint">When a game is shown, the first kind that exists is featured.</p>
-              <div class="credits-priority-list" id="credits-global-priority"></div>
-              <label class="trivia-check field-label-spaced"><input type="checkbox" id="credits-youtube-enabled"><span>Download YouTube videos</span></label>
-              <label class="field-label" for="credits-youtube-resolution">Default YouTube resolution</label>
-              <select class="field-input" id="credits-youtube-resolution">
-                <option value="360">360p</option><option value="480">480p</option>
-                <option value="720">720p</option><option value="1080">1080p</option>
-              </select>
-            </div>
-
-            <div class="settings-col">
-              <label class="field-label" for="credits-seconds-game">Seconds per game</label>
-              <input class="field-input" id="credits-seconds-game" type="number" min="5" max="300">
-              <label class="field-label field-label-spaced" for="credits-dashboard-seconds">Dashboard seconds</label>
-              <input class="field-input" id="credits-dashboard-seconds" type="number" min="10" max="120">
-              <label class="field-label field-label-spaced" for="credits-display-order">Order</label>
-              <select class="field-input" id="credits-display-order">
-                <option value="recent">Newest first</option><option value="oldest">Oldest first</option>
-                <option value="random">Shuffle</option><option value="alpha">A–Z</option>
-              </select>
-              <label class="field-label field-label-spaced" for="credits-scheduled-limit">Scheduled game limit</label>
-              <input class="field-input" id="credits-scheduled-limit" type="number" min="0" value="15">
-              <p class="hint credits-compact-hint">0 shows all games. This limit applies to scheduled airings.</p>
-              <button type="button" class="btn btn-accent btn-block" id="btn-credits-settings-save">Save Roll Credits settings</button>
               <div class="credits-storage">
-                <span class="field-label">Storage</span>
+                <span class="settings-group-title">Storage</span>
                 <strong id="credits-disk-usage">—</strong>
                 <button type="button" class="btn btn-outline btn-block" id="btn-credits-prune">Prune orphaned files</button>
                 <p class="hint credits-compact-hint">Removes media folders that no longer belong to any game.</p>
               </div>
             </div>
+
+            <div class="settings-col">
+              <p class="settings-group-title">Media</p>
+              <p class="hint credits-compact-hint">When a game is shown, the first kind that exists is featured.</p>
+              <div class="credits-priority-list" id="credits-global-priority"></div>
+              <div class="field-grid field-grid-2 credits-media-grid">
+                <div class="field">
+                  <label class="field-label" for="credits-max-screenshots">Screenshots per game</label>
+                  <input class="field-input" id="credits-max-screenshots" type="number" min="1" max="12" value="6">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="credits-youtube-resolution">YouTube resolution</label>
+                  <select class="field-input" id="credits-youtube-resolution">
+                    <option value="360">360p</option><option value="480">480p</option>
+                    <option value="720">720p</option><option value="1080">1080p</option>
+                  </select>
+                </div>
+              </div>
+              <div class="check-grid">
+                <label class="trivia-check"><input type="checkbox" id="credits-download-screenshots" checked disabled><span>Download screenshots</span></label>
+                <label class="trivia-check"><input type="checkbox" id="credits-download-video"><span>Download provider video</span></label>
+                <label class="trivia-check"><input type="checkbox" id="credits-youtube-enabled"><span>Download YouTube videos</span></label>
+              </div>
+              <p class="hint credits-compact-hint">The server currently downloads 1–12 screenshots; zero is not supported.</p>
+            </div>
+
+            <div class="settings-col">
+              <p class="settings-group-title">Playback</p>
+              <div class="field-grid field-grid-2">
+                <div class="field">
+                  <label class="field-label" for="credits-seconds-game">Seconds per game</label>
+                  <input class="field-input" id="credits-seconds-game" type="number" min="5" max="300">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="credits-dashboard-seconds">Dashboard seconds</label>
+                  <input class="field-input" id="credits-dashboard-seconds" type="number" min="10" max="120">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="credits-display-order">Order</label>
+                  <select class="field-input" id="credits-display-order">
+                    <option value="recent">Newest first</option><option value="oldest">Oldest first</option>
+                    <option value="random">Shuffle</option><option value="alpha">A–Z</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="credits-scheduled-limit">Scheduled game limit</label>
+                  <input class="field-input" id="credits-scheduled-limit" type="number" min="0" value="15">
+                </div>
+              </div>
+              <p class="hint credits-compact-hint">0 shows all games. This limit applies to scheduled airings.</p>
+            </div>
+          </div>
+
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-credits-settings-save">Save Roll Credits settings</button>
           </div>
         </div>
 
@@ -2988,6 +3223,133 @@
       <div class="sheet-actions sheet-actions-confirm">
         <button class="btn btn-outline" id="photo-delete-cancel">Cancel</button>
         <button class="btn btn-danger" id="photo-delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Family quote manager -->
+  <div class="sheet-backdrop" id="family-quotes-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="family-quotes-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="family-quotes-manage-title">Manage family quotes</div>
+        <button type="button" class="credits-sheet-close" id="btn-family-quotes-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="family-quotes-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="family-quotes-new">New quote</label>
+          <textarea class="field-input cn-fact-input" id="family-quotes-new" rows="3" maxlength="220" placeholder="Life is beautiful. It's about giving. It's about family."></textarea>
+          <label class="field-label" for="family-quotes-new-author">Who said it</label>
+          <input type="text" class="field-input" id="family-quotes-new-author" maxlength="48" placeholder="Walt Disney" autocomplete="off">
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-family-quotes-add">Add quote</button>
+            <span class="hint" id="family-quotes-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="family-quotes-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="family-quotes-search" placeholder="Search quotes or authors" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="family-quotes-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="family-quotes-quote-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-family-quotes-prev">Previous</button>
+        <span class="hint" id="family-quotes-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-family-quotes-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dad joke manager -->
+  <div class="sheet-backdrop" id="dad-jokes-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="dad-jokes-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="dad-jokes-manage-title">Manage dad jokes</div>
+        <button type="button" class="credits-sheet-close" id="btn-dad-jokes-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="dad-jokes-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="dad-jokes-new">Setup</label>
+          <textarea class="field-input cn-fact-input" id="dad-jokes-new" rows="2" maxlength="160" placeholder="What happens when frogs park illegally?"></textarea>
+          <label class="field-label" for="dad-jokes-new-punchline">Punchline</label>
+          <textarea class="field-input cn-fact-input" id="dad-jokes-new-punchline" rows="2" maxlength="160" placeholder="They get toad."></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-dad-jokes-add">Add joke</button>
+            <span class="hint" id="dad-jokes-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="dad-jokes-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="dad-jokes-search" placeholder="Search setups or punchlines" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="dad-jokes-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="dad-jokes-joke-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-dad-jokes-prev">Previous</button>
+        <span class="hint" id="dad-jokes-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-dad-jokes-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roast manager -->
+  <div class="sheet-backdrop" id="roast-me-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="roast-me-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="roast-me-manage-title">Manage roasts</div>
+        <button type="button" class="credits-sheet-close" id="btn-roast-me-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="roast-me-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="roast-me-new">New roast</label>
+          <textarea class="field-input cn-fact-input" id="roast-me-new" rows="3" maxlength="220" placeholder="I treasure the time I don't spend with you."></textarea>
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-roast-me-add">Add roast</button>
+            <span class="hint" id="roast-me-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="roast-me-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="roast-me-search" placeholder="Search roasts" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="roast-me-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="roast-me-roast-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-roast-me-prev">Previous</button>
+        <span class="hint" id="roast-me-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-roast-me-next">Next</button>
       </div>
     </div>
   </div>
@@ -3397,7 +3759,7 @@
           <label class="field-label" for="date-book-name">Event</label>
           <input type="text" class="field-input" id="date-book-name" maxlength="60" placeholder="Wedding anniversary" autocomplete="off">
           <label class="field-label field-label-spaced" for="date-book-message">Message for the day itself</label>
-          <textarea class="field-input cn-fact-input" id="date-book-message" rows="3" maxlength="240" placeholder="Love you always &amp; forever, Ponpon"></textarea>
+          <textarea class="field-input cn-fact-input" id="date-book-message" rows="2" maxlength="240" placeholder="Love you always &amp; forever, Ponpon"></textarea>
           <div class="date-book-when" id="date-book-when">
             <div class="date-book-when-field">
               <label class="field-label" for="date-book-schedule">When</label>
@@ -3909,6 +4271,13 @@
         <div class="cn-fact-list" id="word-scramble-active-list"></div>
       </div>
       <div id="word-scramble-history-panel" hidden>
+        <div class="cn-pager">
+          <label class="trivia-check">
+            <input type="checkbox" id="word-scramble-hist-all">
+            <span>Select all on this page</span>
+          </label>
+          <button type="button" class="btn btn-danger btn-sm" id="btn-word-scramble-hist-delete" disabled>Delete</button>
+        </div>
         <div class="cn-fact-list" id="word-scramble-history-list"></div>
         <div class="cn-pager">
           <button type="button" class="btn btn-outline btn-sm" id="btn-word-scramble-hist-prev">Previous</button>
@@ -3930,7 +4299,7 @@
     </div>
   </div>
 
-  <script src="settings-filter.js?v=signal195"></script>
-  <script src="app.js?v=signal195"></script>
+  <script src="settings-filter.js?v=signal204"></script>
+  <script src="app.js?v=signal204"></script>
 </body>
 </html>

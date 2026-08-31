@@ -86,6 +86,45 @@ function createGameArchive(config = {}, log = console) {
     return { ok: true, deduped: false };
   }
 
+  /**
+   * Forget archived games. Month files are rewritten without the named rows;
+   * a line we cannot parse is kept rather than quietly dropped with them.
+   */
+  function remove(sessionIds = []) {
+    ensureLoaded();
+    const drop = new Set(
+      (Array.isArray(sessionIds) ? sessionIds : [sessionIds])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean),
+    );
+    if (!drop.size || !fs.existsSync(archiveRoot)) {
+      return { ok: true, removed: 0 };
+    }
+    let removed = 0;
+    for (const name of fs.readdirSync(archiveRoot)) {
+      if (!name.endsWith('.jsonl')) continue;
+      const filePath = path.join(archiveRoot, name);
+      const keep = [];
+      let touched = false;
+      for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        let id = '';
+        try { id = String(JSON.parse(line)?.sessionId || ''); } catch { id = ''; }
+        if (id && drop.has(id)) {
+          idIndex.delete(id);
+          removed += 1;
+          touched = true;
+          continue;
+        }
+        keep.push(line);
+      }
+      if (!touched) continue;
+      if (keep.length) fs.writeFileSync(filePath, `${keep.join('\n')}\n`, 'utf8');
+      else fs.rmSync(filePath, { force: true });
+    }
+    return { ok: true, removed };
+  }
+
   function listPage({ offset = 0, limit = 10 } = {}) {
     const rows = listAll()
       .sort((a, b) => String(b.endedAt || '').localeCompare(String(a.endedAt || '')));
@@ -103,6 +142,7 @@ function createGameArchive(config = {}, log = console) {
     archiveRoot,
     has,
     append,
+    remove,
     listAll,
     listPage,
     count() {

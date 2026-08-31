@@ -2,10 +2,24 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const NAME_KEY = 'signal.games.name';
   let session = null;
   let playerId = '';
   let source = null;
   let clock = null;
+
+  /** Nobody should have to type their name again the next time they play. */
+  function rememberedName() {
+    try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; }
+  }
+
+  function rememberName(name) {
+    try {
+      if (name) localStorage.setItem(NAME_KEY, name);
+    } catch {
+      // A locked-down browser just means they type it again.
+    }
+  }
 
   function show(id) {
     $('gm-join').hidden = id !== 'gm-join';
@@ -33,36 +47,33 @@
   }
 
   /**
-   * One list, never two: who is here while we wait, the running score once
-   * the game is on. Rendering both was what showed everybody twice.
+   * One list, never two: everybody who has joined, with the score they have
+   * right now — the server folds the open round in, so points show up as they
+   * are found instead of at the end of the round.
    */
   function renderStandings(next) {
+    const rows = next.scores || [];
     const waiting = next.phase === 'invited' || next.phase === 'lobby';
-    const rows = waiting ? next.players || [] : next.scores || [];
     $('gm-list-title').textContent = waiting
       ? `Players (${rows.length})`
-      : 'Scores';
+      : `Scores (${rows.length})`;
     const list = $('gm-list');
     list.innerHTML = '';
     rows.forEach((row, index) => {
       const li = document.createElement('li');
       if (next.you && row.id === next.you.id) li.className = 'is-you';
-      if (!waiting) {
-        const rank = document.createElement('span');
-        rank.className = 'gm-rank';
-        rank.textContent = `${index + 1}`;
-        li.appendChild(rank);
-      }
+      const rank = document.createElement('span');
+      rank.className = 'gm-rank';
+      rank.textContent = waiting ? '' : `${index + 1}`;
+      li.appendChild(rank);
       const name = document.createElement('span');
       name.className = 'gm-who';
       name.textContent = row.name;
       li.appendChild(name);
-      if (!waiting) {
-        const score = document.createElement('span');
-        score.className = 'gm-points';
-        score.textContent = String(row.score || 0);
-        li.appendChild(score);
-      }
+      const score = document.createElement('span');
+      score.className = 'gm-points';
+      score.textContent = waiting ? '' : String(row.score || 0);
+      li.appendChild(score);
       list.appendChild(li);
     });
   }
@@ -187,13 +198,15 @@
   async function join() {
     setStatus('gm-join-status', '');
     try {
+      const typed = $('gm-name').value;
       const data = await api('/api/games/join', {
         method: 'POST',
         body: {
           code: $('gm-code').value,
-          name: $('gm-name').value,
+          name: typed,
         },
       });
+      rememberName(String(typed || '').trim());
       playerId = data.player?.id || '';
       applySession(data.session);
       show('gm-play');
@@ -232,6 +245,10 @@
       if (data.liveScore != null) {
         $('gm-score').textContent = `Your score ${data.liveScore}`;
       }
+      if (Array.isArray(data.scores) && session) {
+        session.scores = data.scores;
+        renderStandings(session);
+      }
       if (Array.isArray(data.words) && session) {
         session.you = { ...(session.you || {}), words: data.words };
         renderFound(session);
@@ -244,6 +261,12 @@
   const params = new URLSearchParams(location.search);
   if (params.get('code')) {
     $('gm-code').value = params.get('code').toUpperCase();
+  }
+  const saved = rememberedName();
+  if (saved) {
+    $('gm-name').value = saved;
+    // Their name is already in — put them on the one field they still owe us.
+    if (!$('gm-code').value) $('gm-code').focus();
   }
 
   if (clock) clearInterval(clock);

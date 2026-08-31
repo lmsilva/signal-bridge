@@ -89,6 +89,8 @@ function createQueue({
     lastPostAt: null,
     lastSchedulerFlipAt: null,
     holdUntil: null,
+    /** `game` parks every non-game page; `guest` parks scheduler pages only. */
+    holdKind: null,
     health: 'ok',
     healthReason: null,
     failures: 0,
@@ -134,10 +136,12 @@ function createQueue({
   }
 
   function itemHeld(item, at = now()) {
-    return item.priority !== 'alert'
-      && item.scheduler
-      && state.holdUntil
-      && at < state.holdUntil;
+    if (item.priority === 'alert') return false;
+    if (!state.holdUntil || at >= state.holdUntil) return false;
+    if (state.holdKind === 'game') {
+      return String(item.frame?.source || '') !== 'word.scramble';
+    }
+    return item.scheduler;
   }
 
   function pending() {
@@ -273,7 +277,12 @@ function createQueue({
     }
 
     if (options.breakHold) {
-      state.holdUntil = null;
+      const gameHandoff = options.replaceSource === 'word.scramble'
+        && holdMsOf(list[0]) > 0;
+      if (!gameHandoff) {
+        state.holdUntil = null;
+        state.holdKind = null;
+      }
     }
 
     let dropped = 0;
@@ -339,6 +348,13 @@ function createQueue({
       }
       const holdMs = holdMsOf(item.frame);
       state.holdUntil = holdMs ? at + holdMs : null;
+      if (holdMs) {
+        state.holdKind = String(item.frame.source || '') === 'word.scramble'
+          ? 'game'
+          : 'guest';
+      } else {
+        state.holdKind = null;
+      }
     }
 
     // Hand the next page of this sequence its turn.
@@ -481,6 +497,7 @@ function createQueue({
       queued: items.length,
       lastPostAt: state.lastPostAt,
       holdUntil: state.holdUntil,
+      holdKind: state.holdKind,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
     }),
     /**
@@ -534,6 +551,24 @@ function createQueue({
     clear() {
       items.length = 0;
       announceQueue();
+    },
+    /**
+     * Drop the pending pages a caller no longer wants waiting. Used when one
+     * feature takes the board over and a half-finished multi-page run from
+     * somewhere else would otherwise surface in the middle of it. Whatever is
+     * already showing stays; this only touches the queue.
+     */
+    dropPending(predicate) {
+      if (typeof predicate !== 'function') return 0;
+      let dropped = 0;
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        if (predicate(items[i].frame, items[i])) {
+          items.splice(i, 1);
+          dropped += 1;
+        }
+      }
+      if (dropped) announceQueue();
+      return dropped;
     },
   };
 }

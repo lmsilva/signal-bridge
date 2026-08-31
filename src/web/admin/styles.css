@@ -1164,6 +1164,90 @@ textarea.field-input.text-input-area {
 .settings-col { min-width: 0; }
 .settings-col > .field-label:first-child { margin-top: 0; }
 
+/*
+ * Field grid — related controls sharing a line.
+ *
+ * A settings column on a desktop is 400px or more, and a box you type "45"
+ * into does not need 400px. Four such fields stacked is most of a screen of
+ * scrolling to set four numbers, so fields that belong together sit side by
+ * side and only fall back to a stack when the card is genuinely narrow.
+ *
+ * Cells align on their bottom edge so the inputs line up even when one label
+ * wraps. That only holds if nothing trails the input, which is why hints go in
+ * a `.field-span-all` cell of their own rather than inside a field.
+ */
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px 16px;
+  align-items: end;
+}
+.field-grid > .field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* The stacked layout spaces itself with margins; in a grid the gap does it. */
+.field-grid > .field > .field-label,
+.field-grid > .field > .field-label-spaced {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+.field-grid > .field > .segmented { margin-bottom: 0; }
+.field-grid > .field > .hint:last-child { margin: 6px 4px 0; }
+.field-grid .field-span-all { grid-column: 1 / -1; }
+.field-grid + .field-grid,
+.field-grid + .settings-group,
+.settings-group + .settings-group { margin-top: 18px; }
+.field-grid > .field > .hint { margin-bottom: 0; }
+
+/* A caption over a group of fields, so a long card scans in bands. */
+.settings-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+}
+.settings-group > .field-grid:first-of-type { margin-top: 0; }
+
+/* Checkboxes are short; two-up saves a row apiece without crowding. */
+.check-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px 18px;
+}
+
+/*
+ * Actions that belong to the whole card rather than one column, pinned under
+ * the columns instead of trailing whichever column happened to be longest.
+ */
+.settings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.settings-footer .settings-footer-note {
+  margin: 0 0 0 auto;
+  text-align: right;
+}
+
+@media (min-width: 560px) {
+  .field-grid-2,
+  .field-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .check-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 900px) {
+  .field-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .field-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 /* ---------- The Upside News ---------- */
 
 .upside-news-period-band {
@@ -3089,6 +3173,10 @@ textarea.field-input.text-input-area {
   #tab-settings .starlink-tracker-settings-card,
   #tab-settings .flightplan-settings-card,
   #tab-settings .chuck-norris-settings-card,
+  #tab-settings .roast-me-settings-card,
+  #tab-settings .family-quotes-settings-card,
+  #tab-settings .dad-jokes-settings-card,
+  #tab-settings .us-weather-map-settings-card,
   #tab-settings .amazing-facts-settings-card,
   #tab-settings .world-geography-facts-settings-card,
   #tab-settings .conversation-starters-settings-card,
@@ -3109,9 +3197,11 @@ textarea.field-input.text-input-area {
   #tab-settings .weather-alerts-settings-card,
   #tab-settings .world-population-settings-card,
   #tab-settings .calendar-clock-settings-card,
+  #tab-settings .word-clock-settings-card,
   #tab-settings .red-letter-settings-card,
   #tab-settings .credits-settings-card,
   #tab-settings .word-scramble-settings-card,
+  #tab-settings .word-riddles-settings-card,
   #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card {
     grid-column: 1 / -1;
@@ -3132,6 +3222,9 @@ textarea.field-input.text-input-area {
     align-items: start;
   }
   .settings-columns-3 { grid-template-columns: 1fr 1fr; }
+
+  /* A footer nested among the columns still belongs to the whole card. */
+  .settings-columns > .settings-footer { grid-column: 1 / -1; }
 
   #tab-settings .slideshow-settings-col .field-label-spaced,
   #tab-settings .slideshow-settings-col .field-label {
@@ -3650,6 +3743,12 @@ textarea.field-input.text-input-area {
 .credits-table tbody tr.is-drop-target { background: rgba(56, 189, 248, 0.12); }
 
 .credits-settings-card { width: 100%; }
+/* Word Riddles has only three controls, so they share one line on a wide card
+   rather than stacking under a half-empty bezel-less column. */
+.word-riddles-row { margin-top: 16px; }
+.word-riddles-row .cn-settings-actions { margin: 0; }
+.word-riddles-row .cn-settings-actions .btn { flex: 1 1 140px; }
+
 .credits-settings-actions { margin-top: 9px; }
 .credits-settings-actions .btn { flex: 1; }
 .credits-compact-hint { margin: 4px 0 10px; }
@@ -3704,6 +3803,9 @@ textarea.field-input.text-input-area {
   cursor: default;
 }
 .credits-storage { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.credits-storage .settings-group-title { margin: 0; }
+.credits-media-grid { margin-top: 14px; }
+.credits-media-grid + .check-grid { margin-top: 14px; }
 
 .credits-sheet {
   max-height: min(92dvh, 880px);
@@ -4089,10 +4191,32 @@ textarea.field-input.text-input-area {
   .stock-market-settings-card .settings-columns,
   .currency-rates-settings-card .settings-columns,
   .starlink-tracker-settings-card .settings-columns,
-  .iss-tracker-settings-card .settings-columns,
-  .ring-doorbell-settings-card .settings-columns {
+  .iss-tracker-settings-card .settings-columns {
     grid-template-columns: minmax(0, 1.05fr) minmax(280px, 1fr);
     align-items: start;
+  }
+}
+
+/* Ring carries three unrelated groups — account, alert copy, preview — so it
+   runs three across once there is room rather than one tall account column. */
+.ring-btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.ring-advanced { margin-top: 14px; }
+.ring-doorbell-settings-card #ring-cameras { margin-top: 14px; }
+
+@media (min-width: 720px) {
+  .ring-doorbell-settings-card .ring-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1080px) {
+  .ring-doorbell-settings-card .ring-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(280px, 0.95fr);
   }
 }
 
@@ -4176,25 +4300,72 @@ textarea.field-input.text-input-area {
 /* ---------------------------------------------- Red Letter layout designer */
 
 /* The Date Book manager and the designer both run wider than a corpus sheet:
-   a 22-column board at a tappable flap size needs the room. Date Book also
-   grows taller so the event list isn't a one-and-a-half-row postage stamp. */
+   a 22-column board at a tappable flap size needs the room. On short viewports
+   (e.g. a 1512×949 remote desktop) the compose/tool chrome used to pin the
+   event list and the design grid below the fold with nowhere to scroll —
+   these sheets scroll as a unit under ~900px tall, and only pin the list /
+   sticky action bar when there is real height to spare. */
 .date-book-sheet,
 .rl-designer-sheet {
   max-width: min(1040px, calc(100vw - 24px));
-  max-height: min(94dvh, 980px);
+  max-height: min(92dvh, 980px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .rl-designer-sheet {
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
 }
 .date-book-sheet > .cn-fact-list {
-  min-height: min(280px, 36dvh);
+  /* Grow with content while the sheet itself scrolls — a large min-height
+     here used to steal the viewport and leave a one-row postage-stamp list. */
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+  margin-bottom: 4px;
 }
 .date-book-sheet .cn-compose {
   margin-bottom: 4px;
+  flex: 0 1 auto;
+  min-height: 0;
 }
 .date-book-sheet .cn-toolbar {
   margin-top: 4px;
   margin-bottom: 10px;
+}
+/* Short / laptop viewports: tighten the compose block so the event list
+   shows up without a marathon scroll past the add form. */
+@media (max-height: 900px) {
+  .date-book-sheet .cn-compose-form textarea.cn-fact-input {
+    min-height: 56px;
+    max-height: 96px;
+  }
+  .date-book-sheet .date-book-when {
+    margin-top: 10px;
+    gap: 8px 12px;
+  }
+  .date-book-sheet .cn-preview-col .vb-bezel.preview-bezel {
+    max-width: 240px;
+  }
+  .date-book-sheet .credits-sheet-head {
+    margin-bottom: 6px;
+  }
+  .date-book-sheet > .hint#date-book-summary {
+    margin: 0 0 8px;
+  }
+}
+/* Tall enough: pin the search + list scroll the way corpus managers do. */
+@media (min-height: 901px) {
+  .date-book-sheet {
+    overflow: hidden;
+  }
+  .date-book-sheet > .cn-fact-list {
+    flex: 1 1 auto;
+    min-height: 180px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 .date-book-when {
   display: grid;
@@ -4444,8 +4615,61 @@ textarea.field-input.text-input-area {
   padding-top: 16px;
   padding-bottom: 4px;
   border-top: 1px solid var(--line);
+  /* Stay reachable while the sheet scrolls on short screens. */
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--bg-elev);
+  box-shadow: 0 -10px 18px -12px rgba(0, 0, 0, 0.55);
 }
 .rl-designer-actions-left { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Short viewports: compress the tool chrome so the design grid is reachable
+   without leaving the dialog, and keep the action bar stuck to the bottom. */
+@media (max-height: 900px) {
+  .rl-designer-sheet > .hint#red-letter-designer-subtitle {
+    margin: 0 0 8px;
+  }
+  .rl-tools {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+  .rl-char-row {
+    margin: 0 0 8px;
+  }
+  .rl-char-palette {
+    max-height: 72px;
+    padding: 6px;
+    gap: 4px;
+  }
+  .rl-char {
+    width: 26px;
+    height: 26px;
+    font-size: 0.68rem;
+  }
+  .rl-designer-sheet > .field-label[for="red-letter-quick-type"] {
+    margin: 0 0 4px;
+  }
+  .rl-quick-type {
+    margin: 0 0 8px;
+  }
+  .rl-designer-hint {
+    margin: 0 0 8px;
+  }
+  .rl-designer-columns {
+    margin: 4px 0 10px;
+    gap: 12px 16px;
+  }
+  .rl-preset-block {
+    margin: 8px 0 4px;
+    padding: 10px 0 4px;
+  }
+  .rl-designer-actions {
+    margin-top: 8px;
+    padding-top: 10px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  }
+}
 .rl-designer-sheet .cn-board-preview,
 .rl-designer-sheet .vb-bezel.preview-bezel,
 .date-book-sheet .cn-preview-col .cn-board-preview,
@@ -4478,6 +4702,44 @@ textarea.field-input.text-input-area {
   overscroll-behavior: contain;
   padding: 2px 6px 2px 2px;
   margin: 0 -2px;
+}
+/* Date Book + day-of designer: must win over the corpus manager's
+   overflow:hidden. On short screens the sheet itself scrolls; on tall ones
+   Date Book keeps a pinned list scroller. */
+.cn-manage-sheet.date-book-sheet,
+.cn-manage-sheet.rl-designer-sheet {
+  max-width: min(1040px, calc(100vw - 24px));
+  max-height: min(92dvh, 980px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.cn-manage-sheet.rl-designer-sheet > .credits-sheet-head,
+.cn-manage-sheet.date-book-sheet > .credits-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--bg-elev);
+  margin-bottom: 0;
+  padding-bottom: 8px;
+}
+.cn-manage-sheet.date-book-sheet > .cn-fact-list {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+  margin-bottom: 4px;
+}
+@media (min-height: 901px) {
+  .cn-manage-sheet.date-book-sheet {
+    overflow: hidden;
+  }
+  .cn-manage-sheet.date-book-sheet > .cn-fact-list {
+    flex: 1 1 auto;
+    min-height: 180px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 .cn-manage-sheet > .cn-pager {
   padding-top: 12px;
@@ -4949,6 +5211,38 @@ textarea.field-input.text-input-area {
 .vb-tile[data-chip="69"] .vb-flap { background-color: #f2f2f2; }
 .vb-tile[data-chip="70"] .vb-flap { background-color: #101013; }
 .vb-tile[data-chip="71"] .vb-flap { background-color: #6e6e6e; }
+
+/* US Weather Map legend — the same nine chip colours, at label size. */
+.us-weather-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 12px;
+}
+.uswm-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.uswm-chip {
+  width: 13px;
+  height: 17px;
+  border-radius: 2px;
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.uswm-chip[data-chip="63"] { background-color: #e03c31; }
+.uswm-chip[data-chip="64"] { background-color: #f58220; }
+.uswm-chip[data-chip="65"] { background-color: #ffd200; }
+.uswm-chip[data-chip="66"] { background-color: #22a24b; }
+.uswm-chip[data-chip="67"] { background-color: #0f62c8; }
+.uswm-chip[data-chip="68"] { background-color: #7b3f98; }
+.uswm-chip[data-chip="69"] { background-color: #f2f2f2; }
+.uswm-chip[data-chip="70"] { background-color: #101013; }
+.uswm-chip[data-chip="71"] { background-color: #6e6e6e; }
 
 /* One mechanical click. A full change is staggered to match vb-flip.wav (~5.6s). */
 .vb-tile.is-flipping .vb-flap {

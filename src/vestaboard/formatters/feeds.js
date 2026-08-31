@@ -9,6 +9,7 @@
 // is unreadable from across a room. The measured gate is in 02 §6.
 
 const {
+  ROWS,
   COLS,
   BLANK,
   CHIPS,
@@ -58,6 +59,9 @@ const { languageOf, posLabel: europeanPosLabel } = require('../../learn-language
 const { layoutFor } = require('../../quiet-hours-reminder');
 const { formatPopulation, formatRate } = require('../../world-population');
 const { calendarClockRows } = require('../../calendar-clock');
+const { wordClockRows } = require('../../word-clock');
+const { quoteLines } = require('../../family-quotes-layout');
+const { jokeLines } = require('../../dad-jokes-layout');
 const { redLetterRows } = require('../../red-letter');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
 
@@ -1099,6 +1103,182 @@ function calendarClockFrames(payload = {}) {
 }
 
 /**
+ * Family Quotes (marketplace channel): the quote gets the whole board.
+ *
+ * No title and no chips. `quoteLines` does the shaping — a row per sentence,
+ * wrapped one column shy of the right edge, attribution on the tail of the
+ * last sentence — and this centres the block down the six rows.
+ */
+function familyQuotesFrames(payload = {}) {
+  const lines = quoteLines(
+    payload.quote?.text || payload.text || '',
+    payload.quote?.author || payload.author || '',
+  );
+  if (!lines.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < lines.length; index += ROWS) {
+    const chunk = lines.slice(index, index + ROWS);
+    const top = Math.floor((ROWS - chunk.length) / 2);
+    const rows = [];
+    for (let rowIndex = 0; rowIndex < ROWS; rowIndex += 1) {
+      const row = blankRow(COLS);
+      const line = chunk[rowIndex - top];
+      if (line) {
+        placeText(row, line, 0);
+      }
+      rows.push(row);
+    }
+    frames.push(snapshotFrame(
+      assertValidLayout(rows, 'family quotes'),
+      'Family Quotes',
+      'family.quotes',
+    ));
+  }
+  return frames;
+}
+
+/**
+ * US Weather Map (marketplace channel): the lower 48 in colour chips.
+ *
+ * No text anywhere — every flap the map claims is a chip and everything else
+ * stays blank, so the silhouette is the whole design. The payload already
+ * carries the chip per cell; this only has to place them and refuse to paint a
+ * map with holes in it.
+ */
+function usWeatherMapFrames(payload = {}) {
+  const cells = Array.isArray(payload.cells) ? payload.cells : [];
+  if (!cells.length) {
+    return [];
+  }
+  const rows = Array.from({ length: ROWS }, () => blankRow(COLS));
+  let painted = 0;
+  for (const cell of cells) {
+    const row = Number(cell?.row);
+    const col = Number(cell?.col);
+    const code = chipCode(cell?.chip);
+    if (!code || !Number.isInteger(row) || !Number.isInteger(col)) {
+      continue;
+    }
+    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
+      continue;
+    }
+    rows[row][col] = code;
+    painted += 1;
+  }
+  if (!painted) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'us weather map'),
+    'US Weather Map',
+    'us.weather-map',
+  )];
+}
+
+/**
+ * Dad Jokes (marketplace channel): setup on top, a blank row, then the
+ * punchline.
+ *
+ * No title and no chips. The blank row is the pause before the groan, so it
+ * is load-bearing — `jokeLines` puts it there and this centres the block down
+ * the six rows.
+ */
+function dadJokesFrames(payload = {}) {
+  const lines = jokeLines(
+    payload.joke?.setup || payload.setup || '',
+    payload.joke?.punchline || payload.punchline || '',
+  );
+  if (!lines.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < lines.length; index += ROWS) {
+    // A chunk that starts on the pause would open with a wasted row.
+    const chunk = lines.slice(index, index + ROWS);
+    while (chunk.length && !chunk[0]) {
+      chunk.shift();
+    }
+    if (!chunk.length) {
+      continue;
+    }
+    const top = Math.floor((ROWS - chunk.length) / 2);
+    const rows = [];
+    for (let rowIndex = 0; rowIndex < ROWS; rowIndex += 1) {
+      const row = blankRow(COLS);
+      const line = chunk[rowIndex - top];
+      if (line) {
+        placeText(row, line, 0);
+      }
+      rows.push(row);
+    }
+    frames.push(snapshotFrame(
+      assertValidLayout(rows, 'dad jokes'),
+      'Dad Jokes',
+      'dad.jokes',
+    ));
+  }
+  return frames;
+}
+
+/**
+ * Roast Me! (marketplace "Boom Roasted"): the punchline gets the whole board.
+ *
+ * No title and no chips, so all six rows are text. Lines are left-aligned on
+ * column 0 and the block is centred vertically. The wrap fills greedily
+ * (`orphans: false`) because pushing a two-letter word down a line can cost a
+ * whole row, and a roast reads best packed.
+ */
+function roastMeFrames(payload = {}) {
+  const text = fold(payload.roast?.text || payload.text || '');
+  if (!text) {
+    return [];
+  }
+  const lines = wrap(text, COLS, { orphans: false });
+  if (!lines.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < lines.length; index += ROWS) {
+    const chunk = lines.slice(index, index + ROWS);
+    const top = Math.floor((ROWS - chunk.length) / 2);
+    const rows = [];
+    for (let rowIndex = 0; rowIndex < ROWS; rowIndex += 1) {
+      const row = blankRow(COLS);
+      const line = chunk[rowIndex - top];
+      if (line) {
+        placeText(row, line, 0);
+      }
+      rows.push(row);
+    }
+    frames.push(snapshotFrame(
+      assertValidLayout(rows, 'roast me'),
+      'Roast Me!',
+      'roast.me',
+    ));
+  }
+  return frames;
+}
+
+/**
+ * Word Clock (marketplace productivity): the time spelled out as a sentence,
+ * left-aligned as a block and centred on all six rows. Rows are built in
+ * `word-clock.js` so the admin bezel paints exactly what the flaps will show.
+ */
+function wordClockFrames(payload = {}) {
+  const rows = wordClockRows(payload);
+  if (!rows) {
+    return [];
+  }
+  return [snapshotFrame(
+    assertValidLayout(rows, 'word clock'),
+    'Word Clock',
+    'word.clock',
+  )];
+}
+
+/**
  * Red Letter: a Date Book countdown, or the event's own day-of card.
  *
  * The rows are built in `red-letter.js` because the same six rows feed the
@@ -1567,6 +1747,11 @@ const FORMATTERS = {
   'bake.inspire': bakingInspirationFrames,
   'world.population': worldPopulationFrames,
   'calendar.clock': calendarClockFrames,
+  'word.clock': wordClockFrames,
+  'roast.me': roastMeFrames,
+  'family.quotes': familyQuotesFrames,
+  'dad.jokes': dadJokesFrames,
+  'us.weather-map': usWeatherMapFrames,
   'red-letter.card': redLetterFrames,
   'stocks.market': stockMarketFrames,
   'fx.rates': currencyRatesFrames,
@@ -1602,6 +1787,11 @@ module.exports = {
   bakingInspirationFrames,
   worldPopulationFrames,
   calendarClockFrames,
+  wordClockFrames,
+  roastMeFrames,
+  familyQuotesFrames,
+  dadJokesFrames,
+  usWeatherMapFrames,
   redLetterFrames,
   stockMarketFrames,
   currencyRatesFrames,

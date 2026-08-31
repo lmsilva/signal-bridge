@@ -302,6 +302,11 @@ function createAutodartsService({
 
   function start() {
     live.start();
+    try {
+      auth.startKeepAlive?.();
+    } catch (error) {
+      log?.warn?.('Autodarts token keep-alive failed to start', error?.message || error);
+    }
     // Pull cloud Match History into the local archive (cache). Fail-soft if offline.
     try {
       history.schedule?.();
@@ -313,6 +318,7 @@ function createAutodartsService({
   function close() {
     live.stop();
     history.stop?.();
+    auth.stopKeepAlive?.();
     auth.stopDevicePoll?.();
   }
 
