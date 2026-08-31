@@ -339,12 +339,16 @@ test('the scores card trades its fifth row for the code so latecomers can join',
   ], 'word-scramble final scores with the code');
 });
 
-test('a closed game blanks the board rather than leaving the lobby up', () => {
-  const { clearedRows, clearFrames, framesFor } = require('../src/vestaboard/formatters/games');
-  assertLayout(clearedRows(), ['', '', '', '', '', ''], 'word-scramble clear');
-  assert.equal(clearFrames()[0].source, 'word.scramble');
+test('a closed game paints the final scores rather than a blank board', () => {
+  const { framesFor, scoresRows } = require('../src/vestaboard/formatters/games');
+  const payload = {
+    phase: 'closed',
+    card: 'final',
+    final: true,
+    scores: [{ name: 'Luis', score: 12 }],
+  };
   assert.deepEqual(
-    framesFor({ phase: 'closed', card: 'clear' })[0].rows,
-    clearedRows(),
+    framesFor(payload)[0].rows,
+    scoresRows({ scores: payload.scores, final: true }),
   );
 });

@@ -212,7 +212,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       quietHoursExempt: true,
       replaceSource: 'word.scramble',
       gameSource: 'word.scramble',
-      replaceCard: card && card !== 'clear' ? card : null,
+      replaceCard: card || null,
       holdSeconds,
     };
   }
@@ -243,13 +243,10 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const source = game?.source || 'word.scramble';
     // Take (or renew) the board lock before the card is queued, so the gap
     // between two phases never opens the line to everything parked behind us.
-    // `clear` is the last card of the session and releases instead.
-    if (card !== 'clear') {
-      try {
-        setGameLock(source, true);
-      } catch (error) {
-        log?.warn?.('Could not lock the board for the game', error?.message || error);
-      }
+    try {
+      setGameLock(source, true);
+    } catch (error) {
+      log?.warn?.('Could not lock the board for the game', error?.message || error);
     }
     takeBoard();
     const payload = {
@@ -258,10 +255,14 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       phase: session.phase,
       card,
       code: session.code,
-      showCode: settings.allowLateJoin !== false,
+      showCode: extra.showCode != null
+        ? Boolean(extra.showCode)
+        : settings.allowLateJoin !== false,
       roundIndex: session.roundIndex,
       rounds: settings.rounds,
-      final: session.phase === 'final',
+      final: extra.final != null
+        ? Boolean(extra.final)
+        : session.phase === 'final' || card === 'final',
       alias: aliasOf(session),
       playerCount: session.players.length,
       grid: extra.grid || session.rounds[session.rounds.length - 1]?.grid || [],
@@ -303,11 +304,24 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   function closeSession(session, reason = 'closed') {
     if (session.phase === 'closed') return;
     const abandoned = reason !== 'finished';
+    const alreadyFinal = session.phase === 'final';
+    const scores = session.scores?.length ? session.scores : standings(session);
     session.phase = 'closed';
     session.phaseEndsAt = null;
-    // The board must stop advertising a game nobody can join. Pending game
-    // pages are swept too, or the lobby card lands after the game is gone.
-    pushPhase(session, 'clear', { holdSeconds: 0, takeover: true });
+    // Scores stay up for every ending — finished, admin stop, idle, or the
+    // last player leaving. A blank clear used to wipe a game nobody can
+    // join; the house still wants to see how it finished. Skip a second
+    // flip when the final card is already on the board.
+    if (!alreadyFinal) {
+      const settings = settingsOf(session.gameType);
+      pushPhase(session, 'final', {
+        scores,
+        holdSeconds: settings.intermissionSeconds,
+        takeover: true,
+        final: true,
+        showCode: false,
+      });
+    }
     // Only now may the pages parked behind the game have the board. This is
     // the one release point, so it has to cover every way a session ends:
     // finished, stopped by an admin, invite expired, idle, or last player out.
@@ -597,11 +611,16 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   function leave({ sessionId, playerId } = {}) {
     const session = getById(sessionId);
     if (!session) return { ok: true };
-    session.players = session.players.filter((p) => p.id !== playerId);
-    if (!session.players.length) {
+    const remaining = session.players.filter((p) => p.id !== playerId);
+    if (!remaining.length) {
+      // Snapshot while the last player is still seated so FINAL SCORES
+      // still has their name and the points they had when they left.
+      session.scores = standings(session);
+      session.players = remaining;
       closeSession(session, 'empty');
       return { ok: true };
     }
+    session.players = remaining;
     emit(session, 'leave');
     return { ok: true };
   }
