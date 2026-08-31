@@ -600,6 +600,43 @@ def facts_card_layout(
     }
 
 
+def _default_text_measure(font_size: float):
+    def measure(value, _size=float(font_size)):
+        return len(str(value or "")) * _size * 0.72
+    return measure
+
+
+def fit_single_line(text: str, width_px: float, measure=None, *, font_size: float = 24) -> str:
+    """Keep the longest prefix that still paints inside ``width_px``.
+
+    Measures the real string (not an em-square budget). A title like
+    "Contra Anniversary Collection" stays whole when it fits, instead of
+    collapsing to "Contra…" because eight M glyphs would overflow.
+    """
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return ""
+    if measure is None:
+        measure = _default_text_measure(font_size)
+    limit = max(1.0, float(width_px))
+    if measure(cleaned) <= limit:
+        return cleaned
+    ellipsis = "…"
+    if measure(ellipsis) > limit:
+        return ellipsis
+    lo, hi = 0, len(cleaned)
+    best = ellipsis
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = cleaned[:mid].rstrip(" .,;:") + ellipsis
+        if measure(candidate) <= limit:
+            best = candidate
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best
+
+
 def clip_text_to_lines(
     text: str,
     *,
@@ -610,46 +647,53 @@ def clip_text_to_lines(
 ) -> str:
     """Word-wrap then hard-clip so Tk cannot stack description over the facts row.
 
-    ``measure`` should report painted px width; without it we assume a wide
-    glyph so the clip errs toward fewer lines rather than an overflow.
+    ``measure`` should report painted px width of the *actual* string. Wrapping
+    used to count em-squares (``"M" * n``), which clipped "Contra Anniversary
+    Collection" to "Contra…" while half the Latest Inducted card sat empty.
     """
     cleaned = " ".join(str(text or "").split())
     if not cleaned:
         return ""
     max_lines = max(1, int(max_lines))
     if measure is None:
-        def measure(value, _size=float(font_size)):
-            return len(value) * _size * 0.72
+        measure = _default_text_measure(font_size)
     limit = max(40.0, float(width_px))
-    chars_per_line = 8
-    while chars_per_line < len(cleaned) and measure("M" * (chars_per_line + 1)) <= limit:
-        chars_per_line += 1
+    if max_lines == 1:
+        return fit_single_line(cleaned, limit, measure)
+
     words = cleaned.split(" ")
     lines: list[str] = []
     current = ""
-    overflow = False
-    for word in words:
+    index = 0
+    while index < len(words):
+        word = words[index]
         trial = word if not current else f"{current} {word}"
-        if len(trial) <= chars_per_line:
+        if measure(trial) <= limit:
             current = trial
+            index += 1
             continue
         if current:
             lines.append(current)
-        current = word
-        if len(lines) >= max_lines:
-            overflow = True
-            break
-    if current and len(lines) < max_lines:
-        lines.append(current)
-    elif current and len(lines) >= max_lines:
-        overflow = True
-    if overflow or " ".join(lines) != cleaned:
-        last = lines[-1] if lines else ""
-        clipped = last[: max(1, chars_per_line - 1)].rstrip(".,;: ")
-        if lines:
-            lines[-1] = f"{clipped}…"
+            current = ""
         else:
-            lines = [f"{clipped}…"]
+            lines.append(fit_single_line(word, limit, measure))
+            index += 1
+        if len(lines) >= max_lines:
+            leftover = ([current] if current else []) + words[index:]
+            if leftover:
+                head = lines[-1]
+                lines[-1] = fit_single_line(
+                    f"{head} {' '.join(leftover)}".strip(), limit, measure,
+                )
+            break
+    else:
+        if current:
+            if len(lines) < max_lines:
+                lines.append(current)
+            else:
+                lines[-1] = fit_single_line(
+                    f"{lines[-1]} {current}".strip(), limit, measure,
+                )
     return "\n".join(lines[:max_lines])
 
 
@@ -1082,6 +1126,13 @@ class RollCreditsPanel(BasePanel):
                 self._pill_text(
                     tx, row_y, row_h, text, size=size * fs,
                     color=fill, plate=PLATE_GOLD if key == "game" else mix(CARD_LO, ACCENT, 0.16),
+                )
+                continue
+            if key == "title":
+                self._paint_title_line(
+                    tx, row_y, text_w, row_h, text,
+                    font=self._font(size * fs, bold), fill=fill,
+                    measure=self._measure(size * fs, bold),
                 )
                 continue
             # One line per row — Tk wrapping would push the stack past the card.
@@ -1574,6 +1625,39 @@ class RollCreditsPanel(BasePanel):
         self._loops.append(loop)
         loop.start(self.canvas, self._image_ids.get("hero"), photos, delay)
 
+    def _paint_title_line(self, x, y, width, height, title, *, font, fill, measure):
+        """Full title when it fits; marquee (or a pixel ellipsis) when it does not.
+
+        Latest Inducted used to run the title through ``clip_text_to_lines`` with
+        an 8-em budget, so "Contra Anniversary Collection" became "Contra…"
+        while the gold plate sat a third of the card away.
+        """
+        text = str(title or "")
+        width = max(1, int(width))
+        height = max(16, int(height))
+        if not title_needs_marquee(text, width, measure=measure):
+            self._track(self.canvas.create_text(
+                x, y, anchor="nw", text=text, fill=fill, font=font,
+            ))
+            return
+        try:
+            marquee = MarqueeLine(self.root)
+            viewport = marquee.build(
+                parent=self.canvas, text=text, font=font, fill=fill,
+                width=width, height=height, bg=FILL, center=False,
+            )
+        except Exception:
+            line = fit_single_line(text, width, measure)
+            self._track(self.canvas.create_text(
+                x, y, anchor="nw", text=line, fill=fill, font=font,
+            ))
+            return
+        self._marquees.append(marquee)
+        self._widgets.append(viewport)
+        self._track(self.canvas.create_window(
+            x, y, anchor="nw", window=viewport, width=width, height=height,
+        ))
+
     def _draw_title(self, box, card):
         x0, y0, x1, y1 = box
         u = self._scale
@@ -1584,23 +1668,10 @@ class RollCreditsPanel(BasePanel):
         title_w = max(80, int(x1 - x0 - pad * 2))
         title_font = self._font(24 * fs, True)
         title_h = max(24, int(layout["title_h"]))
-        if title_needs_marquee(title, title_w, measure=self._measure(24 * fs, True)):
-            marquee = MarqueeLine(self.root)
-            viewport = marquee.build(
-                parent=self.canvas, text=title, font=title_font, fill=INK,
-                width=title_w, height=title_h, bg=FILL, center=False,
-            )
-            self._marquees.append(marquee)
-            self._widgets.append(viewport)
-            self._track(self.canvas.create_window(
-                x0 + pad, y0 + layout["title_y"], anchor="nw",
-                window=viewport, width=title_w, height=title_h,
-            ))
-        else:
-            self._track(self.canvas.create_text(
-                x0 + pad, y0 + layout["title_y"], anchor="nw",
-                text=title, fill=INK, font=title_font,
-            ))
+        self._paint_title_line(
+            x0 + pad, y0 + layout["title_y"], title_w, title_h, title,
+            font=title_font, fill=INK, measure=self._measure(24 * fs, True),
+        )
         if layout["meta_fits"]:
             self._draw_meta_chips(
                 x0 + pad, y0 + layout["meta_y"], layout["meta_h"], card, fs=fs,
