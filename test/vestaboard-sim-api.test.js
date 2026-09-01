@@ -415,6 +415,9 @@ test('the settings tab gets the whole board, health included, and never a key', 
     // The edit form needs these to fill itself in.
     assert.equal(typeof sim.dwellSeconds, 'number');
     assert.equal(typeof sim.quietHours.start, 'string');
+    assert.ok(Array.isArray(sim.priorities));
+    assert.ok(res.body.priorityCatalog?.events?.length);
+    assert.ok(res.body.priorityCatalog.defaults.some((rule) => rule.source === 'alarm.fired'));
 
     assert.ok(!res.text.includes(harness.hub.settings.keyFor('sim')));
   } finally {

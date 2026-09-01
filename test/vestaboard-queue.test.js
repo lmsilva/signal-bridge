@@ -1079,7 +1079,7 @@ test('a huupe close releases the board so rotation can continue', async () => {
   assert.equal(h.transport.posts[1].layout[0][0], 2);
 });
 
-test('youtube live holds the queue; last-played does not', async () => {
+test('youtube live does not hold the queue unless the board says so', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([frame('YT', 1, { source: 'youtube.now-playing' })], {
     payload: { type: 'youtube.now-playing', youtube: { mode: 'playing' } },
@@ -1087,24 +1087,60 @@ test('youtube live holds the queue; last-played does not', async () => {
   });
   assert.equal(await h.queue.tick(), 'posted');
   h.queue.submit([frame('WEATHER', 2, { source: 'weather.query' })]);
-  assert.equal(h.queue.pending()[0].status, 'held');
-  assert.equal(h.queue.state().gameLock.source, 'youtube.now-playing');
+  assert.equal(h.queue.state().gameLock, null);
+  assert.equal(h.queue.pending()[0].status, 'waiting');
 
-  h.queue.submit([frame('YT LAST', 3, { source: 'youtube.now-playing' })], {
-    payload: { type: 'youtube.now-playing', youtube: { mode: 'last-played' } },
+  const held = makeQueue({
+    rateWindowSeconds: 1,
+    priorities: [
+      { source: 'youtube.now-playing', jump: true, hold: true, holdMinutes: 90 },
+    ],
+  });
+  held.queue.submit([frame('YT', 1, { source: 'youtube.now-playing' })], {
+    payload: { type: 'youtube.now-playing', youtube: { mode: 'playing' } },
     type: 'youtube.now-playing',
   });
-  assert.equal(h.queue.state().gameLock, null);
-  assert.equal(h.queue.pending().some((row) => row.label === 'WEATHER'), true);
+  assert.equal(await held.queue.tick(), 'posted');
+  held.queue.submit([frame('WEATHER', 2, { source: 'weather.query' })]);
+  assert.equal(held.queue.pending()[0].status, 'held');
+  assert.equal(held.queue.state().gameLock.source, 'youtube.now-playing');
 });
 
-test('an equal-rank live game takes the board from another game', async () => {
-  const h = makeQueue({ rateWindowSeconds: 1 });
+test('a higher-listed live game takes the board from another game', async () => {
+  const h = makeQueue({
+    rateWindowSeconds: 1,
+    priorities: [
+      { source: 'huupe.session', jump: true, hold: true, holdMinutes: 15 },
+      { source: 'word.scramble', jump: true, hold: true, holdMinutes: 15 },
+    ],
+  });
   h.queue.submit([frame('SCRAMBLE', 1, { source: 'word.scramble' })]);
   assert.equal(await h.queue.tick(), 'posted');
   h.queue.submit([frame('HUUPE', 2, { source: 'huupe.session' })]);
   assert.equal(h.queue.pending()[0].label, 'HUUPE');
   assert.equal(h.queue.state().gameLock.source, 'huupe.session');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+});
+
+test('a lower-listed live game waits behind the one that is holding', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('SCRAMBLE', 1, { source: 'word.scramble' })]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('HUUPE', 2, { source: 'huupe.session' })]);
+  assert.equal(h.queue.state().gameLock.source, 'word.scramble');
+  assert.equal(h.queue.pending()[0].label, 'HUUPE');
+  assert.equal(h.queue.pending()[0].status, 'held');
+});
+
+test('an alarm jumps then the queue continues — it does not hold', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15 });
+  h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })], { priority: 'alert' });
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.state().gameLock, null);
+  h.queue.submit([frame('WEATHER', 2, { source: 'weather.query' })]);
+  assert.equal(h.queue.pending()[0].status, 'waiting');
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
   assert.equal(h.transport.posts[1].layout[0][0], 2);

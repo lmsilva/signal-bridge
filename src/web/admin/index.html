@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal225">
+  <link rel="stylesheet" href="styles.css?v=signal229">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -3238,7 +3238,7 @@
         </div>
 
         <div class="section-label" data-settings-group="media">Vestaboards</div>
-        <div class="card vb-settings-card" id="vb-settings-card" data-settings-group="media" data-search-terms="quiet hours reminder overnight vestaboard board split-flap">
+        <div class="card vb-settings-card" id="vb-settings-card" data-settings-group="media" data-search-terms="quiet hours reminder overnight vestaboard board split-flap priorities jump hold queue">
           <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network.</p>
 
           <div class="vb-board-list" id="vb-board-list">
@@ -4648,7 +4648,41 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="vb-priority-reset-sheet" hidden>
+    <div class="sheet sheet-confirm" role="dialog" aria-modal="true" aria-labelledby="vb-priority-reset-title">
+      <div class="sheet-title" id="vb-priority-reset-title">Use recommended priorities?</div>
+      <p class="sheet-subtext">This replaces your current list with the house defaults (alarms jump; live games hold). Your other board settings stay as they are until you save.</p>
+      <div class="sheet-actions sheet-actions-confirm">
+        <button type="button" class="btn btn-outline" id="vb-priority-reset-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="vb-priority-reset-confirm">Use recommended</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="vb-priority-sheet" hidden>
+    <div class="sheet cn-manage-sheet vb-priority-sheet" role="dialog" aria-modal="true" aria-labelledby="vb-priority-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="vb-priority-title">Priorities</div>
+        <button type="button" class="credits-sheet-close" id="btn-vb-priority-close" aria-label="Close">×</button>
+      </div>
+      <div class="vb-priority-toolbar">
+        <p class="hint" id="vb-priority-lead">Top goes first. Unlisted events wait in line. Hold is for live games.</p>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-vb-priority-reset">Use recommended</button>
+      </div>
+      <div class="vb-priority-list" id="vb-priority-list"></div>
+      <p class="hint vb-priority-empty" id="vb-priority-empty" hidden>Nothing jumps. Alarms, games, and everything else wait in line.</p>
+      <div class="vb-priority-actions">
+        <button type="button" class="btn btn-outline" id="btn-vb-priority-add">Add an event</button>
+        <button type="button" class="btn btn-accent" id="btn-vb-priority-save">Save priorities</button>
+      </div>
+      <div class="vb-priority-picker" id="vb-priority-picker" hidden>
+        <input type="search" class="field-input" id="vb-priority-search" placeholder="Find an event…" autocomplete="off" aria-label="Find an event">
+        <div class="vb-priority-picker-list" id="vb-priority-picker-list"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal225"></script>
+  <script src="app.js?v=signal229"></script>
 </body>
 </html>

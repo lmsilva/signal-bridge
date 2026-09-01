@@ -402,6 +402,24 @@ test('a huupe close releases the hold even without a card', () => {
   assert.equal(options.hold.source, 'huupe.session');
 });
 
+test('an empty priority list on a board queues an alarm instead of jumping', () => {
+  let options = null;
+  routeEvent({
+    payload: {
+      type: 'alarm.snapshot',
+      event: { kind: 'fired', alarm: { label: 'Bedroom' } },
+    },
+    boards: [{ board: { id: 'sim', events: 'all', priorities: [] } }],
+    submit: (_boardId, frames, submitted) => {
+      options = submitted;
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.equal(options.priority, 'snapshot');
+  assert.equal(options.hold.lane, 'rotation');
+  assert.equal(options.hold.jump, false);
+});
+
 test('an alarm is still the alert lane', () => {
   let options = null;
   routeEvent({

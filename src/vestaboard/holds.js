@@ -1,18 +1,20 @@
-// What may hold the Vestaboard, and at which rank.
+// What may jump or hold the Vestaboard.
 //
-// The physical board is one page at a time. Most snapshots join the back of
-// the line. A few live events own it until they end — or until something of
-// equal or higher rank arrives:
+// Two separate ideas (see `priorities.js` for the per-board list):
 //
-//   alert (3)  alarms, timers, reminders, the doorbell, a spoken announce
-//   game  (2)  Word Scramble (and later vestaboard games), Huupe live,
-//              Autodarts live
-//   watch (1)  detected now-playing: YouTube, Feature Presentation, Steam, PSN
-//   rotation (0)  everything else — weather, guest book, dashboards, last-played
+//   jump  — this card goes to the front, then the queue continues after
+//           its dwell (alarms, the doorbell, a spoken announce)
+//   hold  — this card owns the board until the session ends or the safety
+//           timeout fires (Word Scramble, Huupe, Autodarts by default)
+//
+// Anything not on the board's priority list joins the back of the line.
+// Detected now-playing (YouTube / Plex / Steam / PSN) is a snapshot unless
+// the board's list says otherwise — it must not pin the flaps by default.
 //
 // Score / metadata updates of the same source replace the live card; they
-// must not stack a new queue page per shot. Weather alerts, space-launch
-// cards, and Alexa "what's playing" are snapshots, not holds.
+// must not stack a new queue page per shot.
+
+const { applyPolicy } = require('./priorities');
 
 const LANES = Object.freeze({
   alert: 3,
@@ -21,7 +23,7 @@ const LANES = Object.freeze({
   rotation: 0,
 });
 
-const GAME_LOCK_TTL_MS = 15 * 60 * 1000;
+const GAME_LOCK_TTL_MS = 30 * 60 * 1000;
 const WATCH_LOCK_TTL_MS = 6 * 60 * 60 * 1000;
 
 const ALERT_TYPES = new Set([
@@ -46,39 +48,25 @@ function baseType(value) {
   return String(value || '').split(' ')[0];
 }
 
-function rotation(source, extra = {}) {
-  return {
-    lane: 'rotation',
-    rank: LANES.rotation,
-    source: source || '',
-    live: false,
-    close: false,
-    coalesceKey: null,
-    ...extra,
-  };
-}
-
 function isPlayingMode(mode) {
   const raw = String(mode || '');
   return raw !== 'last-played' && raw !== 'library-tour';
 }
 
 /**
- * Classify a payload (or a frame source, when tests submit without one)
- * into a hold lane. Missing session/match status means "live" — a score
- * update that forgot the field must still coalesce, not stack.
+ * Facts the policy layer needs: who this is, whether the session is still
+ * live, and which pending page a score update should replace.
  */
-function classify(payload = {}, type, frameSource) {
+function classifyStructural(payload = {}, type, frameSource) {
   const raw = String(type || payload.type || frameSource || '');
   const t = baseType(raw);
 
   const closeSource = CLOSE_TO_SOURCE[t];
   if (closeSource) {
     return {
-      lane: 'rotation',
-      rank: LANES.rotation,
+      kind: 'close',
       source: closeSource,
-      live: false,
+      sessionLive: false,
       close: true,
       coalesceKey: closeSource,
     };
@@ -86,10 +74,9 @@ function classify(payload = {}, type, frameSource) {
 
   if (ALERT_TYPES.has(t)) {
     return {
-      lane: 'alert',
-      rank: LANES.alert,
+      kind: 'interrupt',
       source: t,
-      live: true,
+      sessionLive: undefined,
       close: false,
       coalesceKey: t,
     };
@@ -99,20 +86,18 @@ function classify(payload = {}, type, frameSource) {
   // source is `alarm.fired` / `timer.fired`; the hold must follow that.
   if (t === 'alarm.snapshot' && payload.event?.kind === 'fired') {
     return {
-      lane: 'alert',
-      rank: LANES.alert,
+      kind: 'interrupt',
       source: 'alarm.fired',
-      live: true,
+      sessionLive: undefined,
       close: false,
       coalesceKey: 'alarm.fired',
     };
   }
   if (t === 'timer.snapshot' && payload.event?.kind === 'fired') {
     return {
-      lane: 'alert',
-      rank: LANES.alert,
+      kind: 'interrupt',
       source: 'timer.fired',
-      live: true,
+      sessionLive: undefined,
       close: false,
       coalesceKey: 'timer.fired',
     };
@@ -120,10 +105,9 @@ function classify(payload = {}, type, frameSource) {
 
   if (t === 'word.scramble') {
     return {
-      lane: 'game',
-      rank: LANES.game,
+      kind: 'game',
       source: 'word.scramble',
-      live: true,
+      sessionLive: true,
       close: false,
       // Phases line up (lobby, then the grid). Do not collapse them.
       coalesceKey: null,
@@ -131,86 +115,93 @@ function classify(payload = {}, type, frameSource) {
   }
 
   if (t === 'huupe.session') {
-    const live = payload.session?.status !== 'finished';
     return {
-      lane: 'game',
-      rank: LANES.game,
+      kind: 'game',
       source: 'huupe.session',
-      live,
+      sessionLive: payload.session?.status !== 'finished',
       close: false,
       coalesceKey: 'huupe.session',
     };
   }
 
   if (t === 'autodarts.match') {
-    const live = payload.match?.status !== 'finished';
     return {
-      lane: 'game',
-      rank: LANES.game,
+      kind: 'game',
       source: 'autodarts.match',
-      live,
+      sessionLive: payload.match?.status !== 'finished',
       close: false,
       coalesceKey: 'autodarts.match',
     };
   }
 
   if (t === 'youtube.now-playing') {
-    const live = isPlayingMode(payload.youtube?.mode);
     return {
-      lane: live ? 'watch' : 'rotation',
-      rank: live ? LANES.watch : LANES.rotation,
+      kind: 'watch',
       source: 'youtube.now-playing',
-      live,
+      sessionLive: isPlayingMode(payload.youtube?.mode),
       close: false,
       coalesceKey: 'youtube.now-playing',
     };
   }
 
   if (t === 'plex.now-playing') {
-    const live = payload.plex?.mode !== 'last-played';
     return {
-      lane: live ? 'watch' : 'rotation',
-      rank: live ? LANES.watch : LANES.rotation,
+      kind: 'watch',
       source: 'plex.now-playing',
-      live,
+      sessionLive: payload.plex?.mode !== 'last-played',
       close: false,
       coalesceKey: 'plex.now-playing',
     };
   }
 
   if (t === 'steam.now-playing') {
-    const live = isPlayingMode(payload.steam?.mode);
     return {
-      lane: live ? 'watch' : 'rotation',
-      rank: live ? LANES.watch : LANES.rotation,
+      kind: 'watch',
       source: 'steam.now-playing',
-      live,
+      sessionLive: isPlayingMode(payload.steam?.mode),
       close: false,
       coalesceKey: 'steam.now-playing',
     };
   }
 
   if (t === 'psn.now-playing') {
-    const live = isPlayingMode(payload.psn?.mode);
     return {
-      lane: live ? 'watch' : 'rotation',
-      rank: live ? LANES.watch : LANES.rotation,
+      kind: 'watch',
       source: 'psn.now-playing',
-      live,
+      sessionLive: isPlayingMode(payload.psn?.mode),
       close: false,
       coalesceKey: 'psn.now-playing',
     };
   }
 
-  return rotation(t);
+  return {
+    kind: 'snapshot',
+    source: t,
+    sessionLive: undefined,
+    close: false,
+    coalesceKey: null,
+  };
 }
 
-function lockTtlMs(lane) {
+/**
+ * Classify a payload (or a frame source, when tests submit without one)
+ * into a jump / hold decision. Pass `{ priorities }` from the board; omit
+ * it to use the house defaults. An empty array means nothing jumps.
+ */
+function classify(payload = {}, type, frameSource, options = {}) {
+  const structural = classifyStructural(payload, type, frameSource);
+  return applyPolicy(structural, options.priorities);
+}
+
+function lockTtlMs(lane, ttlMs) {
+  if (Number.isFinite(ttlMs) && ttlMs > 0) {
+    return ttlMs;
+  }
   return lane === 'watch' ? WATCH_LOCK_TTL_MS : GAME_LOCK_TTL_MS;
 }
 
 function isHoldLane(lane) {
-  return lane === 'game' || lane === 'watch';
+  return lane === 'game';
 }
 
 module.exports = {
@@ -220,6 +211,7 @@ module.exports = {
   ALERT_TYPES,
   CLOSE_TO_SOURCE,
   classify,
+  classifyStructural,
   lockTtlMs,
   isHoldLane,
 };

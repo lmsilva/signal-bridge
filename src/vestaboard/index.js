@@ -12,6 +12,7 @@ const { resolveGuestPhotoboothSettings } = require('../guest-photobooth');
 const { createVestaboardSettings, SIMULATOR_ID } = require('./settings');
 const { createTransport } = require('./transport');
 const { createQueue } = require('./queue');
+const { catalogForClient } = require('./priorities');
 const { identityFrame } = require('./formatters/signal');
 const { routeEvent } = require('./router');
 const { houseTimeZone } = require('./clock');
@@ -321,8 +322,8 @@ function createVestaboardHub({
    * A live Vestaboard game owns every board until its session ends. Called on
    * each phase card (which also refreshes the safety deadline) and once more
    * on close. See `src/games/registry.js` — every vestaboard game must do
-   * this. Huupe / Autodarts / now-playing take the same lock from the queue
-   * when their payload is classified as a hold.
+   * this. Huupe / Autodarts take the same lock from the queue when the
+   * board's Priorities list marks them as holds.
    */
   function setGameLock(source, active, { boardId = '' } = {}) {
     const entries = boardId
@@ -394,6 +395,7 @@ function createVestaboardHub({
     settings,
     registryEntries,
     settingsView,
+    priorityCatalog: catalogForClient,
     queueFor,
     pushEvent,
     submit,
