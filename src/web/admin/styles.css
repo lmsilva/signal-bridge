@@ -5107,6 +5107,7 @@ textarea.field-input.text-input-area {
 .vb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .vb-head-text { min-width: 0; }
 .vb-head-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: none; }
+.vb-head > .section-label { margin: 0; }
 .vb-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 /* The bezel is deliberately not a .card — a real board is a slab on a wall,

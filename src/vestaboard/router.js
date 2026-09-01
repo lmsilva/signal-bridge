@@ -13,6 +13,7 @@ const feeds = require('./formatters/feeds');
 const signal = require('./formatters/signal');
 const cinema = require('./formatters/cinema');
 const games = require('./formatters/games');
+const { classify: classifyHold } = require('./holds');
 
 const FORMATTERS = {
   ...alexa.FORMATTERS,
@@ -187,8 +188,62 @@ function routeEvent({
 } = {}) {
   const type = typeOf(payload, commandId);
   const formatter = formatterFor(type);
+  const hold = classifyHold(payload, type);
   const targets = matchBoards(boards, targetId);
   const results = [];
+
+  function submitHold(entry, frames, extra = {}) {
+    const priority = extra.priority
+      || (hold.lane === 'alert' ? 'alert' : 'snapshot');
+    let replaceSource = null;
+    if (replaceSourceOpt === false || replaceSourceOpt === null) {
+      replaceSource = null;
+    } else if (replaceSourceOpt != null && replaceSourceOpt !== '') {
+      replaceSource = String(replaceSourceOpt);
+    } else if (type === 'ring.doorbell') {
+      replaceSource = 'ring.doorbell';
+    }
+    return submit(entry.board.id, frames, {
+      priority,
+      scheduler,
+      quietHoursExempt: quietHoursExempt != null
+        ? Boolean(quietHoursExempt)
+        : undefined,
+      coalesceKey: hold.coalesceKey || coalesceKeyFor(payload, type),
+      replaceSource,
+      replaceCard: replaceCardOpt != null && replaceCardOpt !== ''
+        ? String(replaceCardOpt)
+        : undefined,
+      gameSource: gameSourceOpt != null && gameSourceOpt !== ''
+        ? String(gameSourceOpt)
+        : (hold.lane === 'game' || hold.lane === 'watch' ? hold.source : undefined),
+      breakHold: breakHold != null
+        ? Boolean(breakHold)
+        : false,
+      hold,
+      payload,
+      type,
+      ...extra,
+    });
+  }
+
+  if (hold.close) {
+    for (const entry of targets) {
+      if (!boardAllows(entry.board, type, commandId)
+        && !boardAllows(entry.board, hold.source, commandId)) {
+        results.push({ boardId: entry.board.id, skipped: true, reason: 'allowlist' });
+        continue;
+      }
+      const outcome = submitHold(entry, []);
+      results.push({
+        boardId: entry.board.id,
+        skipped: false,
+        reason: outcome?.reason || 'closed',
+        accepted: outcome?.accepted || 0,
+      });
+    }
+    return results;
+  }
 
   if (!formatter) {
     for (const entry of targets) {
@@ -228,40 +283,11 @@ function routeEvent({
       continue;
     }
 
-    const priority = frames[0].priority === 'alert' ? 'alert' : 'snapshot';
-    let replaceSource = null;
-    if (replaceSourceOpt === false || replaceSourceOpt === null) {
-      replaceSource = null;
-    } else if (replaceSourceOpt != null && replaceSourceOpt !== '') {
-      replaceSource = String(replaceSourceOpt);
-    } else if (type === 'ring.doorbell') {
-      // One doorbell at a time — a second ring replaces an unshown card.
-      replaceSource = 'ring.doorbell';
-    }
     // guest.book messages append. Host bulk release/replay still passes
     // replaceSource on the first item when it wants a clean start.
-    const outcome = submit(entry.board.id, frames, {
-      priority,
-      scheduler,
-      // Quiet hours: only alarm/timer fires get through, plus a caller that
-      // opts in (Quiet Hours Reminder, Feature Presentation live, guests may
-      // wake). Admin Push / Air now / a spoken ask are not exempt — the
-      // checkbox says so, and a 2am flip is still a flip.
-      quietHoursExempt: quietHoursExempt != null
-        ? Boolean(quietHoursExempt)
-        : undefined,
-      coalesceKey: coalesceKeyFor(payload, type),
-      replaceSource,
-      replaceCard: replaceCardOpt != null && replaceCardOpt !== ''
-        ? String(replaceCardOpt)
-        : undefined,
-      gameSource: gameSourceOpt != null && gameSourceOpt !== ''
-        ? String(gameSourceOpt)
-        : undefined,
-      breakHold: breakHold != null
-        ? Boolean(breakHold)
-        : false,
-    });
+    // Lane — not the frame's visual priority — decides alerts vs snapshots
+    // so a Huupe scoreboard cannot wipe the queue the way a timer can.
+    const outcome = submitHold(entry, frames);
     results.push({
       boardId: entry.board.id,
       skipped: !outcome?.ok,
@@ -283,4 +309,5 @@ module.exports = {
   boardAllows,
   coalesceKeyFor,
   routeEvent,
+  classifyHold,
 };

@@ -7108,6 +7108,21 @@ function createWebServer({
     });
   }
 
+  function handleVestaboardSimQueueClear(_body, res) {
+    const queue = vestaboardSimQueueApi();
+    if (!queue) {
+      sendJson(res, 404, { ok: false, error: 'Simulator queue is not running' });
+      return;
+    }
+    const dropped = queue.clear?.() || 0;
+    sendJson(res, 200, {
+      ok: true,
+      dropped,
+      queue: vestaboardSimQueue(),
+      queueRevision: vestaboardSimQueueRevision(),
+    });
+  }
+
   function handleVestaboardSimQueueReorder(body, res) {
     const queue = vestaboardSimQueueApi();
     if (!queue) {
@@ -9301,6 +9316,9 @@ function createWebServer({
             return;
           case '/api/vestaboard-sim/queue/reorder':
             handleVestaboardSimQueueReorder(body, res);
+            return;
+          case '/api/vestaboard-sim/queue/clear':
+            handleVestaboardSimQueueClear(body, res);
             return;
           case '/api/vestaboards':
             handleVestaboardSave(body, res);

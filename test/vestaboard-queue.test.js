@@ -197,7 +197,7 @@ test('only neighbouring repeats fold, so a real rotation keeps its pages', async
   );
 });
 
-test('an alert jumps the line and throws away the rotation it interrupted', async () => {
+test('an alert jumps the line and leaves the rotation waiting', async () => {
   const h = makeQueue();
   h.queue.submit([frame('PAGE 1', 1), frame('PAGE 2', 2), frame('PAGE 3', 3)]);
   await h.queue.tick();
@@ -205,7 +205,7 @@ test('an alert jumps the line and throws away the rotation it interrupted', asyn
   h.queue.submit([frame('TIMER', 9)], { priority: 'alert' });
 
   const labels = h.queue.pending().map((item) => item.label);
-  assert.deepEqual(labels, ['TIMER'], 'pending pages are dropped, not resumed later');
+  assert.deepEqual(labels, ['TIMER', 'PAGE 2', 'PAGE 3'], 'the rest of the run stays queued');
 
   h.advance(15 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
@@ -691,9 +691,7 @@ test('the gap between two game phases does not open the line', async () => {
   assert.equal(h.queue.pending().length, 1);
 });
 
-// Huupe live and Autodarts push `priority: alert`, which used to skip the
-// hold outright and wipe the pages the game was holding.
-test('an alert waits its turn behind a live game instead of taking the board', async () => {
+test('an alarm preempts a live game and does not discard the pages behind it', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.acquireGameLock('word.scramble');
   h.queue.submit([{
@@ -702,34 +700,28 @@ test('an alert waits its turn behind a live game instead of taking the board', a
     holdSeconds: 120,
   }]);
   assert.equal(await h.queue.tick(), 'posted');
-  h.queue.submit([frame('RIDDLE', 2, { source: 'word.riddles' })], { explicit: true, breakHold: true });
-  h.queue.submit([frame('HUUPE', 3, { source: 'huupe.session' })], {
+  h.queue.submit([frame('RIDDLE', 2, { source: 'word.riddles' })]);
+  h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })], {
     priority: 'alert',
     quietHoursExempt: true,
   });
 
-  // The riddle is still queued — an alert no longer discards it — and the
-  // board is still showing the round.
-  assert.equal(h.queue.pending().length, 2);
-  assert.equal(h.queue.pending().every((row) => row.status === 'held'), true);
-  h.advance(16 * SECOND);
-  assert.equal(await h.queue.tick(), null);
-  assert.equal(h.transport.posts.length, 1);
-
-  // Game over: the alert goes first, then the page it did not throw away.
-  h.queue.releaseGameLock('word.scramble');
+  assert.equal(h.queue.pending()[0].label, 'ALARM');
+  assert.equal(h.queue.pending().some((row) => row.label === 'RIDDLE'), true);
+  h.advance(2 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
-  assert.equal(h.transport.posts[1].layout[0][0], 3, 'huupe alert');
-  h.advance(16 * SECOND);
-  assert.equal(await h.queue.tick(), 'posted');
-  assert.equal(h.transport.posts[2].layout[0][0], 2, 'word riddle');
+  assert.equal(h.transport.posts[1].layout[0][0], 9, 'the alarm takes the board');
+  assert.ok(h.queue.state().gameLock, 'the scramble session is still holding');
+  assert.equal(h.queue.pending().find((row) => row.label === 'RIDDLE').status, 'held');
 });
 
 test('a game lock that is never released expires rather than wedging the board', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
-  h.queue.acquireGameLock('word.scramble', { ttlMs: 60 * SECOND });
   h.queue.submit([frame('ROUND', 1, { source: 'word.scramble' })]);
   assert.equal(await h.queue.tick(), 'posted');
+  // The last card already renewed the default deadline. A short remaining
+  // TTL is what bounds a session that dies without another update.
+  h.queue.acquireGameLock('word.scramble', { ttlMs: 60 * SECOND });
   h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), null);
@@ -804,6 +796,15 @@ test('cancel drops one waiting page and leaves the rest', () => {
   assert.equal(h.queue.cancel(id), true);
   assert.deepEqual(h.queue.pending().map((row) => row.label), ['WEATHER', 'CLOCK']);
   assert.equal(h.queue.cancel('missing'), false);
+});
+
+test('clear drops every waiting page and leaves an empty queue', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('WEATHER', 1)]);
+  h.queue.submit([frame('CHUCK', 2)]);
+  assert.equal(h.queue.clear(), 2);
+  assert.deepEqual(h.queue.pending(), []);
+  assert.equal(h.queue.clear(), 0);
 });
 
 test('reorder puts waiting pages in the given order', () => {
@@ -951,7 +952,7 @@ test('formatter-built scramble follow-ups post while non-game pages stay held', 
     quietHoursExempt: true,
   });
   assert.equal(await h.queue.tick(), 'posted');
-  h.queue.submit([frame('BROADCAST', 9, { source: 'broadcast' })]);
+  h.queue.submit([frame('RIDDLE', 9, { source: 'word.riddles' })]);
   h.queue.submit([frame('WEATHER MAP', 8, { source: 'us.weather-map' })], { scheduler: true });
 
   h.advance(16 * SECOND);
@@ -1036,4 +1037,75 @@ test('an in-flight post does not splice a follow-up that replaced it in line', a
   clock += 16 * SECOND;
   assert.equal(await queue.tick(), 'posted');
   assert.equal(posts[1][0][0], 2);
+});
+
+test('huupe score updates replace one pending card instead of stacking', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('HUUPE 1', 1, { source: 'huupe.session' })]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2, { source: 'weather.query' })]);
+  h.queue.submit([frame('HUUPE 2', 3, { source: 'huupe.session' })]);
+  h.queue.submit([frame('HUUPE 3', 4, { source: 'huupe.session' })]);
+
+  assert.equal(h.queue.pending().filter((row) => row.source === 'huupe.session').length, 1);
+  assert.equal(h.queue.pending().find((row) => row.source === 'huupe.session').label, 'HUUPE 3');
+  assert.equal(h.queue.pending().find((row) => row.source === 'weather.query').status, 'held');
+  assert.ok(h.queue.state().gameLock);
+  assert.equal(h.queue.state().gameLock.source, 'huupe.session');
+
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 4);
+  assert.equal(h.queue.pending().length, 1);
+  assert.equal(h.queue.pending()[0].status, 'held');
+});
+
+test('a huupe close releases the board so rotation can continue', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('HUUPE', 1, { source: 'huupe.session' })]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2, { source: 'weather.query' })]);
+  assert.equal(h.queue.pending()[0].status, 'held');
+
+  const closed = h.queue.submit([], {
+    hold: {
+      lane: 'rotation', rank: 0, source: 'huupe.session', live: false, close: true, coalesceKey: 'huupe.session',
+    },
+  });
+  assert.equal(closed.reason, 'closed');
+  assert.equal(h.queue.state().gameLock, null);
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+});
+
+test('youtube live holds the queue; last-played does not', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('YT', 1, { source: 'youtube.now-playing' })], {
+    payload: { type: 'youtube.now-playing', youtube: { mode: 'playing' } },
+    type: 'youtube.now-playing',
+  });
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('WEATHER', 2, { source: 'weather.query' })]);
+  assert.equal(h.queue.pending()[0].status, 'held');
+  assert.equal(h.queue.state().gameLock.source, 'youtube.now-playing');
+
+  h.queue.submit([frame('YT LAST', 3, { source: 'youtube.now-playing' })], {
+    payload: { type: 'youtube.now-playing', youtube: { mode: 'last-played' } },
+    type: 'youtube.now-playing',
+  });
+  assert.equal(h.queue.state().gameLock, null);
+  assert.equal(h.queue.pending().some((row) => row.label === 'WEATHER'), true);
+});
+
+test('an equal-rank live game takes the board from another game', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('SCRAMBLE', 1, { source: 'word.scramble' })]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('HUUPE', 2, { source: 'huupe.session' })]);
+  assert.equal(h.queue.pending()[0].label, 'HUUPE');
+  assert.equal(h.queue.state().gameLock.source, 'huupe.session');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
 });

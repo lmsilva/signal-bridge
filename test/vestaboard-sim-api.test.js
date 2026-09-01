@@ -681,6 +681,58 @@ test('the simulator can reorder waiting pages', async () => {
   }
 });
 
+test('the simulator can clear every waiting page at once', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    harness.hub.submit('sim', [
+      {
+        rows: badgeFrame({ color: 'blue', title: 'ONE', rows: ['A'] }),
+        label: 'One',
+        source: 'one',
+        dwellSeconds: 15,
+      },
+    ]);
+    harness.hub.submit('sim', [
+      {
+        rows: badgeFrame({ color: 'red', title: 'TWO', rows: ['B'] }),
+        label: 'Two',
+        source: 'two',
+        dwellSeconds: 15,
+      },
+    ]);
+    assert.equal(harness.hub.queueFor('sim').pending().length, 2);
+    const res = await request(`${harness.base}/api/vestaboard-sim/queue/clear`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: {},
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.dropped, 2);
+    assert.deepEqual(res.body.queue, []);
+    assert.equal(harness.hub.queueFor('sim').pending().length, 0);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('clearing an empty simulator queue is a no-op', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const res = await request(`${harness.base}/api/vestaboard-sim/queue/clear`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: {},
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.dropped, 0);
+    assert.deepEqual(res.body.queue, []);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('a hub push flips the simulator and the page stream sees it', async () => {
   const harness = await startHarness({ withHub: true });
   try {
@@ -820,6 +872,9 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.doesNotMatch(js, /vbHeardSample/);
   assert.match(js, /vb-flip\.wav/);
   assert.match(html, /btn-vb-sound/);
+  assert.match(html, /btn-vb-queue-clear/);
+  assert.match(js, /function vbClearQueue\(/);
+  assert.match(js, /function vbSyncClearButton\(/);
   assert.match(html, /app\.js\?v=signal\d+/);
   const wavPath = path.join(root, 'vb-flip.wav');
   assert.equal(fs.existsSync(wavPath), true);

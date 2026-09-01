@@ -28,7 +28,7 @@ const {
 } = require('../frames');
 
 const { toDate, clockLabel, shortDate, parseYmd } = require('../clock');
-const { snapshotFrame, alertFrame, padRows, isPlaceholderTitle } = require('./common');
+const { snapshotFrame, padRows, isPlaceholderTitle } = require('./common');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
 const PLAYER_NAME_WIDTH = 13;
@@ -67,7 +67,6 @@ function playingCard({
   lastPlayedAt,
   footerLeft,
   source,
-  alert,
   timeZone,
 }) {
   const name = fold(gameName);
@@ -96,11 +95,7 @@ function playingCard({
   });
 
   const label = playing ? `${title} playing` : `${title} last played`;
-  return [
-    alert
-      ? alertFrame(rows, label, source)
-      : snapshotFrame(rows, label, source),
-  ];
+  return [snapshotFrame(rows, label, source)];
 }
 
 function lastPlayedLine(value, timeZone) {
@@ -130,7 +125,6 @@ function steamFrames(payload = {}, ctx = {}) {
       ? 'GAME ON!'
       : (owned === null ? '' : `${formatCount(owned)} GAMES OWNED`),
     source: 'steam.now-playing',
-    alert: playing,
     timeZone: ctx.timeZone,
   });
 }
@@ -154,7 +148,6 @@ function psnFrames(payload = {}, ctx = {}) {
       ? 'GAME ON!'
       : (owned === null ? '' : `${formatCount(owned)} GAMES OWNED`),
     source: 'psn.now-playing',
-    alert: playing,
     timeZone: ctx.timeZone,
   }).map((frame) => {
     // PSN last-played often has a date and nothing else worth saying.
@@ -227,7 +220,7 @@ function autodartsMatchFrames(payload = {}) {
       ].filter(Boolean)),
       footerLeft: 'THROW SHARP',
     });
-    return [alertFrame(rows, 'Autodarts live', 'autodarts.match')];
+    return [snapshotFrame(rows, 'Autodarts live', 'autodarts.match')];
   }
 
   const winner = players.find((player) => player.isWinner) || players[0];
@@ -263,7 +256,7 @@ function autodartsMatchFrames(payload = {}) {
     ]),
     footerLeft: 'NICE DARTS',
   });
-  return [alertFrame(rows, 'Autodarts final', 'autodarts.match')];
+  return [snapshotFrame(rows, 'Autodarts final', 'autodarts.match')];
 }
 
 function recordValue(record) {
@@ -493,7 +486,7 @@ function huupeSessionFrames(payload = {}) {
         toNumber(stats.streak) > 1 ? `ON A ${formatWhole(stats.streak)} RUN` : '',
       ].filter(Boolean);
 
-    return [alertFrame(
+    return [snapshotFrame(
       badgeFrame({
         color: 'orange',
         title: 'HUUPE',
@@ -524,7 +517,7 @@ function huupeSessionFrames(payload = {}) {
   const threes = toNumber(winner?.threes ?? stats.threes);
   rows.push(threes ? `${formatWhole(threes)} FROM DEEP` : '');
 
-  return [alertFrame(
+  return [snapshotFrame(
     badgeFrame({
       color: 'orange',
       title: 'HUUPE',

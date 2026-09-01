@@ -19,7 +19,7 @@ function assertLayout(actual, drawing, label) {
   }
 }
 
-test('a steam launch is an alert with a game-on footer', () => {
+test('a steam launch is a snapshot with a game-on footer', () => {
   const frames = gaming.steamFrames({
     type: 'steam.now-playing',
     steam: {
@@ -30,7 +30,7 @@ test('a steam launch is an alert with a game-on footer', () => {
     },
   });
 
-  assert.equal(frames[0].priority, 'alert');
+  assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
     'bb STEAM            bb',
     ' NOW PLAYING:',
@@ -83,7 +83,7 @@ test('steam mode is playing, not now-playing, and library tours are skipped', ()
     type: 'steam.now-playing',
     steam: { appId: 1, name: 'Hotshot Racing', mode: 'now-playing', startedAt: new Date(2026, 7, 22, 19, 42).toISOString() },
   });
-  assert.equal(missed[0].priority, 'alert', 'unrecognised mode collapses to playing');
+  assert.equal(missed[0].priority, 'snapshot', 'unrecognised mode collapses to playing');
 
   assert.deepEqual(gaming.steamFrames({
     type: 'steam.now-playing',
@@ -143,7 +143,7 @@ test('an autodarts start names the mode, the pairing and the race', () => {
     },
   });
 
-  assert.equal(frames[0].priority, 'alert');
+  assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
     'gg AUTODARTS        gg',
     ' GAME ON - 501',
@@ -362,7 +362,7 @@ function huupeSession(overrides = {}) {
 test('a live Family Mode game is a scoreboard, closest race first', () => {
   const frames = gaming.huupeSessionFrames(huupeSession());
 
-  assert.equal(frames[0].priority, 'alert');
+  assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
     'oo HUUPE     FAMILY oo',
     ' TRASHPANDA      17.1',
