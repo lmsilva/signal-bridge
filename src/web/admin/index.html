@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal230">
+  <link rel="stylesheet" href="styles.css?v=signal233">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -3239,7 +3239,19 @@
 
         <div class="section-label" data-settings-group="media">Vestaboards</div>
         <div class="card vb-settings-card" id="vb-settings-card" data-settings-group="media" data-search-terms="quiet hours reminder overnight vestaboard board split-flap priorities jump hold queue">
-          <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network.</p>
+          <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network. Dwell and Priorities apply to every enabled board. The Simulator queue is the house line.</p>
+
+          <div class="vb-house-policy" id="vb-house-policy">
+            <label class="vb-form-field">
+              <span class="field-label">Dwell (s)</span>
+              <input type="number" class="field-input" id="vb-house-dwell" min="5" max="60" step="1" value="15">
+              <p class="hint" style="margin:4px 0 0">How long each page stays on every board before the next rotation. Alarms with Now still flip as soon as the flaps can move.</p>
+            </label>
+            <div class="vb-house-policy-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-vb-house-priorities">Priorities</button>
+              <button type="button" class="btn btn-accent btn-sm" id="btn-vb-house-dwell-save">Save dwell</button>
+            </div>
+          </div>
 
           <div class="vb-board-list" id="vb-board-list">
             <p class="hint">Loading…</p>
@@ -3262,11 +3274,6 @@
             <p class="hint" id="vb-form-key-hint">Request one from Vestaboard, then paste the key they email you.</p>
 
             <div class="vb-form-row">
-              <label class="vb-form-field">
-                <span class="field-label">Dwell (s)</span>
-                <input type="number" class="field-input" id="vb-form-dwell" min="5" max="60" step="1" value="15">
-                <p class="hint" style="margin:4px 0 0">How long each page stays before the next rotation. Alerts still flip as soon as the flaps can move.</p>
-              </label>
               <label class="vb-form-field">
                 <span class="field-label">Quiet from</span>
                 <input type="time" class="field-input" id="vb-form-quiet-start" value="22:00">
@@ -3325,10 +3332,11 @@
           <div class="vb-head">
             <div class="section-label">Queue</div>
             <div class="vb-head-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-vb-release-holds">Release Holds</button>
               <button type="button" class="btn btn-outline btn-sm" id="btn-vb-queue-clear" hidden>Clear queue</button>
             </div>
           </div>
-          <p class="hint">Waiting pages flip in this order. Drag to rearrange; cancel drops one page; Clear queue drops every waiting page. Alarms take the board first, then live games and now-playing; everything else waits its turn.</p>
+          <p class="hint">This is the house queue — every enabled Vestaboard follows it. Drag to rearrange; cancel drops one page; Clear queue drops every waiting page. Release Holds drops the house hold. Alarms with Now cut in; Hold events keep the line until they end or you release them; everything else waits its turn.</p>
           <div class="vb-list" id="vb-queue">
             <p class="hint">Nothing queued.</p>
           </div>
@@ -4655,7 +4663,7 @@
         <button type="button" class="credits-sheet-close" id="btn-vb-priority-close" aria-label="Close">×</button>
       </div>
       <div class="vb-priority-toolbar">
-        <p class="hint" id="vb-priority-lead">Top goes first. Unlisted events wait in line. Hold is for live games.</p>
+        <p class="hint" id="vb-priority-lead">Top goes first. <strong>Now</strong> replaces what is showing as soon as flaps can move; without it, wait for the current page. <strong>Hold</strong> pins the board for live games. Unlisted events wait in line.</p>
         <button type="button" class="btn btn-outline btn-sm" id="btn-vb-priority-reset">Use recommended</button>
       </div>
       <div class="vb-priority-list" id="vb-priority-list"></div>
@@ -4674,7 +4682,7 @@
   <div class="sheet-backdrop" id="vb-priority-reset-sheet" hidden>
     <div class="sheet sheet-confirm" role="dialog" aria-modal="true" aria-labelledby="vb-priority-reset-title">
       <div class="sheet-title" id="vb-priority-reset-title">Use recommended priorities?</div>
-      <p class="sheet-subtext">This replaces your current list with the house defaults (alarms jump; live games hold). Your other board settings stay as they are until you save.</p>
+      <p class="sheet-subtext">This replaces your current list with the house defaults (alarms cut in now; live games hold). Your other board settings stay as they are until you save.</p>
       <div class="sheet-actions sheet-actions-confirm">
         <button type="button" class="btn btn-outline" id="vb-priority-reset-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="vb-priority-reset-confirm">Use recommended</button>
@@ -4683,6 +4691,6 @@
   </div>
 
   <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal230"></script>
+  <script src="app.js?v=signal233"></script>
 </body>
 </html>

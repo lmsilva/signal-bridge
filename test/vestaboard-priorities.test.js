@@ -26,6 +26,7 @@ test('house defaults jump household interrupts and hold only live games', () => 
     'autodarts.match',
   ]);
   assert.ok(defaults.every((rule) => rule.jump));
+  assert.ok(defaults.every((rule) => rule.immediate));
   assert.deepEqual(
     defaults.filter((rule) => rule.hold).map((rule) => rule.source),
     ['word.scramble', 'huupe.session', 'autodarts.match'],
@@ -75,9 +76,37 @@ test('a listed jumper that does not hold is an alert with no lock', () => {
   const hold = classify({ type: 'alarm.fired' }, 'alarm.fired');
   assert.equal(hold.lane, 'alert');
   assert.equal(hold.jump, true);
+  assert.equal(hold.immediate, true);
   assert.equal(hold.hold, false);
   assert.equal(hold.live, false);
   assert.ok(hold.rank > 0);
+});
+
+test('immediate false keeps jump but does not cut in', () => {
+  const hold = classify(
+    { type: 'alarm.fired' },
+    'alarm.fired',
+    null,
+    {
+      priorities: [
+        { source: 'alarm.fired', jump: true, immediate: false, hold: false, holdMinutes: 15 },
+      ],
+    },
+  );
+  assert.equal(hold.jump, true);
+  assert.equal(hold.immediate, false);
+  assert.equal(hold.lane, 'alert');
+});
+
+test('omitted immediate on a saved rule still means cut in', () => {
+  const list = normalisePriorities([
+    { source: 'alarm.fired', jump: true, hold: false, holdMinutes: 15 },
+  ]);
+  assert.equal(list[0].immediate, true);
+  const off = normalisePriorities([
+    { source: 'alarm.fired', jump: true, immediate: false, hold: false, holdMinutes: 15 },
+  ]);
+  assert.equal(off[0].immediate, false);
 });
 
 test('a listed hold is a game with a safety timeout', () => {
@@ -143,6 +172,41 @@ test('the add-event catalog includes board pushes like Roast Me and Dad Jokes', 
   }
   assert.ok(catalog.events.length >= 40, `expected a full catalog, got ${catalog.events.length}`);
   assert.ok(catalog.groups.some((group) => group.id === 'language'));
+});
+
+test('priority labels match Push command titles', () => {
+  const { COMMANDS, kindsOf } = require('../src/command-registry');
+  const { COMMAND_SOURCE } = require('../src/vestaboard/priorities');
+  const bySource = new Map(catalogForClient().events.map((item) => [item.source, item.label]));
+
+  assert.equal(bySource.get('ring.doorbell'), 'Ring Doorbell');
+  assert.equal(bySource.get('steam.now-playing'), 'Steam');
+  assert.equal(bySource.get('psn.now-playing'), 'PSN');
+  assert.equal(bySource.get('youtube.now-playing'), 'YouTube');
+  assert.equal(bySource.get('plex.now-playing'), 'Feature Presentation');
+  assert.equal(bySource.get('huupe.session'), 'Huupe Live');
+  assert.equal(bySource.get('autodarts.match'), 'Autodarts');
+  assert.equal(bySource.get('word.scramble'), 'Word Scramble');
+  assert.equal(bySource.get('guest.book'), 'Guest Book');
+
+  for (const command of COMMANDS) {
+    if (!kindsOf(command).includes('vestaboard')) continue;
+    if (command.pushable === false) continue;
+    if (/\.(last-played|last-match|last-game)$/.test(command.id)) continue;
+    const source = COMMAND_SOURCE[command.id] || command.id;
+    const label = bySource.get(source);
+    // First pushable title for a shared source wins (Next Flight before Trip Board).
+    if (!label) continue;
+    const primary = COMMANDS.find((candidate) => (
+      kindsOf(candidate).includes('vestaboard')
+      && candidate.pushable !== false
+      && !/\.(last-played|last-match|last-game)$/.test(candidate.id)
+      && (COMMAND_SOURCE[candidate.id] || candidate.id) === source
+    ));
+    if (primary && primary.id === command.id) {
+      assert.equal(label, command.title, `${source} should be titled like ${command.id}`);
+    }
+  }
 });
 
 test('applyPolicy never lets last-played pin the board', () => {

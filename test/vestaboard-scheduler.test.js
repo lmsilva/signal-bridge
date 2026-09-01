@@ -125,6 +125,29 @@ test('an alert still posts during the rotation gap', async () => {
   }
 });
 
+test('a scheduler target of sim still lands on the house line', async () => {
+  const h = await makeHub({ minRotationGapSeconds: 0 });
+  try {
+    h.hub.settings.upsert({
+      id: 'kitchen',
+      name: 'Kitchen',
+      baseUrl: 'http://127.0.0.1:1',
+      key: 'a-key',
+      quietHours: null,
+    });
+    assert.equal(h.hub.queueFor('kitchen'), h.hub.queueFor('sim'));
+    const outcome = h.hub.pushEvent(weatherPayload(), {
+      targetId: 'sim',
+      scheduler: true,
+      explicit: false,
+    });
+    assert.ok(outcome.boards.some((row) => row.boardId === 'kitchen'));
+    assert.ok(outcome.boards.every((row) => row.reason === 'queued' || row.accepted > 0));
+  } finally {
+    await h.stop();
+  }
+});
+
 test('replaying broadcasts through the router exits cleanly against the simulator', async () => {
   const h = await makeHub({ minRotationGapSeconds: 0 });
   try {

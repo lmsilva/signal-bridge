@@ -1,17 +1,17 @@
 // Wires the Vestaboard feature together.
 //
-// Owns the board list, a queue and a transport per enabled board, and the
-// view of those boards that the display registry merges in. Everything above
-// this — the router, the formatters, the scheduler — talks to `pushEvent()`
-// or `submit()` and never learns whether the board on the other end is
-// hardware or the simulator.
+// Owns the board list, one house queue, and a transport per enabled board.
+// Dwell and priorities are house-wide; each posted page fans out to every
+// enabled board. Everything above this — the router, the formatters, the
+// scheduler — talks to `pushEvent()` or `submit()` and never learns whether
+// the board on the other end is hardware or the simulator.
 
 const fs = require('fs');
 const path = require('path');
 const { resolveGuestPhotoboothSettings } = require('../guest-photobooth');
-const { createVestaboardSettings, SIMULATOR_ID } = require('./settings');
+const { createVestaboardSettings, SIMULATOR_ID, DEFAULTS } = require('./settings');
 const { createTransport } = require('./transport');
-const { createQueue } = require('./queue');
+const { createQueue, inQuietHours, sameLayout } = require('./queue');
 const { catalogForClient } = require('./priorities');
 const { identityFrame } = require('./formatters/signal');
 const { routeEvent } = require('./router');
@@ -33,10 +33,14 @@ function createVestaboardHub({
   const runtimePath = config.vestaboardRuntimePath
     || path.join(config.ROOT || path.resolve(__dirname, '..', '..'), 'data', 'vestaboard-runtime.json');
 
-  /** id -> { board, transport, queue, unsubscribe } */
+  /** id -> { board, transport, follower } */
   const boards = new Map();
   const listeners = new Set();
   let started = false;
+  let houseQueue = null;
+  let houseUnsubscribe = null;
+  let catchUpTimer = null;
+  let catchingUp = false;
 
   function emit(event, detail) {
     for (const listener of listeners) {
@@ -113,48 +117,199 @@ function createVestaboardHub({
     return `http://${board.id}.local:${REAL_BOARD_PORT}`;
   }
 
+  function houseConfig() {
+    const house = settings.house();
+    const donor = settings.get(SIMULATOR_ID) || settings.list()[0] || {};
+    return {
+      id: SIMULATOR_ID,
+      dwellSeconds: house.dwellSeconds,
+      priorities: house.priorities,
+      rateWindowSeconds: donor.rateWindowSeconds ?? DEFAULTS.rateWindowSeconds,
+      minRotationGapSeconds: donor.minRotationGapSeconds ?? DEFAULTS.minRotationGapSeconds,
+      quietHours: { enabled: false },
+    };
+  }
+
+  function followerState(boardId) {
+    return {
+      lastAccepted: null,
+      lastPostAt: asTimestamp(readRuntime().lastPostAt?.[String(boardId)]),
+      retryNotBefore: null,
+      health: 'ok',
+      healthReason: null,
+      failures: 0,
+    };
+  }
+
+  async function postToBoard(entry, rows, opts = {}) {
+    if (!opts.quietHoursExempt
+      && inQuietHours(new Date(now()), entry.board.quietHours, houseTimeZone(config))) {
+      return { id: entry.board.id, skipped: 'quiet' };
+    }
+    let outcome;
+    try {
+      outcome = await entry.transport.post(rows, opts);
+    } catch (error) {
+      outcome = { ok: false, reason: 'network', retryable: true, message: error?.message };
+    }
+    if (outcome.ok) {
+      entry.follower.lastAccepted = rows;
+      entry.follower.lastPostAt = now();
+      entry.follower.retryNotBefore = null;
+      entry.follower.health = 'ok';
+      entry.follower.healthReason = null;
+      entry.follower.failures = 0;
+      persistLastPostAt(entry.board.id, entry.follower.lastPostAt);
+    } else if (outcome.reason === 'auth') {
+      entry.follower.health = 'degraded';
+      entry.follower.healthReason = 'auth';
+      emit('health', { boardId: entry.board.id, health: 'degraded', reason: 'auth' });
+      emit('registry', { boardId: entry.board.id });
+    } else if (outcome.reason === 'busy') {
+      entry.follower.retryNotBefore = (entry.follower.lastPostAt || now())
+        + (DEFAULTS.rateWindowSeconds * 1000) + 1000;
+    } else {
+      entry.follower.failures += 1;
+      if (entry.follower.failures >= 3) {
+        entry.follower.health = 'unhealthy';
+        entry.follower.healthReason = outcome.reason;
+        emit('health', { boardId: entry.board.id, health: 'unhealthy', reason: outcome.reason });
+        emit('registry', { boardId: entry.board.id });
+      }
+    }
+    return { id: entry.board.id, outcome };
+  }
+
+  function createFanoutTransport() {
+    return {
+      async post(rows, opts = {}) {
+        const entries = [...boards.values()];
+        if (!entries.length) {
+          return { ok: false, reason: 'offline', retryable: true };
+        }
+        const results = await Promise.all(
+          entries.map((entry) => postToBoard(entry, rows, opts)),
+        );
+        if (results.some((row) => row.outcome?.ok)) {
+          return { ok: true, reason: 'ok' };
+        }
+        const attempted = results.filter((row) => !row.skipped);
+        if (!attempted.length) {
+          return { ok: true, reason: 'ok' };
+        }
+        if (attempted.every((row) => row.outcome?.reason === 'busy')) {
+          return { ok: false, reason: 'busy', retryable: true };
+        }
+        return attempted[0].outcome
+          || { ok: false, reason: 'network', retryable: true };
+      },
+    };
+  }
+
+  async function catchUpFollowers() {
+    if (!houseQueue || catchingUp) {
+      return;
+    }
+    const current = houseQueue.state()?.current;
+    if (!current) {
+      return;
+    }
+    catchingUp = true;
+    try {
+      const at = now();
+      for (const entry of boards.values()) {
+        if (sameLayout(entry.follower.lastAccepted, current)) {
+          continue;
+        }
+        if (entry.follower.retryNotBefore && at < entry.follower.retryNotBefore) {
+          continue;
+        }
+        if (entry.follower.lastPostAt != null
+          && at < entry.follower.lastPostAt + (DEFAULTS.rateWindowSeconds * 1000)) {
+          continue;
+        }
+        await postToBoard(entry, current, {});
+      }
+    } finally {
+      catchingUp = false;
+    }
+  }
+
   function build(board) {
     const transport = createTransport({
       baseUrl: baseUrlFor(board),
       key: settings.keyFor(board.id) || '',
     });
-
-    const queue = createQueue({
-      board, transport, log, now,
-      timeZone: houseTimeZone(config),
-    });
-    seedQueueCooldown(queue, board.id);
-
-    const unsubscribe = queue.onChange((event, detail) => {
-      if (event === 'posted') {
-        persistLastPostAt(board.id, queue.state().lastPostAt);
-      }
-      if (event === 'health') {
-        // The picker shows board health, so a change has to reach the registry.
-        emit('registry', { boardId: board.id });
-      }
-      emit(event, detail);
-    });
-
-    queue.start();
     return {
-      board, transport, queue, unsubscribe,
+      board,
+      transport,
+      follower: followerState(board.id),
     };
   }
 
-  function teardown(entry) {
-    entry.queue.stop();
-    entry.unsubscribe();
+  function teardownHouse() {
+    if (catchUpTimer) {
+      clearTimer(catchUpTimer);
+      catchUpTimer = null;
+    }
+    if (houseQueue) {
+      houseQueue.stop();
+      houseUnsubscribe?.();
+      houseUnsubscribe = null;
+      houseQueue = null;
+    }
   }
 
-  /** Bring running queues in line with the saved board list. */
+  function ensureHouseQueue() {
+    if (!boards.size) {
+      teardownHouse();
+      return;
+    }
+    const fanout = createFanoutTransport();
+    if (!houseQueue) {
+      houseQueue = createQueue({
+        board: houseConfig(),
+        transport: fanout,
+        log,
+        now,
+        timeZone: houseTimeZone(config),
+        setTimer,
+        clearTimer,
+      });
+      const lastPosts = [...boards.values()]
+        .map((entry) => entry.follower.lastPostAt)
+        .filter((ts) => ts != null);
+      if (lastPosts.length) {
+        houseQueue.noteLastPostAt(Math.max(...lastPosts));
+      }
+      houseUnsubscribe = houseQueue.onChange((event, detail) => {
+        if (event === 'posted') {
+          persistLastPostAt(SIMULATOR_ID, houseQueue.state().lastPostAt);
+        }
+        emit(event, { boardId: SIMULATOR_ID, ...detail });
+      });
+      houseQueue.start();
+      catchUpTimer = setTimer(() => {
+        catchUpFollowers().catch((error) => {
+          log?.warn?.('Vestaboard catch-up failed', error?.message || error);
+        });
+      }, 1000);
+      if (typeof catchUpTimer?.unref === 'function') {
+        catchUpTimer.unref();
+      }
+    } else {
+      houseQueue.setConfig(houseConfig());
+      houseQueue.setTransport(fanout);
+    }
+  }
+
+  /** Bring running boards in line with the saved list. One house queue. */
   function sync() {
     const wanted = settings.list().filter((board) => board.enabled);
     const wantedIds = new Set(wanted.map((board) => board.id));
 
-    for (const [id, entry] of boards) {
+    for (const [id] of boards) {
       if (!wantedIds.has(id)) {
-        teardown(entry);
         boards.delete(id);
       }
     }
@@ -165,17 +320,14 @@ function createVestaboardHub({
         boards.set(board.id, build(board));
         continue;
       }
-      // Settings changes apply live rather than waiting for a restart.
       existing.board = board;
-      existing.queue.setConfig(board);
-      const nextTransport = createTransport({
+      existing.transport = createTransport({
         baseUrl: baseUrlFor(board),
         key: settings.keyFor(board.id) || '',
       });
-      existing.transport = nextTransport;
-      existing.queue.setTransport(nextTransport);
     }
 
+    ensureHouseQueue();
     emit('registry', { boardId: null });
   }
 
@@ -210,7 +362,7 @@ function createVestaboardHub({
   function registryEntries() {
     return settings.list().map((board) => {
       const running = boards.get(board.id);
-      const health = running ? running.queue.state().health : 'offline';
+      const health = running ? running.follower.health : 'offline';
       return {
         id: board.id,
         name: board.name,
@@ -218,7 +370,7 @@ function createVestaboardHub({
         simulator: board.simulator,
         enabled: board.enabled,
         health,
-        healthReason: running ? running.queue.state().healthReason : null,
+        healthReason: running ? running.follower.healthReason : null,
         hasKey: settings.hasKey(board.id),
       };
     });
@@ -233,15 +385,19 @@ function createVestaboardHub({
       const running = boards.get(board.id);
       return {
         ...board,
-        health: running ? running.queue.state().health : 'offline',
-        healthReason: running ? running.queue.state().healthReason : null,
+        health: running ? running.follower.health : 'offline',
+        healthReason: running ? running.follower.healthReason : null,
         hasKey: settings.hasKey(board.id),
       };
     });
   }
 
-  function queueFor(id) {
-    return boards.get(String(id))?.queue || null;
+  function houseSettings() {
+    return settings.house();
+  }
+
+  function queueFor(_id) {
+    return houseQueue;
   }
 
   /**
@@ -284,22 +440,22 @@ function createVestaboardHub({
       replaceSource: options.replaceSource,
       replaceCard: options.replaceCard,
       gameSource: options.gameSource,
-      ctx,
+      ctx: {
+        ...ctx,
+        priorities: settings.house().priorities,
+        board: {
+          dwellSeconds: settings.house().dwellSeconds,
+          priorities: settings.house().priorities,
+        },
+      },
       now,
       submit,
       log,
     });
-    // Kick the queue now rather than waiting up to a second for the timer.
-    // `submit()` itself stays synchronous so unit tests can assert pending
-    // items before an explicit tick.
-    const kicked = new Set();
-    for (const row of results) {
-      if (!(row?.accepted > 0) || kicked.has(row.boardId)) {
-        continue;
-      }
-      kicked.add(row.boardId);
-      queueFor(row.boardId)?.tick()?.catch((error) => {
-        log?.warn?.(`Vestaboard ${row.boardId} tick failed`, error?.message || error);
+    // Kick the house queue now rather than waiting up to a second for the timer.
+    if (results.some((row) => row?.accepted > 0)) {
+      houseQueue?.tick()?.catch((error) => {
+        log?.warn?.('Vestaboard house tick failed', error?.message || error);
       });
     }
     return { boards: results };
@@ -309,12 +465,16 @@ function createVestaboardHub({
    * Hand frames to one board. Returns why nothing happened when nothing did,
    * so callers can say something useful rather than failing silently.
    */
-  function submit(boardId, frames, options = {}) {
-    const entry = boards.get(String(boardId));
-    if (!entry) {
+  function submit(_boardId, frames, options = {}) {
+    if (!houseQueue) {
       return { ok: false, error: 'That board is not enabled' };
     }
-    const outcome = entry.queue.submit(frames, options);
+    const outcome = houseQueue.submit(frames, {
+      ...options,
+      priorities: options.priorities != null
+        ? options.priorities
+        : settings.house().priorities,
+    });
     return { ok: outcome.accepted > 0, ...outcome };
   }
 
@@ -325,29 +485,32 @@ function createVestaboardHub({
    * this. Huupe / Autodarts take the same lock from the queue when the
    * board's Priorities list marks them as holds.
    */
-  function setGameLock(source, active, { boardId = '' } = {}) {
-    const entries = boardId
-      ? [boards.get(String(boardId))].filter(Boolean)
-      : [...boards.values()];
-    for (const entry of entries) {
-      if (active) {
-        entry.queue.acquireGameLock?.(source);
-      } else {
-        entry.queue.releaseGameLock?.(source);
-      }
+  function setGameLock(source, active) {
+    if (!houseQueue) {
+      return;
+    }
+    if (active) {
+      houseQueue.acquireGameLock?.(source);
+    } else {
+      houseQueue.releaseGameLock?.(source);
     }
   }
 
-  /** Drop matching pending pages on every board, or on one when named. */
-  function dropPending(predicate, { boardId = '' } = {}) {
-    const entries = boardId
-      ? [boards.get(String(boardId))].filter(Boolean)
-      : [...boards.values()];
-    let dropped = 0;
-    for (const entry of entries) {
-      dropped += entry.queue.dropPending?.(predicate) || 0;
+  /**
+   * Drop the house hold. Every enabled board follows that line, so one
+   * release unpins them all.
+   */
+  function releaseHolds() {
+    if (!houseQueue?.releaseGameLock?.('')) {
+      return { released: 0, boards: [] };
     }
-    return dropped;
+    const ids = [...boards.keys()];
+    return { released: ids.length, boards: ids };
+  }
+
+  /** Drop matching pending pages on the house line. */
+  function dropPending(predicate) {
+    return houseQueue?.dropPending?.(predicate) || 0;
   }
 
   async function testFlip(boardId) {
@@ -358,15 +521,18 @@ function createVestaboardHub({
     if (!settings.hasKey(entry.board.id)) {
       return { ok: false, error: 'That board has no key yet' };
     }
-    // An alert so it lands now rather than behind whatever is rotating.
-    entry.queue.submit([identityFrame({ name: entry.board.name })], {
-      priority: 'alert',
-      quietHoursExempt: true,
-    });
-    const result = await entry.queue.tick();
-    return result === 'posted'
-      ? { ok: true }
-      : { ok: true, queued: true, state: entry.queue.state() };
+    const rows = identityFrame({ name: entry.board.name }).rows;
+    const outcome = await postToBoard(entry, rows, { quietHoursExempt: true });
+    if (outcome.outcome?.ok) {
+      return { ok: true };
+    }
+    if (outcome.outcome?.reason === 'busy') {
+      return { ok: true, queued: true };
+    }
+    return {
+      ok: false,
+      error: outcome.outcome?.message || outcome.outcome?.reason || 'Test flip failed',
+    };
   }
 
   const quietHoursReminder = createQuietHoursReminder({
@@ -395,12 +561,14 @@ function createVestaboardHub({
     settings,
     registryEntries,
     settingsView,
+    houseSettings,
     priorityCatalog: catalogForClient,
     queueFor,
     pushEvent,
     submit,
     dropPending,
     setGameLock,
+    releaseHolds,
     testFlip,
     boards: () => [...boards.values()].map((entry) => ({ ...entry.board })),
     onChange(listener) {
@@ -420,9 +588,9 @@ function createVestaboardHub({
       quietHoursWatch.start();
       // Recreate / restart forgets the in-memory queue clock. The simulator
       // still knows when it last flipped, so honour that before the first tick.
-      if (simulator?.snapshot) {
+      if (simulator?.snapshot && houseQueue) {
         seedQueueCooldown(
-          queueFor(SIMULATOR_ID),
+          houseQueue,
           SIMULATOR_ID,
           simulator.snapshot().lastAcceptedAt,
         );
@@ -432,9 +600,7 @@ function createVestaboardHub({
       started = false;
       quietHoursWatch.stop();
       unwatchSettings();
-      for (const entry of boards.values()) {
-        teardown(entry);
-      }
+      teardownHouse();
       boards.clear();
     },
   };
