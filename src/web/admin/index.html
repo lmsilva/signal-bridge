@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal229">
+  <link rel="stylesheet" href="styles.css?v=signal230">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -4648,17 +4648,6 @@
     </div>
   </div>
 
-  <div class="sheet-backdrop" id="vb-priority-reset-sheet" hidden>
-    <div class="sheet sheet-confirm" role="dialog" aria-modal="true" aria-labelledby="vb-priority-reset-title">
-      <div class="sheet-title" id="vb-priority-reset-title">Use recommended priorities?</div>
-      <p class="sheet-subtext">This replaces your current list with the house defaults (alarms jump; live games hold). Your other board settings stay as they are until you save.</p>
-      <div class="sheet-actions sheet-actions-confirm">
-        <button type="button" class="btn btn-outline" id="vb-priority-reset-cancel">Cancel</button>
-        <button type="button" class="btn btn-accent" id="vb-priority-reset-confirm">Use recommended</button>
-      </div>
-    </div>
-  </div>
-
   <div class="sheet-backdrop" id="vb-priority-sheet" hidden>
     <div class="sheet cn-manage-sheet vb-priority-sheet" role="dialog" aria-modal="true" aria-labelledby="vb-priority-title">
       <div class="credits-sheet-head">
@@ -4682,7 +4671,18 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="vb-priority-reset-sheet" hidden>
+    <div class="sheet sheet-confirm" role="dialog" aria-modal="true" aria-labelledby="vb-priority-reset-title">
+      <div class="sheet-title" id="vb-priority-reset-title">Use recommended priorities?</div>
+      <p class="sheet-subtext">This replaces your current list with the house defaults (alarms jump; live games hold). Your other board settings stay as they are until you save.</p>
+      <div class="sheet-actions sheet-actions-confirm">
+        <button type="button" class="btn btn-outline" id="vb-priority-reset-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="vb-priority-reset-confirm">Use recommended</button>
+      </div>
+    </div>
+  </div>
+
   <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal229"></script>
+  <script src="app.js?v=signal230"></script>
 </body>
 </html>
