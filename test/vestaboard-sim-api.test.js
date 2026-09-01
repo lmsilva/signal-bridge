@@ -559,6 +559,7 @@ test('the state fetch includes frames waiting on the hub queue', async () => {
     assert.equal(res.body.queue.length, 1);
     assert.equal(res.body.queue[0].label, 'Shopping');
     assert.ok(res.body.queue[0].id, 'the page needs an id so the simulator can cancel it');
+    assert.ok(res.body.queueRevision >= 1);
   } finally {
     await harness.stop();
   }
@@ -584,6 +585,7 @@ test('queueing a frame on the hub reaches the page as sim.queue', async () => {
     const events = await waiting;
     const queued = [...events].reverse().find((e) => e.name === 'sim.queue');
     assert.equal(queued.data.items[0].label, 'Shopping');
+    assert.ok(queued.data.revision >= 1);
   } finally {
     await harness.stop();
   }
@@ -615,7 +617,33 @@ test('the simulator can cancel one waiting page', async () => {
     });
     assert.equal(res.status, 200);
     assert.equal(res.body.ok, true);
+    assert.equal(res.body.gone, false);
     assert.equal(res.body.queue.some((row) => row.label === 'Weather'), false);
+    assert.ok(res.body.queueRevision >= 1);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('cancelling a page that already flipped returns the current queue', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    harness.hub.submit('sim', [{
+      rows: badgeFrame({ color: 'blue', title: 'SHOPPING LIST', rows: ['MILK'] }),
+      label: 'Shopping',
+      source: 'shopping-list.snapshot',
+      dwellSeconds: 15,
+    }]);
+    const res = await request(`${harness.base}/api/vestaboard-sim/queue/cancel`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { id: 'i-missing' },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.gone, true);
+    assert.equal(res.body.queue.length, 1);
+    assert.equal(res.body.queue[0].label, 'Shopping');
   } finally {
     await harness.stop();
   }
@@ -745,6 +773,9 @@ test('the simulator page walks the drum slowly and can click', () => {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(js, /AudioContext/);
   assert.match(js, /vbDrumSteps/);
+  assert.match(js, /function vbSettleBoard\(/);
+  assert.match(js, /function vbFaceMatches\(/);
+  assert.match(js, /always clear code 0/);
   assert.match(js, /VB_FLAP_MS = 100/);
   assert.match(js, /VB_CASCADE_MS = 5616/);
   assert.match(js, /function vbCascadeMs\(/);

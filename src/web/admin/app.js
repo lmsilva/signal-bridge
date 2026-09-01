@@ -18637,6 +18637,10 @@
   let vbEvents = null;
   let vbQueueDragging = false;
   let vbQueueItems = [];
+  let vbQueueRevision = 0;
+  let vbPendingQueue = null;
+  let vbQueuePollTimer = null;
+  const VB_QUEUE_POLL_MS = 2000;
   let vbRateTimer = null;
   let vbSoundOn = (() => {
     try {
@@ -18653,6 +18657,7 @@
   // Flips that arrived while the board tab was hidden — replay with sound
   // the next time the admin is actually looking at the flaps.
   let vbPendingReplay = null;
+  let vbSettleTimer = null;
 
   function vbBoardWatching() {
     return document.body.dataset.tab === 'board' && !document.hidden;
@@ -18883,8 +18888,38 @@
     tile.classList.remove('is-chip');
     delete tile.dataset.chip;
     if (glyph) {
-      glyph.textContent = vbGlyphs[code] ?? vbGlyphs[String(code)] ?? '';
+      // The charset maps blank to a space. Writing that space is not enough
+      // if a previous letter is still in the node — always clear code 0.
+      glyph.textContent = code === 0 ? '' : (vbGlyphs[code] ?? vbGlyphs[String(code)] ?? '');
     }
+  }
+
+  function vbFaceMatches(index, code) {
+    return (vbCurrent[index] ?? 0) === code && (vbShown[index] ?? 0) === code;
+  }
+
+  function vbSettleBoard() {
+    if (!vbTiles || !vbCurrent) {
+      return;
+    }
+    for (let index = 0; index < VB_TILES; index += 1) {
+      const tile = vbTiles[index];
+      const code = vbCurrent[index] ?? 0;
+      if (!tile || (vbShown[index] ?? 0) === code) {
+        continue;
+      }
+      if (tile.classList.contains('is-flipping')) {
+        continue;
+      }
+      vbShown[index] = code;
+      vbPaintTile(tile, code);
+    }
+  }
+
+  function vbScheduleSettle() {
+    window.clearTimeout(vbSettleTimer);
+    const wait = VB_CASCADE_MS + (VB_MAX_DRUM_STEPS * VB_FLAP_MS) + 250;
+    vbSettleTimer = window.setTimeout(vbSettleBoard, wait);
   }
 
   function vbStopTile(index) {
@@ -18962,6 +18997,9 @@
       }
       if (step >= codes.length) {
         tile.classList.remove('is-flipping');
+        const target = vbCurrent[index] ?? 0;
+        vbPaintTile(tile, target);
+        vbShown[index] = target;
         return;
       }
       const code = codes[step];
@@ -19004,18 +19042,38 @@
     }
   }
 
+  function vbStartQueuePoll() {
+    if (vbQueuePollTimer) {
+      return;
+    }
+    vbQueuePollTimer = window.setInterval(() => {
+      if (!vbBoardWatching() || vbQueueDragging) {
+        return;
+      }
+      vbRefreshQueueFromSim();
+    }, VB_QUEUE_POLL_MS);
+  }
+
+  function vbStopQueuePoll() {
+    window.clearInterval(vbQueuePollTimer);
+    vbQueuePollTimer = null;
+  }
+
   function vbOnBoardTabLeave() {
     // Finish in-flight flaps so we do not resume a half-spin later.
     vbSnapToCurrent();
+    vbStopQueuePoll();
   }
 
   function vbOnBoardTabEnter() {
+    vbStartQueuePoll();
     // A flip that landed while we were elsewhere is still worth seeing —
     // roll committed targets back to what is painted, then walk forward so
     // sound and flaps stay paired.
     const pending = vbPendingReplay;
     vbPendingReplay = null;
     if (!pending?.layout) {
+      vbSettleBoard();
       return;
     }
     requestAnimationFrame(() => {
@@ -19032,6 +19090,11 @@
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       vbSnapToCurrent();
+      vbStopQueuePoll();
+    } else if (document.body.dataset.tab === 'board') {
+      vbStartQueuePoll();
+      vbRefreshQueueFromSim();
+      vbSettleBoard();
     }
   });
 
@@ -19074,8 +19137,12 @@
 
       if (!animate || vbReducedMotion()) {
         // A later sim.state with the same target must not snap a drum that's
-        // still walking — only jump when the committed code actually changed.
-        if (vbCurrent[index] === code) {
+        // still walking. A stale face on that same target (letters left on
+        // the ocean after a map flip) must still be painted.
+        if (vbFaceMatches(index, code)) {
+          continue;
+        }
+        if ((vbCurrent[index] ?? 0) === code && tile.classList.contains('is-flipping')) {
           continue;
         }
         vbStopTile(index);
@@ -19085,16 +19152,17 @@
         continue;
       }
 
-      if (vbCurrent[index] === code) {
+      if (vbFaceMatches(index, code)) {
         continue;
       }
       vbCurrent[index] = code;
       starting += 1;
-      vbRunFlips(index, vbDrumSteps(vbShown[index], code), vbFlipDelay(index, strategy));
+      vbRunFlips(index, vbDrumSteps(vbShown[index] ?? 0, code), vbFlipDelay(index, strategy));
     }
     if (starting) {
       vbPendingReplay = null;
       vbPlayCascade();
+      vbScheduleSettle();
     }
   }
 
@@ -19229,39 +19297,94 @@
       .filter(Boolean);
   }
 
+  function vbQueueRevisionOf(payload) {
+    const rev = Number(payload?.revision ?? payload?.queueRevision);
+    return Number.isFinite(rev) ? rev : null;
+  }
+
+  function vbFlushPendingQueue() {
+    if (!vbPendingQueue) {
+      return;
+    }
+    const pending = vbPendingQueue;
+    vbPendingQueue = null;
+    vbApplyQueue(pending.items, pending.revision);
+  }
+
+  function vbApplyQueue(items, revision) {
+    if (revision != null && revision < vbQueueRevision) {
+      return;
+    }
+    if (revision != null) {
+      vbQueueRevision = revision;
+    }
+    if (vbQueueDragging) {
+      vbPendingQueue = { items, revision };
+      return;
+    }
+    vbRenderQueue(items);
+  }
+
+  function vbRefreshQueueFromSim() {
+    return apiGet('/api/vestaboard-sim').then((data) => {
+      if (!data?.ok) {
+        return;
+      }
+      vbApplyQueue(data.queue, data.queueRevision);
+    }).catch(() => {
+      // SSE or the next poll will catch up.
+    });
+  }
+
   async function vbCancelQueued(id) {
     try {
       const data = await apiPost('/api/vestaboard-sim/queue/cancel', { id });
-      vbRenderQueue(data.queue);
-    } catch (error) {
-      toast(error?.message || 'Could not cancel that page', 'bad');
+      vbApplyQueue(data.queue, data.queueRevision);
+    } catch {
+      await vbRefreshQueueFromSim();
     }
   }
 
   async function vbCommitQueueOrder() {
     const ids = vbQueueIdsFromDom();
-    if (!ids.length) {
+    const before = vbQueueItems.map((item) => item.id).filter(Boolean);
+    if (!ids.length || ids.join('\0') === before.join('\0')) {
+      vbFlushPendingQueue();
       return;
     }
     try {
       const data = await apiPost('/api/vestaboard-sim/queue/reorder', { ids });
-      vbRenderQueue(data.queue);
+      vbApplyQueue(data.queue, data.queueRevision);
     } catch (error) {
       toast(error?.message || 'Could not reorder the queue', 'bad');
-      vbRenderQueue(vbQueueItems);
+      await vbRefreshQueueFromSim();
     }
+    vbFlushPendingQueue();
+  }
+
+  function vbEndQueueDrag(row) {
+    row?.classList.remove('dragging');
+    document.body.classList.remove('vb-queue-dragging');
+    vbQueueDragging = false;
   }
 
   function vbStartQueueDrag(event, row) {
     if (event.pointerType === 'mouse' && event.button !== 0) {
       return;
     }
+    if (event.target.closest?.('.vb-queue-cancel')) {
+      return;
+    }
     event.preventDefault();
     vbQueueDragging = true;
     row.classList.add('dragging');
-    row.setPointerCapture(event.pointerId);
+    document.body.classList.add('vb-queue-dragging');
 
+    const pointerId = event.pointerId;
     const onMove = (move) => {
+      if (move.pointerId !== pointerId) {
+        return;
+      }
       const host = $('vb-queue');
       if (!host) {
         return;
@@ -19282,30 +19405,24 @@
         host.appendChild(row);
       }
     };
-    const onUp = () => {
-      row.classList.remove('dragging');
-      try {
-        row.releasePointerCapture(event.pointerId);
-      } catch {
-        // already released
+    const onUp = (up) => {
+      if (up && up.pointerId !== pointerId) {
+        return;
       }
-      row.removeEventListener('pointermove', onMove);
-      row.removeEventListener('pointerup', onUp);
-      row.removeEventListener('pointercancel', onUp);
-      vbQueueDragging = false;
+      document.removeEventListener('pointermove', onMove, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', onUp, true);
+      vbEndQueueDrag(row);
       vbCommitQueueOrder();
     };
-    row.addEventListener('pointermove', onMove);
-    row.addEventListener('pointerup', onUp);
-    row.addEventListener('pointercancel', onUp);
+    document.addEventListener('pointermove', onMove, true);
+    document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('pointercancel', onUp, true);
   }
 
   function vbRenderQueue(items) {
     const host = $('vb-queue');
     if (!host) {
-      return;
-    }
-    if (vbQueueDragging) {
       return;
     }
     vbQueueItems = Array.isArray(items) ? items : [];
@@ -19319,26 +19436,26 @@
       row.className = 'vb-row vb-queue-row';
       row.dataset.id = item.id || '';
 
-      const handle = document.createElement('button');
-      handle.type = 'button';
+      const handle = document.createElement('span');
       handle.className = 'vb-queue-handle';
-      handle.setAttribute('aria-label', 'Reorder');
+      handle.setAttribute('aria-hidden', 'true');
       handle.textContent = '⋮⋮';
-      handle.addEventListener('pointerdown', (event) => vbStartQueueDrag(event, row));
+
+      const source = document.createElement('span');
+      source.className = 'vb-queue-source';
+      source.textContent = item.source || '—';
+      source.title = item.source || '';
 
       const main = document.createElement('span');
-      main.className = 'vb-row-main';
+      main.className = 'vb-queue-title';
       main.textContent = item.label || 'Frame';
+      main.title = item.label || 'Frame';
 
       const state = document.createElement('span');
-      state.className = 'vb-row-result';
+      state.className = `vb-queue-status${item.status === 'held' ? ' is-held' : ''}`;
       state.textContent = item.notBefore
         ? `not before ${vbClockOf(item.notBefore)}`
         : (item.status === 'held' ? 'held' : 'waiting');
-
-      const source = document.createElement('span');
-      source.className = 'vb-row-time';
-      source.textContent = item.source || '';
 
       const cancel = document.createElement('button');
       cancel.type = 'button';
@@ -19353,6 +19470,7 @@
         }
       });
 
+      row.addEventListener('pointerdown', (event) => vbStartQueueDrag(event, row));
       row.append(handle, source, main, state, cancel);
       host.appendChild(row);
     }
@@ -19382,7 +19500,7 @@
     vbRenderState(data.state);
     vbCalls = data.calls || [];
     vbRenderCalls();
-    vbRenderQueue(data.queue);
+    vbApplyQueue(data.queue, data.queueRevision);
 
     const port = $('vb-port');
     if (port && data.port) {
@@ -19391,7 +19509,10 @@
   }
 
   function startVestaboardSimEvents() {
-    if (vbEvents) {
+    if (vbBoardWatching()) {
+      vbStartQueuePoll();
+    }
+    if (vbEvents && vbEvents.readyState !== EventSource.CLOSED) {
       return;
     }
     try {
@@ -19419,10 +19540,10 @@
       }
       vbRenderCalls();
     });
-    on('sim.queue', (detail) => vbRenderQueue(detail.items));
+    on('sim.queue', (detail) => vbApplyQueue(detail.items, vbQueueRevisionOf(detail)));
 
     vbEvents.onerror = () => {
-      // Browser will retry EventSource automatically.
+      vbRefreshQueueFromSim();
     };
   }
 

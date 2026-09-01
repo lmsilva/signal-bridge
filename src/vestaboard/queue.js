@@ -150,6 +150,7 @@ function createQueue({
   const items = [];
   const coalesceSeen = new Map();
   const listeners = new Set();
+  let queueRevision = 0;
   let timer = null;
   let posting = false;
   let tickTail = Promise.resolve();
@@ -244,7 +245,8 @@ function createQueue({
   }
 
   function announceQueue() {
-    emit('queue', { boardId: config.id, items: pending() });
+    queueRevision += 1;
+    emit('queue', { boardId: config.id, items: pending(), revision: queueRevision });
   }
 
   function recoverFromBadKey() {
@@ -669,6 +671,7 @@ function createQueue({
       snapshotCooldownMs: snapshotCooldownMs(),
       gameLock: state.gameLock ? { ...state.gameLock } : null,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
+      queueRevision,
     }),
     /**
      * A live game takes the board until it says otherwise. Re-acquiring is how
