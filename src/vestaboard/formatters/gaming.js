@@ -90,6 +90,7 @@ function playingCard({
   const rows = badgeFrame({
     color: 'blue',
     title,
+    titleAlign: 'center',
     rows: padRows(content),
     footerLeft,
   });
@@ -155,6 +156,7 @@ function psnFrames(payload = {}, ctx = {}) {
       const rebuilt = badgeFrame({
         color: 'blue',
         title: 'PLAYSTATION',
+        titleAlign: 'center',
         rows: padRows([
           'LAST PLAYED:',
           ...wrap(fold(psn.name), BODY_WIDTH),

@@ -32,7 +32,7 @@ test('a steam launch is a snapshot with a game-on footer', () => {
 
   assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
-    'bb STEAM            bb',
+    'bb      STEAM       bb',
     ' NOW PLAYING:',
     ' HOTSHOT RACING',
     '',
@@ -55,7 +55,7 @@ test('steam last-played names the library size and drops the trademark', () => {
 
   assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
-    'bb STEAM            bb',
+    'bb      STEAM       bb',
     ' LAST PLAYED:',
     ' HOT WHEELS UNLEASHED',
     '',
@@ -110,7 +110,7 @@ test('psn last-played uses the date-only line from the spec', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'bb PLAYSTATION      bb',
+    'bb   PLAYSTATION    bb',
     ' LAST PLAYED:',
     ' SPLIT FICTION',
     '',

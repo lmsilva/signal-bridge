@@ -320,7 +320,7 @@
 
   function composeReady() {
     const who = state.status?.whoCanSend || 'anyone';
-    if (who !== 'anyone') {
+    if (who !== 'anyone' && !window.SIGNAL_GUESTBOOK_SKIP_UNLOCK) {
       showPane('gb-unlock');
       const input = $('gb-unlock-input');
       if (input) {
@@ -584,9 +584,9 @@
       status.className = 'gb-status';
     }
     try {
-      const name = String($('gb-name')?.value || '').trim();
+      const name = String(window.SIGNAL_GUESTBOOK_NAME || $('gb-name')?.value || '').trim();
       rememberName(name);
-      const result = await api('/api/guestbook/send', {
+      const result = await api(window.SIGNAL_GUESTBOOK_SEND || '/api/guestbook/send', {
         rows: state.rows,
         name,
       });

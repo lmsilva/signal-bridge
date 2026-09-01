@@ -13,7 +13,8 @@ The listener container needs the saved session file. With **`network_mode: host`
 |---------|---------|
 | Landing page (HTTPS) | `https://<NAS_IP>:47810/` |
 | Guest photo booth (HTTPS) | `https://<NAS_IP>:47810/guestsnaps/` |
-| Admin UI (HTTPS) | `https://<NAS_IP>:47810/admin/` (set `ADMIN_PASSWORD` in `.env`) |
+| Admin UI (HTTPS) | `https://<NAS_IP>:47810/admin/` (set `ADMIN_USERNAME` + `ADMIN_PASSWORD` in `.env`) |
+| Household app (HTTPS) | `https://<NAS_IP>:47810/user/` (same accounts; landing login is `/`) |
 | Optional HTTP→HTTPS | `http://<NAS_IP>:47811/` |
 | Overlay / commands UDP | `:47832` (outbound to displays) |
 | Display announce UDP | `:47833` (inbound from displays) |
@@ -322,6 +323,18 @@ TESLA_FLEET_DOMAIN=fleetapi.example.com
 TESLA_FLEET_REGION=na
 TESLA_VIN=...                 # optional
 ```
+
+Household login + Gmail password mail:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=...
+GMAIL_CLIENT_ID=...
+GMAIL_CLIENT_SECRET=...
+GMAIL_REDIRECT_URI=https://signal.example.com/api/gmail/callback
+```
+
+Publish the Google Cloud OAuth client to **Production**. Apps left in **Testing** lose the Gmail refresh token every **7 days** (verification is not required for household-only use).
 
 `docker-compose.yml` loads `.env` via `env_file`. After editing `.env`:
 

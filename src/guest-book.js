@@ -338,23 +338,26 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     return board.rows;
   }
 
-  function send(body, { ip, req } = {}) {
+  function send(body, { ip, req, skipUnlock = false, actor = null, nameOverride = null } = {}) {
     const settings = getSettings();
     if (settings.enabled === false || settings.paused) {
       return { ok: false, error: 'The guest book is closed right now.', closed: true };
     }
-    const gate = guestAllowed(req, ip);
-    if (!gate.ok) {
-      return gate;
+    if (!skipUnlock) {
+      const gate = guestAllowed(req, ip);
+      if (!gate.ok) {
+        return gate;
+      }
     }
     const painted = Array.isArray(body.rows);
     const layout = preview(body);
     if (!layout.ok) {
       return { ok: false, error: layout.error || 'That message cannot be shown' };
     }
+    const senderName = String(nameOverride || body.name || '').trim();
     const spoken = painted
-      ? `${rowsToText(layout.rows)} ${body.name || ''}`
-      : `${body.text || ''} ${body.name || ''}`;
+      ? `${rowsToText(layout.rows)} ${senderName}`
+      : `${body.text || ''} ${senderName}`;
     if (settings.blockedWordsEnabled && wordBlocked(spoken, settings.blockedWords)) {
       return { ok: false, error: "That message can't be shown" };
     }
@@ -398,8 +401,11 @@ function createGuestBook(config = {}, log = console, deps = {}) {
         type: 'guest.book',
         rows: board.rows,
         footerRows: board.footerRows,
-        name: String(body.name || '').trim(),
-      }, { quietHoursExempt: wake || !quiet });
+        name: senderName,
+      }, {
+        quietHoursExempt: wake || !quiet,
+        actor: actor || { kind: 'guest', userId: null, name: senderName || 'Guest' },
+      });
       const accepted = (vestaboard?.boards || []).some((row) => Number(row.accepted) > 0);
       if (!accepted) {
         status = 'queued';
@@ -416,7 +422,7 @@ function createGuestBook(config = {}, log = console, deps = {}) {
     const entry = {
       id: crypto.randomBytes(8).toString('hex'),
       at: new Date(nowFn()).toISOString(),
-      name: String(body.name || '').trim() || 'Anonymous',
+      name: senderName || 'Anonymous',
       source,
       status,
       ip,

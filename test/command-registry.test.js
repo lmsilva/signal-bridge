@@ -77,21 +77,53 @@ test('every command route is actually handled by the web server', () => {
   }
 });
 
-test('every command icon has admin artwork', () => {
+/** Load the shared tile artwork the way a page does. */
+function loadPushIcons() {
+  const { Script, createContext } = require('node:vm');
+  const source = fs.readFileSync(
+    path.join(__dirname, '../src/web/push-icons.js'), 'utf8',
+  );
+  const sandbox = { window: {} };
+  sandbox.window.window = sandbox.window;
+  createContext(sandbox);
+  new Script(source, { filename: 'push-icons.js' }).runInContext(sandbox);
+  return sandbox.window;
+}
+
+test('every command icon has artwork in the shared map', () => {
+  const { PUSH_ICONS } = loadPushIcons();
+  for (const command of COMMANDS) {
+    const icon = command.icon || command.group.toLowerCase();
+    assert.ok(PUSH_ICONS[icon], `no PUSH_ICONS entry for "${icon}" (${command.id})`);
+  }
+  // Admin reads the same file rather than keeping a second copy.
   const appJs = fs.readFileSync(
     path.join(__dirname, '../src/web/admin/app.js'), 'utf8',
   );
-  const iconBlock = appJs.slice(
-    appJs.indexOf('const PUSH_ICONS = {'),
-    appJs.indexOf('function pushIconSvg('),
-  );
-  for (const command of COMMANDS) {
+  assert.match(appJs, /const pushIconSvg = window\.pushIconSvg/);
+  assert.doesNotMatch(appJs, /const PUSH_ICONS = \{/);
+});
+
+test('no two push tiles draw the same icon', () => {
+  const { PUSH_ICONS } = loadPushIcons();
+  const pushable = COMMANDS.filter((command) => command.pushable);
+
+  const byIcon = new Map();
+  for (const command of pushable) {
     const icon = command.icon || command.group.toLowerCase();
-    assert.ok(
-      iconBlock.includes(`'${icon}':`) || iconBlock.includes(`${icon}:`),
-      `no PUSH_ICONS entry for "${icon}" (${command.id})`,
-    );
+    byIcon.set(icon, [...(byIcon.get(icon) || []), command.id]);
   }
+  const shared = [...byIcon].filter(([, ids]) => ids.length > 1);
+  assert.deepEqual(shared, [], `these tiles share an icon key: ${JSON.stringify(shared)}`);
+
+  // Two keys drawing identical SVG would look the same on the grid even though
+  // the keys differ, which is the thing a person actually notices.
+  const byArt = new Map();
+  for (const [icon, art] of Object.entries(PUSH_ICONS)) {
+    byArt.set(art, [...(byArt.get(art) || []), icon]);
+  }
+  const twins = [...byArt.values()].filter((keys) => keys.length > 1);
+  assert.deepEqual(twins, [], `these icon keys draw the same art: ${JSON.stringify(twins)}`);
 });
 
 test('every pushable command belongs to a rendered row', () => {

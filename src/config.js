@@ -172,6 +172,9 @@ function loadConfig() {
     adminPassword: process.env.ADMIN_PASSWORD
       || config.webServer?.adminPassword
       || '',
+    adminUsername: process.env.ADMIN_USERNAME
+      || config.webServer?.adminUsername
+      || 'admin',
     adminSessionHours: Number(process.env.ADMIN_SESSION_HOURS)
       || Number(config.webServer?.adminSessionHours)
       || 12,

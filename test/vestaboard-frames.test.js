@@ -60,6 +60,28 @@ test('the shopping list badge frame matches the spec drawing', () => {
   ].join('\n'), 'shopping list');
 });
 
+test('a badge frame can centre the title between the chip pairs', () => {
+  const steam = badgeFrame({ color: 'blue', title: 'STEAM', titleAlign: 'center' });
+  const psn = badgeFrame({ color: 'blue', title: 'PLAYSTATION', titleAlign: 'center' });
+
+  assertLayout(steam, [
+    'bb      STEAM       bb',
+    '',
+    '',
+    '',
+    '',
+    'bb                  bb',
+  ].join('\n'), 'centred steam title');
+  assertLayout(psn, [
+    'bb   PLAYSTATION    bb',
+    '',
+    '',
+    '',
+    '',
+    'bb                  bb',
+  ].join('\n'), 'centred playstation title');
+});
+
 test('a badge frame right-aligns the header extra, like a category or page', () => {
   const frame = badgeFrame({
     color: 'yellow',

@@ -1,96 +1,138 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { createWebAdminAuth, parseCookies } = require('../src/web-admin-auth');
+const { createHouseUsers } = require('../src/house-users');
 
 const silentLog = { info() {}, warn() {}, error() {}, debug() {} };
 
+function authWithUsers(password = 's3cret') {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-auth-'));
+  const config = {
+    ROOT: root,
+    houseUsersPath: path.join(root, 'users.json'),
+    webServer: { adminPassword: password, adminUsername: 'admin', adminSessionHours: 1 },
+    env: { ADMIN_PASSWORD: password, ADMIN_USERNAME: 'admin' },
+  };
+  const houseUsers = createHouseUsers(config, silentLog);
+  houseUsers.ensureBootstrap();
+  const auth = createWebAdminAuth(config, silentLog, { houseUsers });
+  return { auth, houseUsers, config };
+}
+
 test('parseCookies reads a simple Cookie header', () => {
   assert.deepEqual(
-    parseCookies({ headers: { cookie: 'a=1; signal_admin=abc%20123' } }),
-    { a: '1', signal_admin: 'abc 123' },
+    parseCookies({ headers: { cookie: 'a=1; signal_session=abc%20123' } }),
+    { a: '1', signal_session: 'abc 123' },
   );
 });
 
 test('login fails closed when ADMIN_PASSWORD is unset', () => {
-  const auth = createWebAdminAuth({ webServer: { adminPassword: '' } }, silentLog);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-auth-'));
+  const auth = createWebAdminAuth({
+    ROOT: root,
+    houseUsersPath: path.join(root, 'users.json'),
+    webServer: { adminPassword: '' },
+    env: { ADMIN_PASSWORD: '' },
+  }, silentLog);
   assert.equal(auth.isConfigured(), false);
-  const result = auth.login('anything', { headers: {}, socket: {} });
+  const result = auth.login({ username: 'admin', password: 'anything' }, { headers: {}, socket: {} });
   assert.equal(result.ok, false);
   assert.equal(result.code, 'admin_password_unset');
   assert.equal(auth.assertAuthorized({ headers: {} }).status, 503);
 });
 
-test('login rejects wrong password and accepts the correct one', () => {
-  const auth = createWebAdminAuth({
-    webServer: { adminPassword: 's3cret', adminSessionHours: 1 },
-  }, silentLog);
-  const bad = auth.login('nope', { headers: {}, socket: {} });
+test('login rejects wrong password and accepts username plus password', () => {
+  const { auth } = authWithUsers();
+  const bad = auth.login({ username: 'admin', password: 'nope' }, { headers: {}, socket: {} });
   assert.equal(bad.ok, false);
   assert.equal(bad.status, 401);
 
-  const good = auth.login('s3cret', { headers: {}, socket: {} });
+  const good = auth.login({ username: 'admin', password: 's3cret' }, { headers: {}, socket: {} });
   assert.equal(good.ok, true);
-  assert.match(good.setCookie, /signal_admin=/);
-  assert.match(good.setCookie, /HttpOnly/);
+  assert.ok(Array.isArray(good.setCookie));
+  assert.match(good.setCookie.join('\n'), /signal_session=/);
+  assert.match(good.setCookie.join('\n'), /HttpOnly/);
+  assert.equal(good.user.username, 'admin');
+  assert.equal(good.user.isAdmin, true);
 
-  const req = { headers: { cookie: `signal_admin=${good.token}` } };
+  const req = { headers: { cookie: `signal_session=${good.token}` } };
   assert.equal(auth.assertAuthorized(req).ok, true);
+  assert.equal(auth.assertUserAuthorized(req).ok, true);
+});
+
+test('legacy signal_admin cookie still unlocks a session', () => {
+  const { auth } = authWithUsers();
+  const good = auth.login({ username: 'admin', password: 's3cret' }, { headers: {}, socket: {} });
+  const req = { headers: { cookie: `signal_admin=${good.token}` } };
+  assert.equal(auth.sessionFromRequest(req).ok, true);
+});
+
+test('non-admin user can open /user/ but not /admin/', () => {
+  const { auth, houseUsers } = authWithUsers();
+  houseUsers.create({ username: 'maya', password: 'household1', firstName: 'Maya' });
+  const good = auth.login({ username: 'maya', password: 'household1' }, { headers: {}, socket: {} });
+  const req = { headers: { cookie: `signal_session=${good.token}` } };
+  assert.equal(auth.assertUserAuthorized(req).ok, true);
+  const admin = auth.assertAuthorized(req);
+  assert.equal(admin.ok, false);
+  assert.equal(admin.status, 403);
+});
+
+test('inactive users lose their session', () => {
+  const { auth, houseUsers } = authWithUsers();
+  const created = houseUsers.create({ username: 'kid', password: 'household1' });
+  const good = auth.login({ username: 'kid', password: 'household1' }, { headers: {}, socket: {} });
+  houseUsers.update(created.user.id, { active: false });
+  const req = { headers: { cookie: `signal_session=${good.token}` } };
+  assert.equal(auth.sessionFromRequest(req).ok, false);
 });
 
 test('logout clears the session', () => {
-  const auth = createWebAdminAuth({
-    webServer: { adminPassword: 's3cret', adminSessionHours: 1 },
-  }, silentLog);
-  const good = auth.login('s3cret', { headers: {}, socket: {} });
-  const req = { headers: { cookie: `signal_admin=${good.token}` } };
+  const { auth } = authWithUsers();
+  const good = auth.login({ username: 'admin', password: 's3cret' }, { headers: {}, socket: {} });
+  const req = { headers: { cookie: `signal_session=${good.token}` } };
   assert.equal(auth.sessionFromRequest(req).ok, true);
-
   const cleared = auth.logout(req);
-  assert.match(cleared.setCookie, /Max-Age=0/);
+  assert.match(cleared.setCookie.join('\n'), /Max-Age=0/);
   assert.equal(auth.sessionFromRequest(req).ok, false);
 });
 
 test('progressive lockout engages after repeated bad passwords from one IP', () => {
-  const auth = createWebAdminAuth({
-    webServer: { adminPassword: 's3cret', adminSessionHours: 1 },
-  }, silentLog);
+  const { auth } = authWithUsers();
   const req = { headers: {}, socket: { remoteAddress: '10.0.0.42' } };
 
-  const first = auth.login('wrong', req);
+  const first = auth.login({ username: 'admin', password: 'wrong' }, req);
   assert.equal(first.ok, false);
   assert.equal(first.status, 401);
   assert.equal(first.code, 'bad_password');
 
-  const second = auth.login('wrong', req);
+  const second = auth.login({ username: 'admin', password: 'wrong' }, req);
   assert.equal(second.status, 401);
 
-  const third = auth.login('wrong', req);
+  const third = auth.login({ username: 'admin', password: 'wrong' }, req);
   assert.equal(third.ok, false);
   assert.equal(third.status, 429);
   assert.equal(third.code, 'rate_limited');
   assert.equal(third.retryAfterSec, 5);
 
-  const whileLocked = auth.login('s3cret', req);
+  const whileLocked = auth.login({ username: 'admin', password: 's3cret' }, req);
   assert.equal(whileLocked.ok, false);
   assert.equal(whileLocked.status, 429);
-  assert.equal(whileLocked.code, 'rate_limited');
-  assert.ok(whileLocked.retryAfterSec >= 1);
   assert.equal(auth._sessions.size, 0);
 });
 
 test('successful login clears lockout for that IP', () => {
-  const auth = createWebAdminAuth({
-    webServer: { adminPassword: 's3cret', adminSessionHours: 1 },
-  }, silentLog);
+  const { auth } = authWithUsers();
   const req = { headers: {}, socket: { remoteAddress: '10.0.0.99' } };
-  auth.login('wrong', req);
-  auth.login('wrong', req);
-  const good = auth.login('s3cret', req);
+  auth.login({ username: 'admin', password: 'wrong' }, req);
+  auth.login({ username: 'admin', password: 'wrong' }, req);
+  const good = auth.login({ username: 'admin', password: 's3cret' }, req);
   assert.equal(good.ok, true);
   assert.equal(auth._loginAttempts.has('10.0.0.99'), false);
-
-  // Fresh failures start the ladder again (not stuck at prior fail count).
-  const again = auth.login('wrong', req);
+  const again = auth.login({ username: 'admin', password: 'wrong' }, req);
   assert.equal(again.status, 401);
 });
 

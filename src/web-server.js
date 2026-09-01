@@ -70,6 +70,9 @@ const {
 const { createDisplayControlAuth } = require('./display-control-auth');
 const { createQrImageCache, parseThumbRouteTail } = require('./qr-image-cache');
 const { createWebAdminAuth } = require('./web-admin-auth');
+const { createHouseUsers, AVATAR_TEMPLATES } = require('./house-users');
+const { createUserAudit } = require('./user-audit');
+const { createGmailMailer } = require('./gmail-mailer');
 const { createCommandRegistry } = require('./command-registry');
 const {
   savePlexToken,
@@ -280,6 +283,14 @@ function resolveStaticPath(webRoot, urlPathname) {
     pathname = '/guestsnaps/index.html';
   } else if (pathname === '/games' || pathname === '/games/') {
     pathname = '/games/index.html';
+  } else if (pathname === '/user' || pathname === '/user/') {
+    pathname = '/user/index.html';
+  } else if (pathname === '/user/reset' || pathname === '/user/reset/') {
+    pathname = '/user/reset.html';
+  } else if (pathname === '/privacy' || pathname === '/privacy/') {
+    pathname = '/privacy.html';
+  } else if (pathname === '/terms' || pathname === '/terms/') {
+    pathname = '/terms.html';
   }
   const resolved = path.normalize(path.join(webRoot, pathname));
   if (resolved !== webRoot && !resolved.startsWith(webRoot + path.sep)) {
@@ -292,6 +303,12 @@ function isAdminHtmlPath(pathname) {
   return pathname === '/admin'
     || pathname === '/admin/'
     || pathname === '/admin/index.html';
+}
+
+function isUserHtmlPath(pathname) {
+  return pathname === '/user'
+    || pathname === '/user/'
+    || pathname === '/user/index.html';
 }
 
 function isAdminLoginPath(pathname) {
@@ -440,12 +457,17 @@ function createWebServer({
   shortlinksHealthIntervalMs = undefined,
 } = {}) {
   let schedulerAir = null;
+  let requestActor = null;
 
   function sendUdpPayload(payload, options = {}) {
     if (typeof sendUdpPayloadIn !== 'function') {
       return undefined;
     }
-    return sendUdpPayloadIn(payload, { ...options, ...(schedulerAir || {}) });
+    return sendUdpPayloadIn(payload, {
+      ...options,
+      actor: options.actor || requestActor || undefined,
+      ...(schedulerAir || {}),
+    });
   }
 
   function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
@@ -472,7 +494,12 @@ function createWebServer({
   };
   const staticRoot = webRoot || path.join(__dirname, 'web');
   const controlAuth = createDisplayControlAuth(config, log);
-  const adminAuth = createWebAdminAuth(config, log);
+  const houseUsers = createHouseUsers(config, log);
+  houseUsers.ensureBootstrap();
+  const userAudit = createUserAudit(config, log);
+  const gmailMailer = createGmailMailer({ config, log });
+  const adminAuth = createWebAdminAuth(config, log, { houseUsers });
+  const avatarDir = path.resolve(config.ROOT || path.resolve(__dirname, '..'), 'data', 'user-avatars');
   const guestSnapsAuth = guestSnapsAuthInjected || createGuestSnapsAuth(config, log);
   const qrImageCache = createQrImageCache(config, log);
   // Existing camera-roll photos predate thumbnail support — fill them in the
@@ -508,6 +535,7 @@ function createWebServer({
         explicit: options.explicit,
         breakHold: options.breakHold,
         replaceSource: options.replaceSource,
+        actor: options.actor,
       });
     },
     getTimeZone: () => localeSettings.get()?.timeZone || houseTimeZone(config),
@@ -5685,6 +5713,25 @@ function createWebServer({
     return targetId;
   }
 
+  function bindActor(session) {
+    if (session?.ok && session.actor) {
+      requestActor = session.actor;
+    }
+  }
+
+  function writeAuthCookies(res, status, cookies, extraHeaders, body) {
+    const headers = {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      ...extraHeaders,
+    };
+    if (cookies) {
+      headers['Set-Cookie'] = cookies;
+    }
+    res.writeHead(status, headers);
+    res.end(typeof body === 'string' ? body : JSON.stringify(body));
+  }
+
   function requireAdminSession(req, res) {
     const gate = adminAuth.assertAuthorized(req);
     if (!gate.ok) {
@@ -5695,7 +5742,67 @@ function createWebServer({
       });
       return false;
     }
+    bindActor(gate);
     return true;
+  }
+
+  function requireUserSession(req, res) {
+    const gate = adminAuth.assertUserAuthorized(req);
+    if (!gate.ok) {
+      sendJson(res, gate.status || 401, {
+        ok: false,
+        error: gate.error,
+        code: gate.code,
+      });
+      return false;
+    }
+    bindActor(gate);
+    return gate;
+  }
+
+  function requirePermission(req, res, permission) {
+    const gate = adminAuth.hasPermission(req, permission);
+    if (!gate.ok) {
+      sendJson(res, gate.status || 403, {
+        ok: false,
+        error: gate.error,
+        code: gate.code,
+      });
+      return false;
+    }
+    bindActor(gate);
+    return gate;
+  }
+
+  function isUserAccessiblePath(pathname) {
+    if (pathname.startsWith('/api/user/')) return true;
+    if (pathname.startsWith('/api/push/')) return true;
+    if (pathname === '/api/commands') return true;
+    if (pathname.startsWith('/api/vestaboard-sim')) return true;
+    if (pathname === '/api/vestaboards/release-holds') return true;
+    if (pathname.startsWith('/api/photos')) return true;
+    if (pathname.startsWith('/api/date-book/')) return true;
+    if (pathname.startsWith('/api/flightplan/trips')) return true;
+    if (pathname.startsWith('/api/flightplan/flights')) return true;
+    if (pathname === '/api/flightplan/search') return true;
+    if (pathname === '/api/flightplan/airports') return true;
+    if (pathname === '/api/flightplan/status') return true;
+    if (pathname === '/api/displays') return true;
+    if (pathname === '/api/displays/events') return true;
+    return false;
+  }
+
+  function requirePathSession(req, res, pathname) {
+    if (pathname.startsWith('/api/photos')) {
+      return requirePermission(req, res, 'slideshow');
+    }
+    if (pathname.startsWith('/api/date-book/')) {
+      return requirePermission(req, res, 'redLetter');
+    }
+    if (pathname.startsWith('/api/flightplan/')) {
+      return requirePermission(req, res, 'flightPlan');
+    }
+    return requireUserSession(req, res);
   }
 
   /** Guest booth photo APIs: guest session OR admin session. */
@@ -5843,12 +5950,18 @@ function createWebServer({
   }
 
   function handleAdminLogin(body, req, res) {
-    const result = adminAuth.login(body?.password, req);
+    const ip = adminAuth.clientIpFromRequest(req);
+    const result = adminAuth.login({
+      username: body?.username,
+      password: body?.password,
+    }, req);
     if (!result.ok) {
-      const headers = {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store',
-      };
+      userAudit.append({
+        ip,
+        action: 'login.fail',
+        detail: { username: String(body?.username || houseUsers.adminUsername), code: result.code },
+      });
+      const headers = {};
       if (result.retryAfterSec > 0) {
         headers['Retry-After'] = String(result.retryAfterSec);
       }
@@ -5860,29 +5973,45 @@ function createWebServer({
       if (result.retryAfterSec > 0) {
         payload.retryAfterSec = result.retryAfterSec;
       }
-      res.writeHead(result.status || 401, headers);
-      res.end(JSON.stringify(payload));
+      writeAuthCookies(res, result.status || 401, null, headers, payload);
       return;
     }
-    res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'Set-Cookie': result.setCookie,
+    if (body?.requireAdmin && !result.user?.isAdmin) {
+      adminAuth.dropSessionsForUser(result.user.id);
+      writeAuthCookies(res, 403, adminAuth.logout(req).setCookie, {}, {
+        ok: false,
+        error: 'Admin access required',
+        code: 'not_admin',
+      });
+      return;
+    }
+    userAudit.append({
+      ip,
+      actorUserId: result.user.id,
+      action: 'login',
+      targetUserId: result.user.id,
+      detail: { username: result.user.username, isAdmin: result.user.isAdmin },
     });
-    res.end(JSON.stringify({
+    writeAuthCookies(res, 200, result.setCookie, {}, {
       ok: true,
       expiresAt: new Date(result.expiresAt).toISOString(),
-    }));
+      user: result.user,
+    });
   }
 
   function handleAdminLogout(req, res) {
+    const session = adminAuth.sessionFromRequest(req);
     const result = adminAuth.logout(req);
-    res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'Set-Cookie': result.setCookie,
-    });
-    res.end(JSON.stringify({ ok: true }));
+    if (session.ok) {
+      userAudit.append({
+        ip: adminAuth.clientIpFromRequest(req),
+        actorUserId: session.userId,
+        action: 'logout',
+        targetUserId: session.userId,
+        detail: { username: session.username },
+      });
+    }
+    writeAuthCookies(res, 200, result.setCookie, {}, { ok: true });
   }
 
   function handleAdminSession(req, res) {
@@ -5892,6 +6021,7 @@ function createWebServer({
         ok: true,
         authenticated: false,
         configured: adminAuth.isConfigured(),
+        adminUsername: houseUsers.adminUsername,
         code: session.code,
       });
       return;
@@ -5900,8 +6030,333 @@ function createWebServer({
       ok: true,
       authenticated: true,
       configured: true,
+      isAdmin: session.isAdmin === true,
       expiresAt: new Date(session.expiresAt).toISOString(),
+      user: session.user,
+      adminUsername: houseUsers.adminUsername,
     });
+  }
+
+  function publicOrigin(req) {
+    const proto = String(req?.headers?.['x-forwarded-proto'] || (req?.socket?.encrypted ? 'https' : 'http'));
+    const host = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || 'localhost');
+    return `${proto}://${host}`.replace(/\/$/, '');
+  }
+
+  function avatarUrlFor(user) {
+    if (!user?.avatar) return `/user/avatars/${AVATAR_TEMPLATES[0].id}.svg`;
+    if (user.avatar.kind === 'upload' && user.avatar.id) {
+      return `/user-avatars/${user.avatar.id}`;
+    }
+    return `/user/avatars/${user.avatar.id || AVATAR_TEMPLATES[0].id}.svg`;
+  }
+
+  async function emailPassword(to, { subject, text }) {
+    if (!to) return { ok: false, code: 'no_email', error: 'This account has no email address' };
+    const result = await gmailMailer.sendMail({ to, subject, text });
+    return result;
+  }
+
+  function handleHouseUsersList(res) {
+    sendJson(res, 200, {
+      ok: true,
+      users: houseUsers.list().map((user) => ({ ...user, avatarUrl: avatarUrlFor(user) })),
+      templates: AVATAR_TEMPLATES,
+    });
+  }
+
+  function handleHouseUserCreate(body, req, res) {
+    const session = adminAuth.sessionFromRequest(req);
+    const result = houseUsers.create(body || {});
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    userAudit.append({
+      ip: adminAuth.clientIpFromRequest(req),
+      actorUserId: session.userId,
+      action: 'user.create',
+      targetUserId: result.user.id,
+      detail: { username: result.user.username },
+    });
+    sendJson(res, 200, result);
+  }
+
+  function handleHouseUserUpdate(id, body, req, res) {
+    const session = adminAuth.sessionFromRequest(req);
+    const before = houseUsers.getById(id);
+    const result = houseUsers.update(id, body || {});
+    if (!result.ok) {
+      sendJson(res, result.error === 'User not found' ? 404 : 400, result);
+      return;
+    }
+    if (before && result.user.active === false && before.active !== false) {
+      adminAuth.dropSessionsForUser(id);
+    }
+    userAudit.append({
+      ip: adminAuth.clientIpFromRequest(req),
+      actorUserId: session.userId,
+      action: 'user.update',
+      targetUserId: id,
+      detail: { username: result.user.username, active: result.user.active, isAdmin: result.user.isAdmin },
+    });
+    sendJson(res, 200, result);
+  }
+
+  function handleHouseUserPassword(id, body, req, res) {
+    const session = adminAuth.sessionFromRequest(req);
+    const generated = !String(body?.password || '').trim();
+    const result = generated
+      ? houseUsers.resetPassword(id)
+      : houseUsers.setPassword(id, body.password);
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    adminAuth.dropSessionsForUser(id);
+    userAudit.append({
+      ip: adminAuth.clientIpFromRequest(req),
+      actorUserId: session.userId,
+      action: generated ? 'password.generate' : 'password.reset',
+      targetUserId: id,
+      detail: { username: result.user.username },
+    });
+    sendJson(res, 200, result);
+  }
+
+  async function handleHouseUserEmailPassword(id, req, res) {
+    const session = adminAuth.sessionFromRequest(req);
+    const result = houseUsers.resetPassword(id);
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    adminAuth.dropSessionsForUser(id);
+    const mailed = await emailPassword(result.user.email, {
+      subject: 'Your Signal password',
+      text: `Hi ${result.user.firstName || result.user.username},\n\nA new password was created for your Signal account:\n\n${result.password}\n\nSign in at ${publicOrigin(req)}/\n`,
+    });
+    userAudit.append({
+      ip: adminAuth.clientIpFromRequest(req),
+      actorUserId: session.userId,
+      action: mailed.ok ? 'password.email' : 'password.email.skip',
+      targetUserId: id,
+      detail: { username: result.user.username, code: mailed.code || null },
+    });
+    sendJson(res, 200, { ...result, emailed: mailed.ok === true, mailError: mailed.ok ? null : mailed.error });
+  }
+
+  function handleUserAudit(reqUrl, res) {
+    sendJson(res, 200, {
+      ok: true,
+      entries: userAudit.list({
+        limit: Number(reqUrl.searchParams.get('limit') || 200),
+        action: reqUrl.searchParams.get('action') || '',
+        userId: reqUrl.searchParams.get('userId') || '',
+      }),
+    });
+  }
+
+  function handleUserMe(req, res) {
+    const session = requireUserSession(req, res);
+    if (!session) return;
+    sendJson(res, 200, {
+      ok: true,
+      user: { ...session.user, avatarUrl: avatarUrlFor(session.user) },
+      templates: AVATAR_TEMPLATES,
+    });
+  }
+
+  function handleUserProfile(body, req, res) {
+    const session = requireUserSession(req, res);
+    if (!session) return;
+    const current = houseUsers.getById(session.userId);
+    const result = houseUsers.update(session.userId, {
+      firstName: body?.firstName,
+      lastName: body?.lastName,
+      email: houseUsers.isBootstrap(current) ? undefined : body?.email,
+      avatar: body?.avatar,
+      dashboardTiles: body?.dashboardTiles,
+    });
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    const identityChanged = ['firstName', 'lastName', 'email', 'avatar'].some(
+      (key) => body && Object.prototype.hasOwnProperty.call(body, key),
+    );
+    if (identityChanged) {
+      userAudit.append({
+        ip: adminAuth.clientIpFromRequest(req),
+        actorUserId: session.userId,
+        action: 'profile.update',
+        targetUserId: session.userId,
+      });
+    }
+    sendJson(res, 200, { ok: true, user: { ...result.user, avatarUrl: avatarUrlFor(result.user) } });
+  }
+
+  function handleUserPasswordChange(body, req, res) {
+    const session = requireUserSession(req, res);
+    if (!session) return;
+    const current = houseUsers.verifyLogin(session.username, body?.currentPassword);
+    if (!current.ok) {
+      sendJson(res, 401, { ok: false, error: 'Current password is incorrect' });
+      return;
+    }
+    const result = houseUsers.setPassword(session.userId, body?.password);
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    userAudit.append({
+      ip: adminAuth.clientIpFromRequest(req),
+      actorUserId: session.userId,
+      action: 'password.change',
+      targetUserId: session.userId,
+    });
+    sendJson(res, 200, { ok: true });
+  }
+
+  function handleUserGuestbookSend(body, req, res) {
+    const session = requireUserSession(req, res);
+    if (!session) return;
+    const result = guestBook.send(body || {}, {
+      ip: guestClientIp(req),
+      req,
+      skipUnlock: true,
+      nameOverride: session.firstName || session.username,
+      actor: session.actor,
+    });
+    sendJson(res, result.ok ? 200 : (result.closed ? 403 : 400), result);
+  }
+
+  function handleUserGames(res) {
+    const rows = (gameSessions.listActive?.() || []).map((session) => ({
+      sessionId: session.sessionId,
+      game: session.title || session.gameType,
+      gameType: session.gameType,
+      code: session.code,
+      phase: session.phase,
+      startedAgoSeconds: session.elapsedSeconds,
+      playerCount: session.playerCount,
+      lobby: session.phase === 'lobby' || session.phase === 'invite',
+    }));
+    sendJson(res, 200, { ok: true, sessions: rows });
+  }
+
+  function handleUserCommands(res) {
+    sendJson(res, 200, {
+      ok: true,
+      commands: commandRegistry.list({ skipContentCheck: true }).filter((row) => row.pushable),
+    });
+  }
+
+  async function handleForgotPassword(body, req, res) {
+    const reset = houseUsers.beginPasswordReset(body?.email);
+    if (reset.sent) {
+      const origin = publicOrigin(req);
+      const mailed = await emailPassword(reset.user.email, {
+        subject: 'Reset your Signal password',
+        text: `Hi ${reset.user.firstName || reset.user.username},\n\nReset your password:\n${origin}/user/reset?token=${reset.token}\n\nThis link expires in one hour.\n`,
+      });
+      userAudit.append({
+        ip: adminAuth.clientIpFromRequest(req),
+        action: mailed.ok ? 'password.reset.email' : 'password.reset.email.skip',
+        targetUserId: reset.user.id,
+        detail: { code: mailed.code || null },
+      });
+    } else {
+      userAudit.append({
+        ip: adminAuth.clientIpFromRequest(req),
+        action: 'password.reset.request',
+        detail: { found: false },
+      });
+    }
+    sendJson(res, 200, { ok: true });
+  }
+
+  function handleResetPassword(body, res) {
+    const result = houseUsers.consumePasswordReset(body?.token, body?.password);
+    if (!result.ok) {
+      sendJson(res, 400, result);
+      return;
+    }
+    userAudit.append({
+      action: 'password.reset.consume',
+      targetUserId: result.user.id,
+      detail: { username: result.user.username },
+    });
+    sendJson(res, 200, { ok: true });
+  }
+
+  function writeAvatarFromDataUrl(userId, dataUrl) {
+    const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(dataUrl || ''));
+    if (!match) return { ok: false, error: 'Upload a PNG, JPEG, or WebP image' };
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length > 1_500_000) {
+      return { ok: false, error: 'That picture is too large (1.5 MB max)' };
+    }
+    const ext = match[1] === 'image/png' ? 'png' : (match[1] === 'image/webp' ? 'webp' : 'jpg');
+    const id = `${userId}.${ext}`;
+    fs.mkdirSync(avatarDir, { recursive: true });
+    fs.writeFileSync(path.join(avatarDir, id), buffer);
+    return { ok: true, id };
+  }
+
+  function handleAvatarUpload(body, req, res) {
+    const session = requireUserSession(req, res);
+    if (!session) return;
+    const stored = writeAvatarFromDataUrl(session.userId, body?.image || body?.dataUrl);
+    if (!stored.ok) {
+      sendJson(res, 400, stored);
+      return;
+    }
+    const result = houseUsers.update(session.userId, { avatar: { kind: 'upload', id: stored.id } });
+    sendJson(res, 200, { ok: true, user: { ...result.user, avatarUrl: avatarUrlFor(result.user) } });
+  }
+
+  function handleHouseUserAvatar(id, body, req, res) {
+    const session = adminAuth.sessionFromRequest(req);
+    const stored = writeAvatarFromDataUrl(id, body?.image || body?.dataUrl);
+    if (!stored.ok) {
+      sendJson(res, 400, stored);
+      return;
+    }
+    const result = houseUsers.update(id, { avatar: { kind: 'upload', id: stored.id } });
+    if (!result.ok) {
+      sendJson(res, result.error === 'User not found' ? 404 : 400, result);
+      return;
+    }
+    userAudit.append({
+      ip: adminAuth.clientIpFromRequest(req),
+      actorUserId: session.userId,
+      action: 'user.avatar',
+      targetUserId: id,
+      detail: { username: result.user.username },
+    });
+    sendJson(res, 200, { ok: true, user: { ...result.user, avatarUrl: avatarUrlFor(result.user) } });
+  }
+
+  function serveUserAvatar(pathname, res) {
+    const name = path.basename(pathname);
+    if (!/^[a-z0-9]+\.(png|jpg|jpeg|webp)$/i.test(name)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
+    const filePath = path.join(avatarDir, name);
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, {
+      'Content-Type': ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : 'image/jpeg'),
+      'Cache-Control': 'private, max-age=3600',
+    });
+    fs.createReadStream(filePath).pipe(res);
   }
 
   function sendCommandPayload(payload, targetId, res, okBody = {}) {
@@ -8523,6 +8978,11 @@ function createWebServer({
       redirectToAdminLogin(res, pathname === '/admin/index.html' ? '/admin/' : pathname);
       return;
     }
+    if (isUserHtmlPath(pathname) && !adminAuth.assertUserAuthorized(req).ok) {
+      res.writeHead(302, { Location: '/', 'Cache-Control': 'no-store' });
+      res.end();
+      return;
+    }
     serveStatic(pathname, res);
   }
 
@@ -8592,6 +9052,62 @@ function createWebServer({
           handleYoutubeImageServe(pathname, res);
           return;
         }
+        if (pathname.startsWith('/user-avatars/')) {
+          serveUserAvatar(pathname, res);
+          return;
+        }
+        if (pathname === '/api/user/session') {
+          handleAdminSession(req, res);
+          return;
+        }
+        if (pathname === '/api/gmail/callback') {
+          const code = reqUrl.searchParams.get('code');
+          const err = reqUrl.searchParams.get('error');
+          if (err || !code) {
+            res.writeHead(302, { Location: '/admin/?gmail=denied', 'Cache-Control': 'no-store' });
+            res.end();
+            return;
+          }
+          try {
+            await gmailMailer.exchangeCode(code);
+            userAudit.append({ action: 'gmail.link', ip: adminAuth.clientIpFromRequest(req) });
+            res.writeHead(302, { Location: '/admin/?gmail=ok', 'Cache-Control': 'no-store' });
+          } catch (error) {
+            log.warn('Gmail OAuth callback failed', error?.message || error);
+            res.writeHead(302, { Location: '/admin/?gmail=error', 'Cache-Control': 'no-store' });
+          }
+          res.end();
+          return;
+        }
+        if (pathname === '/api/user/me') {
+          handleUserMe(req, res);
+          return;
+        }
+        if (pathname === '/api/user/games') {
+          if (!requireUserSession(req, res)) return;
+          handleUserGames(res);
+          return;
+        }
+        if (pathname === '/api/user/commands') {
+          if (!requireUserSession(req, res)) return;
+          handleUserCommands(res);
+          return;
+        }
+        if (pathname === '/api/house-users') {
+          if (!requireAdminSession(req, res)) return;
+          handleHouseUsersList(res);
+          return;
+        }
+        if (pathname === '/api/house-users/audit') {
+          if (!requireAdminSession(req, res)) return;
+          handleUserAudit(reqUrl, res);
+          return;
+        }
+        if (pathname === '/api/gmail/status') {
+          if (!requireAdminSession(req, res)) return;
+          sendJson(res, 200, { ok: true, ...gmailMailer.status() });
+          return;
+        }
         // Admin-only JSON APIs
         if (pathname === '/api/status') {
           if (!requireAdminSession(req, res)) return;
@@ -8599,7 +9115,7 @@ function createWebServer({
           return;
         }
         if (pathname === '/api/commands') {
-          if (!requireAdminSession(req, res)) return;
+          if (!requireUserSession(req, res)) return;
           sendJson(res, 200, { ok: true, commands: commandRegistry.list() });
           return;
         }
@@ -8898,12 +9414,16 @@ function createWebServer({
           return;
         }
         if (pathname.startsWith('/api/date-book/')) {
-          if (!requireAdminSession(req, res)) return;
+          if (!requirePermission(req, res, 'redLetter')) return;
           handleDateBookApi('GET', pathname, null, res);
           return;
         }
         if (pathname.startsWith('/api/flightplan/')) {
-          if (!requireAdminSession(req, res)) return;
+          if (isUserAccessiblePath(pathname)) {
+            if (!requirePermission(req, res, 'flightPlan')) return;
+          } else if (!requireAdminSession(req, res)) {
+            return;
+          }
           await handleFlightplanApi('GET', pathname, null, res, reqUrl.searchParams);
           return;
         }
@@ -8942,7 +9462,7 @@ function createWebServer({
           return;
         }
         if (pathname === '/api/photos') {
-          if (!requireAdminSession(req, res)) return;
+          if (!requirePermission(req, res, 'slideshow')) return;
           handlePhotosList(res);
           return;
         }
@@ -9014,7 +9534,7 @@ function createWebServer({
           return;
         }
         if (pathname === '/api/photos/events') {
-          if (!requireAdminSession(req, res)) return;
+          if (!requirePermission(req, res, 'slideshow')) return;
           handlePhotoEvents(req, res);
           return;
         }
@@ -9029,12 +9549,12 @@ function createWebServer({
           return;
         }
         if (pathname === '/api/vestaboard-sim') {
-          if (!requireAdminSession(req, res)) return;
+          if (!requireUserSession(req, res)) return;
           handleVestaboardSimState(res);
           return;
         }
         if (pathname === '/api/vestaboard-sim/events') {
-          if (!requireAdminSession(req, res)) return;
+          if (!requireUserSession(req, res)) return;
           handleVestaboardSimEvents(req, res);
           return;
         }
@@ -9064,8 +9584,10 @@ function createWebServer({
           await handlePsnLibraryTourPreview(res);
           return;
         }
-        // Login page + guest booth + shared logos are public; admin shell needs a session.
-        if (isAdminLoginPath(pathname) || !pathname.startsWith('/admin')) {
+        // Login page + guest booth + shared logos are public; admin and /user/ shells need a session.
+        if (isAdminLoginPath(pathname) || (
+          !pathname.startsWith('/admin') && !isUserHtmlPath(pathname)
+        )) {
           serveStatic(pathname, res);
           return;
         }
@@ -9131,9 +9653,16 @@ function createWebServer({
           return;
         }
         if (pathname.startsWith('/api/date-book/')) {
-          if (!requireAdminSession(req, res)) return;
+          if (!requirePermission(req, res, 'redLetter')) return;
           const body = req.method === 'PUT' ? await readJsonBody(req, MAX_BODY_BYTES) : {};
           handleDateBookApi(req.method, pathname, body, res);
+          return;
+        }
+        const houseUserPut = /^\/api\/house-users\/([^/]+)$/.exec(pathname);
+        if (houseUserPut && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          handleHouseUserUpdate(houseUserPut[1], body, req, res);
           return;
         }
         const isScheduler = pathname.startsWith('/api/display-scheduler/');
@@ -9145,7 +9674,11 @@ function createWebServer({
           res.end('Method not allowed');
           return;
         }
-        if (!requireAdminSession(req, res)) return;
+        if (isFlightplan && isUserAccessiblePath(pathname)) {
+          if (!requirePermission(req, res, 'flightPlan')) return;
+        } else if (!requireAdminSession(req, res)) {
+          return;
+        }
         const isVideoUpload = isRollCredits
           && /\/media\/video-upload$/.test(pathname)
           && req.method === 'PUT';
@@ -9197,11 +9730,84 @@ function createWebServer({
         const body = await readJsonBody(req, bodyLimit);
 
         if (pathname === '/api/admin/login') {
+          handleAdminLogin({ ...body, requireAdmin: body?.requireAdmin !== false }, req, res);
+          return;
+        }
+        if (pathname === '/api/user/login') {
           handleAdminLogin(body, req, res);
           return;
         }
-        if (pathname === '/api/admin/logout') {
+        if (pathname === '/api/admin/logout' || pathname === '/api/user/logout') {
           handleAdminLogout(req, res);
+          return;
+        }
+        if (pathname === '/api/user/forgot') {
+          await handleForgotPassword(body, req, res);
+          return;
+        }
+        if (pathname === '/api/user/reset') {
+          handleResetPassword(body, res);
+          return;
+        }
+        if (pathname === '/api/user/profile') {
+          handleUserProfile(body, req, res);
+          return;
+        }
+        if (pathname === '/api/user/password') {
+          handleUserPasswordChange(body, req, res);
+          return;
+        }
+        if (pathname === '/api/user/avatar') {
+          handleAvatarUpload(body, req, res);
+          return;
+        }
+        if (pathname === '/api/user/guestbook/send') {
+          handleUserGuestbookSend(body, req, res);
+          return;
+        }
+        if (pathname === '/api/house-users') {
+          if (!requireAdminSession(req, res)) return;
+          handleHouseUserCreate(body, req, res);
+          return;
+        }
+        const houseUserPost = /^\/api\/house-users\/([^/]+)$/.exec(pathname);
+        if (houseUserPost) {
+          if (!requireAdminSession(req, res)) return;
+          handleHouseUserUpdate(houseUserPost[1], body, req, res);
+          return;
+        }
+        const housePw = /^\/api\/house-users\/([^/]+)\/password$/.exec(pathname);
+        if (housePw) {
+          if (!requireAdminSession(req, res)) return;
+          handleHouseUserPassword(housePw[1], body, req, res);
+          return;
+        }
+        const houseEmail = /^\/api\/house-users\/([^/]+)\/email-password$/.exec(pathname);
+        if (houseEmail) {
+          if (!requireAdminSession(req, res)) return;
+          await handleHouseUserEmailPassword(houseEmail[1], req, res);
+          return;
+        }
+        const houseAvatar = /^\/api\/house-users\/([^/]+)\/avatar$/.exec(pathname);
+        if (houseAvatar) {
+          if (!requireAdminSession(req, res)) return;
+          handleHouseUserAvatar(houseAvatar[1], body, req, res);
+          return;
+        }
+        if (pathname === '/api/gmail/start') {
+          if (!requireAdminSession(req, res)) return;
+          sendJson(res, 200, gmailMailer.buildAuthorizeUrl());
+          return;
+        }
+        if (pathname === '/api/gmail/unlink') {
+          if (!requireAdminSession(req, res)) return;
+          const session = adminAuth.sessionFromRequest(req);
+          userAudit.append({
+            ip: adminAuth.clientIpFromRequest(req),
+            actorUserId: session.userId,
+            action: 'gmail.unlink',
+          });
+          sendJson(res, 200, gmailMailer.unlink());
           return;
         }
         if (pathname === '/api/guest/login') {
@@ -9254,8 +9860,10 @@ function createWebServer({
           return;
         }
 
-        // Everything else requires an admin session.
-        if (!requireAdminSession(req, res)) {
+        // Household users can push, manage the board queue, and use permissioned screens.
+        if (isUserAccessiblePath(pathname)) {
+          if (!requirePathSession(req, res, pathname)) return;
+        } else if (!requireAdminSession(req, res)) {
           return;
         }
 
@@ -9288,7 +9896,11 @@ function createWebServer({
           return;
         }
         if (pathname.startsWith('/api/flightplan/')) {
-          if (!requireAdminSession(req, res)) return;
+          if (isUserAccessiblePath(pathname)) {
+            if (!requirePermission(req, res, 'flightPlan')) return;
+          } else if (!requireAdminSession(req, res)) {
+            return;
+          }
           await handleFlightplanApi('POST', pathname, body, res, reqUrl.searchParams);
           return;
         }
@@ -9912,6 +10524,8 @@ function createWebServer({
       } else {
         res.end();
       }
+    } finally {
+      requestActor = null;
     }
   }
 
@@ -10064,6 +10678,7 @@ module.exports = {
   computeWebBasePath,
   checkUrlReachable,
   isAdminHtmlPath,
+  isUserHtmlPath,
   isAdminLoginPath,
   triviaArtworkStemVariants,
 };

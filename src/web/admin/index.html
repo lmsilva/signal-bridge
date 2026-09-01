@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal237">
+  <link rel="stylesheet" href="styles.css?v=signal263">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -40,7 +40,16 @@
           <span class="pulse" id="bridge-pulse"></span>
           <span id="bridge-status-text">connecting…</span>
         </div>
-        <button type="button" class="btn btn-outline btn-sm" id="btn-admin-logout" title="Sign out of admin">Log out</button>
+        <button type="button" class="btn btn-outline btn-icon btn-header-icon" id="btn-house-users" title="User management" aria-label="User management">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </button>
+        <button type="button" class="btn btn-outline btn-header-text" id="btn-admin-logout" title="Sign out of admin">Log out</button>
+        <a class="btn btn-outline btn-header-text" href="/" id="btn-signal-home" title="Open the main menu">Main Menu</a>
       </div>
     </header>
 
@@ -68,16 +77,24 @@
       <div class="push-head tab-sticky-head" id="push-head">
         <div class="push-search-row">
           <label class="push-search" for="push-search">
-            <input
+            <textarea
               id="push-search"
-              class="field-input"
-              type="search"
+              class="field-input filter-search"
+              rows="1"
+              wrap="off"
+              name="signal-push-q"
               placeholder="Search pushes…"
-              autocomplete="off"
+              autocomplete="one-time-code"
+              autocorrect="off"
+              autocapitalize="off"
               spellcheck="false"
               enterkeyhint="search"
               aria-label="Search pushes"
-            >
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+            ></textarea>
           </label>
           <div class="display-kind-filter-wrap">
             <span class="display-kind-filter-label" id="push-kind-filter-label">Applies to</span>
@@ -718,16 +735,24 @@
       <div class="settings-head tab-sticky-head" id="settings-head">
         <div class="settings-search-row">
           <label class="settings-search" for="settings-search">
-            <input
+            <textarea
               id="settings-search"
-              class="field-input"
-              type="search"
+              class="field-input filter-search"
+              rows="1"
+              wrap="off"
+              name="signal-settings-q"
               placeholder="Search settings…"
-              autocomplete="off"
+              autocomplete="one-time-code"
+              autocorrect="off"
+              autocapitalize="off"
               spellcheck="false"
               enterkeyhint="search"
               aria-label="Search settings"
-            >
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+            ></textarea>
           </label>
           <div class="display-kind-filter-wrap">
             <span class="display-kind-filter-label" id="settings-kind-filter-label">Applies to</span>
@@ -1411,6 +1436,27 @@
           <button class="btn btn-outline btn-block" id="btn-psn-library-tour" style="margin-top:10px">
             Start library tour
           </button>
+        </div>
+
+        <div class="section-label" data-settings-group="accounts">Email</div>
+        <div class="card email-sender-card" data-settings-group="accounts" data-search-terms="email sender gmail mail password reset invite oauth household" id="gmail-mail-card">
+          <div class="auth-head">
+            <div class="auth-name">Email Sender</div>
+            <span class="status-pill" id="gmail-status-pill">…</span>
+          </div>
+          <p class="email-sender-lead">Mails a new password when you create or reset a household user.</p>
+          <div class="email-sender-status">
+            <p class="email-sender-kicker">Sends as</p>
+            <p class="email-sender-identity" id="gmail-status-identity">Not linked</p>
+            <p class="auth-detail" id="gmail-status-detail"></p>
+          </div>
+          <div class="btn-row email-sender-actions">
+            <button type="button" class="btn btn-accent" id="btn-gmail-link">Link Gmail</button>
+            <button type="button" class="btn btn-outline" id="btn-gmail-unlink" hidden>Unlink</button>
+          </div>
+          <p class="hint" id="gmail-form-status"></p>
+          <p class="hint email-sender-note" id="gmail-setup-note" hidden>Publish the Google Cloud OAuth client to Production so this link lasts more than 7 days. Verification is not required.</p>
+          <p class="hint email-sender-branding">Google branding: <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/oauth-logo.png">logo (120×120)</a></p>
         </div>
 
         <div class="section-label" data-settings-group="youtube">YouTube</div>
@@ -4615,6 +4661,8 @@
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
   <script src="/flap-grid.js?v=2"></script>
+  <script src="/red-letter-presets.js?v=signal260"></script>
+  <script src="/push-icons.js?v=signal262"></script>
   <div class="sheet-backdrop" id="word-scramble-sessions-sheet" hidden>
     <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="word-scramble-sessions-title">
       <div class="credits-sheet-head">
@@ -4691,7 +4739,161 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="house-users-sheet" hidden>
+    <div class="sheet cn-manage-sheet house-users-sheet" role="dialog" aria-modal="true" aria-labelledby="house-users-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="house-users-title">User management</div>
+        <button type="button" class="credits-sheet-close" id="btn-house-users-close" aria-label="Close">×</button>
+      </div>
+      <div class="segmented house-users-tabs" id="house-users-tabs" role="tablist" aria-label="User management sections">
+        <button type="button" class="segmented-btn active" data-hu-tab="users" role="tab" aria-selected="true">Users</button>
+        <button type="button" class="segmented-btn" data-hu-tab="audit" role="tab" aria-selected="false">Audit</button>
+      </div>
+
+      <div class="house-users-pane" id="hu-pane-users">
+        <div class="house-users-toolbar">
+          <div>
+            <div class="house-users-kicker" id="house-users-count">Users</div>
+            <p class="hint">Open a card to edit that person, or add someone new.</p>
+            <p class="hint" id="house-users-status"></p>
+          </div>
+          <button type="button" class="btn btn-accent" id="btn-hu-add">Add user</button>
+        </div>
+        <div id="house-user-list" class="house-user-grid"></div>
+      </div>
+
+      <div class="house-users-pane" id="hu-pane-audit" hidden>
+        <div class="house-audit-toolbar">
+          <label class="field">
+            <span class="field-label" for="audit-action">Action</span>
+            <input type="search" id="audit-action" class="field-input" placeholder="login, user.create…" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="field-label" for="audit-user">User</span>
+            <input type="search" id="audit-user" class="field-input" placeholder="Name or id" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="field-label" for="audit-sort">Sort</span>
+            <select id="audit-sort" class="field-input">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="action">Action A–Z</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-audit-refresh">Refresh</button>
+        </div>
+        <div class="house-audit-table-wrap">
+          <table class="house-audit-table" id="user-audit-list">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>When</th>
+                <th>Who</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody id="user-audit-body"></tbody>
+          </table>
+          <p class="hint" id="user-audit-empty" hidden>No audit entries match.</p>
+        </div>
+        <div class="cn-pager house-audit-pager">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-audit-prev">Previous</button>
+          <span class="hint" id="audit-page-label">Page 1</span>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-audit-next">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop house-user-editor-backdrop" id="hu-editor-sheet" hidden>
+    <div class="sheet house-user-editor-sheet" role="dialog" aria-modal="true" aria-labelledby="hu-editor-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="hu-editor-title">Add user</div>
+        <button type="button" class="credits-sheet-close" id="btn-hu-editor-close" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="hu-edit-id" value="">
+      <div class="house-user-editor">
+        <div class="house-user-avatar-col">
+          <span class="field-label">Profile picture</span>
+          <img class="house-user-avatar-preview" id="hu-avatar-preview" src="/user/avatars/cat-sky.svg" alt="">
+          <div class="house-user-avatar-grid" id="hu-avatar-grid"></div>
+          <label class="btn btn-outline btn-sm house-user-upload">
+            Upload
+            <input type="file" id="hu-avatar-upload" accept="image/png,image/jpeg,image/webp" hidden>
+          </label>
+        </div>
+        <div class="house-user-editor-main">
+          <div class="field-grid field-grid-2" id="house-user-form">
+            <div class="field">
+              <label class="field-label" for="hu-username">Username</label>
+              <input type="text" id="hu-username" class="field-input" name="signal-member-handle" autocomplete="one-time-code" spellcheck="false" readonly>
+            </div>
+            <div class="field">
+              <label class="field-label" for="hu-email">Email</label>
+              <input type="email" id="hu-email" class="field-input" autocomplete="off">
+            </div>
+            <div class="field">
+              <label class="field-label" for="hu-first">First name</label>
+              <input type="text" id="hu-first" class="field-input" autocomplete="off">
+            </div>
+            <div class="field">
+              <label class="field-label" for="hu-last">Last name</label>
+              <input type="text" id="hu-last" class="field-input" autocomplete="off">
+            </div>
+          </div>
+          <div class="house-user-perms" id="hu-perm-row">
+            <label class="house-user-perm"><input type="checkbox" id="hu-admin"> Admin</label>
+            <label class="house-user-perm"><input type="checkbox" id="hu-flight"> Flight Plan</label>
+            <label class="house-user-perm"><input type="checkbox" id="hu-slides"> Slideshow</label>
+            <label class="house-user-perm"><input type="checkbox" id="hu-dates"> Date Book</label>
+          </div>
+        </div>
+        <div class="btn-row house-user-editor-actions">
+          <button type="button" class="btn btn-outline" id="btn-hu-toggle">Deactivate</button>
+          <button type="button" class="btn btn-outline" id="btn-hu-reset">Reset password</button>
+          <button type="button" class="btn btn-outline" id="btn-hu-email">Email password</button>
+          <button type="button" class="btn btn-accent" id="btn-hu-save">Create user</button>
+        </div>
+        <p class="hint" id="hu-form-status"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop house-pw-backdrop" id="hu-password-sheet" hidden>
+    <div class="sheet house-pw-sheet" role="dialog" aria-modal="true" aria-labelledby="hu-pw-title">
+      <div class="house-pw-head">
+        <h2 class="house-pw-title" id="hu-pw-title">Set password</h2>
+        <button type="button" class="credits-sheet-close" id="btn-hu-pw-close" aria-label="Close">×</button>
+      </div>
+      <div id="hu-pw-form">
+        <p class="house-pw-lead" id="hu-pw-lead">Choose a password or generate one.</p>
+        <label class="house-pw-label" for="hu-pw">Password</label>
+        <input type="text" id="hu-pw" class="field-input house-pw-input" name="signal-new-secret" autocomplete="new-password" spellcheck="false">
+        <div class="house-pw-tools" id="hu-pw-tools">
+          <button type="button" class="house-pw-link" id="btn-hu-pw-generate">Generate</button>
+          <button type="button" class="house-pw-link" id="btn-hu-pw-copy">Copy</button>
+        </div>
+        <div id="hu-pw-confirm-wrap">
+          <label class="house-pw-label" for="hu-pw-confirm">Confirm password</label>
+          <input type="password" id="hu-pw-confirm" class="field-input house-pw-input" name="signal-new-secret-confirm" autocomplete="new-password" spellcheck="false">
+        </div>
+        <p class="house-pw-status" id="hu-pw-status" role="status"></p>
+        <button type="button" class="btn btn-accent house-pw-submit" id="btn-hu-pw-save">Set password</button>
+      </div>
+      <div id="hu-pw-done" hidden>
+        <p class="house-pw-done-msg" id="hu-pw-done-msg">Password set.</p>
+        <div class="house-pw-done-secret" id="hu-pw-done-secret" hidden>
+          <code id="hu-pw-done-value"></code>
+          <button type="button" class="house-pw-link" id="btn-hu-pw-done-copy">Copy</button>
+        </div>
+        <button type="button" class="btn btn-accent house-pw-submit" id="btn-hu-pw-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vestaboard-sim-ui.js?v=signal242"></script>
+  <script src="house-users.js?v=signal257"></script>
   <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal237"></script>
+  <script src="app.js?v=signal263"></script>
 </body>
 </html>

@@ -32,6 +32,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
+  overflow-anchor: none;
   background:
     radial-gradient(120% 70% at 50% 0%, #10203f 0%, rgba(16, 32, 63, 0) 60%),
     var(--bg);
@@ -81,6 +82,11 @@ html, body {
 
 .gm-join { display: grid; justify-items: stretch; }
 .gm-join-card { width: 100%; max-width: 440px; margin-inline: auto; }
+
+@media (min-width: 760px) {
+  .gm-join { min-height: calc(100dvh - 140px); align-content: center; }
+  .gm-join-card { max-width: 520px; padding: 28px; }
+}
 
 .gm-label {
   display: block;

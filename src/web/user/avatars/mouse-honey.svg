@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="mouse-honey">
+  <rect width="64" height="64" rx="16" fill="#f59e0b"/>
+  <circle cx="18" cy="18" r="8" fill="#fff"/><circle cx="46" cy="18" r="8" fill="#fff"/>
+  <circle cx="32" cy="40" r="14" fill="#fff"/><circle cx="27" cy="38" r="2" fill="#0f172a"/><circle cx="37" cy="38" r="2" fill="#0f172a"/><circle cx="32" cy="44" r="2" fill="#fb7185"/>
+</svg>
