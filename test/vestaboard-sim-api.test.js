@@ -748,6 +748,36 @@ test('the Next flip pill waits out Settings dwell, not only the flap window', as
   }
 });
 
+test('the Next flip pill follows a live game phase timer', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const queue = harness.hub.queueFor('sim');
+    queue.setConfig({
+      dwellSeconds: 60,
+      rateWindowSeconds: 0,
+      quietHours: { start: '22:00', end: '07:00', enabled: false },
+    });
+    queue.acquireGameLock('word.scramble');
+    queue.submit([{
+      rows: badgeFrame({ color: 'blue', title: 'WORD SCRAMBLE', rows: ['JOIN'] }),
+      label: 'Word Scramble',
+      source: 'word.scramble',
+      dwellSeconds: 15,
+      holdSeconds: 45,
+    }], { gameSource: 'word.scramble' });
+    assert.equal(await queue.tick(), 'posted');
+    const res = await request(`${harness.base}/api/vestaboard-sim`, { cookie: harness.cookie });
+    assert.ok(res.body.state.gameLock, 'the pill needs to know a game owns the board');
+    assert.ok(
+      res.body.state.cooldownMs >= 40_000,
+      `game cooldown was ${res.body.state.cooldownMs}`,
+    );
+    assert.ok(res.body.state.cooldownMs < 60_000, 'dwell must not stretch a game card to 60s');
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('with the simulator switched off in config the page is told so plainly', async () => {
   const harness = await startHarness({ withSimulator: false });
   try {

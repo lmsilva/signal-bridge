@@ -613,11 +613,19 @@ test('a live game card does not wait out the board dwell', async () => {
   h.queue.submit([frame('WEATHER', 1)]);
   assert.equal(await h.queue.tick(), 'posted');
   h.queue.acquireGameLock('word.scramble');
-  h.queue.submit([frame('ROUND', 2, { source: 'word.scramble' })]);
+  h.queue.submit([{
+    ...frame('ROUND', 2, { source: 'word.scramble' }),
+    holdSeconds: 120,
+  }]);
   h.advance(2 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
   assert.equal(h.transport.posts[1].layout[0][0], 2);
   assert.equal(h.queue.state().snapshotUntil, null);
+  assert.ok(h.queue.state().phaseCooldownMs > 100 * SECOND);
+  assert.ok(h.queue.state().nextFlipCooldownMs > 100 * SECOND);
+  h.queue.releaseGameLock('word.scramble');
+  assert.equal(h.queue.state().phaseUntil, null);
+  assert.equal(h.queue.state().nextFlipCooldownMs, 0);
 });
 
 test('holdSeconds keeps the next snapshot off the board until the hold ends', async () => {

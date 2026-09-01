@@ -18642,6 +18642,8 @@
   let vbQueuePollTimer = null;
   const VB_QUEUE_POLL_MS = 2000;
   let vbRateTimer = null;
+  let vbRateUntil = 0;
+  let vbRateGame = false;
   let vbSoundOn = (() => {
     try {
       return window.localStorage.getItem(VB_SOUND_KEY) !== '0';
@@ -19166,20 +19168,24 @@
     }
   }
 
-  function vbStartRateCountdown(cooldownMs) {
+  function vbStartRateCountdown(cooldownMs, { game = false } = {}) {
     window.clearInterval(vbRateTimer);
     const pill = $('vb-pill-rate');
     if (!pill) {
       return;
     }
-    const until = Date.now() + Math.max(0, cooldownMs || 0);
+    vbRateGame = Boolean(game);
+    vbRateUntil = Date.now() + Math.max(0, cooldownMs || 0);
     const tick = () => {
-      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
-      pill.textContent = left > 0 ? `Next flip in ${left}s` : 'Next flip now';
-      pill.className = `status-pill ${left > 0 ? 'warn' : 'ok'}`;
-      if (left <= 0) {
-        window.clearInterval(vbRateTimer);
+      const left = Math.max(0, Math.ceil((vbRateUntil - Date.now()) / 1000));
+      if (left > 0) {
+        pill.textContent = vbRateGame ? `Next card in ${left}s` : `Next flip in ${left}s`;
+        pill.className = 'status-pill warn';
+        return;
       }
+      pill.textContent = vbRateGame ? 'Waiting on game' : 'Next flip now';
+      pill.className = `status-pill ${vbRateGame ? 'warn' : 'ok'}`;
+      window.clearInterval(vbRateTimer);
     };
     tick();
     vbRateTimer = window.setInterval(tick, 250);
@@ -19203,7 +19209,7 @@
     if (quiet) {
       quiet.hidden = !state.quietHours;
     }
-    vbStartRateCountdown(state.cooldownMs);
+    vbStartRateCountdown(state.cooldownMs, { game: Boolean(state.gameLock) });
     if (Array.isArray(state.current)) {
       vbApplyLayout(state.current, false);
     }
@@ -19331,6 +19337,15 @@
         return;
       }
       vbApplyQueue(data.queue, data.queueRevision);
+      if (data.state) {
+        const nextUntil = Date.now() + Math.max(0, data.state.cooldownMs || 0);
+        const game = Boolean(data.state.gameLock);
+        if (Math.abs(nextUntil - vbRateUntil) > 1500 || game !== vbRateGame) {
+          vbStartRateCountdown(data.state.cooldownMs, { game });
+        } else {
+          vbRateGame = game;
+        }
+      }
     }).catch(() => {
       // SSE or the next poll will catch up.
     });

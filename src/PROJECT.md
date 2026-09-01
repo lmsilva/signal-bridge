@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-31 (Vestaboard sim blank settle)
+**Last updated:** 2026-08-31 (Guest Book queue append)
 
 ---
 
@@ -587,7 +587,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `world.population` | **Vestaboard only.** World Population Tracker: green chips, comma-formatted estimate from a tunable UN-style baseline (births − deaths per second). Push tile + schedulable. Settings → Global |
 | `calendar.clock` | **Vestaboard only.** Calendar Clock: 7-col month chips inset one flap from the left, then a two-flap gutter, then weekday / `MONTH  D` / `H:MM  AM`. Header letters when the month fits in five rows. Month colour + contrasting today. Push tile (Home) + schedulable. Settings → Global |
 | `word.clock` | **Vestaboard only.** Word Clock: the time as a sentence (`text`, pre-wrapped in `lines`), left-aligned as a block and centred on all six rows. Push tile (Home) + schedulable. Settings → Global |
-| `guest.book` | **Vestaboard only.** A guest message from `/guestbook/`. Same as any other snapshot push — stays until the next item replaces it. Optional footer page uses the usual reading-time dwell |
+| `guest.book` | **Vestaboard only.** A guest message from `/guestbook/`. Each send joins the board queue (they no longer replace each other). Optional footer page uses the usual reading-time dwell |
 | `guest.book.invite` | **Vestaboard only.** Guest Book Invite: `SIGN THE` / `GUEST BOOK` plus the chip parade and TinyURL. In board-code mode, row 3 is `CODE ######`. Command `guestbook.invite`. Push tile (Share) + schedulable. Settings → Guest Book also has Show invite. **409** without a short link |
 | `indoor-temperature.query` | Indoor thermostat — "temperature on/at/in \<location\>" or "humidity of \<location\>" |
 | `air-quality.query` | Air quality monitor — IAQ score + sensor metrics (temp, humidity, PM2.5, CO, VOC) |
@@ -847,7 +847,7 @@ Public APIs: `GET /api/displays` (+ events SSE), `GET /api/guest/session`, `POST
 | `POST /api/vestaboards/remove` `{id}` | Delete a board and its key. The simulator refuses — switch it off instead |
 | `POST /api/vestaboards/enable` `{id,enabled}` | Start or stop that board's queue with no restart; a disabled board leaves the picker |
 | `POST /api/vestaboards/test-flip` `{id}` | Queue the identity frame as an alert so it lands now |
-| `GET /api/vestaboard-sim` | One-shot state for the Simulator tab: board face, online flag, rate cooldown, recent calls, queue + `queueRevision`, plus the encoder's code→glyph and chip tables so the page owns no character knowledge. 404 when the simulator is disabled in config |
+| `GET /api/vestaboard-sim` | One-shot state for the Simulator tab: board face, online flag, rate cooldown (max of flap window, Settings dwell, and live-game phase hold), `gameLock`, recent calls, queue + `queueRevision`, plus the encoder's code→glyph and chip tables so the page owns no character knowledge. 404 when the simulator is disabled in config |
 | `GET /api/vestaboard-sim/events` | SSE stream — `sim.state` on connect and on every change, `sim.flip` (layout + transition strategy) after each accepted post, `sim.call` per request, `sim.queue` (`items` + `revision`) on connect and on every queue change. Never carries the board key |
 | `POST /api/vestaboard-sim/online` `{online}` | Live on/off with no restart. Off makes the board answer 503, which is how retry/backoff and health reporting get exercised on purpose |
 | `POST /api/vestaboard-sim/queue/cancel` `{id}` | Drop one waiting page. Already-gone ids still return 200 with the current queue (no toast) |
@@ -877,6 +877,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-31: **Guest Book messages append on the Vestaboard** — every `guest.book` push used to set `replaceSource`, so a second guest wiped the first from the queue. Live sends and invites now join the line; host bulk release/replay still clears earlier guest pages on the first item only. Tests: `vestaboard-router`, `guest-book`.
+- 2026-08-31: **Vestaboard Simulator "Next flip" follows live game timers** — a Word Scramble lobby/round used to say Next flip now after the 15s flap window because game cards skip Settings dwell. The queue now keeps a display-only phase hold from each card's `holdSeconds`, the pill counts that down as **Next card in Ns**, and a queued follow-up page uses its `notBefore` instead. Cache-bust `?v=signal223`. Tests: `vestaboard-queue`, `vestaboard-sim-api`, `web-server`.
 - 2026-08-31: **Vestaboard Simulator blanks leftover letters after a flip** — a cell whose committed target was already blank (the ocean around the US Weather Map) skipped its walk, so letters from the previous page stayed on the flap. The painted face must match the target; a settle pass after the cascade forces code 0 to an empty glyph. Cache-bust `?v=signal222`. Tests: `vestaboard-sim-api`, `web-server`.
 - 2026-08-31: **Vestaboard Simulator queue columns line up** — source, title, and status sit on a shared CSS grid so a short `Timers` row no longer pulls “waiting” left of `Weather alerts`. Narrow viewports stack the command id under the title. Cache-bust `?v=signal221`. Tests: `web-server`.
 - 2026-08-31: **Vestaboard Simulator queue stays live and drag works** — a stuck `pointercancel` on the drag handle used to leave the list grayed out and ignore every later `sim.queue` event. Drag is now document-level (whole row, not a button), SSE updates stash during a gesture, a 2s poll backs up the stream, and cancelling a page that already flipped returns 200 + the current list instead of a toast. Cache-bust `?v=signal220`. Tests: `vestaboard-queue`, `vestaboard-sim-api`, `web-server`.
