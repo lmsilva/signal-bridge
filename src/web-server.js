@@ -6886,8 +6886,23 @@ function createWebServer({
     return {
       ok: true,
       boards: vestaboardHub.settingsView(),
+      house: vestaboardHub.houseSettings?.() || vestaboardHub.settings?.house?.() || null,
       priorityCatalog: vestaboardHub.priorityCatalog?.() || null,
     };
+  }
+
+  function handleVestaboardHouse(body, res) {
+    if (!vestaboardHub) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    const outcome = vestaboardHub.settings.setHouse(body || {});
+    if (!outcome.ok) {
+      sendJson(res, 400, { ok: false, error: outcome.error || 'Could not save house settings' });
+      return;
+    }
+    log.info('Vestaboard house dwell / priorities updated');
+    sendJson(res, 200, vestaboardsPayload());
   }
 
   function handleVestaboardSave(body, res) {
@@ -6946,6 +6961,31 @@ function createWebServer({
     }
     const outcome = await vestaboardHub.testFlip(body?.id);
     sendJson(res, outcome.ok ? 200 : 400, outcome);
+  }
+
+  /**
+   * Drop active holds on every Vestaboard in the house (or one board when
+   * `id` is set). From the Simulator page so Feature Presentation / games
+   * do not keep rotation parked until their detectors notice an end.
+   */
+  function handleVestaboardReleaseHolds(body, res) {
+    if (!vestaboardHub?.releaseHolds) {
+      sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
+      return;
+    }
+    const boardId = String(body?.id || '').trim();
+    const outcome = vestaboardHub.releaseHolds(boardId ? { boardId } : {});
+    // Sim state for the Board tab pill / queue "held" badges.
+    const simState = vestaboardSimulator
+      ? vestaboardSimPublicState()
+      : null;
+    sendJson(res, 200, {
+      ok: true,
+      ...outcome,
+      state: simState,
+      queue: vestaboardSimQueue(),
+      queueRevision: vestaboardSimQueueRevision(),
+    });
   }
 
   function vestaboardSimQueue() {
@@ -9331,6 +9371,9 @@ function createWebServer({
           case '/api/vestaboards':
             handleVestaboardSave(body, res);
             return;
+          case '/api/vestaboards/house':
+            handleVestaboardHouse(body, res);
+            return;
           case '/api/vestaboards/remove':
             handleVestaboardRemove(body, res);
             return;
@@ -9339,6 +9382,9 @@ function createWebServer({
             return;
           case '/api/vestaboards/test-flip':
             await handleVestaboardTestFlip(body, res);
+            return;
+          case '/api/vestaboards/release-holds':
+            handleVestaboardReleaseHolds(body, res);
             return;
           case '/api/library-tour/settings':
             handleLibraryTourSettingsUpdate(body, res);

@@ -19,6 +19,7 @@ const {
 } = require('../src/vestaboard/settings');
 const { createVestaboardHub } = require('../src/vestaboard/index');
 const { createVestaboardSimulator } = require('../src/vestaboard/simulator');
+const { createTransport } = require('../src/vestaboard/transport');
 const { createDisplayRegistry } = require('../src/display-registry');
 const { identityFrame } = require('../src/vestaboard/formatters/signal');
 const { validate, decodeCodes, CHIPS } = require('../src/vestaboard/encoder');
@@ -52,10 +53,11 @@ test('a board id is cleaned into something safe for urls and files', () => {
 
 test('a half-filled board comes back with everything a queue needs', () => {
   const board = normaliseBoard({ id: 'kitchen', name: 'Kitchen' });
-  assert.equal(board.dwellSeconds, 15);
   assert.equal(board.rateWindowSeconds, 15);
   assert.equal(board.minRotationGapSeconds, 600);
   assert.equal(board.enabled, true);
+  assert.equal(board.dwellSeconds, undefined);
+  assert.equal(board.priorities, undefined);
   assert.deepEqual(board.quietHours, {
     start: '22:00',
     end: '07:00',
@@ -63,9 +65,6 @@ test('a half-filled board comes back with everything a queue needs', () => {
     remindOnStart: true,
   });
   assert.equal(board.events, 'all');
-  assert.ok(Array.isArray(board.priorities));
-  assert.ok(board.priorities.some((rule) => rule.source === 'alarm.fired' && rule.jump && !rule.hold));
-  assert.ok(board.priorities.some((rule) => rule.source === 'huupe.session' && rule.hold));
 
   assert.equal(normaliseBoard({ name: 'no id' }), null);
   assert.equal(normaliseBoard({ id: 'x', events: [] }).events, 'all');
@@ -76,13 +75,13 @@ test('a half-filled board comes back with everything a queue needs', () => {
 test('adding, editing and removing a board all persist', () => {
   const { root, settings } = makeSettings();
 
-  const added = settings.upsert({ id: 'kitchen', name: 'Kitchen Board', dwellSeconds: 20 });
+  const added = settings.upsert({ id: 'kitchen', name: 'Kitchen Board' });
   assert.equal(added.ok, true);
   assert.equal(added.created, true);
 
-  const edited = settings.upsert({ id: 'kitchen', name: 'Kitchen', dwellSeconds: 25 });
+  const edited = settings.upsert({ id: 'kitchen', name: 'Kitchen' });
   assert.equal(edited.created, false);
-  assert.equal(settings.get('kitchen').dwellSeconds, 25);
+  assert.equal(settings.get('kitchen').name, 'Kitchen');
 
   const revived = createVestaboardSettings({ config: { ROOT: root }, log: silentLog() });
   assert.equal(revived.get('kitchen').name, 'Kitchen');
@@ -91,25 +90,51 @@ test('adding, editing and removing a board all persist', () => {
   assert.equal(settings.get('kitchen'), null);
 });
 
-test('board priorities persist and an omitted field does not wipe them', () => {
+test('house dwell and priorities persist; a board upsert does not clobber them', () => {
   const { root, settings } = makeSettings();
-  settings.upsert({
-    id: 'kitchen',
-    name: 'Kitchen',
+  assert.equal(settings.house().dwellSeconds, 15);
+  assert.ok(settings.house().priorities.some((rule) => rule.source === 'alarm.fired'));
+
+  settings.setHouse({
+    dwellSeconds: 45,
     priorities: [
       { source: 'huupe.session', jump: true, hold: true, holdMinutes: 20 },
     ],
   });
-  assert.deepEqual(settings.get('kitchen').priorities.map((rule) => rule.source), ['huupe.session']);
+  assert.equal(settings.house().dwellSeconds, 45);
+  assert.deepEqual(settings.house().priorities.map((rule) => rule.source), ['huupe.session']);
 
-  settings.upsert({ id: 'kitchen', name: 'Kitchen board', dwellSeconds: 20 });
-  assert.deepEqual(settings.get('kitchen').priorities.map((rule) => rule.source), ['huupe.session']);
+  settings.upsert({ id: 'kitchen', name: 'Kitchen' });
+  assert.equal(settings.house().dwellSeconds, 45);
+  assert.deepEqual(settings.house().priorities.map((rule) => rule.source), ['huupe.session']);
 
-  settings.upsert({ id: 'kitchen', name: 'Kitchen', priorities: [] });
-  assert.deepEqual(settings.get('kitchen').priorities, []);
+  settings.setHouse({ dwellSeconds: 30 });
+  assert.equal(settings.house().dwellSeconds, 30);
+  assert.deepEqual(settings.house().priorities.map((rule) => rule.source), ['huupe.session']);
 
   const revived = createVestaboardSettings({ config: { ROOT: root }, log: silentLog() });
-  assert.deepEqual(revived.get('kitchen').priorities, []);
+  assert.equal(revived.house().dwellSeconds, 30);
+  assert.deepEqual(revived.house().priorities.map((rule) => rule.source), ['huupe.session']);
+});
+
+test('legacy per-board dwell and priorities migrate onto the house', () => {
+  const root = tempRoot();
+  const filePath = path.join(root, 'data', 'vestaboard-settings.json');
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify({
+    boards: [{
+      id: 'sim',
+      name: 'Simulator',
+      simulator: true,
+      dwellSeconds: 40,
+      priorities: [{ source: 'alarm.fired', jump: true, hold: false, holdMinutes: 15 }],
+    }],
+  }, null, 2)}\n`);
+
+  const settings = createVestaboardSettings({ config: { ROOT: root }, log: silentLog() });
+  assert.equal(settings.house().dwellSeconds, 40);
+  assert.deepEqual(settings.house().priorities.map((rule) => rule.source), ['alarm.fired']);
+  assert.equal(settings.get('sim').dwellSeconds, undefined);
 });
 
 test('a key is stored encrypted and never sits in the config in the clear', () => {
@@ -454,11 +479,124 @@ test('a new board starts running the moment it is saved', async () => {
     });
 
     assert.equal(h.hub.queueFor('kitchen') !== null, true);
+    assert.equal(h.hub.queueFor('kitchen'), h.hub.queueFor('sim'), 'one house queue');
     assert.deepEqual(
       h.hub.registryEntries().map((entry) => entry.id).sort(),
       ['kitchen', 'sim'],
     );
   } finally {
+    await h.stop();
+  }
+});
+
+test('a house push still flips the simulator when another board is unreachable', async () => {
+  const h = await makeHub();
+  try {
+    h.hub.settings.upsert({
+      id: 'kitchen',
+      name: 'Kitchen Board',
+      baseUrl: 'http://127.0.0.1:1',
+      key: 'a-key',
+    });
+    h.hub.settings.upsert({ id: 'sim', quietHours: null, rateWindowSeconds: 0 });
+    h.hub.settings.setHouse({ dwellSeconds: 15 });
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    assert.ok(outcome.boards.some((row) => row.accepted > 0));
+    await waitForFlip(h);
+    assert.ok(hasFace(h.simulator.state().current), 'the simulator still flipped');
+  } finally {
+    await h.stop();
+  }
+});
+
+function hasFace(rows) {
+  return Array.isArray(rows) && rows.some((row) => Array.isArray(row) && row.some(Boolean));
+}
+
+async function waitForFlip(h, { kitchenSim = null } = {}) {
+  const queue = h.hub.queueFor('sim');
+  for (let i = 0; i < 20; i += 1) {
+    if (hasFace(h.simulator.state().current) || hasFace(kitchenSim?.state()?.current)) {
+      return;
+    }
+    await queue?.tick();
+  }
+}
+
+function weatherPayload() {
+  return {
+    type: 'weather.query',
+    weather: {
+      current: { temperatureF: 72, condition: 'sunny' },
+      next7Days: [{ date: '2026-08-24', highF: 80, lowF: 60, condition: 'sunny' }],
+    },
+  };
+}
+
+async function attachKitchen(h) {
+  const kitchenRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vb-kitchen-'));
+  const kitchenSim = createVestaboardSimulator({
+    config: {
+      ROOT: kitchenRoot,
+      vestaboardSimulator: { port: 0, host: '127.0.0.1', rateWindowSeconds: 0 },
+    },
+    log: silentLog(),
+  });
+  await kitchenSim.start();
+  const port = kitchenSim.address()?.port || kitchenSim.port;
+  const transport = createTransport({ baseUrl: `http://127.0.0.1:${port}` });
+  const enabled = await transport.enable(kitchenSim.enablementToken());
+  h.hub.settings.upsert({
+    id: 'kitchen',
+    name: 'Kitchen',
+    baseUrl: `http://127.0.0.1:${port}`,
+    key: enabled.apiKey,
+    quietHours: null,
+  });
+  h.hub.settings.upsert({ id: 'sim', quietHours: null, rateWindowSeconds: 0 });
+  return {
+    kitchenSim,
+    kitchenRoot,
+    async stop() {
+      await kitchenSim.stop();
+      fs.rmSync(kitchenRoot, { recursive: true, force: true });
+    },
+  };
+}
+
+test('every enabled board receives the same posted house page', async () => {
+  const h = await makeHub();
+  const kitchen = await attachKitchen(h);
+  try {
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    assert.ok(outcome.boards.some((row) => row.accepted > 0));
+    await waitForFlip(h, { kitchenSim: kitchen.kitchenSim });
+    const shown = h.simulator.state().current;
+    assert.ok(hasFace(shown), 'the simulator flipped');
+    assert.deepEqual(kitchen.kitchenSim.state().current, shown);
+  } finally {
+    await kitchen.stop();
+    await h.stop();
+  }
+});
+
+test('one board 503 does not drop the house page', async () => {
+  const h = await makeHub();
+  const kitchen = await attachKitchen(h);
+  try {
+    kitchen.kitchenSim.setOnline(false);
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'sim', explicit: true });
+    assert.ok(outcome.boards.some((row) => row.accepted > 0));
+    await waitForFlip(h);
+    const shown = h.simulator.state().current;
+    assert.ok(hasFace(shown), 'the house still flipped the live board');
+    assert.notDeepEqual(
+      kitchen.kitchenSim.state().current,
+      shown,
+      'the offline board must not have taken the house page',
+    );
+  } finally {
+    await kitchen.stop();
     await h.stop();
   }
 });

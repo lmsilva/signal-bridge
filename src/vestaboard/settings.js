@@ -30,6 +30,26 @@ const DEFAULTS = {
   tokenEnv: '',
 };
 
+function normaliseHouse(input = {}) {
+  return {
+    dwellSeconds: positive(input.dwellSeconds, DEFAULTS.dwellSeconds),
+    priorities: normalisePriorities(input.priorities),
+  };
+}
+
+function houseFromLegacyBoards(storedBoards = []) {
+  const list = Array.isArray(storedBoards) ? storedBoards : [];
+  const sim = list.find((entry) => entry?.id === SIMULATOR_ID || entry?.simulator);
+  const donor = sim || list[0];
+  if (!donor) {
+    return normaliseHouse({});
+  }
+  return normaliseHouse({
+    dwellSeconds: donor.dwellSeconds,
+    priorities: donor.priorities,
+  });
+}
+
 function cleanId(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
 }
@@ -74,14 +94,12 @@ function normaliseBoard(input = {}) {
     simulator: Boolean(input.simulator),
     enabled: input.enabled !== false,
     baseUrl: String(input.baseUrl || '').trim(),
-    dwellSeconds: positive(input.dwellSeconds, DEFAULTS.dwellSeconds),
     rateWindowSeconds: positive(input.rateWindowSeconds, DEFAULTS.rateWindowSeconds),
     minRotationGapSeconds: positive(input.minRotationGapSeconds, DEFAULTS.minRotationGapSeconds),
     transitionStrategy: input.transitionStrategy || null,
     quietHours: normaliseQuietHours(input.quietHours),
     events: normaliseEvents(input.events),
     tokenEnv: String(input.tokenEnv || '').trim(),
-    priorities: normalisePriorities(input.priorities),
   };
 }
 
@@ -104,6 +122,8 @@ function createVestaboardSettings({
   const boards = new Map();
   /** id -> encrypted key */
   const keys = new Map();
+  /** House-wide dwell + priorities. One list for every enabled board. */
+  let house = normaliseHouse({});
   const listeners = new Set();
 
   function emit(reason, board = null) {
@@ -120,6 +140,7 @@ function createVestaboardSettings({
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       const payload = {
+        house: { ...house },
         boards: [...boards.values()].map((board) => ({
           ...board,
           // The key never sits beside the config in the clear.
@@ -149,6 +170,13 @@ function createVestaboardSettings({
       if (entry.key) {
         keys.set(board.id, entry.key);
       }
+    }
+    const migrated = !stored?.house;
+    house = stored?.house
+      ? normaliseHouse(stored.house)
+      : houseFromLegacyBoards(stored?.boards || []);
+    if (migrated && (stored?.boards || []).length) {
+      persist();
     }
   }
 
@@ -224,13 +252,28 @@ function createVestaboardSettings({
     return true;
   }
 
+  function houseView() {
+    return { ...house };
+  }
+
+  function setHouse(input = {}) {
+    const next = {
+      dwellSeconds: Object.prototype.hasOwnProperty.call(input, 'dwellSeconds')
+        ? input.dwellSeconds
+        : house.dwellSeconds,
+      priorities: Object.prototype.hasOwnProperty.call(input, 'priorities')
+        ? input.priorities
+        : house.priorities,
+    };
+    house = normaliseHouse(next);
+    persist();
+    emit('house', null);
+    return { ok: true, house: { ...house } };
+  }
+
   function upsert(input) {
     const existing = boards.get(cleanId(input?.id));
     const merged = { ...(input || {}) };
-    // Edit / Quiet Hours Reminder omit this field — keep the saved list.
-    if (!Object.prototype.hasOwnProperty.call(input || {}, 'priorities') && existing) {
-      merged.priorities = existing.priorities;
-    }
     const board = normaliseBoard(merged);
     if (!board) {
       return { ok: false, error: 'A board needs an id' };
@@ -285,6 +328,8 @@ function createVestaboardSettings({
     SIMULATOR_ID,
     list,
     get,
+    house: houseView,
+    setHouse,
     upsert,
     remove,
     setEnabled,
@@ -302,6 +347,7 @@ function createVestaboardSettings({
 module.exports = {
   createVestaboardSettings,
   normaliseBoard,
+  normaliseHouse,
   normaliseQuietHours,
   normaliseEvents,
   cleanId,

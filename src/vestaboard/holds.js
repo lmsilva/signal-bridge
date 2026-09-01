@@ -1,11 +1,12 @@
-// What may jump or hold the Vestaboard.
+// What may jump, cut in, or hold the Vestaboard.
 //
-// Two separate ideas (see `priorities.js` for the per-board list):
+// Three separate ideas (see `priorities.js` for the per-board list):
 //
-//   jump  — this card goes to the front, then the queue continues after
-//           its dwell (alarms, the doorbell, a spoken announce)
-//   hold  — this card owns the board until the session ends or the safety
-//           timeout fires (Word Scramble, Huupe, Autodarts by default)
+//   jump       — this card goes to the front of the waiting line
+//   immediate  — also replace what is showing as soon as flaps can move
+//                (alarms / doorbell / announce by default)
+//   hold       — this card owns the board until the session ends or the
+//                safety timeout fires (Word Scramble, Huupe, Autodarts)
 //
 // Anything not on the board's priority list joins the back of the line.
 // Detected now-playing (YouTube / Plex / Steam / PSN) is a snapshot unless

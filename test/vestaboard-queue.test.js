@@ -608,6 +608,43 @@ test('an alert does not wait out the board dwell', async () => {
   assert.equal(h.queue.state().snapshotUntil, null);
 });
 
+test('a jump without Now waits for the current page dwell', async () => {
+  const h = makeQueue({
+    rateWindowSeconds: 1,
+    dwellSeconds: 60,
+    priorities: [
+      { source: 'alarm.fired', jump: true, immediate: false, hold: false, holdMinutes: 15 },
+    ],
+  });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.ok(h.queue.state().snapshotUntil);
+  h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })]);
+  assert.equal(h.queue.pending()[0].label, 'ALARM');
+  h.advance(2 * SECOND);
+  assert.equal(await h.queue.tick(), null, 'still inside the weather dwell');
+  h.advance(60 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 9);
+});
+
+test('Now on a jumper clears dwell and flips as soon as the rate window allows', async () => {
+  const h = makeQueue({
+    rateWindowSeconds: 1,
+    dwellSeconds: 60,
+    priorities: [
+      { source: 'alarm.fired', jump: true, immediate: true, hold: false, holdMinutes: 15 },
+    ],
+  });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })]);
+  assert.equal(h.queue.state().snapshotUntil, null);
+  h.advance(2 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 9);
+});
+
 test('a live game card does not wait out the board dwell', async () => {
   const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60 });
   h.queue.submit([frame('WEATHER', 1)]);

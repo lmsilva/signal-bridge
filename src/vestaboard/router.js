@@ -149,18 +149,15 @@ function isAllTarget(targetId) {
 /**
  * Which running boards should see this event.
  *
- * `all` and `vestaboard` mean every enabled board. `full` means none — that
- * class is UDP only. A bare id means that board alone.
+ * Vestaboard events are house-wide: `all`, `vestaboard`, and a single board
+ * id all mean every enabled board. `full` means none — that class is UDP only.
  */
 function matchBoards(boards, targetId) {
   const raw = String(targetId == null ? '' : targetId).trim();
   if (raw.toLowerCase() === 'full') {
     return [];
   }
-  if (isAllTarget(raw) || raw.toLowerCase() === 'vestaboard') {
-    return boards;
-  }
-  return boards.filter((entry) => entry.board.id === raw);
+  return boards;
 }
 
 /**
@@ -190,18 +187,26 @@ function routeEvent({
   const formatter = formatterFor(type);
   const targets = matchBoards(boards, targetId);
   const results = [];
+  const housePriorities = ctx.priorities != null
+    ? ctx.priorities
+    : (targets[0]?.board?.priorities);
+  const houseBoard = {
+    ...(targets[0]?.board || {}),
+    dwellSeconds: ctx.board?.dwellSeconds ?? targets[0]?.board?.dwellSeconds,
+    priorities: housePriorities,
+  };
 
-  function holdFor(entry, frames = [], extra = {}) {
+  function holdFor(frames = [], extra = {}) {
     if (extra.hold) {
       return extra.hold;
     }
     return classifyHold(payload, type, frames[0]?.source, {
-      priorities: extra.priorities || entry.board?.priorities,
+      priorities: extra.priorities != null ? extra.priorities : housePriorities,
     });
   }
 
-  function submitHold(entry, frames, extra = {}) {
-    const hold = holdFor(entry, frames, extra);
+  function submitHold(frames, extra = {}) {
+    const hold = holdFor(frames, extra);
     const priority = extra.priority
       || (hold.lane === 'alert' ? 'alert' : 'snapshot');
     let replaceSource = null;
@@ -212,7 +217,8 @@ function routeEvent({
     } else if (type === 'ring.doorbell') {
       replaceSource = 'ring.doorbell';
     }
-    return submit(entry.board.id, frames, {
+    const boardId = houseBoard.id || targets[0]?.board?.id || 'house';
+    return submit(boardId, frames, {
       priority,
       scheduler,
       quietHoursExempt: quietHoursExempt != null
@@ -232,27 +238,35 @@ function routeEvent({
       hold,
       payload,
       type,
+      priorities: housePriorities,
       ...extra,
     });
   }
 
-  const closeHold = classifyHold(payload, type);
-  if (closeHold.close) {
+  function spread(outcome, extra = {}) {
     for (const entry of targets) {
-      if (!boardAllows(entry.board, type, commandId)
-        && !boardAllows(entry.board, closeHold.source, commandId)) {
-        results.push({ boardId: entry.board.id, skipped: true, reason: 'allowlist' });
-        continue;
-      }
-      const outcome = submitHold(entry, [], { hold: closeHold });
       results.push({
         boardId: entry.board.id,
-        skipped: false,
-        reason: outcome?.reason || 'closed',
+        skipped: extra.skipped != null ? extra.skipped : !outcome?.ok,
+        reason: extra.reason
+          || outcome?.reason
+          || (outcome?.ok ? 'posted' : 'rejected'),
         accepted: outcome?.accepted || 0,
       });
     }
     return results;
+  }
+
+  const closeHold = classifyHold(payload, type, null, { priorities: housePriorities });
+  if (closeHold.close) {
+    if (!targets.length) {
+      return results;
+    }
+    const outcome = submitHold([], { hold: closeHold });
+    return spread(outcome, {
+      skipped: false,
+      reason: outcome?.reason || 'closed',
+    });
   }
 
   if (!formatter) {
@@ -267,46 +281,32 @@ function routeEvent({
     return results;
   }
 
-  for (const entry of targets) {
-    if (!boardAllows(entry.board, type, commandId)) {
-      log?.debug?.(`Vestaboard ${entry.board.id} skip (allowlist) ${type}`);
-      results.push({ boardId: entry.board.id, skipped: true, reason: 'allowlist' });
-      continue;
-    }
-
-    let frames;
-    try {
-      frames = formatter(payload, {
-        now: new Date(now()),
-        explicit,
-        board: entry.board,
-        ...ctx,
-      }) || [];
-    } catch (error) {
-      log?.debug?.(`board formatter ${type} threw on ${entry.board.id}: ${error?.message || error}`);
-      results.push({ boardId: entry.board.id, skipped: true, reason: 'error' });
-      continue;
-    }
-
-    if (!frames.length) {
-      results.push({ boardId: entry.board.id, skipped: true, reason: 'empty' });
-      continue;
-    }
-
-    // guest.book messages append. Host bulk release/replay still passes
-    // replaceSource on the first item when it wants a clean start.
-    // The board's Priorities list — not the frame's visual priority —
-    // decides jump vs hold so a Huupe scoreboard cannot wipe the queue.
-    const outcome = submitHold(entry, frames);
-    results.push({
-      boardId: entry.board.id,
-      skipped: !outcome?.ok,
-      reason: outcome?.reason || (outcome?.ok ? 'posted' : 'rejected'),
-      accepted: outcome?.accepted || 0,
-    });
+  if (!targets.length) {
+    return results;
   }
 
-  return results;
+  let frames;
+  try {
+    frames = formatter(payload, {
+      now: new Date(now()),
+      explicit,
+      board: houseBoard,
+      ...ctx,
+    }) || [];
+  } catch (error) {
+    log?.debug?.(`board formatter ${type} threw: ${error?.message || error}`);
+    return spread(null, { skipped: true, reason: 'error' });
+  }
+
+  if (!frames.length) {
+    return spread(null, { skipped: true, reason: 'empty' });
+  }
+
+  // One house submit. The hub fans the posted page out to every board.
+  // The house Priorities list — not the frame's visual priority —
+  // decides jump vs hold so a Huupe scoreboard cannot wipe the queue.
+  const outcome = submitHold(frames);
+  return spread(outcome);
 }
 
 module.exports = {

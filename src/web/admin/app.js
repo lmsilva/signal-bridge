@@ -415,9 +415,7 @@
     if (!knownDisplays.length) {
       hint.textContent = 'No displays yet — tap refresh after the client starts, or wait for the 5‑minute heartbeat.';
     } else if (selectedDisplayKind() === 'vestaboard') {
-      const entry = selectedDisplayEntry();
-      const label = entry?.label || entry?.name || 'Vestaboard';
-      hint.textContent = `${label} — showing board-capable pushes only.`;
+      hint.textContent = 'Vestaboard — board-capable pushes go to every enabled board.';
     } else if (single) {
       const entry = selectedDisplayEntry();
       const label = entry?.label || entry?.name || 'selected display';
@@ -18313,9 +18311,9 @@
   };
 
   let vbBoards = [];
+  let vbHouse = { dwellSeconds: 15, priorities: null };
   let vbPriorityCatalog = null;
   let vbPriorityDraft = [];
-  let vbPriorityBoardId = '';
   let vbPriorityDragIndex = -1;
 
   function vbBoardRow(board) {
@@ -18348,7 +18346,6 @@
     } else {
       bits.push('quiet reminder on');
     }
-    bits.push(vbPrioritySummary(board));
     detail.textContent = bits.join(' · ');
 
     const remind = document.createElement('label');
@@ -18379,19 +18376,13 @@
     toggle.textContent = board.enabled ? 'Switch off' : 'Switch on';
     toggle.addEventListener('click', () => vbSetEnabled(board.id, !board.enabled));
 
-    const priorities = document.createElement('button');
-    priorities.type = 'button';
-    priorities.className = 'btn btn-outline btn-sm';
-    priorities.textContent = 'Priorities';
-    priorities.addEventListener('click', () => vbOpenPriorities(board));
-
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'btn btn-outline btn-sm';
     edit.textContent = 'Edit';
     edit.addEventListener('click', () => vbOpenForm(board));
 
-    actions.append(test, toggle, priorities, edit);
+    actions.append(test, toggle, edit);
 
     if (!board.simulator) {
       actions.append(vbRemoveButton(board));
@@ -18416,13 +18407,32 @@
     }
   }
 
+  function vbApplyHouse(data) {
+    if (data?.house) {
+      vbHouse = {
+        dwellSeconds: Number(data.house.dwellSeconds) || 15,
+        priorities: Array.isArray(data.house.priorities) ? data.house.priorities : null,
+      };
+    }
+    if (data?.priorityCatalog) {
+      vbPriorityCatalog = data.priorityCatalog;
+    }
+    const dwell = $('vb-house-dwell');
+    if (dwell) {
+      dwell.value = String(vbHouse.dwellSeconds || 15);
+    }
+    const pri = $('btn-vb-house-priorities');
+    if (pri) {
+      const summary = vbPrioritySummary(vbHouse);
+      pri.title = summary;
+    }
+  }
+
   async function loadVestaboards() {
     try {
       const data = await apiGet('/api/vestaboards');
       vbBoards = data.boards || [];
-      if (data.priorityCatalog) {
-        vbPriorityCatalog = data.priorityCatalog;
-      }
+      vbApplyHouse(data);
       vbRenderBoards();
     } catch {
       const host = $('vb-board-list');
@@ -18436,38 +18446,42 @@
     return (vbPriorityCatalog?.events || []).find((item) => item.source === source) || null;
   }
 
-  function vbPrioritySummary(board) {
-    const list = Array.isArray(board?.priorities) ? board.priorities : (vbPriorityCatalog?.defaults || []);
+  function vbPrioritySummary(policy) {
+    const list = Array.isArray(policy?.priorities) ? policy.priorities : (vbPriorityCatalog?.defaults || []);
     const jump = list.filter((rule) => rule.jump || rule.hold).length;
     const hold = list.filter((rule) => rule.hold).length;
+    const now = list.filter((rule) => rule.immediate !== false && (rule.jump || rule.hold)).length;
     if (!jump) {
       return 'nothing jumps';
     }
-    return hold
-      ? `${jump} jump · ${hold} hold`
-      : `${jump} jump`;
+    const parts = [`${jump} jump`];
+    if (now && now !== jump) parts.push(`${now} now`);
+    if (hold) parts.push(`${hold} hold`);
+    return parts.join(' · ');
   }
 
   function vbClonePriorities(list) {
     return (Array.isArray(list) ? list : []).map((rule) => ({
       source: rule.source,
       jump: rule.jump !== false,
+      immediate: rule.immediate !== false,
       hold: Boolean(rule.hold),
       holdMinutes: Number(rule.holdMinutes) || vbCatalogEvent(rule.source)?.defaultHoldMinutes || 30,
     }));
   }
 
-  function vbOpenPriorities(board) {
+  function vbOpenPriorities() {
     const sheet = $('vb-priority-sheet');
-    if (!sheet || !board) {
+    if (!sheet) {
       return;
     }
     vbCloseForm();
-    vbPriorityBoardId = board.id;
-    vbPriorityDraft = vbClonePriorities(board.priorities);
+    vbPriorityDraft = vbClonePriorities(
+      vbHouse.priorities != null ? vbHouse.priorities : (vbPriorityCatalog?.defaults || []),
+    );
     const title = $('vb-priority-title');
     if (title) {
-      title.textContent = `Priorities — ${board.name}`;
+      title.textContent = 'Priorities';
     }
     const picker = $('vb-priority-picker');
     if (picker) picker.hidden = true;
@@ -18482,7 +18496,6 @@
     if (sheet) sheet.hidden = true;
     const picker = $('vb-priority-picker');
     if (picker) picker.hidden = true;
-    vbPriorityBoardId = '';
     vbPriorityDraft = [];
     vbPriorityDragIndex = -1;
   }
@@ -18540,15 +18553,33 @@
     name.className = 'vb-priority-name';
     name.textContent = item?.label || rule.source;
     if (rule.hold && item?.holdCaution) {
-      name.title = 'Holding this pins the board. Alarms usually jump, then the queue continues.';
+      name.title = 'Holding this pins the board. Alarms usually cut in now, then the queue continues.';
     } else if (rule.hold) {
       name.title = `Holds the board · gives up after ${rule.holdMinutes} min`;
+    } else if (rule.immediate !== false) {
+      name.title = 'Goes to the front and replaces what is showing as soon as flaps can move';
     } else {
-      name.title = 'Jumps the line, then the queue continues';
+      name.title = 'Goes to the front, then waits for the current page to finish';
     }
 
     const controls = document.createElement('div');
     controls.className = 'vb-priority-controls';
+
+    const nowLabel = document.createElement('label');
+    nowLabel.className = 'trivia-check';
+    nowLabel.title = 'Replace what is on the board right away (after the flap rate window)';
+    const nowInput = document.createElement('input');
+    nowInput.type = 'checkbox';
+    nowInput.checked = rule.immediate !== false;
+    nowInput.addEventListener('change', () => {
+      rule.immediate = nowInput.checked;
+      if (rule.immediate) rule.jump = true;
+      vbRenderPriorityList();
+    });
+    const nowSpan = document.createElement('span');
+    nowSpan.textContent = 'Now';
+    nowLabel.append(nowInput, nowSpan);
+    controls.append(nowLabel);
 
     const holdLabel = document.createElement('label');
     holdLabel.className = 'trivia-check';
@@ -18557,7 +18588,10 @@
     holdInput.checked = Boolean(rule.hold);
     holdInput.addEventListener('change', () => {
       rule.hold = holdInput.checked;
-      if (rule.hold) rule.jump = true;
+      if (rule.hold) {
+        rule.jump = true;
+        rule.immediate = true;
+      }
       vbRenderPriorityList();
     });
     const holdSpan = document.createElement('span');
@@ -18689,6 +18723,7 @@
           vbPriorityDraft.push({
             source: item.source,
             jump: true,
+            immediate: true,
             hold: Boolean(item.defaultHold),
             holdMinutes: item.defaultHoldMinutes || 30,
           });
@@ -18718,7 +18753,6 @@
     $('vb-form-name').value = board?.name || '';
     $('vb-form-url').value = board?.baseUrl || '';
     $('vb-form-key').value = '';
-    $('vb-form-dwell').value = board?.dwellSeconds ?? 15;
     $('vb-form-quiet-start').value = board?.quietHours?.start || '22:00';
     $('vb-form-quiet-end').value = board?.quietHours?.end || '07:00';
     $('vb-form-quiet-enabled').checked = board?.quietHours?.enabled !== false;
@@ -18771,6 +18805,7 @@
     try {
       const data = await apiPost('/api/vestaboards/enable', { id, enabled });
       vbBoards = data.boards || [];
+      vbApplyHouse(data);
       vbRenderBoards();
     } catch (error) {
       toast(error?.message || 'Could not change the board', 'bad');
@@ -18787,7 +18822,6 @@
         id: board.id,
         name: board.name,
         baseUrl: board.baseUrl || '',
-        dwellSeconds: board.dwellSeconds,
         enabled: board.enabled,
         simulator: board.simulator,
         quietHours: {
@@ -18875,35 +18909,34 @@
     vbClosePriorityReset();
   });
   registerSheetDismiss('vb-priority-reset-sheet', () => vbClosePriorityReset());
-  $('btn-vb-priority-save')?.addEventListener('click', async () => {
-    const board = vbBoards.find((entry) => entry.id === vbPriorityBoardId);
-    if (!board) {
-      toast('That board is gone', 'bad');
-      return;
+  $('btn-vb-house-priorities')?.addEventListener('click', () => vbOpenPriorities());
+
+  $('btn-vb-house-dwell-save')?.addEventListener('click', async () => {
+    const button = $('btn-vb-house-dwell-save');
+    if (button) button.disabled = true;
+    try {
+      const data = await apiPost('/api/vestaboards/house', {
+        dwellSeconds: Number($('vb-house-dwell')?.value) || 15,
+      });
+      vbBoards = data.boards || vbBoards;
+      vbApplyHouse(data);
+      toast('Dwell saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save dwell', 'bad');
+    } finally {
+      if (button) button.disabled = false;
     }
+  });
+
+  $('btn-vb-priority-save')?.addEventListener('click', async () => {
     const button = $('btn-vb-priority-save');
     if (button) button.disabled = true;
     try {
-      const data = await apiPost('/api/vestaboards', {
-        id: board.id,
-        name: board.name,
-        baseUrl: board.baseUrl || '',
-        dwellSeconds: board.dwellSeconds,
-        enabled: board.enabled,
-        simulator: board.simulator,
-        quietHours: {
-          start: board.quietHours?.start || '22:00',
-          end: board.quietHours?.end || '07:00',
-          enabled: board.quietHours?.enabled !== false,
-          remindOnStart: board.quietHours?.remindOnStart !== false,
-        },
+      const data = await apiPost('/api/vestaboards/house', {
         priorities: vbPriorityDraft,
       });
-      vbBoards = data.boards || [];
-      if (data.priorityCatalog) {
-        vbPriorityCatalog = data.priorityCatalog;
-      }
-      vbRenderBoards();
+      vbBoards = data.boards || vbBoards;
+      vbApplyHouse(data);
       vbClosePriorities();
       toast('Priorities saved', 'good');
     } catch (error) {
@@ -18937,7 +18970,6 @@
       id: $('vb-form-id').value.trim() || name,
       name,
       baseUrl: $('vb-form-url').value.trim(),
-      dwellSeconds: Number($('vb-form-dwell').value) || 15,
       quietHours: {
         start: $('vb-form-quiet-start').value || '22:00',
         end: $('vb-form-quiet-end').value || '07:00',
@@ -18953,6 +18985,7 @@
     try {
       const data = await apiPost('/api/vestaboards', payload);
       vbBoards = data.boards || [];
+      vbApplyHouse(data);
       vbRenderBoards();
       vbCloseForm();
       toast('Board saved', 'good');
@@ -19536,7 +19569,7 @@
         pill.className = 'status-pill warn';
         return;
       }
-      pill.textContent = vbRateGame ? 'Waiting on game' : 'Next flip now';
+      pill.textContent = vbRateGame ? 'Holding' : 'Next flip now';
       pill.className = `status-pill ${vbRateGame ? 'warn' : 'ok'}`;
       window.clearInterval(vbRateTimer);
     };
@@ -19723,6 +19756,31 @@
       vbApplyQueue(data.queue, data.queueRevision);
     } catch (error) {
       toast(error?.message || 'Could not clear the queue', 'bad');
+      await vbRefreshQueueFromSim();
+    }
+  }
+
+  async function vbReleaseHolds() {
+    try {
+      const data = await apiPost('/api/vestaboards/release-holds', {});
+      if (data?.queue) {
+        vbApplyQueue(data.queue, data.queueRevision);
+      }
+      if (data?.state) {
+        vbStartRateCountdown(data.state.cooldownMs, { game: Boolean(data.state.gameLock) });
+      } else {
+        await vbRefreshQueueFromSim();
+      }
+      const n = Number(data?.released) || 0;
+      toast(
+        n === 0
+          ? 'No holds to release'
+          : n === 1
+            ? 'Released hold on 1 board'
+            : `Released holds on ${n} boards`,
+      );
+    } catch (error) {
+      toast(error?.message || 'Could not release holds', 'bad');
       await vbRefreshQueueFromSim();
     }
   }
@@ -19940,6 +19998,10 @@
 
   $('btn-vb-queue-clear')?.addEventListener('click', () => {
     vbClearQueue();
+  });
+
+  $('btn-vb-release-holds')?.addEventListener('click', () => {
+    vbReleaseHolds();
   });
 
   $('btn-vb-sound')?.addEventListener('click', () => {

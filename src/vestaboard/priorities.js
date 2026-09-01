@@ -1,10 +1,11 @@
-// Per-board jump / hold policy for the Vestaboard queue.
+// Per-board jump / hold / immediate policy for the Vestaboard queue.
 //
-// Two separate ideas:
-//   jump  — this card goes to the front, then the queue continues after it
-//           has had its dwell (alarms, the doorbell, a spoken announce)
-//   hold  — this card owns the board until the session ends or the safety
-//           timeout fires (Word Scramble, Huupe, Autodarts)
+// Three separate ideas:
+//   jump       — this card goes to the front of the waiting line
+//   immediate  — also cut in now: drop the current page's dwell and flip as
+//                soon as the Local API rate window allows (alarms by default)
+//   hold       — this card owns the board until the session ends or the
+//                safety timeout fires (Word Scramble, Huupe, Autodarts)
 //
 // Anything not on the board's list joins the back of the line. An empty
 // saved list means "use the house defaults", so a fresh board still treats
@@ -47,8 +48,9 @@ const GROUP_FROM_PUSH = Object.freeze({
 });
 
 /**
- * Hand-tuned rows: live interrupts, hold defaults, and friendlier labels for
- * sources that several Push tiles share (e.g. steam.now-playing).
+ * Hand-tuned rows: live interrupts, hold defaults, and hints. Labels here are
+ * fallbacks only — when a vestaboard Push command maps to the same source,
+ * that command's `title` wins so Priorities matches the rest of Signal.
  * `recommended` seeds the house default list.
  */
 const SPECIALS = Object.freeze([
@@ -78,7 +80,8 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'ring.doorbell',
-    label: 'Doorbell',
+    // Fallback; Push title "Ring Doorbell" replaces this when the catalog builds.
+    label: 'Ring Doorbell',
     group: 'house',
     holdCaution: true,
     recommended: true,
@@ -104,7 +107,7 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'huupe.session',
-    label: 'Huupe live',
+    label: 'Huupe Live',
     group: 'games',
     canHold: true,
     defaultHold: true,
@@ -114,7 +117,7 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'autodarts.match',
-    label: 'Autodarts live',
+    label: 'Autodarts',
     group: 'games',
     canHold: true,
     defaultHold: true,
@@ -124,7 +127,7 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'youtube.now-playing',
-    label: 'YouTube now playing',
+    label: 'YouTube',
     group: 'media',
     canHold: true,
     defaultHoldMinutes: 180,
@@ -140,7 +143,7 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'steam.now-playing',
-    label: 'Steam now playing',
+    label: 'Steam',
     group: 'media',
     canHold: true,
     defaultHoldMinutes: 180,
@@ -148,7 +151,7 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'psn.now-playing',
-    label: 'PlayStation now playing',
+    label: 'PSN',
     group: 'media',
     canHold: true,
     defaultHoldMinutes: 180,
@@ -156,7 +159,7 @@ const SPECIALS = Object.freeze([
   },
   {
     source: 'guest.book',
-    label: 'Guest Book message',
+    label: 'Guest Book',
     group: 'share',
     hint: 'A signed guest message on the board.',
   },
@@ -253,6 +256,17 @@ function sourceForCommand(commandId) {
   return COMMAND_SOURCE[commandId] || commandId;
 }
 
+/**
+ * Scheduler-only "last played" tiles share a source with the Push tile.
+ * Their longer titles must not replace Steam / YouTube / Huupe Live / …
+ */
+function isSecondaryCommand(command) {
+  if (command?.pushable === false) {
+    return true;
+  }
+  return /\.(last-played|last-match|last-game)$/.test(String(command?.id || ''));
+}
+
 function buildCatalog() {
   if (cachedCatalog) {
     return cachedCatalog;
@@ -261,7 +275,7 @@ function buildCatalog() {
   /** @type {Map<string, object>} */
   const bySource = new Map();
 
-  function upsert(entry) {
+  function upsert(entry, { labelWins = false } = {}) {
     const source = String(entry.source || '').trim();
     if (!source || SKIP_SOURCES.has(source)) {
       return;
@@ -271,14 +285,18 @@ function buildCatalog() {
       bySource.set(source, { ...entry, source });
       return;
     }
-    // Specials win on metadata; a Push title fills a missing label.
+    // Specials keep hold / recommended / hints. Push titles replace special
+    // labels so Priorities matches the Push grid (Ring Doorbell, Steam, …).
     bySource.set(source, {
       ...entry,
       ...existing,
       source,
-      label: existing.label || entry.label,
+      label: labelWins
+        ? (entry.label || existing.label)
+        : (existing.label || entry.label),
       hint: existing.hint || entry.hint || '',
       group: existing.group || entry.group,
+      fromPush: Boolean(existing.fromPush || entry.fromPush),
     });
   }
 
@@ -291,6 +309,18 @@ function buildCatalog() {
       continue;
     }
     const source = sourceForCommand(command.id);
+    const secondary = isSecondaryCommand(command);
+    const existing = bySource.get(source);
+    // Scheduler-only / last-played aliases share a source with the Push tile.
+    // Never let them rename Steam → "Steam — last played".
+    if (secondary && (existing?.fromPush || (existing?.label && existing.label !== source))) {
+      continue;
+    }
+    // Two pushable tiles can share a source (Next Flight + Trip Board). Keep
+    // the first Push title so the name stays stable.
+    if (!secondary && existing?.fromPush) {
+      continue;
+    }
     const pushCat = pushCategoryOf(command);
     upsert({
       source,
@@ -298,7 +328,8 @@ function buildCatalog() {
       group: groupForPushCategory(pushCat),
       hint: command.subtitle || '',
       canHold: true,
-    });
+      fromPush: !secondary,
+    }, { labelWins: !secondary });
   }
 
   // Catch any board formatter the Push list has not wired yet.
@@ -360,6 +391,9 @@ function defaultPriorities() {
     .map((item) => ({
       source: item.source,
       jump: true,
+      // House defaults cut in — missing `immediate` on older saves means the
+      // same (see normaliseRule).
+      immediate: true,
       hold: Boolean(item.defaultHold),
       holdMinutes: defaultHoldMinutesFor(item.source),
     }));
@@ -372,9 +406,13 @@ function normaliseRule(input = {}) {
   }
   const hold = Boolean(input.hold);
   const jump = hold || input.jump !== false;
+  // Omitted `immediate` keeps prior interrupt behaviour (cut in). Only an
+  // explicit false waits out the page already on the board.
+  const immediate = jump && input.immediate !== false;
   return {
     source,
     jump,
+    immediate,
     hold,
     holdMinutes: clampHoldMinutes(input.holdMinutes, source),
   };
@@ -447,6 +485,7 @@ function applyPolicy(structural = {}, priorities) {
       live: false,
       close: true,
       jump: false,
+      immediate: false,
       hold: false,
       ttlMs: 0,
       coalesceKey: structural.coalesceKey || source,
@@ -462,6 +501,7 @@ function applyPolicy(structural = {}, priorities) {
       live: false,
       close: false,
       jump: false,
+      immediate: false,
       hold: false,
       ttlMs: 0,
       coalesceKey: structural.coalesceKey || source,
@@ -478,6 +518,7 @@ function applyPolicy(structural = {}, priorities) {
       live: false,
       close: false,
       jump: false,
+      immediate: false,
       hold: false,
       ttlMs: 0,
       coalesceKey: structural.coalesceKey || null,
@@ -491,6 +532,7 @@ function applyPolicy(structural = {}, priorities) {
   // (or be refreshed) until close. Last-played watch already returned.
   const hold = wantHold && (sessionOk || structural.kind === 'game');
   const jump = Boolean(rule.jump) || hold;
+  const immediate = jump && Boolean(rule.immediate);
   const rank = rankAt(policy, index);
   return {
     lane: hold ? 'game' : (jump ? 'alert' : 'rotation'),
@@ -499,6 +541,7 @@ function applyPolicy(structural = {}, priorities) {
     live: wantHold && sessionOk,
     close: false,
     jump,
+    immediate,
     hold,
     ttlMs: hold ? minutesToMs(rule.holdMinutes, source) : 0,
     coalesceKey: structural.coalesceKey ?? null,

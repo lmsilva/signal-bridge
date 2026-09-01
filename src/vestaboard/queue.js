@@ -1,4 +1,5 @@
-// One send queue per board.
+// One send queue for the house. The hub fans each posted page out to
+// every enabled board; this module owns the waiting line, dwell, and holds.
 //
 // A Vestaboard is a slow, physical thing: roughly fifteen seconds between
 // flips, and every flip is audible in the room. So this queue's job is less
@@ -9,13 +10,13 @@
 //   - a rotation page stays for Settings → Dwell (dwellSeconds), even when
 //     the flaps could already take another flip; alerts and live hold cards
 //     still wait only the rate window
-//   - jumpers (alarms, timers, reminders, doorbell, by default) go to the
-//     front, then the queue continues after their dwell — they do not hold
+//   - jumpers go to the front; with immediate (default for alarms) they
+//     also drop the current dwell and flip as soon as the rate window allows
 //   - a live hold (games only, unless the board's Priorities list says
 //     otherwise) owns the board until it ends, an equal/higher jumper
 //     arrives, or the safety timeout fires; score/metadata updates of the
 //     same source replace the live card instead of stacking
-//   - relative rank comes from the board's Priorities list (top = first)
+//   - relative rank comes from the house Priorities list (top = first)
 //   - every other snapshot (manual Push, Air now, scheduler) joins the back
 //     of the line — they do not jump ahead of pages already waiting
 //   - repeats of the same thing replace each other instead of stacking
@@ -451,6 +452,7 @@ function createQueue({
         rank: Number.MAX_SAFE_INTEGER,
         live: false,
         jump: true,
+        immediate: true,
         hold: false,
       };
     }
@@ -475,10 +477,12 @@ function createQueue({
    * Take frames for the board.
    *
    * Rotation snapshots queue in order. Jumpers go to the front without
-   * throwing the rest away, then the queue continues after their dwell.
-   * A live hold keeps the board until it ends, a higher-ranked jumper
-   * arrives, or the safety timeout fires; updates of the same source
-   * replace the live card instead of stacking.
+   * throwing the rest away. With **immediate**, they also drop the current
+   * page's dwell and flip as soon as the rate window allows (alert lane);
+   * without it they wait out what is already showing, then go next. A live
+   * hold keeps the board until it ends, a higher-ranked jumper arrives, or
+   * the safety timeout fires; updates of the same source replace the live
+   * card instead of stacking.
    */
   function submit(frames, options = {}) {
     const offered = (Array.isArray(frames) ? frames : [frames]).filter(Boolean);
@@ -505,8 +509,16 @@ function createQueue({
       );
     }
 
-    const priority = hold.lane === 'alert' ? 'alert' : 'snapshot';
+    // Immediate cut-in uses the alert priority so pickNext skips board dwell.
+    // Hold/game cards stay snapshots (restore-after-alert must not fire on a
+    // live match) and clear dwell below so they still land right away.
+    const cutIn = Boolean(hold.immediate);
+    const priority = (hold.lane === 'alert' && cutIn) ? 'alert' : 'snapshot';
     const coalesceKey = options.coalesceKey || hold.coalesceKey || null;
+
+    if (cutIn) {
+      state.snapshotUntil = null;
+    }
 
     // A rotation flip too soon after the last one is dropped, not delayed:
     // by the time the gap passes the content is stale anyway.
@@ -662,10 +674,14 @@ function createQueue({
     }
 
     if (priority === 'alert' && takesBoard) {
-      // Jump the line. Leave every waiting page where it is — an alarm
-      // must not throw away the guest book or the weather behind it.
+      // Cut in now. Leave every waiting page where it is — an alarm must
+      // not throw away the guest book or the weather behind it.
       queueInFront();
     } else if (priority === 'alert') {
+      queueInFront();
+    } else if (hold.jump && !mineNow && !isHoldLane(hold.lane)) {
+      // Jump without Now: front of the waiting line, still honour dwell.
+      // Live game phases must not use this — they queue after their own hold.
       queueInFront();
     } else if (preempt && !mineNow) {
       queueInFront();
@@ -842,6 +858,7 @@ function createQueue({
     try {
       outcome = await transport.post(item.frame.rows, {
         strategy: config.transitionStrategy || null,
+        quietHoursExempt: Boolean(item.quietHoursExempt),
       });
     } catch (error) {
       outcome = { ok: false, reason: 'network', retryable: true, message: error?.message };

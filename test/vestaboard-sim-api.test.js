@@ -412,10 +412,11 @@ test('the settings tab gets the whole board, health included, and never a key', 
     assert.equal(sim.simulator, true);
     assert.equal(sim.health, 'ok');
     assert.equal(sim.hasKey, true);
-    // The edit form needs these to fill itself in.
-    assert.equal(typeof sim.dwellSeconds, 'number');
     assert.equal(typeof sim.quietHours.start, 'string');
-    assert.ok(Array.isArray(sim.priorities));
+    assert.equal(sim.dwellSeconds, undefined);
+    assert.equal(sim.priorities, undefined);
+    assert.equal(typeof res.body.house.dwellSeconds, 'number');
+    assert.ok(Array.isArray(res.body.house.priorities));
     assert.ok(res.body.priorityCatalog?.events?.length);
     assert.ok(res.body.priorityCatalog.defaults.some((rule) => rule.source === 'alarm.fired'));
 
@@ -442,12 +443,19 @@ test('a board can be added, edited and removed over the api', async () => {
     const edited = await request(`${harness.base}/api/vestaboards`, {
       method: 'POST',
       cookie: harness.cookie,
-      body: { id: 'kitchen', name: 'Kitchen', dwellSeconds: 25 },
+      body: { id: 'kitchen', name: 'Kitchen' },
     });
     const kitchen = edited.body.boards.find((board) => board.id === 'kitchen');
     assert.equal(kitchen.name, 'Kitchen');
-    assert.equal(kitchen.dwellSeconds, 25);
     assert.equal(kitchen.hasKey, true, 'editing without a key keeps the saved one');
+
+    const house = await request(`${harness.base}/api/vestaboards/house`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { dwellSeconds: 40 },
+    });
+    assert.equal(house.status, 200);
+    assert.equal(house.body.house.dwellSeconds, 40);
 
     const removed = await request(`${harness.base}/api/vestaboards/remove`, {
       method: 'POST',
@@ -736,6 +744,57 @@ test('clearing an empty simulator queue is a no-op', async () => {
   }
 });
 
+test('release-holds drops locks on every board in the house', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    harness.hub.settings.upsert({
+      id: 'kitchen',
+      name: 'Kitchen Board',
+      baseUrl: 'http://127.0.0.1:1',
+      key: 'a-key',
+    });
+    const sim = harness.hub.queueFor('sim');
+    const kitchen = harness.hub.queueFor('kitchen');
+    assert.ok(kitchen, 'kitchen queue should exist after upsert');
+    sim.acquireGameLock('feature.presentation');
+    kitchen.acquireGameLock('huupe.live');
+    assert.ok(sim.state().gameLock);
+    assert.ok(kitchen.state().gameLock);
+
+    const res = await request(`${harness.base}/api/vestaboards/release-holds`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: {},
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.released, 2);
+    assert.deepEqual(res.body.boards.slice().sort(), ['kitchen', 'sim']);
+    assert.equal(sim.state().gameLock, null);
+    assert.equal(kitchen.state().gameLock, null);
+    assert.equal(res.body.state?.gameLock, null);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('release-holds with no locks is a no-op', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    const res = await request(`${harness.base}/api/vestaboards/release-holds`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: {},
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.released, 0);
+    assert.deepEqual(res.body.boards, []);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('a hub push flips the simulator and the page stream sees it', async () => {
   const harness = await startHarness({ withHub: true });
   try {
@@ -876,8 +935,13 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.match(js, /vb-flip\.wav/);
   assert.match(html, /btn-vb-sound/);
   assert.match(html, /btn-vb-queue-clear/);
+  assert.match(html, /btn-vb-release-holds/);
   assert.match(js, /function vbClearQueue\(/);
+  assert.match(js, /function vbReleaseHolds\(/);
+  assert.match(js, /\/api\/vestaboards\/release-holds/);
   assert.match(js, /function vbSyncClearButton\(/);
+  assert.match(js, /Holding/);
+  assert.doesNotMatch(js, /Waiting on game/);
   assert.match(html, /app\.js\?v=signal\d+/);
   const wavPath = path.join(root, 'vb-flip.wav');
   assert.equal(fs.existsSync(wavPath), true);

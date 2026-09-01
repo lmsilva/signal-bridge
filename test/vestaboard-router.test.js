@@ -112,7 +112,8 @@ test('matchBoards treats all / vestaboard as every board and full as none', () =
   assert.equal(matchBoards(boards, '').length, 2);
   assert.equal(matchBoards(boards, 'vestaboard').length, 2);
   assert.deepEqual(matchBoards(boards, 'full'), []);
-  assert.deepEqual(matchBoards(boards, 'kitchen').map((entry) => entry.board.id), ['kitchen']);
+  assert.deepEqual(matchBoards(boards, 'kitchen').map((entry) => entry.board.id), ['sim', 'kitchen']);
+  assert.deepEqual(matchBoards(boards, 'sim').map((entry) => entry.board.id), ['sim', 'kitchen']);
 });
 
 test('a photo push never submits frames and logs one skip line per board', () => {
@@ -154,30 +155,25 @@ test('a weather push posts to every board that allows it', () => {
 
   assert.equal(results.length, 2);
   assert.ok(results.every((row) => row.reason === 'posted'));
-  assert.equal(submitted.length, 2);
+  assert.equal(submitted.length, 1, 'the house queue is submitted once');
   assert.ok(submitted[0].frames.length >= 1);
   assert.equal(submitted[0].options.priority, 'snapshot');
 });
 
-test('an allowlist board skips types it did not subscribe to', () => {
-  const log = silentLog();
+test('a single-board target still submits once for the whole house', () => {
   const submitted = [];
-  routeEvent({
+  const results = routeEvent({
     payload: WEATHER,
-    boards: [
-      { board: { id: 'sim', events: ['broadcast'] } },
-      { board: { id: 'kitchen', events: 'all' } },
-    ],
+    boards: twoBoards(),
+    targetId: 'kitchen',
     submit: (boardId, frames) => {
       submitted.push(boardId);
       return { ok: true, accepted: frames.length };
     },
-    log,
   });
-
-  assert.deepEqual(submitted, ['kitchen']);
-  assert.equal(log.lines.length, 1);
-  assert.match(log.lines[0], /skip \(allowlist\) weather\.query/);
+  assert.equal(submitted.length, 1);
+  assert.equal(results.length, 2);
+  assert.ok(results.every((row) => row.reason === 'posted'));
 });
 
 test('empty content is skipped silently, even when someone asked', () => {
@@ -443,6 +439,6 @@ test('the admin Push grid filters by the selected display kind', () => {
     'utf8',
   );
   assert.match(appJs, /function commandSupportsSelectedKind/);
-  assert.match(appJs, /showing board-capable pushes only/);
+  assert.match(appJs, /board-capable pushes go to every enabled board/);
   assert.match(appJs, /entry\.kind !== 'vestaboard'/);
 });
