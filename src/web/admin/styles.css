@@ -5386,37 +5386,96 @@ textarea.field-input.text-input-area {
 .vb-row-result { font-variant-numeric: tabular-nums; flex: none; }
 
 .vb-queue-row {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(8.5rem, 14rem) minmax(0, 1fr) 8.75rem 1.7rem;
+  column-gap: 14px;
   align-items: center;
-  cursor: default;
+  justify-content: stretch;
+  padding: 9px 12px;
+  cursor: grab;
   user-select: none;
   touch-action: none;
 }
 .vb-queue-row.dragging {
   opacity: 0.72;
   outline: 1px solid var(--line);
+  cursor: grabbing;
+}
+body.vb-queue-dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 .vb-queue-handle,
 .vb-queue-cancel {
-  flex: none;
   border: 0;
   background: transparent;
   color: var(--text-dim);
-  padding: 4px 2px;
+  padding: 0;
   line-height: 1;
   font: inherit;
 }
 .vb-queue-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: grab;
   letter-spacing: -0.12em;
   font-size: 1rem;
+  touch-action: none;
 }
-.vb-queue-row.dragging .vb-queue-handle { cursor: grabbing; }
+.vb-queue-source,
+.vb-queue-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vb-queue-source {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  letter-spacing: 0.01em;
+}
+.vb-queue-title {
+  color: var(--text);
+  font-weight: 600;
+}
+.vb-queue-status {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.vb-queue-status.is-held { color: var(--warn); }
+.vb-queue-row.dragging .vb-queue-handle,
+body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .vb-queue-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
   cursor: pointer;
   font-size: 1.15rem;
   font-weight: 600;
+  touch-action: manipulation;
 }
 .vb-queue-cancel:hover { color: var(--danger); }
+
+@media (max-width: 720px) {
+  .vb-queue-row {
+    grid-template-columns: 1.35rem minmax(0, 1fr) 6.5rem 1.7rem;
+    grid-template-areas:
+      "handle title status cancel"
+      "handle source status cancel";
+    row-gap: 2px;
+    column-gap: 10px;
+  }
+  .vb-queue-handle { grid-area: handle; }
+  .vb-queue-title { grid-area: title; }
+  .vb-queue-source { grid-area: source; }
+  .vb-queue-status { grid-area: status; align-self: center; }
+  .vb-queue-cancel { grid-area: cancel; }
+}
 
 /* The call log is for debugging, so it stays folded away until asked for. */
 .vb-advanced > summary {

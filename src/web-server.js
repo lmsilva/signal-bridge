@@ -6944,6 +6944,18 @@ function createWebServer({
     return vestaboardHub?.queueFor?.(SIMULATOR_ID)?.pending?.() || [];
   }
 
+  function vestaboardSimQueueRevision() {
+    return Number(vestaboardHub?.queueFor?.(SIMULATOR_ID)?.state?.()?.queueRevision) || 0;
+  }
+
+  function vestaboardSimQueuePayload(items = null) {
+    return {
+      boardId: SIMULATOR_ID,
+      items: items || vestaboardSimQueue(),
+      revision: vestaboardSimQueueRevision(),
+    };
+  }
+
   /**
    * The Local API's own cooldown is the 15s flap window. The page's
    * "Next flip" pill should also wait out Settings → Dwell, or it counts
@@ -6970,6 +6982,7 @@ function createWebServer({
       state: vestaboardSimPublicState(),
       calls: vestaboardSimulator.calls(),
       queue: vestaboardSimQueue(),
+      queueRevision: vestaboardSimQueueRevision(),
       // The page owns no knowledge of the character set; it renders whatever
       // the encoder says each code looks like.
       glyphs: Object.fromEntries(VESTABOARD_CHAR_BY_CODE),
@@ -7004,7 +7017,7 @@ function createWebServer({
     };
 
     send('sim.state', vestaboardSimPublicState());
-    send('sim.queue', { boardId: SIMULATOR_ID, items: vestaboardSimQueue() });
+    send('sim.queue', vestaboardSimQueuePayload());
 
     const unsubscribeSim = vestaboardSimulator.onChange((event, detail) => {
       if (event === 'state') send('sim.state', vestaboardSimPublicState(detail));
@@ -7079,11 +7092,13 @@ function createWebServer({
       sendJson(res, 400, { ok: false, error: 'id is required' });
       return;
     }
-    if (!queue.cancel(id)) {
-      sendJson(res, 404, { ok: false, error: 'That page is no longer queued' });
-      return;
-    }
-    sendJson(res, 200, { ok: true, queue: vestaboardSimQueue() });
+    const cancelled = queue.cancel(id);
+    sendJson(res, 200, {
+      ok: true,
+      gone: !cancelled,
+      queue: vestaboardSimQueue(),
+      queueRevision: vestaboardSimQueueRevision(),
+    });
   }
 
   function handleVestaboardSimQueueReorder(body, res) {
@@ -7097,7 +7112,11 @@ function createWebServer({
       sendJson(res, 400, { ok: false, error: 'ids must be an array' });
       return;
     }
-    sendJson(res, 200, { ok: true, queue: queue.reorder(ids) });
+    sendJson(res, 200, {
+      ok: true,
+      queue: queue.reorder(ids),
+      queueRevision: vestaboardSimQueueRevision(),
+    });
   }
 
   function handlePhotoDelete(body, res) {

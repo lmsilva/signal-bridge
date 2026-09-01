@@ -446,12 +446,22 @@ test('health changes are announced so the picker can show them', async () => {
 test('queue changes are announced so the simulator page can list them', () => {
   const h = makeQueue();
   const sizes = [];
+  const revisions = [];
   h.queue.onChange((event, detail) => {
-    if (event === 'queue') sizes.push(detail.items.length);
+    if (event === 'queue') {
+      sizes.push(detail.items.length);
+      revisions.push(detail.revision);
+    }
   });
 
+  assert.equal(h.queue.state().queueRevision, 0);
   h.queue.submit([frame('ONE', 1), frame('TWO', 2)]);
   assert.deepEqual(sizes, [2]);
+  assert.equal(revisions[0], 1);
+  assert.equal(h.queue.state().queueRevision, 1);
+  h.queue.submit([frame('THREE', 3)]);
+  assert.equal(h.queue.state().queueRevision, 2);
+  assert.equal(revisions[1], 2);
 });
 
 test('the token never reaches a log line', async () => {
