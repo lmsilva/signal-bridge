@@ -643,12 +643,17 @@ function createGuestBook(config = {}, log = console, deps = {}) {
         continue;
       }
       const board = boardFramesFor(entry.rows, entry.source);
+      // Append in book order — do not let a morning flush wipe earlier holds.
       pushToBoard({
         type: 'guest.book',
         rows: board.rows,
         footerRows: board.footerRows,
         name: entry.name,
-      }, { quietHoursExempt: false });
+      }, {
+        quietHoursExempt: false,
+        breakHold: flushed === 0,
+        replaceSource: flushed === 0 ? 'guest.book' : false,
+      });
       entry.status = 'shown';
       flushed += 1;
     }

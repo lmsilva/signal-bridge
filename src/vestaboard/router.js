@@ -234,11 +234,12 @@ function routeEvent({
       replaceSource = null;
     } else if (replaceSourceOpt != null && replaceSourceOpt !== '') {
       replaceSource = String(replaceSourceOpt);
-    } else if (type === 'guest.book' || type === 'guest.book.invite') {
-      replaceSource = 'guest.book';
     } else if (type === 'ring.doorbell') {
+      // One doorbell at a time — a second ring replaces an unshown card.
       replaceSource = 'ring.doorbell';
     }
+    // guest.book messages append. Host bulk release/replay still passes
+    // replaceSource on the first item when it wants a clean start.
     const outcome = submit(entry.board.id, frames, {
       priority,
       scheduler,

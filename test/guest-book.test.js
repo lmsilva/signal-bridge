@@ -179,6 +179,20 @@ test('replay refuses a waiting message — release it first', () => {
   assert.equal(pushed.length, 0);
 });
 
+test('three live guest messages each push without replacing the others', () => {
+  const { book, pushed } = makeBook();
+  assert.equal(book.send({ text: 'Hello one', name: 'A' }, { ip: '1.1.1.1' }).ok, true);
+  assert.equal(book.send({ text: 'Hello two', name: 'B' }, { ip: '1.1.1.2' }).ok, true);
+  assert.equal(book.send({ text: 'Hello three', name: 'C' }, { ip: '1.1.1.3' }).ok, true);
+  assert.equal(pushed.length, 3);
+  assert.equal(pushed[0].options.replaceSource, undefined);
+  assert.equal(pushed[1].options.replaceSource, undefined);
+  assert.equal(pushed[2].options.replaceSource, undefined);
+  assert.match(String(pushed[0].payload.name), /A/);
+  assert.match(String(pushed[1].payload.name), /B/);
+  assert.match(String(pushed[2].payload.name), /C/);
+});
+
 test('releaseMany and replayMany queue older messages before newer ones', () => {
   let now = 1_000_000;
   const { book, pushed } = makeBook({

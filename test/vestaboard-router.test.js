@@ -231,6 +231,43 @@ test('a smart-home command coalesces per device, not per room that heard it', ()
   assert.equal(options.coalesceKey, 'smart-home:Kitchen Lights');
 });
 
+test('guest book messages append rather than replacing earlier ones', () => {
+  const { blankBoard } = require('../src/guest-book-compose');
+  const { placeText } = require('../src/vestaboard/encoder');
+  const options = [];
+  for (const name of ['One', 'Two', 'Three']) {
+    const rows = blankBoard();
+    placeText(rows[0], name, 0);
+    routeEvent({
+      payload: { type: 'guest.book', rows, name },
+      boards: [{ board: { id: 'sim', events: 'all' } }],
+      submit: (_boardId, _frames, submitted) => {
+        options.push(submitted);
+        return { ok: true, accepted: 1 };
+      },
+    });
+  }
+  assert.equal(options.length, 3);
+  assert.equal(options[0].replaceSource, null);
+  assert.equal(options[1].replaceSource, null);
+  assert.equal(options[2].replaceSource, null);
+});
+
+test('an explicit guest.book replaceSource still clears earlier pages', () => {
+  const { blankBoard } = require('../src/guest-book-compose');
+  let options = null;
+  routeEvent({
+    payload: { type: 'guest.book', rows: blankBoard(), name: 'Host' },
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    replaceSource: 'guest.book',
+    submit: (_boardId, _frames, submitted) => {
+      options = submitted;
+      return { ok: true, accepted: 1 };
+    },
+  });
+  assert.equal(options.replaceSource, 'guest.book');
+});
+
 test('an explicit push is not exempt from quiet hours; a rotation is not either', () => {
   let options = null;
   routeEvent({

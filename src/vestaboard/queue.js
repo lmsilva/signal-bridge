@@ -145,6 +145,12 @@ function createQueue({
      * Rotation pages wait for this; alerts and live game cards do not.
      */
     snapshotUntil: null,
+    /**
+     * Display-only: when the live game's current phase card is due to
+     * change. Does not park the queue — the session lock does that — but
+     * the simulator "Next flip" pill reads it so lobby/round timers show.
+     */
+    phaseUntil: null,
   };
 
   const items = [];
@@ -188,6 +194,52 @@ function createQueue({
     return Math.max(0, state.snapshotUntil - at);
   }
 
+  /** How long until the live game's current phase is due to change. */
+  function phaseCooldownMs(at = now()) {
+    if (!state.phaseUntil) {
+      return 0;
+    }
+    return Math.max(0, state.phaseUntil - at);
+  }
+
+  /**
+   * How long until the next page the queue is willing to post becomes
+   * eligible by its own `notBefore` (rate window / dwell are separate).
+   * `null` when nothing is waiting that is not held by a lock.
+   */
+  function pendingReadyMs(at = now()) {
+    let soonest = null;
+    for (const item of items) {
+      if (itemHeld(item, at)) {
+        continue;
+      }
+      if (item.notBefore && at < item.notBefore) {
+        const wait = item.notBefore - at;
+        soonest = soonest == null ? wait : Math.min(soonest, wait);
+      } else {
+        return 0;
+      }
+    }
+    return soonest;
+  }
+
+  /**
+   * Remaining wait before the board's next content change, ignoring the
+   * Local API rate window (the simulator owns that). During a game this is
+   * the sooner of a queued phase card and the current phase timer; otherwise
+   * it is Settings dwell (and any sequenced `notBefore`).
+   */
+  function nextFlipCooldownMs(at = now()) {
+    const pending = pendingReadyMs(at);
+    if (gameLockActive(at)) {
+      if (pending != null) {
+        return pending;
+      }
+      return phaseCooldownMs(at);
+    }
+    return Math.max(snapshotCooldownMs(at), pending || 0);
+  }
+
   function holdMsOf(frame) {
     const seconds = Number(frame?.holdSeconds);
     return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
@@ -208,6 +260,7 @@ function createQueue({
     if (at >= state.gameLock.expiresAt) {
       log?.warn?.(`Vestaboard ${config.id} game lock expired without a close`);
       state.gameLock = null;
+      state.phaseUntil = null;
       return false;
     }
     return true;
@@ -489,6 +542,7 @@ function createQueue({
       // An alert is not a rotation page. Leave no leftover dwell that would
       // park the restore (or the next snapshot) after the alert has finished.
       state.snapshotUntil = null;
+      state.phaseUntil = null;
     } else {
       state.lastSnapshot = item.frame;
       state.restoreAfter = null;
@@ -507,8 +561,13 @@ function createQueue({
       if (!ownedByGame(item)) {
         const dwell = boardDwellMs();
         state.snapshotUntil = dwell ? at + dwell : null;
+        state.phaseUntil = null;
       } else {
         state.snapshotUntil = null;
+        // Lobby / round / intermission — the pill counts this down until
+        // the session posts the next card (or a sequenced page is ready).
+        const phaseMs = holdMsOf(item.frame);
+        state.phaseUntil = phaseMs ? at + phaseMs : null;
       }
     }
 
@@ -669,6 +728,9 @@ function createQueue({
       holdKind: state.holdKind,
       snapshotUntil: state.snapshotUntil,
       snapshotCooldownMs: snapshotCooldownMs(),
+      phaseUntil: state.phaseUntil,
+      phaseCooldownMs: phaseCooldownMs(),
+      nextFlipCooldownMs: nextFlipCooldownMs(),
       gameLock: state.gameLock ? { ...state.gameLock } : null,
       quietHours: inQuietHours(new Date(now()), config.quietHours, timeZone),
       queueRevision,
@@ -692,6 +754,7 @@ function createQueue({
       if (!state.gameLock) return false;
       if (owner && state.gameLock.source !== owner) return false;
       state.gameLock = null;
+      state.phaseUntil = null;
       announceQueue();
       return true;
     },

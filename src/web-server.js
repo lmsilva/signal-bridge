@@ -6958,16 +6958,20 @@ function createWebServer({
 
   /**
    * The Local API's own cooldown is the 15s flap window. The page's
-   * "Next flip" pill should also wait out Settings → Dwell, or it counts
-   * down from 15 while the queue still holds the current page.
+   * "Next flip" pill should also wait out Settings → Dwell, and during a
+   * live game the lobby / round / intermission timer — otherwise it says
+   * "Next flip now" while the session still owns the board for a minute.
    */
   function vestaboardSimPublicState(raw = null) {
     const state = raw || vestaboardSimulator?.state?.() || {};
     const queue = vestaboardHub?.queueFor?.(SIMULATOR_ID)?.state?.() || {};
+    const queueWait = Number(queue.nextFlipCooldownMs) || 0;
     const dwellLeft = Number(queue.snapshotCooldownMs) || 0;
     return {
       ...state,
-      cooldownMs: Math.max(Number(state.cooldownMs) || 0, dwellLeft),
+      cooldownMs: Math.max(Number(state.cooldownMs) || 0, queueWait, dwellLeft),
+      gameLock: queue.gameLock || null,
+      phaseUntil: queue.phaseUntil || null,
     };
   }
 
@@ -7031,6 +7035,9 @@ function createWebServer({
       }
       if (event === 'queue') {
         send('sim.queue', detail);
+        // Phase hold / game lock live on the queue; refresh the pill when
+        // a lobby ends or the session releases the board without a flip.
+        send('sim.state', vestaboardSimPublicState());
       }
       // The Local API emits `state` during the POST, before the queue
       // records dwell. Push a second state after `posted` so the pill

@@ -3010,11 +3010,13 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal222/);
+  assert.match(html, /styles\.css\?v=signal223/);
   assert.match(html, /settings-filter\.js\?v=signal217/);
-  assert.match(html, /app\.js\?v=signal222/);
+  assert.match(html, /app\.js\?v=signal223/);
   assert.match(js, /function vbApplyQueue\(/);
   assert.match(js, /function vbSettleBoard\(/);
+  assert.match(js, /Next card in/);
+  assert.match(js, /Waiting on game/);
   assert.match(js, /document\.addEventListener\('pointermove', onMove, true\)/);
   assert.match(js, /VB_QUEUE_POLL_MS = 2000/);
   assert.match(css, /body\.vb-queue-dragging/);
