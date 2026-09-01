@@ -621,6 +621,7 @@ test('a jump without Now waits for the current page dwell', async () => {
   assert.ok(h.queue.state().snapshotUntil);
   h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })]);
   assert.equal(h.queue.pending()[0].label, 'ALARM');
+  assert.equal(h.queue.pending()[0].status, 'waiting');
   h.advance(2 * SECOND);
   assert.equal(await h.queue.tick(), null, 'still inside the weather dwell');
   h.advance(60 * SECOND);
@@ -640,9 +641,60 @@ test('Now on a jumper clears dwell and flips as soon as the rate window allows',
   assert.equal(await h.queue.tick(), 'posted');
   h.queue.submit([frame('ALARM', 9, { source: 'alarm.fired' })]);
   assert.equal(h.queue.state().snapshotUntil, null);
+  assert.equal(h.queue.pending()[0].status, 'cutting-in');
   h.advance(2 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
   assert.equal(h.transport.posts[1].layout[0][0], 9);
+});
+
+test('Now that arrives while a snapshot is posting does not get a 60s dwell put back', async () => {
+  let unblock;
+  const gate = new Promise((resolve) => { unblock = resolve; });
+  let clock = 1_000_000;
+  const posts = [];
+  const queue = createQueue({
+    board: {
+      id: 'sim',
+      rateWindowSeconds: 15,
+      dwellSeconds: 60,
+      priorities: [
+        { source: 'ring.doorbell', jump: true, immediate: true, hold: false, holdMinutes: 15 },
+      ],
+    },
+    transport: {
+      async post(layout) {
+        posts.push(layout);
+        await gate;
+        return { ok: true, reason: 'ok', status: 200 };
+      },
+    },
+    log: silentLog(),
+    now: () => clock,
+  });
+
+  queue.submit([frame('WEATHER', 1)]);
+  const first = queue.tick();
+  await Promise.resolve();
+  assert.equal(posts.length, 1, 'weather post must be in flight');
+  queue.submit([frame('MAP', 2, { source: 'us.weather-map' })]);
+  queue.submit([frame('SHOP', 3, { source: 'shopping-list' })]);
+  queue.submit([frame('DOORBELL', 4, { source: 'ring.doorbell' })]);
+  assert.equal(queue.pending()[0].label, 'DOORBELL');
+  assert.equal(queue.pending()[0].status, 'cutting-in');
+
+  unblock();
+  assert.equal(await first, 'posted');
+  assert.equal(queue.state().snapshotUntil, null, 'in-flight weather must not restore dwell');
+  assert.equal(queue.pending()[0].label, 'DOORBELL');
+  assert.ok(
+    queue.state().nextFlipCooldownMs <= 15 * SECOND,
+    `Now cooldown was ${queue.state().nextFlipCooldownMs}, not the flap window`,
+  );
+  assert.ok(queue.state().nextFlipCooldownMs > 10 * SECOND);
+
+  clock += 15 * SECOND;
+  assert.equal(await queue.tick(), 'posted');
+  assert.equal(posts[1][0][0], 4);
 });
 
 test('a live game card does not wait out the board dwell', async () => {

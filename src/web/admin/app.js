@@ -14461,7 +14461,8 @@
           || 'Autodarts cloud is rate-limited — waiting before retrying';
       } else if (linked) {
         detail.textContent = `Linked as ${status.userName || status.userId || 'account'}`
-          + (status.boardName ? ` · board ${status.boardName}` : '');
+          + (status.boardName ? ` · board ${status.boardName}` : '')
+          + (status.keepAlive ? ' · session kept alive automatically' : '');
       } else {
         detail.textContent = 'Pick device link or email & password below to connect your account.';
       }
@@ -19901,10 +19902,11 @@
       main.title = item.label || 'Frame';
 
       const state = document.createElement('span');
-      state.className = `vb-queue-status${item.status === 'held' ? ' is-held' : ''}`;
+      const cuttingIn = item.status === 'cutting-in';
+      state.className = `vb-queue-status${item.status === 'held' ? ' is-held' : ''}${cuttingIn ? ' is-now' : ''}`;
       state.textContent = item.notBefore
         ? `not before ${vbClockOf(item.notBefore)}`
-        : (item.status === 'held' ? 'held' : 'waiting');
+        : (item.status === 'held' ? 'held' : (cuttingIn ? 'cutting in' : 'waiting'));
 
       const cancel = document.createElement('button');
       cancel.type = 'button';

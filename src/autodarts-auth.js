@@ -30,12 +30,23 @@ const MIN_KEEPALIVE_MS = 60 * 1000;
 /** Cap so a very long refresh_expires_in still gets periodic rotation. */
 const MAX_KEEPALIVE_MS = 6 * 60 * 60 * 1000;
 
+function tokenSource(json) {
+  if (!json || typeof json !== 'object') return {};
+  if (json.access_token || json.refresh_token || json.accessToken || json.refreshToken) {
+    return json;
+  }
+  if (json.data && typeof json.data === 'object') return tokenSource(json.data);
+  if (json.tokens && typeof json.tokens === 'object') return tokenSource(json.tokens);
+  return json;
+}
+
 function pickTokenFields(json = {}) {
+  const src = tokenSource(json);
   return {
-    accessToken: json.access_token || json.accessToken || '',
-    refreshToken: json.refresh_token || json.refreshToken || '',
-    expiresIn: Number(json.expires_in || json.expiresIn || 0) || 0,
-    refreshExpiresIn: Number(json.refresh_expires_in || json.refreshExpiresIn || 0) || 0,
+    accessToken: src.access_token || src.accessToken || '',
+    refreshToken: src.refresh_token || src.refreshToken || '',
+    expiresIn: Number(src.expires_in || src.expiresIn || 0) || 0,
+    refreshExpiresIn: Number(src.refresh_expires_in || src.refreshExpiresIn || 0) || 0,
   };
 }
 
@@ -56,13 +67,21 @@ function authErrorDetail(json, text, fallback = 'Request failed') {
   return fallback;
 }
 
-function isInvalidRefreshError(json, text) {
+function isInvalidRefreshError(json, text, status) {
+  if (Number(status) === 401) return true;
   const detail = authErrorDetail(json, text, '').toLowerCase();
-  const code = typeof json?.error === 'string'
-    ? json.error
-    : (json?.error?.code || '');
-  return /invalid|expired|revoked/.test(detail)
-    || /invalid_grant|invalid_token/.test(String(code));
+  const code = String(
+    typeof json?.error === 'string'
+      ? json.error
+      : (json?.error?.code || ''),
+  ).toLowerCase();
+  // `invalid_client` contains "invalid" but is a config problem, not a dead token.
+  if (code === 'invalid_client' || /\binvalid_client\b/.test(detail)) return false;
+  return /invalid_grant|invalid_token/.test(code)
+    || /invalid_grant|invalid_token/.test(detail)
+    || /invalid or expired refresh/.test(detail)
+    || /refresh token.*(invalid|expired|revoked)/.test(detail)
+    || /token.*(revoked|expired)/.test(detail);
 }
 
 function createAutodartsAuth({
@@ -127,8 +146,16 @@ function createAutodartsAuth({
 
   async function persistTokens(tokenJson, extra = {}) {
     const tokens = pickTokenFields(tokenJson);
-    if (!tokens.refreshToken) {
+    const existing = credentials.load();
+    // Autodarts often returns only a new access token on refresh. Throwing here
+    // used to discard a still-valid session, and — if they had already rotated
+    // server-side — the next keep-alive then died with invalid_grant.
+    const refreshToken = tokens.refreshToken || existing.refreshToken;
+    if (!refreshToken) {
       throw new Error('Autodarts did not return a refresh token');
+    }
+    if (!tokens.refreshToken && existing.refreshToken) {
+      log?.debug?.('Autodarts refresh omitted a new refresh token — keeping the current one');
     }
     memoryAccessToken = tokens.accessToken || memoryAccessToken;
     if (tokens.expiresIn > 0) {
@@ -155,9 +182,8 @@ function createAutodartsAuth({
         log?.warn?.('Autodarts userinfo failed', error?.message || error);
       }
     }
-    const existing = credentials.load();
     credentials.save({
-      refreshToken: tokens.refreshToken,
+      refreshToken,
       accessToken: tokens.accessToken || existing.accessToken,
       userId: userId || existing.userId,
       userName: userName || existing.userName,
@@ -168,7 +194,10 @@ function createAutodartsAuth({
       needsRelink: false,
       unavailableReason: null,
     });
-    scheduleKeepAlive();
+    // A failed refresh used to stop keep-alive forever. Device-link / password
+    // persist then called scheduleKeepAlive(), which no-ops when the flag is
+    // off — so every re-link without a container restart died again in a few days.
+    ensureKeepAlive();
     return statusSnapshot();
   }
 
@@ -244,18 +273,25 @@ function createAutodartsAuth({
           scheduleKeepAlive(Math.min(MAX_KEEPALIVE_MS, 60_000));
           throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed'));
         }
-        if (isInvalidRefreshError(result.json, result.text)) {
+        if (isInvalidRefreshError(result.json, result.text, result.status)) {
           if (await tryPasswordRecovery(authErrorDetail(result.json, result.text))) {
             return memoryAccessToken;
           }
+          credentials.markNeedsRelink(
+            authErrorDetail(result.json, result.text, 'Refresh failed — re-link Autodarts'),
+          );
+          memoryAccessToken = null;
+          accessExpiresAt = 0;
+          stopKeepAlive();
+          throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed — re-link in Settings'));
         }
-        credentials.markNeedsRelink(
-          authErrorDetail(result.json, result.text, 'Refresh failed — re-link Autodarts'),
-        );
+        // Other 4xx (invalid_client, 403, empty 400): keep the session and retry.
+        // Treating every 4xx as a dead token stopped keep-alive and forced a
+        // phone approval even when the refresh token was still good.
         memoryAccessToken = null;
         accessExpiresAt = 0;
-        stopKeepAlive();
-        throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed — re-link in Settings'));
+        scheduleKeepAlive(Math.min(MAX_KEEPALIVE_MS, 60_000));
+        throw new Error(authErrorDetail(result.json, result.text, 'Autodarts token refresh failed'));
       }
       await persistTokens(result.json, {
         userId: stored.userId,
@@ -319,6 +355,10 @@ function createAutodartsAuth({
       keepAliveTimer = null;
       return;
     }
+    // Boot / recovery overrides may be shorter than MIN_KEEPALIVE_MS (15s kick).
+    const waitMs = overrideMs != null
+      ? Math.max(1_000, overrideMs)
+      : Math.max(MIN_KEEPALIVE_MS, delay);
     keepAliveTimer = setTimer(async () => {
       keepAliveTimer = null;
       try {
@@ -331,8 +371,17 @@ function createAutodartsAuth({
           scheduleKeepAlive();
         }
       }
-    }, Math.max(MIN_KEEPALIVE_MS, delay));
+    }, waitMs);
     keepAliveTimer?.unref?.();
+  }
+
+  function ensureKeepAlive() {
+    const resuming = !keepAliveStarted;
+    keepAliveStarted = true;
+    scheduleKeepAlive();
+    if (resuming) {
+      log?.info?.('Autodarts token keep-alive resumed');
+    }
   }
 
   function startKeepAlive() {
@@ -341,6 +390,7 @@ function createAutodartsAuth({
     if (stored.refreshToken && !stored.needsRelink) {
       // Kick a refresh soon after boot so a multi-day idle container does not
       // sit on a refresh token that is already hours from expiry.
+      log?.info?.('Autodarts token keep-alive started');
       scheduleKeepAlive(Math.min(DEFAULT_KEEPALIVE_MS, 15_000));
     }
   }
@@ -525,6 +575,7 @@ function createAutodartsAuth({
     persistTokens,
     startKeepAlive,
     stopKeepAlive,
+    ensureKeepAlive,
   };
 }
 
@@ -532,6 +583,7 @@ module.exports = {
   createAutodartsAuth,
   pickTokenFields,
   authErrorDetail,
+  isInvalidRefreshError,
   DEFAULT_KEEPALIVE_MS,
   ACCESS_REFRESH_SKEW_SECONDS,
 };
