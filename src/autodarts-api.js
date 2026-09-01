@@ -162,9 +162,12 @@ function createAutodartsApi({
   }
 
   async function refreshWithAutodarts(refreshToken, { clientId: id, clientSecret: secret } = {}) {
+    // Autodarts docs show camelCase `refreshToken`; OAuth clients send
+    // `refresh_token`. Send both so a field-name mismatch cannot kill the session.
     return raw('POST', `${API_BASE}/auth/v1/refresh`, {
       body: {
         refresh_token: refreshToken,
+        refreshToken,
         ...authClientFields({ clientId: id, clientSecret: secret }),
       },
       auth: false,

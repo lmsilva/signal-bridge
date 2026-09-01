@@ -5368,23 +5368,53 @@ textarea.field-input.text-input-area {
 
 .vb-house-policy {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px 16px;
+  flex-direction: column;
+  gap: 8px;
   margin: 0 0 16px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
-.vb-house-policy .vb-form-field {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-.vb-house-policy-actions {
+.vb-house-policy .settings-group-title { margin: 0; }
+.vb-house-policy-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: 2px;
+  align-items: flex-end;
+  gap: 10px 12px;
 }
+.vb-house-dwell-field {
+  flex: none;
+}
+.vb-house-dwell-field .field-label { margin-bottom: 0; }
+.vb-house-dwell-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.vb-house-dwell-field .field-input {
+  width: 4.5rem;
+  height: 38px;
+  padding: 0 8px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+.vb-house-dwell-field .field-input::-webkit-outer-spin-button,
+.vb-house-dwell-field .field-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.vb-house-policy-row > .btn,
+.vb-house-dwell-controls .btn {
+  min-height: 0;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 0.82rem;
+  border-radius: 10px;
+}
+.vb-house-policy-row > #btn-vb-house-priorities {
+  margin-left: auto;
+}
+.vb-house-policy > .hint { margin: 0; }
 
 .vb-priority-sheet {
   max-width: min(720px, calc(100vw - 24px));
@@ -5697,6 +5727,7 @@ body.vb-queue-dragging {
   white-space: nowrap;
 }
 .vb-queue-status.is-held { color: var(--warn); }
+.vb-queue-status.is-now { color: var(--accent); }
 .vb-queue-row.dragging .vb-queue-handle,
 body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .vb-queue-cancel {

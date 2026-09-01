@@ -92,6 +92,8 @@ test('device-link poll stores encrypted tokens; password never persisted', async
   assert.equal(stored.userName, 'TRASHPANDA');
   assert.equal(stored.userId, 'user-1');
   assert.ok(!JSON.stringify(stored).includes('password'));
+  auth.stopKeepAlive();
+  auth.stopDevicePoll();
 });
 
 test('password login stores tokens; env blocks overwrite', async () => {
@@ -134,6 +136,7 @@ test('password login stores tokens; env blocks overwrite', async () => {
   });
   const refused = await authEnv.loginWithPassword({ email: 'other', password: 'x' });
   assert.equal(refused.status, 409);
+  auth.stopKeepAlive();
 });
 
 test('password login works without a saved client secret', async () => {
@@ -158,6 +161,7 @@ test('password login works without a saved client secret', async () => {
   });
   const result = await auth.loginWithPassword({ email: 'a@b.c', password: 'x' });
   assert.equal(result.ok, true);
+  auth.stopKeepAlive();
 });
 
 test('oauth client save encrypts optional secret; maps legacy client id', () => {
@@ -318,6 +322,7 @@ test('token keep-alive refreshes before the access token expires', async () => {
   });
   auth.startKeepAlive();
   assert.equal(timers.length, 1, 'boot schedules a keep-alive');
+  assert.equal(timers[0].ms, 15_000, 'boot kick is 15s, not clamped to 1 minute');
   await timers[0].fn();
   assert.equal(refreshCount, 1);
   assert.equal(credentials.load().refreshToken, 'refresh-1');
@@ -382,6 +387,7 @@ test('env password recovers an expired refresh token without marking needsRelink
   assert.equal(credentials.load().refreshToken, 'refresh-new');
   assert.equal(credentials.load().needsRelink, false);
   assert.equal(auth.statusSnapshot().linked, true);
+  auth.stopKeepAlive();
 });
 
 test('auth/v1 password + device POSTs use JSON bodies on api.autodarts.io', async () => {
@@ -415,5 +421,132 @@ test('auth/v1 password + device POSTs use JSON bodies on api.autodarts.io', asyn
   assert.equal(JSON.parse(calls[0].body).client_id, 'darts-caller');
   assert.equal(JSON.parse(calls[1].body).email, 'a@b.c');
   assert.equal(JSON.parse(calls[2].body).refresh_token, 'refresh-x');
+  assert.equal(JSON.parse(calls[2].body).refreshToken, 'refresh-x');
   assert.doesNotMatch(calls[0].url, /login\.autodarts\.io/);
+});
+
+test('refresh that omits refresh_token keeps the existing one and stays linked', async () => {
+  const root = tempRoot();
+  const credentials = createAutodartsCredentials({
+    ROOT: root,
+    autodartsCredentialsPath: path.join(root, 'creds.json'),
+    env: {},
+  });
+  credentials.save({
+    refreshToken: 'keep-me',
+    userId: 'u',
+    userName: 'X',
+  });
+  const api = {
+    refreshWithAutodarts: async () => ({
+      ok: true,
+      status: 200,
+      json: { access_token: 'access-only', expires_in: 900 },
+    }),
+    passwordLogin: async () => ({ ok: false }),
+    userInfo: async () => ({ ok: false }),
+    startDeviceCode: async () => ({ ok: false }),
+    pollDeviceToken: async () => ({ ok: false }),
+  };
+  const auth = createAutodartsAuth({ credentials, api, env: {} });
+  const token = await auth.refreshAccessToken();
+  assert.equal(token, 'access-only');
+  assert.equal(credentials.load().refreshToken, 'keep-me');
+  assert.equal(credentials.load().needsRelink, false);
+  assert.equal(auth.statusSnapshot().linked, true);
+  assert.equal(auth.statusSnapshot().keepAlive, true, 'persist restarts keep-alive');
+  auth.stopKeepAlive();
+});
+
+test('a successful re-link restarts keep-alive after a dead refresh', async () => {
+  const root = tempRoot();
+  const credentials = createAutodartsCredentials({
+    ROOT: root,
+    autodartsCredentialsPath: path.join(root, 'creds.json'),
+    env: {},
+  });
+  credentials.save({
+    refreshToken: 'dead',
+    userId: 'u',
+    userName: 'X',
+  });
+  const timers = [];
+  let refreshCalls = 0;
+  const api = {
+    refreshWithAutodarts: async () => {
+      refreshCalls += 1;
+      return {
+        ok: false,
+        status: 401,
+        json: { error: { code: 'invalid_token', message: 'invalid or expired refresh token' } },
+      };
+    },
+    passwordLogin: async () => ({ ok: false }),
+    userInfo: async () => ({ ok: false }),
+    startDeviceCode: async () => ({ ok: false }),
+    pollDeviceToken: async () => ({ ok: false }),
+  };
+  const auth = createAutodartsAuth({
+    credentials,
+    api,
+    env: {},
+    setTimer: (fn, ms) => {
+      const timer = { fn, ms, cancelled: false };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer: (timer) => {
+      if (timer) timer.cancelled = true;
+    },
+  });
+  auth.startKeepAlive();
+  await assert.rejects(() => auth.refreshAccessToken());
+  assert.equal(credentials.load().needsRelink, true);
+  assert.equal(auth.statusSnapshot().keepAlive, false, 'failed refresh stops keep-alive');
+
+  await auth.persistTokens({
+    access_token: 'access-2',
+    refresh_token: 'refresh-2',
+    expires_in: 900,
+  });
+  assert.equal(credentials.load().needsRelink, false);
+  assert.equal(credentials.load().refreshToken, 'refresh-2');
+  assert.equal(auth.statusSnapshot().keepAlive, true, 're-link must restart keep-alive');
+  assert.ok(
+    timers.some((t) => !t.cancelled),
+    'keep-alive timer is armed after re-link',
+  );
+  assert.equal(refreshCalls, 1);
+  auth.stopKeepAlive();
+});
+
+test('invalid_client on refresh does not mark needsRelink', async () => {
+  const root = tempRoot();
+  const credentials = createAutodartsCredentials({
+    ROOT: root,
+    autodartsCredentialsPath: path.join(root, 'creds.json'),
+    env: {},
+  });
+  credentials.save({
+    refreshToken: 'still-good',
+    userId: 'u',
+    userName: 'X',
+  });
+  const api = {
+    refreshWithAutodarts: async () => ({
+      ok: false,
+      status: 400,
+      json: { error: 'invalid_client' },
+    }),
+    passwordLogin: async () => ({ ok: false }),
+    userInfo: async () => ({ ok: false }),
+  };
+  const auth = createAutodartsAuth({ credentials, api, env: {} });
+  auth.startKeepAlive();
+  await assert.rejects(() => auth.refreshAccessToken(), /invalid_client/i);
+  assert.equal(credentials.load().needsRelink, false);
+  assert.equal(credentials.load().refreshToken, 'still-good');
+  assert.equal(auth.statusSnapshot().linked, true);
+  assert.equal(auth.statusSnapshot().keepAlive, true);
+  auth.stopKeepAlive();
 });

@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal233">
+  <link rel="stylesheet" href="styles.css?v=signal237">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -3238,19 +3238,20 @@
         </div>
 
         <div class="section-label" data-settings-group="media">Vestaboards</div>
-        <div class="card vb-settings-card" id="vb-settings-card" data-settings-group="media" data-search-terms="quiet hours reminder overnight vestaboard board split-flap priorities jump hold queue">
-          <p class="hint">Split-flap boards reached over the Local API. The simulator is always here; add a real board once it is on your network. Dwell and Priorities apply to every enabled board. The Simulator queue is the house line.</p>
-
+        <div class="card vb-settings-card" id="vb-settings-card" data-settings-group="media" data-search-terms="quiet hours reminder overnight vestaboard board split-flap priorities jump hold queue dwell global">
           <div class="vb-house-policy" id="vb-house-policy">
-            <label class="vb-form-field">
-              <span class="field-label">Dwell (s)</span>
-              <input type="number" class="field-input" id="vb-house-dwell" min="5" max="60" step="1" value="15">
-              <p class="hint" style="margin:4px 0 0">How long each page stays on every board before the next rotation. Alarms with Now still flip as soon as the flaps can move.</p>
-            </label>
-            <div class="vb-house-policy-actions">
-              <button type="button" class="btn btn-outline btn-sm" id="btn-vb-house-priorities">Priorities</button>
-              <button type="button" class="btn btn-accent btn-sm" id="btn-vb-house-dwell-save">Save dwell</button>
+            <p class="settings-group-title">Global Settings</p>
+            <div class="vb-house-policy-row">
+              <div class="vb-form-field vb-house-dwell-field">
+                <label class="field-label" for="vb-house-dwell">Dwell (s)</label>
+                <div class="vb-house-dwell-controls">
+                  <input type="number" class="field-input" id="vb-house-dwell" min="5" max="999" step="1" value="15" inputmode="numeric">
+                  <button type="button" class="btn btn-accent" id="btn-vb-house-dwell-save">Save</button>
+                </div>
+              </div>
+              <button type="button" class="btn btn-outline" id="btn-vb-house-priorities">Priorities</button>
             </div>
+            <p class="hint">How long each page stays on every board before the next rotation. Events with a priority of "Now" will flip as soon as the flaps can move.</p>
           </div>
 
           <div class="vb-board-list" id="vb-board-list">
@@ -4691,6 +4692,6 @@
   </div>
 
   <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal233"></script>
+  <script src="app.js?v=signal237"></script>
 </body>
 </html>

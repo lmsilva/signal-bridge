@@ -207,6 +207,19 @@ function createQueue({
     return Math.max(0, state.snapshotUntil - at);
   }
 
+  /** How long until the Local API will accept another flip. */
+  function rateWindowRemainingMs(at = now()) {
+    if (state.lastPostAt == null) {
+      return 0;
+    }
+    return Math.max(0, state.lastPostAt + rateWindowMs() - at);
+  }
+
+  /** Now: skip page dwell; wait only until the flaps can move. */
+  function itemCutsIn(item) {
+    return Boolean(item && item.priority === 'alert');
+  }
+
   /** How long until the live game's current phase is due to change. */
   function phaseCooldownMs(at = now()) {
     if (!state.phaseUntil) {
@@ -237,10 +250,10 @@ function createQueue({
   }
 
   /**
-   * Remaining wait before the board's next content change, ignoring the
-   * Local API rate window (the simulator owns that). During a game this is
-   * the sooner of a queued phase card and the current phase timer; otherwise
-   * it is Settings dwell (and any sequenced `notBefore`).
+   * Remaining wait before the board's next content change. During a game
+   * this is the sooner of a queued phase card and the current phase timer.
+   * A Now jumper skips Settings dwell and only waits out the flap window;
+   * everything else waits Settings dwell (and any sequenced `notBefore`).
    */
   function nextFlipCooldownMs(at = now()) {
     const pending = pendingReadyMs(at);
@@ -249,6 +262,10 @@ function createQueue({
         return pending;
       }
       return phaseCooldownMs(at);
+    }
+    const next = items.find((item) => !itemHeld(item, at));
+    if (itemCutsIn(next)) {
+      return Math.max(rateWindowRemainingMs(at), pending || 0);
     }
     return Math.max(snapshotCooldownMs(at), pending || 0);
   }
@@ -373,7 +390,7 @@ function createQueue({
       notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
       status: item.notBefore
         ? null
-        : (itemHeld(item) ? 'held' : 'waiting'),
+        : (itemHeld(item) ? 'held' : (itemCutsIn(item) ? 'cutting-in' : 'waiting')),
     }));
   }
 
@@ -737,7 +754,13 @@ function createQueue({
       // The Settings dwell is how long a rotation page stays. Game cards
       // keep their own phase timing; do not stretch them to 60s, and do
       // not leave a pre-game dwell that would park the next page after.
-      if (!ownedByGame(item)) {
+      // A Now jumper that arrived while this snapshot was still posting
+      // already dropped dwell — do not put a 60s wait back on top of it.
+      const nextWaiting = items[0];
+      if (itemCutsIn(nextWaiting)) {
+        state.snapshotUntil = null;
+        state.phaseUntil = null;
+      } else if (!ownedByGame(item)) {
         const dwell = boardDwellMs();
         state.snapshotUntil = dwell ? at + dwell : null;
         state.phaseUntil = null;

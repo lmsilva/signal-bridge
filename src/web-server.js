@@ -7006,18 +7006,19 @@ function createWebServer({
 
   /**
    * The Local API's own cooldown is the 15s flap window. The page's
-   * "Next flip" pill should also wait out Settings → Dwell, and during a
-   * live game the lobby / round / intermission timer — otherwise it says
-   * "Next flip now" while the session still owns the board for a minute.
+   * "Next flip" pill also waits out Settings → Dwell, or a Now jumper's
+   * remaining flap window — `nextFlipCooldownMs` already picks which.
+   * Do not max in leftover snapshot dwell: a Now event that arrived while
+   * a rotation page was still posting used to put 60s back on the pill
+   * even though the doorbell was about to cut in.
    */
   function vestaboardSimPublicState(raw = null) {
     const state = raw || vestaboardSimulator?.state?.() || {};
     const queue = vestaboardHub?.queueFor?.(SIMULATOR_ID)?.state?.() || {};
     const queueWait = Number(queue.nextFlipCooldownMs) || 0;
-    const dwellLeft = Number(queue.snapshotCooldownMs) || 0;
     return {
       ...state,
-      cooldownMs: Math.max(Number(state.cooldownMs) || 0, queueWait, dwellLeft),
+      cooldownMs: Math.max(Number(state.cooldownMs) || 0, queueWait),
       gameLock: queue.gameLock || null,
       phaseUntil: queue.phaseUntil || null,
     };
