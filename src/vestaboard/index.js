@@ -320,7 +320,9 @@ function createVestaboardHub({
   /**
    * A live Vestaboard game owns every board until its session ends. Called on
    * each phase card (which also refreshes the safety deadline) and once more
-   * on close. See `src/games/registry.js` — every game must do this.
+   * on close. See `src/games/registry.js` — every vestaboard game must do
+   * this. Huupe / Autodarts / now-playing take the same lock from the queue
+   * when their payload is classified as a hold.
    */
   function setGameLock(source, active, { boardId = '' } = {}) {
     const entries = boardId

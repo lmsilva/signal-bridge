@@ -19360,6 +19360,28 @@
     }
   }
 
+  async function vbClearQueue() {
+    if (!vbQueueItems.length) {
+      return;
+    }
+    try {
+      vbEndQueueDrag(document.querySelector('.vb-queue-row.dragging'));
+      const data = await apiPost('/api/vestaboard-sim/queue/clear', {});
+      vbApplyQueue(data.queue, data.queueRevision);
+    } catch (error) {
+      toast(error?.message || 'Could not clear the queue', 'bad');
+      await vbRefreshQueueFromSim();
+    }
+  }
+
+  function vbSyncClearButton() {
+    const btn = $('btn-vb-queue-clear');
+    if (!btn) {
+      return;
+    }
+    btn.hidden = vbQueueItems.length === 0;
+  }
+
   async function vbCommitQueueOrder() {
     const ids = vbQueueIdsFromDom();
     const before = vbQueueItems.map((item) => item.id).filter(Boolean);
@@ -19441,6 +19463,7 @@
       return;
     }
     vbQueueItems = Array.isArray(items) ? items : [];
+    vbSyncClearButton();
     if (!vbQueueItems.length) {
       host.innerHTML = '<p class="hint">Nothing queued.</p>';
       return;
@@ -19561,6 +19584,10 @@
       vbRefreshQueueFromSim();
     };
   }
+
+  $('btn-vb-queue-clear')?.addEventListener('click', () => {
+    vbClearQueue();
+  });
 
   $('btn-vb-sound')?.addEventListener('click', () => {
     vbSoundOn = !vbSoundOn;

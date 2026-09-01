@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal223">
+  <link rel="stylesheet" href="styles.css?v=signal225">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -3322,8 +3322,13 @@
         </div>
 
         <div class="card">
-          <div class="section-label">Queue</div>
-          <p class="hint">Waiting pages flip in this order. Drag to rearrange; cancel drops one page. Alarms and a live game still take the board first.</p>
+          <div class="vb-head">
+            <div class="section-label">Queue</div>
+            <div class="vb-head-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-vb-queue-clear" hidden>Clear queue</button>
+            </div>
+          </div>
+          <p class="hint">Waiting pages flip in this order. Drag to rearrange; cancel drops one page; Clear queue drops every waiting page. Alarms take the board first, then live games and now-playing; everything else waits its turn.</p>
           <div class="vb-list" id="vb-queue">
             <p class="hint">Nothing queued.</p>
           </div>
@@ -4644,6 +4649,6 @@
   </div>
 
   <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal223"></script>
+  <script src="app.js?v=signal225"></script>
 </body>
 </html>

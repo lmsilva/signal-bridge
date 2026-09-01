@@ -359,6 +359,66 @@ test('a photo push to the live simulator never produces a board HTTP call', asyn
   }
 });
 
+test('a live huupe session is a game hold that coalesces, not an alert wipe', () => {
+  let options = null;
+  const payload = {
+    type: 'huupe.session',
+    session: {
+      status: 'live',
+      mode: 'family',
+      stats: { made: 4, attempts: 8, points: 6.2 },
+      players: [{ name: 'trashpanda', score: 6.2 }],
+    },
+  };
+  routeEvent({
+    payload,
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    submit: (_boardId, frames, submitted) => {
+      options = submitted;
+      assert.equal(frames[0].priority, 'snapshot');
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.equal(options.priority, 'snapshot');
+  assert.equal(options.coalesceKey, 'huupe.session');
+  assert.equal(options.hold.lane, 'game');
+  assert.equal(options.hold.live, true);
+  assert.equal(options.gameSource, 'huupe.session');
+});
+
+test('a huupe close releases the hold even without a card', () => {
+  let options = null;
+  const results = routeEvent({
+    payload: { type: 'huupe.session.close' },
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    submit: (_boardId, frames, submitted) => {
+      options = submitted;
+      assert.deepEqual(frames, []);
+      return { accepted: 0, reason: 'closed' };
+    },
+  });
+  assert.equal(results[0].reason, 'closed');
+  assert.equal(options.hold.close, true);
+  assert.equal(options.hold.source, 'huupe.session');
+});
+
+test('an alarm is still the alert lane', () => {
+  let options = null;
+  routeEvent({
+    payload: {
+      type: 'alarm.snapshot',
+      event: { kind: 'fired', alarm: { label: 'Bedroom' } },
+    },
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    submit: (_boardId, frames, submitted) => {
+      options = submitted;
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.equal(options.priority, 'alert');
+  assert.equal(options.hold.lane, 'alert');
+});
+
 test('the admin Push grid filters by the selected display kind', () => {
   const appJs = fs.readFileSync(
     path.join(__dirname, '../src/web/admin/app.js'),
