@@ -3010,13 +3010,15 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal229/);
+  assert.match(html, /styles\.css\?v=signal230/);
   assert.match(html, /settings-filter\.js\?v=signal217/);
-  assert.match(html, /app\.js\?v=signal229/);
+  assert.match(html, /app\.js\?v=signal230/);
   assert.match(html, /id="vb-priority-sheet"/);
   assert.match(html, /id="btn-vb-priority-save"/);
   assert.match(html, /id="vb-priority-reset-sheet"/);
   assert.match(html, /Use recommended priorities\?/);
+  // Confirm must come after the Priorities sheet so equal z-index stacks on top.
+  assert.match(html, /id="vb-priority-sheet"[\s\S]*id="vb-priority-reset-sheet"/);
   assert.match(js, /function vbOpenPriorities\(/);
   assert.match(js, /function vbRenderPriorityList\(/);
   assert.match(css, /\.vb-priority-row \{/);

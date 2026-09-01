@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-31 (recommended hold 30m)
+**Last updated:** 2026-08-31 (priorities confirm on top)
 
 ---
 
@@ -880,6 +880,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-08-31: **Priorities “Use recommended” confirm stacks on top** — the confirm sheet was earlier in the DOM than the Priorities sheet, so equal `z-index` painted it underneath. Cache-bust `?v=signal230`.
 - 2026-08-31: **Recommended Vestaboard hold timeout is 30 minutes** — Word Scramble / Huupe / Autodarts (and the game-lock fallback) use a 30-minute safety net out of the box; sessions should still release earlier when detectors see the game end.
 - 2026-08-31: **Priorities Add-an-event is the full board catalog** — Roast Me, Dad Jokes, and every other vestaboard-capable push are listed (grouped like Push). **Use recommended** asks for confirmation first. Cache-bust `?v=signal229`.
 - 2026-08-31: **Simulator flip animation was racing itself** — `sim.state` right after `sim.flip` snapped every cell before its stagger delay set `is-flipping`, so you heard the cascade with no flaps. Same-target state updates now leave an in-flight (or pending) walk alone; settle still cleans leftover glyphs. Cache-bust `?v=signal228`.
