@@ -21,6 +21,33 @@
       <p class="ln-tagline">Everything on the board, from your phone.</p>
     </header>
 
+    <section class="ln-login" id="ln-login" aria-label="Sign in">
+      <form class="ln-login-card" id="ln-login-form" autocomplete="on">
+        <h2 class="ln-login-title">Household sign-in</h2>
+        <p class="ln-login-error" id="ln-login-error" role="alert"></p>
+        <label class="ln-label" for="ln-username">Username</label>
+        <input id="ln-username" class="ln-input" type="text" name="username" autocomplete="username" spellcheck="false" required>
+        <label class="ln-label" for="ln-password">Password</label>
+        <input id="ln-password" class="ln-input" type="password" name="password" autocomplete="current-password" required>
+        <button class="ln-submit" type="submit" id="ln-submit">Sign in</button>
+        <button class="ln-forgot" type="button" id="ln-forgot">Forgot password?</button>
+      </form>
+      <form class="ln-login-card" id="ln-forgot-form" hidden>
+        <h2 class="ln-login-title">Reset password</h2>
+        <p class="ln-login-hint">We’ll email a reset link if that address is on an account.</p>
+        <p class="ln-login-error" id="ln-forgot-error" role="alert"></p>
+        <label class="ln-label" for="ln-forgot-email">Email</label>
+        <input id="ln-forgot-email" class="ln-input" type="email" name="email" autocomplete="email" required>
+        <button class="ln-submit" type="submit">Send reset link</button>
+        <button class="ln-forgot" type="button" id="ln-forgot-back">Back to sign-in</button>
+      </form>
+      <div class="ln-login-card" id="ln-session" hidden>
+        <p class="ln-welcome" id="ln-welcome">Signed in</p>
+        <a class="ln-submit" id="ln-continue" href="/user/">Continue</a>
+        <button class="ln-forgot" type="button" id="ln-logout">Log out</button>
+      </div>
+    </section>
+
     <nav class="ln-grid" aria-label="Where to go">
       <a class="ln-tile ln-tile-games" href="/games/">
         <span class="ln-icon" aria-hidden="true">
@@ -68,10 +95,99 @@
         <span class="ln-note">Settings, pushes and the board</span>
       </a>
     </nav>
+
+    <footer class="ln-legal-links">
+      <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>
+      <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+    </footer>
   </div>
 
   <script>
-    // The guest book is only a destination when the house has it switched on.
+    const $ = (id) => document.getElementById(id);
+    const loginForm = $('ln-login-form');
+    const forgotForm = $('ln-forgot-form');
+    const sessionCard = $('ln-session');
+
+    function showSession(user) {
+      loginForm.hidden = true;
+      forgotForm.hidden = true;
+      sessionCard.hidden = false;
+      const name = user.firstName || user.username || 'there';
+      $('ln-welcome').textContent = `Continue as ${name}`;
+      $('ln-continue').textContent = `Continue as ${name}`;
+    }
+
+    function showLogin() {
+      loginForm.hidden = false;
+      forgotForm.hidden = true;
+      sessionCard.hidden = true;
+    }
+
+    fetch('/api/user/session', { credentials: 'same-origin' })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data && data.authenticated && data.user) showSession(data.user);
+      })
+      .catch(() => {});
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const errorEl = $('ln-login-error');
+      errorEl.textContent = '';
+      $('ln-submit').disabled = true;
+      try {
+        const response = await fetch('/api/user/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: $('ln-username').value.trim(),
+            password: $('ln-password').value,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Sign-in failed');
+        location.href = '/user/';
+      } catch (error) {
+        errorEl.textContent = error.message || 'Sign-in failed';
+      } finally {
+        $('ln-submit').disabled = false;
+      }
+    });
+
+    $('ln-forgot').addEventListener('click', () => {
+      loginForm.hidden = true;
+      forgotForm.hidden = false;
+    });
+    $('ln-forgot-back').addEventListener('click', showLogin);
+
+    forgotForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const errorEl = $('ln-forgot-error');
+      errorEl.textContent = '';
+      try {
+        await fetch('/api/user/forgot', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: $('ln-forgot-email').value.trim() }),
+        });
+        errorEl.textContent = 'If that email is on an account, a reset link is on its way.';
+      } catch {
+        errorEl.textContent = 'If that email is on an account, a reset link is on its way.';
+      }
+    });
+
+    $('ln-logout').addEventListener('click', async () => {
+      await fetch('/api/user/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }).catch(() => {});
+      showLogin();
+    });
+
     fetch('/api/guestbook/status', { credentials: 'same-origin' })
       .then((response) => response.json())
       .then((data) => {

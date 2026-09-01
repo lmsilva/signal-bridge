@@ -219,6 +219,13 @@ test('resolveStaticPath blocks path traversal', () => {
   assert.equal(resolveStaticPath(root, '/guestsnaps/'), path.join(root, 'guestsnaps', 'index.html'));
   assert.equal(resolveStaticPath(root, '/games'), path.join(root, 'games', 'index.html'));
   assert.equal(resolveStaticPath(root, '/games/'), path.join(root, 'games', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/user'), path.join(root, 'user', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/user/'), path.join(root, 'user', 'index.html'));
+  assert.equal(resolveStaticPath(root, '/user/reset'), path.join(root, 'user', 'reset.html'));
+  assert.equal(resolveStaticPath(root, '/privacy'), path.join(root, 'privacy.html'));
+  assert.equal(resolveStaticPath(root, '/privacy/'), path.join(root, 'privacy.html'));
+  assert.equal(resolveStaticPath(root, '/terms'), path.join(root, 'terms.html'));
+  assert.equal(resolveStaticPath(root, '/terms/'), path.join(root, 'terms.html'));
 });
 
 test('computeWebBasePath preserves reverse-proxy mount directories', () => {
@@ -302,6 +309,10 @@ test('control page has a Slideshow Manager tab with a camera roll grid and delet
   assert.match(html, /id="slideshow-seconds-value"/);
   assert.match(html, /min="5"/);
   assert.match(html, /max="60"/);
+  const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  // Escape leaves photo select mode once no sheet is on top (lightbox / delete
+  // still win, the same way Cancel does).
+  assert.match(js, /if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 });
 
 test('control page JS pushes QR codes via /api/qr/push and /api/qr/image-upload', () => {
@@ -775,7 +786,7 @@ test('displays list and discover endpoints', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-disp-'));
   const { createDisplayRegistry } = require('../src/display-registry');
   const registry = createDisplayRegistry(
-    { ROOT: dataDir, discoverSweepMs: 30 },
+    { ROOT: dataDir, discoverSweepMs: 150 },
     { warn() {}, info() {} },
   );
   registry.upsertFromAnnounce({
@@ -805,7 +816,7 @@ test('displays list and discover endpoints', async () => {
       registry.upsertFromAnnounce({
         display: { id: 'disp-x', name: 'Living Room' },
       }, { address: '192.168.0.9' });
-    }, 5);
+    }, 40);
 
     const discover = await postJson(base, '/api/displays/discover');
     assert.equal(discover.status, 200);
@@ -1941,14 +1952,20 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   assert.match(html, /data-rl-preset="confetti">Day of</);
   assert.match(html, /data-rl-preset="halloween">Halloween</);
   assert.match(html, /data-rl-preset="christmas">Christmas</);
-  assert.match(js, /halloween:\s*\[/);
-  assert.match(js, /summer:\s*\[/);
-  assert.match(js, /beach:\s*\[/);
-  assert.match(js, /christmas:\s*\[/);
-  assert.match(js, /autumn:\s*\[/);
+  // The theme grids are shared with the household event editor.
+  const presetsJs = fs.readFileSync(path.join(__dirname, '../src/web/red-letter-presets.js'), 'utf8');
+  assert.match(html, /src="\/red-letter-presets\.js/);
+  assert.match(js, /window\.RED_LETTER_PRESETS/);
+  assert.match(html, /src="\/push-icons\.js/);
+  assert.match(js, /const pushIconSvg = window\.pushIconSvg/);
+  assert.match(presetsJs, /halloween:\s*\[/);
+  assert.match(presetsJs, /summer:\s*\[/);
+  assert.match(presetsJs, /beach:\s*\[/);
+  assert.match(presetsJs, /christmas:\s*\[/);
+  assert.match(presetsJs, /autumn:\s*\[/);
   // Every preset line is a full 22-column board row.
   for (const name of ['halloween', 'summer', 'beach', 'christmas', 'autumn']) {
-    const block = js.match(new RegExp(`${name}:\\s*\\[([\\s\\S]*?)\\]`));
+    const block = presetsJs.match(new RegExp(`${name}:\\s*\\[([\\s\\S]*?)\\]`));
     assert.ok(block, `${name} preset is defined`);
     const lines = [...block[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
     assert.equal(lines.length, 6, `${name} has six rows`);
@@ -2211,6 +2228,11 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(page.text, /id="gm-recap"/);
     assert.match(page.text, /id="gm-code-line"/);
     assert.match(js, /Friends can still join/);
+    assert.match(js, /params\.get\('name'\)/);
+    assert.match(js, /Joining…/);
+    assert.match(js, /codeParam && joinName/);
+    assert.match(js, /function resetPageScroll/);
+    assert.match(js, /scrollRestoration = 'manual'/);
 
     // Phone first, but the board and the lists sit side by side on a tablet
     // or a laptop, and the tiles size off their column rather than the window.
@@ -2223,6 +2245,7 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(css, /font-size: clamp\([^)]*cqi/);
     assert.match(css, /\[hidden\] \{ display: none !important; \}/,
       'grid and flex panels would otherwise ignore the hidden attribute');
+    assert.match(css, /overflow-anchor: none/);
 
     // Tap the letters instead of typing them: buttons, any unused tile, and
     // spent tiles greyed so nobody spends one twice.
@@ -2922,6 +2945,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'learn-japanese-settings-card',
     'learn-language-settings-card',
     'space-launch-alerts-settings-card',
+    'email-sender-card',
   ]) {
     assert.match(
       css,
@@ -2944,6 +2968,55 @@ test('the wide Settings cards span the grid and column up inside', () => {
 
   // Settings is too long to scroll as one page — a sub-nav groups the cards,
   // and a search box filters panels across those panes with hit counts.
+  assert.match(html, />Email Sender</);
+  assert.match(html, /data-settings-group="accounts">Email</);
+  assert.doesNotMatch(html, /data-settings-group="accounts">Household</);
+  assert.match(html, /email-sender-lead/);
+  assert.match(html, /id="gmail-setup-note"/);
+  assert.match(html, /href="\/privacy"/);
+  assert.match(html, /href="\/terms"/);
+  assert.match(html, /href="\/oauth-logo\.png"/);
+  assert.doesNotMatch(html, /email-sender-grid/);
+  assert.doesNotMatch(html, /Gmail mailer/);
+  assert.doesNotMatch(html, /id="house-users-card"/);
+  assert.match(html, /id="btn-house-users"/);
+  assert.match(html, /id="house-users-sheet"/);
+  assert.match(html, /id="hu-pane-users"/);
+  assert.match(html, /id="hu-pane-audit"/);
+  assert.match(html, /id="audit-sort"/);
+  assert.match(html, /id="btn-hu-add"/);
+  assert.match(html, /id="hu-editor-sheet"/);
+  assert.match(html, /id="hu-password-sheet"/);
+  assert.match(html, /id="btn-hu-pw-generate"/);
+  assert.match(html, /id="btn-hu-pw-copy"/);
+  assert.match(html, /id="hu-pw-confirm"/);
+  assert.match(html, /id="hu-pw-done"/);
+  assert.match(html, /id="btn-hu-pw-done"/);
+  assert.match(html, /id="user-audit-body"/);
+  assert.match(html, /house-users\.js\?v=signal257/);
+  assert.doesNotMatch(html, /id="hu-env-hint"/);
+  assert.doesNotMatch(html, /The environment admin follows ADMIN_USERNAME/);
+  assert.match(css, /\.email-sender-lead \{/);
+  assert.match(css, /\.house-user-grid \{/);
+  assert.match(css, /\.house-user-card \{/);
+  assert.match(css, /200px minmax\(0, 1fr\)/);
+  assert.match(css, /\.house-user-editor-actions #btn-hu-save \{[^}]*margin-left: auto/);
+  assert.match(html, /house-user-avatar-col[\s\S]*house-user-editor-main/);
+  assert.match(css, /\.house-audit-table \{/);
+  assert.match(css, /\.house-pw-sheet \{/);
+  assert.match(css, /\.house-pw-done-msg \{/);
+  const houseUsersJs = fs.readFileSync(path.join(__dirname, '../src/web/admin/house-users.js'), 'utf8');
+  assert.match(houseUsersJs, /function openEditor/);
+  assert.match(houseUsersJs, /function openPasswordSheet/);
+  assert.match(houseUsersJs, /function showPasswordSuccess/);
+  assert.match(houseUsersJs, /function generateHousePassword/);
+  assert.match(houseUsersJs, /Passwords do not match/);
+  assert.match(houseUsersJs, /Password set for/);
+  assert.doesNotMatch(houseUsersJs, /window\.prompt/);
+  assert.match(houseUsersJs, /wipeAutofill/);
+  assert.match(houseUsersJs, /ACTION_LABELS/);
+  assert.match(houseUsersJs, /gmail-setup-note/);
+  assert.match(houseUsersJs, /btn-gmail-link'\)\.hidden = Boolean\(data\.linked\)/);
   assert.match(html, /id="settings-view-tabs"/);
   assert.match(html, /id="settings-search"/);
   assert.match(html, /id="settings-search-clear"/);
@@ -3010,9 +3083,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal237/);
+  assert.match(html, /styles\.css\?v=signal263/);
   assert.match(html, /settings-filter\.js\?v=signal217/);
-  assert.match(html, /app\.js\?v=signal237/);
+  assert.match(html, /app\.js\?v=signal263/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3092,9 +3165,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function resetDesigner\(/);
   assert.match(js, /designerIsDirty\(/);
   assert.match(css, /\.rl-preset-block \{/);
-  assert.match(js, /ggyoyoyoyggg/);
-  assert.match(js, /fgg\.bwbwbw/);
-  assert.match(js, /royyoyr\.\./);
+  const rlPresets = fs.readFileSync(path.join(__dirname, '../src/web/red-letter-presets.js'), 'utf8');
+  assert.match(rlPresets, /ggyoyoyoyggg/);
+  assert.match(rlPresets, /fgg\.bwbwbw/);
+  assert.match(rlPresets, /royyoyr\.\./);
   assert.match(css, /\.date-book-sheet,\s*\.rl-designer-sheet \{[^}]*max-height: min\(92dvh, 980px\)/);
   assert.match(css, /\.cn-manage-sheet\.date-book-sheet,\s*\.cn-manage-sheet\.rl-designer-sheet \{[^}]*overflow-y:\s*auto/);
   assert.match(css, /\.date-book-sheet > \.cn-fact-list \{[^}]*min-height:\s*0/);
@@ -3600,6 +3674,9 @@ test('the Push page files its tiles behind searchable category tabs', () => {
 
   assert.match(html, /id="push-view-tabs"/);
   assert.match(html, /id="push-search"/);
+  assert.match(html, /<textarea[^>]*id="push-search"/);
+  assert.match(html, /name="signal-push-q"/);
+  assert.doesNotMatch(html, /login-autofill-trap/);
   assert.match(html, /id="push-search-clear"/);
   assert.match(html, /id="push-search-empty"/);
   assert.match(html, /id="push-kind-filter"/);
@@ -3624,6 +3701,7 @@ test('the Push page files its tiles behind searchable category tabs', () => {
   assert.match(js, /push-share-pane/);
   assert.match(js, /pushViewSession/);
   assert.match(js, /applyPushFilter\(PUSH_VIEW_ORDER\[0\]\)/);
+  assert.match(js, /function bindFilterSearch/);
   assert.match(js, /push-hit-count/);
   // Tiles answer to their service and command id as well as their printed copy.
   assert.match(js, /data-search-terms=/);
@@ -3634,6 +3712,7 @@ test('the Push page files its tiles behind searchable category tabs', () => {
   assert.match(css, /\.push-view-tabs\b/);
   assert.match(css, /\.push-hit-count\b/);
   assert.match(css, /\.push-search-row\b/);
+  assert.match(css, /textarea\.field-input\.filter-search/);
   assert.match(css, /\.display-kind-filter\b/);
   assert.match(css, /#tab-push \[data-push-group\]\[hidden\]/);
 });
@@ -4356,8 +4435,25 @@ test('the landing page and booth are public; the admin shell redirects', async (
     assert.match(landing.text, /href="\/guestsnaps\/"/);
     assert.match(landing.text, /href="\/guestbook\/"/);
     assert.match(landing.text, /href="\/admin\/"/);
+    assert.match(landing.text, /href="\/privacy"[^>]*target="_blank"/);
+    assert.match(landing.text, /href="\/terms"[^>]*target="_blank"/);
+    assert.doesNotMatch(landing.text, /What Signal is/);
     assert.match(landing.text, /href="landing\.css\?v=\d+(?:\.\d+)?"/);
     assert.doesNotMatch(landing.text, /booth\.js/);
+
+    const privacy = await request(`${base}/privacy`);
+    assert.equal(privacy.status, 200);
+    assert.match(privacy.text, /Privacy policy/);
+    assert.match(privacy.text, /gmail\.send/);
+    assert.match(privacy.text, /household/);
+
+    const terms = await request(`${base}/terms`);
+    assert.equal(terms.status, 200);
+    assert.match(terms.text, /Terms of use/);
+    assert.match(terms.text, /household/);
+
+    const oauthLogo = await request(`${base}/oauth-logo.png`);
+    assert.equal(oauthLogo.status, 200);
 
     const booth = await request(`${base}/guestsnaps/`);
     assert.equal(booth.status, 200);
@@ -4706,13 +4802,23 @@ test('admin chrome boots ahead of the panel wiring and survives a throw in it', 
 test('admin login page and logout control exist', () => {
   const login = fs.readFileSync(path.join(__dirname, '../src/web/admin/login.html'), 'utf8');
   const admin = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
+  const adminCss = fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8');
   assert.match(login, /\/api\/admin\/login/);
-  assert.match(login, /id="guest-book-quicklink"/);
-  assert.match(login, /\/guestbook\//);
-  assert.match(login, /class="login-note-links"/);
-  assert.match(login, />Photo booth</);
-  assert.match(login, />Guest book</);
+  assert.match(login, /id="btn-signal-home"/);
+  assert.match(login, /href="\/"/);
+  assert.doesNotMatch(login, /id="guest-book-quicklink"/);
+  assert.doesNotMatch(login, />Photo booth</);
+  assert.doesNotMatch(login, /GUESTS/);
   assert.match(admin, /id="btn-admin-logout"/);
+  assert.match(admin, /id="btn-signal-home"/);
+  assert.match(admin, /href="\/"[^>]*id="btn-signal-home"|id="btn-signal-home"[^>]*href="\/"/);
+  assert.match(admin, />Main Menu</);
+  assert.ok(
+    admin.indexOf('id="btn-admin-logout"') < admin.indexOf('id="btn-signal-home"'),
+    'Main Menu sits to the right of Log out',
+  );
+  assert.match(adminCss, /\.btn-header-text \{[^}]*font-size: 0\.85rem/);
+  assert.match(adminCss, /\.btn-header-text \{[^}]*font-weight: 800/);
 });
 
 /**
@@ -4846,12 +4952,22 @@ test('admin app.js runs top to bottom, not just parses', () => {
   // never caught it, so run it.
   const { Script, createContext } = require('node:vm');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
+  const presets = fs.readFileSync(path.join(__dirname, '../src/web/red-letter-presets.js'), 'utf8');
+  const icons = fs.readFileSync(path.join(__dirname, '../src/web/push-icons.js'), 'utf8');
   const sandbox = stubDom();
   createContext(sandbox);
+  // Same order as the page: shared theme grids and tile artwork load first.
+  new Script(presets, { filename: 'red-letter-presets.js' }).runInContext(sandbox);
+  new Script(icons, { filename: 'push-icons.js' }).runInContext(sandbox);
   assert.doesNotThrow(
     () => new Script(js, { filename: 'app.js' }).runInContext(sandbox),
     'admin/app.js must bind cleanly — a throw here strands the whole page',
   );
+  const confetti = sandbox.window.RED_LETTER_PRESETS.presetCells('confetti');
+  assert.equal(confetti.length, 6);
+  assert.equal(confetti[1][0], -1, 'confetti rails leave the middle rows for the message');
+  assert.equal(sandbox.window.RED_LETTER_PRESETS.matchPreset(confetti), 'confetti');
+  assert.match(sandbox.window.pushIconSvg('red-letter'), /^<svg viewBox="0 0 24 24"/);
 });
 
 test('admin app.js parses and tab bar keeps remote/control between push and scheduler', () => {
@@ -4963,4 +5079,218 @@ test('Roll Credits media rows open a preview and videos expose clip trimming', (
   assert.match(js, /function closeCreditsPreview\(\)[\s\S]{0,500}removeAttribute\('src'\)/);
   assert.match(css, /\.credits-media-thumb-btn \{/);
   assert.match(css, /\.credits-trim \{/);
+});
+
+function cookieFrom(res) {
+  const setCookie = res.headers['set-cookie'];
+  const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+  return String(raw || '').split(';')[0];
+}
+
+test('household login, /user/ gate, and permission 403s', async () => {
+  const realWebRoot = path.join(__dirname, '../src/web');
+  const { webServer, base } = await startTestServer({
+    webRoot: realWebRoot,
+    autoLogin: false,
+  });
+  try {
+    const landing = await request(`${base}/`);
+    assert.equal(landing.status, 200);
+    assert.match(landing.text, /Household sign-in/);
+    assert.match(landing.text, /\/api\/user\/login/);
+
+    const gated = await request(`${base}/user/`);
+    assert.equal(gated.status, 302);
+    assert.equal(gated.headers.location, '/');
+
+    const adminCookie = await loginAdmin(base);
+    const created = await request(`${base}/api/house-users`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        username: 'maya',
+        password: 'maya-pass-1',
+        firstName: 'Maya',
+        email: 'maya@example.com',
+      },
+    });
+    assert.equal(created.status, 200, created.text);
+    assert.equal(created.body.ok, true);
+
+    const adminOnUserLogin = await request(`${base}/api/user/login`, {
+      method: 'POST',
+      body: { username: 'maya', password: 'maya-pass-1' },
+    });
+    assert.equal(adminOnUserLogin.status, 200, adminOnUserLogin.text);
+    const userCookie = cookieFrom(adminOnUserLogin);
+
+    const userApp = await request(`${base}/user/`, { cookie: userCookie });
+    assert.equal(userApp.status, 200);
+    assert.match(userApp.text, /Write the board|Household/);
+    assert.match(userApp.text, /id="btn-push-library"/);
+    assert.match(userApp.text, /id="push-dash-hint"/);
+    assert.match(userApp.text, /su-row-head/);
+    assert.match(userApp.text, /su-display-field/);
+    assert.match(userApp.text, /id="lib-cats"/);
+    assert.match(userApp.text, /push-lib-sheet/);
+    assert.match(userApp.text, /id="btn-vb-sound"/);
+    assert.match(userApp.text, /class="tab-bar"/);
+    assert.match(userApp.text, /data-tab="slideshow"/);
+    assert.match(userApp.text, /tab-label-full">Slideshow/);
+    assert.match(userApp.text, /id="btn-slideshow-select-all"/);
+    assert.match(userApp.text, /id="su-confirm-sheet"/);
+    assert.match(userApp.text, /id="photo-lightbox"/);
+    assert.match(userApp.text, /class="date-list"/);
+    assert.match(userApp.text, /id="date-recurring"/);
+    assert.match(userApp.text, /tab-label-full">Vestaboard Simulator/);
+    assert.match(userApp.text, /tab-label-short">Simulator/);
+    assert.match(userApp.text, /tab-label-full">Date Book/);
+    assert.match(userApp.text, /data-tab="dates"/);
+    assert.match(userApp.text, /id="btn-profile"/);
+    assert.doesNotMatch(userApp.text, /M16 3\.13a4 4 0 0 1 0 7\.75/);
+    assert.match(userApp.text, /id="profile-sheet"/);
+    assert.match(userApp.text, /id="pf-new-confirm"/);
+    assert.match(userApp.text, /id="btn-logout"/);
+    assert.match(userApp.text, /id="btn-signal-home"/);
+    assert.match(userApp.text, />Main Menu</);
+    assert.ok(
+      userApp.text.indexOf('id="btn-logout"') < userApp.text.indexOf('id="btn-signal-home"'),
+      'household Main Menu sits to the right of Log out',
+    );
+    assert.match(userApp.text, /su-head-who/);
+    assert.doesNotMatch(userApp.text, /id="su-home"/);
+    assert.doesNotMatch(userApp.text, /data-tab="profile"/);
+    const userJs = fs.readFileSync(path.join(realWebRoot, 'user', 'app.js'), 'utf8');
+    assert.match(userJs, /date-card-when/);
+    assert.match(userJs, /askConfirm/);
+    assert.match(userJs, /openGameSession/);
+    assert.match(userJs, /\/api\/photos\/events/);
+    assert.match(userJs, /New passwords do not match/);
+    assert.match(userJs, /pendingAvatar/);
+    assert.match(userJs, /toastTimer/);
+    assert.match(userJs, /dataset\.tab/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal265/);
+    assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
+
+    // Push tiles carry the same artwork the admin grid draws, and adding one
+    // is a single tap — only removing asks first.
+    assert.match(userApp.text, /src="\/push-icons\.js/);
+    assert.match(userJs, /window\.pushIconSvg\(command\.icon\)/);
+    assert.match(userJs, /push-card-icon/);
+    assert.match(userJs, /added to Your tiles/);
+    assert.doesNotMatch(userJs, /Add \$\{command\.title\}/);
+
+    // A household user tunes the day-of card the way admin does: the message,
+    // a shared theme, and a preview of the card the theme paints.
+    assert.match(userApp.text, /id="date-message"/);
+    assert.match(userApp.text, /src="\/red-letter-presets\.js/);
+    assert.match(userApp.text, /data-date-theme="default"/);
+    for (const theme of ['heart', 'christmas', 'halloween', 'autumn', 'summer', 'beach', 'border']) {
+      assert.match(userApp.text, new RegExp(`data-date-theme="${theme}"`), `the picker needs ${theme}`);
+    }
+    assert.match(userApp.text, /data-date-preview="countdown"/);
+    assert.match(userApp.text, /data-date-preview="dayOf"/);
+    assert.match(userJs, /RED_LETTER_PRESETS/);
+    assert.match(userJs, /function applyDateTheme/);
+    assert.match(userJs, /matchPreset/);
+    // Save and preview must carry the layout, so picking a theme sticks and
+    // clearing one back to Confetti drops the artwork rather than keeping it.
+    assert.match(userJs, /layout: dateLayout \? \{ cells: dateLayout \} : null/);
+    const userCss = fs.readFileSync(path.join(realWebRoot, 'user', 'styles.css'), 'utf8');
+    assert.match(userCss, /max-width: 1400px/);
+    assert.match(userCss, /\.date-card-when/);
+    assert.match(userCss, /\.date-theme-row/);
+    // Icon colour must out-rank `.push-card span`, or tiles paint it dim grey.
+    assert.match(userCss, /\.push-card > \.push-card-icon \{[^}]*color: var\(--accent\)/);
+    assert.match(userCss, /\.game-card \.su-btn \{[^}]*color: #082f49/);
+    // Every Push tile is one box, and the column keeps its width with no tiles.
+    assert.match(userCss, /\.push-grid \{[^}]*grid-auto-rows: 1fr/);
+    assert.match(userCss, /\.push-card \{[^}]*min-height: 124px/);
+    assert.match(userCss, /main \{\s*\/\*[\s\S]*?\*\/\s*width: 100%;\s*max-width: 1180px/);
+    assert.match(userCss, /transform: translateX\(-50%\)/);
+    assert.match(userCss, /\.su-head-who/);
+    assert.match(userCss, /a\.su-btn/);
+    assert.match(userCss, /body\[data-tab="board"\] main/);
+    assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(5\.5rem/);
+    assert.match(userCss, /push-card-grip/);
+    assert.match(userCss, /\.push-card-top \{/);
+    assert.match(userCss, /\.push-card-lead \{/);
+    assert.match(userCss, /\.push-card-top \.push-card-handle \{/);
+    assert.match(userJs, /function nearestDashSlot/);
+    assert.match(userJs, /GAMES_POLL_MS/);
+    assert.match(userJs, /function startGamesPoll/);
+    assert.match(userJs, /function bindFineDashDrag/);
+    assert.match(userJs, /function bindCoarseDashDrag/);
+    assert.match(userJs, /Drag the dots to reorder/);
+    assert.match(userJs, /function cleanupDashDrag/);
+    assert.match(userJs, /push-card-top/);
+    assert.match(userJs, /push-card-lead/);
+    assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal265/);
+    assert.match(userCss, /html, body \{[^}]*position: fixed/);
+    assert.match(userCss, /html, body \{[^}]*overflow: hidden/);
+    assert.match(userCss, /main \{\s*flex: 1 1 auto/);
+    assert.match(userCss, /\.tab-bar \{[^}]*position: relative/);
+    assert.doesNotMatch(userCss, /\.tab-bar \{[^}]*transform:/);
+    assert.match(userCss, /push-lib-backdrop/);
+    assert.doesNotMatch(userCss, /body\[data-tab="board"\] \.tab-bar/);
+    assert.match(userCss, /--vb-chrome/);
+    assert.match(userCss, /100dvh - var\(--vb-chrome\)/);
+    assert.match(userCss, /1080px, calc\(\(100dvh - var\(--vb-chrome\)\)/);
+    assert.match(userCss, /body\.is-coarse \.push-card-top \.push-card-handle/);
+    assert.match(userCss, /"board board"/);
+
+    const adminShell = await request(`${base}/admin/`, { cookie: userCookie });
+    assert.equal(adminShell.status, 302);
+
+    const me = await request(`${base}/api/user/me`, { cookie: userCookie });
+    assert.equal(me.status, 200);
+    assert.equal(me.body.user.username, 'maya');
+
+    const photos = await request(`${base}/api/photos`, { cookie: userCookie });
+    assert.equal(photos.status, 403);
+
+    const dates = await request(`${base}/api/date-book/events`, { cookie: userCookie });
+    assert.equal(dates.status, 403);
+
+    const status = await request(`${base}/api/status`, { cookie: userCookie });
+    assert.equal(status.status, 403);
+
+    const commands = await request(`${base}/api/commands`, { cookie: userCookie });
+    assert.equal(commands.status, 200);
+
+    await request(`${base}/api/house-users/${created.body.user.id}`, {
+      method: 'PUT',
+      cookie: adminCookie,
+      body: { permissions: { slideshow: true } },
+    });
+    const photosOk = await request(`${base}/api/photos`, { cookie: userCookie });
+    assert.equal(photosOk.status, 200);
+
+    const listed = await request(`${base}/api/house-users`, { cookie: adminCookie });
+    const envAdmin = (listed.body.users || []).find((row) => row.bootstrap);
+    assert.ok(envAdmin, 'environment admin is listed');
+    assert.equal(envAdmin.firstName, 'Admin');
+    const locked = await request(`${base}/api/house-users/${envAdmin.id}`, {
+      method: 'PUT',
+      cookie: adminCookie,
+      body: { active: false },
+    });
+    assert.equal(locked.status, 400);
+    const reset = await request(`${base}/api/house-users/${envAdmin.id}/password`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {},
+    });
+    assert.equal(reset.status, 400);
+    const renamed = await request(`${base}/api/house-users/${envAdmin.id}`, {
+      method: 'PUT',
+      cookie: adminCookie,
+      body: { firstName: 'House', lastName: 'Host' },
+    });
+    assert.equal(renamed.status, 200, renamed.text);
+    assert.equal(renamed.body.user.firstName, 'House');
+  } finally {
+    webServer.stop();
+  }
 });

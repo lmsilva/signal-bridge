@@ -178,6 +178,7 @@ function routeEvent({
   replaceSource: replaceSourceOpt = undefined,
   replaceCard: replaceCardOpt = undefined,
   gameSource: gameSourceOpt = undefined,
+  actor = null,
   ctx = {},
   now = () => Date.now(),
   submit,
@@ -239,6 +240,7 @@ function routeEvent({
       payload,
       type,
       priorities: housePriorities,
+      actor,
       ...extra,
     });
   }

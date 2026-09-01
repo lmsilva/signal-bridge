@@ -168,6 +168,7 @@ function badgeFrame({
   color,
   title = '',
   titleRight = '',
+  titleAlign = 'left',
   rows = [],
   footerLeft = '',
   footerRight = '',
@@ -178,7 +179,7 @@ function badgeFrame({
     throw new Error(`badge frame takes at most ${MAX_BODY_ROWS} rows, got ${rows.length}`);
   }
 
-  const cornerRow = (left, right) => {
+  const cornerRow = (left, right, { align = 'left' } = {}) => {
     const row = blankRow(COLS);
     row[0] = chip;
     row[1] = chip;
@@ -187,6 +188,17 @@ function badgeFrame({
 
     const rightText = truncate(right, BADGE_TEXT_WIDTH);
     const rightCodes = encodeText(rightText);
+    // Steam / PSN centre the brand between the chip pairs. Extra leftover
+    // column sits on the right so a short word is a hair left of true centre.
+    if (align === 'center' && !rightCodes.length) {
+      centered(truncate(left, 18), {
+        row,
+        from: 2,
+        width: 18,
+        lean: 'left',
+      });
+      return row;
+    }
     // The left label yields whatever the right-hand text needs, plus a gap.
     const leftRoom = rightCodes.length
       ? BADGE_TEXT_WIDTH - rightCodes.length - 1
@@ -198,7 +210,7 @@ function badgeFrame({
     return row;
   };
 
-  const layout = [cornerRow(title, titleRight)];
+  const layout = [cornerRow(title, titleRight, { align: titleAlign })];
   for (let i = 0; i < MAX_BODY_ROWS; i += 1) {
     layout.push(bodyRow(rows[i]));
   }

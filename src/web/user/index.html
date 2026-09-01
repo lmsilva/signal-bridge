@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Signal</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
+  <link rel="stylesheet" href="/guestbook/guestbook.css">
+  <link rel="stylesheet" href="styles.css?v=signal265">
+</head>
+<body>
+  <header class="su-head">
+    <div class="su-head-who">
+      <img class="su-avatar" id="su-avatar" src="/user/avatars/cat-sky.svg" alt="">
+      <div>
+        <h1 id="su-hello">Signal</h1>
+        <p class="su-sub" id="su-sub">Household</p>
+      </div>
+    </div>
+    <div class="su-head-actions">
+      <button type="button" class="su-icon-btn" id="btn-profile" title="Profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+        </svg>
+      </button>
+      <button type="button" class="su-btn su-btn-ghost su-btn-sm su-logout" id="btn-logout" title="Sign out">Log out</button>
+      <a class="su-btn su-btn-ghost su-btn-sm" href="/" id="btn-signal-home" title="Open the main menu">Main Menu</a>
+    </div>
+  </header>
+
+  <p class="su-toast" id="su-toast" hidden></p>
+
+  <main>
+    <section class="tab-panel active" id="tab-main">
+      <div class="gb-name-hidden">
+        <header class="gb-header">
+          <div>
+            <h2>Write the board</h2>
+            <p id="gb-subtitle">Select a flap, then type</p>
+          </div>
+        </header>
+        <div class="gb-main" id="gb-closed" hidden>
+          <p class="gb-status" id="gb-closed-reason">The guest book is closed right now.</p>
+        </div>
+        <div class="gb-main" id="gb-unlock" hidden></div>
+        <div class="gb-main" id="gb-compose" hidden>
+          <div class="gb-board-wrap">
+            <div class="vb-bezel preview-bezel gb-bezel">
+              <div class="vb-grid gb-preview" id="gb-preview" role="grid" aria-label="Board" tabindex="0"></div>
+              <div class="vb-wordmark">VESTABOARD</div>
+            </div>
+          </div>
+          <label class="gb-label" for="gb-keys">Your message</label>
+          <input id="gb-keys" class="gb-input gb-keys-field" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type a letter — it goes on the selected flap">
+          <p class="gb-hint" id="gb-charset-hint"></p>
+          <div class="gb-chips" role="group" aria-label="Color chips">
+            <button type="button" class="gb-color is-chip-red" data-chip="R" aria-label="Red chip"></button>
+            <button type="button" class="gb-color is-chip-orange" data-chip="O" aria-label="Orange chip"></button>
+            <button type="button" class="gb-color is-chip-yellow" data-chip="Y" aria-label="Yellow chip"></button>
+            <button type="button" class="gb-color is-chip-green" data-chip="G" aria-label="Green chip"></button>
+            <button type="button" class="gb-color is-chip-blue" data-chip="B" aria-label="Blue chip"></button>
+            <button type="button" class="gb-color is-chip-violet" data-chip="V" aria-label="Violet chip"></button>
+            <button type="button" class="gb-color is-chip-white" data-chip="W" aria-label="White chip"></button>
+            <button type="button" class="gb-chip-btn" id="btn-gb-erase">Erase</button>
+          </div>
+          <div class="gb-align-row">
+            <button type="button" class="gb-chip-btn" id="btn-gb-undo">Undo</button>
+            <button type="button" class="gb-chip-btn" id="btn-gb-clear">Clear</button>
+            <button type="button" class="gb-chip-btn" id="btn-gb-clear-footer" hidden>Clear footer</button>
+            <button type="button" class="gb-chip-btn" id="btn-gb-restore-footer" hidden>Restore footer</button>
+          </div>
+          <input id="gb-name" hidden>
+          <p class="gb-counter" id="gb-counter">0 / 88</p>
+          <button type="button" class="gb-send" id="btn-gb-send" disabled>Send to the board</button>
+          <p class="gb-status" id="gb-send-status" role="status"></p>
+        </div>
+        <div class="gb-main" id="gb-done" hidden>
+          <div class="vb-bezel preview-bezel gb-bezel" aria-hidden="true">
+            <div class="vb-grid gb-preview" id="gb-done-preview"></div>
+            <div class="vb-wordmark">VESTABOARD</div>
+          </div>
+          <p class="gb-status is-good" id="gb-done-message">Sent.</p>
+          <p class="gb-hint" id="gb-done-hint" hidden></p>
+          <button type="button" class="gb-secondary" id="btn-gb-another">Write another</button>
+        </div>
+        <div class="gb-main" id="gb-cooldown" hidden>
+          <p class="gb-status" id="gb-cooldown-message">Rate Limit Reached</p>
+          <p class="gb-counter" id="gb-cooldown-clock">0:00</p>
+          <button type="button" class="gb-secondary" id="btn-gb-cooldown-back">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-push">
+      <div class="su-display-field">
+        <label class="su-label" for="push-target">Display</label>
+        <select id="push-target" class="su-input">
+          <option value="*">All displays</option>
+          <option value="vestaboard">Vestaboard</option>
+          <option value="full">Software</option>
+        </select>
+      </div>
+      <input id="push-search" class="su-input" type="search" placeholder="Search your tiles…" autocomplete="off">
+      <div class="su-seg" id="push-kind" role="group" aria-label="Applies to">
+        <button type="button" class="active" data-kind="all">All</button>
+        <button type="button" data-kind="vestaboard">Vestaboard</button>
+        <button type="button" data-kind="full">Software</button>
+      </div>
+      <div class="su-row-head">
+        <h2 class="su-h" id="push-dash-heading">Your tiles</h2>
+        <button type="button" class="su-btn su-btn-sm" id="btn-push-library">Browse library</button>
+      </div>
+      <p class="hint" id="push-dash-hint"></p>
+      <div class="push-grid" id="push-dash"></div>
+      <p class="hint" id="push-dash-empty">Add tiles from the library, then tap one to push it.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-games">
+      <div class="su-toolbar">
+        <h2 class="su-h" style="margin:0">Live games</h2>
+        <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-games-refresh">Refresh</button>
+      </div>
+      <p class="hint">Tap a session to join in a new tab. Your first name goes with you.</p>
+      <div class="game-list" id="games-list"></div>
+      <p class="hint" id="games-empty">No games are running right now.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-board">
+      <div class="vb-shell">
+        <div class="card vb-head-card">
+          <div class="vb-head">
+            <div class="vb-head-text">
+              <h2 class="vb-title">House board</h2>
+              <p class="vb-port" id="vb-port">Vestaboard simulator</p>
+            </div>
+            <div class="vb-head-actions">
+              <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-vb-sound" title="Flipping clicks. Browsers stay silent until you tap.">Sound on</button>
+            </div>
+          </div>
+          <div class="vb-pills">
+            <span class="status-pill ok" id="vb-pill-online">Online</span>
+            <span class="status-pill" id="vb-pill-rate">Next flip now</span>
+            <span class="status-pill warn" id="vb-pill-quiet" hidden>Quiet hours</span>
+          </div>
+        </div>
+        <div class="vb-flip-clock" id="vb-flip-clock">
+          <span class="vb-flip-label" id="vb-flip-label">Ready to flip</span>
+          <span class="vb-flip-remain" id="vb-flip-remain">now</span>
+          <span class="vb-flip-when" id="vb-flip-when">The board can flip now</span>
+        </div>
+        <div class="vb-bezel" id="vb-bezel">
+          <div class="vb-grid" id="vb-grid"></div>
+          <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+        </div>
+        <div class="card vb-queue-card">
+          <div class="vb-head">
+            <h2 class="vb-title">Queue</h2>
+            <div class="vb-head-actions">
+              <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-vb-release-holds">Release Holds</button>
+              <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-vb-queue-clear" hidden>Clear queue</button>
+            </div>
+          </div>
+          <p class="hint">This is the house queue. Drag to rearrange; cancel drops one page.</p>
+          <div class="vb-list" id="vb-queue"><p class="hint">Nothing queued.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-flight" hidden>
+      <div class="su-toolbar">
+        <h2 class="su-h" style="margin:0">Flight Plan</h2>
+        <button type="button" class="su-btn su-btn-sm" id="btn-trip-new">New trip</button>
+      </div>
+      <div class="su-seg" id="trip-filter">
+        <button type="button" class="active" data-filter="upcoming">Upcoming</button>
+        <button type="button" data-filter="active">Active</button>
+        <button type="button" data-filter="past">Past</button>
+        <button type="button" data-filter="all">All</button>
+      </div>
+      <div id="trip-list"></div>
+      <div class="su-sheet" id="trip-sheet" hidden>
+        <div class="su-sheet-head">
+          <h2 id="trip-sheet-title">New trip</h2>
+          <button type="button" class="su-text" id="btn-trip-close">Close</button>
+        </div>
+        <label class="su-label" for="trip-name">Name</label>
+        <input id="trip-name" class="su-input" type="text">
+        <label class="su-label" for="trip-start">Start</label>
+        <input id="trip-start" class="su-input" type="date">
+        <label class="su-label" for="trip-end">End</label>
+        <input id="trip-end" class="su-input" type="date">
+        <button type="button" class="su-btn" id="btn-trip-save">Save trip</button>
+        <div id="trip-detail" hidden>
+          <h3 class="su-h">Flights</h3>
+          <div id="flight-list"></div>
+          <label class="su-label" for="flight-airline">Airline code</label>
+          <input id="flight-airline" class="su-input" type="text" placeholder="DL" maxlength="3">
+          <label class="su-label" for="flight-number">Number</label>
+          <input id="flight-number" class="su-input" type="text" placeholder="123">
+          <label class="su-label" for="flight-date">Date</label>
+          <input id="flight-date" class="su-input" type="date">
+          <button type="button" class="su-btn" id="btn-flight-search">Find flight</button>
+          <div id="flight-results"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-slideshow" hidden>
+      <div class="slideshow-toolbar-card">
+        <div class="slideshow-toolbar">
+          <button type="button" class="su-btn su-btn-sm" id="btn-slideshow-push">Show on display</button>
+          <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-select">Select</button>
+          <div class="slideshow-toolbar-selecting" id="slideshow-toolbar-selecting" hidden>
+            <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-select-all">Select All</button>
+            <button type="button" class="su-btn su-btn-danger su-btn-sm" id="btn-slideshow-delete-selected" disabled>Delete (<span id="slideshow-selected-count">0</span>)</button>
+            <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-cancel-select">Cancel</button>
+          </div>
+          <button type="button" class="su-btn su-btn-ghost su-btn-sm slideshow-refresh" id="btn-slideshow-refresh" title="Refresh camera roll">Refresh</button>
+        </div>
+        <p class="hint">Photos shared via Guest Snaps land here and stay until you delete them. Delete always asks first.</p>
+      </div>
+      <div class="photo-grid" id="photo-grid"></div>
+      <p class="hint photo-grid-empty" id="photo-grid-empty" hidden>No saved photos yet — share one via Guest Snaps first.</p>
+    </section>
+
+    <section class="tab-panel" id="tab-dates" hidden>
+      <div class="su-toolbar">
+        <h2 class="su-h" style="margin:0">Date Book</h2>
+        <button type="button" class="su-btn su-btn-sm" id="btn-date-new">New event</button>
+      </div>
+      <p class="hint" id="date-summary">Birthdays, holidays, and the dates you want counted down.</p>
+      <div class="date-list" id="date-list"></div>
+      <p class="hint" id="date-empty" hidden>Nothing here yet. Add the dates you want on the board.</p>
+    </section>
+  </main>
+
+  <div class="su-backdrop" id="profile-sheet" hidden>
+    <div class="su-dialog profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title">
+      <div class="su-sheet-head">
+        <h2 id="profile-sheet-title">Profile</h2>
+        <button type="button" class="su-text" id="btn-profile-close">Close</button>
+      </div>
+      <div class="date-form-grid">
+        <div>
+          <label class="su-label" for="pf-first">First name</label>
+          <input id="pf-first" class="su-input" type="text" autocomplete="given-name">
+        </div>
+        <div>
+          <label class="su-label" for="pf-last">Last name</label>
+          <input id="pf-last" class="su-input" type="text" autocomplete="family-name">
+        </div>
+      </div>
+      <label class="su-label" for="pf-email">Email</label>
+      <input id="pf-email" class="su-input" type="email" autocomplete="email">
+      <p class="hint" id="pf-env-hint" hidden>This account is the environment admin. Change the password in <code>ADMIN_PASSWORD</code>.</p>
+      <button type="button" class="su-btn" id="btn-profile-save">Save profile</button>
+      <h2 class="su-h">Avatar</h2>
+      <div class="avatar-grid" id="avatar-grid"></div>
+      <label class="su-label" for="pf-upload">Or upload a picture</label>
+      <input id="pf-upload" class="su-input" type="file" accept="image/png,image/jpeg,image/webp">
+      <div id="pf-password-block">
+        <h2 class="su-h">Password</h2>
+        <label class="su-label" for="pf-current">Current password</label>
+        <input id="pf-current" class="su-input" type="password" autocomplete="current-password">
+        <label class="su-label" for="pf-new">New password</label>
+        <input id="pf-new" class="su-input" type="password" autocomplete="new-password">
+        <label class="su-label" for="pf-new-confirm">Confirm new password</label>
+        <input id="pf-new-confirm" class="su-input" type="password" autocomplete="new-password">
+        <button type="button" class="su-btn" id="btn-password">Change password</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="su-backdrop" id="date-sheet" hidden>
+    <div class="su-dialog date-dialog" role="dialog" aria-modal="true" aria-labelledby="date-sheet-title">
+      <div class="su-sheet-head">
+        <h2 id="date-sheet-title">Event</h2>
+        <button type="button" class="su-text" id="btn-date-close">Close</button>
+      </div>
+      <div class="date-form-grid">
+        <div>
+          <label class="su-label" for="date-name">Name</label>
+          <input id="date-name" class="su-input" type="text" maxlength="40" placeholder="Kylie Birthday">
+        </div>
+        <div>
+          <label class="su-label" for="date-date">Date</label>
+          <input id="date-date" class="su-input" type="date">
+        </div>
+        <div>
+          <label class="su-label" for="date-time">Time <span class="su-optional">(optional)</span></label>
+          <input id="date-time" class="su-input" type="time">
+        </div>
+        <div class="date-repeat-field">
+          <label class="su-label" for="date-recurring">Repeats</label>
+          <label class="date-repeat-box" for="date-recurring">
+            <input id="date-recurring" type="checkbox">
+            <span>Every year</span>
+          </label>
+        </div>
+      </div>
+      <p class="hint" id="date-schedule-hint" hidden></p>
+      <label class="su-label" for="date-message">Day-of message</label>
+      <textarea id="date-message" class="su-input" rows="2" maxlength="240" placeholder="Love you always"></textarea>
+      <span class="su-label">Day-of theme</span>
+      <div class="su-seg date-theme-row" id="date-theme" role="group" aria-label="Day-of theme">
+        <button type="button" class="active" data-date-theme="default">Confetti</button>
+        <button type="button" data-date-theme="heart">Heart</button>
+        <button type="button" data-date-theme="christmas">Christmas</button>
+        <button type="button" data-date-theme="halloween">Halloween</button>
+        <button type="button" data-date-theme="autumn">Autumn</button>
+        <button type="button" data-date-theme="summer">Summer</button>
+        <button type="button" data-date-theme="beach">Beach</button>
+        <button type="button" data-date-theme="border">Border</button>
+      </div>
+      <p class="hint" id="date-theme-hint" hidden>This event has artwork painted in the admin Date Book. Picking a theme replaces it.</p>
+      <div class="su-seg date-preview-tabs" id="date-preview-tabs" role="group" aria-label="Which card to preview">
+        <button type="button" class="active" data-date-preview="countdown">Countdown</button>
+        <button type="button" data-date-preview="dayOf">Day of</button>
+      </div>
+      <div class="vb-bezel preview-bezel">
+        <div class="vb-grid" id="date-preview"></div>
+        <div class="vb-wordmark">VESTABOARD</div>
+      </div>
+      <div class="su-dialog-actions">
+        <button type="button" class="su-btn su-btn-ghost" id="btn-date-delete" hidden>Delete</button>
+        <button type="button" class="su-btn" id="btn-date-save">Save event</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="su-backdrop" id="photo-lightbox" hidden>
+    <div class="su-dialog su-lightbox" role="dialog" aria-modal="true" aria-label="Photo">
+      <div class="lightbox-frame" id="lightbox-frame">
+        <img class="lightbox-img" id="lightbox-img" alt="Photo preview">
+        <button type="button" class="lightbox-nav lightbox-prev" id="btn-lightbox-prev" aria-label="Previous photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button type="button" class="lightbox-nav lightbox-next" id="btn-lightbox-next" aria-label="Next photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+        <button type="button" class="lightbox-close" id="btn-lightbox-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="lightbox-counter" id="lightbox-counter"></p>
+      <p class="lightbox-uploaded-at" id="lightbox-uploaded-at"></p>
+      <div class="su-dialog-actions su-lightbox-actions">
+        <button type="button" class="su-btn su-btn-ghost" id="btn-lightbox-cancel">Close</button>
+        <button type="button" class="su-btn su-btn-danger" id="btn-lightbox-delete">Delete</button>
+        <button type="button" class="su-btn" id="btn-lightbox-push">Show on display</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="su-backdrop push-lib-backdrop" id="push-library" hidden>
+    <div class="su-dialog push-lib-sheet" role="dialog" aria-modal="true" aria-labelledby="push-lib-title">
+      <div class="su-sheet-head">
+        <h2 id="push-lib-title">Push library</h2>
+        <button type="button" class="su-text" id="btn-push-library-close">Close</button>
+      </div>
+      <input id="lib-search" class="su-input" type="search" placeholder="Search the catalog…" autocomplete="off">
+      <div class="su-seg" id="lib-kind" role="group" aria-label="Applies to">
+        <button type="button" class="active" data-kind="all">All</button>
+        <button type="button" data-kind="vestaboard">Vestaboard</button>
+        <button type="button" data-kind="full">Software</button>
+      </div>
+      <div class="su-seg su-seg-wrap" id="lib-cats" role="tablist" aria-label="Categories"></div>
+      <div class="push-lib-body" id="push-lib-body">
+        <div id="push-lib"></div>
+        <p class="hint push-lib-empty" id="push-lib-empty" hidden>Nothing matches that search.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="su-backdrop" id="su-confirm-sheet" hidden>
+    <div class="su-dialog su-confirm" role="dialog" aria-modal="true" aria-labelledby="su-confirm-title">
+      <div class="su-confirm-title" id="su-confirm-title">Delete?</div>
+      <p class="hint" id="su-confirm-text">This cannot be undone.</p>
+      <div class="su-dialog-actions su-confirm-actions">
+        <button type="button" class="su-btn su-btn-ghost" id="su-confirm-cancel">Cancel</button>
+        <button type="button" class="su-btn su-btn-danger" id="su-confirm-ok">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tab-bar" id="su-tabs">
+    <button type="button" class="tab-btn active" data-tab="main">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
+      <span>Main</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="push">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 8v5M9.5 10.5 12 8l2.5 2.5"/></svg>
+      <span>Push</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="games">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="3"/><path d="M7 12h.01M10 12h.01M6.5 15h4"/><circle cx="16.5" cy="12" r="1"/><path d="M15 15h3M9 7V5M15 7V5"/></svg>
+      <span>Games</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="board">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Vestaboard Simulator</span><span class="tab-label-short">Simulator</span></span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="flight" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l20-5-5 5 5 5-20-5 5-5-5-5Z"/><path d="M12 12v9"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Flight Plan</span><span class="tab-label-short">Flights</span></span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="slideshow" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Slideshow</span><span class="tab-label-short">Slides</span></span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="dates" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Date Book</span><span class="tab-label-short">Dates</span></span>
+    </button>
+  </nav>
+
+  <script>
+    window.SIGNAL_GUESTBOOK_SEND = '/api/user/guestbook/send';
+    window.SIGNAL_GUESTBOOK_SKIP_UNLOCK = true;
+  </script>
+  <script src="/flap-grid.js"></script>
+  <script src="/red-letter-presets.js?v=signal260"></script>
+  <script src="/push-icons.js?v=signal262"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal250"></script>
+  <script src="/guestbook/guestbook.js"></script>
+  <script src="app.js?v=signal265"></script>
+</body>
+</html>

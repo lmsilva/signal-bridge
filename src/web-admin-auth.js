@@ -1,16 +1,18 @@
 /**
- * Password gate for the Signal Bridge /admin control UI.
+ * Household session gate for /admin and /user.
  *
- * Login form → HTTP-only session cookie. Fail closed when ADMIN_PASSWORD
- * is unset/empty (admin APIs reject; login page explains how to configure).
+ * Username + password → HTTP-only cookies (`signal_session`, plus legacy
+ * `signal_admin`). Fail closed when ADMIN_PASSWORD is unset.
  *
  * Progressive per-IP lockout on bad passwords (in-memory only — cleared by
  * container recreate / process restart).
  */
 
 const crypto = require('crypto');
+const { createHouseUsers, actorFromUser } = require('./house-users');
 
-const COOKIE_NAME = 'signal_admin';
+const COOKIE_NAME = 'signal_session';
+const LEGACY_COOKIE_NAME = 'signal_admin';
 const DEFAULT_SESSION_HOURS = 12;
 /** Lockout seconds after N failures (index = fails after this attempt). */
 const LOCKOUT_LADDER_SEC = [0, 0, 5, 15, 60, 300, 900];
@@ -19,7 +21,6 @@ function timingSafeEqualString(a, b) {
   const left = Buffer.from(String(a || ''), 'utf8');
   const right = Buffer.from(String(b || ''), 'utf8');
   if (left.length !== right.length) {
-    // Still compare to keep timing closer for wrong-length guesses.
     crypto.timingSafeEqual(
       crypto.createHash('sha256').update(left).digest(),
       crypto.createHash('sha256').update(right).digest(),
@@ -34,13 +35,9 @@ function parseCookies(req) {
   const out = {};
   for (const part of header.split(';')) {
     const trimmed = part.trim();
-    if (!trimmed) {
-      continue;
-    }
+    if (!trimmed) continue;
     const eq = trimmed.indexOf('=');
-    if (eq === -1) {
-      continue;
-    }
+    if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
     let value = trimmed.slice(eq + 1).trim();
     try {
@@ -48,24 +45,17 @@ function parseCookies(req) {
     } catch {
       // keep raw
     }
-    if (key) {
-      out[key] = value;
-    }
+    if (key) out[key] = value;
   }
   return out;
 }
 
 function normalizeClientIp(raw) {
   let ip = String(raw || '').trim();
-  if (!ip) {
-    return 'unknown';
-  }
-  // "192.168.1.5:54321" or "[::1]:54321"
+  if (!ip) return 'unknown';
   if (ip.startsWith('[')) {
     const end = ip.indexOf(']');
-    if (end > 0) {
-      ip = ip.slice(1, end);
-    }
+    if (end > 0) ip = ip.slice(1, end);
   } else if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(ip)) {
     ip = ip.replace(/:\d+$/, '');
   }
@@ -79,27 +69,19 @@ function clientIpFromRequest(req) {
   const forwarded = String(req?.headers?.['x-forwarded-for'] || '')
     .split(',')[0]
     .trim();
-  if (forwarded) {
-    return normalizeClientIp(forwarded);
-  }
+  if (forwarded) return normalizeClientIp(forwarded);
   return normalizeClientIp(req?.socket?.remoteAddress || req?.connection?.remoteAddress);
 }
 
 function lockoutSecondsForFails(fails) {
   const n = Math.max(0, Number(fails) || 0);
-  if (n <= 0) {
-    return 0;
-  }
+  if (n <= 0) return 0;
   const idx = Math.min(n, LOCKOUT_LADDER_SEC.length) - 1;
   return LOCKOUT_LADDER_SEC[Math.max(0, idx)];
 }
 
-function createWebAdminAuth(config = {}, log = console) {
-  const password = String(
-    config.webServer?.adminPassword
-    ?? process.env.ADMIN_PASSWORD
-    ?? '',
-  );
+function createWebAdminAuth(config = {}, log = console, deps = {}) {
+  const houseUsers = deps.houseUsers || createHouseUsers(config, log);
   const sessionHours = Math.max(
     1,
     Number(config.webServer?.adminSessionHours || process.env.ADMIN_SESSION_HOURS)
@@ -107,65 +89,57 @@ function createWebAdminAuth(config = {}, log = console) {
   );
   const sessionMs = sessionHours * 60 * 60 * 1000;
 
-  /** @type {Map<string, { expiresAt: number }>} */
+  /** @type {Map<string, { expiresAt: number, userId: string }>} */
   const sessions = new Map();
   /** @type {Map<string, { fails: number, lockedUntil: number }>} */
   const loginAttempts = new Map();
 
   function isConfigured() {
-    return password.length > 0;
+    return houseUsers.isConfigured();
   }
 
   function purgeExpired() {
     const now = Date.now();
     for (const [token, sess] of sessions) {
-      if (sess.expiresAt <= now) {
-        sessions.delete(token);
-      }
+      if (sess.expiresAt <= now) sessions.delete(token);
     }
   }
 
-  function buildSetCookie(token, { secure = false } = {}) {
+  function cookieParts(name, token, { secure = false, maxAge } = {}) {
     const parts = [
-      `${COOKIE_NAME}=${encodeURIComponent(token)}`,
+      `${name}=${token != null ? encodeURIComponent(token) : ''}`,
       'Path=/',
       'HttpOnly',
       'SameSite=Lax',
-      `Max-Age=${Math.floor(sessionMs / 1000)}`,
+      `Max-Age=${maxAge != null ? maxAge : Math.floor(sessionMs / 1000)}`,
     ];
-    if (secure) {
-      parts.push('Secure');
-    }
+    if (secure) parts.push('Secure');
     return parts.join('; ');
   }
 
-  function buildClearCookie({ secure = false } = {}) {
-    const parts = [
-      `${COOKIE_NAME}=`,
-      'Path=/',
-      'HttpOnly',
-      'SameSite=Lax',
-      'Max-Age=0',
+  function buildSetCookies(token, { secure = false } = {}) {
+    return [
+      cookieParts(COOKIE_NAME, token, { secure }),
+      cookieParts(LEGACY_COOKIE_NAME, token, { secure }),
     ];
-    if (secure) {
-      parts.push('Secure');
-    }
-    return parts.join('; ');
+  }
+
+  function buildClearCookies({ secure = false } = {}) {
+    return [
+      cookieParts(COOKIE_NAME, '', { secure, maxAge: 0 }),
+      cookieParts(LEGACY_COOKIE_NAME, '', { secure, maxAge: 0 }),
+    ];
   }
 
   function requestIsSecure(req) {
-    if (req?.socket?.encrypted) {
-      return true;
-    }
+    if (req?.socket?.encrypted) return true;
     const forwarded = String(req?.headers?.['x-forwarded-proto'] || '').toLowerCase();
     return forwarded === 'https';
   }
 
   function rateLimitStatus(ip, now = Date.now()) {
     const entry = loginAttempts.get(ip);
-    if (!entry || entry.lockedUntil <= now) {
-      return null;
-    }
+    if (!entry || entry.lockedUntil <= now) return null;
     const retryAfterSec = Math.max(1, Math.ceil((entry.lockedUntil - now) / 1000));
     return {
       ok: false,
@@ -189,7 +163,17 @@ function createWebAdminAuth(config = {}, log = console) {
     loginAttempts.delete(ip);
   }
 
-  function login(candidatePassword, req) {
+  function parseCredentials(raw) {
+    if (typeof raw === 'string') {
+      return { username: houseUsers.adminUsername, password: raw };
+    }
+    return {
+      username: String(raw?.username || houseUsers.adminUsername || '').trim(),
+      password: String(raw?.password || ''),
+    };
+  }
+
+  function login(credentials, req) {
     if (!isConfigured()) {
       return {
         ok: false,
@@ -198,32 +182,40 @@ function createWebAdminAuth(config = {}, log = console) {
         code: 'admin_password_unset',
       };
     }
-
+    houseUsers.ensureBootstrap();
+    const { username, password } = parseCredentials(credentials);
     const ip = clientIpFromRequest(req);
     const now = Date.now();
     const limited = rateLimitStatus(ip, now);
     if (limited) {
-      // Keep response timing closer to a real password check.
-      timingSafeEqualString(candidatePassword, password);
-      log.warn?.('Admin login blocked — rate limited', { ip, retryAfterSec: limited.retryAfterSec });
+      timingSafeEqualString(password, password);
+      log.warn?.('Login blocked — rate limited', { ip, retryAfterSec: limited.retryAfterSec });
       return limited;
     }
+    if (!username || !password) {
+      recordFailedLogin(ip, now);
+      return { ok: false, status: 401, error: 'Username and password are required', code: 'bad_password' };
+    }
 
-    if (!timingSafeEqualString(candidatePassword, password)) {
+    const result = houseUsers.verifyLogin(username, password);
+    if (!result.ok) {
       const recorded = recordFailedLogin(ip, now);
-      log.warn?.('Admin login failed — incorrect password', {
+      log.warn?.('Login failed', {
         ip,
+        username,
+        code: result.code,
         fails: recorded.fails,
         lockSec: recorded.lockSec,
       });
       const retryAfterSec = recorded.lockSec > 0 ? recorded.lockSec : undefined;
+      const inactive = result.code === 'inactive';
       return {
         ok: false,
         status: recorded.lockSec > 0 ? 429 : 401,
         error: recorded.lockSec > 0
-          ? `Incorrect password — try again in ${recorded.lockSec}s`
-          : 'Incorrect password',
-        code: recorded.lockSec > 0 ? 'rate_limited' : 'bad_password',
+          ? `Incorrect username or password — try again in ${recorded.lockSec}s`
+          : (inactive ? 'This account is inactive' : 'Incorrect username or password'),
+        code: recorded.lockSec > 0 ? 'rate_limited' : (inactive ? 'inactive' : 'bad_password'),
         retryAfterSec,
       };
     }
@@ -232,26 +224,39 @@ function createWebAdminAuth(config = {}, log = console) {
     purgeExpired();
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = Date.now() + sessionMs;
-    sessions.set(token, { expiresAt });
-    log.info?.('Admin session created', { expiresAt: new Date(expiresAt).toISOString() });
+    sessions.set(token, { expiresAt, userId: result.user.id });
+    houseUsers.markLogin(result.user.id);
+    const user = houseUsers.publicUser(result.user);
+    log.info?.('Session created', {
+      userId: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin,
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
     return {
       ok: true,
       token,
       expiresAt,
-      setCookie: buildSetCookie(token, { secure: requestIsSecure(req) }),
+      user,
+      setCookie: buildSetCookies(token, { secure: requestIsSecure(req) }),
     };
   }
 
   function logout(req) {
     const cookies = parseCookies(req);
-    const token = cookies[COOKIE_NAME];
-    if (token) {
-      sessions.delete(token);
-    }
+    const token = cookies[COOKIE_NAME] || cookies[LEGACY_COOKIE_NAME];
+    if (token) sessions.delete(token);
     return {
       ok: true,
-      setCookie: buildClearCookie({ secure: requestIsSecure(req) }),
+      setCookie: buildClearCookies({ secure: requestIsSecure(req) }),
     };
+  }
+
+  function dropSessionsForUser(userId) {
+    const needle = String(userId || '');
+    for (const [token, sess] of sessions) {
+      if (sess.userId === needle) sessions.delete(token);
+    }
   }
 
   function sessionFromRequest(req) {
@@ -259,26 +264,36 @@ function createWebAdminAuth(config = {}, log = console) {
     if (!isConfigured()) {
       return { ok: false, code: 'admin_password_unset' };
     }
-    const token = parseCookies(req)[COOKIE_NAME];
-    if (!token) {
-      return { ok: false, code: 'no_session' };
-    }
+    const cookies = parseCookies(req);
+    const token = cookies[COOKIE_NAME] || cookies[LEGACY_COOKIE_NAME];
+    if (!token) return { ok: false, code: 'no_session' };
     const sess = sessions.get(token);
-    if (!sess) {
-      return { ok: false, code: 'no_session' };
-    }
+    if (!sess) return { ok: false, code: 'no_session' };
     if (sess.expiresAt <= Date.now()) {
       sessions.delete(token);
       return { ok: false, code: 'expired' };
     }
-    return { ok: true, expiresAt: sess.expiresAt };
+    const user = houseUsers.getById(sess.userId);
+    if (!user || user.active === false) {
+      sessions.delete(token);
+      return { ok: false, code: 'inactive' };
+    }
+    const pub = houseUsers.publicUser(user);
+    return {
+      ok: true,
+      expiresAt: sess.expiresAt,
+      userId: pub.id,
+      username: pub.username,
+      firstName: pub.firstName,
+      lastName: pub.lastName,
+      isAdmin: pub.isAdmin,
+      permissions: pub.permissions,
+      user: pub,
+      actor: actorFromUser(user),
+    };
   }
 
-  function assertAuthorized(req) {
-    const session = sessionFromRequest(req);
-    if (session.ok) {
-      return session;
-    }
+  function deny(session, message, status = 401) {
     if (session.code === 'admin_password_unset') {
       return {
         ok: false,
@@ -289,21 +304,49 @@ function createWebAdminAuth(config = {}, log = console) {
     }
     return {
       ok: false,
-      status: 401,
-      error: 'Admin login required',
+      status,
+      error: message,
       code: session.code || 'unauthorized',
     };
   }
 
+  function assertAuthorized(req) {
+    const session = sessionFromRequest(req);
+    if (session.ok && session.isAdmin) return session;
+    if (session.ok && !session.isAdmin) {
+      return { ok: false, status: 403, error: 'Admin access required', code: 'not_admin' };
+    }
+    return deny(session, 'Admin login required');
+  }
+
+  function assertUserAuthorized(req) {
+    const session = sessionFromRequest(req);
+    if (session.ok) return session;
+    return deny(session, 'Sign in required');
+  }
+
+  function hasPermission(req, permission) {
+    const session = sessionFromRequest(req);
+    if (!session.ok) return session;
+    if (session.isAdmin || session.permissions?.[permission] === true) {
+      return { ok: true, ...session };
+    }
+    return { ok: false, status: 403, error: 'You do not have access to that', code: 'forbidden' };
+  }
+
   return {
     COOKIE_NAME,
+    LEGACY_COOKIE_NAME,
+    houseUsers,
     isConfigured,
     login,
     logout,
     sessionFromRequest,
     assertAuthorized,
+    assertUserAuthorized,
+    hasPermission,
+    dropSessionsForUser,
     clientIpFromRequest,
-    // test helpers
     _sessions: sessions,
     _loginAttempts: loginAttempts,
     _lockoutSecondsForFails: lockoutSecondsForFails,
@@ -314,6 +357,7 @@ module.exports = {
   createWebAdminAuth,
   parseCookies,
   COOKIE_NAME,
+  LEGACY_COOKIE_NAME,
   timingSafeEqualString,
   clientIpFromRequest,
   normalizeClientIp,

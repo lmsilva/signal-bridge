@@ -8,6 +8,10 @@
   let source = null;
   let clock = null;
 
+  if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+  }
+
   /** Nobody should have to type their name again the next time they play. */
   function rememberedName() {
     try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; }
@@ -24,6 +28,24 @@
   function show(id) {
     $('gm-join').hidden = id !== 'gm-join';
     $('gm-play').hidden = id !== 'gm-play';
+    if (id === 'gm-play') resetPageScroll();
+  }
+
+  function resetPageScroll() {
+    $('gm-code')?.blur();
+    $('gm-name')?.blur();
+    if (document.activeElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    // iOS sometimes applies scroll after the layout swap lands.
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    });
   }
 
   function setStatus(id, text) {
@@ -211,6 +233,7 @@
       applySession(data.session);
       show('gm-play');
       listen(data.session.sessionId);
+      window.setTimeout(resetPageScroll, 300);
     } catch (error) {
       setStatus('gm-join-status', error.message);
     }
@@ -259,14 +282,23 @@
   };
 
   const params = new URLSearchParams(location.search);
-  if (params.get('code')) {
-    $('gm-code').value = params.get('code').toUpperCase();
+  const codeParam = String(params.get('code') || '').trim();
+  const nameParam = String(params.get('name') || '').trim();
+  if (codeParam && $('gm-code')) {
+    $('gm-code').value = codeParam.toUpperCase();
   }
   const saved = rememberedName();
-  if (saved) {
-    $('gm-name').value = saved;
-    // Their name is already in — put them on the one field they still owe us.
-    if (!$('gm-code').value) $('gm-code').focus();
+  const joinName = nameParam || saved;
+  if (joinName && $('gm-name')) {
+    $('gm-name').value = joinName;
+  }
+  if (joinName && !codeParam && $('gm-code')) {
+    $('gm-code').focus();
+  }
+  // Household "Join now" opens /games/?code=&name= — skip the form and sit down.
+  if (codeParam && joinName) {
+    setStatus('gm-join-status', 'Joining…');
+    join();
   }
 
   if (clock) clearInterval(clock);

@@ -90,6 +90,21 @@ function sameLayout(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function resolveActor(options = {}) {
+  if (options.actor && typeof options.actor === 'object') {
+    const name = String(options.actor.name || '').trim();
+    return {
+      kind: String(options.actor.kind || (options.scheduler ? 'scheduler' : 'user')),
+      userId: options.actor.userId || null,
+      name: name || (options.scheduler ? 'Scheduled' : 'User'),
+    };
+  }
+  if (options.scheduler) {
+    return { kind: 'scheduler', userId: null, name: 'Scheduled' };
+  }
+  return { kind: 'system', userId: null, name: '' };
+}
+
 /** "22:00" -> minutes since midnight, or null if unusable. */
 function parseHhMm(value) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
@@ -387,6 +402,7 @@ function createQueue({
       source: item.frame.source || '',
       priority: item.priority,
       scheduler: Boolean(item.scheduler),
+      actor: item.actor || null,
       notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
       status: item.notBefore
         ? null
@@ -559,6 +575,7 @@ function createQueue({
         existing.lane = hold.lane;
         existing.rank = hold.rank;
         existing.quietHoursExempt = isExempt(list[0], options.quietHoursExempt);
+        existing.actor = resolveActor(options);
         coalesceSeen.set(coalesceKey, at);
         if (hold.live && isHoldLane(hold.lane)) {
           acquireLaneLock(hold.source, hold.lane, { ttlMs: hold.ttlMs, rank: hold.rank });
@@ -575,6 +592,7 @@ function createQueue({
 
     const sequenceId = `s${nextItemId}`;
     const ownerSource = options.gameSource || hold.source || options.replaceSource || null;
+    const actor = resolveActor(options);
     const made = list.map((frame) => ({
       id: `i${nextItemId++}`,
       frame,
@@ -589,6 +607,7 @@ function createQueue({
       quietHoursExempt: isExempt(frame, options.quietHoursExempt),
       scheduler: Boolean(options.scheduler),
       ownerSource: ownerSource ? String(ownerSource) : null,
+      actor,
     }));
 
     if (!made[0].quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {

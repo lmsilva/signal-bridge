@@ -71,6 +71,19 @@ function makeQueue(boardOverrides = {}) {
   };
 }
 
+test('submit stamps actor on queue items', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('SHOPPING', 1)], {
+    actor: { kind: 'user', userId: 'u1', name: 'Maya' },
+  });
+  assert.equal(h.queue.pending()[0].actor.name, 'Maya');
+  assert.equal(h.queue.pending()[0].actor.kind, 'user');
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  const scheduled = h.queue.pending().find((item) => item.label === 'WEATHER');
+  assert.equal(scheduled.actor.kind, 'scheduler');
+  assert.equal(scheduled.actor.name, 'Scheduled');
+});
+
 test('the first frame goes straight to the board', async () => {
   const h = makeQueue();
   h.queue.submit([frame('SHOPPING', 1)]);

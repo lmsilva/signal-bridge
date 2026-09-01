@@ -440,6 +440,7 @@ function createVestaboardHub({
       replaceSource: options.replaceSource,
       replaceCard: options.replaceCard,
       gameSource: options.gameSource,
+      actor: options.actor,
       ctx: {
         ...ctx,
         priorities: settings.house().priorities,

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -51,47 +51,27 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.28);
     }
-    .login-note {
-      margin: 18px 0 0;
-      padding-top: 14px;
-      border-top: 1px solid var(--line);
-    }
-    .login-note-label {
+    .login-home {
       display: block;
-      margin: 0 0 8px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-    .login-note-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px 18px;
-    }
-    /* One colour in every state, visited included. Left to the browser these
-       fall back to the 1994 blue-then-purple defaults, which reads as broken
-       styling rather than as useful history. Hover carries the affordance. */
-    .login-note-links a,
-    .login-note-links a:visited {
-      color: var(--text);
+      margin: 16px 0 0;
+      text-align: center;
+      color: var(--text-dim);
       font-size: 0.9rem;
       font-weight: 600;
       text-decoration: none;
-      border-radius: 6px;
     }
-    .login-note-links a:hover,
-    .login-note-links a:focus-visible {
+    .login-home:visited { color: var(--text-dim); }
+    .login-home:hover,
+    .login-home:focus-visible {
       color: var(--accent);
       text-decoration: underline;
       text-underline-offset: 3px;
     }
-    .login-note-links a:focus-visible {
+    .login-home:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 3px;
+      border-radius: 6px;
     }
-    .login-note-links a:active { color: var(--accent-press); }
   </style>
 </head>
 <body>
@@ -101,8 +81,19 @@
         <img src="/logo.png" width="36" height="36" alt="">
         <h1>Signal Admin</h1>
       </div>
-      <p class="hint" id="login-hint">Enter the admin password.</p>
+      <p class="hint" id="login-hint">Sign in with the household admin username and password.</p>
       <p class="login-error" id="login-error" role="alert"></p>
+      <label class="field-label" for="admin-username">Username</label>
+      <input
+        id="admin-username"
+        class="field-input"
+        type="text"
+        name="username"
+        autocomplete="username"
+        spellcheck="false"
+        autofocus
+        placeholder="admin"
+      >
       <label class="field-label" for="admin-password">Password</label>
       <input
         id="admin-password"
@@ -111,23 +102,15 @@
         name="password"
         autocomplete="current-password"
         required
-        autofocus
       >
       <button class="btn btn-accent btn-block" type="submit" id="login-submit">Sign in</button>
-      <div class="login-note">
-        <span class="login-note-label">Guests</span>
-        <div class="login-note-links">
-          <a href="/">Home</a>
-          <a href="/guestsnaps/">Photo booth</a>
-          <a href="/games/">Games</a>
-          <span id="guest-book-quicklink" hidden><a href="/guestbook/">Guest book</a></span>
-        </div>
-      </div>
+      <a class="login-home" href="/" id="btn-signal-home">Back to Signal</a>
     </form>
   </div>
   <script>
     (() => {
       const form = document.getElementById('login-form');
+      const username = document.getElementById('admin-username');
       const input = document.getElementById('admin-password');
       const errorEl = document.getElementById('login-error');
       const hintEl = document.getElementById('login-hint');
@@ -135,12 +118,11 @@
       const params = new URLSearchParams(location.search);
       const next = params.get('next') || '/admin/';
 
-      fetch('/api/guestbook/status', { credentials: 'same-origin' })
+      fetch('/api/admin/session', { credentials: 'same-origin' })
         .then((response) => response.json().catch(() => ({})))
         .then((data) => {
-          const link = document.getElementById('guest-book-quicklink');
-          if (link && data && data.enabled) {
-            link.hidden = false;
+          if (data && data.adminUsername && username && !username.value) {
+            username.placeholder = data.adminUsername;
           }
         })
         .catch(() => {});
@@ -154,7 +136,11 @@
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: input.value }),
+            body: JSON.stringify({
+              username: username.value.trim() || 'admin',
+              password: input.value,
+              requireAdmin: true,
+            }),
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
