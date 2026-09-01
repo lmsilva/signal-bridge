@@ -558,6 +558,7 @@ test('the state fetch includes frames waiting on the hub queue', async () => {
     const res = await request(`${harness.base}/api/vestaboard-sim`, { cookie: harness.cookie });
     assert.equal(res.body.queue.length, 1);
     assert.equal(res.body.queue[0].label, 'Shopping');
+    assert.ok(res.body.queue[0].id, 'the page needs an id so the simulator can cancel it');
   } finally {
     await harness.stop();
   }
@@ -583,6 +584,70 @@ test('queueing a frame on the hub reaches the page as sim.queue', async () => {
     const events = await waiting;
     const queued = [...events].reverse().find((e) => e.name === 'sim.queue');
     assert.equal(queued.data.items[0].label, 'Shopping');
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('the simulator can cancel one waiting page', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    harness.hub.submit('sim', [
+      {
+        rows: badgeFrame({ color: 'blue', title: 'SHOPPING LIST', rows: ['MILK'] }),
+        label: 'Shopping',
+        source: 'shopping-list.snapshot',
+        dwellSeconds: 15,
+      },
+      {
+        rows: badgeFrame({ color: 'red', title: 'WEATHER', rows: ['72F'] }),
+        label: 'Weather',
+        source: 'weather.query',
+        dwellSeconds: 15,
+      },
+    ]);
+    const weather = harness.hub.queueFor('sim').pending().find((row) => row.label === 'Weather');
+    assert.ok(weather?.id);
+    const res = await request(`${harness.base}/api/vestaboard-sim/queue/cancel`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { id: weather.id },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.queue.some((row) => row.label === 'Weather'), false);
+  } finally {
+    await harness.stop();
+  }
+});
+
+test('the simulator can reorder waiting pages', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    harness.hub.submit('sim', [
+      {
+        rows: badgeFrame({ color: 'blue', title: 'ONE', rows: ['A'] }),
+        label: 'One',
+        source: 'one',
+        dwellSeconds: 15,
+      },
+    ]);
+    harness.hub.submit('sim', [
+      {
+        rows: badgeFrame({ color: 'red', title: 'TWO', rows: ['B'] }),
+        label: 'Two',
+        source: 'two',
+        dwellSeconds: 15,
+      },
+    ]);
+    const ids = harness.hub.queueFor('sim').pending().map((row) => row.id);
+    const res = await request(`${harness.base}/api/vestaboard-sim/queue/reorder`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { ids: [ids[1], ids[0]] },
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.queue.map((row) => row.label), ['Two', 'One']);
   } finally {
     await harness.stop();
   }

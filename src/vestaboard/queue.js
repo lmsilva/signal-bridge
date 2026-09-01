@@ -10,6 +10,10 @@
 //     the flaps could already take another flip; alerts and live game cards
 //     still wait only the rate window
 //   - an alert jumps the line and throws away the rotation it interrupted
+//   - a live game invite may take the board (`breakHold`); later game cards
+//     line up in front of everything the lock is holding
+//   - every other snapshot (manual Push, Air now, scheduler) joins the back
+//     of the line — they do not jump ahead of pages already waiting
 //   - repeats of the same thing replace each other instead of stacking
 //   - a layout identical to what is already showing is dropped, because the
 //     board would not flip anyway
@@ -227,9 +231,11 @@ function createQueue({
 
   function pending() {
     return items.map((item) => ({
+      id: item.id,
       label: item.frame.label || 'Frame',
       source: item.frame.source || '',
       priority: item.priority,
+      scheduler: Boolean(item.scheduler),
       notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
       status: item.notBefore
         ? null
@@ -370,7 +376,8 @@ function createQueue({
     const mine = locked && offeredSource === state.gameLock.source;
     const takesBoard = !locked || mine;
 
-    // Manual Push / Air now normally jump the line (`breakHold`).
+    // Only an explicit takeover (game invite, first guest-book page) jumps
+    // the line. Manual Push / Air now join the back like the scheduler.
     const mayBreakHold = Boolean(options.breakHold) && takesBoard;
     if (mayBreakHold) {
       state.holdUntil = null;
@@ -556,14 +563,18 @@ function createQueue({
       return null;
     }
 
-    // A guest dwell parks scheduler pages, not the whole line. Air now / Push
-    // sitting behind a held invite must still be able to reach the board. A
-    // game lock parks everything, so nothing is found and the board sits.
+    // A game lock parks every non-game page — skip those to reach the
+    // session's own card. A guest hold only parks scheduler pages; the
+    // head of the line still has to finish (or drop as a duplicate)
+    // before a later Push / Air now may flip.
     let index = 0;
     while (index < items.length && itemHeld(items[index], at)) {
       if (sameLayout(items[index].frame.rows, state.current)) {
         dropAt(index, 'dedupe drop', items[index]);
         return 'duplicate';
+      }
+      if (!gameLockActive(at)) {
+        return null;
       }
       index += 1;
     }
@@ -750,6 +761,49 @@ function createQueue({
       }
       if (dropped) announceQueue();
       return dropped;
+    },
+    /** Drop one waiting page from the simulator (or any caller that has its id). */
+    cancel(id) {
+      const key = String(id || '');
+      const index = items.findIndex((item) => item.id === key);
+      if (index < 0) {
+        return false;
+      }
+      dropAt(index, 'cancelled', items[index]);
+      return true;
+    },
+    /**
+     * Put waiting pages in this order. Unknown ids are ignored; anything
+     * not listed stays at the end in its current relative order.
+     */
+    reorder(ids) {
+      const wanted = (Array.isArray(ids) ? ids : []).map((id) => String(id || ''));
+      if (!wanted.length || !items.length) {
+        return pending();
+      }
+      const byId = new Map(items.map((item) => [item.id, item]));
+      const next = [];
+      for (const id of wanted) {
+        const item = byId.get(id);
+        if (!item) {
+          continue;
+        }
+        next.push(item);
+        byId.delete(id);
+      }
+      for (const item of items) {
+        if (byId.has(item.id)) {
+          next.push(item);
+        }
+      }
+      const changed = next.length !== items.length
+        || next.some((item, index) => item.id !== items[index].id);
+      if (changed) {
+        items.length = 0;
+        items.push(...next);
+        announceQueue();
+      }
+      return pending();
     },
   };
 }

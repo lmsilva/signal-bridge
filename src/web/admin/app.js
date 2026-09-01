@@ -18635,6 +18635,8 @@
   let vbGen = null;
   let vbCalls = [];
   let vbEvents = null;
+  let vbQueueDragging = false;
+  let vbQueueItems = [];
   let vbRateTimer = null;
   let vbSoundOn = (() => {
     try {
@@ -19221,19 +19223,108 @@
     }
   }
 
+  function vbQueueIdsFromDom() {
+    return [...document.querySelectorAll('#vb-queue .vb-queue-row')]
+      .map((row) => row.dataset.id)
+      .filter(Boolean);
+  }
+
+  async function vbCancelQueued(id) {
+    try {
+      const data = await apiPost('/api/vestaboard-sim/queue/cancel', { id });
+      vbRenderQueue(data.queue);
+    } catch (error) {
+      toast(error?.message || 'Could not cancel that page', 'bad');
+    }
+  }
+
+  async function vbCommitQueueOrder() {
+    const ids = vbQueueIdsFromDom();
+    if (!ids.length) {
+      return;
+    }
+    try {
+      const data = await apiPost('/api/vestaboard-sim/queue/reorder', { ids });
+      vbRenderQueue(data.queue);
+    } catch (error) {
+      toast(error?.message || 'Could not reorder the queue', 'bad');
+      vbRenderQueue(vbQueueItems);
+    }
+  }
+
+  function vbStartQueueDrag(event, row) {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    vbQueueDragging = true;
+    row.classList.add('dragging');
+    row.setPointerCapture(event.pointerId);
+
+    const onMove = (move) => {
+      const host = $('vb-queue');
+      if (!host) {
+        return;
+      }
+      const others = [...host.querySelectorAll('.vb-queue-row')].filter((node) => node !== row);
+      const y = move.clientY;
+      let before = null;
+      for (const other of others) {
+        const box = other.getBoundingClientRect();
+        if (y < box.top + box.height / 2) {
+          before = other;
+          break;
+        }
+      }
+      if (before) {
+        host.insertBefore(row, before);
+      } else {
+        host.appendChild(row);
+      }
+    };
+    const onUp = () => {
+      row.classList.remove('dragging');
+      try {
+        row.releasePointerCapture(event.pointerId);
+      } catch {
+        // already released
+      }
+      row.removeEventListener('pointermove', onMove);
+      row.removeEventListener('pointerup', onUp);
+      row.removeEventListener('pointercancel', onUp);
+      vbQueueDragging = false;
+      vbCommitQueueOrder();
+    };
+    row.addEventListener('pointermove', onMove);
+    row.addEventListener('pointerup', onUp);
+    row.addEventListener('pointercancel', onUp);
+  }
+
   function vbRenderQueue(items) {
     const host = $('vb-queue');
     if (!host) {
       return;
     }
-    if (!items || !items.length) {
+    if (vbQueueDragging) {
+      return;
+    }
+    vbQueueItems = Array.isArray(items) ? items : [];
+    if (!vbQueueItems.length) {
       host.innerHTML = '<p class="hint">Nothing queued.</p>';
       return;
     }
     host.innerHTML = '';
-    for (const item of items) {
+    for (const item of vbQueueItems) {
       const row = document.createElement('div');
-      row.className = 'vb-row';
+      row.className = 'vb-row vb-queue-row';
+      row.dataset.id = item.id || '';
+
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'vb-queue-handle';
+      handle.setAttribute('aria-label', 'Reorder');
+      handle.textContent = '⋮⋮';
+      handle.addEventListener('pointerdown', (event) => vbStartQueueDrag(event, row));
 
       const main = document.createElement('span');
       main.className = 'vb-row-main';
@@ -19249,7 +19340,20 @@
       source.className = 'vb-row-time';
       source.textContent = item.source || '';
 
-      row.append(source, main, state);
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'vb-queue-cancel';
+      cancel.setAttribute('aria-label', 'Cancel this page');
+      cancel.textContent = '×';
+      cancel.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (item.id) {
+          vbCancelQueued(item.id);
+        }
+      });
+
+      row.append(handle, source, main, state, cancel);
       host.appendChild(row);
     }
   }
