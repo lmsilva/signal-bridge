@@ -6879,7 +6879,15 @@ function createWebServer({
       sendJson(res, 404, { ok: false, error: 'Vestaboards are not configured' });
       return;
     }
-    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+    sendJson(res, 200, vestaboardsPayload());
+  }
+
+  function vestaboardsPayload() {
+    return {
+      ok: true,
+      boards: vestaboardHub.settingsView(),
+      priorityCatalog: vestaboardHub.priorityCatalog?.() || null,
+    };
   }
 
   function handleVestaboardSave(body, res) {
@@ -6894,7 +6902,7 @@ function createWebServer({
     }
     log.info(`Vestaboard ${outcome.created ? 'added' : 'updated'}: ${outcome.board.id}`);
     displayRegistry?.announce?.({ vestaboard: outcome.board.id });
-    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+    sendJson(res, 200, vestaboardsPayload());
   }
 
   function handleVestaboardRemove(body, res) {
@@ -6909,7 +6917,7 @@ function createWebServer({
     }
     log.info(`Vestaboard removed: ${body.id}`);
     displayRegistry?.announce?.({ vestaboard: body.id, removed: true });
-    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+    sendJson(res, 200, vestaboardsPayload());
   }
 
   function handleVestaboardEnable(body, res) {
@@ -6927,7 +6935,7 @@ function createWebServer({
       return;
     }
     displayRegistry?.announce?.({ vestaboard: body.id, enabled: body.enabled });
-    sendJson(res, 200, { ok: true, boards: vestaboardHub.settingsView() });
+    sendJson(res, 200, vestaboardsPayload());
   }
 
   /** Proof that a board answers, its key works, and every flap still turns. */

@@ -18313,6 +18313,10 @@
   };
 
   let vbBoards = [];
+  let vbPriorityCatalog = null;
+  let vbPriorityDraft = [];
+  let vbPriorityBoardId = '';
+  let vbPriorityDragIndex = -1;
 
   function vbBoardRow(board) {
     const row = document.createElement('div');
@@ -18344,6 +18348,7 @@
     } else {
       bits.push('quiet reminder on');
     }
+    bits.push(vbPrioritySummary(board));
     detail.textContent = bits.join(' · ');
 
     const remind = document.createElement('label');
@@ -18374,13 +18379,19 @@
     toggle.textContent = board.enabled ? 'Switch off' : 'Switch on';
     toggle.addEventListener('click', () => vbSetEnabled(board.id, !board.enabled));
 
+    const priorities = document.createElement('button');
+    priorities.type = 'button';
+    priorities.className = 'btn btn-outline btn-sm';
+    priorities.textContent = 'Priorities';
+    priorities.addEventListener('click', () => vbOpenPriorities(board));
+
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'btn btn-outline btn-sm';
     edit.textContent = 'Edit';
     edit.addEventListener('click', () => vbOpenForm(board));
 
-    actions.append(test, toggle, edit);
+    actions.append(test, toggle, priorities, edit);
 
     if (!board.simulator) {
       actions.append(vbRemoveButton(board));
@@ -18409,12 +18420,291 @@
     try {
       const data = await apiGet('/api/vestaboards');
       vbBoards = data.boards || [];
+      if (data.priorityCatalog) {
+        vbPriorityCatalog = data.priorityCatalog;
+      }
       vbRenderBoards();
     } catch {
       const host = $('vb-board-list');
       if (host) {
         host.innerHTML = '<p class="hint">Vestaboards are switched off in config.</p>';
       }
+    }
+  }
+
+  function vbCatalogEvent(source) {
+    return (vbPriorityCatalog?.events || []).find((item) => item.source === source) || null;
+  }
+
+  function vbPrioritySummary(board) {
+    const list = Array.isArray(board?.priorities) ? board.priorities : (vbPriorityCatalog?.defaults || []);
+    const jump = list.filter((rule) => rule.jump || rule.hold).length;
+    const hold = list.filter((rule) => rule.hold).length;
+    if (!jump) {
+      return 'nothing jumps';
+    }
+    return hold
+      ? `${jump} jump · ${hold} hold`
+      : `${jump} jump`;
+  }
+
+  function vbClonePriorities(list) {
+    return (Array.isArray(list) ? list : []).map((rule) => ({
+      source: rule.source,
+      jump: rule.jump !== false,
+      hold: Boolean(rule.hold),
+      holdMinutes: Number(rule.holdMinutes) || vbCatalogEvent(rule.source)?.defaultHoldMinutes || 30,
+    }));
+  }
+
+  function vbOpenPriorities(board) {
+    const sheet = $('vb-priority-sheet');
+    if (!sheet || !board) {
+      return;
+    }
+    vbCloseForm();
+    vbPriorityBoardId = board.id;
+    vbPriorityDraft = vbClonePriorities(board.priorities);
+    const title = $('vb-priority-title');
+    if (title) {
+      title.textContent = `Priorities — ${board.name}`;
+    }
+    const picker = $('vb-priority-picker');
+    if (picker) picker.hidden = true;
+    const search = $('vb-priority-search');
+    if (search) search.value = '';
+    vbRenderPriorityList();
+    sheet.hidden = false;
+  }
+
+  function vbClosePriorities() {
+    const sheet = $('vb-priority-sheet');
+    if (sheet) sheet.hidden = true;
+    const picker = $('vb-priority-picker');
+    if (picker) picker.hidden = true;
+    vbPriorityBoardId = '';
+    vbPriorityDraft = [];
+    vbPriorityDragIndex = -1;
+  }
+
+  function vbRenderPriorityList() {
+    const host = $('vb-priority-list');
+    const empty = $('vb-priority-empty');
+    if (!host) {
+      return;
+    }
+    host.innerHTML = '';
+    if (empty) empty.hidden = vbPriorityDraft.length > 0;
+    vbPriorityDraft.forEach((rule, index) => {
+      host.appendChild(vbPriorityRow(rule, index));
+    });
+    vbRenderPriorityPicker();
+  }
+
+  function vbPriorityRow(rule, index) {
+    const item = vbCatalogEvent(rule.source);
+    const row = document.createElement('div');
+    row.className = 'vb-priority-row';
+    if (rule.hold) row.classList.add('is-holding');
+    if (rule.hold && item?.holdCaution) row.classList.add('is-caution');
+    row.draggable = true;
+    row.dataset.priorityIndex = String(index);
+
+    const handle = document.createElement('div');
+    handle.className = 'vb-priority-handle';
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.className = 'vb-priority-move';
+    up.textContent = '▲';
+    up.setAttribute('aria-label', 'Move up');
+    up.disabled = index === 0;
+    up.addEventListener('click', () => vbMovePriority(index, index - 1));
+    const grip = document.createElement('div');
+    grip.className = 'vb-priority-grip';
+    grip.textContent = '⋮⋮';
+    grip.title = 'Drag to reorder';
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.className = 'vb-priority-move';
+    down.textContent = '▼';
+    down.setAttribute('aria-label', 'Move down');
+    down.disabled = index === vbPriorityDraft.length - 1;
+    down.addEventListener('click', () => vbMovePriority(index, index + 1));
+    handle.append(up, grip, down);
+
+    const rank = document.createElement('span');
+    rank.className = 'vb-priority-rank';
+    rank.textContent = String(index + 1);
+
+    const name = document.createElement('div');
+    name.className = 'vb-priority-name';
+    name.textContent = item?.label || rule.source;
+    if (rule.hold && item?.holdCaution) {
+      name.title = 'Holding this pins the board. Alarms usually jump, then the queue continues.';
+    } else if (rule.hold) {
+      name.title = `Holds the board · gives up after ${rule.holdMinutes} min`;
+    } else {
+      name.title = 'Jumps the line, then the queue continues';
+    }
+
+    const controls = document.createElement('div');
+    controls.className = 'vb-priority-controls';
+
+    const holdLabel = document.createElement('label');
+    holdLabel.className = 'trivia-check';
+    const holdInput = document.createElement('input');
+    holdInput.type = 'checkbox';
+    holdInput.checked = Boolean(rule.hold);
+    holdInput.addEventListener('change', () => {
+      rule.hold = holdInput.checked;
+      if (rule.hold) rule.jump = true;
+      vbRenderPriorityList();
+    });
+    const holdSpan = document.createElement('span');
+    holdSpan.textContent = 'Hold';
+    holdLabel.append(holdInput, holdSpan);
+    controls.append(holdLabel);
+
+    if (rule.hold) {
+      const minutes = document.createElement('label');
+      minutes.className = 'vb-priority-minutes';
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.className = 'field-input';
+      minInput.min = String(vbPriorityCatalog?.minHoldMinutes || 1);
+      minInput.max = String(vbPriorityCatalog?.maxHoldMinutes || 180);
+      minInput.value = String(rule.holdMinutes);
+      minInput.title = 'Max hold time';
+      minInput.addEventListener('change', () => {
+        const raw = Number(minInput.value);
+        const lo = vbPriorityCatalog?.minHoldMinutes || 1;
+        const hi = vbPriorityCatalog?.maxHoldMinutes || 180;
+        rule.holdMinutes = Number.isFinite(raw)
+          ? Math.min(hi, Math.max(lo, Math.round(raw)))
+          : (item?.defaultHoldMinutes || 30);
+        minInput.value = String(rule.holdMinutes);
+        vbRenderPriorityList();
+      });
+      const minText = document.createElement('span');
+      minText.textContent = 'min';
+      minutes.append(minInput, minText);
+      controls.append(minutes);
+    }
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'vb-priority-remove';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remove ${item?.label || rule.source}`);
+    remove.addEventListener('click', () => {
+      vbPriorityDraft.splice(index, 1);
+      vbRenderPriorityList();
+    });
+    controls.append(remove);
+
+    row.append(handle, rank, name, controls);
+
+    row.addEventListener('dragstart', (event) => {
+      vbPriorityDragIndex = index;
+      row.classList.add('is-dragging');
+      try {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      } catch {
+        // Older WebViews reject setData; the drag still works locally.
+      }
+    });
+    row.addEventListener('dragend', () => {
+      vbPriorityDragIndex = -1;
+      hostClearPriorityDrag();
+    });
+    row.addEventListener('dragover', (event) => {
+      if (vbPriorityDragIndex < 0) return;
+      event.preventDefault();
+      row.classList.add('is-drop-target');
+    });
+    row.addEventListener('dragleave', (event) => {
+      if (!row.contains(event.relatedTarget)) {
+        row.classList.remove('is-drop-target');
+      }
+    });
+    row.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const from = vbPriorityDragIndex;
+      vbPriorityDragIndex = -1;
+      hostClearPriorityDrag();
+      if (from >= 0 && from !== index) {
+        vbMovePriority(from, index);
+      }
+    });
+
+    return row;
+  }
+
+  function hostClearPriorityDrag() {
+    $('vb-priority-list')?.querySelectorAll('.is-dragging, .is-drop-target').forEach((el) => {
+      el.classList.remove('is-dragging', 'is-drop-target');
+    });
+  }
+
+  function vbMovePriority(from, to) {
+    if (to < 0 || to >= vbPriorityDraft.length || from === to) {
+      return;
+    }
+    const [row] = vbPriorityDraft.splice(from, 1);
+    vbPriorityDraft.splice(to, 0, row);
+    vbRenderPriorityList();
+  }
+
+  function vbRenderPriorityPicker() {
+    const host = $('vb-priority-picker-list');
+    if (!host || !vbPriorityCatalog) {
+      return;
+    }
+    const query = String($('vb-priority-search')?.value || '').trim().toLowerCase();
+    const taken = new Set(vbPriorityDraft.map((rule) => rule.source));
+    host.innerHTML = '';
+    let shown = 0;
+    for (const group of vbPriorityCatalog.groups || []) {
+      const events = (vbPriorityCatalog.events || []).filter((item) => {
+        if (item.group !== group.id || taken.has(item.source)) return false;
+        if (!query) return true;
+        return `${item.label} ${item.source} ${item.hint}`.toLowerCase().includes(query);
+      });
+      if (!events.length) continue;
+      const label = document.createElement('div');
+      label.className = 'vb-priority-group-label';
+      label.textContent = group.label;
+      host.append(label);
+      for (const item of events) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vb-priority-choice';
+        const title = document.createElement('strong');
+        title.textContent = item.label;
+        const hint = document.createElement('span');
+        hint.textContent = item.defaultHold ? 'Hold' : 'Jump';
+        button.append(title, hint);
+        button.addEventListener('click', () => {
+          vbPriorityDraft.push({
+            source: item.source,
+            jump: true,
+            hold: Boolean(item.defaultHold),
+            holdMinutes: item.defaultHoldMinutes || 30,
+          });
+          const picker = $('vb-priority-picker');
+          if (picker) picker.hidden = true;
+          vbRenderPriorityList();
+        });
+        host.append(button);
+        shown += 1;
+      }
+    }
+    if (!shown) {
+      const none = document.createElement('p');
+      none.className = 'hint';
+      none.textContent = query ? 'Nothing matches.' : 'Every event in the catalog is already on the list.';
+      host.append(none);
     }
   }
 
@@ -18558,6 +18848,70 @@
 
   $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   $('btn-vb-cancel')?.addEventListener('click', () => vbCloseForm());
+  $('btn-vb-priority-close')?.addEventListener('click', () => vbClosePriorities());
+  registerSheetDismiss('vb-priority-sheet', () => vbClosePriorities());
+  $('btn-vb-priority-add')?.addEventListener('click', () => {
+    const picker = $('vb-priority-picker');
+    if (!picker) return;
+    picker.hidden = !picker.hidden;
+    if (!picker.hidden) {
+      vbRenderPriorityPicker();
+      $('vb-priority-search')?.focus();
+    }
+  });
+  $('vb-priority-search')?.addEventListener('input', () => vbRenderPriorityPicker());
+  $('btn-vb-priority-reset')?.addEventListener('click', () => {
+    const sheet = $('vb-priority-reset-sheet');
+    if (sheet) sheet.hidden = false;
+  });
+  function vbClosePriorityReset() {
+    const sheet = $('vb-priority-reset-sheet');
+    if (sheet) sheet.hidden = true;
+  }
+  $('vb-priority-reset-cancel')?.addEventListener('click', () => vbClosePriorityReset());
+  $('vb-priority-reset-confirm')?.addEventListener('click', () => {
+    vbPriorityDraft = vbClonePriorities(vbPriorityCatalog?.defaults || []);
+    vbRenderPriorityList();
+    vbClosePriorityReset();
+  });
+  registerSheetDismiss('vb-priority-reset-sheet', () => vbClosePriorityReset());
+  $('btn-vb-priority-save')?.addEventListener('click', async () => {
+    const board = vbBoards.find((entry) => entry.id === vbPriorityBoardId);
+    if (!board) {
+      toast('That board is gone', 'bad');
+      return;
+    }
+    const button = $('btn-vb-priority-save');
+    if (button) button.disabled = true;
+    try {
+      const data = await apiPost('/api/vestaboards', {
+        id: board.id,
+        name: board.name,
+        baseUrl: board.baseUrl || '',
+        dwellSeconds: board.dwellSeconds,
+        enabled: board.enabled,
+        simulator: board.simulator,
+        quietHours: {
+          start: board.quietHours?.start || '22:00',
+          end: board.quietHours?.end || '07:00',
+          enabled: board.quietHours?.enabled !== false,
+          remindOnStart: board.quietHours?.remindOnStart !== false,
+        },
+        priorities: vbPriorityDraft,
+      });
+      vbBoards = data.boards || [];
+      if (data.priorityCatalog) {
+        vbPriorityCatalog = data.priorityCatalog;
+      }
+      vbRenderBoards();
+      vbClosePriorities();
+      toast('Priorities saved', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save priorities', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
 
   $('btn-vb-quiet-hours-push')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
@@ -19139,12 +19493,11 @@
 
       if (!animate || vbReducedMotion()) {
         // A later sim.state with the same target must not snap a drum that's
-        // still walking. A stale face on that same target (letters left on
-        // the ocean after a map flip) must still be painted.
-        if (vbFaceMatches(index, code)) {
-          continue;
-        }
-        if ((vbCurrent[index] ?? 0) === code && tile.classList.contains('is-flipping')) {
+        // still walking — or one still waiting on its stagger delay (before
+        // `is-flipping` is set). That race is how you heard vb-flip.wav with
+        // an instant paint and no flaps. A stale face on that same target
+        // (letters left on the ocean after a map flip) is fixed by settle.
+        if ((vbCurrent[index] ?? 0) === code) {
           continue;
         }
         vbStopTile(index);

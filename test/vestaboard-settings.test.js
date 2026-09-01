@@ -63,6 +63,9 @@ test('a half-filled board comes back with everything a queue needs', () => {
     remindOnStart: true,
   });
   assert.equal(board.events, 'all');
+  assert.ok(Array.isArray(board.priorities));
+  assert.ok(board.priorities.some((rule) => rule.source === 'alarm.fired' && rule.jump && !rule.hold));
+  assert.ok(board.priorities.some((rule) => rule.source === 'huupe.session' && rule.hold));
 
   assert.equal(normaliseBoard({ name: 'no id' }), null);
   assert.equal(normaliseBoard({ id: 'x', events: [] }).events, 'all');
@@ -86,6 +89,27 @@ test('adding, editing and removing a board all persist', () => {
 
   assert.equal(settings.remove('kitchen').ok, true);
   assert.equal(settings.get('kitchen'), null);
+});
+
+test('board priorities persist and an omitted field does not wipe them', () => {
+  const { root, settings } = makeSettings();
+  settings.upsert({
+    id: 'kitchen',
+    name: 'Kitchen',
+    priorities: [
+      { source: 'huupe.session', jump: true, hold: true, holdMinutes: 20 },
+    ],
+  });
+  assert.deepEqual(settings.get('kitchen').priorities.map((rule) => rule.source), ['huupe.session']);
+
+  settings.upsert({ id: 'kitchen', name: 'Kitchen board', dwellSeconds: 20 });
+  assert.deepEqual(settings.get('kitchen').priorities.map((rule) => rule.source), ['huupe.session']);
+
+  settings.upsert({ id: 'kitchen', name: 'Kitchen', priorities: [] });
+  assert.deepEqual(settings.get('kitchen').priorities, []);
+
+  const revived = createVestaboardSettings({ config: { ROOT: root }, log: silentLog() });
+  assert.deepEqual(revived.get('kitchen').priorities, []);
 });
 
 test('a key is stored encrypted and never sits in the config in the clear', () => {

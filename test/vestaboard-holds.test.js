@@ -9,7 +9,9 @@ test('alarms, timers, reminders, the doorbell and a spoken announce are the aler
   for (const type of ['alarm.fired', 'timer.fired', 'reminder.fired', 'ring.doorbell', 'broadcast']) {
     const hold = classify({ type }, type);
     assert.equal(hold.lane, 'alert');
-    assert.equal(hold.rank, LANES.alert);
+    assert.equal(hold.jump, true);
+    assert.equal(hold.hold, false);
+    assert.ok(hold.rank > LANES.game);
     assert.equal(hold.source, type);
   }
 
@@ -59,26 +61,27 @@ test('a missing session status still counts as live so score updates coalesce', 
   assert.equal(huupe.coalesceKey, 'huupe.session');
 });
 
-test('detected now-playing is the watch lane; last-played is rotation', () => {
+test('detected now-playing just queues; last-played is rotation too', () => {
   const yt = classify({ type: 'youtube.now-playing', youtube: { mode: 'playing' } }, 'youtube.now-playing');
-  assert.equal(yt.lane, 'watch');
-  assert.equal(yt.live, true);
+  assert.equal(yt.lane, 'rotation');
+  assert.equal(yt.hold, false);
+  assert.equal(yt.live, false);
 
   const ytLast = classify({ type: 'youtube.now-playing', youtube: { mode: 'last-played' } }, 'youtube.now-playing');
   assert.equal(ytLast.lane, 'rotation');
   assert.equal(ytLast.live, false);
 
   const plex = classify({ type: 'plex.now-playing', plex: { mode: 'now-playing' } }, 'plex.now-playing');
-  assert.equal(plex.lane, 'watch');
+  assert.equal(plex.lane, 'rotation');
 
   const plexLast = classify({ type: 'plex.now-playing', plex: { mode: 'last-played' } }, 'plex.now-playing');
   assert.equal(plexLast.lane, 'rotation');
 
   const steam = classify({ type: 'steam.now-playing', steam: { mode: 'playing' } }, 'steam.now-playing');
-  assert.equal(steam.lane, 'watch');
+  assert.equal(steam.lane, 'rotation');
 
   const psn = classify({ type: 'psn.now-playing', psn: { mode: 'playing' } }, 'psn.now-playing');
-  assert.equal(psn.lane, 'watch');
+  assert.equal(psn.lane, 'rotation');
 });
 
 test('close payloads name the source they release', () => {

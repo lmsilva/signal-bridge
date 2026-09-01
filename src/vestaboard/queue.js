@@ -9,13 +9,13 @@
 //   - a rotation page stays for Settings → Dwell (dwellSeconds), even when
 //     the flaps could already take another flip; alerts and live hold cards
 //     still wait only the rate window
-//   - alerts (alarms, timers, reminders, doorbell) jump the line and do not
-//     discard the pages they interrupted — those wait and resume after
-//   - a live hold (game or now-playing) owns the board until it ends or
-//     something of equal or higher rank arrives; score/metadata updates of
-//     the same source replace the live card instead of stacking
-//   - hold ranks: alert > game (scramble / Huupe / Autodarts) > watch
-//     (YouTube / Plex / Steam / PSN) > rotation
+//   - jumpers (alarms, timers, reminders, doorbell, by default) go to the
+//     front, then the queue continues after their dwell — they do not hold
+//   - a live hold (games only, unless the board's Priorities list says
+//     otherwise) owns the board until it ends, an equal/higher jumper
+//     arrives, or the safety timeout fires; score/metadata updates of the
+//     same source replace the live card instead of stacking
+//   - relative rank comes from the board's Priorities list (top = first)
 //   - every other snapshot (manual Push, Air now, scheduler) joins the back
 //     of the line — they do not jump ahead of pages already waiting
 //   - repeats of the same thing replace each other instead of stacking
@@ -27,9 +27,10 @@
 //     (`timeZone`), not the process TZ, so a UTC container does not treat
 //     8pm Utah as 2am quiet.
 //   - a live hold is session-scoped (`laneLock`, still exposed as `gameLock`).
-//     Word Scramble still takes it explicitly (`acquireGameLock`); Huupe,
-//     Autodarts and now-playing acquire it from the payload. The lock is not
-//     inferred from a frame's `holdSeconds`.
+//     Word Scramble still takes it explicitly (`acquireGameLock`); Huupe
+//     and Autodarts acquire it from the payload when the board's list
+//     marks them as holds. The lock is not inferred from a frame's
+//     `holdSeconds`. Now-playing does not hold unless configured.
 //
 // Time and the transport are injected so the whole thing can be tested
 // without waiting fifteen real seconds for anything.
@@ -40,8 +41,8 @@ const {
   LANES,
   GAME_LOCK_TTL_MS,
   isHoldLane,
-  lockTtlMs,
 } = require('./holds');
+const { minutesToMs, normalisePriorities, rankAt } = require('./priorities');
 
 const DEFAULT_RATE_WINDOW_SECONDS = 15;
 const DEFAULT_DWELL_SECONDS = 15;
@@ -139,9 +140,9 @@ function createQueue({
     /** `guest` parks scheduler pages only, for the length of `holdUntil`. */
     holdKind: null,
     /**
-     * A live hold owns the board: `{ source, lane, expiresAt }`. Games
-     * (scramble / Huupe / Autodarts) and now-playing (YouTube / Plex /
-     * Steam / PSN) take this; alerts do not — they are timed dwells.
+     * A live hold owns the board: `{ source, lane, rank, expiresAt }`.
+     * Games take this when the board's Priorities list says Hold.
+     * Jumpers (alarms, the doorbell) do not — they are timed dwells.
      * `gameLock` stays in sync as the public alias the simulator pill reads.
      */
     laneLock: null,
@@ -296,12 +297,38 @@ function createQueue({
 
   const ownedByGame = ownedByLock;
 
-  function acquireLaneLock(source, lane = 'game', { ttlMs } = {}) {
+  function policyFor(source) {
+    const policy = normalisePriorities(config.priorities == null ? null : config.priorities);
+    const index = policy.findIndex((rule) => rule.source === source);
+    if (index < 0) {
+      return { rank: LANES.game, ttlMs: GAME_LOCK_TTL_MS };
+    }
+    const rule = policy[index];
+    return {
+      rank: rankAt(policy, index),
+      ttlMs: rule.hold ? minutesToMs(rule.holdMinutes, source) : GAME_LOCK_TTL_MS,
+    };
+  }
+
+  function lockRankOf(lock) {
+    if (!lock) return 0;
+    if (Number.isFinite(lock.rank)) return lock.rank;
+    return LANES[lock.lane] || 0;
+  }
+
+  function acquireLaneLock(source, lane = 'game', { ttlMs, rank } = {}) {
     const owner = String(source || '');
     if (!owner || !isHoldLane(lane)) return false;
-    const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : lockTtlMs(lane);
+    const policy = policyFor(owner);
+    const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : policy.ttlMs;
+    const storedRank = Number.isFinite(rank) ? rank : policy.rank;
     const fresh = state.laneLock?.source !== owner;
-    state.laneLock = { source: owner, lane, expiresAt: now() + ttl };
+    state.laneLock = {
+      source: owner,
+      lane,
+      rank: storedRank,
+      expiresAt: now() + ttl,
+    };
     syncGameLockAlias();
     if (fresh) announceQueue();
     return true;
@@ -319,11 +346,15 @@ function createQueue({
   }
 
   function itemHeld(item, at = now()) {
-    // A live hold owns the board. Rotation waits. Alerts still get through
-    // — they outrank games and now-playing.
+    // A live hold owns the board. Rotation waits. A jumper only gets
+    // through when it outranks the lock (alarms sit above games by default).
     if (laneLockActive(at)) {
       if (ownedByLock(item)) return false;
-      if (item.priority === 'alert' || item.lane === 'alert') return false;
+      const itemRank = Number.isFinite(item.rank) ? item.rank : (LANES[item.lane] || 0);
+      if ((item.priority === 'alert' || item.lane === 'alert')
+        && itemRank > lockRankOf(state.laneLock)) {
+        return false;
+      }
       return true;
     }
     if (item.priority === 'alert') return false;
@@ -408,16 +439,19 @@ function createQueue({
       options.payload || {},
       options.type || firstSource,
       firstSource,
+      { priorities: options.priorities || config.priorities },
     );
     // Unit tests (and testFlip) still pass priority: 'alert' without a
-    // classified hold. Do not let that override a real game/watch lane —
+    // classified hold. Do not let that override a real game lane —
     // Huupe used to arrive as an alert and stack a page per shot.
     if (options.priority === 'alert' && hold.lane === 'rotation') {
       hold = {
         ...hold,
         lane: 'alert',
-        rank: LANES.alert,
-        live: true,
+        rank: Number.MAX_SAFE_INTEGER,
+        live: false,
+        jump: true,
+        hold: false,
       };
     }
     return hold;
@@ -440,10 +474,11 @@ function createQueue({
   /**
    * Take frames for the board.
    *
-   * Rotation snapshots queue in order. Alerts jump the line without throwing
-   * the rest away. A live hold (game / now-playing) keeps the board until it
-   * ends or an equal/higher lane arrives; updates of the same source replace
-   * the live card instead of stacking.
+   * Rotation snapshots queue in order. Jumpers go to the front without
+   * throwing the rest away, then the queue continues after their dwell.
+   * A live hold keeps the board until it ends, a higher-ranked jumper
+   * arrives, or the safety timeout fires; updates of the same source
+   * replace the live card instead of stacking.
    */
   function submit(frames, options = {}) {
     const offered = (Array.isArray(frames) ? frames : [frames]).filter(Boolean);
@@ -493,13 +528,14 @@ function createQueue({
         existing.frame = list[0];
         existing.priority = priority;
         existing.lane = hold.lane;
+        existing.rank = hold.rank;
         existing.quietHoursExempt = isExempt(list[0], options.quietHoursExempt);
         coalesceSeen.set(coalesceKey, at);
         if (hold.live && isHoldLane(hold.lane)) {
-          acquireLaneLock(hold.source, hold.lane);
+          acquireLaneLock(hold.source, hold.lane, { ttlMs: hold.ttlMs, rank: hold.rank });
         } else if (isHoldLane(hold.lane) && laneLockActive(at)
           && state.laneLock.source === hold.source) {
-          acquireLaneLock(hold.source, hold.lane);
+          acquireLaneLock(hold.source, hold.lane, { ttlMs: hold.ttlMs, rank: hold.rank });
         }
         log?.debug?.(`Vestaboard ${config.id} coalesce replace ${coalesceKey}`);
         announceQueue();
@@ -515,6 +551,7 @@ function createQueue({
       frame,
       priority,
       lane: hold.lane,
+      rank: hold.rank,
       // Only the first page may go immediately; later pages get their time
       // when the page before them actually lands.
       notBefore: null,
@@ -541,21 +578,23 @@ function createQueue({
     }
 
     const lockNow = laneLockActive(at) ? state.laneLock : null;
-    const lockRank = lockNow ? (LANES[lockNow.lane] || 0) : 0;
+    const lockRank = lockRankOf(lockNow);
+    const offeredRank = Number.isFinite(hold.rank) ? hold.rank : (LANES[hold.lane] || 0);
     const offeredSource = String(
       options.gameSource || hold.source || list[0].source || options.replaceSource || '',
     );
     const mine = Boolean(lockNow && offeredSource === lockNow.source);
-    const preempt = hold.lane === 'alert'
-      || (lockNow && hold.rank > lockRank)
-      || (lockNow && hold.rank === lockRank && !mine && (hold.live || hold.lane === 'alert'));
+    const preempt = Boolean(lockNow) && (
+      offeredRank > lockRank
+      || (offeredRank === lockRank && !mine && (hold.hold || hold.live || hold.jump))
+    );
     const takesBoard = !lockNow || mine || preempt;
 
     if (isHoldLane(hold.lane) && takesBoard) {
       if (hold.live) {
-        acquireLaneLock(hold.source, hold.lane);
+        acquireLaneLock(hold.source, hold.lane, { ttlMs: hold.ttlMs, rank: hold.rank });
       } else if (lockNow && lockNow.source === hold.source) {
-        acquireLaneLock(hold.source, hold.lane);
+        acquireLaneLock(hold.source, hold.lane, { ttlMs: hold.ttlMs, rank: hold.rank });
       }
     }
 

@@ -5366,6 +5366,236 @@ textarea.field-input.text-input-area {
 .vb-board-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .vb-board-actions .btn.confirming { border-color: var(--danger); color: var(--danger); }
 
+.vb-priority-sheet {
+  max-width: min(720px, calc(100vw - 24px));
+  max-height: min(88dvh, 820px);
+}
+.vb-priority-sheet > .vb-priority-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -2px;
+  padding: 0 2px;
+}
+.vb-priority-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 8px;
+}
+.vb-priority-toolbar .hint {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vb-priority-toolbar .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.vb-priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vb-priority-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+}
+.vb-priority-row.is-holding {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+.vb-priority-row.is-caution {
+  border-color: rgba(251, 191, 36, 0.45);
+}
+.vb-priority-row.is-dragging {
+  opacity: 0.55;
+}
+.vb-priority-row.is-drop-target {
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.08);
+}
+.vb-priority-handle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-dim);
+  user-select: none;
+  flex: 0 0 auto;
+}
+.vb-priority-grip {
+  cursor: grab;
+  letter-spacing: -0.12em;
+  line-height: 1;
+  padding: 4px 3px;
+  font-size: 0.85rem;
+}
+.vb-priority-move {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  width: 24px;
+  height: 28px;
+  line-height: 1;
+  padding: 0;
+  font-size: 0.7rem;
+}
+.vb-priority-move:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+.vb-priority-move:disabled {
+  opacity: 0.28;
+}
+.vb-priority-rank {
+  flex: 0 0 1.4rem;
+  text-align: right;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.vb-priority-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 650;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vb-priority-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.vb-priority-controls .trivia-check {
+  margin: 0;
+  gap: 5px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.vb-priority-minutes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.vb-priority-minutes input {
+  width: 3.4rem;
+  min-height: 28px;
+  padding: 2px 4px;
+  text-align: center;
+  font-size: 0.82rem;
+}
+.vb-priority-remove {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+  font-size: 1.15rem;
+  padding: 0;
+  cursor: pointer;
+}
+.vb-priority-remove:hover {
+  color: var(--danger, #f87171);
+  background: rgba(248, 113, 113, 0.1);
+}
+.vb-priority-empty {
+  text-align: center;
+  padding: 14px 8px;
+}
+.vb-priority-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.vb-priority-actions .btn {
+  flex: 1 1 0;
+}
+.vb-priority-picker {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+}
+.vb-priority-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: min(48dvh, 360px);
+  overflow-y: auto;
+  margin-top: 6px;
+}
+.vb-priority-group-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 6px 2px 1px;
+}
+.vb-priority-choice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.vb-priority-choice strong {
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+.vb-priority-choice span {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .vb-priority-toolbar {
+    flex-wrap: wrap;
+  }
+  .vb-priority-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px 8px;
+    padding: 7px 8px;
+  }
+  .vb-priority-controls {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 2.6rem;
+    justify-content: space-between;
+  }
+  .vb-priority-actions {
+    flex-direction: column;
+  }
+}
+
 .vb-board-form { display: block; margin-top: 14px; }
 .vb-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
 .vb-form-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

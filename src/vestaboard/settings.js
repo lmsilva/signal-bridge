@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { createSecretBox } = require('../secret-box');
+const { normalisePriorities } = require('./priorities');
 
 const SIMULATOR_ID = 'sim';
 
@@ -80,6 +81,7 @@ function normaliseBoard(input = {}) {
     quietHours: normaliseQuietHours(input.quietHours),
     events: normaliseEvents(input.events),
     tokenEnv: String(input.tokenEnv || '').trim(),
+    priorities: normalisePriorities(input.priorities),
   };
 }
 
@@ -223,11 +225,16 @@ function createVestaboardSettings({
   }
 
   function upsert(input) {
-    const board = normaliseBoard(input);
+    const existing = boards.get(cleanId(input?.id));
+    const merged = { ...(input || {}) };
+    // Edit / Quiet Hours Reminder omit this field — keep the saved list.
+    if (!Object.prototype.hasOwnProperty.call(input || {}, 'priorities') && existing) {
+      merged.priorities = existing.priorities;
+    }
+    const board = normaliseBoard(merged);
     if (!board) {
       return { ok: false, error: 'A board needs an id' };
     }
-    const existing = boards.get(board.id);
     if (existing?.simulator) {
       // The simulator's identity and address are ours, not the user's; only
       // the parts that make sense to tune are taken from the form.
@@ -236,7 +243,7 @@ function createVestaboardSettings({
     }
     boards.set(board.id, board);
 
-    if (typeof input.key === 'string' && input.key.trim()) {
+    if (typeof input?.key === 'string' && input.key.trim()) {
       keys.set(board.id, box.encrypt(input.key.trim()));
     }
 

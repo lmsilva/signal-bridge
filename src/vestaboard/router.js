@@ -188,11 +188,20 @@ function routeEvent({
 } = {}) {
   const type = typeOf(payload, commandId);
   const formatter = formatterFor(type);
-  const hold = classifyHold(payload, type);
   const targets = matchBoards(boards, targetId);
   const results = [];
 
+  function holdFor(entry, frames = [], extra = {}) {
+    if (extra.hold) {
+      return extra.hold;
+    }
+    return classifyHold(payload, type, frames[0]?.source, {
+      priorities: extra.priorities || entry.board?.priorities,
+    });
+  }
+
   function submitHold(entry, frames, extra = {}) {
+    const hold = holdFor(entry, frames, extra);
     const priority = extra.priority
       || (hold.lane === 'alert' ? 'alert' : 'snapshot');
     let replaceSource = null;
@@ -216,7 +225,7 @@ function routeEvent({
         : undefined,
       gameSource: gameSourceOpt != null && gameSourceOpt !== ''
         ? String(gameSourceOpt)
-        : (hold.lane === 'game' || hold.lane === 'watch' ? hold.source : undefined),
+        : (hold.hold || hold.lane === 'game' ? hold.source : undefined),
       breakHold: breakHold != null
         ? Boolean(breakHold)
         : false,
@@ -227,14 +236,15 @@ function routeEvent({
     });
   }
 
-  if (hold.close) {
+  const closeHold = classifyHold(payload, type);
+  if (closeHold.close) {
     for (const entry of targets) {
       if (!boardAllows(entry.board, type, commandId)
-        && !boardAllows(entry.board, hold.source, commandId)) {
+        && !boardAllows(entry.board, closeHold.source, commandId)) {
         results.push({ boardId: entry.board.id, skipped: true, reason: 'allowlist' });
         continue;
       }
-      const outcome = submitHold(entry, []);
+      const outcome = submitHold(entry, [], { hold: closeHold });
       results.push({
         boardId: entry.board.id,
         skipped: false,
@@ -285,8 +295,8 @@ function routeEvent({
 
     // guest.book messages append. Host bulk release/replay still passes
     // replaceSource on the first item when it wants a clean start.
-    // Lane — not the frame's visual priority — decides alerts vs snapshots
-    // so a Huupe scoreboard cannot wipe the queue the way a timer can.
+    // The board's Priorities list — not the frame's visual priority —
+    // decides jump vs hold so a Huupe scoreboard cannot wipe the queue.
     const outcome = submitHold(entry, frames);
     results.push({
       boardId: entry.board.id,
