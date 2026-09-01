@@ -5385,6 +5385,39 @@ textarea.field-input.text-input-area {
 .vb-row-time { color: var(--text-dim); font-variant-numeric: tabular-nums; flex: none; }
 .vb-row-result { font-variant-numeric: tabular-nums; flex: none; }
 
+.vb-queue-row {
+  align-items: center;
+  cursor: default;
+  user-select: none;
+  touch-action: none;
+}
+.vb-queue-row.dragging {
+  opacity: 0.72;
+  outline: 1px solid var(--line);
+}
+.vb-queue-handle,
+.vb-queue-cancel {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 4px 2px;
+  line-height: 1;
+  font: inherit;
+}
+.vb-queue-handle {
+  cursor: grab;
+  letter-spacing: -0.12em;
+  font-size: 1rem;
+}
+.vb-queue-row.dragging .vb-queue-handle { cursor: grabbing; }
+.vb-queue-cancel {
+  cursor: pointer;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.vb-queue-cancel:hover { color: var(--danger); }
+
 /* The call log is for debugging, so it stays folded away until asked for. */
 .vb-advanced > summary {
   cursor: pointer;

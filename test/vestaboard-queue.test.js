@@ -738,17 +738,33 @@ test('replaceSource drops earlier pages from the same guest book run', async () 
   assert.equal(h.queue.pending()[0].label, 'NEW');
 });
 
-test('a held scheduler page does not block an explicit Air now behind it', async () => {
+test('a held scheduler page keeps a later Push waiting its turn', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);
   assert.equal(await h.queue.tick(), 'posted');
   h.queue.submit([frame('INVITE', 2)], { scheduler: true });
   h.queue.submit([frame('CLOCK', 3)]);
   assert.equal(h.queue.pending()[0].status, 'held');
+  assert.equal(h.queue.pending()[1].label, 'CLOCK');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null);
+  assert.equal(h.transport.posts.length, 1);
+  h.advance(300 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2, 'the scheduler page that was already waiting');
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
-  assert.equal(h.transport.posts[1].layout[0][0], 3);
-  assert.equal(h.queue.pending()[0].label, 'INVITE');
+  assert.equal(h.transport.posts[2].layout[0][0], 3, 'the push that joined the back');
+});
+
+test('a manual push joins the back of the queue instead of jumping it', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([frame('WEATHER', 1)], { scheduler: true });
+  h.queue.submit([frame('CHUCK', 2)]);
+  h.queue.submit([frame('AIR NOW', 3)], { explicit: true });
+  assert.deepEqual(h.queue.pending().map((row) => row.label), ['WEATHER', 'CHUCK', 'AIR NOW']);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[0].layout[0][0], 1);
 });
 
 test('a held page that is already on the board is dropped instead of parking the line', async () => {
@@ -759,6 +775,27 @@ test('a held page that is already on the board is dropped instead of parking the
   h.advance(16 * SECOND);
   assert.equal(await h.queue.tick(), 'duplicate');
   assert.equal(h.queue.pending().length, 0);
+});
+
+test('cancel drops one waiting page and leaves the rest', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('WEATHER', 1)]);
+  h.queue.submit([frame('CHUCK', 2)]);
+  h.queue.submit([frame('CLOCK', 3)]);
+  const id = h.queue.pending()[1].id;
+  assert.equal(h.queue.cancel(id), true);
+  assert.deepEqual(h.queue.pending().map((row) => row.label), ['WEATHER', 'CLOCK']);
+  assert.equal(h.queue.cancel('missing'), false);
+});
+
+test('reorder puts waiting pages in the given order', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('WEATHER', 1)]);
+  h.queue.submit([frame('CHUCK', 2)]);
+  h.queue.submit([frame('CLOCK', 3)]);
+  const ids = h.queue.pending().map((row) => row.id);
+  const next = h.queue.reorder([ids[2], ids[0], ids[1]]);
+  assert.deepEqual(next.map((row) => row.label), ['CLOCK', 'WEATHER', 'CHUCK']);
 });
 
 test('breakHold puts an explicit snapshot in front of parked scheduler pages', async () => {

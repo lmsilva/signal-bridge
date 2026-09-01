@@ -5290,9 +5290,10 @@ function createWebServer({
       ...params,
       device,
       targetId: deliveryId,
-      // Air now is a human press — same path as the Push tile (explicit, jumps
-      // the rotation gap). Quiet hours still apply: only alarm/timer fires
-      // reach the board unless the caller opts in. Automated ticks stay soft.
+      // Air now is a human press — same path as the Push tile (explicit,
+      // still waits its turn in the board queue). Quiet hours still apply:
+      // only alarm/timer fires reach the board unless the caller opts in.
+      // Automated ticks stay soft. Game invites pass breakHold themselves.
       triggeredBy: manual ? 'manual' : 'scheduler',
     };
 
@@ -5300,7 +5301,7 @@ function createWebServer({
       source: manual ? 'manual' : 'scheduler',
       scheduler: !manual,
       explicit: Boolean(manual),
-      breakHold: Boolean(manual),
+      breakHold: false,
       targetId: deliveryId,
     };
     try {
@@ -7061,6 +7062,42 @@ function createWebServer({
     displayRegistry?.announce?.({ simulatorOnline: state.online });
     log.info(`Vestaboard simulator turned ${state.online ? 'on' : 'off'}`);
     sendJson(res, 200, { ok: true, state });
+  }
+
+  function vestaboardSimQueueApi() {
+    return vestaboardHub?.queueFor?.(SIMULATOR_ID) || null;
+  }
+
+  function handleVestaboardSimQueueCancel(body, res) {
+    const queue = vestaboardSimQueueApi();
+    if (!queue) {
+      sendJson(res, 404, { ok: false, error: 'Simulator queue is not running' });
+      return;
+    }
+    const id = String(body?.id || '').trim();
+    if (!id) {
+      sendJson(res, 400, { ok: false, error: 'id is required' });
+      return;
+    }
+    if (!queue.cancel(id)) {
+      sendJson(res, 404, { ok: false, error: 'That page is no longer queued' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, queue: vestaboardSimQueue() });
+  }
+
+  function handleVestaboardSimQueueReorder(body, res) {
+    const queue = vestaboardSimQueueApi();
+    if (!queue) {
+      sendJson(res, 404, { ok: false, error: 'Simulator queue is not running' });
+      return;
+    }
+    const ids = Array.isArray(body?.ids) ? body.ids.map((id) => String(id || '').trim()).filter(Boolean) : null;
+    if (!ids) {
+      sendJson(res, 400, { ok: false, error: 'ids must be an array' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, queue: queue.reorder(ids) });
   }
 
   function handlePhotoDelete(body, res) {
@@ -9232,6 +9269,12 @@ function createWebServer({
             return;
           case '/api/vestaboard-sim/online':
             handleVestaboardSimOnline(body, res);
+            return;
+          case '/api/vestaboard-sim/queue/cancel':
+            handleVestaboardSimQueueCancel(body, res);
+            return;
+          case '/api/vestaboard-sim/queue/reorder':
+            handleVestaboardSimQueueReorder(body, res);
             return;
           case '/api/vestaboards':
             handleVestaboardSave(body, res);

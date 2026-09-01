@@ -259,7 +259,7 @@ function routeEvent({
         : undefined,
       breakHold: breakHold != null
         ? Boolean(breakHold)
-        : Boolean(explicit && !scheduler),
+        : false,
     });
     results.push({
       boardId: entry.board.id,
