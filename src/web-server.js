@@ -138,6 +138,8 @@ const {
   clearTinyurlToken,
   credentialsStatus: tinyurlCredentialsStatus,
 } = require('./tinyurl-credentials');
+const partyPrompts = require('./party-prompts');
+const wheelOfFortune = require('./wheel-of-fortune');
 const { createGameSettings } = require('./games/settings');
 const { createGameArchive } = require('./games/archive');
 const { createGameSessions, parseCookie: parseGamesCookie, cookieHeader: gamesCookieHeader } = require('./games/sessions');
@@ -2477,6 +2479,24 @@ function createWebServer({
     });
   }
 
+  /**
+   * Every game sends phones to the same `/games/` page and they sort
+   * themselves out by code, so there is one short link and one alias. Both
+   * invites ensure it before they post, and the Party Prompts settings card
+   * edits the same value the Word Scramble card shows.
+   */
+  async function ensureGamesShortlink(label = 'Games') {
+    const alias = gameSettings.alias();
+    if (alias) {
+      try {
+        await shortlinks.ensure(GAMES_NAME, GAMES_PATH, { preferredAlias: alias });
+      } catch (error) {
+        log.warn?.(`${label} short link failed`, error?.message || error);
+      }
+    }
+    return shortlinks.status(GAMES_NAME);
+  }
+
   function scrambleSettingsPayload() {
     const settings = gameSettings.get('scramble');
     return {
@@ -2537,36 +2557,120 @@ function createWebServer({
     if (Object.keys(patch).length) {
       gameSettings.update('scramble', patch);
     }
-    const settings = gameSettings.get('scramble');
-    let shortlink = shortlinks.status(GAMES_NAME);
-    if (settings.preferredAlias) {
-      try {
-        await shortlinks.ensure(GAMES_NAME, GAMES_PATH, {
-          preferredAlias: settings.preferredAlias,
-        });
-        shortlink = shortlinks.status(GAMES_NAME);
-      } catch (error) {
-        log.warn?.('Word Scramble short link failed', error?.message || error);
-      }
-    }
+    const shortlink = await ensureGamesShortlink('Word Scramble');
     sendJson(res, 200, { ...scrambleSettingsPayload(), shortlink });
   }
 
   async function handleWordScramblePush(body, res) {
     try {
-      const settings = gameSettings.get('scramble');
-      if (settings.preferredAlias) {
-        try {
-          await shortlinks.ensure(GAMES_NAME, GAMES_PATH, {
-            preferredAlias: settings.preferredAlias,
-          });
-        } catch (error) {
-          log.warn?.('Word Scramble invite short link failed', error?.message || error);
-        }
-      }
+      await ensureGamesShortlink('Word Scramble');
       const session = gameSessions.create({ gameType: 'scramble' });
       log.info('Word Scramble invite', { code: session.code });
       sendJson(res, 200, { ok: true, type: 'word.scramble', session });
+    } catch (error) {
+      sendJson(res, 409, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function partyPromptsSettingsPayload() {
+    return {
+      ok: true,
+      settings: gameSettings.get('prompts'),
+      promptCount: partyPrompts.loadPrompts().length,
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'games' }),
+      shortlink: shortlinks.status(GAMES_NAME),
+      targetPath: GAMES_PATH,
+      targetUrl: publicUrl(GAMES_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
+      preferredAlias: gameSettings.alias(),
+      ...publicUrlEnvNote(),
+    };
+  }
+
+  function handlePartyPromptsSettingsGet(res) {
+    sendJson(res, 200, partyPromptsSettingsPayload());
+  }
+
+  async function handlePartyPromptsSettingsPut(body, res) {
+    const patch = {};
+    for (const key of [
+      'lobbySeconds', 'roundSeconds', 'votingSeconds', 'intermissionSeconds',
+      'rounds', 'inviteTtlMinutes', 'idleTimeoutSeconds', 'maxPlayers',
+      'minPlayers', 'allowLateJoin',
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+        patch[key] = body[key];
+      }
+    }
+    if (Object.keys(patch).length) {
+      gameSettings.update('prompts', patch);
+    }
+    // The alias belongs to `/games/`, not to one game, so editing it here is
+    // editing the same value the Word Scramble card shows.
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'preferredAlias')) {
+      gameSettings.setAlias(body.preferredAlias);
+    }
+    const shortlink = await ensureGamesShortlink('Party Prompts');
+    sendJson(res, 200, { ...partyPromptsSettingsPayload(), shortlink });
+  }
+
+  async function handlePartyPromptsPush(body, res) {
+    try {
+      await ensureGamesShortlink('Party Prompts');
+      const session = gameSessions.create({ gameType: 'prompts' });
+      log.info('Party Prompts invite', { code: session.code });
+      sendJson(res, 200, { ok: true, type: 'party.prompts', session });
+    } catch (error) {
+      sendJson(res, 409, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function wheelOfFortuneSettingsPayload() {
+    return {
+      ok: true,
+      settings: gameSettings.get('wheel'),
+      puzzleCount: wheelOfFortune.loadPuzzles().length,
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'games' }),
+      shortlink: shortlinks.status(GAMES_NAME),
+      targetPath: GAMES_PATH,
+      targetUrl: publicUrl(GAMES_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
+      preferredAlias: gameSettings.alias(),
+      ...publicUrlEnvNote(),
+    };
+  }
+
+  function handleWheelOfFortuneSettingsGet(res) {
+    sendJson(res, 200, wheelOfFortuneSettingsPayload());
+  }
+
+  async function handleWheelOfFortuneSettingsPut(body, res) {
+    const patch = {};
+    for (const key of [
+      'lobbySeconds', 'turnSeconds', 'roundSeconds', 'intermissionSeconds',
+      'rounds', 'inviteTtlMinutes', 'idleTimeoutSeconds', 'maxPlayers',
+      'minPlayers', 'allowLateJoin',
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+        patch[key] = body[key];
+      }
+    }
+    if (Object.keys(patch).length) {
+      gameSettings.update('wheel', patch);
+    }
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'preferredAlias')) {
+      gameSettings.setAlias(body.preferredAlias);
+    }
+    const shortlink = await ensureGamesShortlink('Wheel of Fortune');
+    sendJson(res, 200, { ...wheelOfFortuneSettingsPayload(), shortlink });
+  }
+
+  async function handleWheelOfFortunePush(body, res) {
+    try {
+      await ensureGamesShortlink('Wheel of Fortune');
+      const session = gameSessions.create({ gameType: 'wheel' });
+      log.info('Wheel of Fortune invite', { code: session.code });
+      sendJson(res, 200, { ok: true, type: 'wheel.fortune', session });
     } catch (error) {
       sendJson(res, 409, { ok: false, error: error?.message || String(error) });
     }
@@ -2623,12 +2727,35 @@ function createWebServer({
     sendJson(res, 200, { ok: true, session: gameSessions.publicSession(session) });
   }
 
+  /**
+   * Which seat is acting. The cookie is per browser, so two players sharing
+   * one laptop (two windows) used to collapse onto a single seat and drive
+   * each other's turn. A tab that knows its own player id wins, as long as
+   * that player really is in the session it names.
+   */
+  function seatFor(req, body = {}, sessionIdHint = '') {
+    const cookie = parseGamesCookie(req.headers.cookie);
+    const askedSession = String(sessionIdHint || body?.sessionId || '').trim() || cookie.sessionId;
+    const askedPlayer = String(body?.playerId || '').trim();
+    if (askedSession && askedPlayer) {
+      const session = gameSessions.getById(askedSession);
+      if (session?.players?.some((player) => player.id === askedPlayer)) {
+        return { sessionId: askedSession, playerId: askedPlayer };
+      }
+    }
+    return cookie;
+  }
+
   function handleGamesJoin(body, req, res) {
     const seated = parseGamesCookie(req.headers.cookie);
+    const asked = String(body?.playerId || '').trim();
+    // `newSeat` is the tab saying it holds no seat of its own — mint a fresh
+    // player rather than handing it whoever this browser last sat down as.
+    const claimed = asked || (body?.newSeat === true ? '' : seated.playerId);
     const result = gameSessions.join({
       code: body?.code,
       name: body?.name,
-      playerId: seated.playerId,
+      playerId: claimed,
     });
     if (!result.ok) {
       sendJson(res, 400, result);
@@ -2648,7 +2775,7 @@ function createWebServer({
   }
 
   function handleGamesSubmit(body, req, res) {
-    const seated = parseGamesCookie(req.headers.cookie);
+    const seated = seatFor(req, body);
     const result = gameSessions.submit({
       sessionId: seated.sessionId || body?.sessionId,
       playerId: seated.playerId,
@@ -2658,8 +2785,8 @@ function createWebServer({
     sendJson(res, result.ok ? 200 : 400, result);
   }
 
-  function handleGamesLeave(req, res) {
-    const seated = parseGamesCookie(req.headers.cookie);
+  function handleGamesLeave(body, req, res) {
+    const seated = seatFor(req, body);
     const result = gameSessions.leave({
       sessionId: seated.sessionId,
       playerId: seated.playerId,
@@ -2674,8 +2801,10 @@ function createWebServer({
       sendJson(res, 404, { ok: false, error: 'Session not found' });
       return;
     }
-    // The cookie decides whose found-words list rides along on this stream.
-    const seated = parseGamesCookie(req.headers.cookie);
+    // Whose found-words list (and whose turn) rides along on this stream. The
+    // tab names its own seat; the cookie is only the fallback.
+    const asked = String(reqUrl.searchParams.get('playerId') || '').trim();
+    const seated = seatFor(req, { sessionId, playerId: asked }, sessionId);
     const playerId = seated.sessionId === sessionId ? seated.playerId : '';
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -5418,6 +5547,10 @@ function createWebServer({
           handleLearnLanguagePush('italian', body, res); break;
         case 'scramble.invite':
           await handleWordScramblePush(body, res); break;
+        case 'prompts.invite':
+          await handlePartyPromptsPush(body, res); break;
+        case 'wheel.invite':
+          await handleWheelOfFortunePush(body, res); break;
         case 'word.riddles':
           handleWordRiddlesPush(body, res); break;
         case 'chuck.facts':
@@ -8766,6 +8899,8 @@ function createWebServer({
       const vGamesJs = assetVersionBeside(filePath, 'games.js');
       const vGamesCss = assetVersionBeside(filePath, 'games.css');
       const vScrambleJs = assetVersionBeside(filePath, 'scramble.js');
+      const vPartyPromptsJs = assetVersionBeside(filePath, 'party-prompts.js');
+      const vWheelJs = assetVersionBeside(filePath, 'wheel.js');
       const vLandingCss = assetVersionBeside(filePath, 'landing.css');
       let vFlap = String(Date.now());
       let vBezel = String(Date.now());
@@ -8789,6 +8924,8 @@ function createWebServer({
         .replace(/(href="(?:\.\/)?games\.css)(?:\?[^"]*)?(")/, `$1?v=${vGamesCss}$2`)
         .replace(/(src="(?:\.\/)?games\.js)(?:\?[^"]*)?(")/, `$1?v=${vGamesJs}$2`)
         .replace(/(src="(?:\.\/)?scramble\.js)(?:\?[^"]*)?(")/, `$1?v=${vScrambleJs}$2`)
+        .replace(/(src="(?:\.\/)?party-prompts\.js)(?:\?[^"]*)?(")/, `$1?v=${vPartyPromptsJs}$2`)
+        .replace(/(src="(?:\.\/)?wheel\.js)(?:\?[^"]*)?(")/, `$1?v=${vWheelJs}$2`)
         .replace(/(href="(?:\.\/)?landing\.css)(?:\?[^"]*)?(")/, `$1?v=${vLandingCss}$2`)
         .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`)
         .replace(/(href="(?:\/)?vestaboard-bezel\.css)(?:\?[^"]*)?(")/, `href="/vestaboard-bezel.css?v=${vBezel}"`);
@@ -9250,6 +9387,16 @@ function createWebServer({
           handleWordScrambleSettingsGet(res);
           return;
         }
+        if (pathname === '/api/party-prompts/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handlePartyPromptsSettingsGet(res);
+          return;
+        }
+        if (pathname === '/api/wheel-of-fortune/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleWheelOfFortuneSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/game-sessions') {
           if (!requireAdminSession(req, res)) return;
           handleGameSessionsGet(res);
@@ -9659,6 +9806,18 @@ function createWebServer({
           await handleWordScrambleSettingsPut(body, res);
           return;
         }
+        if (pathname === '/api/party-prompts/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handlePartyPromptsSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/wheel-of-fortune/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handleWheelOfFortuneSettingsPut(body, res);
+          return;
+        }
         if (pathname === '/api/guest-book/settings' && req.method === 'PUT') {
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
@@ -9872,7 +10031,7 @@ function createWebServer({
           return;
         }
         if (pathname === '/api/games/leave') {
-          handleGamesLeave(req, res);
+          handleGamesLeave(body, req, res);
           return;
         }
         if (pathname === '/api/qr/image-upload') {
@@ -10151,6 +10310,12 @@ function createWebServer({
           case '/api/word-scramble/settings':
             await handleWordScrambleSettingsPut(body, res);
             return;
+          case '/api/party-prompts/settings':
+            await handlePartyPromptsSettingsPut(body, res);
+            return;
+          case '/api/wheel-of-fortune/settings':
+            await handleWheelOfFortuneSettingsPut(body, res);
+            return;
           case '/api/game-sessions/end':
             handleGameSessionsEnd(body, res);
             return;
@@ -10159,6 +10324,12 @@ function createWebServer({
             return;
           case '/api/push/word-scramble':
             await handleWordScramblePush(body, res);
+            return;
+          case '/api/push/party-prompts':
+            await handlePartyPromptsPush(body, res);
+            return;
+          case '/api/push/wheel-of-fortune':
+            await handleWheelOfFortunePush(body, res);
             return;
           case '/api/guest-book/settings':
             await handleGuestBookSettingsPut(body, res);

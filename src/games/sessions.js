@@ -1,6 +1,14 @@
 /**
  * Live game sessions — codes, the phase machine, SSE, and a 1s tick.
  *
+ * This file is the shell. It knows about codes, seats, phases, the board lock
+ * and the archive; it knows nothing about grids, prompts, or scoring. Each
+ * game supplies that through a mode in `games/modes/` (see `games/registry.js`
+ * for the contract), so a new game is a new mode rather than a new branch here.
+ *
+ * Phases run `invited -> lobby -> round [-> voting] -> intermission -> ... ->
+ * final -> closed`. The voting half only exists for modes that ask for it.
+ *
  * Active sessions live in memory. A container restart closes them. Archived
  * on a clean finish and on abandon. Late joiners sit out the current round.
  */
@@ -9,10 +17,8 @@ const crypto = require('crypto');
 const { gameOf: defaultGameOf } = require('./registry');
 const { createGameSettings } = require('./settings');
 const { createGameArchive } = require('./archive');
-const { hardestWord, scoreWord } = require('../word-scramble');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const SUBMIT_CAP = 80;
 const COOKIE = 'signal_games';
 
 function mintCode(random, taken) {
@@ -80,14 +86,33 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     return settingsApi.get(gameType);
   }
 
+  function modeOf(session) {
+    return gameOf(session.gameType);
+  }
+
+  function sourceOf(session) {
+    return modeOf(session)?.source || 'word.scramble';
+  }
+
+  function stateOf(session) {
+    return session.rounds[session.rounds.length - 1] || null;
+  }
+
+  function minPlayersOf(session) {
+    const settings = settingsOf(session.gameType);
+    const floor = Number(settings.minPlayers);
+    if (Number.isFinite(floor) && floor > 0) return floor;
+    return Math.max(1, Number(modeOf(session)?.minPlayers) || 1);
+  }
+
   function remainingSeconds(session, at = now()) {
     if (!session.phaseEndsAt) return 0;
     return Math.max(0, Math.ceil((session.phaseEndsAt - at) / 1000));
   }
 
-  function aliasOf(session) {
+  function aliasOf() {
     const link = getShortlink?.('games');
-    return link?.alias || settingsOf(session.gameType).preferredAlias || 'WITTYGAME';
+    return link?.alias || settingsApi.alias?.() || 'WITTYGAME';
   }
 
   function publicPlayer(player) {
@@ -100,37 +125,16 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   /**
-   * What the open round has earned each player so far. Submitted words were
-   * already checked against the board, so this only has to apply the
-   * duplicate rule — no need to re-solve the grid on every keystroke.
-   */
-  function pendingScores(session) {
-    const out = new Map();
-    const current = session.rounds[session.rounds.length - 1];
-    if (session.phase !== 'round' || !current) return out;
-    const claims = new Map();
-    for (const [id, words] of current.wordsByPlayer) {
-      for (const word of words) {
-        const list = claims.get(word) || [];
-        list.push(id);
-        claims.set(word, list);
-      }
-    }
-    const { duplicateRule } = settingsOf(session.gameType);
-    for (const [word, ids] of claims) {
-      const points = duplicateRule === 'cancel' && ids.length > 1 ? 0 : scoreWord(word);
-      for (const id of ids) out.set(id, (out.get(id) || 0) + points);
-    }
-    return out;
-  }
-
-  /**
-   * Everyone who has joined, banked score plus the open round, best first.
-   * Built fresh on every read so a phone sees its points the moment they land
-   * rather than waiting for the round to close.
+   * Everyone who has joined, banked score plus whatever the open round has
+   * already earned them. Built fresh on every read so a phone sees its points
+   * the moment they land rather than waiting for the round to close.
    */
   function standings(session) {
-    const pending = pendingScores(session);
+    const mode = modeOf(session);
+    const state = stateOf(session);
+    const pending = session.phase === 'round' && state && mode?.livePoints
+      ? mode.livePoints({ state, settings: settingsOf(session.gameType), session })
+      : new Map();
     return session.players
       .map((player) => ({
         id: player.id,
@@ -141,24 +145,26 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
   }
 
-  /** What one player has found this round — never another player's list. */
-  function playerWords(session, playerId) {
-    const current = session.rounds[session.rounds.length - 1];
-    if (!current || !playerId) return [];
-    return (current.wordsByPlayer.get(playerId) || [])
-      .map((word) => ({ word, points: scoreWord(word) }));
-  }
-
   function publicSession(session, at = now(), playerId = '') {
-    const game = gameOf(session.gameType);
+    const mode = modeOf(session);
     const settings = settingsOf(session.gameType);
-    const current = session.rounds[session.rounds.length - 1] || null;
+    const state = stateOf(session);
     const player = playerId ? session.players.find((p) => p.id === playerId) : null;
-    const revealing = session.phase === 'intermission' || session.phase === 'final';
+    const extras = mode?.publicRound
+      ? mode.publicRound({
+        session,
+        state,
+        phase: session.phase,
+        playerId,
+        players: session.players,
+      }) || {}
+      : {};
+    const { you: youExtras, ...rest } = extras;
+    const floor = minPlayersOf(session);
     return {
       sessionId: session.id,
       gameType: session.gameType,
-      title: game?.title || 'Game',
+      title: mode?.title || 'Game',
       code: session.code,
       phase: session.phase,
       roundIndex: session.roundIndex,
@@ -166,15 +172,15 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       allowLateJoin: settings.allowLateJoin !== false,
       remainingSeconds: remainingSeconds(session, at),
       playerCount: session.players.length,
+      minPlayers: floor,
+      needPlayers: Math.max(0, floor - session.players.length),
       players: session.players.map(publicPlayer),
       scores: standings(session),
-      best: session.best || null,
-      grid: session.phase === 'round' ? current?.grid || null : null,
-      lastRound: revealing ? session.lastRound || null : null,
+      ...rest,
       you: player
-        ? { ...publicPlayer(player), words: playerWords(session, playerId) }
+        ? { ...publicPlayer(player), ...(youExtras || {}) }
         : null,
-      alias: aliasOf(session),
+      alias: aliasOf(),
     };
   }
 
@@ -200,7 +206,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     if (set.size) session.lastSseAt = now();
   }
 
-  function boardOptions(holdSeconds, { takeover = false, card = '' } = {}) {
+  function boardOptions(source, holdSeconds, { takeover = false, card = '' } = {}) {
     return {
       targetId: 'vestaboard',
       explicit: true,
@@ -210,8 +216,8 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       // not evicted when the next round starts.
       breakHold: Boolean(takeover),
       quietHoursExempt: true,
-      replaceSource: 'word.scramble',
-      gameSource: 'word.scramble',
+      replaceSource: source,
+      gameSource: source,
       replaceCard: card || null,
       holdSeconds,
     };
@@ -226,10 +232,10 @@ function createGameSessions(config = {}, log = console, deps = {}) {
    * session holds the board, manual Push / Air now / scheduler ticks must not
    * interrupt — the board lock taken in `pushPhase` enforces that.
    */
-  function takeBoard() {
+  function takeBoard(source) {
     try {
       dropPendingBoard((frame, item) => item?.priority !== 'alert'
-        && String(frame?.source || '') !== 'word.scramble'
+        && String(frame?.source || '') !== source
         && Boolean(item?.sequenceId));
     } catch (error) {
       log?.warn?.('Could not clear the board queue', error?.message || error);
@@ -237,10 +243,11 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   function pushPhase(session, card, extra = {}) {
-    const game = gameOf(session.gameType);
+    const mode = modeOf(session);
     const settings = settingsOf(session.gameType);
+    const state = stateOf(session);
     const hold = extra.holdSeconds != null ? extra.holdSeconds : remainingSeconds(session);
-    const source = game?.source || 'word.scramble';
+    const source = sourceOf(session);
     // Take (or renew) the board lock before the card is queued, so the gap
     // between two phases never opens the line to everything parked behind us.
     try {
@@ -248,10 +255,10 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     } catch (error) {
       log?.warn?.('Could not lock the board for the game', error?.message || error);
     }
-    takeBoard();
+    takeBoard(source);
     const payload = {
-      type: 'word.scramble',
-      source: game?.source || 'word.scramble',
+      type: source,
+      source,
       phase: session.phase,
       card,
       code: session.code,
@@ -263,15 +270,19 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       final: extra.final != null
         ? Boolean(extra.final)
         : session.phase === 'final' || card === 'final',
-      alias: aliasOf(session),
+      alias: aliasOf(),
       playerCount: session.players.length,
-      grid: extra.grid || session.rounds[session.rounds.length - 1]?.grid || [],
+      minPlayers: minPlayersOf(session),
       scores: extra.scores || standings(session),
       roundWinner: extra.roundWinner || null,
       roundScores: extra.roundScores || null,
-      word: session.best?.word || '',
-      name: session.best?.name || '',
-      points: session.best?.points || 0,
+      ...(mode?.boardExtras ? mode.boardExtras({
+        session,
+        state,
+        settings,
+        players: session.players,
+      }) : {}),
+      ...(extra.board || {}),
       holdSeconds: hold,
       remainingSeconds: hold,
     };
@@ -279,13 +290,14 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       ? Boolean(extra.takeover)
       : card === 'invite' || session.phase === 'invited';
     try {
-      pushBoard(payload, boardOptions(hold, { takeover, card }));
+      pushBoard(payload, boardOptions(source, hold, { takeover, card }));
     } catch (error) {
       log?.warn?.('Game board push failed', error?.message || error);
     }
   }
 
   function archiveRow(session, { abandoned = false, reason = '' } = {}) {
+    const mode = modeOf(session);
     archive.append({
       sessionId: session.id,
       gameType: session.gameType,
@@ -295,7 +307,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       players: session.players.map((p) => ({ id: p.id, name: p.name, score: p.score || 0 })),
       rounds: session.rounds.length,
       winner: session.scores?.[0] || null,
-      topWord: session.best || null,
+      ...(mode?.archiveExtras ? mode.archiveExtras(session) : {}),
       abandoned,
       reason,
     });
@@ -307,14 +319,23 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const alreadyFinal = session.phase === 'final';
     const scores = session.scores?.length ? session.scores : standings(session);
     const hadAGame = session.hadPlayer || scores.length > 0;
+    const settings = settingsOf(session.gameType);
+    const short = reason === 'not-enough-players';
     session.phase = 'closed';
     session.phaseEndsAt = null;
-    // Scores stay up when someone actually sat down. An empty invite that
-    // times out should just drop the lock so rotation can continue — there
-    // is nothing to celebrate. Skip a second flip when the final card is
-    // already on the board.
-    if (!alreadyFinal && hadAGame) {
-      const settings = settingsOf(session.gameType);
+    if (short) {
+      // Say why. A lobby that simply vanishes reads as a broken board, and
+      // the room has no idea it only needed one more person.
+      pushPhase(session, 'short', {
+        holdSeconds: settings.intermissionSeconds,
+        takeover: true,
+        showCode: false,
+      });
+    } else if (!alreadyFinal && hadAGame) {
+      // Scores stay up when someone actually sat down. An empty invite that
+      // times out should just drop the lock so rotation can continue — there
+      // is nothing to celebrate. Skip a second flip when the final card is
+      // already on the board.
       pushPhase(session, 'final', {
         scores,
         holdSeconds: settings.intermissionSeconds,
@@ -327,7 +348,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     // the one release point, so it has to cover every way a session ends:
     // finished, stopped by an admin, invite expired, idle, or last player out.
     try {
-      setGameLock(gameOf(session.gameType)?.source || 'word.scramble', false);
+      setGameLock(sourceOf(session), false);
     } catch (error) {
       log?.warn?.('Could not release the board lock', error?.message || error);
     }
@@ -360,91 +381,72 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   function startRound(session) {
-    const game = gameOf(session.gameType);
+    const mode = modeOf(session);
     const settings = settingsOf(session.gameType);
     session.roundIndex += 1;
-    const round = game.createRound({
-      minSolutions: settings.minSolutions,
-      random,
-    });
-    session.rounds.push({
-      grid: round.grid,
-      solutions: round.solutions,
-      wordsByPlayer: new Map(),
-    });
+    const at = now();
+    const state = mode.createRound({ random, settings, session, now: at });
+    session.rounds.push(state);
+    if (mode.roundKey) {
+      const key = mode.roundKey(state);
+      if (key) session.usedRounds.push(key);
+    }
     session.phase = 'round';
-    session.phaseEndsAt = now() + settings.roundSeconds * 1000;
     for (const player of session.players) {
       if (player.seated === false) continue;
-      session.rounds[session.rounds.length - 1].wordsByPlayer.set(player.id, []);
+      mode.seat(state, player.id);
     }
-    pushPhase(session, 'round', {
-      grid: round.grid,
-      holdSeconds: settings.roundSeconds,
-    });
+    mode.beginRound?.({ state, session, settings, players: session.players, now: at });
+    const hold = typeof mode.roundHoldSeconds === 'function'
+      ? mode.roundHoldSeconds({ settings, state, session })
+      : settings.roundSeconds;
+    session.phaseEndsAt = at + hold * 1000;
+    pushPhase(session, 'round', { holdSeconds: hold });
     emit(session, 'round');
   }
 
-  function finishRound(session) {
-    const game = gameOf(session.gameType);
+  /**
+   * The second half of a round for modes that vote. Skipped when there is
+   * nothing to choose between — one answer cannot win a ballot.
+   */
+  function startVoting(session) {
+    const mode = modeOf(session);
     const settings = settingsOf(session.gameType);
-    const current = session.rounds[session.rounds.length - 1];
-    const seated = session.players.filter((p) => current.wordsByPlayer.has(p.id));
-    const scored = game.scoreRound(
-      seated.map((p) => ({
-        id: p.id,
-        words: current.wordsByPlayer.get(p.id) || [],
-      })),
-      { duplicateRule: settings.duplicateRule, grid: current.grid },
-    );
-    const byId = new Map(scored.map((row) => [row.id, row]));
+    const state = stateOf(session);
+    if (mode.canVote && !mode.canVote({ state })) {
+      finishRound(session);
+      return;
+    }
+    mode.beginVoting?.({ state, random });
+    session.phase = 'voting';
+    session.phaseEndsAt = now() + (settings.votingSeconds || settings.intermissionSeconds) * 1000;
+    pushPhase(session, 'voting', {
+      holdSeconds: settings.votingSeconds || settings.intermissionSeconds,
+    });
+    emit(session, 'voting');
+  }
+
+  function finishRound(session) {
+    const mode = modeOf(session);
+    const settings = settingsOf(session.gameType);
+    const state = stateOf(session);
+    const result = mode.closeRound({
+      state,
+      players: session.players,
+      settings,
+      session,
+      best: session.best || null,
+    }) || {};
+    const roundOnly = result.perPlayer || [];
+    const byId = new Map(roundOnly.map((row) => [row.id, row.score || 0]));
     for (const player of session.players) {
-      player.score = (player.score || 0) + (byId.get(player.id)?.score || 0);
+      player.score = (player.score || 0) + (byId.get(player.id) || 0);
     }
     session.scores = session.players
       .map((p) => ({ id: p.id, name: p.name, score: p.score || 0 }))
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-
-    const found = [];
-    for (const [playerId, words] of current.wordsByPlayer) {
-      const player = session.players.find((p) => p.id === playerId);
-      for (const word of words) {
-        found.push({ word, playerId, name: player?.name || '' });
-      }
-    }
-
-    // The reveal between rounds: every word the table found, and who got it.
-    const byWord = new Map();
-    for (const row of found) {
-      const entry = byWord.get(row.word)
-        || { word: row.word, points: scoreWord(row.word), names: [] };
-      if (row.name && !entry.names.includes(row.name)) entry.names.push(row.name);
-      byWord.set(row.word, entry);
-    }
-    session.lastRound = {
-      index: session.roundIndex,
-      words: [...byWord.values()]
-        .sort((a, b) => b.points - a.points || a.word.localeCompare(b.word)),
-    };
-
-    const hardest = hardestWord(found);
-    if (hardest && (!session.best || hardest.word.length > session.best.word.length)) {
-      session.best = {
-        word: hardest.word,
-        playerId: hardest.playerId,
-        name: found.find((f) => f.word === hardest.word)?.name || '',
-        points: hardest.points,
-      };
-    }
-
-    const roundOnly = seated
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        score: byId.get(p.id)?.score || 0,
-      }))
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-    const roundWinner = roundOnly[0] || null;
+    session.best = result.best || session.best || null;
+    session.lastRound = { index: session.roundIndex, ...(result.reveal || {}) };
 
     const more = session.roundIndex < settings.rounds;
     if (more) {
@@ -452,7 +454,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       session.phaseEndsAt = now() + settings.intermissionSeconds * 1000;
       seatWaiting(session);
       pushPhase(session, 'intermission', {
-        roundWinner,
+        roundWinner: result.winner || null,
         roundScores: roundOnly,
         scores: session.scores,
         holdSeconds: settings.intermissionSeconds,
@@ -466,6 +468,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     pushPhase(session, 'final', {
       scores: session.scores,
       holdSeconds: settings.intermissionSeconds,
+      // The game is over, so the code is dead. Dropping it also frees the row
+      // the fifth score needs.
+      showCode: false,
     });
     emit(session, 'final');
   }
@@ -480,10 +485,47 @@ function createGameSessions(config = {}, log = console, deps = {}) {
         closeSession(session, 'invite-expired');
         return;
       }
+      // A game with a floor says so rather than starting a round it cannot
+      // finish. Party Prompts needs three; Word Scramble is happy with one.
+      if (session.players.length < minPlayersOf(session)) {
+        closeSession(session, 'not-enough-players');
+        return;
+      }
       startRound(session);
       return;
     }
     if (session.phase === 'round') {
+      const mode = modeOf(session);
+      if (mode?.onRoundTimeout) {
+        const result = mode.onRoundTimeout({
+          state: stateOf(session),
+          session,
+          settings: settingsOf(session.gameType),
+          players: session.players,
+          now: now(),
+        }) || {};
+        if (result.finishRound) {
+          finishRound(session);
+          return;
+        }
+        if (result.continue) {
+          const hold = result.holdSeconds
+            || settingsOf(session.gameType).turnSeconds
+            || settingsOf(session.gameType).roundSeconds;
+          session.phaseEndsAt = now() + hold * 1000;
+          pushPhase(session, 'round', { holdSeconds: hold });
+          emit(session, 'timeout');
+          return;
+        }
+      }
+      if (mode?.votes) {
+        startVoting(session);
+      } else {
+        finishRound(session);
+      }
+      return;
+    }
+    if (session.phase === 'voting') {
       finishRound(session);
       return;
     }
@@ -497,8 +539,8 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   function create({ gameType = 'scramble' } = {}) {
-    const game = gameOf(gameType);
-    if (!game) {
+    const mode = gameOf(gameType);
+    if (!mode) {
       throw new Error(`Unknown game: ${gameType}`);
     }
     const settings = settingsOf(gameType);
@@ -517,6 +559,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       phaseEndsAt: inviteExpiresAt,
       players: [],
       rounds: [],
+      usedRounds: [],
       roundIndex: 0,
       scores: [],
       best: null,
@@ -564,7 +607,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       player = {
         id: crypto.randomUUID(),
         name: uniqueName(session.players, display),
-        seated: session.phase !== 'round',
+        seated: session.phase !== 'round' && session.phase !== 'voting',
         score: 0,
       };
       session.players.push(player);
@@ -588,42 +631,59 @@ function createGameSessions(config = {}, log = console, deps = {}) {
 
   function submit({ sessionId, playerId, action = 'word', payload = {} } = {}) {
     const session = getById(sessionId);
-    if (!session || session.phase !== 'round') {
+    const mode = session ? modeOf(session) : null;
+    const open = session
+      && (session.phase === 'round' || (session.phase === 'voting' && mode?.votes));
+    if (!open) {
       return { ok: false, error: 'No round is open' };
     }
-    const current = session.rounds[session.rounds.length - 1];
-    if (!current.wordsByPlayer.has(playerId)) {
+    const state = stateOf(session);
+    if (!mode.isSeated(state, playerId)) {
       return { ok: false, error: 'You are seated for the next round' };
     }
-    const words = current.wordsByPlayer.get(playerId);
-    if (words.length >= SUBMIT_CAP) {
-      return { ok: false, error: 'Round word limit reached' };
+    const result = mode.submit({
+      state,
+      session,
+      playerId,
+      action,
+      payload,
+      phase: session.phase,
+      settings: settingsOf(session.gameType),
+      players: session.players,
+      random,
+    });
+    if (!result.ok) return result;
+    if (result.finishRound) {
+      finishRound(session);
+    } else if (result.advance) {
+      // The mode is done with this half of the round (every answer locked,
+      // the puzzle solved, …). Same path as the phase timer expiring.
+      advance(session);
+    } else if (result.refreshBoard) {
+      if (Number.isFinite(result.holdSeconds)) {
+        session.phaseEndsAt = now() + result.holdSeconds * 1000;
+      }
+      pushPhase(session, result.card || session.phase, {
+        holdSeconds: Number.isFinite(result.holdSeconds)
+          ? result.holdSeconds
+          : remainingSeconds(session),
+      });
     }
-    const game = gameOf(session.gameType);
-    const result = game.validateAction(current, action, payload);
-    if (!result.ok) {
-      return { ok: false, error: result.reason === 'not-on-board' ? 'Not on the board' : 'Not a word' };
-    }
-    if (words.includes(result.word)) {
-      return { ok: false, error: 'Already found', duplicate: true };
-    }
-    words.push(result.word);
+    emit(session, action);
     const player = session.players.find((p) => p.id === playerId);
-    const live = (player.score || 0) + words.reduce((sum, word) => sum + scoreWord(word), 0);
-    emit(session, 'word');
+    const live = standings(session).find((row) => row.id === playerId);
     return {
-      ok: true,
-      word: result.word,
-      points: result.points,
-      liveScore: live,
-      words: playerWords(session, playerId),
+      ...result,
+      liveScore: live ? live.score : player?.score || 0,
       scores: standings(session),
+      session: publicSession(session, now(), playerId),
     };
   }
 
   function leave({ sessionId, playerId } = {}) {
     const session = getById(sessionId);
     if (!session) return { ok: true };
+    const mode = modeOf(session);
     const remaining = session.players.filter((p) => p.id !== playerId);
     if (!remaining.length) {
       // Snapshot while the last player is still seated so FINAL SCORES
@@ -634,6 +694,27 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       return { ok: true };
     }
     session.players = remaining;
+    if (session.phase === 'round' && mode?.onLeave) {
+      const result = mode.onLeave({
+        state: stateOf(session),
+        playerId,
+        players: remaining,
+        session,
+        settings: settingsOf(session.gameType),
+      }) || {};
+      if (result.advance) {
+        advance(session);
+      } else if (result.refreshBoard) {
+        if (Number.isFinite(result.holdSeconds)) {
+          session.phaseEndsAt = now() + result.holdSeconds * 1000;
+        }
+        pushPhase(session, 'round', {
+          holdSeconds: Number.isFinite(result.holdSeconds)
+            ? result.holdSeconds
+            : remainingSeconds(session),
+        });
+      }
+    }
     emit(session, 'leave');
     return { ok: true };
   }

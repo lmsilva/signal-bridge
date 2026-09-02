@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal278">
+  <link rel="stylesheet" href="styles.css?v=signal281">
 </head>
 <body>
   <header class="su-head">
@@ -55,29 +55,31 @@
               <div class="vb-wordmark">VESTABOARD</div>
             </div>
           </div>
-          <label class="gb-label" for="gb-keys">Your message</label>
-          <input id="gb-keys" class="gb-input gb-keys-field" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type a letter — it goes on the selected flap">
-          <p class="gb-hint" id="gb-charset-hint"></p>
-          <div class="gb-chips" role="group" aria-label="Color chips">
-            <button type="button" class="gb-color is-chip-red" data-chip="R" aria-label="Red chip"></button>
-            <button type="button" class="gb-color is-chip-orange" data-chip="O" aria-label="Orange chip"></button>
-            <button type="button" class="gb-color is-chip-yellow" data-chip="Y" aria-label="Yellow chip"></button>
-            <button type="button" class="gb-color is-chip-green" data-chip="G" aria-label="Green chip"></button>
-            <button type="button" class="gb-color is-chip-blue" data-chip="B" aria-label="Blue chip"></button>
-            <button type="button" class="gb-color is-chip-violet" data-chip="V" aria-label="Violet chip"></button>
-            <button type="button" class="gb-color is-chip-white" data-chip="W" aria-label="White chip"></button>
-            <button type="button" class="gb-chip-btn" id="btn-gb-erase">Erase</button>
+          <div class="gb-controls">
+            <label class="gb-label" for="gb-keys">Your message</label>
+            <input id="gb-keys" class="gb-input gb-keys-field" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type a letter — it goes on the selected flap">
+            <p class="gb-hint" id="gb-charset-hint"></p>
+            <div class="gb-chips" role="group" aria-label="Color chips">
+              <button type="button" class="gb-color is-chip-red" data-chip="R" aria-label="Red chip"></button>
+              <button type="button" class="gb-color is-chip-orange" data-chip="O" aria-label="Orange chip"></button>
+              <button type="button" class="gb-color is-chip-yellow" data-chip="Y" aria-label="Yellow chip"></button>
+              <button type="button" class="gb-color is-chip-green" data-chip="G" aria-label="Green chip"></button>
+              <button type="button" class="gb-color is-chip-blue" data-chip="B" aria-label="Blue chip"></button>
+              <button type="button" class="gb-color is-chip-violet" data-chip="V" aria-label="Violet chip"></button>
+              <button type="button" class="gb-color is-chip-white" data-chip="W" aria-label="White chip"></button>
+              <button type="button" class="gb-chip-btn" id="btn-gb-erase">Erase</button>
+            </div>
+            <div class="gb-align-row">
+              <button type="button" class="gb-chip-btn" id="btn-gb-undo">Undo</button>
+              <button type="button" class="gb-chip-btn" id="btn-gb-clear">Clear</button>
+              <button type="button" class="gb-chip-btn" id="btn-gb-clear-footer" hidden>Clear footer</button>
+              <button type="button" class="gb-chip-btn" id="btn-gb-restore-footer" hidden>Restore footer</button>
+            </div>
+            <input id="gb-name" hidden>
+            <p class="gb-counter" id="gb-counter">0 / 88</p>
+            <button type="button" class="gb-send" id="btn-gb-send" disabled>Send to the board</button>
+            <p class="gb-status" id="gb-send-status" role="status"></p>
           </div>
-          <div class="gb-align-row">
-            <button type="button" class="gb-chip-btn" id="btn-gb-undo">Undo</button>
-            <button type="button" class="gb-chip-btn" id="btn-gb-clear">Clear</button>
-            <button type="button" class="gb-chip-btn" id="btn-gb-clear-footer" hidden>Clear footer</button>
-            <button type="button" class="gb-chip-btn" id="btn-gb-restore-footer" hidden>Restore footer</button>
-          </div>
-          <input id="gb-name" hidden>
-          <p class="gb-counter" id="gb-counter">0 / 88</p>
-          <button type="button" class="gb-send" id="btn-gb-send" disabled>Send to the board</button>
-          <p class="gb-status" id="gb-send-status" role="status"></p>
         </div>
         <div class="gb-main" id="gb-done" hidden>
           <div class="gb-board-wrap">
@@ -462,9 +464,9 @@
   <script src="/flap-grid.js"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
   <script src="/push-icons.js?v=signal262"></script>
-  <script src="/vestaboard-sim-ui.js?v=signal278"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal284"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="app.js?v=signal273"></script>
+  <script src="app.js?v=signal274"></script>
 </body>
 </html>

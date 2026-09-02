@@ -13,6 +13,8 @@ const feeds = require('./formatters/feeds');
 const signal = require('./formatters/signal');
 const cinema = require('./formatters/cinema');
 const games = require('./formatters/games');
+const partyPrompts = require('./formatters/party-prompts');
+const wheelOfFortune = require('./formatters/wheel-of-fortune');
 const { classify: classifyHold } = require('./holds');
 
 const FORMATTERS = {
@@ -23,6 +25,8 @@ const FORMATTERS = {
   ...signal.FORMATTERS,
   ...cinema.FORMATTERS,
   ...games.FORMATTERS,
+  ...partyPrompts.FORMATTERS,
+  ...wheelOfFortune.FORMATTERS,
 };
 
 /**
@@ -85,6 +89,8 @@ const COMMAND_TO_TYPE = {
   'us.weather-map': 'us.weather-map',
   'word.riddles': 'word.riddles',
   'scramble.invite': 'word.scramble',
+  'prompts.invite': 'party.prompts',
+  'wheel.invite': 'wheel.fortune',
   'amazing.facts': 'amazing.facts',
   'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',
@@ -133,6 +139,12 @@ function boardAllows(board, type, commandId) {
 }
 
 function coalesceKeyFor(payload, type) {
+  if (type === 'tesla-battery.query' || type === 'tesla.battery') {
+    return 'tesla-battery.query';
+  }
+  if (type === 'tesla-dashboard.query' || type === 'tesla.dashboard') {
+    return 'tesla-dashboard.query';
+  }
   if (type !== 'smart-home.command') {
     return null;
   }

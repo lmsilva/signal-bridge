@@ -1,5 +1,5 @@
 /*
- * Word Scramble, phone first.
+ * Game night, phone first.
  *
  * Most players hold a phone, so the single column and the thumb-height
  * compose bar are the base case. Wider screens get the board and the lists
@@ -28,6 +28,10 @@
 
 /* Several panels are display:grid/flex, which would otherwise beat [hidden]. */
 [hidden] { display: none !important; }
+
+/* Every game ships its own panels in the one page; the shell marks the ones
+   that belong to another game. */
+[data-off] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -493,3 +497,207 @@ body.gm-keyboard .gm-status { flex: 0 0 auto; }
 @media (prefers-reduced-motion: no-preference) {
   .gm-cell { transition: transform 120ms ease, background 120ms ease, color 120ms ease, opacity 120ms ease; }
 }
+
+/* --------------------------------------------- Party Prompts */
+
+.pp-stage { display: grid; gap: var(--gap); }
+.pp-panel, .pp-panel-plain { margin: 0; }
+
+/* The prompt is the whole game — it gets the size the letter grid gets in
+   Word Scramble, and it reads the same way as it does on the board. */
+.pp-prompt-card {
+  padding: clamp(16px, 4vw, 26px);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, #241a45 0%, var(--card) 70%);
+  text-align: center;
+}
+.pp-prompt-kicker {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+.pp-prompt {
+  margin: 0;
+  font-size: clamp(1.35rem, 5.4vw, 2rem);
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.pp-lobby, .pp-note { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.pp-note { margin-top: 10px; }
+.pp-locked-label {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pp-locked { margin: 0; font-size: 1.1rem; font-weight: 600; line-height: 1.35; }
+
+.pp-counter {
+  margin: 6px 2px 0;
+  text-align: right;
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pp-counter.is-full { color: var(--warn); }
+
+/* Ballot rows are the tap target for the whole round, so they are full width
+   and thumb height, and the one you wrote is visibly out of play. */
+.pp-ballot { list-style: none; display: grid; gap: 10px; padding: 0; margin: 10px 0 0; }
+.pp-vote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pp-vote-text { flex: 1 1 auto; min-width: 0; line-height: 1.35; }
+.pp-vote-tag {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pp-vote.is-picked { border-color: var(--accent); background: #1c2f55; box-shadow: 0 0 0 1px var(--accent) inset; }
+.pp-vote.is-mine { opacity: 0.55; cursor: default; }
+
+.pp-reveal { list-style: none; display: grid; gap: 10px; padding: 0; margin: 10px 0 0; }
+.pp-reveal-row {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pp-reveal-row:last-child { border-bottom: 0; }
+.pp-reveal-row.is-winner .pp-reveal-answer { color: var(--good); }
+.pp-reveal-answer { font-weight: 600; line-height: 1.35; }
+.pp-reveal-meta { font-size: 0.78rem; color: var(--muted); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pp-vote { transition: background 120ms ease, border-color 120ms ease; }
+}
+
+/* --------------------------------------------- Wheel of Fortune */
+
+.wf-stage { display: grid; gap: var(--gap); }
+.wf-panel { margin: 0; }
+.wf-puzzle-card {
+  padding: clamp(16px, 4vw, 26px);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, #3a2a12 0%, var(--card) 70%);
+  text-align: center;
+}
+.wf-category {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fbbf24;
+}
+.wf-puzzle {
+  margin: 0;
+  font-size: clamp(1.25rem, 5vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.45;
+  text-wrap: balance;
+  font-variant-ligatures: none;
+}
+.wf-event, .wf-lobby, .wf-turn, .wf-bank { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.wf-event { margin-top: 12px; color: #fde68a; font-weight: 600; }
+.wf-bank { margin-top: 6px; font-variant-numeric: tabular-nums; }
+/* The wheel is square and capped by the shorter of width or viewport height,
+   so a phone in portrait, a tablet, and a desktop column all keep it whole
+   without pushing the letter pad off screen. */
+.wf-wheel-panel {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.wf-wheel {
+  position: relative;
+  width: min(100%, 42vh, 340px);
+  aspect-ratio: 1;
+}
+.wf-wheel-face {
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg);
+  will-change: transform;
+}
+.wf-wheel-face svg { display: block; width: 100%; height: 100%; }
+.wf-wheel-pointer {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-top: 20px solid #fbbf24;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.wf-wheel-result {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fde68a;
+}
+.wf-turn-panel.is-yours,
+.wf-panel.is-yours { border-color: #fbbf24; }
+.wf-turn-panel.is-yours .wf-turn,
+.wf-panel.is-yours .wf-turn { color: #fde68a; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-wheel-face { transition: none !important; }
+}
+
+.wf-letters {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.wf-letter {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wf-letter.is-vowel { color: #fde68a; }
+.wf-letter.is-called,
+.wf-letter:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.wf-letter.is-hit { border-color: var(--good); color: var(--good); }
+.wf-reveal-puzzle { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: 0.06em; }
+.wf-reveal-meta { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }

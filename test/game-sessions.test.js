@@ -8,6 +8,8 @@ const path = require('path');
 
 const { createGameSessions, CODE_ALPHABET } = require('../src/games/sessions');
 const { createGameArchive } = require('../src/games/archive');
+const scrambleMode = require('../src/games/modes/scramble');
+const { scoreWord } = require('../src/word-scramble');
 
 const SETTINGS = Object.freeze({
   lobbySeconds: 10,
@@ -22,28 +24,36 @@ const SETTINGS = Object.freeze({
   preferredAlias: 'WITTYGAME',
 });
 
+const ALLOWED_WORDS = ['cat', 'wind', 'leap', 'scrambled'];
+
+/**
+ * The session framework is game-agnostic, so this drives it with the real
+ * Word Scramble mode on a fixed grid and a fixed word list. Everything the
+ * mode contract asks for is genuine; only the two calls that would reach the
+ * dictionary are stubbed, so a corpus change cannot move these assertions.
+ */
 function fakeGame() {
   return {
-    id: 'scramble',
-    title: 'Word Scramble',
-    source: 'word.scramble',
+    ...scrambleMode,
     createRound: () => ({
       grid: ['CATE', 'ORWX', 'WIND', 'LEAP'],
       solutions: ['cat', 'wind', 'leap'],
+      wordsByPlayer: new Map(),
     }),
-    validateAction: (_round, action, payload) => {
+    submit({ state, playerId, action, payload }) {
+      if (action !== 'word') return { ok: false, error: 'Unknown action' };
       const word = String(payload?.word || '').toLowerCase();
-      if (action !== 'word') return { ok: false, reason: 'unknown-action' };
-      if (['cat', 'wind', 'leap', 'scrambled'].includes(word)) {
-        return { ok: true, word, points: 1 };
-      }
-      return { ok: false, reason: 'not-a-word' };
+      if (!ALLOWED_WORDS.includes(word)) return { ok: false, error: 'Not a word' };
+      const words = state.wordsByPlayer.get(playerId);
+      if (words.includes(word)) return { ok: false, error: 'Already found' };
+      words.push(word);
+      return {
+        ok: true,
+        word,
+        points: scoreWord(word),
+        words: words.map((row) => ({ word: row, points: scoreWord(row) })),
+      };
     },
-    scoreRound: (players) => players.map((player) => ({
-      id: player.id,
-      score: (player.words || []).length,
-      words: player.words || [],
-    })),
   };
 }
 

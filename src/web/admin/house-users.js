@@ -193,12 +193,29 @@
     if ($('hu-pw-done')) $('hu-pw-done').hidden = which !== 'done';
   }
 
+  function setPasswordVisible(inputId, buttonId, visible) {
+    const input = $(inputId);
+    const button = $(buttonId);
+    if (input) input.type = visible ? 'text' : 'password';
+    if (button) {
+      button.textContent = visible ? 'Hide' : 'Show';
+      button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+      button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+    }
+  }
+
+  function hidePasswordFields() {
+    setPasswordVisible('hu-pw', 'btn-hu-pw-reveal', false);
+    setPasswordVisible('hu-pw-confirm', 'btn-hu-pw-confirm-reveal', false);
+  }
+
   function closePasswordSheet({ keepEditor = false } = {}) {
     const created = passwordMode === 'created';
     if ($('hu-password-sheet')) $('hu-password-sheet').hidden = true;
     passwordMode = null;
     if ($('hu-pw')) $('hu-pw').value = '';
     if ($('hu-pw-confirm')) $('hu-pw-confirm').value = '';
+    hidePasswordFields();
     if ($('hu-pw-done-value')) $('hu-pw-done-value').textContent = '';
     if ($('hu-pw-done-secret')) $('hu-pw-done-secret').hidden = true;
     if ($('hu-pw-status')) {
@@ -231,6 +248,10 @@
     }
     if ($('hu-pw')) $('hu-pw').value = password;
     if ($('hu-pw-confirm')) $('hu-pw-confirm').value = password;
+    // Reveal is the "copy this now" fallback when mail did not send — show
+    // that one password. Create/reset stay hidden until Show is pressed.
+    setPasswordVisible('hu-pw', 'btn-hu-pw-reveal', mode === 'reveal');
+    setPasswordVisible('hu-pw-confirm', 'btn-hu-pw-confirm-reveal', false);
     if ($('hu-pw-confirm-wrap')) $('hu-pw-confirm-wrap').hidden = mode === 'reveal';
     if ($('btn-hu-pw-generate')) $('btn-hu-pw-generate').hidden = mode === 'reveal';
     if ($('btn-hu-pw-save')) {
@@ -543,6 +564,12 @@
     $('btn-hu-pw-close')?.addEventListener('click', closePasswordSheet);
     $('hu-password-sheet')?.addEventListener('click', (event) => {
       if (event.target === $('hu-password-sheet')) closePasswordSheet();
+    });
+    $('btn-hu-pw-reveal')?.addEventListener('click', () => {
+      setPasswordVisible('hu-pw', 'btn-hu-pw-reveal', $('hu-pw')?.type === 'password');
+    });
+    $('btn-hu-pw-confirm-reveal')?.addEventListener('click', () => {
+      setPasswordVisible('hu-pw-confirm', 'btn-hu-pw-confirm-reveal', $('hu-pw-confirm')?.type === 'password');
     });
     $('btn-hu-pw-generate')?.addEventListener('click', fillGeneratedPassword);
     $('btn-hu-pw-copy')?.addEventListener('click', () => {

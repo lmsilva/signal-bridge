@@ -10,7 +10,7 @@
     const name = String(actor.name || '').trim();
     if (actor.kind === 'scheduler') return name || 'Scheduled';
     if (actor.kind === 'guest') return name ? `Guest · ${name}` : 'Guest';
-    if (actor.kind === 'system') return name || '';
+    if (actor.kind === 'system') return name || 'System';
     return name || 'User';
   }
 
@@ -371,9 +371,19 @@
       flushPending();
     }
 
+    function eventEl(event) {
+      const node = event.target;
+      return node && node.nodeType === 1 ? node : node?.parentElement;
+    }
+
     function startDrag(event, row) {
       if (event.pointerType === 'mouse' && event.button !== 0) return;
-      if (event.target.closest?.('.vb-queue-cancel')) return;
+      const from = eventEl(event);
+      // The handle is the only drag affordance. Starting a drag from the
+      // whole row used to swallow the cancel click: pointerdown on the ×
+      // text node has no closest(), preventDefault killed the click, and
+      // the red X lit up but did nothing.
+      if (!from?.closest('.vb-queue-handle')) return;
       event.preventDefault();
       dragging = true;
       row.classList.add('dragging');
@@ -435,7 +445,9 @@
         source.title = byline;
         row.querySelector('.vb-queue-title').title = queueEventTitle(item);
         row.querySelector('.vb-queue-status').textContent = statusOf(item);
-        row.querySelector('.vb-queue-cancel').addEventListener('click', (event) => {
+        const cancelBtn = row.querySelector('.vb-queue-cancel');
+        cancelBtn.addEventListener('pointerdown', (event) => event.stopPropagation());
+        cancelBtn.addEventListener('click', (event) => {
           event.preventDefault();
           event.stopPropagation();
           if (item.id) cancel(item.id).catch((error) => toast(error.message));

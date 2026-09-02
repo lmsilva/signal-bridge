@@ -236,6 +236,12 @@ body.is-dash-dragging {
 body.is-fine .push-card-handle { cursor: grab; }
 body.is-fine .push-card-wrap.is-dragging,
 body.is-dash-dragging .push-card-handle { cursor: grabbing; }
+body.is-coarse .push-card-top {
+  grid-template-columns: 44px 44px 1fr 44px;
+  height: 44px;
+}
+body.is-coarse .push-card-top .push-card-handle,
+body.is-coarse .push-card-top .push-card-icon,
 body.is-coarse .push-card-top .push-card-remove {
   width: 44px;
   height: 44px;
@@ -261,8 +267,9 @@ body.is-coarse .push-card-top .push-card-remove {
   height: 100%;
   min-height: 124px;
 }
-/* Beats `.push-card span`, which owns the subtitle colour. */
-.push-card > .push-card-icon {
+/* Beats `.push-card span`, which owns the subtitle colour. Descendant, not
+   child: dashboard tiles nest the glyph under `.push-card-top`. */
+.push-card .push-card-icon {
   width: 40px;
   height: 40px;
   border-radius: 12px;
@@ -273,33 +280,40 @@ body.is-coarse .push-card-top .push-card-remove {
   margin-bottom: 2px;
   flex: 0 0 auto;
 }
-.push-card-icon svg { width: 24px; height: 24px; }
+.push-card-icon svg { width: 24px; height: 24px; display: block; }
 .push-card strong, .game-card strong, .manage-card strong, .date-card strong { display: block; }
 .push-card span, .game-card span, .manage-card span, .date-card span { color: var(--text-dim); font-size: 0.82rem; }
 .push-card.is-add { border-style: dashed; }
 .push-card.is-on { border-color: rgba(56, 189, 248, 0.45); }
+/* One 40px axis: grip, glyph, and dismiss share a box and a center. */
 .push-card-top {
   display: grid;
-  grid-template-columns: 40px 40px 1fr auto;
+  grid-template-columns: 40px 40px 1fr 40px;
   align-items: center;
   column-gap: 6px;
   width: 100%;
+  height: 40px;
   margin-bottom: 8px;
+}
+.push-card-top .push-card-handle,
+.push-card-top .push-card-icon,
+.push-card-top .push-card-remove {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
 }
 .push-card-top .push-card-handle {
   grid-column: 1;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
   border: 1px solid var(--line);
   background: rgba(15, 23, 42, 0.35);
 }
 .push-card-top .push-card-icon {
   grid-column: 2;
-  width: 40px;
-  height: 40px;
   margin-bottom: 0;
-  flex: 0 0 40px;
 }
 .push-card-remove,
 .push-card-handle {
@@ -318,10 +332,12 @@ body.is-coarse .push-card-top .push-card-remove {
 .push-card-top .push-card-remove {
   grid-column: 4;
   justify-self: end;
-  width: 36px;
-  height: 36px;
-  font-size: 1.35rem;
-  line-height: 1;
+  cursor: pointer;
+}
+.push-card-top .push-card-remove svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 .push-card-remove:hover,
 .push-card-handle:hover,
@@ -985,6 +1001,16 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   max-width: min(100%, 480px);
 }
 
+/* One box for everything under the board, so a wide screen can stand it
+   beside the board instead of below it. Stacked it reads exactly as the
+   loose children did. */
+#tab-main .gb-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
 @media (min-width: 600px) {
   body[data-tab="main"] {
     --gb-chrome: calc(
@@ -1042,9 +1068,69 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
       width: min(100cqi, calc(100cqb * 1.87));
     }
   }
+  #tab-main .gb-controls { gap: 8px; }
+  /* `.gb-chip-btn` is `flex: 1` so Undo/Clear split their row evenly. In the
+     chip row it has six colour swatches beside it and would swallow every
+     leftover pixel, which on a wide screen is most of the row. */
+  #tab-main .gb-chips { align-items: center; }
+  #tab-main .gb-chips .gb-chip-btn {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+  }
   #tab-main .gb-input { padding: 10px 14px; }
   #tab-main .gb-send,
   #tab-main .gb-secondary { padding: 12px 16px; }
+}
+
+/*
+ * Large desktop. Stacked, the board is capped by the column width long before
+ * it runs out of height, so the leftover height opens as dead air between the
+ * board and the controls. Standing the controls beside the board spends that
+ * width on the board instead and brings them back up to the top.
+ *
+ * Matches the Board tab, which goes two-column at the same width.
+ */
+@media (min-width: 1600px) and (min-height: 720px) {
+  body[data-tab="main"] {
+    /* The controls no longer sit under the board, so this only has to cover
+       the site header and the page heading. It is what stops a wide but short
+       display from growing a board taller than the panel. */
+    --gb-chrome: calc(
+      var(--tab-h)
+      + env(safe-area-inset-top, 0px)
+      + env(safe-area-inset-bottom, 0px)
+      + 11rem
+    );
+  }
+  body[data-tab="main"] main { max-width: 1720px; }
+  #tab-main .gb-name-hidden #gb-compose.gb-main {
+    display: grid;
+    /* Wide enough that the seven swatches and Erase share one row. */
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 25%, 440px);
+    column-gap: 28px;
+    align-items: start;
+    /* Content height rather than the leftover height, so the block ends with
+       the board instead of stretching and re-opening the gap underneath it. */
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  #tab-main #gb-compose .gb-board-wrap {
+    grid-column: 1;
+    grid-row: 1;
+    /* `inline-size`, not `size`: the box takes its height from the board.
+       Size containment here would leave the board measuring itself against a
+       box that is only as tall as the board, and it would collapse. */
+    container-type: inline-size;
+    align-items: flex-start;
+  }
+  #tab-main #gb-compose .gb-board-wrap .gb-bezel {
+    width: min(100cqi, calc((100dvh - var(--gb-chrome)) * 1.87));
+  }
+  #tab-main #gb-compose .gb-controls {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 10px;
+  }
 }
 
 @media (min-width: 720px) {
