@@ -41,21 +41,30 @@
    * on one laptop open two windows, and a cookie is shared between them — the
    * second player used to land on the first one's seat, so both screens drove
    * one turn. Per-tab storage keeps them apart; a refresh still comes back to
-   * the same seat.
+   * the same seat. The code rides along so a reconnect can fall back to join
+   * if the session id alone is not enough.
    */
   function storedSeat() {
     try {
       const raw = JSON.parse(sessionStorage.getItem(SEAT_KEY) || '{}');
-      return { sessionId: raw.sessionId || '', playerId: raw.playerId || '' };
+      return {
+        sessionId: raw.sessionId || '',
+        playerId: raw.playerId || '',
+        code: raw.code || '',
+      };
     } catch {
-      return { sessionId: '', playerId: '' };
+      return { sessionId: '', playerId: '', code: '' };
     }
   }
 
-  function rememberSeat(sessionId, id) {
+  function rememberSeat(sessionId, id, code = '') {
     playerId = id || '';
     try {
-      sessionStorage.setItem(SEAT_KEY, JSON.stringify({ sessionId: sessionId || '', playerId: playerId }));
+      sessionStorage.setItem(SEAT_KEY, JSON.stringify({
+        sessionId: sessionId || '',
+        playerId: playerId,
+        code: String(code || '').trim().toUpperCase(),
+      }));
     } catch {
       // Without storage the cookie still carries this tab; only a second tab
       // on the same browser loses its own seat.
@@ -254,6 +263,31 @@
     statusBeat = beat;
   }
 
+  /**
+   * Modules register after this file. Auto-join used to race that and paint
+   * the play shell with every game panel still `hidden` — an empty screen.
+   * Wait a beat for the matching module before we flip away from the form.
+   */
+  function whenGameReady(type, timeoutMs = 2500) {
+    const id = String(type || '').trim();
+    if (!id) return Promise.resolve(false);
+    if (games.has(id)) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const tick = window.setInterval(() => {
+        if (games.has(id)) {
+          window.clearInterval(tick);
+          resolve(true);
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          window.clearInterval(tick);
+          resolve(false);
+        }
+      }, 25);
+    });
+  }
+
   function applySession(next) {
     session = next;
     if (!next) return;
@@ -271,13 +305,48 @@
     renderCodeLine(next);
     renderStandings(next);
     renderScore(next);
-    games.get(activeGame)?.render?.(next);
+    const mod = games.get(activeGame);
+    if (!mod?.render) {
+      setStatus('gm-play-status', 'Loading the game…');
+      return;
+    }
+    try {
+      mod.render(next);
+    } catch (error) {
+      setStatus('gm-play-status', error?.message || 'Could not draw this round');
+    }
+  }
+
+  /**
+   * Flip into the live view only once we have a real session and its module.
+   * Showing `#gm-play` with neither used to leave three browsers on a blank
+   * stage after a successful join.
+   */
+  async function enterSession(next, player = null) {
+    if (!next?.sessionId || !next.gameType) {
+      throw new Error('That join did not return a game');
+    }
+    if (player?.id) {
+      rememberSeat(next.sessionId, player.id, next.code || '');
+    } else {
+      rememberSeat(next.sessionId, playerId, next.code || '');
+    }
+    const ready = await whenGameReady(next.gameType);
+    if (!ready) {
+      throw new Error('The game is still loading — try again in a moment');
+    }
+    applySession(next);
+    show('gm-play');
+    listen(next.sessionId);
+    window.setTimeout(resetPageScroll, 300);
   }
 
   function listen(sessionId) {
     if (source) source.close();
+    if (!sessionId || !playerId) return;
     // The seat rides on the URL so this tab's stream is its own, even when a
     // second window on the same browser is playing a different seat.
+    let probing = false;
     source = new EventSource(
       `/api/games/events?sessionId=${encodeURIComponent(sessionId)}&playerId=${encodeURIComponent(playerId)}`,
     );
@@ -292,7 +361,32 @@
         // ignore
       }
     });
-    source.onerror = () => {};
+    source.onerror = () => {
+      // EventSource retries forever on a dead session id. If the session is
+      // gone (idle close right after join used to do this), bounce back to
+      // the form instead of sitting on an empty play shell.
+      if (probing || !session || session.sessionId !== sessionId) return;
+      probing = true;
+      window.setTimeout(async () => {
+        try {
+          await api(
+            `/api/games/session?sessionId=${encodeURIComponent(sessionId)}`
+            + `&playerId=${encodeURIComponent(playerId)}`,
+          );
+        } catch {
+          if (source) source.close();
+          games.get(activeGame)?.teardown?.();
+          activeGame = '';
+          session = null;
+          statusBeat = '';
+          forgetSeat();
+          show('gm-join');
+          setStatus('gm-join-status', 'That game ended — join again with a fresh code.');
+        } finally {
+          probing = false;
+        }
+      }, 800);
+    };
   }
 
   async function join() {
@@ -311,13 +405,13 @@
           newSeat: !seat.playerId,
         },
       });
+      if (!data.session?.sessionId) {
+        throw new Error(data.error || 'That join did not return a game');
+      }
       rememberName(String(typed || '').trim());
-      rememberSeat(data.session?.sessionId, data.player?.id);
-      applySession(data.session);
-      show('gm-play');
-      listen(data.session.sessionId);
-      window.setTimeout(resetPageScroll, 300);
+      await enterSession(data.session, data.player);
     } catch (error) {
+      show('gm-join');
       setStatus('gm-join-status', error.message);
     }
   }
@@ -406,12 +500,43 @@
   if (joinName && !codeParam && $('gm-code')) {
     $('gm-code').focus();
   }
-  // Household "Join now" opens /games/?code=&name= — skip the form and sit down.
-  // Modules register synchronously below this file, so wait a tick or the
-  // first session would arrive before its game had signed up.
-  if (codeParam && joinName) {
-    setStatus('gm-join-status', 'Joining…');
-    window.setTimeout(join, 0);
+
+  /**
+   * A refresh used to dump a seated player back on the code form even though
+   * their seat was still live. Reconnect first; only fall through to the
+   * join form (or the ?code=&name= auto-join) when that seat is gone.
+   *
+   * Auto-join waits for `load` so every game module has registered — a
+   * `setTimeout(0)` from this file used to race the scripts below it and
+   * paint an empty play shell.
+   */
+  async function boot() {
+    const seat = storedSeat();
+    if (seat.sessionId && seat.playerId) {
+      playerId = seat.playerId;
+      setStatus('gm-join-status', 'Reconnecting…');
+      try {
+        const data = await api(
+          `/api/games/session?sessionId=${encodeURIComponent(seat.sessionId)}`
+          + `&playerId=${encodeURIComponent(seat.playerId)}`,
+        );
+        await enterSession(data.session, { id: seat.playerId });
+        return;
+      } catch {
+        forgetSeat();
+        setStatus('gm-join-status', '');
+      }
+    }
+    if (codeParam && joinName) {
+      setStatus('gm-join-status', 'Joining…');
+      await join();
+    }
+  }
+
+  if (document.readyState === 'complete') {
+    window.setTimeout(boot, 0);
+  } else {
+    window.addEventListener('load', () => { boot(); }, { once: true });
   }
 
   if (clock) clearInterval(clock);

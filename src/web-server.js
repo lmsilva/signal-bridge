@@ -582,6 +582,10 @@ function createWebServer({
       gameSessions.noteBoardShown?.(detail);
     } else if (event === 'cancelled') {
       gameSessions.noteBoardCancelled?.(detail);
+    } else if (event === 'lock-preempted' && detail?.source) {
+      // Doorbell (or another higher jumper) took the board — end the game
+      // session so it cannot renew the lock on the next phase card.
+      gameSessions.endByBoardSource?.(detail.source, 'preempted');
     }
   });
   const learnJapanese = createLearnJapanese(config, log);
@@ -2823,12 +2827,22 @@ function createWebServer({
   }
 
   function handleGamesSessionGet(query, res) {
-    const session = gameSessions.getByCode(query?.code);
-    if (!session) {
+    // Phones keep a seat in sessionStorage across a refresh. Look up by id
+    // first so they can reconnect without retyping the code; the code path
+    // stays for the public "is this invite still live?" check.
+    const byId = String(query?.sessionId || '').trim();
+    const session = byId
+      ? gameSessions.getById(byId)
+      : gameSessions.getByCode(query?.code);
+    if (!session || session.phase === 'closed') {
       sendJson(res, 404, { ok: false, error: 'No game uses that code' });
       return;
     }
-    sendJson(res, 200, { ok: true, session: gameSessions.publicSession(session) });
+    const playerId = String(query?.playerId || '').trim();
+    sendJson(res, 200, {
+      ok: true,
+      session: gameSessions.publicSession(session, playerId),
+    });
   }
 
   /**
@@ -5571,6 +5585,7 @@ function createWebServer({
       explicit: Boolean(manual),
       breakHold: false,
       targetId: deliveryId,
+      ...(manual && requestActor ? { actor: requestActor } : {}),
     };
     try {
       switch (commandId) {
@@ -6643,6 +6658,9 @@ function createWebServer({
       spokenResponse: null,
       targetId,
       triggeredBy: body?.triggeredBy || 'web-api',
+      actor: body?.triggeredBy === 'scheduler'
+        ? null
+        : (requestActor || body?.actor || null),
     };
     // Fire and forget: Tesla fetches can take up to 30s (vehicle wake); the
     // voice pipeline already sends a cached preview / processing ack first.
@@ -6679,6 +6697,11 @@ function createWebServer({
       spokenResponse: null,
       targetId,
       triggeredBy: body?.triggeredBy || trigger,
+      // Capture now — requestActor is cleared when the HTTP response finishes,
+      // but Alexa enrich may post the board card seconds later.
+      actor: body?.triggeredBy === 'scheduler'
+        ? null
+        : (requestActor || body?.actor || null),
     };
     const pending = recordVoiceEvent(event);
     if (body?.triggeredBy === 'scheduler') {
@@ -6699,7 +6722,10 @@ function createWebServer({
       return;
     }
     const device = deviceFrom(body);
-    requestTimerPoll(device);
+    const actor = body?.triggeredBy === 'scheduler'
+      ? null
+      : (requestActor || body?.actor || null);
+    requestTimerPoll(device, { actor });
     log.info('Web push accepted (timers)', { device });
     sendJson(res, 202, { ok: true, kind: 'timers' });
   }
@@ -6710,7 +6736,10 @@ function createWebServer({
       return;
     }
     const device = deviceFrom(body);
-    requestAlarmPoll(device);
+    const actor = body?.triggeredBy === 'scheduler'
+      ? null
+      : (requestActor || body?.actor || null);
+    requestAlarmPoll(device, { actor });
     log.info('Web push accepted (alarms)', { device });
     sendJson(res, 202, { ok: true, kind: 'alarms' });
   }

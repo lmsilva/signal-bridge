@@ -826,8 +826,10 @@ test('the gap between two game phases does not open the line', async () => {
   assert.equal(h.queue.pending().length, 1);
 });
 
-test('an alarm preempts a live game and does not discard the pages behind it', async () => {
+test('an alarm preempts a live game and ends the game lock so the queue continues', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
   h.queue.acquireGameLock('word.scramble');
   h.queue.submit([{
     ...frame('ROUND', 1, { source: 'word.scramble' }),
@@ -843,11 +845,60 @@ test('an alarm preempts a live game and does not discard the pages behind it', a
 
   assert.equal(h.queue.pending()[0].label, 'ALARM');
   assert.equal(h.queue.pending().some((row) => row.label === 'RIDDLE'), true);
+  assert.equal(h.queue.state().gameLock, null, 'the scramble lock ends with the interrupt');
+  assert.equal(h.queue.pending().find((row) => row.label === 'RIDDLE').status, 'waiting');
+  assert.ok(events.some((row) => row.event === 'lock-preempted'
+    && row.detail.source === 'word.scramble'));
   h.advance(2 * SECOND);
   assert.equal(await h.queue.tick(), 'posted');
   assert.equal(h.transport.posts[1].layout[0][0], 9, 'the alarm takes the board');
-  assert.ok(h.queue.state().gameLock, 'the scramble session is still holding');
-  assert.equal(h.queue.pending().find((row) => row.label === 'RIDDLE').status, 'held');
+});
+
+test('doorbell cutting through Hangman frees a held Red Letter page', async () => {
+  const priorities = [
+    { source: 'ring.doorbell', jump: true, immediate: true, hold: false, holdMinutes: 15 },
+    { source: 'hangman.game', jump: true, immediate: true, hold: true, holdMinutes: 30 },
+  ];
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60, priorities });
+  h.queue.acquireGameLock('hangman.game');
+  h.queue.submit([{
+    ...frame('INVITE', 1, { source: 'hangman.game' }),
+    dwellSeconds: 15,
+    holdSeconds: 120,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('RED LETTER', 2, { source: 'red.letter' })]);
+  assert.equal(h.queue.pending()[0].status, 'held');
+  h.queue.submit([frame('DOORBELL', 9, { source: 'ring.doorbell' })]);
+  assert.equal(h.queue.state().gameLock, null);
+  assert.equal(h.queue.pending()[0].label, 'DOORBELL');
+  assert.equal(h.queue.pending().find((row) => row.label === 'RED LETTER').status, 'waiting');
+  assert.equal(
+    h.queue.pending().some((row) => row.source === 'hangman.game'),
+    false,
+    'displaced hangman pages leave the queue',
+  );
+  h.advance(2 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 9);
+  // After the doorbell's own reading time, Red Letter may flip — not held forever.
+  h.advance(60 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[2].layout[0][0], 2);
+});
+
+test('sequence pages wait at least the house dwell, not a 15s formatter stamp', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60 });
+  h.queue.submit([
+    frame('PAGE 1', 1, { dwellSeconds: 15 }),
+    frame('PAGE 2', 2, { dwellSeconds: 15 }),
+  ]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), null, '15s stamp must not undercut a 60s dwell');
+  h.advance(44 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
 });
 
 test('a game lock that is never released expires rather than wedging the board', async () => {

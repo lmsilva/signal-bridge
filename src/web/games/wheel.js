@@ -312,7 +312,16 @@
 
   window.GameShell.register('wheel', {
     render(session) {
-      if (Array.isArray(session.wheel)) buildWheel(session.wheel);
+      // Build the bitmap only once a round needs it. Doing it on every lobby
+      // join was wasted work and, on a slow phone, could stall the first paint
+      // so the play shell looked empty after the code was accepted.
+      if (session.phase === 'round' && Array.isArray(session.wheel)) {
+        try {
+          buildWheel(session.wheel);
+        } catch {
+          // A wheel that will not paint must not blank the puzzle / lobby.
+        }
+      }
       if (session.roundIndex !== lastRoundIndex) {
         lastRoundIndex = session.roundIndex;
         lastSpinId = 0;

@@ -14,8 +14,11 @@
 //     also drop the current dwell and flip as soon as the rate window allows
 //   - a live hold (games only, unless the board's Priorities list says
 //     otherwise) owns the board until it ends, an equal/higher jumper
-//     arrives, or the safety timeout fires; score/metadata updates of the
-//     same source replace the live card instead of stacking
+//     arrives, or the safety timeout fires; a jumper that does not itself
+//     hold (doorbell, alarm, ...) ends the displaced lock so the queue can
+//     continue — it does not keep the game pin alive under the interrupt.
+//     Score/metadata updates of the same source replace the live card
+//     instead of stacking
 //   - relative rank comes from the house Priorities list (top = first)
 //   - every other snapshot (manual Push, Air now, scheduler) joins the back
 //     of the line — they do not jump ahead of pages already waiting
@@ -207,9 +210,20 @@ function createQueue({
     return (Number.isFinite(seconds) ? seconds : DEFAULT_ROTATION_GAP_SECONDS) * 1000;
   }
 
-  function dwellMsOf(frame) {
+  /** Reading time stamped on the frame (formatter / alert dwell). */
+  function readingMsOf(frame) {
     const seconds = Number(frame?.dwellSeconds);
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_DWELL_SECONDS) * 1000;
+  }
+
+  /**
+   * How long this page should stay before the next queued page may flip.
+   * House Settings → Dwell is the floor so a formatter that still stamps
+   * the old 15s default cannot undercut the configured dwell (including
+   * later pages of a multi-page sequence).
+   */
+  function dwellMsOf(frame) {
+    return Math.max(readingMsOf(frame), boardDwellMs());
   }
 
   /** Board Settings → Dwell. Zero / missing means "rate window only". */
@@ -655,6 +669,32 @@ function createQueue({
     );
     const takesBoard = !lockNow || mine || preempt;
 
+    // A higher-listed jumper that does not hold (doorbell / alarm / …) must
+    // end the displaced lock. Keeping it left Red Letter "held" under a
+    // Hangman pin while the board showed RING DOOR BELL — Hold is unchecked
+    // on the doorbell, so the queue should continue after the interrupt.
+    if (preempt && !mine && lockNow) {
+      const displaced = lockNow.source;
+      const jumperHolds = Boolean(hold.hold || hold.live);
+      if (!jumperHolds) {
+        releaseLaneLock(displaced);
+        dropSourcePending(displaced);
+        if (state.lastSnapshot
+          && (String(state.lastSnapshot.source || '') === displaced
+            || String(state.lastSnapshot.ownerSource || '') === displaced)) {
+          state.lastSnapshot = null;
+        }
+        // Do not put the displaced game back after the alert's dwell.
+        state.restoreAfter = null;
+        state.phaseUntil = null;
+      }
+      emit('lock-preempted', {
+        boardId: config.id,
+        source: displaced,
+        by: hold.source || offeredSource,
+      });
+    }
+
     if (isHoldLane(hold.lane) && takesBoard) {
       if (hold.live) {
         acquireLaneLock(hold.source, hold.lane, { ttlMs: hold.ttlMs, rank: hold.rank });
@@ -769,8 +809,9 @@ function createQueue({
 
     if (item.priority === 'alert') {
       // Once the alert has had its time, the board should go back to what it
-      // was showing rather than sitting on a stale warning.
-      state.restoreAfter = at + dwellMsOf(item.frame);
+      // was showing rather than sitting on a stale warning. Use the frame's
+      // own reading time — do not stretch an interrupt to house dwell.
+      state.restoreAfter = at + readingMsOf(item.frame);
       // An alert is not a rotation page. Leave no leftover dwell that would
       // park the restore (or the next snapshot) after the alert has finished.
       state.snapshotUntil = null;

@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal285">
+  <link rel="stylesheet" href="styles.css?v=signal288">
 </head>
 <body>
   <header class="su-head">
@@ -75,7 +75,8 @@
               <button type="button" class="gb-chip-btn" id="btn-gb-clear-footer" hidden>Clear footer</button>
               <button type="button" class="gb-chip-btn" id="btn-gb-restore-footer" hidden>Restore footer</button>
             </div>
-            <input id="gb-name" hidden>
+            <!-- Hidden stub for guestbook.js; never a username for Chrome's password manager. -->
+            <input id="gb-name" type="text" hidden tabindex="-1" aria-hidden="true" autocomplete="off" name="signal-guestbook-signer">
             <p class="gb-counter" id="gb-counter">0 / 88</p>
             <button type="button" class="gb-send" id="btn-gb-send" disabled>Send to the board</button>
             <p class="gb-status" id="gb-send-status" role="status"></p>
@@ -236,7 +237,14 @@
   </main>
 
   <div class="su-backdrop" id="profile-sheet" hidden>
-    <div class="su-dialog profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title">
+    <!--
+      Chrome treats a filled first name next to any type=password on the same
+      document as a login form — even while this sheet is closed — and pops
+      "Save password?" after unrelated work (Skills drag, tab change). Keep
+      password inputs disabled until the sheet opens, and never mark them as
+      current-password / username.
+    -->
+    <div class="su-dialog profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title" autocomplete="off">
       <div class="su-sheet-head">
         <h2 id="profile-sheet-title">Profile</h2>
         <button type="button" class="su-text" id="btn-profile-close">Close</button>
@@ -244,15 +252,15 @@
       <div class="date-form-grid">
         <div>
           <label class="su-label" for="pf-first">First name</label>
-          <input id="pf-first" class="su-input" type="text" autocomplete="given-name">
+          <input id="pf-first" class="su-input" type="text" name="signal-profile-first" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false">
         </div>
         <div>
           <label class="su-label" for="pf-last">Last name</label>
-          <input id="pf-last" class="su-input" type="text" autocomplete="family-name">
+          <input id="pf-last" class="su-input" type="text" name="signal-profile-last" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false">
         </div>
       </div>
       <label class="su-label" for="pf-email">Email</label>
-      <input id="pf-email" class="su-input" type="email" autocomplete="email">
+      <input id="pf-email" class="su-input" type="email" name="signal-profile-email" autocomplete="off" data-lpignore="true" data-1p-ignore="true" spellcheck="false">
       <p class="hint" id="pf-env-hint" hidden>This account is the environment admin. Change the password in <code>ADMIN_PASSWORD</code>.</p>
       <button type="button" class="su-btn" id="btn-profile-save">Save profile</button>
       <h2 class="su-h">Avatar</h2>
@@ -260,14 +268,14 @@
       <p class="hint avatar-upload-hint">Upload a photo and adjust how it fits the rounded square.</p>
       <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-avatar-upload">Choose picture</button>
       <input id="pf-upload" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-      <div id="pf-password-block">
+      <div id="pf-password-block" hidden>
         <h2 class="su-h">Password</h2>
         <label class="su-label" for="pf-current">Current password</label>
-        <input id="pf-current" class="su-input" type="password" autocomplete="current-password">
+        <input id="pf-current" class="su-input" type="password" name="signal-current-secret" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" spellcheck="false" disabled>
         <label class="su-label" for="pf-new">New password</label>
-        <input id="pf-new" class="su-input" type="password" autocomplete="new-password">
+        <input id="pf-new" class="su-input" type="password" name="signal-new-secret" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" spellcheck="false" disabled>
         <label class="su-label" for="pf-new-confirm">Confirm new password</label>
-        <input id="pf-new-confirm" class="su-input" type="password" autocomplete="new-password">
+        <input id="pf-new-confirm" class="su-input" type="password" name="signal-new-secret-confirm" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" spellcheck="false" disabled>
         <button type="button" class="su-btn" id="btn-password">Change password</button>
       </div>
     </div>
@@ -470,6 +478,6 @@
   <script src="/vestaboard-sim-ui.js?v=signal284"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="app.js?v=signal285"></script>
+  <script src="app.js?v=signal288"></script>
 </body>
 </html>
