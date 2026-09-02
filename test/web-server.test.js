@@ -3087,9 +3087,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal263/);
+  assert.match(html, /styles\.css\?v=signal278/);
   assert.match(html, /settings-filter\.js\?v=signal217/);
-  assert.match(html, /app\.js\?v=signal263/);
+  assert.match(html, /app\.js\?v=signal278/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3135,7 +3135,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /document\.addEventListener\('pointermove', onMove, true\)/);
   assert.match(js, /VB_QUEUE_POLL_MS = 2000/);
   assert.match(css, /body\.vb-queue-dragging/);
-  assert.match(css, /\.vb-queue-row \{[^}]*grid-template-columns:/);
+  assert.match(css, /\.vb-queue-row \{[^}]*grid-template-areas: "handle title source status cancel"/);
   assert.match(js, /vb-queue-source/);
   assert.match(js, /vb-queue-title/);
   assert.match(html, /id="tinyurl-settings-card"/);
@@ -5144,6 +5144,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /id="btn-vb-sound"/);
     assert.match(userApp.text, /class="tab-bar"/);
     assert.match(userApp.text, /data-tab="slideshow"/);
+    assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
     assert.match(userApp.text, /id="btn-slideshow-select-all"/);
     assert.match(userApp.text, /id="su-confirm-sheet"/);
@@ -5152,6 +5153,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /id="date-recurring"/);
     assert.match(userApp.text, /tab-label-full">Vestaboard Simulator/);
     assert.match(userApp.text, /tab-label-short">Simulator/);
+    assert.match(userApp.text, /tab-label-full">Game Sessions/);
+    assert.match(userApp.text, /tab-label-short">Sessions/);
     assert.match(userApp.text, /tab-label-full">Date Book/);
     assert.match(userApp.text, /data-tab="dates"/);
     assert.match(userApp.text, /id="btn-profile"/);
@@ -5179,7 +5182,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal270/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal273/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
     // Push tiles carry the same artwork the admin grid draws, and adding one
@@ -5219,17 +5222,20 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /main \{\s*\/\*[\s\S]*?\*\/\s*width: 100%;\s*max-width: 1180px/);
     assert.match(userCss, /transform: translateX\(-50%\)/);
     assert.match(userCss, /\.su-head-who/);
+    assert.match(userCss, /\.su-page-head-actions \{/);
     assert.match(userCss, /a\.su-btn/);
     assert.match(userCss, /#tab-main \.gb-name-hidden \.gb-main/);
+    assert.match(userCss, /--gb-chrome/);
+    assert.match(userCss, /100cqb \* 1\.87/);
     assert.match(userCss, /body\[data-tab="board"\] main/);
     assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(0, 1fr\)/);
     assert.match(userCss, /push-card-grip/);
     assert.match(userCss, /\.push-card-top \{/);
     assert.match(userCss, /grid-template-columns: 40px 40px 1fr auto/);
     assert.match(userCss, /\.push-card-top \.push-card-handle \{/);
-    assert.match(userJs, /function rectOverlap/);
-    assert.match(userJs, /function dashDragRect/);
-    assert.match(userJs, /function nearestDashSlot/);
+    assert.match(userJs, /function dashCellIndex/);
+    assert.match(userJs, /function dashGridMetrics/);
+    assert.match(userJs, /function dashFlowNodes/);
     assert.match(userJs, /GAMES_POLL_MS/);
     assert.match(userJs, /function startGamesPoll/);
     assert.match(userJs, /function bindPointerDashDrag/);
@@ -5239,10 +5245,20 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal271/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal278/);
+    assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
+    assert.match(userCss, /\*::-webkit-scrollbar \{/);
+    assert.match(userCss, /@container vb-queue \(max-width: 520px\)/);
+    assert.match(userCss, /\.vb-queue-row \{[^}]*grid-template-areas: "handle title source status cancel"/);
     assert.match(userApp.text, /class="su-page-head"/);
     assert.match(userApp.text, /class="su-page-head-copy"/);
+    assert.match(userApp.text, /class="card trip-board-card"/);
+    assert.match(userApp.text, /id="trip-sheet"/);
+    assert.match(userApp.text, /class="su-dialog trip-dialog"/);
+    assert.match(userJs, /function closeTripSheet/);
+    assert.match(userJs, /function formatTripDates/);
     assert.match(userCss, /\.su-page-head \{[^}]*justify-content: space-between/);
+    assert.match(userCss, /\.trip-card \{/);
     assert.match(userCss, /\.push-card-top \.push-card-handle \{[^}]*width: 40px/);
     assert.match(userCss, /html, body \{[^}]*position: fixed/);
     assert.match(userCss, /html, body \{[^}]*overflow: hidden/);

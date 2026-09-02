@@ -11,6 +11,25 @@
 }
 
 * { box-sizing: border-box; }
+
+/* Match admin: thin themed scrollbars instead of the OS gray bar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 163, 196, 0.4) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(143, 163, 196, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 163, 196, 0.55);
+  background-clip: padding-box;
+}
+
 [hidden] { display: none !important; }
 html, body {
   margin: 0;
@@ -182,7 +201,17 @@ a.su-btn { text-decoration: none; box-sizing: border-box; }
   position: relative;
   min-width: 0;
 }
-.push-card-wrap.is-dragging { opacity: 0.4; }
+.push-card-wrap.is-dragging {
+  position: absolute;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
 .push-card-wrap.is-placeholder {
   min-height: 88px;
   border: 1px dashed rgba(56, 189, 248, 0.7);
@@ -309,9 +338,6 @@ body.is-coarse .push-card-top .push-card-remove {
   background-position: center;
   opacity: 0.85;
 }
-body.is-fine .push-card-wrap.is-dragging {
-  opacity: 0.35;
-}
 .su-sheet {
   position: fixed;
   inset: auto 0 0;
@@ -350,8 +376,22 @@ body.is-fine .push-card-wrap.is-dragging {
   flex: 1 1 auto;
   min-height: 12rem;
   overflow: auto;
+  overscroll-behavior: contain;
   margin-top: 8px;
-  padding-right: 2px;
+  padding: 0 14px 6px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 163, 196, 0.35) transparent;
+}
+.push-lib-body::-webkit-scrollbar { width: 6px; }
+.push-lib-body::-webkit-scrollbar-thumb {
+  background: rgba(143, 163, 196, 0.32);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.push-lib-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 163, 196, 0.5);
+  background-clip: padding-box;
 }
 .push-lib-empty { margin: 18px 4px; }
 .avatar-grid {
@@ -419,20 +459,83 @@ body.is-fine .push-card-wrap.is-dragging {
   transform: rotate(45deg);
 }
 .photo-grid-empty { text-align: center; padding: 24px 0; }
-.slideshow-toolbar-card {
+.su-page-head .su-btn {
+  flex: 0 0 auto;
+  margin: 0;
+  align-self: center;
+}
+.su-page-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+}
+.slideshow-toolbar-selecting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.slideshow-push {
+  width: auto;
+  margin: 0 0 14px;
+}
+
+.trip-board-card { padding: 18px 18px 16px; }
+.trip-board-title {
+  margin: 0 0 8px;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+.trip-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-elev);
+  gap: 8px;
+  margin-top: 12px;
 }
-.slideshow-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.slideshow-toolbar .su-btn { width: auto; margin: 0; }
-.slideshow-toolbar-selecting { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; }
-.slideshow-refresh { margin-left: auto; }
+.trip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: inherit;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+.trip-card strong { display: block; }
+.trip-card-meta {
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+.trip-flights-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 4px;
+}
+.trip-flights-head .su-h { margin: 0; }
+.trip-flight-list,
+.trip-flight-results { display: flex; flex-direction: column; gap: 8px; }
+.trip-flight-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.trip-flight-row:last-child { border-bottom: 0; }
+.trip-flight-row span { color: var(--text-dim); font-size: 0.88rem; }
+.trip-flight-results .manage-card { margin-top: 0; }
+#btn-flight-search { width: auto; margin-top: 12px; }
+.trip-dialog #trip-detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 
 .game-list, .date-list {
   display: grid;
@@ -699,10 +802,15 @@ body[data-tab="board"] .vb-bezel {
 .vb-flip-clock.is-ready .vb-flip-remain { color: #86efac; }
 .vb-flip-clock.is-waiting .vb-flip-remain { color: var(--text); }
 .vb-queue-card .hint { margin: 12px 0 14px; }
+.vb-queue-card {
+  container-type: inline-size;
+  container-name: vb-queue;
+}
 .vb-list { display: flex; flex-direction: column; gap: 6px; }
 .vb-queue-row {
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr) minmax(5rem, 8.5rem) minmax(6.5rem, 9rem) 1.7rem;
+  grid-template-columns: 1.35rem minmax(0, 1fr) minmax(4.5rem, 7rem) minmax(4.5rem, 7rem) 1.7rem;
+  grid-template-areas: "handle title source status cancel";
   column-gap: 12px;
   align-items: center;
   padding: 9px 12px;
@@ -732,6 +840,7 @@ body.vb-queue-dragging {
   font: inherit;
 }
 .vb-queue-handle {
+  grid-area: handle;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -748,15 +857,21 @@ body.vb-queue-dragging {
   white-space: nowrap;
 }
 .vb-queue-source {
+  grid-area: source;
   color: var(--text-dim);
   font-size: 0.74rem;
   letter-spacing: 0.01em;
 }
+.vb-queue-source.is-empty {
+  visibility: hidden;
+}
 .vb-queue-title {
+  grid-area: title;
   color: var(--text);
   font-weight: 600;
 }
 .vb-queue-status {
+  grid-area: status;
   color: var(--text-dim);
   font-size: 0.74rem;
   letter-spacing: 0.04em;
@@ -768,6 +883,7 @@ body.vb-queue-dragging {
 .vb-queue-row.dragging .vb-queue-handle,
 body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .vb-queue-cancel {
+  grid-area: cancel;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -779,6 +895,21 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   touch-action: manipulation;
 }
 .vb-queue-cancel:hover { color: #f87171; }
+@container vb-queue (max-width: 520px) {
+  .vb-queue-row {
+    grid-template-columns: 1.35rem minmax(0, 1fr) minmax(4.5rem, 6.5rem) 1.7rem;
+    grid-template-areas:
+      "handle title status cancel"
+      "handle source status cancel";
+    row-gap: 2px;
+    column-gap: 10px;
+  }
+  .vb-queue-handle { grid-area: handle; }
+  .vb-queue-title { grid-area: title; }
+  .vb-queue-source { grid-area: source; }
+  .vb-queue-status { grid-area: status; align-self: center; }
+  .vb-queue-cancel { grid-area: cancel; }
+}
 @media (max-width: 720px) {
   .vb-queue-row {
     grid-template-columns: 1.35rem minmax(0, 1fr) minmax(5.5rem, 7.5rem) 1.7rem;
@@ -847,40 +978,73 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .profile-dialog { max-width: 640px; }
 .gb-name-hidden .gb-header { padding-top: 0; }
 
-/* Message tab — grow the compose board on tablets and desktops. */
+/* Message tab — phone keeps a readable column; tablet/desktop fill the
+   leftover viewport so the board and send controls never need a scrollbar. */
 #tab-main .gb-name-hidden .gb-main {
   width: 100%;
   max-width: min(100%, 480px);
 }
 
 @media (min-width: 600px) {
-  #tab-main .gb-name-hidden .gb-main {
-    max-width: min(94vw, 620px);
+  body[data-tab="main"] {
+    --gb-chrome: calc(
+      var(--tab-h)
+      + env(safe-area-inset-top, 0px)
+      + env(safe-area-inset-bottom, 0px)
+      + 28rem
+    );
   }
-}
-
-@media (min-width: 900px) {
-  #tab-main .gb-name-hidden .gb-main {
-    max-width: min(92vw, 760px);
-  }
-}
-
-@media (min-width: 1100px) {
   body[data-tab="main"] main {
-    max-width: 1280px;
-  }
-  #tab-main .gb-name-hidden .gb-main {
-    max-width: min(90vw, 920px);
-  }
-}
-
-@media (min-width: 1400px) {
-  body[data-tab="main"] main {
+    overflow: hidden;
     max-width: 1400px;
   }
-  #tab-main .gb-name-hidden .gb-main {
-    max-width: min(88vw, 1040px);
+  body[data-tab="main"] #tab-main.tab-panel.active {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 4px;
+    padding-bottom: 8px;
   }
+  #tab-main .gb-name-hidden {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #tab-main .gb-name-hidden > .gb-header {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+  }
+  #tab-main .gb-name-hidden > .gb-header h2 { font-size: 1.35rem; }
+  #tab-main .gb-name-hidden .gb-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: min(100%, 1040px);
+    gap: 8px;
+  }
+  #tab-main .gb-main > :not(.gb-board-wrap) { flex: 0 0 auto; }
+  #tab-main .gb-board-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    container-type: size;
+  }
+  #tab-main .gb-board-wrap .gb-bezel {
+    width: min(100%, calc((100dvh - var(--gb-chrome)) * 1.87));
+  }
+  @supports (width: 1cqb) {
+    #tab-main .gb-board-wrap .gb-bezel {
+      width: min(100cqi, calc(100cqb * 1.87));
+    }
+  }
+  #tab-main .gb-input { padding: 10px 14px; }
+  #tab-main .gb-send,
+  #tab-main .gb-secondary { padding: 12px 16px; }
 }
 
 @media (min-width: 720px) {
@@ -916,6 +1080,7 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
     max-height: 86dvh;
   }
   .date-dialog { max-width: 720px; }
+  .trip-dialog { max-width: 560px; }
   .push-lib-backdrop {
     padding: 16px 16px calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 12px);
   }

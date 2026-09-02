@@ -7563,7 +7563,7 @@ function createWebServer({
         return;
       }
       if (event === 'queue') {
-        send('sim.queue', detail);
+        send('sim.queue', vestaboardSimQueuePayload());
         // Phase hold / game lock live on the queue; refresh the pill when
         // a lobby ends or the session releases the board without a flip.
         send('sim.state', vestaboardSimPublicState());

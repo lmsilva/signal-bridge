@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-01 (Live games page header)
+**Last updated:** 2026-09-01 (Vestaboard queue column alignment)
 
 ---
 
@@ -722,7 +722,7 @@ Served by the listener at **`https://<NAS_IP or hostname>:47810/`** (config `web
 | `/privacy` | Everyone | Household privacy policy (`src/web/privacy.html`) — Google OAuth consent branding |
 | `/terms` | Everyone | Household terms of use (`src/web/terms.html`) — Google OAuth consent branding |
 | `/oauth-logo.png` | Everyone | 120×120 PNG app mark for the Google Cloud OAuth consent screen |
-| `/user/` | Signed-in users | Household app: icon tab bar (Message / Skills / Games / Vestaboard Simulator + permissioned Flight Plan / Slideshow / Date Book), header **Signal** (back to `/`) + Profile dialog + Log out, Skills dashboard (HTML5 drag on desktop, long-press / grip on phones), Games auto-join, shared Vestaboard simulator (viewport-fit bezel; queue beside the board only from 1600px), Date Book (day-of message + theme picker with a Countdown / Day of preview) |
+| `/user/` | Signed-in users | Household app: icon tab bar (Message / Skills / Game Sessions / Vestaboard Simulator + permissioned Flight Plan / Slideshow / Date Book), header **Signal** (back to `/`) + Profile dialog + Log out, Skills dashboard (HTML5 drag on desktop, long-press / grip on phones), Games auto-join, shared Vestaboard simulator (viewport-fit bezel; queue beside the board only from 1600px), Date Book (day-of message + theme picker with a Countdown / Day of preview) |
 | `/guestsnaps/` | Guests | Photo booth — **6-digit PIN gate** (rotates every 24h; PIN shown on `guest.photobooth` overlay). After unlock: pick a display, queue one or more photos (camera or camera roll), then send — one photo is `qr.display` photo mode; two or more is `photo.slideshow` of just that queue |
 | `/guestbook/` | Guests | Guest Book — leave a message for the Vestaboard |
 | `/games/` | Guests | Word Scramble — join with the code on the board. `?code=` + `?name=` prefill and auto-join (household Join now) |
@@ -895,6 +895,14 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-01: **Vestaboard queue column alignment** — admin and household queue rows pin title, sender, status, and cancel to fixed grid areas so rows without a byline no longer shift the status column. Empty sender cells stay in-layout (`visibility: hidden`). Cache-bust `signal278`. Tests: `vestaboard-sim-api`, `web-server`.
+- 2026-09-01: **Vestaboard queue row labels** — narrow queue columns (simulator sidebar) no longer collapse the event title to zero width; live `sim.queue` SSE events now carry enriched `eventTitle` like the REST snapshot. Cache-bust `signal277`. Tests: `vestaboard-sim-api`, `web-server`.
+- 2026-09-01: **Household scrollbar polish** — thin themed scrollbars across `/user/` (admin-style, not OS gray); Skill library body gets extra right padding and a slimmer bar so tiles do not hug the track. Cache-bust `signal276`. Tests: `web-server`.
+- 2026-09-01: **Slideshow page head actions** — **Select** and **Refresh** sit on the right of the page head like other tabs; bulk-select controls stay there while selecting. Cache-bust `signal275`. Tests: `web-server`.
+- 2026-09-01: **Game Sessions tab label** — household bottom tab **Games** → **Game Sessions** (short **Sessions** on narrow screens). Tests: `web-server`.
+- 2026-09-01: **Message tab fits the viewport** — on tablet/desktop the compose board sizes from leftover height (`1.87` Flagship ratio) so the Vestaboard, type field, and Send stay on screen without a vertical scrollbar. Phones still scroll. Cache-bust `signal274`. Tests: `web-server`.
+- 2026-09-01: **Household Flight Plan and Date Book chrome** — Flight Plan uses an admin-style Your trips card (phase/count/dates on each row). Trip details open as a dialog that closes on Escape or a backdrop click. New trip / New event sit on the right of each page head, same as Live games Refresh. Cache-bust `signal273`. Tests: `web-server`.
+- 2026-09-01: **Skills tile drag uses grid cells** — the dragged tile leaves the grid (placeholder is the only hole) and the drop target is the cell under the pointer, so a drag along row 1 no longer wraps to row 2 column 1. The hole only moves when the cell index changes, which stops the flash. Cache-bust `signal272`. Tests: `web-server`.
 - 2026-09-01: **Live games page header** — title and hint sit as a left-hand copy block; Refresh is a right-aligned action so it is no longer jammed against **Live games**. Cache-bust `signal271`. Tests: `web-server`.
 - 2026-09-01: **Skills tile drag targets overlap + handle alignment** — reordering picks the card with the largest ghost overlap (pointer breaks ties), then inserts before/after from pointer position inside that card; grip handle and skill icon share a 40×40 grid row. Cache-bust `signal270`. Tests: `web-server`.
 - 2026-09-01: **Word Scramble rejects impossible letters while typing** — typing a letter that is not on the board shakes the compose bar, clears the word, and deselects every tile (no point building further). Tap-to-spell is unchanged. Cache-bust games `games.css?v=8` / `scramble.js?v=9`. Tests: `web-server`.

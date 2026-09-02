@@ -5709,7 +5709,8 @@ textarea.field-input.filter-search {
 
 .vb-queue-row {
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr) minmax(5rem, 8.5rem) 8.75rem 1.7rem;
+  grid-template-columns: 1.35rem minmax(0, 1fr) minmax(4.5rem, 7rem) minmax(4.5rem, 7rem) 1.7rem;
+  grid-template-areas: "handle title source status cancel";
   column-gap: 14px;
   align-items: center;
   justify-content: stretch;
@@ -5737,6 +5738,7 @@ body.vb-queue-dragging {
   font: inherit;
 }
 .vb-queue-handle {
+  grid-area: handle;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5752,26 +5754,34 @@ body.vb-queue-dragging {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.vb-queue-title {
+  grid-area: title;
+  color: var(--text);
+  font-weight: 600;
+}
 .vb-queue-source {
+  grid-area: source;
   color: var(--text-dim);
   font-size: 0.74rem;
   letter-spacing: 0.01em;
 }
-.vb-queue-title {
-  color: var(--text);
-  font-weight: 600;
+.vb-queue-source.is-empty {
+  visibility: hidden;
 }
 .vb-queue-status {
+  grid-area: status;
   color: var(--text-dim);
   font-size: 0.74rem;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  text-align: right;
 }
 .vb-queue-status.is-held { color: var(--warn); }
 .vb-queue-status.is-now { color: var(--accent); }
 .vb-queue-row.dragging .vb-queue-handle,
 body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .vb-queue-cancel {
+  grid-area: cancel;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5783,6 +5793,27 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   touch-action: manipulation;
 }
 .vb-queue-cancel:hover { color: var(--danger); }
+
+.card:has(#vb-queue) {
+  container-type: inline-size;
+  container-name: vb-queue;
+}
+
+@container vb-queue (max-width: 520px) {
+  .vb-queue-row {
+    grid-template-columns: 1.35rem minmax(0, 1fr) minmax(4.5rem, 6.5rem) 1.7rem;
+    grid-template-areas:
+      "handle title status cancel"
+      "handle source status cancel";
+    row-gap: 2px;
+    column-gap: 10px;
+  }
+  .vb-queue-handle { grid-area: handle; }
+  .vb-queue-title { grid-area: title; }
+  .vb-queue-source { grid-area: source; }
+  .vb-queue-status { grid-area: status; align-self: center; }
+  .vb-queue-cancel { grid-area: cancel; }
+}
 
 @media (max-width: 720px) {
   .vb-queue-row {
