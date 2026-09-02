@@ -15,6 +15,7 @@ const cinema = require('./formatters/cinema');
 const games = require('./formatters/games');
 const partyPrompts = require('./formatters/party-prompts');
 const wheelOfFortune = require('./formatters/wheel-of-fortune');
+const hangman = require('./formatters/hangman');
 const { classify: classifyHold } = require('./holds');
 
 const FORMATTERS = {
@@ -27,6 +28,7 @@ const FORMATTERS = {
   ...games.FORMATTERS,
   ...partyPrompts.FORMATTERS,
   ...wheelOfFortune.FORMATTERS,
+  ...hangman.FORMATTERS,
 };
 
 /**
@@ -91,6 +93,7 @@ const COMMAND_TO_TYPE = {
   'scramble.invite': 'word.scramble',
   'prompts.invite': 'party.prompts',
   'wheel.invite': 'wheel.fortune',
+  'hangman.invite': 'hangman.game',
   'amazing.facts': 'amazing.facts',
   'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',

@@ -238,6 +238,10 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('scramble.invite', 'full'), false);
   assert.equal(supportsKind('prompts.invite', 'vestaboard'), true);
   assert.equal(supportsKind('prompts.invite', 'full'), false);
+  assert.equal(supportsKind('wheel.invite', 'vestaboard'), true);
+  assert.equal(supportsKind('wheel.invite', 'full'), false);
+  assert.equal(supportsKind('hangman.invite', 'vestaboard'), true);
+  assert.equal(supportsKind('hangman.invite', 'full'), false);
   assert.equal(supportsKind('word.riddles', 'vestaboard'), true);
   assert.equal(supportsKind('word.riddles', 'full'), false);
   assert.equal(supportsKind('chuck.facts', 'vestaboard'), true);
@@ -568,6 +572,22 @@ test('wheel.invite is the third Game night tile and gates on the same link', () 
   assert.equal(empty.hasContent('wheel.invite'), false);
   const ready = createCommandRegistry({ getScrambleInviteStatus: () => ({ inviteReady: true }) });
   assert.equal(ready.hasContent('wheel.invite'), true);
+});
+
+test('hangman.invite is the fourth Game night tile and gates on the same link', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'hangman.invite');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'games');
+  assert.equal(command.route, '/api/push/hangman');
+
+  const empty = createCommandRegistry({ getScrambleInviteStatus: () => ({ inviteReady: false }) });
+  assert.equal(empty.hasContent('hangman.invite'), false);
+  const ready = createCommandRegistry({ getScrambleInviteStatus: () => ({ inviteReady: true }) });
+  assert.equal(ready.hasContent('hangman.invite'), true);
 });
 
 test('word.riddles is Vestaboard-only and needs a ready riddle', () => {

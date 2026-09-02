@@ -2201,11 +2201,13 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(page.text, /scramble\.js\?v=/);
     assert.match(page.text, /party-prompts\.js\?v=/);
     assert.match(page.text, /wheel\.js\?v=/);
+    assert.match(page.text, /hangman\.js\?v=/);
 
     // One page, one shell, one panel set per game — the shell hides the rest.
     assert.match(page.text, /data-game="scramble"/);
     assert.match(page.text, /data-game="prompts"/);
     assert.match(page.text, /data-game="wheel"/);
+    assert.match(page.text, /data-game="hangman"/);
 
     const pushed = await postJson(base, '/api/push/word-scramble', {}, cookie);
     assert.equal(pushed.status, 200);
@@ -2294,6 +2296,21 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(wheel, /prefers-reduced-motion/);
     assert.match(css, /\.wf-wheel \{[^}]*width: min\(100%, 42vh, 340px\)/);
     assert.match(css, /\.wf-wheel \{[^}]*aspect-ratio: 1/);
+
+    // Hangman draws the gallows a limb at a time next to a tile per letter,
+    // and the letter pad remembers which calls hit and which cost a life.
+    const hangman = fs.readFileSync(path.join(realRoot, 'games', 'hangman.js'), 'utf8');
+    assert.match(page.text, /id="hm-gallows"/);
+    assert.match(page.text, /id="hm-letters"/);
+    assert.match(page.text, /id="hm-pick-panel"/);
+    assert.match(page.text, /id="hm-solve-form"/);
+    assert.match(hangman, /function renderGallows/);
+    assert.match(hangman, /function renderMask/);
+    assert.match(hangman, /is-drawn/);
+    assert.match(hangman, /prefers-reduced-motion/);
+    assert.match(css, /\.hm-slot/);
+    assert.match(css, /\.hm-letter\.is-miss/);
+    assert.match(css, /@keyframes hm-shake/);
 
     // A seat belongs to the tab, not to the browser, so two players on one
     // laptop do not end up driving each other's turn.
@@ -2449,6 +2466,56 @@ test('Wheel of Fortune settings save on their own but share the games short link
     assert.equal(resolved.status, 200);
     assert.equal(resolved.body.session.gameType, 'wheel');
     assert.equal(resolved.body.session.title, 'Wheel of Fortune');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('Hangman settings carry the deck, the categories, and the same short link', async () => {
+  const { webServer, base, cookie } = await startTestServer();
+  try {
+    const initial = await getJson(base, '/api/hangman/settings');
+    assert.equal(initial.status, 200);
+    assert.equal(initial.body.settings.minPlayers, 1, 'one phone and the house is a game');
+    assert.equal(initial.body.settings.wordSetter, true);
+    assert.equal(initial.body.settings.categoryId, 'all');
+    assert.equal(initial.body.lives, 6);
+    assert.equal(initial.body.targetPath, '/games/');
+    assert.ok(initial.body.wordCount > 1000, 'the deck ships with the game');
+    assert.ok(initial.body.categories.length >= 15);
+    assert.ok(initial.body.categories.every((row) => row.id && row.label && row.count > 0));
+
+    const saved = await postJson(base, '/api/hangman/settings', {
+      rounds: 5,
+      turnSeconds: 20,
+      pickSeconds: 45,
+      wordSetter: false,
+      categoryId: 'animals',
+      preferredAlias: 'HANGNITE',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.rounds, 5);
+    assert.equal(saved.body.settings.turnSeconds, 20);
+    assert.equal(saved.body.settings.pickSeconds, 45);
+    assert.equal(saved.body.settings.wordSetter, false);
+    assert.equal(saved.body.settings.categoryId, 'animals');
+    assert.equal(saved.body.preferredAlias, 'HANGNITE');
+
+    const wheel = await getJson(base, '/api/wheel-of-fortune/settings');
+    assert.equal(wheel.body.preferredAlias, 'HANGNITE', 'the alias is the one games link');
+    assert.equal(wheel.body.settings.rounds, 3, 'a hangman save must not move the wheel');
+
+    const pushed = await postJson(base, '/api/push/hangman', {}, cookie);
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'hangman.game');
+    assert.equal(pushed.body.session.gameType, 'hangman');
+    assert.equal(pushed.body.session.minPlayers, 1);
+    assert.match(String(pushed.body.session.code || ''), /^[A-HJ-NP-Z]{4}$/);
+
+    const resolved = await getJson(base, `/api/games/session?code=${pushed.body.session.code}`);
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.session.gameType, 'hangman');
+    assert.equal(resolved.body.session.title, 'Hangman');
   } finally {
     webServer.stop();
   }
@@ -3245,9 +3312,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-    assert.match(html, /styles\.css\?v=signal285/);
+    assert.match(html, /styles\.css\?v=signal286/);
     assert.match(html, /settings-filter\.js\?v=signal283/);
-    assert.match(html, /app\.js\?v=signal285/);
+    assert.match(html, /app\.js\?v=signal286/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3336,6 +3403,13 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/wheel-of-fortune\/settings/);
   assert.match(js, /btn-wheel-of-fortune-sessions.*openWordScrambleSessions/s);
   assert.doesNotMatch(html, /id="wheel-of-fortune-sessions-sheet"/);
+  assert.match(html, /id="hangman-settings-card"/);
+  assert.match(html, /id="hangman-pick"/);
+  assert.match(html, /id="hangman-word-setter"/);
+  assert.match(html, /id="hangman-category"/);
+  assert.match(js, /\/api\/hangman\/settings/);
+  assert.match(js, /btn-hangman-sessions.*openWordScrambleSessions/s);
+  assert.doesNotMatch(html, /id="hangman-sessions-sheet"/);
   assert.doesNotMatch(js, /openWordScrambleEnd[\s\S]*window\.confirm/);
   assert.match(html, /id="btn-ring-login"/);
   assert.match(html, /id="ring-2fa-block"/);
@@ -5159,6 +5233,92 @@ test('admin app.js runs top to bottom, not just parses', () => {
   assert.equal(confetti[1][0], -1, 'confetti rails leave the middle rows for the message');
   assert.equal(sandbox.window.RED_LETTER_PRESETS.matchPreset(confetti), 'confetti');
   assert.match(sandbox.window.pushIconSvg('red-letter'), /^<svg viewBox="0 0 24 24"/);
+});
+
+/**
+ * Every panel a game module paints is behind a phase, so a bad identifier in
+ * one branch survives both parsing and a happy-path look at the page. Run the
+ * module and walk it through the phases instead.
+ */
+test('the games page modules bind and paint every phase without throwing', () => {
+  const { Script, createContext } = require('node:vm');
+  const sandbox = stubDom();
+  const captured = new Map();
+  const submitted = [];
+  sandbox.window.GameShell = {
+    register: (id, handlers) => captured.set(id, handlers),
+    submit: (action, payload) => { submitted.push({ action, payload }); return null; },
+    setStatus() {},
+    renderChips() {},
+    $: (id) => sandbox.document.getElementById(id),
+  };
+  createContext(sandbox);
+  for (const file of ['scramble.js', 'party-prompts.js', 'wheel.js', 'hangman.js']) {
+    const js = fs.readFileSync(path.join(__dirname, '../src/web/games', file), 'utf8');
+    assert.doesNotThrow(
+      () => new Script(js, { filename: file }).runInContext(sandbox),
+      `${file} must bind cleanly — a throw here strands the phone`,
+    );
+  }
+  assert.deepEqual([...captured.keys()].sort(), ['hangman', 'prompts', 'scramble', 'wheel']);
+
+  const hangman = captured.get('hangman');
+  const base = {
+    gameType: 'hangman',
+    phase: 'lobby',
+    roundIndex: 0,
+    rounds: 3,
+    lives: 6,
+    livesLeft: 6,
+    letterPoints: 10,
+    needPlayers: 0,
+    called: [],
+    misses: [],
+    you: { score: 0, points: 0, choices: [] },
+  };
+  const phases = [
+    base,
+    // The setter's menu, then the same beat as everybody else sees it.
+    {
+      ...base,
+      phase: 'round',
+      roundIndex: 1,
+      step: 'pick',
+      setterName: 'Luis',
+      you: { score: 0, points: 0, isSetter: true, canPick: true, choices: [{ word: 'BADGER', category: 'ANIMALS' }] },
+    },
+    { ...base, phase: 'round', roundIndex: 1, step: 'pick', setterName: 'Luis', you: { score: 0, choices: [] } },
+    {
+      ...base,
+      phase: 'round',
+      roundIndex: 1,
+      step: 'guess',
+      category: 'ANIMALS',
+      mask: 'B_____',
+      called: ['B', 'Z'],
+      misses: ['Z'],
+      livesLeft: 5,
+      lastEvent: 'NO Z',
+      turnName: 'Ada',
+      beat: { id: 1, kind: 'miss' },
+      you: { score: 10, points: 10, canGuess: true, canSolve: true, yourTurn: true, choices: [] },
+    },
+    {
+      ...base,
+      phase: 'intermission',
+      roundIndex: 1,
+      lastRound: { word: 'BADGER', solvedBy: 'Ada', misses: 1 },
+    },
+    { ...base, phase: 'final', roundIndex: 3, lastRound: { word: 'WAFFLE', solvedBy: '', misses: 6 } },
+  ];
+  for (const session of phases) {
+    assert.doesNotThrow(() => hangman.render(session), `hangman render: ${session.phase}/${session.step || ''}`);
+    assert.equal(typeof hangman.scoreLine(session), 'string');
+    assert.equal(typeof hangman.phaseLabel(session), 'string');
+  }
+  assert.match(hangman.scoreLine(phases[3]), /5 lives left/);
+  assert.match(hangman.phaseLabel(phases[1]), /Luis is picking/);
+  assert.doesNotThrow(() => hangman.teardown());
 });
 
 test('admin app.js parses and tab bar keeps remote/control between push and scheduler', () => {

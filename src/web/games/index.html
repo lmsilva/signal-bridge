@@ -9,7 +9,7 @@
   <title>Game night</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="games.css?v=10">
+  <link rel="stylesheet" href="games.css?v=12">
 </head>
 <body>
   <div class="gm-shell">
@@ -121,6 +121,78 @@
           </section>
         </div>
 
+        <!-- Hangman -->
+        <div class="hm-stage" data-game="hangman">
+          <section class="gm-card hm-panel" id="hm-lobby-panel" hidden>
+            <p class="hm-lobby" id="hm-lobby"></p>
+          </section>
+
+          <section class="hm-word-card" id="hm-word-card" hidden>
+            <p class="hm-category" id="hm-category"></p>
+            <p class="hm-word" id="hm-word"></p>
+            <p class="hm-event" id="hm-event"></p>
+          </section>
+
+          <section class="gm-card hm-gallows-panel" id="hm-gallows-panel" hidden>
+            <svg class="hm-gallows" id="hm-gallows" viewBox="0 0 100 140" role="img" aria-labelledby="hm-gallows-title">
+              <title id="hm-gallows-title">The gallows</title>
+              <g class="hm-frame">
+                <path d="M8 132h44" />
+                <path d="M20 132V10h48" />
+                <path d="M44 10L20 32" />
+                <path d="M68 10v14" />
+              </g>
+              <g class="hm-figure">
+                <circle data-at="1" cx="68" cy="34" r="10" />
+                <path data-at="2" d="M68 44v36" />
+                <path data-at="3" d="M68 53l-16 14" />
+                <path data-at="4" d="M68 53l16 14" />
+                <path data-at="5" d="M68 80l-15 23" />
+                <path data-at="6" d="M68 80l15 23" />
+              </g>
+            </svg>
+            <div class="hm-lives">
+              <ul class="hm-pips" id="hm-pips" aria-hidden="true"></ul>
+              <p class="hm-lives-label" id="hm-lives-label" role="status"></p>
+              <p class="hm-misses" id="hm-misses"></p>
+            </div>
+          </section>
+
+          <section class="gm-card hm-panel hm-pick-panel" id="hm-pick-panel" hidden>
+            <h2 class="gm-h2">Set the word</h2>
+            <p class="hm-note">Everyone else guesses. Every miss you force pays you &mdash; but only if somebody gets there.</p>
+            <div class="hm-choices" id="hm-choices"></div>
+            <form class="hm-own" id="hm-own-form">
+              <label class="gm-label gm-sr-only" for="hm-own">Use a word of your own</label>
+              <div class="gm-compose-row">
+                <input id="hm-own" class="gm-input" type="text" name="hm-own" maxlength="14" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" inputmode="text" placeholder="Or type your own">
+                <button type="submit" class="gm-send gm-send-inline">Use it</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="gm-card hm-panel" id="hm-turn-panel" hidden>
+            <p class="hm-turn" id="hm-turn"></p>
+            <p class="hm-points" id="hm-points"></p>
+          </section>
+
+          <div class="hm-letters" id="hm-letters" hidden></div>
+
+          <form class="gm-compose" id="hm-solve-form" hidden>
+            <label class="gm-label gm-sr-only" for="hm-solve">Say the whole word</label>
+            <div class="gm-compose-row">
+              <input id="hm-solve" class="gm-input" type="text" name="hm-solve" maxlength="14" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" inputmode="text" placeholder="Say the whole word">
+              <button type="submit" class="gm-send gm-send-inline">Say it</button>
+            </div>
+          </form>
+
+          <section class="gm-card hm-panel" id="hm-reveal-panel" hidden>
+            <h2 class="gm-h2" id="hm-reveal-title">The word</h2>
+            <p class="hm-reveal-word" id="hm-reveal-word"></p>
+            <p class="hm-reveal-meta" id="hm-reveal-meta"></p>
+          </section>
+        </div>
+
         <form class="gm-compose" id="gm-word-form" data-game="scramble" hidden>
           <label class="gm-label gm-sr-only" for="gm-word">Word</label>
           <div class="gm-compose-row">
@@ -166,6 +238,7 @@
   <script src="games.js?v=9"></script>
   <script src="scramble.js?v=10"></script>
   <script src="party-prompts.js?v=1"></script>
-  <script src="wheel.js?v=2"></script>
+  <script src="wheel.js?v=3"></script>
+  <script src="hangman.js?v=1"></script>
 </body>
 </html>

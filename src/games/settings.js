@@ -52,12 +52,46 @@ const DEFAULTS = Object.freeze({
     minPlayers: 2,
     allowLateJoin: true,
   }),
+  hangman: Object.freeze({
+    // One player and the house is a game, so the lobby is short.
+    lobbySeconds: 45,
+    // Per-turn clock; the word itself is capped by roundSeconds.
+    turnSeconds: 25,
+    // A word setter is choosing from a menu, which takes longer than a letter.
+    pickSeconds: 30,
+    roundSeconds: 300,
+    intermissionSeconds: 20,
+    rounds: 3,
+    inviteTtlMinutes: 60,
+    idleTimeoutSeconds: 180,
+    maxPlayers: 10,
+    minPlayers: 1,
+    allowLateJoin: true,
+    /** Off makes every round house-dealt, however many people are playing. */
+    wordSetter: true,
+    /** `all`, or one category id from hangman-words.json. */
+    categoryId: 'all',
+  }),
 });
 
 function clampInt(value, min, max, fallback) {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+let cachedHangmanCategories = null;
+
+/** Lazy: the corpus is only needed when a Hangman setting is saved. */
+function hangmanCategories() {
+  if (!cachedHangmanCategories) {
+    try {
+      cachedHangmanCategories = require('../hangman').loadCategories();
+    } catch {
+      cachedHangmanCategories = [];
+    }
+  }
+  return cachedHangmanCategories;
 }
 
 function cleanAlias(value, fallback = DEFAULT_ALIAS) {
@@ -123,12 +157,44 @@ function sanitiseWheel(incoming, base) {
   };
 }
 
+function cleanCategoryId(value, fallback = 'all') {
+  const id = String(value != null ? value : '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!id) return fallback || 'all';
+  if (id === 'all') return 'all';
+  // An id that no longer exists in the corpus would deal from an empty pool.
+  const known = hangmanCategories().some((row) => row.id === id);
+  return known ? id : (fallback || 'all');
+}
+
+function sanitiseHangman(incoming, base) {
+  return {
+    lobbySeconds: clampInt(incoming.lobbySeconds, 20, 300, base.lobbySeconds),
+    turnSeconds: clampInt(incoming.turnSeconds, 10, 120, base.turnSeconds),
+    pickSeconds: clampInt(incoming.pickSeconds, 10, 180, base.pickSeconds),
+    roundSeconds: clampInt(incoming.roundSeconds, 60, 900, base.roundSeconds),
+    intermissionSeconds: clampInt(incoming.intermissionSeconds, 5, 120, base.intermissionSeconds),
+    rounds: clampInt(incoming.rounds, 1, 8, base.rounds),
+    inviteTtlMinutes: clampInt(incoming.inviteTtlMinutes, 5, 240, base.inviteTtlMinutes),
+    idleTimeoutSeconds: clampInt(incoming.idleTimeoutSeconds, 30, 600, base.idleTimeoutSeconds),
+    maxPlayers: clampInt(incoming.maxPlayers, 1, 24, base.maxPlayers),
+    minPlayers: clampInt(incoming.minPlayers, 1, 12, base.minPlayers),
+    allowLateJoin: incoming.allowLateJoin != null
+      ? incoming.allowLateJoin !== false
+      : base.allowLateJoin !== false,
+    wordSetter: incoming.wordSetter != null
+      ? incoming.wordSetter !== false
+      : base.wordSetter !== false,
+    categoryId: cleanCategoryId(incoming.categoryId, base.categoryId || 'all'),
+  };
+}
+
 function sanitiseGame(id, raw = {}, base = DEFAULTS[id] || {}) {
   const incoming = raw && typeof raw === 'object' ? raw : {};
   const fallback = base || {};
   if (id === 'scramble') return sanitiseScramble(incoming, fallback);
   if (id === 'prompts') return sanitisePrompts(incoming, fallback);
   if (id === 'wheel') return sanitiseWheel(incoming, fallback);
+  if (id === 'hangman') return sanitiseHangman(incoming, fallback);
   return { ...fallback, ...incoming };
 }
 

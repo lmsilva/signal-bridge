@@ -46,6 +46,12 @@ test('word scramble, party prompts, huupe live and autodarts live are games', ()
   assert.equal(wheel.source, 'wheel.fortune');
   assert.equal(wheel.coalesceKey, null);
 
+  // Every letter called repaints the word; coalescing would eat the misses.
+  const hangman = classify({ type: 'hangman.game' }, 'hangman.game');
+  assert.equal(hangman.lane, 'game');
+  assert.equal(hangman.source, 'hangman.game');
+  assert.equal(hangman.coalesceKey, null);
+
   const huupe = classify({ type: 'huupe.session', session: { status: 'live' } }, 'huupe.session');
   assert.equal(huupe.lane, 'game');
   assert.equal(huupe.live, true);

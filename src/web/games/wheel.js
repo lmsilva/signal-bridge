@@ -108,9 +108,9 @@
       const from = index * step;
       const mid = from + step / 2;
       const label = sliceLabel(wedge);
-      const size = wedge.type === 'cash' ? 11 : 8;
-      // Labels run along the radius — the only way BANKRUPT fits in an
-      // eighteen-degree wedge — and the half of the wheel past six o'clock
+      const size = wedge.type === 'cash' ? 10 : 7.5;
+      // Labels run along the radius — the only way BANKRUPT fits in a
+      // fifteen-degree wedge — and the half of the wheel past six o'clock
       // reads the other way round, or it would hang upside down.
       const outward = mid < 180;
       const anchorY = outward ? 60 : 14;
@@ -121,16 +121,26 @@
         + ` font-size="${size}" font-weight="700" text-anchor="start" dominant-baseline="middle">${label}</text>`
         + '</g>';
     }).join('');
-    wheelFace.innerHTML = '<svg viewBox="0 0 200 200" role="img" aria-label="Wheel of Fortune wheel">'
-      + `<g>${slices}</g>`
+    // Fonts do not cross into an image, so the wheel names its own.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">'
+      + `<g font-family="Helvetica, Arial, sans-serif">${slices}</g>`
       + '<circle cx="100" cy="100" r="29" fill="#0b1220" stroke="#f8fafc" stroke-width="1.5"/>'
       + '</svg>';
+    // Painted once into an image so the throw is the compositor turning a
+    // decoded bitmap. As live SVG a phone re-rasterises two dozen paths and
+    // their rotated text every frame, which is why the spin stuttered there
+    // and looked fine on a desktop.
+    wheelFace.innerHTML = '<img alt="Wheel of Fortune wheel" src="data:image/svg+xml;charset=utf-8,'
+      + encodeURIComponent(svg) + '">';
   }
 
-  function spinTo(index, count) {
+  function spinTo(index, count, throwId) {
     if (!wheelFace || !count) return;
     const step = 360 / count;
-    const target = index * step + step / 2;
+    // Stop off-centre the way a real wheel does. The offset is derived from
+    // the throw id, so every phone in the room stops on the same picture.
+    const drift = (((((throwId || 1) * 37) % 61) / 60) - 0.5) * step * 0.7;
+    const target = index * step + step / 2 + drift;
     // Always wind forwards, so a second spin never rewinds through the wheel.
     const base = Math.ceil((rotation + 1) / 360) * 360;
     rotation = base + SPIN_TURNS * 360 - target;
@@ -314,10 +324,12 @@
       if (fresh) {
         lastSpinId = spin.id;
         clearSettle();
-        spinTo(spin.index || 0, (session.wheel || []).length);
-        // The server has already resolved the throw, so hold the controls
-        // until the wheel stops — otherwise the phone spoils its own result.
+        // Lay the turn out before the wheel moves. The server has already
+        // resolved the throw, so the controls are held until it stops —
+        // otherwise the phone spoils its own result — and reflowing the page
+        // (the letter pad leaves) mid-throw costs a phone its first frames.
         renderRound(session, { spinning: true });
+        spinTo(spin.index || 0, (session.wheel || []).length, spin.id);
         pending = session;
         settleTimer = window.setTimeout(() => {
           settleTimer = 0;

@@ -644,9 +644,14 @@ body.gm-keyboard .gm-status { flex: 0 0 auto; }
   width: 100%;
   height: 100%;
   transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  /* The throw is a compositor transform over a decoded bitmap; keeping the
+     layer promoted and self-contained stops a phone re-rastering mid-spin. */
   will-change: transform;
+  backface-visibility: hidden;
+  contain: paint;
 }
-.wf-wheel-face svg { display: block; width: 100%; height: 100%; }
+.wf-wheel-face img { display: block; width: 100%; height: 100%; }
 .wf-wheel-pointer {
   position: absolute;
   top: -2px;
@@ -701,3 +706,165 @@ body.gm-keyboard .gm-status { flex: 0 0 auto; }
 .wf-letter.is-hit { border-color: var(--good); color: var(--good); }
 .wf-reveal-puzzle { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: 0.06em; }
 .wf-reveal-meta { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+/* --------------------------------------------- Hangman */
+
+.hm-stage { display: grid; gap: var(--gap); }
+.hm-panel { margin: 0; }
+.hm-word-card {
+  padding: clamp(16px, 4vw, 26px);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, #3a1f14 0%, var(--card) 70%);
+  text-align: center;
+}
+.hm-category {
+  margin: 0 0 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fb923c;
+  min-height: 1em;
+}
+/* One tile per letter, wrapping when the word is long. The tiles size off
+   their own row rather than the viewport, so the same word reads the same
+   in a phone column and in a desktop half-width stage. */
+.hm-word {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 8px;
+  margin: 0;
+}
+.hm-slot {
+  display: grid;
+  place-items: center;
+  min-width: clamp(20px, 7vw, 34px);
+  padding-bottom: 4px;
+  border-bottom: 3px solid var(--line);
+  font-size: clamp(1.3rem, 6vw, 2rem);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-ligatures: none;
+}
+.hm-word[data-long="true"] .hm-slot {
+  min-width: clamp(16px, 5.5vw, 26px);
+  font-size: clamp(1.05rem, 4.6vw, 1.6rem);
+}
+.hm-slot.is-open { border-bottom-color: #fb923c; }
+.hm-event {
+  margin: 14px 0 0;
+  min-height: 1.3em;
+  color: #fed7aa;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.hm-lobby, .hm-turn, .hm-points, .hm-note { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.hm-note { margin: 4px 0 12px; }
+.hm-points { margin-top: 6px; font-variant-numeric: tabular-nums; }
+.hm-panel.is-yours { border-color: #fb923c; }
+.hm-panel.is-yours .hm-turn { color: #fed7aa; font-weight: 600; }
+
+.hm-gallows-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(12px, 4vw, 22px);
+}
+.hm-gallows {
+  width: clamp(96px, 26vw, 148px);
+  height: auto;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hm-gallows .hm-figure > * {
+  opacity: 0;
+  stroke: #f87171;
+}
+.hm-gallows .hm-figure > .is-drawn { opacity: 1; }
+.hm-lives { display: grid; gap: 6px; }
+.hm-pips { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hm-pip {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+}
+.hm-pip.is-alive { border-color: var(--good); background: var(--good); }
+.hm-lives-label { margin: 0; font-weight: 700; font-size: 0.95rem; }
+.hm-misses {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+}
+
+.hm-choices { display: grid; gap: 8px; margin-bottom: 12px; }
+.hm-choice {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card-soft);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hm-choice:disabled { opacity: 0.4; cursor: default; }
+.hm-choice-word { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.08em; }
+.hm-choice-cat {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hm-own { margin: 0; }
+
+.hm-letters {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.hm-letter {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hm-letter:disabled { cursor: default; }
+.hm-letter.is-hit { border-color: var(--good); color: var(--good); opacity: 0.75; }
+.hm-letter.is-miss { border-color: #f87171; color: #f87171; opacity: 0.45; }
+.hm-letter:disabled:not(.is-hit):not(.is-miss) { opacity: 0.35; }
+.hm-reveal-word {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.hm-reveal-meta { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .hm-gallows .hm-figure > * { transition: opacity 260ms ease; }
+  .hm-gallows-panel.is-shake { animation: hm-shake 600ms ease; }
+}
+
+@keyframes hm-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  35% { transform: translateX(5px); }
+  55% { transform: translateX(-3px); }
+  75% { transform: translateX(2px); }
+}

@@ -126,6 +126,16 @@ const SPECIALS = Object.freeze([
     hint: 'Holds the board for the whole session. The timeout is a safety net.',
   },
   {
+    source: 'hangman.game',
+    label: 'Hangman',
+    group: 'games',
+    canHold: true,
+    defaultHold: true,
+    defaultHoldMinutes: 30,
+    recommended: true,
+    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+  },
+  {
     source: 'huupe.session',
     label: 'Huupe Live',
     group: 'games',
@@ -243,6 +253,7 @@ const COMMAND_SOURCE = Object.freeze({
   'scramble.invite': 'word.scramble',
   'prompts.invite': 'party.prompts',
   'wheel.invite': 'wheel.fortune',
+  'hangman.invite': 'hangman.game',
   'amazing.facts': 'amazing.facts',
   'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',
@@ -355,7 +366,7 @@ function buildCatalog() {
   }
 
   // Do not walk FORMATTERS. Game modes register a key per card
-  // (`party.prompts.lobby`, `wheel.fortune.round`) and some commands keep a
+  // (`wheel.fortune.round`, `hangman.game.round`) and some commands keep a
   // legacy type next to the real source (`credits.show` → `roll-credits.tour`).
   // Those are updates of one event, not events of their own — listing them
   // would show raw dotted ids. Specials + vestaboard Push commands already

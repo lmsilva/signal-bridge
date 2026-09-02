@@ -944,6 +944,7 @@
     'word-scramble-settings-card': ['vestaboard'],
     'party-prompts-settings-card': ['vestaboard'],
     'wheel-of-fortune-settings-card': ['vestaboard'],
+    'hangman-settings-card': ['vestaboard'],
     'word-riddles-settings-card': ['vestaboard'],
     'plex-settings-card': ['vestaboard'],
     'credits-settings-card': ['full', 'vestaboard'],
@@ -12216,7 +12217,12 @@
   const WS_HISTORY_PAGE = 10;
   /* The sessions sheet is shared by every game, so archived rows have to say
      which one they were. */
-  const GAME_TITLES = { scramble: 'Word Scramble', prompts: 'Party Prompts', wheel: 'Wheel of Fortune' };
+  const GAME_TITLES = {
+    scramble: 'Word Scramble',
+    prompts: 'Party Prompts',
+    wheel: 'Wheel of Fortune',
+    hangman: 'Hangman',
+  };
   let wordScrambleHistOffset = 0;
   let wordScrambleHistTotal = 0;
   let wordScramblePoll = null;
@@ -12630,6 +12636,7 @@
       // there showing the value it had a moment ago.
       loadWordScrambleSettings();
       loadWheelOfFortuneSettings();
+      loadHangmanSettings();
       toast('Party Prompts settings saved', 'ok');
     } catch (error) {
       toast(error.message || 'Could not save Party Prompts settings', 'bad');
@@ -12735,6 +12742,7 @@
       renderWheelOfFortuneSettings(data);
       loadWordScrambleSettings();
       loadPartyPromptsSettings();
+      loadHangmanSettings();
       toast('Wheel of Fortune settings saved', 'ok');
     } catch (error) {
       toast(error.message || 'Could not save Wheel of Fortune settings', 'bad');
@@ -12755,6 +12763,129 @@
   $('btn-wheel-of-fortune-sessions')?.addEventListener('click', () => openWordScrambleSessions());
 
   loadWheelOfFortuneSettings();
+
+  // ------------------------------------------------- Settings → Hangman
+
+  function renderHangmanSettings(data = {}) {
+    const settings = data.settings || {};
+    const link = data.shortlink || {};
+    const setNum = (id, value) => {
+      const el = $(id);
+      if (el && document.activeElement !== el) el.value = String(value);
+    };
+    setNum('hangman-lobby', settings.lobbySeconds ?? 45);
+    setNum('hangman-turn', settings.turnSeconds ?? 25);
+    setNum('hangman-pick', settings.pickSeconds ?? 30);
+    setNum('hangman-round', settings.roundSeconds ?? 300);
+    setNum('hangman-intermission', settings.intermissionSeconds ?? 20);
+    setNum('hangman-rounds', settings.rounds ?? 3);
+    setNum('hangman-min', settings.minPlayers ?? 1);
+    setNum('hangman-max', settings.maxPlayers ?? 10);
+    const setter = $('hangman-word-setter');
+    if (setter) setter.checked = settings.wordSetter !== false;
+    const lateJoin = $('hangman-late-join');
+    if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
+    const alias = $('hangman-alias');
+    if (alias && document.activeElement !== alias) {
+      alias.value = data.preferredAlias || 'WITTYGAME';
+    }
+    const picker = $('hangman-category');
+    if (picker && Array.isArray(data.categories) && document.activeElement !== picker) {
+      const wanted = settings.categoryId || 'all';
+      picker.innerHTML = ['<option value="all">Every category</option>']
+        .concat(data.categories.map((row) => (
+          `<option value="${escapeHtml(row.id)}">${escapeHtml(row.label)} (${row.count})</option>`
+        )))
+        .join('');
+      picker.value = data.categories.some((row) => row.id === wanted) ? wanted : 'all';
+    }
+    const corpus = $('hangman-corpus-hint');
+    if (corpus) {
+      const lives = data.lives || 6;
+      corpus.textContent = data.wordCount
+        ? `${data.wordCount} words in the deck. ${lives} lives. A right letter keeps your turn; a miss costs a life and passes it. The setter's seat rotates every round.`
+        : `${lives} lives. A right letter keeps your turn; a miss costs a life and passes it.`;
+    }
+
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    const pill = $('hangman-status-pill');
+    if (pill) {
+      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
+      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    const detail = $('hangman-status-detail');
+    if (detail) {
+      detail.textContent = link.alert?.message
+        || (link.display
+          ? `Short link ${link.display}`
+          : 'The board shows the word and the gallows. Alone, the house deals it; with company, one phone sets the word.');
+    }
+    const dot = $('hangman-dot');
+    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    if ($('hangman-shortlink-label')) {
+      $('hangman-shortlink-label').textContent = link.display || 'No short link yet.';
+    }
+    if ($('hangman-shortlink-check')) {
+      $('hangman-shortlink-check').textContent = formatShortlinkCheck(link);
+    }
+    if ($('hangman-target-hint')) {
+      $('hangman-target-hint').textContent = data.targetUrl
+        ? `Target ${data.targetUrl}`
+        : 'Set a Public base URL (HTTPS) first.';
+    }
+  }
+
+  async function loadHangmanSettings() {
+    try {
+      renderHangmanSettings(await apiGet('/api/hangman/settings'));
+    } catch {
+      renderHangmanSettings({});
+    }
+  }
+
+  $('btn-hangman-save')?.addEventListener('click', async () => {
+    const button = $('btn-hangman-save');
+    if (button) button.disabled = true;
+    try {
+      const data = await apiPost('/api/hangman/settings', {
+        lobbySeconds: Number($('hangman-lobby')?.value),
+        turnSeconds: Number($('hangman-turn')?.value),
+        pickSeconds: Number($('hangman-pick')?.value),
+        roundSeconds: Number($('hangman-round')?.value),
+        intermissionSeconds: Number($('hangman-intermission')?.value),
+        rounds: Number($('hangman-rounds')?.value),
+        minPlayers: Number($('hangman-min')?.value),
+        maxPlayers: Number($('hangman-max')?.value),
+        wordSetter: $('hangman-word-setter')?.checked !== false,
+        allowLateJoin: $('hangman-late-join')?.checked !== false,
+        categoryId: $('hangman-category')?.value || 'all',
+        preferredAlias: $('hangman-alias')?.value || '',
+      });
+      renderHangmanSettings(data);
+      loadWordScrambleSettings();
+      loadPartyPromptsSettings();
+      loadWheelOfFortuneSettings();
+      toast('Hangman settings saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not save Hangman settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-hangman-push')?.addEventListener('click', async () => {
+    try {
+      const result = await apiPost('/api/push/hangman', {});
+      toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not push invite', 'bad');
+    }
+  });
+
+  $('btn-hangman-sessions')?.addEventListener('click', () => openWordScrambleSessions());
+
+  loadHangmanSettings();
 
   // ------------------------------------ Settings → On This Day in History
 

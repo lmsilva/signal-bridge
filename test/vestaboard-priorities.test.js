@@ -24,6 +24,7 @@ test('house defaults jump household interrupts and hold only live games', () => 
     'word.scramble',
     'party.prompts',
     'wheel.fortune',
+    'hangman.game',
     'huupe.session',
     'autodarts.match',
   ]);
@@ -31,7 +32,7 @@ test('house defaults jump household interrupts and hold only live games', () => 
   assert.ok(defaults.every((rule) => rule.immediate));
   assert.deepEqual(
     defaults.filter((rule) => rule.hold).map((rule) => rule.source),
-    ['word.scramble', 'party.prompts', 'wheel.fortune', 'huupe.session', 'autodarts.match'],
+    ['word.scramble', 'party.prompts', 'wheel.fortune', 'hangman.game', 'huupe.session', 'autodarts.match'],
   );
 });
 
@@ -171,6 +172,7 @@ test('the add-event catalog includes board pushes like Roast Me and Dad Jokes', 
     'alarm.fired',
     'party.prompts',
     'wheel.fortune',
+    'hangman.game',
     'word.scramble',
     'roll-credits.tour',
   ]) {
@@ -185,7 +187,7 @@ test('the add-event catalog hides phase cards and command aliases', () => {
   for (const item of catalog.events) {
     assert.doesNotMatch(
       item.source,
-      /^(party\.prompts|wheel\.fortune|word\.scramble)\./,
+      /^(party\.prompts|wheel\.fortune|hangman\.game|word\.scramble)\./,
       `${item.source} is a card of a game, not its own event`,
     );
     assert.notEqual(item.source, 'credits.show');
@@ -209,6 +211,7 @@ test('priority labels match Push command titles', () => {
   assert.equal(bySource.get('autodarts.match'), 'Autodarts');
   assert.equal(bySource.get('word.scramble'), 'Word Scramble');
   assert.equal(bySource.get('wheel.fortune'), 'Wheel of Fortune');
+  assert.equal(bySource.get('hangman.game'), 'Hangman');
   assert.equal(bySource.get('guest.book'), 'Guest Book');
 
   for (const command of COMMANDS) {

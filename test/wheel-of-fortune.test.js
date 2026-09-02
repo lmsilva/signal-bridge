@@ -74,13 +74,46 @@ test('a solve with an empty bank still pays the floor', () => {
 
 test('a wedge knows its seat on the wheel so a phone can animate to it', () => {
   assert.equal(spinWheel(() => 0).index, 0);
-  assert.equal(spinWheel(() => 0.999).index, 19);
+  assert.equal(spinWheel(() => 0.999).index, 23);
   const layout = wheelLayout();
-  assert.equal(layout.length, 20);
+  assert.equal(layout.length, 24);
   assert.deepEqual(layout.map((wedge) => wedge.index), layout.map((_, i) => i));
   assert.equal(layout[0].label, '500');
   assert.ok(layout.some((wedge) => wedge.label === 'BANKRUPT'));
   assert.ok(layout.some((wedge) => wedge.label === 'FREE SPIN'));
+});
+
+test('the wheel is laid out like the show lays one out', () => {
+  const layout = wheelLayout();
+  const seats = (label) => layout.filter((wedge) => wedge.label === label).map((w) => w.index);
+
+  // Twenty-four wedges: two BANKRUPTs, one LOSE A TURN, one FREE SPIN.
+  const bankrupt = seats('BANKRUPT');
+  assert.equal(bankrupt.length, 2);
+  assert.equal(seats('LOSE A TURN').length, 1);
+  assert.equal(seats('FREE SPIN').length, 1);
+
+  // The BANKRUPTs face each other across the hub rather than sitting side by
+  // side, and no two penalties are neighbours.
+  assert.equal(bankrupt[1] - bankrupt[0], layout.length / 2);
+  const penalty = new Set(layout
+    .filter((wedge) => wedge.type !== 'cash')
+    .map((wedge) => wedge.index));
+  for (const seat of penalty) {
+    const next = (seat + 1) % layout.length;
+    assert.ok(!penalty.has(next), `two penalties touch at ${seat}`);
+  }
+
+  // Cash runs $500-$900 around one top dollar, and no value repeats itself
+  // next door — a sorted wheel is the tell of a generated one.
+  const cash = layout.filter((wedge) => wedge.type === 'cash');
+  assert.equal(cash.filter((wedge) => wedge.value > 900).length, 1);
+  assert.ok(cash.filter((wedge) => wedge.value <= 900).every((wedge) => wedge.value >= 500));
+  for (let i = 0; i < layout.length; i += 1) {
+    const here = layout[i];
+    const next = layout[(i + 1) % layout.length];
+    assert.ok(here.label !== next.label, `${here.label} repeats at ${i}`);
+  }
 });
 
 test('the first wedge is cash so a zero roll is predictable', () => {

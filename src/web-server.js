@@ -140,6 +140,7 @@ const {
 } = require('./tinyurl-credentials');
 const partyPrompts = require('./party-prompts');
 const wheelOfFortune = require('./wheel-of-fortune');
+const hangman = require('./hangman');
 const { createGameSettings } = require('./games/settings');
 const { createGameArchive } = require('./games/archive');
 const { createGameSessions, parseCookie: parseGamesCookie, cookieHeader: gamesCookieHeader } = require('./games/sessions');
@@ -2671,6 +2672,64 @@ function createWebServer({
       const session = gameSessions.create({ gameType: 'wheel' });
       log.info('Wheel of Fortune invite', { code: session.code });
       sendJson(res, 200, { ok: true, type: 'wheel.fortune', session });
+    } catch (error) {
+      sendJson(res, 409, { ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  function hangmanSettingsPayload() {
+    const categories = hangman.loadCategories();
+    return {
+      ok: true,
+      settings: gameSettings.get('hangman'),
+      wordCount: categories.reduce((sum, row) => sum + row.words.length, 0),
+      categories: categories.map((row) => ({
+        id: row.id,
+        label: row.label,
+        count: row.words.length,
+      })),
+      lives: hangman.LIVES,
+      credentials: tinyurlCredentialsStatus(tinyurlCredPath(), { scope: 'games' }),
+      shortlink: shortlinks.status(GAMES_NAME),
+      targetPath: GAMES_PATH,
+      targetUrl: publicUrl(GAMES_PATH, config),
+      shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
+      preferredAlias: gameSettings.alias(),
+      ...publicUrlEnvNote(),
+    };
+  }
+
+  function handleHangmanSettingsGet(res) {
+    sendJson(res, 200, hangmanSettingsPayload());
+  }
+
+  async function handleHangmanSettingsPut(body, res) {
+    const patch = {};
+    for (const key of [
+      'lobbySeconds', 'turnSeconds', 'pickSeconds', 'roundSeconds',
+      'intermissionSeconds', 'rounds', 'inviteTtlMinutes', 'idleTimeoutSeconds',
+      'maxPlayers', 'minPlayers', 'allowLateJoin', 'wordSetter', 'categoryId',
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+        patch[key] = body[key];
+      }
+    }
+    if (Object.keys(patch).length) {
+      gameSettings.update('hangman', patch);
+    }
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'preferredAlias')) {
+      gameSettings.setAlias(body.preferredAlias);
+    }
+    const shortlink = await ensureGamesShortlink('Hangman');
+    sendJson(res, 200, { ...hangmanSettingsPayload(), shortlink });
+  }
+
+  async function handleHangmanPush(body, res) {
+    try {
+      await ensureGamesShortlink('Hangman');
+      const session = gameSessions.create({ gameType: 'hangman' });
+      log.info('Hangman invite', { code: session.code });
+      sendJson(res, 200, { ok: true, type: 'hangman.game', session });
     } catch (error) {
       sendJson(res, 409, { ok: false, error: error?.message || String(error) });
     }
@@ -5551,6 +5610,8 @@ function createWebServer({
           await handlePartyPromptsPush(body, res); break;
         case 'wheel.invite':
           await handleWheelOfFortunePush(body, res); break;
+        case 'hangman.invite':
+          await handleHangmanPush(body, res); break;
         case 'word.riddles':
           handleWordRiddlesPush(body, res); break;
         case 'chuck.facts':
@@ -8901,6 +8962,7 @@ function createWebServer({
       const vScrambleJs = assetVersionBeside(filePath, 'scramble.js');
       const vPartyPromptsJs = assetVersionBeside(filePath, 'party-prompts.js');
       const vWheelJs = assetVersionBeside(filePath, 'wheel.js');
+      const vHangmanJs = assetVersionBeside(filePath, 'hangman.js');
       const vLandingCss = assetVersionBeside(filePath, 'landing.css');
       let vFlap = String(Date.now());
       let vBezel = String(Date.now());
@@ -8926,6 +8988,7 @@ function createWebServer({
         .replace(/(src="(?:\.\/)?scramble\.js)(?:\?[^"]*)?(")/, `$1?v=${vScrambleJs}$2`)
         .replace(/(src="(?:\.\/)?party-prompts\.js)(?:\?[^"]*)?(")/, `$1?v=${vPartyPromptsJs}$2`)
         .replace(/(src="(?:\.\/)?wheel\.js)(?:\?[^"]*)?(")/, `$1?v=${vWheelJs}$2`)
+        .replace(/(src="(?:\.\/)?hangman\.js)(?:\?[^"]*)?(")/, `$1?v=${vHangmanJs}$2`)
         .replace(/(href="(?:\.\/)?landing\.css)(?:\?[^"]*)?(")/, `$1?v=${vLandingCss}$2`)
         .replace(/(src="(?:\/)?flap-grid\.js)(?:\?[^"]*)?(")/, `src="/flap-grid.js?v=${vFlap}"`)
         .replace(/(href="(?:\/)?vestaboard-bezel\.css)(?:\?[^"]*)?(")/, `href="/vestaboard-bezel.css?v=${vBezel}"`);
@@ -9397,6 +9460,11 @@ function createWebServer({
           handleWheelOfFortuneSettingsGet(res);
           return;
         }
+        if (pathname === '/api/hangman/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleHangmanSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/game-sessions') {
           if (!requireAdminSession(req, res)) return;
           handleGameSessionsGet(res);
@@ -9816,6 +9884,12 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
           await handleWheelOfFortuneSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/hangman/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          await handleHangmanSettingsPut(body, res);
           return;
         }
         if (pathname === '/api/guest-book/settings' && req.method === 'PUT') {
@@ -10316,6 +10390,9 @@ function createWebServer({
           case '/api/wheel-of-fortune/settings':
             await handleWheelOfFortuneSettingsPut(body, res);
             return;
+          case '/api/hangman/settings':
+            await handleHangmanSettingsPut(body, res);
+            return;
           case '/api/game-sessions/end':
             handleGameSessionsEnd(body, res);
             return;
@@ -10330,6 +10407,9 @@ function createWebServer({
             return;
           case '/api/push/wheel-of-fortune':
             await handleWheelOfFortunePush(body, res);
+            return;
+          case '/api/push/hangman':
+            await handleHangmanPush(body, res);
             return;
           case '/api/guest-book/settings':
             await handleGuestBookSettingsPut(body, res);

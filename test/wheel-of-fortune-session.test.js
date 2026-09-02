@@ -195,7 +195,8 @@ test('a late joiner sits out the current puzzle', () => {
 });
 
 test('bankrupt zeros the round bank and passes the turn', () => {
-  const harness = makeApi({}, { random: () => 0.8 });
+  // 0.2 of the way round the wheel is the first BANKRUPT.
+  const harness = makeApi({}, { random: () => 0.2 });
   const invited = harness.api.create({ gameType: 'wheel' });
   const luis = harness.api.join({ code: invited.code, name: 'Luis' }).player;
   const ada = harness.api.join({ code: invited.code, name: 'Ada' }).player;
@@ -235,7 +236,7 @@ test('the wheel travels to every phone with the wedge it landed on', () => {
   const { api, sessionId, players } = startedGame();
   const [luis, ada] = players;
   const idle = api.publicSession(api.getById(sessionId), ada.id);
-  assert.equal(idle.wheel.length, 20, 'the painted wheel is the wheel we spin');
+  assert.equal(idle.wheel.length, 24, 'the painted wheel is the wheel we spin');
   assert.equal(idle.wheel[0].label, '500');
   assert.ok(idle.wheel.some((wedge) => wedge.type === 'bankrupt'));
 

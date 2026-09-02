@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal285">
+  <link rel="stylesheet" href="styles.css?v=signal286">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -159,7 +159,7 @@
         <div class="push-block" data-push-group="games">
           <div class="section-label">Game night</div>
           <div class="card-row card-row-quad" id="push-row-games" data-push-category="games"
-               data-skeleton-count="14" aria-busy="true"></div>
+               data-skeleton-count="15" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="media">
@@ -3134,6 +3134,110 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="games">Hangman</div>
+        <div class="card hangman-settings-card" id="hangman-settings-card" data-settings-group="games">
+          <div class="auth-head">
+            <div class="auth-name">Hangman on the board</div>
+            <span class="status-pill" id="hangman-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="hangman-status-detail">
+            The board shows the word and the gallows. Alone, the house deals it; with company, one phone sets the word and the rest take turns guessing.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Round timing</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="hangman-lobby">Lobby seconds</label>
+                    <input type="number" id="hangman-lobby" class="field-input" min="20" max="300" value="45">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-turn">Turn seconds</label>
+                    <input type="number" id="hangman-turn" class="field-input" min="10" max="120" value="25">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-pick">Pick seconds</label>
+                    <input type="number" id="hangman-pick" class="field-input" min="10" max="180" value="30">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-round">Word seconds</label>
+                    <input type="number" id="hangman-round" class="field-input" min="60" max="900" value="300">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-intermission">Intermission</label>
+                    <input type="number" id="hangman-intermission" class="field-input" min="5" max="120" value="20">
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <p class="settings-group-title">Play</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="hangman-rounds">Rounds</label>
+                    <input type="number" id="hangman-rounds" class="field-input" min="1" max="8" value="3">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-min">Minimum players</label>
+                    <input type="number" id="hangman-min" class="field-input" min="1" max="12" value="1">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-max">Maximum players</label>
+                    <input type="number" id="hangman-max" class="field-input" min="1" max="24" value="10">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-category">Words from</label>
+                    <select id="hangman-category" class="field-input">
+                      <option value="all">Every category</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="trivia-check">
+                      <input type="checkbox" id="hangman-word-setter" checked>
+                      <span>Let a player set the word</span>
+                    </label>
+                  </div>
+                  <div class="field">
+                    <label class="trivia-check">
+                      <input type="checkbox" id="hangman-late-join" checked>
+                      <span>Let phones join mid-game</span>
+                    </label>
+                  </div>
+                  <p class="hint field-span-all" id="hangman-corpus-hint">Six lives. A right letter keeps your turn; a miss costs a life and passes it. The setter's seat rotates every round.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Short link</p>
+                <div class="gb-shortlink-status" id="hangman-shortlink">
+                  <span class="gb-dot" id="hangman-dot" aria-hidden="true"></span>
+                  <p class="hint" id="hangman-shortlink-label">No short link yet.</p>
+                  <p class="hint" id="hangman-shortlink-check">Last check —</p>
+                </div>
+                <div class="field-grid field-grid-2">
+                  <div class="field">
+                    <label class="field-label" for="hangman-alias">Preferred alias</label>
+                    <input type="text" id="hangman-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+                  </div>
+                  <div class="field field-span-all">
+                    <p class="hint">Every game shares the one <code>/games/</code> link, so this is the same alias the Word Scramble card shows. The TinyURL token lives on that card too.</p>
+                  </div>
+                </div>
+                <p class="hint" id="hangman-target-hint">Target —</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-hangman-save">Save</button>
+            <button type="button" class="btn btn-outline" id="btn-hangman-push">Push invite</button>
+            <button type="button" class="btn btn-outline" id="btn-hangman-sessions">Sessions</button>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="games">Word Riddles</div>
         <div class="card word-riddles-settings-card" id="word-riddles-settings-card" data-settings-group="games">
           <div class="auth-head">
@@ -5077,6 +5181,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal267"></script>
   <script src="settings-filter.js?v=signal283"></script>
-  <script src="app.js?v=signal285"></script>
+  <script src="app.js?v=signal286"></script>
 </body>
 </html>
