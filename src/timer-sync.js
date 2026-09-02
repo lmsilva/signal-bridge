@@ -399,7 +399,7 @@ function createTimerSync({
     }
   }
 
-  function emitSnapshot({ trigger, device, event }) {
+  function emitSnapshot({ trigger, device, event, actor = null }) {
     let timers = listActiveTimers();
     if (event?.kind === 'fired' && event.timer) {
       timers = [{
@@ -414,10 +414,11 @@ function createTimerSync({
       timestamp: Date.now(),
       trigger,
       event,
+      ...(actor ? { actor } : {}),
     });
   }
 
-  function applySnapshot(currentMap, trigger, device) {
+  function applySnapshot(currentMap, trigger, device, options = {}) {
     const previousTimers = mirror.timers;
     const prevActiveCount = Object.values(previousTimers).filter(isActiveTimer).length;
 
@@ -466,10 +467,11 @@ function createTimerSync({
       trigger,
       device: event.timer?.device || device,
       event,
+      actor: options.actor || null,
     });
   }
 
-  function pollNotifications(reason = 'scheduled', device = null) {
+  function pollNotifications(reason = 'scheduled', device = null, options = {}) {
     if (!settings.enabled) {
       return;
     }
@@ -488,7 +490,7 @@ function createTimerSync({
       if (err) {
         log.warn(`Timer sync poll failed (${reason})`, err.message || err);
         if (immediatePollRequested) {
-          setTimeout(() => pollNotifications('immediate-retry', device), 500);
+          setTimeout(() => pollNotifications('immediate-retry', device, options), 500);
         }
         return;
       }
@@ -505,16 +507,16 @@ function createTimerSync({
         currentMap[normalized.amazonId] = normalized;
       }
 
-      applySnapshot(currentMap, reason, device);
+      applySnapshot(currentMap, reason, device, options);
 
       if (immediatePollRequested) {
-        pollNotifications('immediate-followup', device);
+        pollNotifications('immediate-followup', device, options);
       }
     });
   }
 
-  function requestImmediatePoll(reason = 'voice-hint', device = null) {
-    pollNotifications(reason, device);
+  function requestImmediatePoll(reason = 'voice-hint', device = null, options = {}) {
+    pollNotifications(reason, device, options);
     if (
       reason === 'timer-set-voice'
       || reason === 'show-timers'
@@ -525,7 +527,10 @@ function createTimerSync({
       // point most confirmations show up) so the display doesn't have to
       // wait for the next 30s background poll to catch up.
       for (const delayMs of VOICE_HINT_FOLLOWUP_DELAYS_MS) {
-        setTimeout(() => pollNotifications(`${reason}-followup-${delayMs}ms`, device), delayMs);
+        setTimeout(
+          () => pollNotifications(`${reason}-followup-${delayMs}ms`, device, options),
+          delayMs,
+        );
       }
     }
   }

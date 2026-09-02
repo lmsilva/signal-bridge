@@ -206,6 +206,40 @@ test('idle timeout closes a started game and archives it as abandoned', () => {
   assert.equal(row.reason, 'idle');
 });
 
+test('a long-waiting invite does not idle-close the moment the first phone joins', () => {
+  const { api, archive, advance } = makeApi();
+  const invited = api.create();
+  // Sit past the idle window with nobody joined. Idle only arms after hadPlayer,
+  // so the invite stays up — but lastSseAt is still invite-create time.
+  advance(20);
+  assert.equal(api.getByCode(invited.code).phase, 'invited');
+  const luis = api.join({ code: invited.code, name: 'Luis' });
+  assert.equal(luis.ok, true);
+  // The next tick used to close as idle (FINAL SCORES, one player at zero)
+  // because hadPlayer flipped true while lastSseAt was already stale.
+  advance(1);
+  assert.ok(api.getByCode(invited.code), 'session must survive the first tick after join');
+  assert.equal(api.getByCode(invited.code).phase, 'lobby');
+  // Idle still fires once the post-join grace is spent with no EventSource.
+  advance(15);
+  assert.equal(api.getByCode(invited.code), null);
+  assert.equal(archive.listAll()[0].reason, 'idle');
+});
+
+test('last SSE disconnect restarts the idle clock from now', () => {
+  const { api, advance } = makeApi();
+  const invited = api.create();
+  api.join({ code: invited.code, name: 'Luis' });
+  const unsub = api.subscribe(invited.sessionId, { write() {}, end() {} });
+  advance(10);
+  unsub();
+  // Ten more seconds after the last phone dropped — still inside the idle window.
+  advance(10);
+  assert.ok(api.getByCode(invited.code));
+  advance(6);
+  assert.equal(api.getByCode(invited.code), null);
+});
+
 test('phones can still join before the lobby window runs out', () => {
   const { api, advance, locks, pushes } = makeApi();
   const invited = api.create();

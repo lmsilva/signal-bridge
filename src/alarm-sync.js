@@ -269,7 +269,7 @@ function createAlarmSync({
     saveMirror(mirrorPath, mirror);
   }
 
-  function emitSnapshot({ trigger, device, event, highlightAmazonId }) {
+  function emitSnapshot({ trigger, device, event, highlightAmazonId, actor = null }) {
     const alarms = listActiveAlarms(mirror.alarms);
     onSnapshot?.({
       alarms,
@@ -278,10 +278,11 @@ function createAlarmSync({
       trigger,
       event,
       highlightAmazonId: highlightAmazonId || pickHighlightAmazonId(alarms, event, trigger),
+      ...(actor ? { actor } : {}),
     });
   }
 
-  function applySnapshot(currentMap, trigger, device) {
+  function applySnapshot(currentMap, trigger, device, options = {}) {
     const previousAlarms = mirror.alarms;
     const prevActiveCount = listActiveAlarms(previousAlarms).length;
 
@@ -332,10 +333,11 @@ function createAlarmSync({
       device: mappedEvent?.alarm?.device || device,
       event: mappedEvent,
       highlightAmazonId: pickHighlightAmazonId(activeAlarms, mappedEvent, trigger),
+      actor: options.actor || null,
     });
   }
 
-  function pollNotifications(reason = 'scheduled', device = null) {
+  function pollNotifications(reason = 'scheduled', device = null, options = {}) {
     if (!settings.enabled) {
       return;
     }
@@ -354,7 +356,7 @@ function createAlarmSync({
       if (err) {
         log.warn(`Alarm sync poll failed (${reason})`, err.message || err);
         if (immediatePollRequested) {
-          setTimeout(() => pollNotifications('immediate-retry', device), 500);
+          setTimeout(() => pollNotifications('immediate-retry', device, options), 500);
         }
         return;
       }
@@ -373,23 +375,26 @@ function createAlarmSync({
         currentMap[normalized.amazonId] = normalized;
       }
 
-      applySnapshot(currentMap, reason, device);
+      applySnapshot(currentMap, reason, device, options);
 
       if (immediatePollRequested) {
-        pollNotifications('immediate-followup', device);
+        pollNotifications('immediate-followup', device, options);
       }
     });
   }
 
-  function requestImmediatePoll(reason = 'voice-hint', device = null) {
-    pollNotifications(reason, device);
+  function requestImmediatePoll(reason = 'voice-hint', device = null, options = {}) {
+    pollNotifications(reason, device, options);
     if (
       reason === 'alarm-set-voice'
       || reason === 'show-alarms'
       || reason === 'alarm-cancel-voice'
     ) {
       for (const delayMs of [1000, 2000, 4000, 8000, 15000]) {
-        setTimeout(() => pollNotifications(`${reason}-followup-${delayMs}ms`, device), delayMs);
+        setTimeout(
+          () => pollNotifications(`${reason}-followup-${delayMs}ms`, device, options),
+          delayMs,
+        );
       }
     }
   }

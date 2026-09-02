@@ -677,6 +677,7 @@ function createListener({
         ...(event.triggeredBy === 'scheduler'
           ? { source: 'scheduler', targetId: event.targetId }
           : {}),
+        ...(event.actor ? { actor: event.actor } : {}),
       });
       voiceFanout = result?.vestaboard || voiceFanout;
       sendRequest.rememberSent();
@@ -1697,7 +1698,10 @@ function createListener({
         return;
       }
       const allDelivery = displayRegistry.resolveDelivery('*');
-      sendUdpPayload(attachTarget(payload, allDelivery.target), allDelivery.sendOptions);
+      sendUdpPayload(attachTarget(payload, allDelivery.target), {
+        ...allDelivery.sendOptions,
+        ...(event.actor ? { actor: event.actor } : {}),
+      });
       voiceEventsLog.append({ type: payload.type, device: payload.device, query: event.query });
       lastCaptureAt = Date.now();
       log.info(`Voice event sent (photo-slideshow) for ${event.device}`, {
@@ -1757,7 +1761,7 @@ function createListener({
       alarmCount: payload.alarms.length,
       event: payload.event,
     });
-    sendUdpPayload(payload);
+    sendUdpPayload(payload, snapshot?.actor ? { actor: snapshot.actor } : {});
     lastCaptureAt = Date.now();
     log.info(`Alarm snapshot sent (${payload.trigger})`, {
       activeAlarms: payload.alarms.length,
@@ -1774,7 +1778,7 @@ function createListener({
       timerCount: payload.timers.length,
       event: payload.event,
     });
-    sendUdpPayload(payload);
+    sendUdpPayload(payload, snapshot?.actor ? { actor: snapshot.actor } : {});
     lastCaptureAt = Date.now();
     log.info(`Timer snapshot sent (${payload.trigger})`, {
       activeTimers: payload.timers.length,
@@ -2482,10 +2486,10 @@ function createListener({
     // timer-hint/timer-list before it ever builds a payload) — the "Active
     // Timers" push tile needs its own hook straight into timerSync so a web
     // push re-polls Amazon and always emits a snapshot, same as "show timers".
-    requestTimerPoll: (device) => timerSync?.requestImmediatePoll('show-timers', device),
+    requestTimerPoll: (device, options = {}) => timerSync?.requestImmediatePoll('show-timers', device, options),
     // Same pattern as timers — alarm-list never builds a payload inside
     // handleVoiceEvent; the "Show Alarms" Quick Push tile polls Amazon.
-    requestAlarmPoll: (device) => alarmSync?.requestImmediatePoll('show-alarms', device),
+    requestAlarmPoll: (device, options = {}) => alarmSync?.requestImmediatePoll('show-alarms', device, options),
     steamNowPlaying: () => steamNowPlaying,
     recordSteamPresence: (body) => steamNowPlaying?.recordPresence(body),
     getSteamStatus: () => steamNowPlaying?.statusSnapshot?.() || null,

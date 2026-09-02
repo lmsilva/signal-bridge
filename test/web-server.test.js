@@ -146,9 +146,9 @@ async function startTestServer(options = {}) {
     displayRegistry: options.displayRegistry || null,
     deliverTargetedPayload: options.deliverTargetedPayload || null,
     requestTimerPoll: options.requestTimerPoll
-      || ((device) => timerPolls.push(device)),
+      || ((device, opts = {}) => timerPolls.push({ device, actor: opts.actor || null })),
     requestAlarmPoll: options.requestAlarmPoll
-      || ((device) => alarmPolls.push(device)),
+      || ((device, opts = {}) => alarmPolls.push({ device, actor: opts.actor || null })),
     guestSnapsAuth: options.guestSnapsAuth || null,
     vestaboardHub: options.vestaboardHub || null,
     gameSessions: options.gameSessions || null,
@@ -2284,6 +2284,17 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(js, /localStorage\.getItem\(NAME_KEY\)/);
     assert.match(js, /localStorage\.setItem\(NAME_KEY/);
 
+    // Join must wait for the game module and refuse to flip into an empty
+    // play shell. A refresh reconnects the stored seat instead of dumping
+    // the player back on the code form.
+    assert.match(js, /function whenGameReady/);
+    assert.match(js, /function enterSession/);
+    assert.match(js, /That join did not return a game/);
+    assert.match(js, /Reconnecting…/);
+    assert.match(js, /addEventListener\('load'/);
+    assert.match(js, /sessionId=\$\{encodeURIComponent\(seat\.sessionId\)\}/);
+    assert.doesNotMatch(js, /setTimeout\(join, 0\)/);
+
     // Wheel of Fortune spins a real wheel on the phone: one SVG built from
     // the wedges the server sends, turned to the wedge the server picked, and
     // sized off its column so it survives a phone, a tablet and a laptop.
@@ -2294,6 +2305,8 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(wheel, /function spinTo/);
     assert.match(wheel, /spin\.id > lastSpinId/);
     assert.match(wheel, /prefers-reduced-motion/);
+    assert.match(wheel, /session\.phase === 'round' && Array\.isArray\(session\.wheel\)/,
+      'the lobby must not pay for the wheel bitmap');
     assert.match(css, /\.wf-wheel \{[^}]*width: min\(100%, 42vh, 340px\)/);
     assert.match(css, /\.wf-wheel \{[^}]*aspect-ratio: 1/);
 
@@ -2337,6 +2350,18 @@ test('two players sharing one browser keep their own seats', async () => {
     assert.equal(first.status, 200);
     const jar = String(first.headers['set-cookie'] || '').split(';')[0];
     const luis = first.body.player.id;
+    const sessionId = first.body.session.sessionId;
+
+    // A refresh looks the session up by id so the phone can reconnect without
+    // retyping the code — and still gets the `you` block for that seat.
+    const resumed = await request(
+      `${base}/api/games/session?sessionId=${encodeURIComponent(sessionId)}`
+      + `&playerId=${encodeURIComponent(luis)}`,
+    );
+    assert.equal(resumed.status, 200);
+    assert.equal(resumed.body.session.sessionId, sessionId);
+    assert.equal(resumed.body.session.you?.id, luis);
+    assert.equal(resumed.body.session.gameType, 'wheel');
 
     // The second window carries the first player's cookie. It says it has no
     // seat of its own, so it must be sat down as somebody new.
@@ -4376,10 +4401,16 @@ test('air-quality and now-playing quick-push tiles feed synthetic events', async
     assert.equal(recorded.length, 2);
     assert.equal(recorded[0].kind, 'air-quality');
     assert.equal(recorded[0].query, 'show indoor air quality');
+    // Manual Push must carry the signed-in user — async Alexa enrich used to
+    // lose requestActor and stamp the queue as System.
+    assert.equal(recorded[0].actor?.kind, 'user');
+    assert.ok(recorded[0].actor?.name);
+    assert.notEqual(recorded[0].actor?.name, 'System');
     assert.equal(recorded[1].kind, 'music');
     assert.equal(recorded[1].trigger, 'music-query');
     assert.equal(recorded[1].device, 'iPhone');
     assert.match(recorded[1].query, /playing/i);
+    assert.equal(recorded[1].actor?.kind, 'user');
   } finally {
     webServer.stop();
   }
@@ -4419,7 +4450,9 @@ test('timers quick-push tile requests an immediate timer poll', async () => {
     const push = await postJson(base, '/api/push/timers', { device: 'iPhone' });
     assert.equal(push.status, 202);
     assert.equal(push.body.ok, true);
-    assert.deepEqual(timerPolls, ['iPhone']);
+    assert.equal(timerPolls.length, 1);
+    assert.equal(timerPolls[0].device, 'iPhone');
+    assert.equal(timerPolls[0].actor?.kind, 'user');
   } finally {
     webServer.stop();
   }
@@ -4432,7 +4465,9 @@ test('alarms quick-push tile requests an immediate alarm poll', async () => {
     assert.equal(push.status, 202);
     assert.equal(push.body.ok, true);
     assert.equal(push.body.kind, 'alarms');
-    assert.deepEqual(alarmPolls, ['iPhone']);
+    assert.equal(alarmPolls.length, 1);
+    assert.equal(alarmPolls[0].device, 'iPhone');
+    assert.equal(alarmPolls[0].actor?.kind, 'user');
   } finally {
     webServer.stop();
   }
@@ -5581,6 +5616,12 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /id="btn-avatar-upload"/);
     assert.match(userApp.text, /avatar-crop\.js/);
     assert.match(userApp.text, /id="pf-new-confirm"/);
+    // Profile secrets must not look like a login form while the sheet is closed
+    // (Chrome otherwise offers to save "Admin" + a vault autofill mid-Skills).
+    assert.match(userApp.text, /id="pf-current"[^>]*\bdisabled\b/);
+    assert.match(userApp.text, /name="signal-current-secret"/);
+    assert.doesNotMatch(userApp.text, /autocomplete="current-password"/);
+    assert.doesNotMatch(userApp.text, /autocomplete="given-name"/);
     assert.match(userApp.text, /id="btn-logout"/);
     assert.match(userApp.text, /id="btn-signal-home"/);
     assert.match(userApp.text, />Main Menu</);
@@ -5600,7 +5641,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal285/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal288/);
+    assert.match(userJs, /armProfileSecrets/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
     // Push tiles carry the same artwork the admin grid draws, and adding one
@@ -5663,7 +5705,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal285/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal288/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal284/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);

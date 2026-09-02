@@ -682,6 +682,9 @@
     if ($('pf-email')) $('pf-email').disabled = me.bootstrap === true;
     if ($('pf-env-hint')) $('pf-env-hint').hidden = me.bootstrap !== true;
     if ($('pf-password-block')) $('pf-password-block').hidden = me.bootstrap === true;
+    // Password inputs stay disabled while the sheet is closed so Chrome does
+    // not treat "Admin" + a dormant type=password as a login form.
+    armProfileSecrets(!$('profile-sheet')?.hidden && me.bootstrap !== true);
     const canFlight = me.isAdmin || me.permissions?.flightPlan;
     const canSlides = me.isAdmin || me.permissions?.slideshow;
     const canDates = me.isAdmin || me.permissions?.redLetter;
@@ -1176,16 +1179,27 @@
       toast(error.message);
     }
   });
+  function armProfileSecrets(armed) {
+    for (const id of ['pf-current', 'pf-new', 'pf-new-confirm']) {
+      const el = $(id);
+      if (!el) continue;
+      el.disabled = !armed;
+      if (!armed) el.value = '';
+    }
+  }
+
   function openProfile() {
     pendingAvatar = null;
     renderAvatars();
+    armProfileSecrets(me?.bootstrap !== true);
     $('profile-sheet').hidden = false;
   }
 
   function closeProfile() {
     pendingAvatar = null;
-    applyMe();
     if ($('profile-sheet')) $('profile-sheet').hidden = true;
+    armProfileSecrets(false);
+    applyMe();
   }
 
   $('btn-profile')?.addEventListener('click', openProfile);

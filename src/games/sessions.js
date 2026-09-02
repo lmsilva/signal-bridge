@@ -364,11 +364,12 @@ function createGameSessions(config = {}, log = console, deps = {}) {
         takeover: true,
         showCode: false,
       });
-    } else if (!alreadyFinal && hadAGame) {
+    } else if (!alreadyFinal && hadAGame && reason !== 'preempted') {
       // Scores stay up when someone actually sat down. An empty invite that
       // times out should just drop the lock so rotation can continue — there
       // is nothing to celebrate. Skip a second flip when the final card is
-      // already on the board.
+      // already on the board. A board preempt (doorbell cutting through) also
+      // skips the scores card — the interrupt already owns the flaps.
       pushPhase(session, 'final', {
         scores,
         holdSeconds: settings.intermissionSeconds,
@@ -691,6 +692,13 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       session.players.push(player);
       session.hadPlayer = true;
     }
+    // The idle clock used to run from invite-create time. An invite that sat
+    // on the board for longer than idleTimeoutSeconds would then die on the
+    // very next tick after the first join — FINAL SCORES with one player at
+    // zero — because hadPlayer flipped true while sseCount was still 0 and
+    // lastSseAt was already stale. Reset it so the phone has a full idle
+    // window to open its EventSource.
+    session.lastSseAt = now();
     if (session.phase === 'invited') {
       startLobby(session);
     } else {
@@ -808,7 +816,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     return () => {
       set.delete(res);
       session.sseCount = set.size;
-      if (set.size) session.lastSseAt = now();
+      // Always stamp the clock: when the last phone drops, idle must start
+      // from *now*, not from the last time somebody was still connected.
+      session.lastSseAt = now();
     };
   }
 
@@ -819,6 +829,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
         continue;
       }
       const idle = settingsOf(session.gameType).idleTimeoutSeconds * 1000;
+      // Nobody listening after somebody sat down. lastSseAt is refreshed on
+      // join and on every SSE connect/disconnect, so a long-waiting invite
+      // can no longer expire the moment the first phone sits down.
       if (session.hadPlayer && session.sseCount === 0 && at - session.lastSseAt >= idle) {
         closeSession(session, 'idle');
         continue;
@@ -841,6 +854,19 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     if (!session) return { ok: false, error: 'Session not found' };
     closeSession(session, 'ended');
     return { ok: true };
+  }
+
+  /** A higher-listed board interrupt ended this game's hold. */
+  function endByBoardSource(source, reason = 'preempted') {
+    const owner = String(source || '');
+    if (!owner) return { ended: 0 };
+    let ended = 0;
+    for (const session of [...sessions.values()]) {
+      if (sourceOf(session) !== owner) continue;
+      closeSession(session, reason);
+      ended += 1;
+    }
+    return { ended };
   }
 
   function start() {
@@ -873,6 +899,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     tick,
     listActive,
     end,
+    endByBoardSource,
     noteBoardShown,
     noteBoardCancelled,
     history: (query) => archive.listPage(query),
