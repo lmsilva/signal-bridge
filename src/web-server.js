@@ -131,6 +131,7 @@ const { createGuestBookSettings, sanitiseAlias, publicSettings } = require('./gu
 const { createGuestBook, guestClientIp } = require('./guest-book');
 const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH, GUESTSNAPS_NAME, GUESTSNAPS_PATH, GAMES_NAME, GAMES_PATH } = require('./shortlinks');
 const { houseTimeZone } = require('./vestaboard/clock');
+const { labelFor: vestaboardSourceLabel } = require('./vestaboard/priorities');
 const {
   defaultCredentialsPath: defaultTinyurlCredentialsPath,
   saveTinyurlToken,
@@ -187,6 +188,10 @@ const MAX_BODY_BYTES = 64 * 1024;
 // get rejected by the body-size guard before the cache's own size check runs.
 const QR_IMAGE_BODY_OVERHEAD_FACTOR = 1.4;
 const QR_IMAGE_BODY_PADDING_BYTES = 16 * 1024;
+/** Cropped avatars are small, but allow headroom for uncropped uploads. */
+const AVATAR_MAX_BYTES = 1_500_000;
+const AVATAR_BODY_LIMIT = Math.ceil(AVATAR_MAX_BYTES * QR_IMAGE_BODY_OVERHEAD_FACTOR)
+  + QR_IMAGE_BODY_PADDING_BYTES;
 const URL_CHECK_TIMEOUT_MS = 5000;
 // Tesla's OAuth callback server is opened on demand and must not hold the
 // port forever when the user abandons the login.
@@ -471,13 +476,15 @@ function createWebServer({
   }
 
   function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
-    if (typeof deliverTargetedPayloadIn !== 'function') {
-      return sendUdpPayload(payload, extraSendOptions);
-    }
-    return deliverTargetedPayloadIn(payload, targetId, {
+    const sendOptions = {
       ...extraSendOptions,
+      actor: extraSendOptions.actor || requestActor || undefined,
       ...(schedulerAir || {}),
-    });
+    };
+    if (typeof deliverTargetedPayloadIn !== 'function') {
+      return sendUdpPayload(payload, sendOptions);
+    }
+    return deliverTargetedPayloadIn(payload, targetId, sendOptions);
   }
 
   const settings = {
@@ -535,7 +542,7 @@ function createWebServer({
         explicit: options.explicit,
         breakHold: options.breakHold,
         replaceSource: options.replaceSource,
-        actor: options.actor,
+        actor: options.actor || requestActor,
       });
     },
     getTimeZone: () => localeSettings.get()?.timeZone || houseTimeZone(config),
@@ -7444,7 +7451,25 @@ function createWebServer({
   }
 
   function vestaboardSimQueue() {
-    return vestaboardHub?.queueFor?.(SIMULATOR_ID)?.pending?.() || [];
+    const items = vestaboardHub?.queueFor?.(SIMULATOR_ID)?.pending?.() || [];
+    return items.map((item) => ({
+      ...item,
+      eventTitle: resolveVestaboardQueueEventTitle(item),
+    }));
+  }
+
+  function resolveVestaboardQueueEventTitle(item = {}) {
+    const commandId = String(item.commandId || '').trim();
+    if (commandId) {
+      const command = commandRegistry.get(commandId);
+      if (command?.title) return command.title;
+    }
+    const source = String(item.source || '').trim();
+    if (source) {
+      const fromCatalog = vestaboardSourceLabel(source);
+      if (fromCatalog && fromCatalog !== source) return fromCatalog;
+    }
+    return item.label || 'Frame';
   }
 
   function vestaboardSimQueueRevision() {
@@ -9719,8 +9744,12 @@ function createWebServer({
         // Uploaded photos are the one POST body that can legitimately exceed
         // the default JSON body cap (base64-encoded image data).
         const isRollCreditsImage = /^\/api\/roll-credits\/games\/[^/]+\/media$/.test(pathname);
+        const isAvatarUpload = pathname === '/api/user/avatar'
+          || /^\/api\/house-users\/[^/]+\/avatar$/.test(pathname);
         const bodyLimit = pathname === '/api/qr/image-upload'
           ? Math.ceil(qrImageCache.maxBytes * QR_IMAGE_BODY_OVERHEAD_FACTOR) + QR_IMAGE_BODY_PADDING_BYTES
+          : isAvatarUpload
+            ? AVATAR_BODY_LIMIT
           : isRollCreditsImage
             ? Math.ceil(
               rollCreditsInstance.getSettings().limits.maxImageBytes

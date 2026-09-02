@@ -189,7 +189,7 @@
     }
     const ok = await askConfirm({
       title: `Remove ${command.title}?`,
-      text: 'This tile will leave Your tiles. You can add it again from the library.',
+      text: 'This tile will leave Your tiles. You can add it again from the skill library.',
       ok: 'Remove',
       danger: true,
     });
@@ -203,7 +203,7 @@
     const command = commandById(id);
     const ok = await askConfirm({
       title: `Remove ${command?.title || 'this tile'}?`,
-      text: 'This tile will leave Your tiles. You can add it again from the library.',
+      text: 'This tile will leave Your tiles. You can add it again from the skill library.',
       ok: 'Remove',
       danger: true,
     });
@@ -250,30 +250,95 @@
         && !node.classList.contains('is-dragging'));
   }
 
-  function nearestDashSlot(host, x, y, skip) {
+  const GHOST_ANCHOR_Y = 36;
+
+  function rectOverlap(a, b) {
+    const left = Math.max(a.left, b.left);
+    const right = Math.min(a.right, b.right);
+    const top = Math.max(a.top, b.top);
+    const bottom = Math.min(a.bottom, b.bottom);
+    if (right <= left || bottom <= top) return 0;
+    return (right - left) * (bottom - top);
+  }
+
+  function dashDragRect(clientX, clientY, sourceWrap) {
+    const width = sourceWrap?.offsetWidth || 0;
+    const height = sourceWrap?.getBoundingClientRect().height || 0;
+    const left = clientX - width / 2;
+    const top = clientY - GHOST_ANCHOR_Y;
+    return {
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      width,
+      height,
+    };
+  }
+
+  function pointerInRect(clientX, clientY, box) {
+    return clientX >= box.left && clientX <= box.right
+      && clientY >= box.top && clientY <= box.bottom;
+  }
+
+  /** Before or after a card in DOM order, using the pointer inside that card. */
+  function insertionSlotForCard(card, clientX, clientY) {
+    const box = card.getBoundingClientRect();
+    const midX = box.left + box.width / 2;
+    const midY = box.top + box.height / 2;
+    if (clientX < midX - 2) return card;
+    if (clientX > midX + 2) return card.nextElementSibling;
+    return clientY < midY ? card : card.nextElementSibling;
+  }
+
+  function nearestDashSlot(host, clientX, clientY, skip, sourceWrap) {
     const cards = dashCardNodes(host, skip);
     if (!cards.length) return null;
-    let best = cards[0];
+    const dragRect = dashDragRect(clientX, clientY, sourceWrap);
+
+    let bestCard = null;
+    let bestArea = 0;
+    for (const card of cards) {
+      const box = card.getBoundingClientRect();
+      const area = rectOverlap(dragRect, box);
+      if (area > bestArea) {
+        bestArea = area;
+        bestCard = card;
+      } else if (area > 0 && area === bestArea && pointerInRect(clientX, clientY, box)) {
+        bestCard = card;
+      }
+    }
+    if (bestCard && bestArea > 0) {
+      return insertionSlotForCard(bestCard, clientX, clientY);
+    }
+
+    for (const card of cards) {
+      const box = card.getBoundingClientRect();
+      if (pointerInRect(clientX, clientY, box)) {
+        return insertionSlotForCard(card, clientX, clientY);
+      }
+    }
+
+    let nearest = cards[0];
     let bestDist = Infinity;
     for (const card of cards) {
       const box = card.getBoundingClientRect();
-      const dx = x - (box.left + box.width / 2);
-      const dy = y - (box.top + box.height / 2);
+      const dx = clientX - (box.left + box.width / 2);
+      const dy = clientY - (box.top + box.height / 2);
       const dist = dx * dx + dy * dy;
       if (dist < bestDist) {
         bestDist = dist;
-        best = card;
+        nearest = card;
       }
     }
-    const box = best.getBoundingClientRect();
-    return x < box.left + box.width / 2 ? best : best.nextElementSibling;
+    return insertionSlotForCard(nearest, clientX, clientY);
   }
 
-  function placeDashCard(host, wrap, x, y) {
-    if (!host || !wrap) return;
-    const slot = nearestDashSlot(host, x, y, wrap);
-    if (slot && slot !== wrap) host.insertBefore(wrap, slot);
-    else if (!slot) host.appendChild(wrap);
+  function placeDashCard(host, placeholder, clientX, clientY, sourceWrap) {
+    if (!host || !placeholder) return;
+    const slot = nearestDashSlot(host, clientX, clientY, placeholder, sourceWrap);
+    if (slot && slot !== placeholder) host.insertBefore(placeholder, slot);
+    else if (!slot) host.appendChild(placeholder);
   }
 
   async function commitDashOrder() {
@@ -327,9 +392,9 @@
       card.innerHTML = iconHtml + titleHtml + subHtml;
     } else {
       card.innerHTML = `<div class="push-card-top">`
-        + `<div class="push-card-lead">${iconHtml}`
         + '<button type="button" class="push-card-handle" title="Drag to reorder" aria-label="Drag to reorder">'
-        + '<span class="push-card-grip" aria-hidden="true"></span></button></div>'
+        + '<span class="push-card-grip" aria-hidden="true"></span></button>'
+        + iconHtml
         + `<button type="button" class="push-card-remove" aria-label="Remove ${escapeHtml(command.title)}">×</button>`
         + '</div>'
         + titleHtml
@@ -374,34 +439,11 @@
       event.preventDefault();
       event.stopPropagation();
     });
-    if (coarsePointer()) bindCoarseDashDrag(wrap, handle);
-    else bindFineDashDrag(wrap, handle);
+    handle.draggable = false;
+    bindPointerDashDrag(wrap, handle);
   }
 
-  function bindFineDashDrag(wrap, handle) {
-    handle.draggable = true;
-    handle.addEventListener('dragstart', (event) => {
-      event.stopPropagation();
-      dashDragWrap = wrap;
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', wrap.dataset.id);
-      try { event.dataTransfer.setDragImage(wrap, 24, 24); } catch { /* Safari */ }
-      wrap.classList.add('is-dragging');
-      document.body.classList.add('is-dash-dragging');
-      dashPlaceholder = makeDashPlaceholder(wrap);
-      wrap.after(dashPlaceholder);
-    });
-    handle.addEventListener('dragend', async () => {
-      cleanupDashDrag(wrap);
-      try {
-        await commitDashOrder();
-      } catch (error) {
-        toast(error.message);
-      }
-    });
-  }
-
-  function bindCoarseDashDrag(wrap, handle) {
+  function bindPointerDashDrag(wrap, handle) {
     handle.addEventListener('pointerdown', (event) => startDashDrag(event, wrap, handle));
   }
 
@@ -413,6 +455,7 @@
     const host = $('push-dash');
     if (!host) return;
     const pointerId = event.pointerId;
+    dashDragWrap = wrap;
     handle.setPointerCapture?.(pointerId);
     dashPlaceholder = makeDashPlaceholder(wrap);
     wrap.after(dashPlaceholder);
@@ -424,14 +467,14 @@
     ghost.style.width = `${wrap.offsetWidth}px`;
     document.body.appendChild(ghost);
     const moveGhost = (x, y) => {
-      ghost.style.transform = `translate(${x - wrap.offsetWidth / 2}px, ${y - 36}px)`;
+      ghost.style.transform = `translate(${x - wrap.offsetWidth / 2}px, ${y - GHOST_ANCHOR_Y}px)`;
     };
     moveGhost(event.clientX, event.clientY);
     const onMove = (move) => {
       if (move.pointerId !== pointerId) return;
       move.preventDefault();
       moveGhost(move.clientX, move.clientY);
-      placeDashCard(host, dashPlaceholder, move.clientX, move.clientY);
+      placeDashCard(host, dashPlaceholder, move.clientX, move.clientY, wrap);
     };
     const finish = async () => {
       ghost.remove();
@@ -452,23 +495,7 @@
   }
 
   function bindDashHost() {
-    const host = $('push-dash');
-    if (!host || host.dataset.boundDrag) return;
-    host.dataset.boundDrag = '1';
-    host.addEventListener('dragenter', (event) => {
-      if (!dashPlaceholder) return;
-      event.preventDefault();
-    });
-    host.addEventListener('dragover', (event) => {
-      if (!dashPlaceholder) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      placeDashCard(host, dashPlaceholder, event.clientX, event.clientY);
-    });
-    host.addEventListener('drop', (event) => {
-      if (!dashPlaceholder) return;
-      event.preventDefault();
-    });
+    // Pointer drag moves the placeholder directly; no HTML5 drop target needed.
   }
 
   function renderDash() {
@@ -488,7 +515,7 @@
       empty.hidden = list.length > 0;
       empty.textContent = (me?.dashboardTiles || []).length
         ? 'Nothing in your tiles matches that search.'
-        : 'Add tiles from the library, then tap one to push it.';
+        : 'Add tiles from the skill library, then tap one to push it.';
     }
   }
 
@@ -611,6 +638,27 @@
       });
       host.appendChild(btn);
     });
+    if (selected.kind === 'upload' && selected.id) {
+      const custom = document.createElement('button');
+      custom.type = 'button';
+      custom.className = 'active avatar-grid-custom';
+      custom.title = 'Your picture';
+      custom.innerHTML = `<img src="${avatarPreviewUrl(selected)}" alt="Your picture">`;
+      custom.addEventListener('click', () => $('btn-avatar-upload')?.click());
+      host.appendChild(custom);
+    }
+  }
+
+  async function uploadAvatarFile(file) {
+    if (!file || !window.avatarCropEditor) return;
+    const cropped = await window.avatarCropEditor.open(file);
+    if (!cropped) return;
+    const saved = await api('/api/user/avatar', { image: cropped });
+    me = saved.user;
+    pendingAvatar = null;
+    applyMe();
+    renderAvatars();
+    toast('Picture updated');
   }
 
   function applyMe() {
@@ -1067,20 +1115,16 @@
       toast(error.message);
     }
   });
+  $('btn-avatar-upload')?.addEventListener('click', () => $('pf-upload')?.click());
   $('pf-upload')?.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const saved = await api('/api/user/avatar', { image: reader.result });
-        me = saved.user;
-        applyMe();
-      } catch (error) {
-        toast(error.message);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      await uploadAvatarFile(file);
+    } catch (error) {
+      toast(error.message);
+    }
   });
   $('btn-password')?.addEventListener('click', async () => {
     const next = String($('pf-new')?.value || '');

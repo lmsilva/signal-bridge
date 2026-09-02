@@ -356,7 +356,7 @@ function createListener({
     }
     return vestaboardHub.pushEvent(payload, {
       targetId: payloadTargetId(payload, options),
-      commandId: options.commandId || null,
+      commandId: options.commandId || payload?.commandId || payload?.type || null,
       explicit: options.explicit != null
         ? Boolean(options.explicit)
         : options.source !== 'scheduler',

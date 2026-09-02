@@ -476,15 +476,6 @@
     if (name === 'audit') renderAudit();
   }
 
-  function readFileAsDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('Could not read that picture'));
-      reader.readAsDataURL(file);
-    });
-  }
-
   document.addEventListener('DOMContentLoaded', () => {
     if (!$('btn-house-users') && !$('gmail-mail-card')) return;
 
@@ -630,8 +621,9 @@
         return;
       }
       try {
-        const image = await readFileAsDataUrl(file);
-        const result = await api(`/api/house-users/${id}/avatar`, { method: 'POST', body: { image } });
+        const cropped = await window.avatarCropEditor.open(file);
+        if (!cropped) return;
+        const result = await api(`/api/house-users/${id}/avatar`, { method: 'POST', body: { image: cropped } });
         selectedAvatar = result.user?.avatar || selectedAvatar;
         await loadUsers();
         toast('Picture updated.');

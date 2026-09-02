@@ -105,6 +105,24 @@ main {
   margin: 10px 0 8px;
 }
 .su-row-head .su-h { margin: 0; }
+.su-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 16px;
+}
+.su-page-head-copy { min-width: 0; flex: 1 1 auto; }
+.su-page-head .su-h {
+  margin: 0 0 4px;
+  line-height: 1.25;
+}
+.su-page-head .hint { margin: 0; }
+.su-page-head .su-btn {
+  flex: 0 0 auto;
+  margin: 0;
+  align-self: center;
+}
 .su-seg-wrap { row-gap: 8px; }
 .su-label {
   display: block;
@@ -189,7 +207,6 @@ body.is-dash-dragging {
 body.is-fine .push-card-handle { cursor: grab; }
 body.is-fine .push-card-wrap.is-dragging,
 body.is-dash-dragging .push-card-handle { cursor: grabbing; }
-body.is-coarse .push-card-top .push-card-handle,
 body.is-coarse .push-card-top .push-card-remove {
   width: 44px;
   height: 44px;
@@ -233,24 +250,27 @@ body.is-coarse .push-card-top .push-card-remove {
 .push-card.is-add { border-style: dashed; }
 .push-card.is-on { border-color: rgba(56, 189, 248, 0.45); }
 .push-card-top {
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px 40px 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  column-gap: 6px;
   width: 100%;
   margin-bottom: 8px;
 }
-.push-card-lead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+.push-card-top .push-card-handle {
+  grid-column: 1;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 1px solid var(--line);
+  background: rgba(15, 23, 42, 0.35);
 }
 .push-card-top .push-card-icon {
+  grid-column: 2;
   width: 40px;
   height: 40px;
   margin-bottom: 0;
-  flex: 0 0 auto;
+  flex: 0 0 40px;
 }
 .push-card-remove,
 .push-card-handle {
@@ -261,20 +281,16 @@ body.is-coarse .push-card-top .push-card-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: grab;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
   flex: 0 0 auto;
 }
-.push-card-top .push-card-handle {
-  width: 36px;
-  height: 36px;
-  cursor: grab;
-}
 .push-card-top .push-card-remove {
+  grid-column: 4;
+  justify-self: end;
   width: 36px;
   height: 36px;
-  margin-left: auto;
   font-size: 1.35rem;
   line-height: 1;
 }
@@ -286,14 +302,15 @@ body.is-coarse .push-card-top .push-card-remove {
   background: rgba(226, 232, 240, 0.08);
 }
 .push-card-grip {
-  width: 12px;
+  width: 14px;
   height: 18px;
-  background-image: radial-gradient(circle, currentColor 1.4px, transparent 1.5px);
-  background-size: 6px 6px;
-  opacity: 0.9;
+  background-image: radial-gradient(circle, currentColor 1.5px, transparent 1.6px);
+  background-size: 7px 6px;
+  background-position: center;
+  opacity: 0.85;
 }
 body.is-fine .push-card-wrap.is-dragging {
-  display: none;
+  opacity: 0.35;
 }
 .su-sheet {
   position: fixed;
@@ -351,6 +368,8 @@ body.is-fine .push-card-wrap.is-dragging {
 }
 .avatar-grid button.active { border-color: var(--accent); }
 .avatar-grid img { display: block; width: 100%; height: auto; }
+.avatar-grid-custom img { aspect-ratio: 1; object-fit: cover; }
+.avatar-upload-hint { margin: 10px 0 8px; }
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -683,7 +702,7 @@ body[data-tab="board"] .vb-bezel {
 .vb-list { display: flex; flex-direction: column; gap: 6px; }
 .vb-queue-row {
   display: grid;
-  grid-template-columns: 1.35rem minmax(5.5rem, 9rem) minmax(0, 1fr) minmax(6.5rem, 9rem) 1.7rem;
+  grid-template-columns: 1.35rem minmax(0, 1fr) minmax(5rem, 8.5rem) minmax(6.5rem, 9rem) 1.7rem;
   column-gap: 12px;
   align-items: center;
   padding: 9px 12px;
@@ -827,6 +846,42 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .tab-btn.active { color: var(--accent); }
 .profile-dialog { max-width: 640px; }
 .gb-name-hidden .gb-header { padding-top: 0; }
+
+/* Message tab — grow the compose board on tablets and desktops. */
+#tab-main .gb-name-hidden .gb-main {
+  width: 100%;
+  max-width: min(100%, 480px);
+}
+
+@media (min-width: 600px) {
+  #tab-main .gb-name-hidden .gb-main {
+    max-width: min(94vw, 620px);
+  }
+}
+
+@media (min-width: 900px) {
+  #tab-main .gb-name-hidden .gb-main {
+    max-width: min(92vw, 760px);
+  }
+}
+
+@media (min-width: 1100px) {
+  body[data-tab="main"] main {
+    max-width: 1280px;
+  }
+  #tab-main .gb-name-hidden .gb-main {
+    max-width: min(90vw, 920px);
+  }
+}
+
+@media (min-width: 1400px) {
+  body[data-tab="main"] main {
+    max-width: 1400px;
+  }
+  #tab-main .gb-name-hidden .gb-main {
+    max-width: min(88vw, 1040px);
+  }
+}
 
 @media (min-width: 720px) {
   main {

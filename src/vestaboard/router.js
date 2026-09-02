@@ -239,6 +239,7 @@ function routeEvent({
       hold,
       payload,
       type,
+      commandId,
       priorities: housePriorities,
       actor,
       ...extra,

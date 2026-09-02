@@ -399,6 +399,8 @@ function createQueue({
     return items.map((item) => ({
       id: item.id,
       label: item.frame.label || 'Frame',
+      eventTitle: item.eventTitle || item.frame.label || 'Frame',
+      commandId: item.commandId || null,
       source: item.frame.source || '',
       priority: item.priority,
       scheduler: Boolean(item.scheduler),
@@ -593,6 +595,7 @@ function createQueue({
     const sequenceId = `s${nextItemId}`;
     const ownerSource = options.gameSource || hold.source || options.replaceSource || null;
     const actor = resolveActor(options);
+    const commandId = options.commandId ? String(options.commandId) : null;
     const made = list.map((frame) => ({
       id: `i${nextItemId++}`,
       frame,
@@ -607,6 +610,8 @@ function createQueue({
       quietHoursExempt: isExempt(frame, options.quietHoursExempt),
       scheduler: Boolean(options.scheduler),
       ownerSource: ownerSource ? String(ownerSource) : null,
+      commandId,
+      eventTitle: options.eventTitle ? String(options.eventTitle) : null,
       actor,
     }));
 

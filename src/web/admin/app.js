@@ -19785,14 +19785,16 @@
 
       const source = document.createElement('span');
       source.className = 'vb-queue-source';
-      const actorLabel = window.VestaboardSimUi?.actorLabel?.(item.actor) || '';
-      source.textContent = actorLabel || item.source || '—';
-      source.title = [actorLabel, item.source].filter(Boolean).join(' · ');
+      const actorLine = window.VestaboardSimUi?.queueActorLine?.(item.actor) || '';
+      source.textContent = actorLine;
+      source.hidden = !actorLine;
+      source.title = actorLine;
 
       const main = document.createElement('span');
       main.className = 'vb-queue-title';
-      main.textContent = item.label || 'Frame';
-      main.title = item.label || 'Frame';
+      const eventTitle = window.VestaboardSimUi?.queueEventTitle?.(item) || item.label || 'Frame';
+      main.textContent = eventTitle;
+      main.title = eventTitle;
 
       const state = document.createElement('span');
       const cuttingIn = item.status === 'cutting-in';
@@ -19815,7 +19817,7 @@
       });
 
       row.addEventListener('pointerdown', (event) => vbStartQueueDrag(event, row));
-      row.append(handle, source, main, state, cancel);
+      row.append(handle, main, source, state, cancel);
       host.appendChild(row);
     }
   }

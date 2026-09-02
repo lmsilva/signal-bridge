@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal265">
+  <link rel="stylesheet" href="styles.css?v=signal271">
 </head>
 <body>
   <header class="su-head">
@@ -40,7 +40,7 @@
       <div class="gb-name-hidden">
         <header class="gb-header">
           <div>
-            <h2>Write the board</h2>
+            <h2>Message the board</h2>
             <p id="gb-subtitle">Select a flap, then type</p>
           </div>
         </header>
@@ -113,7 +113,7 @@
       </div>
       <div class="su-row-head">
         <h2 class="su-h" id="push-dash-heading">Your tiles</h2>
-        <button type="button" class="su-btn su-btn-sm" id="btn-push-library">Browse library</button>
+        <button type="button" class="su-btn su-btn-sm" id="btn-push-library">Skill library</button>
       </div>
       <p class="hint" id="push-dash-hint"></p>
       <div class="push-grid" id="push-dash"></div>
@@ -121,11 +121,13 @@
     </section>
 
     <section class="tab-panel" id="tab-games">
-      <div class="su-toolbar">
-        <h2 class="su-h" style="margin:0">Live games</h2>
+      <div class="su-page-head">
+        <div class="su-page-head-copy">
+          <h2 class="su-h">Live games</h2>
+          <p class="hint">Tap a session to join in a new tab. Your first name goes with you.</p>
+        </div>
         <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-games-refresh">Refresh</button>
       </div>
-      <p class="hint">Tap a session to join in a new tab. Your first name goes with you.</p>
       <div class="game-list" id="games-list"></div>
       <p class="hint" id="games-empty">No games are running right now.</p>
     </section>
@@ -261,8 +263,9 @@
       <button type="button" class="su-btn" id="btn-profile-save">Save profile</button>
       <h2 class="su-h">Avatar</h2>
       <div class="avatar-grid" id="avatar-grid"></div>
-      <label class="su-label" for="pf-upload">Or upload a picture</label>
-      <input id="pf-upload" class="su-input" type="file" accept="image/png,image/jpeg,image/webp">
+      <p class="hint avatar-upload-hint">Upload a photo and adjust how it fits the rounded square.</p>
+      <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-avatar-upload">Choose picture</button>
+      <input id="pf-upload" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       <div id="pf-password-block">
         <h2 class="su-h">Password</h2>
         <label class="su-label" for="pf-current">Current password</label>
@@ -360,7 +363,7 @@
   <div class="su-backdrop push-lib-backdrop" id="push-library" hidden>
     <div class="su-dialog push-lib-sheet" role="dialog" aria-modal="true" aria-labelledby="push-lib-title">
       <div class="su-sheet-head">
-        <h2 id="push-lib-title">Push library</h2>
+        <h2 id="push-lib-title">Skill library</h2>
         <button type="button" class="su-text" id="btn-push-library-close">Close</button>
       </div>
       <input id="lib-search" class="su-input" type="search" placeholder="Search the catalog…" autocomplete="off">
@@ -391,11 +394,11 @@
   <nav class="tab-bar" id="su-tabs">
     <button type="button" class="tab-btn active" data-tab="main">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
-      <span>Main</span>
+      <span>Message</span>
     </button>
     <button type="button" class="tab-btn" data-tab="push">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 8v5M9.5 10.5 12 8l2.5 2.5"/></svg>
-      <span>Push</span>
+      <span>Skills</span>
     </button>
     <button type="button" class="tab-btn" data-tab="games">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="3"/><path d="M7 12h.01M10 12h.01M6.5 15h4"/><circle cx="16.5" cy="12" r="1"/><path d="M15 15h3M9 7V5M15 7V5"/></svg>
@@ -426,8 +429,9 @@
   <script src="/flap-grid.js"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
   <script src="/push-icons.js?v=signal262"></script>
-  <script src="/vestaboard-sim-ui.js?v=signal250"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal269"></script>
   <script src="/guestbook/guestbook.js"></script>
-  <script src="app.js?v=signal265"></script>
+  <script src="/avatar-crop.js?v=signal266"></script>
+  <script src="app.js?v=signal270"></script>
 </body>
 </html>

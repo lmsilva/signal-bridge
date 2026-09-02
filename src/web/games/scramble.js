@@ -63,12 +63,41 @@
     setWord('');
   }
 
+  let shakeTimer = null;
+
+  function shakeCompose() {
+    if (!form || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    form.classList.remove('is-shake');
+    void form.offsetWidth;
+    form.classList.add('is-shake');
+    window.clearTimeout(shakeTimer);
+    shakeTimer = window.setTimeout(() => form.classList.remove('is-shake'), 420);
+  }
+
+  /** Wrong letter while typing — wipe the attempt and the tile picks. */
+  function rejectInvalidLetter() {
+    picked = [];
+    input.value = '';
+    paint();
+    shakeCompose();
+  }
+
   /** Typed text wins; we just work out which cells it would use. */
   function syncFromInput() {
     const typed = input.value.replace(/[^A-Za-z]/g, '').toUpperCase();
     if (typed !== input.value) input.value = typed;
-    if (typed !== pickedWord()) picked = pathFor(typed) || [];
-    paint();
+    if (!typed) {
+      picked = [];
+      paint();
+      return;
+    }
+    const path = pathFor(typed);
+    if (path) {
+      picked = path;
+      paint();
+      return;
+    }
+    rejectInvalidLetter();
   }
 
   function tap(index) {
