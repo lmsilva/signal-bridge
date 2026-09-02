@@ -84,6 +84,18 @@ test('submit stamps actor on queue items', () => {
   assert.equal(scheduled.actor.name, 'Scheduled');
 });
 
+test('submit keeps command id on queue items', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('WEATHER MAP', 3, { source: 'us.weather.map' })], {
+    commandId: 'weather.us-map',
+    actor: { kind: 'user', userId: 'u1', name: 'Admin' },
+  });
+  const row = h.queue.pending()[0];
+  assert.equal(row.commandId, 'weather.us-map');
+  assert.equal(row.eventTitle, 'WEATHER MAP');
+  assert.equal(row.label, 'WEATHER MAP');
+});
+
 test('the first frame goes straight to the board', async () => {
   const h = makeQueue();
   h.queue.submit([frame('SHOPPING', 1)]);

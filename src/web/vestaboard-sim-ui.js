@@ -10,8 +10,18 @@
     const name = String(actor.name || '').trim();
     if (actor.kind === 'scheduler') return name || 'Scheduled';
     if (actor.kind === 'guest') return name ? `Guest · ${name}` : 'Guest';
-    if (actor.kind === 'system') return name || 'System';
+    if (actor.kind === 'system') return name || '';
     return name || 'User';
+  }
+
+  function queueActorLine(actor) {
+    const label = actorLabel(actor);
+    if (!label) return '';
+    return `by ${label}`;
+  }
+
+  function queueEventTitle(item = {}) {
+    return item.eventTitle || item.label || 'Frame';
   }
 
   function clockOf(iso) {
@@ -410,15 +420,19 @@
         const row = document.createElement('div');
         row.className = 'vb-row vb-queue-row';
         row.dataset.id = item.id || '';
-        const label = actorLabel(item.actor);
+        const byline = queueActorLine(item.actor);
         row.innerHTML = `
           <span class="vb-queue-handle" aria-hidden="true">⋮⋮</span>
-          <span class="vb-queue-source"></span>
           <span class="vb-queue-title"></span>
+          <span class="vb-queue-source"></span>
           <span class="vb-queue-status${item.status === 'held' ? ' is-held' : ''}${item.status === 'cutting-in' ? ' is-now' : ''}"></span>
           <button type="button" class="vb-queue-cancel" aria-label="Cancel this page">×</button>`;
-        row.querySelector('.vb-queue-source').textContent = label || item.source || '—';
-        row.querySelector('.vb-queue-title').textContent = item.label || 'Frame';
+        row.querySelector('.vb-queue-title').textContent = queueEventTitle(item);
+        const source = row.querySelector('.vb-queue-source');
+        source.textContent = byline;
+        source.hidden = !byline;
+        source.title = byline;
+        row.querySelector('.vb-queue-title').title = queueEventTitle(item);
         row.querySelector('.vb-queue-status').textContent = statusOf(item);
         row.querySelector('.vb-queue-cancel').addEventListener('click', (event) => {
           event.preventDefault();
@@ -607,5 +621,5 @@
     return { mount, refresh, disconnect, applyQueue, renderQueue, enter, leave };
   }
 
-  root.VestaboardSimUi = { actorLabel, createVestaboardSimUi };
+  root.VestaboardSimUi = { actorLabel, queueActorLine, queueEventTitle, createVestaboardSimUi };
 })(window);

@@ -563,12 +563,16 @@ test('the state fetch includes frames waiting on the hub queue', async () => {
       label: 'Shopping',
       source: 'shopping-list.snapshot',
       dwellSeconds: 15,
-    }]);
+    }], {
+      commandId: 'alexa.shopping-list',
+      actor: { kind: 'user', userId: 'u1', name: 'Admin' },
+    });
     assert.equal(outcome.accepted, 1);
 
     const res = await request(`${harness.base}/api/vestaboard-sim`, { cookie: harness.cookie });
     assert.equal(res.body.queue.length, 1);
-    assert.equal(res.body.queue[0].label, 'Shopping');
+    assert.equal(res.body.queue[0].eventTitle, 'Shopping List');
+    assert.equal(res.body.queue[0].actor.name, 'Admin');
     assert.ok(res.body.queue[0].id, 'the page needs an id so the simulator can cancel it');
     assert.ok(res.body.queueRevision >= 1);
   } finally {
@@ -979,7 +983,7 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(userJs, /function removeDashTile/);
   assert.match(userJs, /function startDashDrag/);
   assert.match(userJs, /function nearestDashSlot/);
-  assert.match(userJs, /function bindFineDashDrag/);
+  assert.match(userJs, /function bindPointerDashDrag/);
   assert.match(userCss, /push-lib-sheet/);
   assert.match(userCss, /push-lib-backdrop/);
   assert.match(userCss, /max-width: min\(1600px/);

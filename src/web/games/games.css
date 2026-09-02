@@ -277,6 +277,15 @@ html, body {
 }
 .gm-compose-row { display: flex; gap: 10px; }
 .gm-compose-row .gm-input { flex: 1 1 auto; min-width: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+
+@keyframes gm-shake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-9px); }
+  36% { transform: translateX(9px); }
+  54% { transform: translateX(-6px); }
+  72% { transform: translateX(6px); }
+}
+.gm-compose.is-shake { animation: gm-shake 0.38s ease; }
 .gm-send-inline { width: auto; flex: none; margin-top: 0; padding-inline: clamp(16px, 4vw, 26px); }
 
 /* ------------------------------------------------------------- lists */

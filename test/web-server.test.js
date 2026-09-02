@@ -2252,6 +2252,9 @@ test('games page and a live session join without an admin session', async () => 
     const scramble = fs.readFileSync(path.join(realRoot, 'games', 'scramble.js'), 'utf8');
     assert.match(scramble, /createElement\('button'\)/);
     assert.match(scramble, /function pathFor/);
+    assert.match(scramble, /function rejectInvalidLetter/);
+    assert.match(scramble, /is-shake/);
+    assert.match(css, /@keyframes gm-shake/);
     assert.match(scramble, /is-used/);
     assert.match(css, /\.gm-cell\.is-used/);
     assert.match(page.text, /id="btn-gm-clear"/);
@@ -2993,7 +2996,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="hu-pw-done"/);
   assert.match(html, /id="btn-hu-pw-done"/);
   assert.match(html, /id="user-audit-body"/);
-  assert.match(html, /house-users\.js\?v=signal257/);
+  assert.match(html, /house-users\.js\?v=signal266/);
+  assert.match(html, /avatar-crop\.js\?v=signal266/);
   assert.doesNotMatch(html, /id="hu-env-hint"/);
   assert.doesNotMatch(html, /The environment admin follows ADMIN_USERNAME/);
   assert.match(css, /\.email-sender-lead \{/);
@@ -5126,7 +5130,11 @@ test('household login, /user/ gate, and permission 403s', async () => {
 
     const userApp = await request(`${base}/user/`, { cookie: userCookie });
     assert.equal(userApp.status, 200);
-    assert.match(userApp.text, /Write the board|Household/);
+    assert.match(userApp.text, /Message the board|Household/);
+    assert.match(userApp.text, />Message</);
+    assert.match(userApp.text, />Skills</);
+    assert.match(userApp.text, />Skill library</);
+    assert.match(userApp.text, /id="push-lib-title">Skill library/);
     assert.match(userApp.text, /id="btn-push-library"/);
     assert.match(userApp.text, /id="push-dash-hint"/);
     assert.match(userApp.text, /su-row-head/);
@@ -5149,6 +5157,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /id="btn-profile"/);
     assert.doesNotMatch(userApp.text, /M16 3\.13a4 4 0 0 1 0 7\.75/);
     assert.match(userApp.text, /id="profile-sheet"/);
+    assert.match(userApp.text, /id="btn-avatar-upload"/);
+    assert.match(userApp.text, /avatar-crop\.js/);
     assert.match(userApp.text, /id="pf-new-confirm"/);
     assert.match(userApp.text, /id="btn-logout"/);
     assert.match(userApp.text, /id="btn-signal-home"/);
@@ -5169,7 +5179,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal265/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal270/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
     // Push tiles carry the same artwork the admin grid draws, and adding one
@@ -5210,23 +5220,30 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /transform: translateX\(-50%\)/);
     assert.match(userCss, /\.su-head-who/);
     assert.match(userCss, /a\.su-btn/);
+    assert.match(userCss, /#tab-main \.gb-name-hidden \.gb-main/);
     assert.match(userCss, /body\[data-tab="board"\] main/);
-    assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(5\.5rem/);
+    assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(0, 1fr\)/);
     assert.match(userCss, /push-card-grip/);
     assert.match(userCss, /\.push-card-top \{/);
-    assert.match(userCss, /\.push-card-lead \{/);
+    assert.match(userCss, /grid-template-columns: 40px 40px 1fr auto/);
     assert.match(userCss, /\.push-card-top \.push-card-handle \{/);
+    assert.match(userJs, /function rectOverlap/);
+    assert.match(userJs, /function dashDragRect/);
     assert.match(userJs, /function nearestDashSlot/);
     assert.match(userJs, /GAMES_POLL_MS/);
     assert.match(userJs, /function startGamesPoll/);
-    assert.match(userJs, /function bindFineDashDrag/);
-    assert.match(userJs, /function bindCoarseDashDrag/);
+    assert.match(userJs, /function bindPointerDashDrag/);
+    assert.match(userJs, /handle\.draggable = false/);
     assert.match(userJs, /Drag the dots to reorder/);
     assert.match(userJs, /function cleanupDashDrag/);
     assert.match(userJs, /push-card-top/);
-    assert.match(userJs, /push-card-lead/);
+    assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal265/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal271/);
+    assert.match(userApp.text, /class="su-page-head"/);
+    assert.match(userApp.text, /class="su-page-head-copy"/);
+    assert.match(userCss, /\.su-page-head \{[^}]*justify-content: space-between/);
+    assert.match(userCss, /\.push-card-top \.push-card-handle \{[^}]*width: 40px/);
     assert.match(userCss, /html, body \{[^}]*position: fixed/);
     assert.match(userCss, /html, body \{[^}]*overflow: hidden/);
     assert.match(userCss, /main \{\s*flex: 1 1 auto/);
@@ -5237,7 +5254,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /--vb-chrome/);
     assert.match(userCss, /100dvh - var\(--vb-chrome\)/);
     assert.match(userCss, /1080px, calc\(\(100dvh - var\(--vb-chrome\)\)/);
-    assert.match(userCss, /body\.is-coarse \.push-card-top \.push-card-handle/);
+    assert.match(userCss, /\.push-card-top \{\s*display: grid/);
     assert.match(userCss, /"board board"/);
 
     const adminShell = await request(`${base}/admin/`, { cookie: userCookie });
@@ -5246,6 +5263,16 @@ test('household login, /user/ gate, and permission 403s', async () => {
     const me = await request(`${base}/api/user/me`, { cookie: userCookie });
     assert.equal(me.status, 200);
     assert.equal(me.body.user.username, 'maya');
+
+    const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD0lEQVQ42mP8z5BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const avatar = await request(`${base}/api/user/avatar`, {
+      method: 'POST',
+      cookie: userCookie,
+      body: { image: tinyPng },
+    });
+    assert.equal(avatar.status, 200, avatar.text);
+    assert.equal(avatar.body.user.avatar.kind, 'upload');
+    assert.match(avatar.body.user.avatarUrl, /\/user-avatars\//);
 
     const photos = await request(`${base}/api/photos`, { cookie: userCookie });
     assert.equal(photos.status, 403);
