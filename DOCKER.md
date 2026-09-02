@@ -15,11 +15,17 @@ The listener container needs the saved session file. With **`network_mode: host`
 | Guest photo booth (HTTPS) | `https://<NAS_IP>:47810/guestsnaps/` |
 | Admin UI (HTTPS) | `https://<NAS_IP>:47810/admin/` (set `ADMIN_USERNAME` + `ADMIN_PASSWORD` in `.env`) |
 | Household app (HTTPS) | `https://<NAS_IP>:47810/user/` (same accounts; landing login is `/`) |
+| Guest book (HTTPS) | `https://<NAS_IP>:47810/guestbook/` |
+| Games (HTTPS) | `https://<NAS_IP>:47810/games/` |
 | Optional HTTP→HTTPS | `http://<NAS_IP>:47811/` |
 | Overlay / commands UDP | `:47832` (outbound to displays) |
 | Display announce UDP | `:47833` (inbound from displays) |
+| Vestaboard simulator (HTTP) | `:7000` — the built-in stand-in board, on its own listener |
+| Vestaboard hardware (HTTP) | Outbound to each board's Local API, `http://<board-ip>:7000` |
 
-No `ports:` mapping is required — host networking shares the NAS stack. See the [main README](README.md) for display discovery and the phone UI.
+No `ports:` mapping is required — host networking shares the NAS stack. See the [main README](README.md) for display discovery, the Vestaboard, and the phone UI.
+
+**Vestaboard on Docker:** give each real board a **static IP** and use it in Settings → Media → Vestaboards. mDNS names (`vestaboard.local`) do not resolve reliably from inside the container. The simulator binds where the web server binds; set `VESTABOARD_SIM_PORT` / `VESTABOARD_SIM_HOST` if 7000 is taken.
 
 ### Required: LAN UDP secret
 
@@ -260,6 +266,11 @@ docker compose logs -f
 | Control page shows no displays | Client needs `bridgeHosts: ["<NAS_IP>"]` + restart; bridge must listen on **47833** (check logs for “UDP display discovery listening”); tap refresh on the control page |
 | Control page / QR camera blocked | Use **https://** `:47810`. With self-signed: accept cert once; put NAS IP in `webServer.certHosts`. With Let's Encrypt: browse the hostname (e.g. `https://signal.wittydigital.com:47810/`) — no warning |
 | Pushed URL does nothing | Client needs WebView2; check client logs; try `send_test.py --type web-open` |
+| Board health says **Key refused** | Wrong Local API key — re-enter it in Settings → Media → Vestaboards (leaving the field blank keeps the stored one) |
+| Board health says **Not answering** | Board unreachable from the container. Use a static IP, not `vestaboard.local`, and confirm the Local API is enabled on the board |
+| Nothing flips but the queue grows | Something holds the board (a live game or session) or you are inside quiet hours. Simulator tab → **Release Holds**, or open the Priorities sheet in Settings → Media → Vestaboards |
+| Simulator missing / `/api/vestaboard-sim` 404 | `vestaboardSimulator.enabled` is false, or port 7000 is taken — set `VESTABOARD_SIM_PORT` |
+| Household login rejected after a restart | Lockout counters are in memory and clear on restart; if the account itself is wrong, reset it from an admin session or re-bootstrap with `ADMIN_USERNAME`/`ADMIN_PASSWORD` |
 
 ---
 
@@ -335,6 +346,24 @@ GMAIL_REDIRECT_URI=https://signal.example.com/api/gmail/callback
 ```
 
 Publish the Google Cloud OAuth client to **Production**. Apps left in **Testing** lose the Gmail refresh token every **7 days** (verification is not required for household-only use).
+
+Integration keys (all optional — each one can also be linked from admin Settings, where the env var wins and the admin save returns 409):
+
+```env
+TINYURL_API_TOKEN=...          # short links for /guestbook/, /guestsnaps/, /games/
+STEAM_API_KEY=...              # Steam Now Playing + library tours
+YOUTUBE_API_KEY=...            # YouTube Now Playing
+PLEX_TOKEN=...                 # Feature Presentation + Plex Top 10
+GUARDIAN_API_KEY=...           # The Upside News
+TRIVIA_API_KEY=...             # richer trivia pools
+IGDB_CLIENT_ID=... / IGDB_CLIENT_SECRET=...   # Roll Credits metadata
+FLIGHTPLAN_RAPIDAPI_KEY=...    # AeroDataBox schedules
+AUTODARTS_EMAIL=... / AUTODARTS_PASSWORD=...  # or link the device from Settings
+```
+
+Real Vestaboard keys are **not** env vars by default — add each board in Settings → Media → Vestaboards and the key is encrypted into `data/vestaboard-settings.json` with `data/secret.key`. A board may name a `tokenEnv` instead if you would rather inject it.
+
+`.env` is read at container **create** time, so `./recreate.sh` (or `docker compose up -d --force-recreate`) is required after editing it — a plain restart will not pick up new values.
 
 `docker-compose.yml` loads `.env` via `env_file`. After editing `.env`:
 
