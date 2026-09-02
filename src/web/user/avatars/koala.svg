@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Koala avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FD4C1"/>
+      <stop offset="1" stop-color="#4ABBA2"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 46 39 Q 47.3 44.7 53 46 Q 47.3 47.3 46 53 Q 44.7 47.3 39 46 Q 44.7 44.7 46 39 Z" fill="#FFFFFF" opacity=".75"/>
+  <circle cx="56" cy="86" r="24" fill="#AFBACB" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="56" cy="88" r="13.5" fill="#EFC0CE"/>
+  <circle cx="144" cy="86" r="24" fill="#AFBACB" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="144" cy="88" r="13.5" fill="#EFC0CE"/>
+  <ellipse cx="100" cy="114" rx="52" ry="49" fill="#BCC6D6" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="78" cy="110" r="7.5" fill="#332B31"/>
+  <circle cx="75.75" cy="107.45" r="2.6999999999999997" fill="#FFFFFF"/>
+  <circle cx="80.4" cy="112.4" r="1.2" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="122" cy="110" r="7.5" fill="#332B31"/>
+  <circle cx="119.75" cy="107.45" r="2.6999999999999997" fill="#FFFFFF"/>
+  <circle cx="124.4" cy="112.4" r="1.2" fill="#FFFFFF" opacity=".9"/>
+  <ellipse cx="100" cy="128" rx="10" ry="14" fill="#4A5058"/>
+  <ellipse cx="97" cy="123" rx="2.8" ry="4" fill="#6B7280" opacity=".9"/>
+  <path d="M 94 149 Q 100 154.4 106 149" fill="none" stroke="#4A3B43" stroke-width="3.5" stroke-linecap="round"/>
+  <ellipse cx="60" cy="128" rx="8.5" ry="6.12" fill="#F2A0B6" opacity=".7"/>
+  <ellipse cx="140" cy="128" rx="8.5" ry="6.12" fill="#F2A0B6" opacity=".7"/>
+
+</svg>

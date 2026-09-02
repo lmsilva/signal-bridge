@@ -2484,6 +2484,7 @@ test('Hangman settings carry the deck, the categories, and the same short link',
     assert.ok(initial.body.wordCount > 1000, 'the deck ships with the game');
     assert.ok(initial.body.categories.length >= 15);
     assert.ok(initial.body.categories.every((row) => row.id && row.label && row.count > 0));
+    assert.equal(initial.body.activeSession, null);
 
     const saved = await postJson(base, '/api/hangman/settings', {
       rounds: 5,
@@ -2516,6 +2517,62 @@ test('Hangman settings carry the deck, the categories, and the same short link',
     assert.equal(resolved.status, 200);
     assert.equal(resolved.body.session.gameType, 'hangman');
     assert.equal(resolved.body.session.title, 'Hangman');
+
+    const live = await getJson(base, '/api/hangman/settings');
+    assert.equal(live.body.activeSession.phase, 'invited');
+    assert.equal(live.body.activeSession.code, pushed.body.session.code);
+    assert.equal(live.body.activeSession.liveCount, 1);
+
+    const idle = await getJson(base, '/api/word-scramble/settings');
+    assert.equal(idle.body.activeSession, null);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('Hangman settings can set the shared games TinyURL override', async () => {
+  const prev = process.env.TINYURL_API_TOKEN;
+  process.env.TINYURL_API_TOKEN = 'env-token-value';
+  const { webServer, base } = await startTestServer();
+  try {
+    const blocked = await postJson(base, '/api/hangman/settings', {
+      apiToken: 'session-token',
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.source, 'env');
+  } finally {
+    webServer.stop();
+    if (prev == null) delete process.env.TINYURL_API_TOKEN;
+    else process.env.TINYURL_API_TOKEN = prev;
+  }
+});
+
+test('a Hangman push stamps the signed-in admin as the board actor', async () => {
+  const boardPushes = [];
+  const listeners = new Set();
+  const { webServer, base, cookie } = await startTestServer({
+    vestaboardHub: {
+      pushEvent(payload, options = {}) {
+        boardPushes.push({ payload, options });
+        return { boards: ['sim'] };
+      },
+      dropPending() { return 0; },
+      setGameLock() {},
+      onChange(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+  });
+  try {
+    const pushed = await postJson(base, '/api/push/hangman', {}, cookie);
+    assert.equal(pushed.status, 200);
+    assert.ok(boardPushes.length >= 1);
+    const invite = boardPushes.find((row) => row.payload?.card === 'invite') || boardPushes[0];
+    assert.equal(invite.options.actor?.kind, 'user');
+    assert.match(String(invite.options.actor?.name || ''), /admin/i);
+    assert.equal(invite.options.sessionId, pushed.body.session.sessionId);
+    assert.equal(invite.options.code, pushed.body.session.code);
   } finally {
     webServer.stop();
   }
@@ -3312,9 +3369,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-    assert.match(html, /styles\.css\?v=signal286/);
-    assert.match(html, /settings-filter\.js\?v=signal283/);
-    assert.match(html, /app\.js\?v=signal286/);
+  assert.match(html, /styles\.css\?v=signal287/);
+  assert.match(html, /settings-filter\.js\?v=signal283/);
+  assert.match(html, /app\.js\?v=signal287/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3407,6 +3464,20 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="hangman-pick"/);
   assert.match(html, /id="hangman-word-setter"/);
   assert.match(html, /id="hangman-category"/);
+  assert.match(html, />Word Scramble Settings</);
+  assert.match(html, />Party Prompts Settings</);
+  assert.match(html, />Wheel of Fortune Settings</);
+  assert.match(html, />Hangman Settings</);
+  assert.doesNotMatch(html, /on the board<\/div>/);
+  assert.match(html, /id="party-prompts-token"/);
+  assert.match(html, /id="wheel-of-fortune-token"/);
+  assert.match(html, /id="hangman-token"/);
+  assert.match(html, /id="party-prompts-clear-override"/);
+  assert.match(html, /id="hangman-clear-override"/);
+  assert.match(html, /field-grid-timing/);
+  assert.match(js, /function fillGameSessionPill/);
+  assert.match(js, /function collectGamesTokenBody/);
+  assert.match(js, /Invite queued/);
   assert.match(js, /\/api\/hangman\/settings/);
   assert.match(js, /btn-hangman-sessions.*openWordScrambleSessions/s);
   assert.doesNotMatch(html, /id="hangman-sessions-sheet"/);
@@ -5529,7 +5600,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal274/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal285/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
     // Push tiles carry the same artwork the admin grid draws, and adding one
@@ -5592,7 +5663,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal281/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal285/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal284/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
@@ -5695,4 +5766,39 @@ test('household login, /user/ gate, and permission 403s', async () => {
   } finally {
     webServer.stop();
   }
+});
+
+test('the user Skills page filters its own tiles by category, the way the library does', () => {
+  const dir = path.join(__dirname, '..', 'src', 'web', 'user');
+  const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(dir, 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(dir, 'styles.css'), 'utf8');
+
+  // The category chips share the line with the Applies-to segment and take the
+  // slack, which is the empty run that used to sit there.
+  assert.match(html, /su-filter-bar/);
+  assert.match(html, /id="push-kind"[\s\S]{0,500}id="push-cats"/);
+  assert.match(css, /\.su-filter-bar \.su-seg-cats \{ flex: 1 1 auto; \}/);
+
+  // One renderer for both lists, so the tiles and the library agree on the
+  // counts and on standing a category down once nothing in it matches.
+  assert.match(js, /function renderCatChips/);
+  assert.match(js, /renderCatChips\(\$\('push-cats'\)/);
+  assert.match(js, /renderCatChips\(\$\('lib-cats'\)/);
+  assert.match(
+    js,
+    /btn\.hidden = entry\.id !== 'all' && count === 0 && selected !== entry\.id/,
+  );
+
+  // A filtered grid holds only some of the tiles, so a drag inside it must be
+  // folded back into the full order rather than saved as the whole list.
+  assert.match(js, /function mergedDashOrder/);
+  assert.match(js, /mergedDashOrder\(dashCardNodes\(\)/);
+
+  // The page inlines the category list rather than fetching it, so it has to
+  // stay the registry's list, in the registry's order.
+  const block = js.match(/const PUSH_CATEGORIES = Object\.freeze\(\[([\s\S]*?)\]\);/);
+  assert.ok(block, 'the user page inlines PUSH_CATEGORIES');
+  const listed = [...block[1].matchAll(/id: '([a-z]+)'/g)].map((match) => match[1]);
+  assert.deepEqual(listed, PUSH_CATEGORIES.map((entry) => entry.id));
 });

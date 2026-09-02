@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { validate } = require('../src/vestaboard/encoder');
+const { validate, blankRow, COLS } = require('../src/vestaboard/encoder');
 const { formatLayout } = require('../src/vestaboard/notation');
 const { formatterFor, typeOf } = require('../src/vestaboard/router');
 const hm = require('../src/vestaboard/formatters/hangman');
@@ -74,6 +74,25 @@ test('the round is the hint, the word, the misses, and the lives', () => {
   ], 'round');
 });
 
+test('TIMES UP yields the footer to whose turn it is', () => {
+  assertBoard(hm.roundRows({
+    category: 'CELEBRATIONS',
+    word: 'SPARKLER',
+    revealed: ['K', 'L', 'E'],
+    misses: ['B', 'F'],
+    livesLeft: 4,
+    turnName: 'Luis',
+    lastEvent: 'TIMES UP',
+  }), [
+    'oo     HANGMAN      oo',
+    '     CELEBRATIONS',
+    '   w w w w K L E w',
+    '       MISS B F',
+    '     LIVES ggggrr',
+    '    LUIS TO GUESS',
+  ], 'times-up');
+});
+
 test('a word too long to space out closes up rather than falling off the row', () => {
   assertBoard(hm.roundRows({
     category: 'AROUND THE HOUSE',
@@ -98,13 +117,51 @@ test('while a phone is picking there is nothing to mask, so the board says who',
     code: '19ut',
     showCode: true,
   }), [
-    'oo     HANGMAN      oo',
+    'oo HANGMAN    #19UT oo',
     '',
     '   LUIS IS PICKING',
     '    A WORD FOR YOU',
     '',
-    '      CODE 19UT',
+    '',
   ], 'round pick');
+});
+
+/**
+ * Late join is the whole reason the code stays up, and the round card is the
+ * one that is up longest -- so it goes in the masthead, where it costs the
+ * game nothing. The footer still belongs to whose turn it is.
+ */
+test('the code rides the masthead all round, so a latecomer can read their way in', () => {
+  assertBoard(hm.roundRows({
+    category: 'ANIMALS',
+    word: 'ALLIGATOR',
+    revealed: ['A', 'L'],
+    misses: ['B', 'Q'],
+    livesLeft: 4,
+    turnName: 'ADA',
+    code: '19ut',
+    showCode: true,
+  }), [
+    'oo HANGMAN    #19UT oo',
+    '       ANIMALS',
+    '  A L L w w A w w w',
+    '       MISS B Q',
+    '     LIVES ggggrr',
+    '     ADA TO GUESS',
+  ], 'round with code');
+});
+
+test('a title too long to share the band keeps it, and the code stands down', () => {
+  const rows = [hm.titleRow('NOT ENOUGH PLAYERS', { code: '19UT' })];
+  while (rows.length < 6) rows.push(blankRow(COLS));
+  assertBoard(rows, [
+    'ooNOT ENOUGH PLAYERSoo',
+    '',
+    '',
+    '',
+    '',
+    '',
+  ], 'title too long');
 });
 
 test('the reveal names the round, the word, and who got it', () => {

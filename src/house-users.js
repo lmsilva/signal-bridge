@@ -16,22 +16,54 @@ const RESET_TTL_MS = 60 * 60 * 1000;
 const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{1,31}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * The built-in faces, in picker order. Every `id` is also the filename in
+ * `web/user/avatars/<id>.svg`, and `color` is the top of that tile's gradient
+ * — the picker paints from the file, but the colour is what anything drawing
+ * a user without their artwork (a chip, a placeholder) can fall back on.
+ */
 const AVATAR_TEMPLATES = Object.freeze([
-  { id: 'cat-sky', label: 'Sky cat', animal: 'cat', color: '#38bdf8' },
-  { id: 'cat-peach', label: 'Peach cat', animal: 'cat', color: '#fb7185' },
-  { id: 'raccoon-mint', label: 'Mint raccoon', animal: 'raccoon', color: '#34d399' },
-  { id: 'raccoon-dusk', label: 'Dusk raccoon', animal: 'raccoon', color: '#818cf8' },
-  { id: 'otter-sand', label: 'Sand otter', animal: 'otter', color: '#fbbf24' },
-  { id: 'otter-sea', label: 'Sea otter', animal: 'otter', color: '#22d3ee' },
-  { id: 'mouse-lilac', label: 'Lilac mouse', animal: 'mouse', color: '#c084fc' },
-  { id: 'mouse-honey', label: 'Honey mouse', animal: 'mouse', color: '#f59e0b' },
-  { id: 'fox-ember', label: 'Ember fox', animal: 'fox', color: '#f97316' },
-  { id: 'bunny-cloud', label: 'Cloud bunny', animal: 'bunny', color: '#e2e8f0' },
-  { id: 'panda-ink', label: 'Ink panda', animal: 'panda', color: '#64748b' },
-  { id: 'frog-moss', label: 'Moss frog', animal: 'frog', color: '#84cc16' },
-  { id: 'owl-night', label: 'Night owl', animal: 'owl', color: '#6366f1' },
-  { id: 'chick-sun', label: 'Sun chick', animal: 'chick', color: '#facc15' },
+  { id: 'cat-blue', label: 'Sky cat', animal: 'cat', color: '#5bc4f2' },
+  { id: 'cat-pink', label: 'Coral cat', animal: 'cat', color: '#ff8fa0' },
+  { id: 'bunny', label: 'Cloud bunny', animal: 'bunny', color: '#c9b8f5' },
+  { id: 'raccoon', label: 'Meadow raccoon', animal: 'raccoon', color: '#4fd69a' },
+  { id: 'panda', label: 'Ink panda', animal: 'panda', color: '#8a94a6' },
+  { id: 'red-panda', label: 'Ruby red panda', animal: 'red panda', color: '#ff6e61' },
+  { id: 'fox', label: 'Ember fox', animal: 'fox', color: '#ffb35c' },
+  { id: 'bear', label: 'Amber bear', animal: 'bear', color: '#ffc24a' },
+  { id: 'polar-bear', label: 'Frost polar bear', animal: 'polar bear', color: '#3ed6e0' },
+  { id: 'mouse', label: 'Lilac mouse', animal: 'mouse', color: '#c0a6f7' },
+  { id: 'hamster', label: 'Honey hamster', animal: 'hamster', color: '#ffaf54' },
+  { id: 'frog', label: 'Moss frog', animal: 'frog', color: '#a6e24a' },
+  { id: 'owl', label: 'Night owl', animal: 'owl', color: '#7c6cf0' },
+  { id: 'chick', label: 'Sun chick', animal: 'chick', color: '#ffd43d' },
+  { id: 'koala', label: 'Mint koala', animal: 'koala', color: '#7fd4c1' },
+  { id: 'penguin', label: 'Ocean penguin', animal: 'penguin', color: '#5fa8f5' },
 ]);
+
+/**
+ * The flat icon set the sticker set replaced. Without this every household
+ * member who had picked one would silently come back as whoever sits first in
+ * the list, because an unknown id falls back rather than erroring. Each old id
+ * points at the nearest new face; the two otters have no successor of their
+ * own, so they go to the tiles that kept their colour.
+ */
+const LEGACY_AVATAR_IDS = Object.freeze({
+  'cat-sky': 'cat-blue',
+  'cat-peach': 'cat-pink',
+  'raccoon-mint': 'raccoon',
+  'raccoon-dusk': 'raccoon',
+  'otter-sand': 'bear',
+  'otter-sea': 'polar-bear',
+  'mouse-lilac': 'mouse',
+  'mouse-honey': 'hamster',
+  'fox-ember': 'fox',
+  'bunny-cloud': 'bunny',
+  'panda-ink': 'panda',
+  'frog-moss': 'frog',
+  'owl-night': 'owl',
+  'chick-sun': 'chick',
+});
 
 function defaultUsersPath(root) {
   return path.resolve(root || path.resolve(__dirname, '..'), 'data', 'house-users.json');
@@ -93,8 +125,9 @@ function sanitiseAvatar(raw = {}) {
   const kind = raw.kind === 'upload' ? 'upload' : 'template';
   const id = String(raw.id || '').trim();
   if (kind === 'template') {
-    const known = AVATAR_TEMPLATES.some((row) => row.id === id);
-    return { kind: 'template', id: known ? id : AVATAR_TEMPLATES[0].id };
+    const wanted = LEGACY_AVATAR_IDS[id] || id;
+    const known = AVATAR_TEMPLATES.some((row) => row.id === wanted);
+    return { kind: 'template', id: known ? wanted : AVATAR_TEMPLATES[0].id };
   }
   return { kind: 'upload', id: id || '' };
 }
@@ -547,6 +580,7 @@ module.exports = {
   sanitiseAvatar,
   sanitiseDashboard,
   AVATAR_TEMPLATES,
+  LEGACY_AVATAR_IDS,
   DEFAULT_ADMIN_USERNAME,
   USERNAME_RE,
 };

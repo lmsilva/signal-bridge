@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Happy cat avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF8FA0"/>
+      <stop offset="1" stop-color="#F96D85"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 154 46 Q 155.3 50.7 160 52 Q 155.3 53.3 154 58 Q 152.7 53.3 148 52 Q 152.7 50.7 154 46 Z" fill="#FFFFFF" opacity=".75"/>
+  <path d="M 85 82 Q 87 50 70 43 Q 51 53 53 82 Z" fill="#FFE9A8" stroke="#4A3B43" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M 75 72 Q 76 57 69 53 Q 60 60 61 72 Z" fill="#FFB7C9"/>
+  <path d="M 115 82 Q 113 50 130 43 Q 149 53 147 82 Z" fill="#FFE9A8" stroke="#4A3B43" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M 125 72 Q 124 57 131 53 Q 140 60 139 72 Z" fill="#FFB7C9"/>
+  <ellipse cx="100" cy="114" rx="52" ry="49" fill="#FFEFBC" stroke="#4A3B43" stroke-width="3.5"/>
+  <path d="M 69 114 Q 78 104 87 114" fill="none" stroke="#332B31" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 113 114 Q 122 104 131 114" fill="none" stroke="#332B31" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 94.5 126 Q 100 122.5 105.5 126 Q 101 133.0 100 133.5 Q 99 133.0 94.5 126 Z" fill="#F2977F"/>
+  <path d="M 93 135 Q 100 147.6 107 135 Q 100 138.5 93 135 Z" fill="#7A4450" stroke="#4A3B43" stroke-width="2.5" stroke-linejoin="round"/>
+  <ellipse cx="100" cy="140.95" rx="4.06" ry="3.5" fill="#FF9AA8"/>
+  <path d="M 58 120.5 L 46 119" fill="none" stroke="#4A3B43" stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+  <path d="M 58 124.5 L 46 127" fill="none" stroke="#4A3B43" stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+  <path d="M 142 120.5 L 154 119" fill="none" stroke="#4A3B43" stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+  <path d="M 142 124.5 L 154 127" fill="none" stroke="#4A3B43" stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+  <ellipse cx="64" cy="128" rx="8.5" ry="6.12" fill="#FF97AB" opacity=".75"/>
+  <ellipse cx="136" cy="128" rx="8.5" ry="6.12" fill="#FF97AB" opacity=".75"/>
+
+</svg>

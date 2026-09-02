@@ -12223,6 +12223,118 @@
     wheel: 'Wheel of Fortune',
     hangman: 'Hangman',
   };
+  const GAME_PILL_PREFIX = {
+    scramble: 'word-scramble',
+    prompts: 'party-prompts',
+    wheel: 'wheel-of-fortune',
+    hangman: 'hangman',
+  };
+  const GAME_PHASE_PILL = {
+    invited: 'Invite queued',
+    lobby: 'Lobby',
+    round: 'Live',
+    voting: 'Voting',
+    intermission: 'Between rounds',
+    final: 'Scores',
+    short: 'Ended short',
+  };
+  let gameSessionPillTimer = null;
+
+  function setNumIfIdle(id, value) {
+    const el = $(id);
+    if (el && document.activeElement !== el) el.value = String(value);
+  }
+
+  function fillGamesTokenFields(prefix, creds = {}) {
+    const token = $(`${prefix}-token`);
+    if (token && document.activeElement !== token) {
+      token.value = '';
+      token.placeholder = creds.hasOverride
+        ? (creds.tokenHint ? `Override (…${creds.tokenHint})` : 'Override saved')
+        : 'Optional — leave blank to use the global token';
+    }
+    const hint = $(`${prefix}-token-hint`);
+    if (hint) {
+      if (creds.envBlocksOverwrite) {
+        hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
+      } else if (creds.hasOverride) {
+        hint.textContent = creds.tokenHint
+          ? `Override saved (…${creds.tokenHint}). Every game shares the one /games/ link.`
+          : 'Override saved. Every game shares the one /games/ link.';
+      } else if (creds.usingGlobal && creds.hasToken) {
+        hint.textContent = 'Using the global token. Every game shares the one /games/ link.';
+      } else {
+        hint.textContent = 'Optional. Uses the global TinyURL token unless you paste one here. Every game shares the one /games/ link.';
+      }
+    }
+    const clear = $(`${prefix}-clear-override`);
+    if (clear) clear.checked = false;
+  }
+
+  function collectGamesTokenBody(prefix, body) {
+    const token = String($(`${prefix}-token`)?.value || '').trim();
+    if (token) body.apiToken = token;
+    if ($(`${prefix}-clear-override`)?.checked) body.clearOverride = true;
+    return body;
+  }
+
+  function fillGamesShortlink(prefix, data = {}) {
+    const link = data.shortlink || {};
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    const dot = $(`${prefix}-dot`);
+    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    if ($(`${prefix}-shortlink-label`)) {
+      $(`${prefix}-shortlink-label`).textContent = link.display || 'No short link yet.';
+    }
+    if ($(`${prefix}-shortlink-check`)) {
+      $(`${prefix}-shortlink-check`).textContent = formatShortlinkCheck(link);
+    }
+    if ($(`${prefix}-target-hint`)) {
+      $(`${prefix}-target-hint`).textContent = data.targetUrl
+        ? `Target ${data.targetUrl}`
+        : 'Set a Public base URL (HTTPS) first.';
+    }
+  }
+
+  function gameSessionPillState(session) {
+    if (!session) return { text: 'Idle', tone: '' };
+    if (session.liveCount > 1) return { text: `${session.liveCount} live`, tone: 'ok' };
+    const phase = GAME_PHASE_PILL[session.phase] || 'Live';
+    return { text: session.code ? `${phase} · ${session.code}` : phase, tone: 'ok' };
+  }
+
+  function fillGameSessionPill(prefix, session) {
+    const pill = $(`${prefix}-status-pill`);
+    if (!pill) return;
+    const state = gameSessionPillState(session);
+    pill.textContent = state.text;
+    pill.className = `status-pill${state.tone ? ` ${state.tone}` : ''}`;
+  }
+
+  async function refreshGameSessionPills() {
+    try {
+      const data = await apiGet('/api/game-sessions');
+      const byType = {};
+      for (const session of data.sessions || []) {
+        if (!byType[session.gameType]) {
+          byType[session.gameType] = { ...session, liveCount: 0 };
+        }
+        byType[session.gameType].liveCount += 1;
+      }
+      for (const [gameType, prefix] of Object.entries(GAME_PILL_PREFIX)) {
+        fillGameSessionPill(prefix, byType[gameType] || null);
+      }
+    } catch {
+      // A failed poll should not blank a pill we already painted.
+    }
+  }
+
+  function startGameSessionPills() {
+    refreshGameSessionPills();
+    if (gameSessionPillTimer) return;
+    gameSessionPillTimer = setInterval(refreshGameSessionPills, 5000);
+  }
   let wordScrambleHistOffset = 0;
   let wordScrambleHistTotal = 0;
   let wordScramblePoll = null;
@@ -12230,16 +12342,10 @@
 
   function renderWordScrambleSettings(data = {}) {
     const settings = data.settings || {};
-    const creds = data.credentials || {};
-    const link = data.shortlink || {};
-    const setNum = (id, value) => {
-      const el = $(id);
-      if (el && document.activeElement !== el) el.value = String(value);
-    };
-    setNum('word-scramble-lobby', settings.lobbySeconds ?? 45);
-    setNum('word-scramble-round', settings.roundSeconds ?? 180);
-    setNum('word-scramble-intermission', settings.intermissionSeconds ?? 20);
-    setNum('word-scramble-rounds', settings.rounds ?? 3);
+    setNumIfIdle('word-scramble-lobby', settings.lobbySeconds ?? 45);
+    setNumIfIdle('word-scramble-round', settings.roundSeconds ?? 180);
+    setNumIfIdle('word-scramble-intermission', settings.intermissionSeconds ?? 20);
+    setNumIfIdle('word-scramble-rounds', settings.rounds ?? 3);
     const dup = $('word-scramble-dup');
     if (dup && document.activeElement !== dup) {
       dup.value = settings.duplicateRule === 'cancel' ? 'cancel' : 'everyone';
@@ -12248,59 +12354,11 @@
     if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
     const alias = $('word-scramble-alias');
     if (alias && document.activeElement !== alias) {
-      alias.value = settings.preferredAlias || 'WITTYGAME';
+      alias.value = settings.preferredAlias || data.preferredAlias || 'WITTYGAME';
     }
-    const token = $('word-scramble-token');
-    if (token && document.activeElement !== token) {
-      token.value = '';
-      token.placeholder = creds.hasOverride
-        ? (creds.tokenHint ? `Override (…${creds.tokenHint})` : 'Override saved')
-        : 'Optional — leave blank to use the global token';
-    }
-    const hint = $('word-scramble-token-hint');
-    if (hint) {
-      if (creds.envBlocksOverwrite) {
-        hint.textContent = 'TINYURL_API_TOKEN is set in .env and cannot be replaced here.';
-      } else if (creds.hasOverride) {
-        hint.textContent = creds.tokenHint
-          ? `Override saved (…${creds.tokenHint}).`
-          : 'Override saved.';
-      } else if (creds.usingGlobal && creds.hasToken) {
-        hint.textContent = 'Using the global token.';
-      } else {
-        hint.textContent = 'Optional. Uses the global TinyURL token unless you paste one here.';
-      }
-    }
-    const clear = $('word-scramble-clear-override');
-    if (clear) clear.checked = false;
-
-    const health = link.health || (link.alias ? 'unknown' : 'missing');
-    const pill = $('word-scramble-status-pill');
-    const detail = $('word-scramble-status-detail');
-    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
-    if (pill) {
-      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
-      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    }
-    if (detail) {
-      detail.textContent = link.alert?.message
-        || (link.display
-          ? `Short link ${link.display}`
-          : 'Invite phones to a 4×4 Word Scramble. The board holds the grid; the timer stays on the phone.');
-    }
-    const dot = $('word-scramble-dot');
-    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    if ($('word-scramble-shortlink-label')) {
-      $('word-scramble-shortlink-label').textContent = link.display || 'No short link yet.';
-    }
-    if ($('word-scramble-shortlink-check')) {
-      $('word-scramble-shortlink-check').textContent = formatShortlinkCheck(link);
-    }
-    if ($('word-scramble-target-hint')) {
-      $('word-scramble-target-hint').textContent = data.targetUrl
-        ? `Target ${data.targetUrl}`
-        : 'Set a Public base URL (HTTPS) first.';
-    }
+    fillGamesTokenFields('word-scramble', data.credentials || {});
+    fillGamesShortlink('word-scramble', data);
+    fillGameSessionPill('word-scramble', data.activeSession || null);
   }
 
   async function loadWordScrambleSettings() {
@@ -12315,7 +12373,7 @@
     const button = $('btn-word-scramble-save');
     if (button) button.disabled = true;
     try {
-      const body = {
+      const body = collectGamesTokenBody('word-scramble', {
         lobbySeconds: Number($('word-scramble-lobby')?.value),
         roundSeconds: Number($('word-scramble-round')?.value),
         intermissionSeconds: Number($('word-scramble-intermission')?.value),
@@ -12323,12 +12381,12 @@
         duplicateRule: $('word-scramble-dup')?.value,
         allowLateJoin: $('word-scramble-late-join')?.checked !== false,
         preferredAlias: $('word-scramble-alias')?.value || '',
-      };
-      const token = String($('word-scramble-token')?.value || '').trim();
-      if (token) body.apiToken = token;
-      if ($('word-scramble-clear-override')?.checked) body.clearOverride = true;
+      });
       renderWordScrambleSettings(await apiPost('/api/word-scramble/settings', body));
       if ($('word-scramble-token')) $('word-scramble-token').value = '';
+      loadPartyPromptsSettings();
+      loadWheelOfFortuneSettings();
+      loadHangmanSettings();
       toast('Word Scramble settings saved', 'ok');
     } catch (error) {
       toast(error.message || 'Could not save Word Scramble settings', 'bad');
@@ -12341,6 +12399,7 @@
     try {
       const result = await apiPost('/api/push/word-scramble', {});
       toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+      refreshGameSessionPills();
     } catch (error) {
       toast(error.message || 'Could not push invite', 'bad');
     }
@@ -12542,6 +12601,7 @@
       toast('Session ended', 'ok');
       loadWordScrambleActive();
       loadWordScrambleHistory(wordScrambleHistOffset);
+      refreshGameSessionPills();
     } catch (error) {
       toast(error.message || 'Could not end session', 'bad');
     }
@@ -12554,18 +12614,13 @@
 
   function renderPartyPromptsSettings(data = {}) {
     const settings = data.settings || {};
-    const link = data.shortlink || {};
-    const setNum = (id, value) => {
-      const el = $(id);
-      if (el && document.activeElement !== el) el.value = String(value);
-    };
-    setNum('party-prompts-lobby', settings.lobbySeconds ?? 90);
-    setNum('party-prompts-round', settings.roundSeconds ?? 90);
-    setNum('party-prompts-voting', settings.votingSeconds ?? 45);
-    setNum('party-prompts-intermission', settings.intermissionSeconds ?? 20);
-    setNum('party-prompts-rounds', settings.rounds ?? 3);
-    setNum('party-prompts-min', settings.minPlayers ?? 3);
-    setNum('party-prompts-max', settings.maxPlayers ?? 12);
+    setNumIfIdle('party-prompts-lobby', settings.lobbySeconds ?? 90);
+    setNumIfIdle('party-prompts-round', settings.roundSeconds ?? 90);
+    setNumIfIdle('party-prompts-voting', settings.votingSeconds ?? 45);
+    setNumIfIdle('party-prompts-intermission', settings.intermissionSeconds ?? 20);
+    setNumIfIdle('party-prompts-rounds', settings.rounds ?? 3);
+    setNumIfIdle('party-prompts-min', settings.minPlayers ?? 3);
+    setNumIfIdle('party-prompts-max', settings.maxPlayers ?? 12);
     const lateJoin = $('party-prompts-late-join');
     if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
     const alias = $('party-prompts-alias');
@@ -12578,34 +12633,9 @@
         ? `${data.promptCount} prompts in the deck. Voting needs someone to vote against, so the lobby ends the game if the minimum is not met.`
         : 'Voting needs someone to vote against, so the lobby ends the game if the minimum is not met.';
     }
-
-    const health = link.health || (link.alias ? 'unknown' : 'missing');
-    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
-    const pill = $('party-prompts-status-pill');
-    if (pill) {
-      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
-      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    }
-    const detail = $('party-prompts-status-detail');
-    if (detail) {
-      detail.textContent = link.alert?.message
-        || (link.display
-          ? `Short link ${link.display}`
-          : 'The board asks an open-ended question, phones write the wittiest answer they can, then everyone votes.');
-    }
-    const dot = $('party-prompts-dot');
-    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    if ($('party-prompts-shortlink-label')) {
-      $('party-prompts-shortlink-label').textContent = link.display || 'No short link yet.';
-    }
-    if ($('party-prompts-shortlink-check')) {
-      $('party-prompts-shortlink-check').textContent = formatShortlinkCheck(link);
-    }
-    if ($('party-prompts-target-hint')) {
-      $('party-prompts-target-hint').textContent = data.targetUrl
-        ? `Target ${data.targetUrl}`
-        : 'Set a Public base URL (HTTPS) first.';
-    }
+    fillGamesTokenFields('party-prompts', data.credentials || {});
+    fillGamesShortlink('party-prompts', data);
+    fillGameSessionPill('party-prompts', data.activeSession || null);
   }
 
   async function loadPartyPromptsSettings() {
@@ -12620,7 +12650,7 @@
     const button = $('btn-party-prompts-save');
     if (button) button.disabled = true;
     try {
-      const data = await apiPost('/api/party-prompts/settings', {
+      const data = await apiPost('/api/party-prompts/settings', collectGamesTokenBody('party-prompts', {
         lobbySeconds: Number($('party-prompts-lobby')?.value),
         roundSeconds: Number($('party-prompts-round')?.value),
         votingSeconds: Number($('party-prompts-voting')?.value),
@@ -12630,8 +12660,9 @@
         maxPlayers: Number($('party-prompts-max')?.value),
         allowLateJoin: $('party-prompts-late-join')?.checked !== false,
         preferredAlias: $('party-prompts-alias')?.value || '',
-      });
+      }));
       renderPartyPromptsSettings(data);
+      if ($('party-prompts-token')) $('party-prompts-token').value = '';
       // The alias is shared, so the other game's card would otherwise sit
       // there showing the value it had a moment ago.
       loadWordScrambleSettings();
@@ -12649,6 +12680,7 @@
     try {
       const result = await apiPost('/api/push/party-prompts', {});
       toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+      refreshGameSessionPills();
     } catch (error) {
       toast(error.message || 'Could not push invite', 'bad');
     }
@@ -12662,18 +12694,13 @@
 
   function renderWheelOfFortuneSettings(data = {}) {
     const settings = data.settings || {};
-    const link = data.shortlink || {};
-    const setNum = (id, value) => {
-      const el = $(id);
-      if (el && document.activeElement !== el) el.value = String(value);
-    };
-    setNum('wheel-of-fortune-lobby', settings.lobbySeconds ?? 60);
-    setNum('wheel-of-fortune-turn', settings.turnSeconds ?? 30);
-    setNum('wheel-of-fortune-round', settings.roundSeconds ?? 300);
-    setNum('wheel-of-fortune-intermission', settings.intermissionSeconds ?? 20);
-    setNum('wheel-of-fortune-rounds', settings.rounds ?? 3);
-    setNum('wheel-of-fortune-min', settings.minPlayers ?? 2);
-    setNum('wheel-of-fortune-max', settings.maxPlayers ?? 8);
+    setNumIfIdle('wheel-of-fortune-lobby', settings.lobbySeconds ?? 60);
+    setNumIfIdle('wheel-of-fortune-turn', settings.turnSeconds ?? 30);
+    setNumIfIdle('wheel-of-fortune-round', settings.roundSeconds ?? 300);
+    setNumIfIdle('wheel-of-fortune-intermission', settings.intermissionSeconds ?? 20);
+    setNumIfIdle('wheel-of-fortune-rounds', settings.rounds ?? 3);
+    setNumIfIdle('wheel-of-fortune-min', settings.minPlayers ?? 2);
+    setNumIfIdle('wheel-of-fortune-max', settings.maxPlayers ?? 8);
     const lateJoin = $('wheel-of-fortune-late-join');
     if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
     const alias = $('wheel-of-fortune-alias');
@@ -12686,34 +12713,9 @@
         ? `${data.puzzleCount} puzzles in the deck. Two players take turns. A lobby that never fills ends the game. Vowels cost $250 from the round bank; only the solver banks the puzzle ($1,000 floor).`
         : 'Two players take turns. A lobby that never fills ends the game.';
     }
-
-    const health = link.health || (link.alias ? 'unknown' : 'missing');
-    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
-    const pill = $('wheel-of-fortune-status-pill');
-    if (pill) {
-      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
-      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    }
-    const detail = $('wheel-of-fortune-status-detail');
-    if (detail) {
-      detail.textContent = link.alert?.message
-        || (link.display
-          ? `Short link ${link.display}`
-          : 'The board shows the puzzle. Phones take turns spinning, calling a letter, and solving.');
-    }
-    const dot = $('wheel-of-fortune-dot');
-    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    if ($('wheel-of-fortune-shortlink-label')) {
-      $('wheel-of-fortune-shortlink-label').textContent = link.display || 'No short link yet.';
-    }
-    if ($('wheel-of-fortune-shortlink-check')) {
-      $('wheel-of-fortune-shortlink-check').textContent = formatShortlinkCheck(link);
-    }
-    if ($('wheel-of-fortune-target-hint')) {
-      $('wheel-of-fortune-target-hint').textContent = data.targetUrl
-        ? `Target ${data.targetUrl}`
-        : 'Set a Public base URL (HTTPS) first.';
-    }
+    fillGamesTokenFields('wheel-of-fortune', data.credentials || {});
+    fillGamesShortlink('wheel-of-fortune', data);
+    fillGameSessionPill('wheel-of-fortune', data.activeSession || null);
   }
 
   async function loadWheelOfFortuneSettings() {
@@ -12728,7 +12730,7 @@
     const button = $('btn-wheel-of-fortune-save');
     if (button) button.disabled = true;
     try {
-      const data = await apiPost('/api/wheel-of-fortune/settings', {
+      const data = await apiPost('/api/wheel-of-fortune/settings', collectGamesTokenBody('wheel-of-fortune', {
         lobbySeconds: Number($('wheel-of-fortune-lobby')?.value),
         turnSeconds: Number($('wheel-of-fortune-turn')?.value),
         roundSeconds: Number($('wheel-of-fortune-round')?.value),
@@ -12738,8 +12740,9 @@
         maxPlayers: Number($('wheel-of-fortune-max')?.value),
         allowLateJoin: $('wheel-of-fortune-late-join')?.checked !== false,
         preferredAlias: $('wheel-of-fortune-alias')?.value || '',
-      });
+      }));
       renderWheelOfFortuneSettings(data);
+      if ($('wheel-of-fortune-token')) $('wheel-of-fortune-token').value = '';
       loadWordScrambleSettings();
       loadPartyPromptsSettings();
       loadHangmanSettings();
@@ -12755,6 +12758,7 @@
     try {
       const result = await apiPost('/api/push/wheel-of-fortune', {});
       toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+      refreshGameSessionPills();
     } catch (error) {
       toast(error.message || 'Could not push invite', 'bad');
     }
@@ -12768,19 +12772,14 @@
 
   function renderHangmanSettings(data = {}) {
     const settings = data.settings || {};
-    const link = data.shortlink || {};
-    const setNum = (id, value) => {
-      const el = $(id);
-      if (el && document.activeElement !== el) el.value = String(value);
-    };
-    setNum('hangman-lobby', settings.lobbySeconds ?? 45);
-    setNum('hangman-turn', settings.turnSeconds ?? 25);
-    setNum('hangman-pick', settings.pickSeconds ?? 30);
-    setNum('hangman-round', settings.roundSeconds ?? 300);
-    setNum('hangman-intermission', settings.intermissionSeconds ?? 20);
-    setNum('hangman-rounds', settings.rounds ?? 3);
-    setNum('hangman-min', settings.minPlayers ?? 1);
-    setNum('hangman-max', settings.maxPlayers ?? 10);
+    setNumIfIdle('hangman-lobby', settings.lobbySeconds ?? 45);
+    setNumIfIdle('hangman-turn', settings.turnSeconds ?? 25);
+    setNumIfIdle('hangman-pick', settings.pickSeconds ?? 30);
+    setNumIfIdle('hangman-round', settings.roundSeconds ?? 300);
+    setNumIfIdle('hangman-intermission', settings.intermissionSeconds ?? 20);
+    setNumIfIdle('hangman-rounds', settings.rounds ?? 3);
+    setNumIfIdle('hangman-min', settings.minPlayers ?? 1);
+    setNumIfIdle('hangman-max', settings.maxPlayers ?? 10);
     const setter = $('hangman-word-setter');
     if (setter) setter.checked = settings.wordSetter !== false;
     const lateJoin = $('hangman-late-join');
@@ -12806,34 +12805,9 @@
         ? `${data.wordCount} words in the deck. ${lives} lives. A right letter keeps your turn; a miss costs a life and passes it. The setter's seat rotates every round.`
         : `${lives} lives. A right letter keeps your turn; a miss costs a life and passes it.`;
     }
-
-    const health = link.health || (link.alias ? 'unknown' : 'missing');
-    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
-    const pill = $('hangman-status-pill');
-    if (pill) {
-      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
-      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    }
-    const detail = $('hangman-status-detail');
-    if (detail) {
-      detail.textContent = link.alert?.message
-        || (link.display
-          ? `Short link ${link.display}`
-          : 'The board shows the word and the gallows. Alone, the house deals it; with company, one phone sets the word.');
-    }
-    const dot = $('hangman-dot');
-    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
-    if ($('hangman-shortlink-label')) {
-      $('hangman-shortlink-label').textContent = link.display || 'No short link yet.';
-    }
-    if ($('hangman-shortlink-check')) {
-      $('hangman-shortlink-check').textContent = formatShortlinkCheck(link);
-    }
-    if ($('hangman-target-hint')) {
-      $('hangman-target-hint').textContent = data.targetUrl
-        ? `Target ${data.targetUrl}`
-        : 'Set a Public base URL (HTTPS) first.';
-    }
+    fillGamesTokenFields('hangman', data.credentials || {});
+    fillGamesShortlink('hangman', data);
+    fillGameSessionPill('hangman', data.activeSession || null);
   }
 
   async function loadHangmanSettings() {
@@ -12848,7 +12822,7 @@
     const button = $('btn-hangman-save');
     if (button) button.disabled = true;
     try {
-      const data = await apiPost('/api/hangman/settings', {
+      const data = await apiPost('/api/hangman/settings', collectGamesTokenBody('hangman', {
         lobbySeconds: Number($('hangman-lobby')?.value),
         turnSeconds: Number($('hangman-turn')?.value),
         pickSeconds: Number($('hangman-pick')?.value),
@@ -12861,8 +12835,9 @@
         allowLateJoin: $('hangman-late-join')?.checked !== false,
         categoryId: $('hangman-category')?.value || 'all',
         preferredAlias: $('hangman-alias')?.value || '',
-      });
+      }));
       renderHangmanSettings(data);
+      if ($('hangman-token')) $('hangman-token').value = '';
       loadWordScrambleSettings();
       loadPartyPromptsSettings();
       loadWheelOfFortuneSettings();
@@ -12878,6 +12853,7 @@
     try {
       const result = await apiPost('/api/push/hangman', {});
       toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+      refreshGameSessionPills();
     } catch (error) {
       toast(error.message || 'Could not push invite', 'bad');
     }
@@ -12886,6 +12862,7 @@
   $('btn-hangman-sessions')?.addEventListener('click', () => openWordScrambleSessions());
 
   loadHangmanSettings();
+  startGameSessionPills();
 
   // ------------------------------------ Settings → On This Day in History
 

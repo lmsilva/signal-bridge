@@ -604,6 +604,8 @@ function createQueue({
     const ownerSource = options.gameSource || hold.source || options.replaceSource || null;
     const actor = resolveActor(options);
     const commandId = options.commandId ? String(options.commandId) : null;
+    const sessionId = options.sessionId ? String(options.sessionId) : null;
+    const code = options.code ? String(options.code).trim().toUpperCase() : null;
     const made = list.map((frame) => ({
       id: `i${nextItemId++}`,
       frame,
@@ -621,6 +623,8 @@ function createQueue({
       commandId,
       eventTitle: options.eventTitle ? String(options.eventTitle) : null,
       actor,
+      sessionId,
+      code,
     }));
 
     if (!made[0].quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
@@ -926,7 +930,13 @@ function createQueue({
       if (atPosted >= 0) items.splice(atPosted, 1);
       onPosted(item, now());
       announceQueue();
-      emit('posted', { boardId: config.id, frame: item.frame });
+      emit('posted', {
+        boardId: config.id,
+        frame: item.frame,
+        sessionId: item.sessionId || null,
+        code: item.code || null,
+        card: item.frame?.card || null,
+      });
       return 'posted';
     }
 
@@ -1046,8 +1056,17 @@ function createQueue({
       if (!dropped) {
         return 0;
       }
-      items.length = 0;
+      const gone = items.splice(0, items.length);
       announceQueue();
+      for (const item of gone) {
+        emit('cancelled', {
+          boardId: config.id,
+          frame: item.frame,
+          sessionId: item.sessionId || null,
+          code: item.code || null,
+          card: item.frame?.card || null,
+        });
+      }
       return dropped;
     },
     /**
@@ -1075,7 +1094,17 @@ function createQueue({
       if (index < 0) {
         return false;
       }
-      dropAt(index, 'cancelled', items[index]);
+      const item = items[index];
+      items.splice(index, 1);
+      log?.debug?.(`Vestaboard ${config.id} cancelled ${item.frame.label || ''}`.trim());
+      announceQueue();
+      emit('cancelled', {
+        boardId: config.id,
+        frame: item.frame,
+        sessionId: item.sessionId || null,
+        code: item.code || null,
+        card: item.frame?.card || null,
+      });
       return true;
     },
     /**

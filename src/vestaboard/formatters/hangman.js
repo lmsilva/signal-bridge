@@ -29,6 +29,8 @@ const BODY_ROWS = 3;
 const LEADER_MIN_WIDTH = 11;
 const LEADER_MAX_WIDTH = 20;
 const MAX_NAME = 10;
+/** What marks the four flaps of a join code as a code and not a score. */
+const CODE_TAG = '#';
 /** Misses that still fit the row once `MISS ` has had its say. */
 const MAX_MISSES_SHOWN = 8;
 
@@ -36,13 +38,26 @@ function centreRow(text, options = {}) {
   return centered(fold(text), { from: 0, width: COLS, lean: 'left', ...options });
 }
 
-function titleRow(text = 'HANGMAN') {
+/**
+ * The masthead. With a code it reads like a marquee -- name on the left, room
+ * number on the right -- which costs no row the game needs and keeps the way
+ * in on the wall for the whole word. The split only happens when the pair fits
+ * with a blank between them and one off each chip pair; a title too long to
+ * share keeps the band to itself and the code goes without.
+ */
+function titleRow(text = 'HANGMAN', { code = '' } = {}) {
   const row = blankRow(COLS);
   row[0] = ORANGE();
   row[1] = ORANGE();
   row[COLS - 2] = ORANGE();
   row[COLS - 1] = ORANGE();
-  return centered(fold(text), {
+  const title = fold(text);
+  const tag = pin(code) ? CODE_TAG + pin(code) : '';
+  if (tag && title.length + tag.length + 3 <= TITLE_WIDTH) {
+    placeText(row, title, TITLE_FROM + 1);
+    return placeText(row, tag, TITLE_FROM + TITLE_WIDTH - 1 - tag.length);
+  }
+  return centered(title, {
     row,
     from: TITLE_FROM,
     width: TITLE_WIDTH,
@@ -73,8 +88,8 @@ function missesLabel(count) {
   return n + ' MISS' + (n === 1 ? '' : 'ES');
 }
 
-function shell(title = 'HANGMAN') {
-  const rows = [titleRow(title)];
+function shell(title = 'HANGMAN', options = {}) {
+  const rows = [titleRow(title, options)];
   for (let r = 1; r < 6; r += 1) rows.push(blankRow(COLS));
   return rows;
 }
@@ -183,12 +198,13 @@ function roundRows({
   showCode = false,
   code = '',
 } = {}) {
-  const rows = shell();
+  // The code lives in the masthead for the whole round, so a latecomer can
+  // read their way in without the game giving up a row for it.
+  const rows = shell('HANGMAN', { code: showCode ? code : '' });
   if (step === 'pick') {
     const who = fold(setterName).slice(0, MAX_NAME);
     rows[2] = centreRow(who ? who + ' IS PICKING' : 'PICKING A WORD');
     rows[3] = centreRow('A WORD FOR YOU');
-    rows[5] = showCode && pin(code) ? centreRow('CODE ' + pin(code)) : blankRow(COLS);
     return assertValidLayout(rows, 'hangman-round');
   }
   const cat = fold(category);
@@ -196,8 +212,11 @@ function roundRows({
   rows[2] = maskRow(mask || maskWord(word, revealed));
   rows[3] = missRow(misses);
   rows[4] = livesRow(livesLeft, lives);
-  const footer = fold(lastEvent)
-    || (showCode && pin(code) ? 'CODE ' + pin(code) : '')
+  // TIMES UP is a turn pass, not the end of the word. Keeping it as the
+  // footer for the whole next turn is what made the board say the clock
+  // was dead while the phone and the simulator still had seconds left.
+  const event = fold(lastEvent);
+  const footer = (event && event !== 'TIMES UP' ? event : '')
     || (turnName ? fold(turnName).slice(0, MAX_NAME) + ' TO GUESS' : '');
   if (footer) rows[5] = centreRow(footer.slice(0, COLS));
   return assertValidLayout(rows, 'hangman-round');

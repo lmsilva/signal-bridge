@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Bunny avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9B8F5"/>
+      <stop offset="1" stop-color="#A88FEC"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 48 37 Q 49.3 42.7 55 44 Q 49.3 45.3 48 51 Q 46.7 45.3 41 44 Q 46.7 42.7 48 37 Z" fill="#FFFFFF" opacity=".75"/>
+  <path d="M 89 86 Q 93 30 76 27 Q 63 33 66 86 Z" fill="#C8E8F7" stroke="#4A3B43" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M 81 74 Q 84 42 76 39 Q 71 44 73 74 Z" fill="#F7C9D8"/>
+  <path d="M 111 86 Q 107 30 124 27 Q 137 33 134 86 Z" fill="#C8E8F7" stroke="#4A3B43" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M 119 74 Q 116 42 124 39 Q 129 44 127 74 Z" fill="#F7C9D8"/>
+  <ellipse cx="100" cy="114" rx="52" ry="49" fill="#DDF1FA" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="78" cy="112" r="7.5" fill="#332B31"/>
+  <circle cx="75.75" cy="109.45" r="2.6999999999999997" fill="#FFFFFF"/>
+  <circle cx="80.4" cy="114.4" r="1.2" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="122" cy="112" r="7.5" fill="#332B31"/>
+  <circle cx="119.75" cy="109.45" r="2.6999999999999997" fill="#FFFFFF"/>
+  <circle cx="124.4" cy="114.4" r="1.2" fill="#FFFFFF" opacity=".9"/>
+  <path d="M 94.5 126 Q 100 122.5 105.5 126 Q 101 133.0 100 133.5 Q 99 133.0 94.5 126 Z" fill="#F2839B"/>
+  <path d="M 94 135 Q 100 145.8 106 135 Q 100 138.5 94 135 Z" fill="#7A4450" stroke="#4A3B43" stroke-width="2.5" stroke-linejoin="round"/>
+  <ellipse cx="100" cy="140.1" rx="3.4799999999999995" ry="3.0" fill="#FF9AA8"/>
+  <ellipse cx="64" cy="128" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+  <ellipse cx="136" cy="128" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+
+</svg>

@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="fox-ember">
-  <rect width="64" height="64" rx="16" fill="#f97316"/>
-  <path d="M14 28 L22 8 L30 26" fill="#fff"/><path d="M34 26 L42 8 L50 28" fill="#fff"/>
-  <ellipse cx="32" cy="40" rx="15" ry="13" fill="#fff"/><circle cx="26" cy="38" r="2" fill="#0f172a"/><circle cx="38" cy="38" r="2" fill="#0f172a"/><path d="M32 42 l-4 6 h8 z" fill="#0f172a"/>
-</svg>

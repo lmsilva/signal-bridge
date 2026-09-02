@@ -443,7 +443,12 @@ module.exports = {
       return { continue: true, holdSeconds: turnSeconds(settings) };
     }
     // A clock that runs out costs the turn, not a life -- the gallows is for
-    // guesses, not for somebody who put their phone down.
+    // guesses, not for somebody who put their phone down. Alone there is
+    // nobody to hand it to, so TIMES UP on the board while the same phone
+    // still has a fresh clock reads as a broken timer. Just renew.
+    if (state.order.length <= 1) {
+      return { continue: true, holdSeconds: turnSeconds(settings) };
+    }
     passTurn(state);
     state.lastEvent = 'TIMES UP';
     return { continue: true, holdSeconds: turnSeconds(settings) };

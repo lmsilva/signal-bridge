@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Owl avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C6CF0"/>
+      <stop offset="1" stop-color="#5A48E0"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 46 37 Q 47.3 42.7 53 44 Q 47.3 45.3 46 51 Q 44.7 45.3 39 44 Q 44.7 42.7 46 37 Z" fill="#FFFFFF" opacity=".75"/>
+  <path d="M 82 78 Q 78 52 60 56 Q 55 67 60 80 Z" fill="#C4B9F7" stroke="#4A3B43" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M 118 78 Q 122 52 140 56 Q 145 67 140 80 Z" fill="#C4B9F7" stroke="#4A3B43" stroke-width="3.5" stroke-linejoin="round"/>
+  <ellipse cx="100" cy="114" rx="52" ry="49" fill="#D5CDFA" stroke="#4A3B43" stroke-width="3.5"/>
+  <path d="M 100 152 l -7 10 M 100 152 l 0 12 M 100 152 l 7 10" stroke="#A493F2" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <circle cx="79" cy="111" r="17" fill="#FFFFFF" stroke="#8B79E8" stroke-width="3"/>
+  <circle cx="121" cy="111" r="17" fill="#FFFFFF" stroke="#8B79E8" stroke-width="3"/>
+  <circle cx="79" cy="112" r="7" fill="#332B31"/>
+  <circle cx="76.9" cy="109.62" r="2.52" fill="#FFFFFF"/>
+  <circle cx="81.24" cy="114.24" r="1.12" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="121" cy="112" r="7" fill="#332B31"/>
+  <circle cx="118.9" cy="109.62" r="2.52" fill="#FFFFFF"/>
+  <circle cx="123.24" cy="114.24" r="1.12" fill="#FFFFFF" opacity=".9"/>
+  <path d="M 100 123 L 92 131 Q 100 139 108 131 Z" fill="#FFA53C" stroke="#4A3B43" stroke-width="2.5" stroke-linejoin="round"/>
+  <ellipse cx="56" cy="128" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+  <ellipse cx="144" cy="128" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+
+</svg>

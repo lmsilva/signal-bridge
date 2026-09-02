@@ -1,5 +1,5 @@
 /**
- * Wheel of Fortune board frames -- invite, lobby, the masked puzzle,
+ * Wheel of Fortune board frames ? invite, lobby, the masked puzzle,
  * the round winner, high scores, the night's biggest win, and the
  * not-enough-players card.
  *

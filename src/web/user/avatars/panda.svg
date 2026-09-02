@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Panda avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8A94A6"/>
+      <stop offset="1" stop-color="#66707F"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 46 39 Q 47.3 44.7 53 46 Q 47.3 47.3 46 53 Q 44.7 47.3 39 46 Q 44.7 44.7 46 39 Z" fill="#FFFFFF" opacity=".75"/>
+  <circle cx="60" cy="70" r="18" fill="#3A3138" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="140" cy="70" r="18" fill="#3A3138" stroke="#4A3B43" stroke-width="3.5"/>
+  <ellipse cx="100" cy="114" rx="52" ry="49" fill="#FFFFFF" stroke="#4A3B43" stroke-width="3.5"/>
+  <ellipse cx="77" cy="112" rx="14" ry="17" fill="#3A3138" transform="rotate(-15 77 112)"/>
+  <ellipse cx="123" cy="112" rx="14" ry="17" fill="#3A3138" transform="rotate(15 123 112)"/>
+  <circle cx="77" cy="113" r="6.5" fill="#141116"/>
+  <circle cx="75.05" cy="110.79" r="2.34" fill="#FFFFFF"/>
+  <circle cx="79.08" cy="115.08" r="1.04" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="75" cy="110.8" r="2.4" fill="#FFFFFF"/>
+  <circle cx="123" cy="113" r="6.5" fill="#141116"/>
+  <circle cx="121.05" cy="110.79" r="2.34" fill="#FFFFFF"/>
+  <circle cx="125.08" cy="115.08" r="1.04" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="121" cy="110.8" r="2.4" fill="#FFFFFF"/>
+  <path d="M 94.5 130 Q 100 126.5 105.5 130 Q 101 137.0 100 137.5 Q 99 137.0 94.5 130 Z" fill="#332B31"/>
+  <path d="M 94 140 Q 100 150.8 106 140 Q 100 143.5 94 140 Z" fill="#7A4450" stroke="#4A3B43" stroke-width="2.5" stroke-linejoin="round"/>
+  <ellipse cx="100" cy="145.1" rx="3.4799999999999995" ry="3.0" fill="#FF9AA8"/>
+  <ellipse cx="60" cy="130" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+  <ellipse cx="140" cy="130" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+
+</svg>

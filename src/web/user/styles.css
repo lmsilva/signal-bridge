@@ -65,7 +65,21 @@ body {
   gap: 12px;
   min-width: 0;
 }
-.su-avatar { width: 44px; height: 44px; border-radius: 14px; object-fit: cover; cursor: pointer; }
+/*
+ * The template avatars draw their own rounded corners (radius 23% of the
+ * tile) and leave the outside transparent, so a CSS radius that disagrees
+ * clips the artwork a second time and the corners come out thin. Matching the
+ * ratio means the clip lands on the corner the file already drew, and an
+ * uploaded photo -- which has no corners of its own -- gets the same shape.
+ */
+:root { --avatar-radius: 23%; }
+.su-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--avatar-radius);
+  object-fit: cover;
+  cursor: pointer;
+}
 .su-head h1 { margin: 0; font-size: 1.2rem; }
 .su-sub { margin: 2px 0 0; color: var(--text-dim); font-size: 0.85rem; }
 .su-head-actions {
@@ -177,6 +191,15 @@ a.su-btn { text-decoration: none; box-sizing: border-box; }
 .su-text { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 .su-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .su-seg { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+/*
+ * Two groups of chips on one line: what a tile applies to, then which
+ * category it is filed under. The categories take the slack so they spread
+ * into the empty run beside the kind chips, and the wider gap between the
+ * groups is what keeps the two "All" chips from reading as one control.
+ */
+.su-filter-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.su-filter-bar .su-seg { margin: 10px 0; }
+.su-filter-bar .su-seg-cats { flex: 1 1 auto; }
 .su-seg button {
   border: 1px solid var(--line);
   background: var(--bg-elev);
@@ -419,7 +442,7 @@ body.is-coarse .push-card-top .push-card-remove {
   border: 2px solid transparent;
   background: none;
   padding: 0;
-  border-radius: 16px;
+  border-radius: var(--avatar-radius);
   overflow: hidden;
 }
 .avatar-grid button.active { border-color: var(--accent); }
