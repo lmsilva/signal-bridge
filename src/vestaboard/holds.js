@@ -138,6 +138,17 @@ function classifyStructural(payload = {}, type, frameSource) {
     };
   }
 
+  if (t === 'hangman.game') {
+    return {
+      kind: 'game',
+      source: 'hangman.game',
+      sessionLive: true,
+      close: false,
+      // A letter, a life, a turn — collapsing them would skip the gallows.
+      coalesceKey: null,
+    };
+  }
+
   if (t === 'huupe.session') {
     return {
       kind: 'game',

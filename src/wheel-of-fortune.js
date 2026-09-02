@@ -26,30 +26,37 @@ const VOWEL_COST = 250;
 const SOLVE_FLOOR = 1000;
 
 /**
- * A slightly thinned American wheel. Cash first so a random() of 0, which
- * the session tests use, is a predictable $500 rather than BANKRUPT.
+ * The wheel, laid out the way the show lays one out: twenty-four wedges,
+ * $500-$900 around a single top-dollar wedge, two BANKRUPTs facing each other
+ * across the hub with LOSE A TURN and FREE SPIN between them. No two
+ * penalties touch and no value repeats next to itself. Cash sits first so a
+ * random() of 0, which the session tests use, is a predictable $500.
  */
 const WHEEL = Object.freeze([
   Object.freeze({ type: 'cash', value: 500 }),
-  Object.freeze({ type: 'cash', value: 550 }),
-  Object.freeze({ type: 'cash', value: 600 }),
-  Object.freeze({ type: 'cash', value: 650 }),
-  Object.freeze({ type: 'cash', value: 700 }),
-  Object.freeze({ type: 'cash', value: 800 }),
   Object.freeze({ type: 'cash', value: 900 }),
+  Object.freeze({ type: 'cash', value: 600 }),
+  Object.freeze({ type: 'cash', value: 700 }),
+  Object.freeze({ type: 'bankrupt' }),
+  Object.freeze({ type: 'cash', value: 2500 }),
   Object.freeze({ type: 'cash', value: 500 }),
   Object.freeze({ type: 'cash', value: 600 }),
-  Object.freeze({ type: 'cash', value: 700 }),
   Object.freeze({ type: 'cash', value: 800 }),
-  Object.freeze({ type: 'cash', value: 900 }),
-  Object.freeze({ type: 'cash', value: 1000 }),
-  Object.freeze({ type: 'cash', value: 1500 }),
-  Object.freeze({ type: 'cash', value: 2500 }),
-  Object.freeze({ type: 'cash', value: 3500 }),
-  Object.freeze({ type: 'bankrupt' }),
-  Object.freeze({ type: 'bankrupt' }),
+  Object.freeze({ type: 'cash', value: 550 }),
+  Object.freeze({ type: 'cash', value: 700 }),
   Object.freeze({ type: 'lose' }),
+  Object.freeze({ type: 'cash', value: 600 }),
+  Object.freeze({ type: 'cash', value: 500 }),
+  Object.freeze({ type: 'cash', value: 700 }),
+  Object.freeze({ type: 'cash', value: 650 }),
+  Object.freeze({ type: 'bankrupt' }),
+  Object.freeze({ type: 'cash', value: 800 }),
+  Object.freeze({ type: 'cash', value: 500 }),
+  Object.freeze({ type: 'cash', value: 600 }),
+  Object.freeze({ type: 'cash', value: 900 }),
   Object.freeze({ type: 'free' }),
+  Object.freeze({ type: 'cash', value: 700 }),
+  Object.freeze({ type: 'cash', value: 650 }),
 ]);
 
 let cachedPuzzles = null;

@@ -16,11 +16,13 @@
 const scramble = require('./modes/scramble');
 const prompts = require('./modes/prompts');
 const wheel = require('./modes/wheel');
+const hangman = require('./modes/hangman');
 
 const GAME_TYPES = Object.freeze({
   scramble: Object.freeze(scramble),
   prompts: Object.freeze(prompts),
   wheel: Object.freeze(wheel),
+  hangman: Object.freeze(hangman),
 });
 
 function gameOf(id) {
