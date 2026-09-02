@@ -12,13 +12,19 @@ The client does **not** talk to Amazon. The NAS bridge does that; this app only 
 
 - Runs minimized in the system tray
 - Listens on `0.0.0.0:47832` for overlays and commands
-- **Advertises to the bridge** (`display.announce` → NAS `:47833`) so the Signal UI can list and target this PC
+- **Advertises to the bridge** (`display.announce` → NAS `:47833`) so the Signal UI can list and target this PC. The announce also carries the Steam app id when a game is running on this PC
 - Fullscreen tinted overlays with fade in/out (portrait or landscape)
-- Voice-driven panels: broadcasts, time, weather, indoor temp, air quality, timers, alarms, shopping list, music, smart home, Tesla, Vivint, notifications
-- **Roll Credits:** image-only completed-games dashboard and showcase tour (`roll-credits.tour`), with portrait/landscape charts and playlist/card prefetch. Video heroes are reserved for Phase 2.
+- **Voice panels:** broadcasts, time, weather, indoor temp, air quality, timers, alarms, reminders, shopping list, music, smart home, Tesla battery + dashboard, Vivint, notifications
+- **Now Playing panels:** Steam, PlayStation Network and YouTube cards that open and close on their own, with artwork, progress and marquee titles
+- **Scoreboards:** Autodarts live match / FINAL and house dashboard, Huupe Mini live session and career dashboard
+- **Feeds:** trivia, The Upside News, Wikipedia Common Knowledge, Overhead flight radar, Route Planner and Flight Plan boards
+- **Roll Credits:** image-only completed-games dashboard and showcase tour (`roll-credits.tour`), hero still or cached WebP loop, with portrait/landscape charts and playlist/card prefetch
+- **Guest and photo panels:** Guest Snaps dual-QR welcome, QR (URL / Wi-Fi / photo) cards, and shared photo slideshows
 - **Web browser mode:** `web.open` → frameless Edge WebView2 fullscreen until `web.close`
-- **Remote control:** `input.pointer` / `input.key` from the bridge Control tab (touchpad + keyboard)
+- **Remote control:** `input.pointer` / `input.key` / `input.text` from the bridge Control tab (touchpad, keyboard, send-text), behind a 6-digit PIN unlock shown on this screen
 - Caps overlay duration with `maxDisplaySeconds` (timers use full payload duration)
+
+This client is the **full display** half of Signal. Vestaboards are driven straight from the bridge over HTTP and never send UDP here.
 
 ---
 
@@ -148,7 +154,15 @@ python send_test.py --type web-open --url https://example.com
 python send_test.py --type web-close
 python send_test.py --type display-discover
 python send_test.py --type tesla-battery --percent 78 --seconds 30
+python send_test.py --type steam-now-playing
+python send_test.py --type psn-now-playing
+python send_test.py --type youtube-now-playing
+python send_test.py --type trivia
+python send_test.py --type huupe-live
+python send_test.py --type route-planner-flight
 ```
+
+`send_test.py --help` lists every payload type it can fake (broadcasts, timers, reminders, shopping list, Tesla, QR and guest cards, slideshows, the Now Playing families, trivia, news, Huupe and route/flight boards).
 
 Or `.\run_test.bat` for a simple broadcast.
 
