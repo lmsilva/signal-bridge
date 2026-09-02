@@ -3,10 +3,21 @@
 
   const $ = (id) => document.getElementById(id);
   const NAME_KEY = 'signal.games.name';
+  const SEAT_KEY = 'signal.games.seat';
   let session = null;
   let playerId = '';
   let source = null;
   let clock = null;
+  let statusBeat = '';
+
+  /**
+   * Per-game modules register here and the shell hands each session to the
+   * one that matches `session.gameType`. Everything the games have in common
+   * — the join form, the code line, the scoreboard, the clock — stays in this
+   * file; anything shaped like one particular game belongs in its module.
+   */
+  const games = new Map();
+  let activeGame = '';
 
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
@@ -23,6 +34,37 @@
     } catch {
       // A locked-down browser just means they type it again.
     }
+  }
+
+  /**
+   * Which seat this tab is playing. Deliberately `sessionStorage`: two people
+   * on one laptop open two windows, and a cookie is shared between them — the
+   * second player used to land on the first one's seat, so both screens drove
+   * one turn. Per-tab storage keeps them apart; a refresh still comes back to
+   * the same seat.
+   */
+  function storedSeat() {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(SEAT_KEY) || '{}');
+      return { sessionId: raw.sessionId || '', playerId: raw.playerId || '' };
+    } catch {
+      return { sessionId: '', playerId: '' };
+    }
+  }
+
+  function rememberSeat(sessionId, id) {
+    playerId = id || '';
+    try {
+      sessionStorage.setItem(SEAT_KEY, JSON.stringify({ sessionId: sessionId || '', playerId: playerId }));
+    } catch {
+      // Without storage the cookie still carries this tab; only a second tab
+      // on the same browser loses its own seat.
+    }
+  }
+
+  function forgetSeat() {
+    playerId = '';
+    try { sessionStorage.removeItem(SEAT_KEY); } catch { /* nothing to clear */ }
   }
 
   function show(id) {
@@ -69,6 +111,18 @@
   }
 
   /**
+   * Only the active game's panels take part in the layout. A separate
+   * attribute from `hidden` so a module can keep showing and hiding its own
+   * pieces without the shell fighting it.
+   */
+  function showGamePanels(type) {
+    document.querySelectorAll('[data-game]').forEach((node) => {
+      node.toggleAttribute('data-off', node.dataset.game !== type);
+    });
+    document.body.dataset.game = type || '';
+  }
+
+  /**
    * One list, never two: everybody who has joined, with the score they have
    * right now — the server folds the open round in, so points show up as they
    * are found instead of at the end of the round.
@@ -100,8 +154,10 @@
     });
   }
 
+  /** A list of `{ word, points, names }` — Word Scramble's found and recap lists. */
   function renderChips(hostId, words = []) {
     const host = $(hostId);
+    if (!host) return;
     host.innerHTML = '';
     for (const entry of words) {
       const li = document.createElement('li');
@@ -123,29 +179,30 @@
     }
   }
 
-  function renderFound(next) {
-    const mine = next.you?.words || [];
-    const playing = next.phase === 'round';
-    $('gm-found-section').hidden = !mine.length;
-    $('gm-found-title').textContent = playing
-      ? `Your words (${mine.length})`
-      : `Your words last round (${mine.length})`;
-    renderChips('gm-found', mine);
+  function roundOf(next) {
+    return next.rounds > 1
+      ? `Round ${next.roundIndex} of ${next.rounds}`
+      : `Round ${next.roundIndex}`;
   }
 
-  function renderRecap(next) {
-    const recap = next.lastRound?.words || [];
-    $('gm-recap-section').hidden = !recap.length;
-    if (!recap.length) return;
-    $('gm-recap-title').textContent = `Every word found in round ${next.lastRound.index}`;
-    renderChips('gm-recap', recap);
-  }
-
+  /**
+   * A lobby that is only waiting on the clock reads very differently from one
+   * that is waiting on people, so say which it is.
+   */
   function phaseLabel(next) {
-    if (next.phase === 'invited' || next.phase === 'lobby') return 'Waiting to start';
-    if (next.phase === 'round') return `Round ${next.roundIndex} of ${next.rounds}`;
+    const custom = games.get(next.gameType)?.phaseLabel?.(next);
+    if (custom) return custom;
+    if (next.phase === 'invited' || next.phase === 'lobby') {
+      const short = next.needPlayers || 0;
+      if (short > 0) {
+        return `Waiting — ${short} more player${short === 1 ? '' : 's'} needed`;
+      }
+      return 'Waiting to start';
+    }
+    if (next.phase === 'round') return roundOf(next);
+    if (next.phase === 'voting') return `${roundOf(next)} · voting`;
     if (next.phase === 'final') return 'Final scores';
-    return `Round ${next.roundIndex} of ${next.rounds} done`;
+    return `${roundOf(next)} done`;
   }
 
   /**
@@ -176,33 +233,54 @@
     }
   }
 
+  function renderScore(next) {
+    if (!next.you) return;
+    const game = games.get(next.gameType);
+    $('gm-score').textContent = game?.scoreLine
+      ? game.scoreLine(next)
+      : `Your score ${next.you.score || 0}`;
+  }
+
+  /**
+   * A toast belongs to the beat it happened in. Leaving "Bankrupt" on screen
+   * while the wheel has moved on two players later reads like the game is
+   * stuck, so the line clears as soon as the round or the turn moves.
+   */
+  function clearStaleStatus(next) {
+    const beat = `${next.phase}|${next.roundIndex}|${next.turnPlayerId || ''}`;
+    if (statusBeat && beat !== statusBeat) {
+      setStatus('gm-play-status', '');
+    }
+    statusBeat = beat;
+  }
+
   function applySession(next) {
     session = next;
     if (!next) return;
-    $('gm-title').textContent = next.title || 'Word Scramble';
+    clearStaleStatus(next);
+    if (next.gameType !== activeGame) {
+      games.get(activeGame)?.teardown?.();
+      activeGame = next.gameType || '';
+      showGamePanels(activeGame);
+    }
+    $('gm-title').textContent = next.title || 'Games';
     $('gm-phase').textContent = phaseLabel(next);
     $('gm-timer').textContent = next.remainingSeconds
       ? `${next.remainingSeconds}s`
       : '';
     renderCodeLine(next);
     renderStandings(next);
-    renderFound(next);
-    renderRecap(next);
-    if (next.you) {
-      // you.score only banks finished rounds; add what is still in play.
-      const pending = next.phase === 'round'
-        ? (next.you.words || []).reduce((sum, row) => sum + (row.points || 0), 0)
-        : 0;
-      $('gm-score').textContent = `Your score ${(next.you.score || 0) + pending}`;
-    }
-    if (typeof window.scrambleRender === 'function') {
-      window.scrambleRender(next);
-    }
+    renderScore(next);
+    games.get(activeGame)?.render?.(next);
   }
 
   function listen(sessionId) {
     if (source) source.close();
-    source = new EventSource(`/api/games/events?sessionId=${encodeURIComponent(sessionId)}`);
+    // The seat rides on the URL so this tab's stream is its own, even when a
+    // second window on the same browser is playing a different seat.
+    source = new EventSource(
+      `/api/games/events?sessionId=${encodeURIComponent(sessionId)}&playerId=${encodeURIComponent(playerId)}`,
+    );
     source.addEventListener('session', (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -221,15 +299,20 @@
     setStatus('gm-join-status', '');
     try {
       const typed = $('gm-name').value;
+      const seat = storedSeat();
       const data = await api('/api/games/join', {
         method: 'POST',
         body: {
           code: $('gm-code').value,
           name: typed,
+          // No seat in this tab means a new player is sitting down, even if
+          // the browser still holds somebody else's cookie.
+          playerId: seat.playerId,
+          newSeat: !seat.playerId,
         },
       });
       rememberName(String(typed || '').trim());
-      playerId = data.player?.id || '';
+      rememberSeat(data.session?.sessionId, data.player?.id);
       applySession(data.session);
       show('gm-play');
       listen(data.session.sessionId);
@@ -248,37 +331,65 @@
   });
   $('btn-gm-leave')?.addEventListener('click', async () => {
     try {
-      await api('/api/games/leave', { method: 'POST', body: {} });
+      await api('/api/games/leave', {
+        method: 'POST',
+        body: { sessionId: session?.sessionId || '', playerId },
+      });
     } catch {
       // still leave the UI
     }
     if (source) source.close();
+    games.get(activeGame)?.teardown?.();
+    activeGame = '';
     session = null;
+    statusBeat = '';
+    forgetSeat();
     show('gm-join');
   });
 
+  /**
+   * Every game submits through here. The server decides what an action means
+   * and hands back a one-line toast, so the shell never has to know whether a
+   * word scored or a vote landed.
+   */
   window.gameSubmit = async (action, payload) => {
-    if (!session) return;
+    if (!session) return null;
     try {
       const data = await api('/api/games/submit', {
         method: 'POST',
-        body: { action, payload },
+        body: {
+          action,
+          payload,
+          sessionId: session.sessionId,
+          playerId,
+        },
       });
-      setStatus('gm-play-status', `+${data.points} ${String(data.word || '').toUpperCase()}`);
-      if (data.liveScore != null) {
-        $('gm-score').textContent = `Your score ${data.liveScore}`;
-      }
-      if (Array.isArray(data.scores) && session) {
+      // The server returns the whole session, so a submit repaints exactly
+      // like an SSE frame and the two can never disagree. Repaint first: the
+      // toast describes what just happened, so it must outlive the repaint
+      // that moves the beat on.
+      if (data.session) {
+        applySession(data.session);
+      } else if (Array.isArray(data.scores) && session) {
         session.scores = data.scores;
         renderStandings(session);
       }
-      if (Array.isArray(data.words) && session) {
-        session.you = { ...(session.you || {}), words: data.words };
-        renderFound(session);
-      }
+      setStatus('gm-play-status', data.toast || '');
+      return data;
     } catch (error) {
       setStatus('gm-play-status', error.message);
+      return null;
     }
+  };
+
+  window.GameShell = {
+    register(id, handlers) {
+      games.set(id, handlers || {});
+    },
+    submit: (action, payload) => window.gameSubmit(action, payload),
+    setStatus,
+    renderChips,
+    $,
   };
 
   const params = new URLSearchParams(location.search);
@@ -296,9 +407,11 @@
     $('gm-code').focus();
   }
   // Household "Join now" opens /games/?code=&name= — skip the form and sit down.
+  // Modules register synchronously below this file, so wait a tick or the
+  // first session would arrive before its game had signed up.
   if (codeParam && joinName) {
     setStatus('gm-join-status', 'Joining…');
-    join();
+    window.setTimeout(join, 0);
   }
 
   if (clock) clearInterval(clock);

@@ -942,6 +942,8 @@
     'huupe-settings-card': ['full', 'vestaboard'],
     'trivia-settings-card': ['full', 'vestaboard'],
     'word-scramble-settings-card': ['vestaboard'],
+    'party-prompts-settings-card': ['vestaboard'],
+    'wheel-of-fortune-settings-card': ['vestaboard'],
     'word-riddles-settings-card': ['vestaboard'],
     'plex-settings-card': ['vestaboard'],
     'credits-settings-card': ['full', 'vestaboard'],
@@ -12212,6 +12214,9 @@
   // ------------------------------------------- Settings → Word Scramble
 
   const WS_HISTORY_PAGE = 10;
+  /* The sessions sheet is shared by every game, so archived rows have to say
+     which one they were. */
+  const GAME_TITLES = { scramble: 'Word Scramble', prompts: 'Party Prompts', wheel: 'Wheel of Fortune' };
   let wordScrambleHistOffset = 0;
   let wordScrambleHistTotal = 0;
   let wordScramblePoll = null;
@@ -12358,6 +12363,7 @@
         const row = document.createElement('article');
         row.className = 'cn-fact';
         row.innerHTML = `<div class="cn-fact-meta"><strong>${escapeHtml(session.code)}</strong>`
+          + ` · ${escapeHtml(session.title || 'Game')}`
           + ` · ${escapeHtml(session.phase)} · ${session.playerCount || 0} players`
           + ` · ${session.elapsedSeconds || 0}s</div>`
           + `<button type="button" class="btn btn-outline btn-sm" data-ws-end="${escapeHtml(session.sessionId)}">End</button>`;
@@ -12410,12 +12416,15 @@
           : `Won by ${row.winner?.name || 'nobody'}`;
         const best = row.topWord?.word
           ? ` · best word ${String(row.topWord.word).toUpperCase()}`
-          : '';
+          : row.topAnswer?.answer
+            ? ` · best answer “${row.topAnswer.answer}”`
+            : '';
         const id = String(row.sessionId || '');
         article.innerHTML = '<label class="trivia-check">'
           + `<input type="checkbox" data-ws-hist="${escapeHtml(id)}"`
           + `${wordScrambleHistPicked.has(id) ? ' checked' : ''}>`
-          + `<span><strong>${escapeHtml(when)}</strong> · ${rounds} round${rounds === 1 ? '' : 's'}`
+          + `<span><strong>${escapeHtml(when)}</strong> · ${escapeHtml(GAME_TITLES[row.gameType] || 'Game')}`
+          + ` · ${rounds} round${rounds === 1 ? '' : 's'}`
           + ` · ${players} player${players === 1 ? '' : 's'}<br>`
           + `<span class="hint">${escapeHtml(outcome)}${escapeHtml(best)}</span></span></label>`;
         list.appendChild(article);
@@ -12534,6 +12543,218 @@
   registerSheetDismiss('word-scramble-end-sheet', () => closeWordScrambleEnd());
 
   loadWordScrambleSettings();
+
+  // ------------------------------------------- Settings → Party Prompts
+
+  function renderPartyPromptsSettings(data = {}) {
+    const settings = data.settings || {};
+    const link = data.shortlink || {};
+    const setNum = (id, value) => {
+      const el = $(id);
+      if (el && document.activeElement !== el) el.value = String(value);
+    };
+    setNum('party-prompts-lobby', settings.lobbySeconds ?? 90);
+    setNum('party-prompts-round', settings.roundSeconds ?? 90);
+    setNum('party-prompts-voting', settings.votingSeconds ?? 45);
+    setNum('party-prompts-intermission', settings.intermissionSeconds ?? 20);
+    setNum('party-prompts-rounds', settings.rounds ?? 3);
+    setNum('party-prompts-min', settings.minPlayers ?? 3);
+    setNum('party-prompts-max', settings.maxPlayers ?? 12);
+    const lateJoin = $('party-prompts-late-join');
+    if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
+    const alias = $('party-prompts-alias');
+    if (alias && document.activeElement !== alias) {
+      alias.value = data.preferredAlias || 'WITTYGAME';
+    }
+    const corpus = $('party-prompts-corpus-hint');
+    if (corpus) {
+      corpus.textContent = data.promptCount
+        ? `${data.promptCount} prompts in the deck. Voting needs someone to vote against, so the lobby ends the game if the minimum is not met.`
+        : 'Voting needs someone to vote against, so the lobby ends the game if the minimum is not met.';
+    }
+
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    const pill = $('party-prompts-status-pill');
+    if (pill) {
+      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
+      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    const detail = $('party-prompts-status-detail');
+    if (detail) {
+      detail.textContent = link.alert?.message
+        || (link.display
+          ? `Short link ${link.display}`
+          : 'The board asks an open-ended question, phones write the wittiest answer they can, then everyone votes.');
+    }
+    const dot = $('party-prompts-dot');
+    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    if ($('party-prompts-shortlink-label')) {
+      $('party-prompts-shortlink-label').textContent = link.display || 'No short link yet.';
+    }
+    if ($('party-prompts-shortlink-check')) {
+      $('party-prompts-shortlink-check').textContent = formatShortlinkCheck(link);
+    }
+    if ($('party-prompts-target-hint')) {
+      $('party-prompts-target-hint').textContent = data.targetUrl
+        ? `Target ${data.targetUrl}`
+        : 'Set a Public base URL (HTTPS) first.';
+    }
+  }
+
+  async function loadPartyPromptsSettings() {
+    try {
+      renderPartyPromptsSettings(await apiGet('/api/party-prompts/settings'));
+    } catch {
+      renderPartyPromptsSettings({});
+    }
+  }
+
+  $('btn-party-prompts-save')?.addEventListener('click', async () => {
+    const button = $('btn-party-prompts-save');
+    if (button) button.disabled = true;
+    try {
+      const data = await apiPost('/api/party-prompts/settings', {
+        lobbySeconds: Number($('party-prompts-lobby')?.value),
+        roundSeconds: Number($('party-prompts-round')?.value),
+        votingSeconds: Number($('party-prompts-voting')?.value),
+        intermissionSeconds: Number($('party-prompts-intermission')?.value),
+        rounds: Number($('party-prompts-rounds')?.value),
+        minPlayers: Number($('party-prompts-min')?.value),
+        maxPlayers: Number($('party-prompts-max')?.value),
+        allowLateJoin: $('party-prompts-late-join')?.checked !== false,
+        preferredAlias: $('party-prompts-alias')?.value || '',
+      });
+      renderPartyPromptsSettings(data);
+      // The alias is shared, so the other game's card would otherwise sit
+      // there showing the value it had a moment ago.
+      loadWordScrambleSettings();
+      loadWheelOfFortuneSettings();
+      toast('Party Prompts settings saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not save Party Prompts settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-party-prompts-push')?.addEventListener('click', async () => {
+    try {
+      const result = await apiPost('/api/push/party-prompts', {});
+      toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not push invite', 'bad');
+    }
+  });
+
+  $('btn-party-prompts-sessions')?.addEventListener('click', () => openWordScrambleSessions());
+
+  loadPartyPromptsSettings();
+
+  // ------------------------------------------- Settings → Wheel of Fortune
+
+  function renderWheelOfFortuneSettings(data = {}) {
+    const settings = data.settings || {};
+    const link = data.shortlink || {};
+    const setNum = (id, value) => {
+      const el = $(id);
+      if (el && document.activeElement !== el) el.value = String(value);
+    };
+    setNum('wheel-of-fortune-lobby', settings.lobbySeconds ?? 60);
+    setNum('wheel-of-fortune-turn', settings.turnSeconds ?? 30);
+    setNum('wheel-of-fortune-round', settings.roundSeconds ?? 300);
+    setNum('wheel-of-fortune-intermission', settings.intermissionSeconds ?? 20);
+    setNum('wheel-of-fortune-rounds', settings.rounds ?? 3);
+    setNum('wheel-of-fortune-min', settings.minPlayers ?? 2);
+    setNum('wheel-of-fortune-max', settings.maxPlayers ?? 8);
+    const lateJoin = $('wheel-of-fortune-late-join');
+    if (lateJoin) lateJoin.checked = settings.allowLateJoin !== false;
+    const alias = $('wheel-of-fortune-alias');
+    if (alias && document.activeElement !== alias) {
+      alias.value = data.preferredAlias || 'WITTYGAME';
+    }
+    const corpus = $('wheel-of-fortune-corpus-hint');
+    if (corpus) {
+      corpus.textContent = data.puzzleCount
+        ? `${data.puzzleCount} puzzles in the deck. Two players take turns. A lobby that never fills ends the game. Vowels cost $250 from the round bank; only the solver banks the puzzle ($1,000 floor).`
+        : 'Two players take turns. A lobby that never fills ends the game.';
+    }
+
+    const health = link.health || (link.alias ? 'unknown' : 'missing');
+    const tone = health === 'healthy' ? 'ok' : (health === 'unhealthy' || link.alert ? 'bad' : 'warn');
+    const pill = $('wheel-of-fortune-status-pill');
+    if (pill) {
+      pill.textContent = link.alert ? 'Needs repair' : health === 'healthy' ? 'Active' : health === 'missing' ? 'Not set' : 'Unknown';
+      pill.className = `status-pill ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    }
+    const detail = $('wheel-of-fortune-status-detail');
+    if (detail) {
+      detail.textContent = link.alert?.message
+        || (link.display
+          ? `Short link ${link.display}`
+          : 'The board shows the puzzle. Phones take turns spinning, calling a letter, and solving.');
+    }
+    const dot = $('wheel-of-fortune-dot');
+    if (dot) dot.className = `gb-dot ${tone === 'ok' ? 'is-ok' : tone === 'bad' ? 'is-bad' : 'is-warn'}`;
+    if ($('wheel-of-fortune-shortlink-label')) {
+      $('wheel-of-fortune-shortlink-label').textContent = link.display || 'No short link yet.';
+    }
+    if ($('wheel-of-fortune-shortlink-check')) {
+      $('wheel-of-fortune-shortlink-check').textContent = formatShortlinkCheck(link);
+    }
+    if ($('wheel-of-fortune-target-hint')) {
+      $('wheel-of-fortune-target-hint').textContent = data.targetUrl
+        ? `Target ${data.targetUrl}`
+        : 'Set a Public base URL (HTTPS) first.';
+    }
+  }
+
+  async function loadWheelOfFortuneSettings() {
+    try {
+      renderWheelOfFortuneSettings(await apiGet('/api/wheel-of-fortune/settings'));
+    } catch {
+      renderWheelOfFortuneSettings({});
+    }
+  }
+
+  $('btn-wheel-of-fortune-save')?.addEventListener('click', async () => {
+    const button = $('btn-wheel-of-fortune-save');
+    if (button) button.disabled = true;
+    try {
+      const data = await apiPost('/api/wheel-of-fortune/settings', {
+        lobbySeconds: Number($('wheel-of-fortune-lobby')?.value),
+        turnSeconds: Number($('wheel-of-fortune-turn')?.value),
+        roundSeconds: Number($('wheel-of-fortune-round')?.value),
+        intermissionSeconds: Number($('wheel-of-fortune-intermission')?.value),
+        rounds: Number($('wheel-of-fortune-rounds')?.value),
+        minPlayers: Number($('wheel-of-fortune-min')?.value),
+        maxPlayers: Number($('wheel-of-fortune-max')?.value),
+        allowLateJoin: $('wheel-of-fortune-late-join')?.checked !== false,
+        preferredAlias: $('wheel-of-fortune-alias')?.value || '',
+      });
+      renderWheelOfFortuneSettings(data);
+      loadWordScrambleSettings();
+      loadPartyPromptsSettings();
+      toast('Wheel of Fortune settings saved', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not save Wheel of Fortune settings', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  $('btn-wheel-of-fortune-push')?.addEventListener('click', async () => {
+    try {
+      const result = await apiPost('/api/push/wheel-of-fortune', {});
+      toast(result.session?.code ? `Invite posted — code ${result.session.code}` : 'Invite posted', 'ok');
+    } catch (error) {
+      toast(error.message || 'Could not push invite', 'bad');
+    }
+  });
+
+  $('btn-wheel-of-fortune-sessions')?.addEventListener('click', () => openWordScrambleSessions());
+
+  loadWheelOfFortuneSettings();
 
   // ------------------------------------ Settings → On This Day in History
 
@@ -19634,7 +19855,8 @@
     try {
       const data = await apiPost('/api/vestaboard-sim/queue/cancel', { id });
       vbApplyQueue(data.queue, data.queueRevision);
-    } catch {
+    } catch (error) {
+      toast(error?.message || 'Could not cancel that page', 'bad');
       await vbRefreshQueueFromSim();
     }
   }
@@ -19709,11 +19931,19 @@
     vbQueueDragging = false;
   }
 
+  function vbEventEl(event) {
+    const node = event.target;
+    return node && node.nodeType === 1 ? node : node?.parentElement;
+  }
+
   function vbStartQueueDrag(event, row) {
     if (event.pointerType === 'mouse' && event.button !== 0) {
       return;
     }
-    if (event.target.closest?.('.vb-queue-cancel')) {
+    // Drag from the grip only. A row-wide pointerdown used to swallow the
+    // cancel click (the × is a text node, so closest() was undefined and
+    // preventDefault killed the click).
+    if (!vbEventEl(event)?.closest('.vb-queue-handle')) {
       return;
     }
     event.preventDefault();
@@ -19809,6 +20039,7 @@
       cancel.className = 'vb-queue-cancel';
       cancel.setAttribute('aria-label', 'Cancel this page');
       cancel.textContent = '×';
+      cancel.addEventListener('pointerdown', (event) => event.stopPropagation());
       cancel.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();

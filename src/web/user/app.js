@@ -361,7 +361,9 @@
         + '<button type="button" class="push-card-handle" title="Drag to reorder" aria-label="Drag to reorder">'
         + '<span class="push-card-grip" aria-hidden="true"></span></button>'
         + iconHtml
-        + `<button type="button" class="push-card-remove" aria-label="Remove ${escapeHtml(command.title)}">×</button>`
+        + `<button type="button" class="push-card-remove" aria-label="Remove ${escapeHtml(command.title)}">`
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">'
+        + '<path d="M6 6l12 12M18 6 6 18"/></svg></button>'
         + '</div>'
         + titleHtml
         + subHtml;

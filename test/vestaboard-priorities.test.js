@@ -22,6 +22,8 @@ test('house defaults jump household interrupts and hold only live games', () => 
     'ring.doorbell',
     'broadcast',
     'word.scramble',
+    'party.prompts',
+    'wheel.fortune',
     'huupe.session',
     'autodarts.match',
   ]);
@@ -29,7 +31,7 @@ test('house defaults jump household interrupts and hold only live games', () => 
   assert.ok(defaults.every((rule) => rule.immediate));
   assert.deepEqual(
     defaults.filter((rule) => rule.hold).map((rule) => rule.source),
-    ['word.scramble', 'huupe.session', 'autodarts.match'],
+    ['word.scramble', 'party.prompts', 'wheel.fortune', 'huupe.session', 'autodarts.match'],
   );
 });
 
@@ -167,11 +169,30 @@ test('the add-event catalog includes board pushes like Roast Me and Dad Jokes', 
     'trivia.round',
     'guest.book',
     'alarm.fired',
+    'party.prompts',
+    'wheel.fortune',
+    'word.scramble',
+    'roll-credits.tour',
   ]) {
     assert.ok(sources.has(source), `missing ${source}`);
   }
   assert.ok(catalog.events.length >= 40, `expected a full catalog, got ${catalog.events.length}`);
   assert.ok(catalog.groups.some((group) => group.id === 'language'));
+});
+
+test('the add-event catalog hides phase cards and command aliases', () => {
+  const catalog = catalogForClient();
+  for (const item of catalog.events) {
+    assert.doesNotMatch(
+      item.source,
+      /^(party\.prompts|wheel\.fortune|word\.scramble)\./,
+      `${item.source} is a card of a game, not its own event`,
+    );
+    assert.notEqual(item.source, 'credits.show');
+    assert.notEqual(item.label, item.source, `${item.source} needs a friendly name`);
+  }
+  const rollCredits = catalog.events.find((item) => item.source === 'roll-credits.tour');
+  assert.equal(rollCredits?.label, 'Roll Credits');
 });
 
 test('priority labels match Push command titles', () => {
@@ -187,6 +208,7 @@ test('priority labels match Push command titles', () => {
   assert.equal(bySource.get('huupe.session'), 'Huupe Live');
   assert.equal(bySource.get('autodarts.match'), 'Autodarts');
   assert.equal(bySource.get('word.scramble'), 'Word Scramble');
+  assert.equal(bySource.get('wheel.fortune'), 'Wheel of Fortune');
   assert.equal(bySource.get('guest.book'), 'Guest Book');
 
   for (const command of COMMANDS) {

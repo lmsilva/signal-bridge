@@ -106,6 +106,26 @@ const SPECIALS = Object.freeze([
     hint: 'Holds the board for the whole session. The timeout is a safety net.',
   },
   {
+    source: 'party.prompts',
+    label: 'Party Prompts',
+    group: 'games',
+    canHold: true,
+    defaultHold: true,
+    defaultHoldMinutes: 30,
+    recommended: true,
+    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+  },
+  {
+    source: 'wheel.fortune',
+    label: 'Wheel of Fortune',
+    group: 'games',
+    canHold: true,
+    defaultHold: true,
+    defaultHoldMinutes: 30,
+    recommended: true,
+    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+  },
+  {
     source: 'huupe.session',
     label: 'Huupe Live',
     group: 'games',
@@ -221,6 +241,8 @@ const COMMAND_SOURCE = Object.freeze({
   'us.weather-map': 'us.weather-map',
   'word.riddles': 'word.riddles',
   'scramble.invite': 'word.scramble',
+  'prompts.invite': 'party.prompts',
+  'wheel.invite': 'wheel.fortune',
   'amazing.facts': 'amazing.facts',
   'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',
@@ -332,25 +354,12 @@ function buildCatalog() {
     }, { labelWins: !secondary });
   }
 
-  // Catch any board formatter the Push list has not wired yet.
-  try {
-    const { FORMATTERS } = require('./router');
-    for (const type of Object.keys(FORMATTERS || {})) {
-      if (bySource.has(type) || SKIP_SOURCES.has(type)) {
-        continue;
-      }
-      upsert({
-        source: type,
-        label: type,
-        group: 'news',
-        hint: '',
-        canHold: true,
-      });
-    }
-  } catch {
-    // Router may be mid-load during a circular require; specials + commands
-    // already cover the picker. A later catalogForClient call rebuilds.
-  }
+  // Do not walk FORMATTERS. Game modes register a key per card
+  // (`party.prompts.lobby`, `wheel.fortune.round`) and some commands keep a
+  // legacy type next to the real source (`credits.show` → `roll-credits.tour`).
+  // Those are updates of one event, not events of their own — listing them
+  // would show raw dotted ids. Specials + vestaboard Push commands already
+  // name every row a person can pick.
 
   const groupOrder = new Map(GROUPS.map((group, index) => [group.id, index]));
   const events = [...bySource.values()].sort((a, b) => {

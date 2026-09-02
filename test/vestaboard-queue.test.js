@@ -82,6 +82,27 @@ test('submit stamps actor on queue items', () => {
   const scheduled = h.queue.pending().find((item) => item.label === 'WEATHER');
   assert.equal(scheduled.actor.kind, 'scheduler');
   assert.equal(scheduled.actor.name, 'Scheduled');
+  h.queue.submit([frame('TESLA', 3)]);
+  const system = h.queue.pending().find((item) => item.label === 'TESLA');
+  assert.equal(system.actor.kind, 'system');
+  assert.equal(system.actor.name, 'System');
+});
+
+test('a tesla preview and the live reading share one waiting page', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('TESLA 50', 1, { source: 'tesla-battery.query' })], {
+    coalesceKey: 'tesla-battery.query',
+  });
+  h.queue.submit([frame('TESLA 57', 2, { source: 'tesla-battery.query' })], {
+    coalesceKey: 'tesla-battery.query',
+  });
+  h.queue.submit([frame('TESLA 57', 3, { source: 'tesla-battery.query' })], {
+    coalesceKey: 'tesla-battery.query',
+  });
+  const waiting = h.queue.pending().filter((item) => item.source === 'tesla-battery.query'
+    || item.frame?.source === 'tesla-battery.query');
+  assert.equal(waiting.length, 1);
+  assert.equal(waiting[0].label, 'TESLA 57');
 });
 
 test('submit keeps command id on queue items', () => {

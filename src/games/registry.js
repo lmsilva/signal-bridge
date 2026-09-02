@@ -1,6 +1,9 @@
 /**
- * Game types the session framework can run. Word Scramble is the only entry
- * today; Wheel of Fortune drops in here later without touching the shell.
+ * Game types the session framework can run.
+ *
+ * A game is a *mode* (`games/modes/*.js`) — how a round is built, what a phone
+ * may submit, how a round is scored, and what the board should be told — plus
+ * the Vestaboard `source` that owns the board while it is live.
  *
  * **Vestaboard requirement:** any game that takes the board must register its
  * `source` here and route its cards through `games/sessions.js`, which takes
@@ -10,36 +13,14 @@
  * manual Push, Air now, scheduler ticks, and alerts alike.
  */
 
-const scramble = require('../word-scramble');
-const {
-  inviteRows,
-  lobbyRows,
-  roundRows,
-  scoresRows,
-  bestRows,
-} = require('../vestaboard/formatters/games');
+const scramble = require('./modes/scramble');
+const prompts = require('./modes/prompts');
+const wheel = require('./modes/wheel');
 
 const GAME_TYPES = Object.freeze({
-  scramble: Object.freeze({
-    id: 'scramble',
-    title: 'Word Scramble',
-    source: 'word.scramble',
-    createRound: (options) => scramble.createRound(options),
-    validateAction: (round, action, payload) => {
-      if (action !== 'word') {
-        return { ok: false, reason: 'unknown-action' };
-      }
-      return scramble.validateWord(round?.grid, payload?.word);
-    },
-    scoreRound: (players, options) => scramble.scoreRound(players, options),
-    boardFrames: {
-      invite: inviteRows,
-      lobby: lobbyRows,
-      round: roundRows,
-      scores: scoresRows,
-      best: bestRows,
-    },
-  }),
+  scramble: Object.freeze(scramble),
+  prompts: Object.freeze(prompts),
+  wheel: Object.freeze(wheel),
 });
 
 function gameOf(id) {
@@ -51,8 +32,14 @@ const BOARD_SOURCES = Object.freeze(
   new Set(Object.values(GAME_TYPES).map((row) => row.source).filter(Boolean)),
 );
 
+/** Board source -> game id, for the push and priority wiring. */
+const GAME_BY_SOURCE = Object.freeze(
+  Object.fromEntries(Object.values(GAME_TYPES).map((row) => [row.source, row.id])),
+);
+
 module.exports = {
   GAME_TYPES,
   gameOf,
   BOARD_SOURCES,
+  GAME_BY_SOURCE,
 };

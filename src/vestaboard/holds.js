@@ -115,6 +115,29 @@ function classifyStructural(payload = {}, type, frameSource) {
     };
   }
 
+  if (t === 'party.prompts') {
+    return {
+      kind: 'game',
+      source: 'party.prompts',
+      sessionLive: true,
+      close: false,
+      // Prompt, then voting, then the winner — every card is a beat of the
+      // round and collapsing them would skip the reveal.
+      coalesceKey: null,
+    };
+  }
+
+  if (t === 'wheel.fortune') {
+    return {
+      kind: 'game',
+      source: 'wheel.fortune',
+      sessionLive: true,
+      close: false,
+      // Spin, letter, solve — each board refresh is a beat, not a score tick.
+      coalesceKey: null,
+    };
+  }
+
   if (t === 'huupe.session') {
     return {
       kind: 'game',
@@ -172,6 +195,27 @@ function classifyStructural(payload = {}, type, frameSource) {
       sessionLive: isPlayingMode(payload.psn?.mode),
       close: false,
       coalesceKey: 'psn.now-playing',
+    };
+  }
+
+  // One car, one card. A voice ask sends a cached preview and then the
+  // live reading — those must replace, not stack four Tesla pages.
+  if (t === 'tesla-battery.query' || t === 'tesla.battery') {
+    return {
+      kind: 'snapshot',
+      source: 'tesla-battery.query',
+      sessionLive: undefined,
+      close: false,
+      coalesceKey: 'tesla-battery.query',
+    };
+  }
+  if (t === 'tesla-dashboard.query' || t === 'tesla.dashboard') {
+    return {
+      kind: 'snapshot',
+      source: 'tesla-dashboard.query',
+      sessionLive: undefined,
+      close: false,
+      coalesceKey: 'tesla-dashboard.query',
     };
   }
 

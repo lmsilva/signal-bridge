@@ -31,9 +31,20 @@ test('weather alerts and space-launch cards are rotation, not alarms', () => {
   assert.equal(classify({ type: 'launch.alert' }, 'launch.alert').lane, 'rotation');
 });
 
-test('word scramble, huupe live and autodarts live are games', () => {
+test('word scramble, party prompts, huupe live and autodarts live are games', () => {
   assert.equal(classify({ type: 'word.scramble' }, 'word.scramble').lane, 'game');
   assert.equal(classify({ type: 'word.scramble' }, 'word.scramble').coalesceKey, null);
+
+  const prompts = classify({ type: 'party.prompts' }, 'party.prompts');
+  assert.equal(prompts.lane, 'game');
+  assert.equal(prompts.source, 'party.prompts');
+  // Prompt, ballot, winner — collapsing them would skip the reveal.
+  assert.equal(prompts.coalesceKey, null);
+
+  const wheel = classify({ type: 'wheel.fortune' }, 'wheel.fortune');
+  assert.equal(wheel.lane, 'game');
+  assert.equal(wheel.source, 'wheel.fortune');
+  assert.equal(wheel.coalesceKey, null);
 
   const huupe = classify({ type: 'huupe.session', session: { status: 'live' } }, 'huupe.session');
   assert.equal(huupe.lane, 'game');
@@ -91,6 +102,14 @@ test('close payloads name the source they release', () => {
     assert.equal(hold.source, source);
     assert.equal(hold.live, false);
   }
+});
+
+test('a tesla battery ask shares one waiting page', () => {
+  const battery = classify({ type: 'tesla-battery.query' }, 'tesla-battery.query');
+  assert.equal(battery.lane, 'rotation');
+  assert.equal(battery.coalesceKey, 'tesla-battery.query');
+  const dashboard = classify({ type: 'tesla-dashboard.query' }, 'tesla-dashboard.query');
+  assert.equal(dashboard.coalesceKey, 'tesla-dashboard.query');
 });
 
 test('dashboards, guest book and clocks just queue', () => {

@@ -90,19 +90,27 @@ function sameLayout(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function actorNameFor(kind, name, scheduler) {
+  if (name) return name;
+  if (kind === 'scheduler' || scheduler) return 'Scheduled';
+  if (kind === 'system') return 'System';
+  return 'User';
+}
+
 function resolveActor(options = {}) {
   if (options.actor && typeof options.actor === 'object') {
     const name = String(options.actor.name || '').trim();
+    const kind = String(options.actor.kind || (options.scheduler ? 'scheduler' : 'user'));
     return {
-      kind: String(options.actor.kind || (options.scheduler ? 'scheduler' : 'user')),
+      kind,
       userId: options.actor.userId || null,
-      name: name || (options.scheduler ? 'Scheduled' : 'User'),
+      name: actorNameFor(kind, name, options.scheduler),
     };
   }
   if (options.scheduler) {
     return { kind: 'scheduler', userId: null, name: 'Scheduled' };
   }
-  return { kind: 'system', userId: null, name: '' };
+  return { kind: 'system', userId: null, name: 'System' };
 }
 
 /** "22:00" -> minutes since midnight, or null if unusable. */

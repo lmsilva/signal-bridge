@@ -209,6 +209,23 @@ test('empty content is skipped silently, even when someone asked', () => {
   assert.equal(submitted.length, 1);
 });
 
+test('a tesla battery preview and the live reading share a coalesce key', () => {
+  assert.equal(coalesceKeyFor({}, 'tesla-battery.query'), 'tesla-battery.query');
+  let options = null;
+  routeEvent({
+    payload: {
+      type: 'tesla-battery.query',
+      battery: { percent: 57, rangeMiles: 157, chargingLabel: 'NOT PLUGGED IN' },
+    },
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    submit: (_boardId, _frames, submitted) => {
+      options = submitted;
+      return { ok: true, accepted: 1 };
+    },
+  });
+  assert.equal(options.coalesceKey, 'tesla-battery.query');
+});
+
 test('a smart-home command coalesces per device, not per room that heard it', () => {
   assert.equal(
     coalesceKeyFor(SMART_HOME, 'smart-home.command'),

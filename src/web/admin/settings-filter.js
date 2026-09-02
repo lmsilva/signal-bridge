@@ -238,6 +238,8 @@ const SETTINGS_CARD_KINDS = Object.freeze({
   'huupe-settings-card': ['full', 'vestaboard'],
   'trivia-settings-card': ['full', 'vestaboard'],
   'word-scramble-settings-card': ['vestaboard'],
+  'party-prompts-settings-card': ['vestaboard'],
+  'wheel-of-fortune-settings-card': ['vestaboard'],
   'word-riddles-settings-card': ['vestaboard'],
   'plex-settings-card': ['vestaboard'],
   'credits-settings-card': ['full', 'vestaboard'],

@@ -6,17 +6,17 @@
   <meta name="theme-color" content="#070f22">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Games">
-  <title>Word Scramble</title>
+  <title>Game night</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
-  <link rel="stylesheet" href="games.css?v=8">
+  <link rel="stylesheet" href="games.css?v=10">
 </head>
 <body>
   <div class="gm-shell">
     <header class="gm-header">
       <img class="gm-logo" src="/logo.png" width="40" height="40" alt="">
       <div class="gm-headings">
-        <h1 id="gm-title">Word Scramble</h1>
+        <h1 id="gm-title">Game night</h1>
         <p id="gm-subtitle">Join with the code on the board</p>
       </div>
     </header>
@@ -44,11 +44,84 @@
 
         <p class="gm-code-line" id="gm-code-line" hidden></p>
 
-        <div class="gm-board-wrap">
+        <!-- Word Scramble -->
+        <div class="gm-board-wrap" data-game="scramble">
           <div class="gm-grid" id="gm-grid" hidden></div>
         </div>
 
-        <form class="gm-compose" id="gm-word-form" hidden>
+        <!-- Party Prompts -->
+        <div class="pp-stage" data-game="prompts">
+          <section class="gm-card pp-panel" id="pp-lobby-panel" hidden>
+            <p class="pp-lobby" id="pp-lobby"></p>
+          </section>
+
+          <section class="pp-prompt-card" id="pp-prompt-card" hidden>
+            <p class="pp-prompt-kicker" id="pp-prompt-kicker">Your prompt</p>
+            <p class="pp-prompt" id="pp-prompt"></p>
+          </section>
+
+          <section class="gm-card pp-panel" id="pp-locked-panel" hidden>
+            <p class="pp-locked-label">Your answer</p>
+            <p class="pp-locked" id="pp-locked"></p>
+            <p class="pp-note" id="pp-locked-note"></p>
+          </section>
+
+          <section class="pp-panel-plain" id="pp-ballot-panel" hidden>
+            <h2 class="gm-h2">Pick your favourite</h2>
+            <ul class="pp-ballot" id="pp-ballot"></ul>
+            <p class="pp-note" id="pp-ballot-note"></p>
+          </section>
+
+          <section class="gm-card pp-panel" id="pp-reveal-panel" hidden>
+            <h2 class="gm-h2" id="pp-reveal-title">The votes are in</h2>
+            <ul class="pp-reveal" id="pp-reveal"></ul>
+          </section>
+        </div>
+
+        <!-- Wheel of Fortune -->
+        <div class="wf-stage" data-game="wheel">
+          <section class="gm-card wf-panel" id="wf-lobby-panel" hidden>
+            <p class="wf-lobby" id="wf-lobby"></p>
+          </section>
+
+          <section class="wf-puzzle-card" id="wf-puzzle-card" hidden>
+            <p class="wf-category" id="wf-category"></p>
+            <p class="wf-puzzle" id="wf-puzzle"></p>
+            <p class="wf-event" id="wf-event"></p>
+          </section>
+
+          <section class="gm-card wf-wheel-panel" id="wf-wheel-panel" hidden>
+            <div class="wf-wheel">
+              <div class="wf-wheel-pointer" aria-hidden="true"></div>
+              <div class="wf-wheel-face" id="wf-wheel-face"></div>
+            </div>
+            <p class="wf-wheel-result" id="wf-wheel-result" role="status"></p>
+          </section>
+
+          <section class="gm-card wf-panel" id="wf-turn-panel" hidden>
+            <p class="wf-turn" id="wf-turn"></p>
+            <p class="wf-bank" id="wf-bank"></p>
+            <button type="button" class="gm-send" id="btn-wf-spin" hidden>Spin the wheel</button>
+          </section>
+
+          <div class="wf-letters" id="wf-letters" hidden></div>
+
+          <form class="gm-compose" id="wf-solve-form" hidden>
+            <label class="gm-label gm-sr-only" for="wf-solve">Solve the puzzle</label>
+            <div class="gm-compose-row">
+              <input id="wf-solve" class="gm-input" type="text" name="wf-solve" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" inputmode="text" placeholder="Solve the puzzle">
+              <button type="submit" class="gm-send gm-send-inline">Solve</button>
+            </div>
+          </form>
+
+          <section class="gm-card wf-panel" id="wf-reveal-panel" hidden>
+            <h2 class="gm-h2" id="wf-reveal-title">The puzzle</h2>
+            <p class="wf-reveal-puzzle" id="wf-reveal-puzzle"></p>
+            <p class="wf-reveal-meta" id="wf-reveal-meta"></p>
+          </section>
+        </div>
+
+        <form class="gm-compose" id="gm-word-form" data-game="scramble" hidden>
           <label class="gm-label gm-sr-only" for="gm-word">Word</label>
           <div class="gm-compose-row">
             <input id="gm-word" class="gm-input" type="text" name="gm-word" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" inputmode="text" placeholder="Tap the letters or type">
@@ -57,16 +130,25 @@
           </div>
         </form>
 
+        <form class="gm-compose" id="pp-answer-form" data-game="prompts" hidden>
+          <label class="gm-label gm-sr-only" for="pp-answer">Your answer</label>
+          <div class="gm-compose-row">
+            <input id="pp-answer" class="gm-input" type="text" name="pp-answer" maxlength="60" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" inputmode="text" placeholder="Be funnier than everyone else">
+            <button type="submit" class="gm-send gm-send-inline">Send</button>
+          </div>
+          <p class="pp-counter" id="pp-answer-count">0/60</p>
+        </form>
+
         <p class="gm-status" id="gm-play-status" role="status"></p>
       </section>
 
       <aside class="gm-side">
-        <section class="gm-card gm-section" id="gm-found-section" hidden>
+        <section class="gm-card gm-section" id="gm-found-section" data-game="scramble" hidden>
           <h2 class="gm-h2" id="gm-found-title">Your words</h2>
           <ul class="gm-chips" id="gm-found"></ul>
         </section>
 
-        <section class="gm-card gm-section" id="gm-recap-section" hidden>
+        <section class="gm-card gm-section" id="gm-recap-section" data-game="scramble" hidden>
           <h2 class="gm-h2" id="gm-recap-title">Words found</h2>
           <ul class="gm-chips" id="gm-recap"></ul>
         </section>
@@ -81,7 +163,9 @@
     </main>
   </div>
 
-  <script src="games.js?v=7"></script>
-  <script src="scramble.js?v=9"></script>
+  <script src="games.js?v=9"></script>
+  <script src="scramble.js?v=10"></script>
+  <script src="party-prompts.js?v=1"></script>
+  <script src="wheel.js?v=2"></script>
 </body>
 </html>

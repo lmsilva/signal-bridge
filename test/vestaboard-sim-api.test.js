@@ -641,6 +641,46 @@ test('the simulator can cancel one waiting page', async () => {
   }
 });
 
+test('a household user can cancel a waiting page', async () => {
+  const harness = await startHarness({ withHub: true });
+  try {
+    harness.hub.submit('sim', [{
+      rows: badgeFrame({ color: 'blue', title: 'TESLA BATTERY', rows: ['57%'] }),
+      label: 'Tesla battery',
+      source: 'tesla-battery.query',
+      dwellSeconds: 15,
+    }]);
+    const waiting = harness.hub.queueFor('sim').pending()[0];
+    assert.ok(waiting?.id);
+
+    const created = await request(`${harness.base}/api/house-users`, {
+      method: 'POST',
+      cookie: harness.cookie,
+      body: { username: 'maya', password: 'maya-pass-1', firstName: 'Maya' },
+    });
+    assert.equal(created.status, 200, created.text);
+
+    const login = await request(`${harness.base}/api/user/login`, {
+      method: 'POST',
+      body: { username: 'maya', password: 'maya-pass-1' },
+    });
+    assert.equal(login.status, 200, login.text);
+    const raw = login.headers['set-cookie'];
+    const userCookie = String(Array.isArray(raw) ? raw[0] : raw || '').split(';')[0];
+
+    const res = await request(`${harness.base}/api/vestaboard-sim/queue/cancel`, {
+      method: 'POST',
+      cookie: userCookie,
+      body: { id: waiting.id },
+    });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.queue.length, 0);
+  } finally {
+    await harness.stop();
+  }
+});
+
 test('cancelling a page that already flipped returns the current queue', async () => {
   const harness = await startHarness({ withHub: true });
   try {
@@ -942,6 +982,7 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.match(html, /btn-vb-queue-clear/);
   assert.match(html, /btn-vb-release-holds/);
   assert.match(js, /function vbClearQueue\(/);
+  assert.match(js, /closest\('\.vb-queue-handle'\)/);
   assert.match(js, /function vbReleaseHolds\(/);
   assert.match(js, /\/api\/vestaboards\/release-holds/);
   assert.match(js, /function vbSyncClearButton\(/);
@@ -973,6 +1014,8 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(js, /\/admin\/vb-flip\.wav/);
   assert.match(js, /btn-vb-sound/);
   assert.match(js, /classList\.toggle\('is-empty'/);
+  assert.match(js, /kind === 'system'\) return name \|\| 'System'/);
+  assert.match(js, /closest\('\.vb-queue-handle'\)/);
   assert.match(bezel, /vb-tile\.is-flipping/);
   assert.match(userHtml, /id="btn-vb-sound"/);
   assert.match(userHtml, /id="vb-flip-clock"/);

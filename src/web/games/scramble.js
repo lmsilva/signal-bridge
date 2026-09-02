@@ -111,7 +111,27 @@
     setWord(pickedWord());
   }
 
-  window.scrambleRender = (session) => {
+  /** Everything you have found this round, newest list each repaint. */
+  function renderFound(session) {
+    const mine = session.you?.words || [];
+    const playing = session.phase === 'round';
+    document.getElementById('gm-found-section').hidden = !mine.length;
+    document.getElementById('gm-found-title').textContent = playing
+      ? `Your words (${mine.length})`
+      : `Your words last round (${mine.length})`;
+    window.GameShell.renderChips('gm-found', mine);
+  }
+
+  /** The between-rounds reveal: every word the table found, and who got it. */
+  function renderRecap(session) {
+    const recap = session.lastRound?.words || [];
+    document.getElementById('gm-recap-section').hidden = !recap.length;
+    if (!recap.length) return;
+    document.getElementById('gm-recap-title').textContent = `Every word found in round ${session.lastRound.index}`;
+    window.GameShell.renderChips('gm-recap', recap);
+  }
+
+  function renderBoard(session) {
     const playing = session.phase === 'round' && Array.isArray(session.grid);
     gridEl.hidden = !playing;
     form.hidden = !playing;
@@ -158,7 +178,29 @@
       return cell;
     });
     setWord('');
-  };
+  }
+
+  window.GameShell.register('scramble', {
+    render(session) {
+      renderBoard(session);
+      renderFound(session);
+      renderRecap(session);
+    },
+    scoreLine(session) {
+      // you.score only banks finished rounds; add what is still in play.
+      const pending = session.phase === 'round'
+        ? (session.you.words || []).reduce((sum, row) => sum + (row.points || 0), 0)
+        : 0;
+      return `Your score ${(session.you.score || 0) + pending}`;
+    },
+    teardown() {
+      gridEl.innerHTML = '';
+      letters = [];
+      cells = [];
+      picked = [];
+      play?.classList.remove('gm-no-board');
+    },
+  });
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();

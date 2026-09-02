@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal278">
+  <link rel="stylesheet" href="styles.css?v=signal285">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -159,7 +159,7 @@
         <div class="push-block" data-push-group="games">
           <div class="section-label">Game night</div>
           <div class="card-row card-row-quad" id="push-row-games" data-push-category="games"
-               data-skeleton-count="12" aria-busy="true"></div>
+               data-skeleton-count="14" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="media">
@@ -2958,6 +2958,182 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="games">Party Prompts</div>
+        <div class="card party-prompts-settings-card" id="party-prompts-settings-card" data-settings-group="games">
+          <div class="auth-head">
+            <div class="auth-name">Party Prompts on the board</div>
+            <span class="status-pill" id="party-prompts-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="party-prompts-status-detail">
+            The board asks an open-ended question, phones write the wittiest answer they can, then everyone votes. Needs at least three players.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Round timing</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-lobby">Lobby seconds</label>
+                    <input type="number" id="party-prompts-lobby" class="field-input" min="10" max="300" value="90">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-round">Writing seconds</label>
+                    <input type="number" id="party-prompts-round" class="field-input" min="30" max="600" value="90">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-voting">Voting seconds</label>
+                    <input type="number" id="party-prompts-voting" class="field-input" min="15" max="300" value="45">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-intermission">Intermission</label>
+                    <input type="number" id="party-prompts-intermission" class="field-input" min="5" max="120" value="20">
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <p class="settings-group-title">Play</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-rounds">Rounds</label>
+                    <input type="number" id="party-prompts-rounds" class="field-input" min="1" max="8" value="3">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-min">Minimum players</label>
+                    <input type="number" id="party-prompts-min" class="field-input" min="3" max="8" value="3">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-max">Maximum players</label>
+                    <input type="number" id="party-prompts-max" class="field-input" min="3" max="24" value="12">
+                  </div>
+                  <div class="field">
+                    <label class="trivia-check">
+                      <input type="checkbox" id="party-prompts-late-join" checked>
+                      <span>Let phones join mid-game</span>
+                    </label>
+                  </div>
+                  <p class="hint field-span-all" id="party-prompts-corpus-hint">Voting needs someone to vote against, so the lobby ends the game if the minimum is not met.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Short link</p>
+                <div class="gb-shortlink-status" id="party-prompts-shortlink">
+                  <span class="gb-dot" id="party-prompts-dot" aria-hidden="true"></span>
+                  <p class="hint" id="party-prompts-shortlink-label">No short link yet.</p>
+                  <p class="hint" id="party-prompts-shortlink-check">Last check —</p>
+                </div>
+                <div class="field-grid field-grid-2">
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-alias">Preferred alias</label>
+                    <input type="text" id="party-prompts-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+                  </div>
+                  <div class="field field-span-all">
+                    <p class="hint">Every game shares the one <code>/games/</code> link, so this is the same alias the Word Scramble card shows. The TinyURL token lives on that card too.</p>
+                  </div>
+                </div>
+                <p class="hint" id="party-prompts-target-hint">Target —</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-party-prompts-save">Save</button>
+            <button type="button" class="btn btn-outline" id="btn-party-prompts-push">Push invite</button>
+            <button type="button" class="btn btn-outline" id="btn-party-prompts-sessions">Sessions</button>
+          </div>
+        </div>
+
+        <div class="section-label" data-settings-group="games">Wheel of Fortune</div>
+        <div class="card wheel-of-fortune-settings-card" id="wheel-of-fortune-settings-card" data-settings-group="games">
+          <div class="auth-head">
+            <div class="auth-name">Wheel of Fortune on the board</div>
+            <span class="status-pill" id="wheel-of-fortune-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="wheel-of-fortune-status-detail">
+            The board shows the puzzle. Phones take turns spinning, calling a letter, and solving. Needs at least two players.
+          </p>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Round timing</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-lobby">Lobby seconds</label>
+                    <input type="number" id="wheel-of-fortune-lobby" class="field-input" min="20" max="300" value="60">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-turn">Turn seconds</label>
+                    <input type="number" id="wheel-of-fortune-turn" class="field-input" min="10" max="120" value="30">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-round">Puzzle seconds</label>
+                    <input type="number" id="wheel-of-fortune-round" class="field-input" min="60" max="900" value="300">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-intermission">Intermission</label>
+                    <input type="number" id="wheel-of-fortune-intermission" class="field-input" min="5" max="120" value="20">
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <p class="settings-group-title">Play</p>
+                <div class="field-grid field-grid-4">
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-rounds">Rounds</label>
+                    <input type="number" id="wheel-of-fortune-rounds" class="field-input" min="1" max="8" value="3">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-min">Minimum players</label>
+                    <input type="number" id="wheel-of-fortune-min" class="field-input" min="2" max="8" value="2">
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-max">Maximum players</label>
+                    <input type="number" id="wheel-of-fortune-max" class="field-input" min="2" max="24" value="8">
+                  </div>
+                  <div class="field">
+                    <label class="trivia-check">
+                      <input type="checkbox" id="wheel-of-fortune-late-join" checked>
+                      <span>Let phones join mid-game</span>
+                    </label>
+                  </div>
+                  <p class="hint field-span-all" id="wheel-of-fortune-corpus-hint">Two players take turns. A lobby that never fills ends the game. Vowels cost $250 from the round bank; only the solver banks the puzzle ($1,000 floor).</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-col">
+              <div class="settings-group">
+                <p class="settings-group-title">Short link</p>
+                <div class="gb-shortlink-status" id="wheel-of-fortune-shortlink">
+                  <span class="gb-dot" id="wheel-of-fortune-dot" aria-hidden="true"></span>
+                  <p class="hint" id="wheel-of-fortune-shortlink-label">No short link yet.</p>
+                  <p class="hint" id="wheel-of-fortune-shortlink-check">Last check —</p>
+                </div>
+                <div class="field-grid field-grid-2">
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-alias">Preferred alias</label>
+                    <input type="text" id="wheel-of-fortune-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
+                  </div>
+                  <div class="field field-span-all">
+                    <p class="hint">Every game shares the one <code>/games/</code> link, so this is the same alias the Word Scramble card shows. The TinyURL token lives on that card too.</p>
+                  </div>
+                </div>
+                <p class="hint" id="wheel-of-fortune-target-hint">Target —</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-footer">
+            <button type="button" class="btn btn-accent" id="btn-wheel-of-fortune-save">Save</button>
+            <button type="button" class="btn btn-outline" id="btn-wheel-of-fortune-push">Push invite</button>
+            <button type="button" class="btn btn-outline" id="btn-wheel-of-fortune-sessions">Sessions</button>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="games">Word Riddles</div>
         <div class="card word-riddles-settings-card" id="word-riddles-settings-card" data-settings-group="games">
           <div class="auth-head">
@@ -4662,11 +4838,11 @@
   <script src="jsqr.min.js"></script>
   <script src="/flap-grid.js?v=2"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
-  <script src="/push-icons.js?v=signal262"></script>
+  <script src="/push-icons.js?v=signal283"></script>
   <div class="sheet-backdrop" id="word-scramble-sessions-sheet" hidden>
     <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="word-scramble-sessions-title">
       <div class="credits-sheet-head">
-        <div class="sheet-title" id="word-scramble-sessions-title">Word Scramble sessions</div>
+        <div class="sheet-title" id="word-scramble-sessions-title">Game sessions</div>
         <button type="button" class="credits-sheet-close" id="btn-word-scramble-sessions-close" aria-label="Close">×</button>
       </div>
       <div class="segmented" id="word-scramble-sessions-tabs" role="tablist" aria-label="Session lists">
@@ -4868,14 +5044,20 @@
       <div id="hu-pw-form">
         <p class="house-pw-lead" id="hu-pw-lead">Choose a password or generate one.</p>
         <label class="house-pw-label" for="hu-pw">Password</label>
-        <input type="text" id="hu-pw" class="field-input house-pw-input" name="signal-new-secret" autocomplete="new-password" spellcheck="false">
+        <div class="house-pw-field">
+          <input type="password" id="hu-pw" class="field-input house-pw-input" name="signal-new-secret" autocomplete="new-password" spellcheck="false">
+          <button type="button" class="house-pw-reveal" id="btn-hu-pw-reveal" aria-controls="hu-pw" aria-pressed="false" aria-label="Show password">Show</button>
+        </div>
         <div class="house-pw-tools" id="hu-pw-tools">
           <button type="button" class="house-pw-link" id="btn-hu-pw-generate">Generate</button>
           <button type="button" class="house-pw-link" id="btn-hu-pw-copy">Copy</button>
         </div>
         <div id="hu-pw-confirm-wrap">
           <label class="house-pw-label" for="hu-pw-confirm">Confirm password</label>
-          <input type="password" id="hu-pw-confirm" class="field-input house-pw-input" name="signal-new-secret-confirm" autocomplete="new-password" spellcheck="false">
+          <div class="house-pw-field">
+            <input type="password" id="hu-pw-confirm" class="field-input house-pw-input" name="signal-new-secret-confirm" autocomplete="new-password" spellcheck="false">
+            <button type="button" class="house-pw-reveal" id="btn-hu-pw-confirm-reveal" aria-controls="hu-pw-confirm" aria-pressed="false" aria-label="Show password">Show</button>
+          </div>
         </div>
         <p class="house-pw-status" id="hu-pw-status" role="status"></p>
         <button type="button" class="btn btn-accent house-pw-submit" id="btn-hu-pw-save">Set password</button>
@@ -4891,10 +5073,10 @@
     </div>
   </div>
 
-  <script src="/vestaboard-sim-ui.js?v=signal278"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal284"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="house-users.js?v=signal266"></script>
-  <script src="settings-filter.js?v=signal217"></script>
-  <script src="app.js?v=signal278"></script>
+  <script src="house-users.js?v=signal267"></script>
+  <script src="settings-filter.js?v=signal283"></script>
+  <script src="app.js?v=signal285"></script>
 </body>
 </html>

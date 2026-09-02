@@ -3322,6 +3322,8 @@ textarea.field-input.filter-search {
   #tab-settings .red-letter-settings-card,
   #tab-settings .credits-settings-card,
   #tab-settings .word-scramble-settings-card,
+  #tab-settings .party-prompts-settings-card,
+  #tab-settings .wheel-of-fortune-settings-card,
   #tab-settings .word-riddles-settings-card,
   #tab-settings .plex-settings-card,
   #tab-settings .vb-settings-card,
@@ -3355,7 +3357,17 @@ textarea.field-input.filter-search {
 
   .yt-link-row { flex-direction: row; }
   .yt-link-row .field-input { flex: 1; min-width: 0; }
+}
 
+/* Whether a dialog should hug the bottom edge is a question about vertical
+   room, not about aspect ratio. Two browser windows side by side on a
+   landscape monitor are each *portrait* to CSS while being taller than any
+   phone — orientation used to send those the mobile bottom-sheet treatment,
+   which opened a short dialog down past the halfway line with the top half of
+   the window empty. Ask for the room instead: a window this size gets a
+   centred dialog; a phone (narrow) or a short window keeps the sheet on the
+   edge it slides up from. */
+@media (min-width: 640px) and (min-height: 600px) {
   .sheet-backdrop { align-items: center; }
   .sheet { border-radius: 20px; border-bottom: 1px solid var(--line); }
 }
@@ -5459,7 +5471,9 @@ textarea.field-input.filter-search {
 
 .vb-priority-sheet {
   max-width: min(720px, calc(100vw - 24px));
-  max-height: min(88dvh, 820px);
+  /* A tall window should show more of the order, not the same short box with
+     a scrollbar — the list is the flex child that takes the extra height. */
+  max-height: min(88dvh, 960px);
 }
 .vb-priority-sheet > .vb-priority-list {
   flex: 1 1 auto;
@@ -5632,7 +5646,7 @@ textarea.field-input.filter-search {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: min(48dvh, 360px);
+  max-height: min(46dvh, 440px);
   overflow-y: auto;
   margin-top: 6px;
 }
@@ -6114,11 +6128,32 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+.house-pw-field {
+  position: relative;
+}
 .house-pw-input {
   width: 100%;
+  padding-right: 4.4rem;
   font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
   letter-spacing: 0.02em;
 }
+.house-pw-reveal {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.house-pw-reveal:hover,
+.house-pw-reveal:focus-visible { color: #7dd3fc; }
 .house-pw-tools {
   display: flex;
   gap: 16px;

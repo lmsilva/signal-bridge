@@ -2199,6 +2199,13 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(page.text, /games\.css\?v=/);
     assert.match(page.text, /games\.js\?v=/);
     assert.match(page.text, /scramble\.js\?v=/);
+    assert.match(page.text, /party-prompts\.js\?v=/);
+    assert.match(page.text, /wheel\.js\?v=/);
+
+    // One page, one shell, one panel set per game — the shell hides the rest.
+    assert.match(page.text, /data-game="scramble"/);
+    assert.match(page.text, /data-game="prompts"/);
+    assert.match(page.text, /data-game="wheel"/);
 
     const pushed = await postJson(base, '/api/push/word-scramble', {}, cookie);
     assert.equal(pushed.status, 200);
@@ -2274,6 +2281,69 @@ test('games page and a live session join without an admin session', async () => 
     // And the name they typed last time is waiting for them.
     assert.match(js, /localStorage\.getItem\(NAME_KEY\)/);
     assert.match(js, /localStorage\.setItem\(NAME_KEY/);
+
+    // Wheel of Fortune spins a real wheel on the phone: one SVG built from
+    // the wedges the server sends, turned to the wedge the server picked, and
+    // sized off its column so it survives a phone, a tablet and a laptop.
+    const wheel = fs.readFileSync(path.join(realRoot, 'games', 'wheel.js'), 'utf8');
+    assert.match(page.text, /id="wf-wheel-face"/);
+    assert.match(page.text, /class="wf-wheel-pointer"/);
+    assert.match(wheel, /function buildWheel/);
+    assert.match(wheel, /function spinTo/);
+    assert.match(wheel, /spin\.id > lastSpinId/);
+    assert.match(wheel, /prefers-reduced-motion/);
+    assert.match(css, /\.wf-wheel \{[^}]*width: min\(100%, 42vh, 340px\)/);
+    assert.match(css, /\.wf-wheel \{[^}]*aspect-ratio: 1/);
+
+    // A seat belongs to the tab, not to the browser, so two players on one
+    // laptop do not end up driving each other's turn.
+    assert.match(js, /sessionStorage\.getItem\(SEAT_KEY\)/);
+    assert.match(js, /sessionStorage\.setItem\(SEAT_KEY/);
+    assert.match(js, /playerId=\$\{encodeURIComponent\(playerId\)\}/);
+    assert.match(js, /newSeat: !seat\.playerId/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('two players sharing one browser keep their own seats', async () => {
+  const { webServer, base, cookie } = await startTestServer();
+  try {
+    const pushed = await postJson(base, '/api/push/wheel-of-fortune', {}, cookie);
+    assert.equal(pushed.status, 200);
+    const code = pushed.body.session?.code;
+
+    const first = await request(`${base}/api/games/join`, {
+      method: 'POST',
+      body: { code, name: 'Luis', newSeat: true },
+    });
+    assert.equal(first.status, 200);
+    const jar = String(first.headers['set-cookie'] || '').split(';')[0];
+    const luis = first.body.player.id;
+
+    // The second window carries the first player's cookie. It says it has no
+    // seat of its own, so it must be sat down as somebody new.
+    const second = await request(`${base}/api/games/join`, {
+      method: 'POST',
+      cookie: jar,
+      body: { code, name: 'Thomas', newSeat: true },
+    });
+    assert.equal(second.status, 200);
+    assert.equal(second.body.player.name, 'Thomas');
+    const thomas = second.body.player.id;
+    assert.notEqual(thomas, luis, 'the second window must not land on the first seat');
+    assert.equal(second.body.session.players.length, 2);
+
+    // And an action names its own seat, whatever the shared cookie says.
+    const left = await request(`${base}/api/games/leave`, {
+      method: 'POST',
+      cookie: jar,
+      body: { sessionId: second.body.session.sessionId, playerId: thomas },
+    });
+    assert.equal(left.status, 200);
+    const after = await request(`${base}/api/games/session?code=${code}`);
+    assert.equal(after.body.session.players.length, 1);
+    assert.equal(after.body.session.players[0].id, luis);
   } finally {
     webServer.stop();
   }
@@ -2297,6 +2367,88 @@ test('Word Scramble settings carry the mid-game join rule', async () => {
 
     const on = await postJson(base, '/api/word-scramble/settings', { allowLateJoin: true });
     assert.equal(on.body.settings.allowLateJoin, true);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('Party Prompts settings save on their own but share the games short link', async () => {
+  const { webServer, base, cookie } = await startTestServer();
+  try {
+    const initial = await getJson(base, '/api/party-prompts/settings');
+    assert.equal(initial.status, 200);
+    assert.equal(initial.body.settings.minPlayers, 3);
+    assert.equal(initial.body.targetPath, '/games/');
+    assert.ok(initial.body.promptCount > 300, 'the deck ships with the game');
+
+    const saved = await postJson(base, '/api/party-prompts/settings', {
+      rounds: 5,
+      votingSeconds: 30,
+      preferredAlias: 'GAMENIGHT',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.rounds, 5);
+    assert.equal(saved.body.settings.votingSeconds, 30);
+    assert.equal(saved.body.preferredAlias, 'GAMENIGHT');
+
+    // Both games live at /games/, so there is only ever one alias to edit —
+    // but the round settings belong to one game each.
+    const scramble = await getJson(base, '/api/word-scramble/settings');
+    assert.equal(scramble.body.settings.preferredAlias, 'GAMENIGHT');
+    assert.equal(scramble.body.settings.rounds, 3, 'a prompts save must not move scramble');
+
+    const pushed = await postJson(base, '/api/push/party-prompts', {}, cookie);
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'party.prompts');
+    assert.equal(pushed.body.session.gameType, 'prompts');
+    assert.equal(pushed.body.session.minPlayers, 3);
+    assert.match(String(pushed.body.session.code || ''), /^[A-HJ-NP-Z]{4}$/);
+
+    // The same phone page serves it — no second join flow to keep in step.
+    const resolved = await getJson(base, `/api/games/session?code=${pushed.body.session.code}`);
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.session.gameType, 'prompts');
+    assert.equal(resolved.body.session.title, 'Party Prompts');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('Wheel of Fortune settings save on their own but share the games short link', async () => {
+  const { webServer, base, cookie } = await startTestServer();
+  try {
+    const initial = await getJson(base, '/api/wheel-of-fortune/settings');
+    assert.equal(initial.status, 200);
+    assert.equal(initial.body.settings.minPlayers, 2);
+    assert.equal(initial.body.settings.turnSeconds, 30);
+    assert.equal(initial.body.targetPath, '/games/');
+    assert.ok(initial.body.puzzleCount > 200, 'the deck ships with the game');
+
+    const saved = await postJson(base, '/api/wheel-of-fortune/settings', {
+      rounds: 4,
+      turnSeconds: 20,
+      preferredAlias: 'WHEELNITE',
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.rounds, 4);
+    assert.equal(saved.body.settings.turnSeconds, 20);
+    assert.equal(saved.body.preferredAlias, 'WHEELNITE');
+
+    const scramble = await getJson(base, '/api/word-scramble/settings');
+    assert.equal(scramble.body.settings.preferredAlias, 'WHEELNITE');
+    assert.equal(scramble.body.settings.rounds, 3, 'a wheel save must not move scramble');
+
+    const pushed = await postJson(base, '/api/push/wheel-of-fortune', {}, cookie);
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'wheel.fortune');
+    assert.equal(pushed.body.session.gameType, 'wheel');
+    assert.equal(pushed.body.session.minPlayers, 2);
+    assert.match(String(pushed.body.session.code || ''), /^[A-HJ-NP-Z]{4}$/);
+
+    const resolved = await getJson(base, `/api/games/session?code=${pushed.body.session.code}`);
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.session.gameType, 'wheel');
+    assert.equal(resolved.body.session.title, 'Wheel of Fortune');
   } finally {
     webServer.stop();
   }
@@ -2992,11 +3144,14 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="hu-password-sheet"/);
   assert.match(html, /id="btn-hu-pw-generate"/);
   assert.match(html, /id="btn-hu-pw-copy"/);
-  assert.match(html, /id="hu-pw-confirm"/);
+  assert.match(html, /id="btn-hu-pw-reveal"/);
+  assert.match(html, /id="btn-hu-pw-confirm-reveal"/);
+  assert.match(html, /<input[^>]*type="password"[^>]*id="hu-pw"(?:\s|>|\/)/);
+  assert.match(html, /<input[^>]*type="password"[^>]*id="hu-pw-confirm"/);
   assert.match(html, /id="hu-pw-done"/);
   assert.match(html, /id="btn-hu-pw-done"/);
   assert.match(html, /id="user-audit-body"/);
-  assert.match(html, /house-users\.js\?v=signal266/);
+  assert.match(html, /house-users\.js\?v=signal267/);
   assert.match(html, /avatar-crop\.js\?v=signal266/);
   assert.doesNotMatch(html, /id="hu-env-hint"/);
   assert.doesNotMatch(html, /The environment admin follows ADMIN_USERNAME/);
@@ -3008,10 +3163,13 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /house-user-avatar-col[\s\S]*house-user-editor-main/);
   assert.match(css, /\.house-audit-table \{/);
   assert.match(css, /\.house-pw-sheet \{/);
+  assert.match(css, /\.house-pw-field \{/);
+  assert.match(css, /\.house-pw-reveal \{/);
   assert.match(css, /\.house-pw-done-msg \{/);
   const houseUsersJs = fs.readFileSync(path.join(__dirname, '../src/web/admin/house-users.js'), 'utf8');
   assert.match(houseUsersJs, /function openEditor/);
   assert.match(houseUsersJs, /function openPasswordSheet/);
+  assert.match(houseUsersJs, /function setPasswordVisible/);
   assert.match(houseUsersJs, /function showPasswordSuccess/);
   assert.match(houseUsersJs, /function generateHousePassword/);
   assert.match(houseUsersJs, /Passwords do not match/);
@@ -3087,9 +3245,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal278/);
-  assert.match(html, /settings-filter\.js\?v=signal217/);
-  assert.match(html, /app\.js\?v=signal278/);
+    assert.match(html, /styles\.css\?v=signal285/);
+    assert.match(html, /settings-filter\.js\?v=signal283/);
+    assert.match(html, /app\.js\?v=signal285/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3118,6 +3276,20 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.vb-priority-row \{/);
   assert.match(css, /\.vb-priority-actions \{/);
   assert.match(css, /\.vb-priority-controls \{/);
+  // A dialog centres when there is vertical room, not when the viewport is
+  // landscape: two browser windows side by side on a landscape monitor are
+  // each portrait to CSS, and orientation used to drop those into the phone
+  // bottom-sheet layout — the dialog opened past the halfway line with the
+  // top of the window empty.
+  assert.match(
+    css,
+    /@media \(min-width: 640px\) and \(min-height: 600px\) \{\s*\.sheet-backdrop \{ align-items: center; \}/,
+  );
+  assert.equal(
+    (css.match(/\.sheet-backdrop \{ align-items: center; \}/g) || []).length,
+    1,
+    'one rule decides where sheets sit, so orientation cannot quietly come back',
+  );
   assert.match(html, /id="btn-vb-queue-clear"/);
   assert.match(html, /id="btn-vb-release-holds"/);
   assert.match(js, /function vbClearQueue\(/);
@@ -3149,6 +3321,21 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/word-scramble\/settings/);
   assert.match(js, /\/api\/game-sessions\/end/);
   assert.match(js, /word-scramble-end-sheet/);
+
+  // Party Prompts is a second card under Game night, and the sessions sheet
+  // is shared rather than duplicated.
+  assert.match(html, /id="party-prompts-settings-card"/);
+  assert.match(html, /id="party-prompts-voting"/);
+  assert.match(html, /id="party-prompts-min"/);
+  assert.match(js, /\/api\/party-prompts\/settings/);
+  assert.match(js, /btn-party-prompts-sessions.*openWordScrambleSessions/s);
+  assert.doesNotMatch(html, /id="party-prompts-sessions-sheet"/);
+  assert.match(html, /id="wheel-of-fortune-settings-card"/);
+  assert.match(html, /id="wheel-of-fortune-turn"/);
+  assert.match(html, /id="wheel-of-fortune-min"/);
+  assert.match(js, /\/api\/wheel-of-fortune\/settings/);
+  assert.match(js, /btn-wheel-of-fortune-sessions.*openWordScrambleSessions/s);
+  assert.doesNotMatch(html, /id="wheel-of-fortune-sessions-sheet"/);
   assert.doesNotMatch(js, /openWordScrambleEnd[\s\S]*window\.confirm/);
   assert.match(html, /id="btn-ring-login"/);
   assert.match(html, /id="ring-2fa-block"/);
@@ -5182,7 +5369,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal273/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal274/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
     // Push tiles carry the same artwork the admin grid draws, and adding one
@@ -5214,7 +5401,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /\.date-card-when/);
     assert.match(userCss, /\.date-theme-row/);
     // Icon colour must out-rank `.push-card span`, or tiles paint it dim grey.
-    assert.match(userCss, /\.push-card > \.push-card-icon \{[^}]*color: var\(--accent\)/);
+    assert.match(userCss, /\.push-card \.push-card-icon \{[^}]*color: var\(--accent\)/);
     assert.match(userCss, /\.game-card \.su-btn \{[^}]*color: #082f49/);
     // Every Push tile is one box, and the column keeps its width with no tiles.
     assert.match(userCss, /\.push-grid \{[^}]*grid-auto-rows: 1fr/);
@@ -5231,7 +5418,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(0, 1fr\)/);
     assert.match(userCss, /push-card-grip/);
     assert.match(userCss, /\.push-card-top \{/);
-    assert.match(userCss, /grid-template-columns: 40px 40px 1fr auto/);
+    assert.match(userCss, /grid-template-columns: 40px 40px 1fr 40px/);
     assert.match(userCss, /\.push-card-top \.push-card-handle \{/);
     assert.match(userJs, /function dashCellIndex/);
     assert.match(userJs, /function dashGridMetrics/);
@@ -5245,11 +5432,21 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal278/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal281/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal284/);
+    assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
     assert.match(userCss, /\*::-webkit-scrollbar \{/);
     assert.match(userCss, /@container vb-queue \(max-width: 520px\)/);
     assert.match(userCss, /\.vb-queue-row \{[^}]*grid-template-areas: "handle title source status cancel"/);
+    // Two columns on a large desktop, and the board box must measure only its
+    // inline size there: `container-type: size` in a content-sized grid row
+    // collapses the board to nothing.
+    assert.match(userCss, /@media \(min-width: 1600px\) and \(min-height: 720px\)/);
+    assert.match(userCss, /#tab-main \.gb-name-hidden #gb-compose\.gb-main/);
+    assert.match(userCss, /#tab-main #gb-compose \.gb-board-wrap \{[^}]*container-type: inline-size/);
+    // Erase is `flex: 1` by default and would eat the whole chip row.
+    assert.match(userCss, /#tab-main \.gb-chips \.gb-chip-btn \{[^}]*flex: 0 0 auto/);
     assert.match(userApp.text, /class="su-page-head"/);
     assert.match(userApp.text, /class="su-page-head-copy"/);
     assert.match(userApp.text, /class="card trip-board-card"/);
@@ -5259,7 +5456,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /function formatTripDates/);
     assert.match(userCss, /\.su-page-head \{[^}]*justify-content: space-between/);
     assert.match(userCss, /\.trip-card \{/);
-    assert.match(userCss, /\.push-card-top \.push-card-handle \{[^}]*width: 40px/);
+    // Grip, glyph, and dismiss share one 40×40 box so their centres line up.
+    assert.match(userCss, /\.push-card-top \.push-card-handle,\s*\.push-card-top \.push-card-icon,\s*\.push-card-top \.push-card-remove \{[^}]*width: 40px[^}]*height: 40px[^}]*place-items: center/);
+    assert.match(userJs, /M6 6l12 12M18 6 6 18/);
     assert.match(userCss, /html, body \{[^}]*position: fixed/);
     assert.match(userCss, /html, body \{[^}]*overflow: hidden/);
     assert.match(userCss, /main \{\s*flex: 1 1 auto/);
