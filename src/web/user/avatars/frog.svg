@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Frog avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A6E24A"/>
+      <stop offset="1" stop-color="#6FC92D"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 152 38 Q 153.3 42.7 158 44 Q 153.3 45.3 152 50 Q 150.7 45.3 146 44 Q 150.7 42.7 152 38 Z" fill="#FFFFFF" opacity=".75"/>
+  <circle cx="73" cy="76" r="19" fill="#93DB6A" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="73" cy="76" r="12" fill="#FFFFFF"/>
+  <circle cx="73" cy="77" r="6" fill="#332B31"/>
+  <circle cx="71.2" cy="74.96" r="2.16" fill="#FFFFFF"/>
+  <circle cx="74.92" cy="78.92" r="0.96" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="127" cy="76" r="19" fill="#93DB6A" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="127" cy="76" r="12" fill="#FFFFFF"/>
+  <circle cx="127" cy="77" r="6" fill="#332B31"/>
+  <circle cx="125.2" cy="74.96" r="2.16" fill="#FFFFFF"/>
+  <circle cx="128.92" cy="78.92" r="0.96" fill="#FFFFFF" opacity=".9"/>
+  <ellipse cx="100" cy="122" rx="53" ry="44" fill="#A3E37D" stroke="#4A3B43" stroke-width="3.5"/>
+  <circle cx="89" cy="112" r="2.6" fill="#4C9A22"/>
+  <circle cx="111" cy="112" r="2.6" fill="#4C9A22"/>
+  <path d="M 78 126 Q 100 144 122 126" fill="none" stroke="#2F6B12" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="66" cy="130" rx="8.5" ry="6.12" fill="#FF9E6B" opacity=".6"/>
+  <ellipse cx="134" cy="130" rx="8.5" ry="6.12" fill="#FF9E6B" opacity=".6"/>
+
+</svg>

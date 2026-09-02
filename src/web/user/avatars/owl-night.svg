@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="owl-night">
-  <rect width="64" height="64" rx="16" fill="#6366f1"/>
-  <path d="M18 22 L24 8 L30 22" fill="#fff"/><path d="M34 22 L40 8 L46 22" fill="#fff"/>
-  <circle cx="32" cy="38" r="16" fill="#fff"/><circle cx="25" cy="36" r="6" fill="#f8fafc" stroke="#0f172a"/><circle cx="39" cy="36" r="6" fill="#f8fafc" stroke="#0f172a"/><circle cx="25" cy="36" r="2" fill="#0f172a"/><circle cx="39" cy="36" r="2" fill="#0f172a"/><path d="M32 42 l-3 5 h6 z" fill="#f59e0b"/>
-</svg>

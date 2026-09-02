@@ -10,12 +10,12 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal281">
+  <link rel="stylesheet" href="styles.css?v=signal285">
 </head>
 <body>
   <header class="su-head">
     <div class="su-head-who">
-      <img class="su-avatar" id="su-avatar" src="/user/avatars/cat-sky.svg" alt="">
+      <img class="su-avatar" id="su-avatar" src="/user/avatars/cat-blue.svg" alt="">
       <div>
         <h1 id="su-hello">Signal</h1>
         <p class="su-sub" id="su-sub">Household</p>
@@ -110,10 +110,13 @@
         </select>
       </div>
       <input id="push-search" class="su-input" type="search" placeholder="Search your tiles…" autocomplete="off">
-      <div class="su-seg" id="push-kind" role="group" aria-label="Applies to">
-        <button type="button" class="active" data-kind="all">All</button>
-        <button type="button" data-kind="vestaboard">Vestaboard</button>
-        <button type="button" data-kind="full">Software</button>
+      <div class="su-filter-bar">
+        <div class="su-seg" id="push-kind" role="group" aria-label="Applies to">
+          <button type="button" class="active" data-kind="all">All</button>
+          <button type="button" data-kind="vestaboard">Vestaboard</button>
+          <button type="button" data-kind="full">Software</button>
+        </div>
+        <div class="su-seg su-seg-wrap su-seg-cats" id="push-cats" role="group" aria-label="Category"></div>
       </div>
       <div class="su-row-head">
         <h2 class="su-h" id="push-dash-heading">Your tiles</h2>
@@ -407,7 +410,7 @@
         <button type="button" data-kind="vestaboard">Vestaboard</button>
         <button type="button" data-kind="full">Software</button>
       </div>
-      <div class="su-seg su-seg-wrap" id="lib-cats" role="tablist" aria-label="Categories"></div>
+      <div class="su-seg su-seg-wrap" id="lib-cats" role="group" aria-label="Category"></div>
       <div class="push-lib-body" id="push-lib-body">
         <div id="push-lib"></div>
         <p class="hint push-lib-empty" id="push-lib-empty" hidden>Nothing matches that search.</p>
@@ -467,6 +470,6 @@
   <script src="/vestaboard-sim-ui.js?v=signal284"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="app.js?v=signal274"></script>
+  <script src="app.js?v=signal285"></script>
 </body>
 </html>

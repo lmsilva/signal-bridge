@@ -209,8 +209,11 @@ test('idle timeout closes a started game and archives it as abandoned', () => {
 test('phones can still join before the lobby window runs out', () => {
   const { api, advance, locks, pushes } = makeApi();
   const invited = api.create();
+  assert.equal(api.noteBoardShown({ sessionId: invited.sessionId, card: 'invite' }), true);
   assert.equal(invited.remainingSeconds, 10);
   assert.equal(pushes[0].payload.holdSeconds, 10);
+  assert.equal(pushes[0].options.sessionId, invited.sessionId);
+  assert.equal(pushes[0].options.code, invited.code);
   assert.deepEqual(locks[0], { source: 'word.scramble', active: true });
 
   advance(9);
@@ -223,6 +226,7 @@ test('phones can still join before the lobby window runs out', () => {
 test('an empty invite ends after the lobby seconds and hands the board back', () => {
   const { api, archive, advance, locks, pushes } = makeApi();
   const invited = api.create();
+  api.noteBoardShown({ sessionId: invited.sessionId, card: 'invite' });
   advance(11);
   assert.equal(api.getByCode(invited.code), null);
   assert.equal(api.join({ code: invited.code, name: 'Ada' }).ok, false);
@@ -234,6 +238,67 @@ test('an empty invite ends after the lobby seconds and hands the board back', ()
     pushes.some((row) => row.payload.card === 'final'),
     false,
     'nobody sat down, so there are no scores to leave up',
+  );
+});
+
+test('a queued invite keeps the session alive past the lobby window until it flips', () => {
+  const { api, advance, queued } = makeApi();
+  const invited = api.create();
+  // Lobby is 10s; without a show the invite only dies on the longer TTL.
+  advance(11);
+  assert.equal(api.getByCode(invited.code).phase, 'invited');
+  assert.equal(api.join({ code: invited.code, name: 'Luis' }).ok, true);
+
+  const waiting = makeApi();
+  const ghost = waiting.api.create();
+  waiting.queued.push({
+    frame: { source: 'word.scramble', card: 'invite' },
+    priority: 'snapshot',
+    sessionId: ghost.sessionId,
+    code: ghost.code,
+  });
+  waiting.advance(11);
+  assert.ok(waiting.api.getByCode(ghost.code), 'still joinable while waiting to flip');
+  waiting.api.noteBoardShown({ sessionId: ghost.sessionId, card: 'invite' });
+  waiting.advance(11);
+  assert.equal(waiting.api.getByCode(ghost.code), null);
+});
+
+test('cancelling a waiting invite closes the session and clears its queue page', () => {
+  const { api, archive, queued } = makeApi();
+  const invited = api.create();
+  queued.push({
+    frame: { source: 'word.scramble', card: 'invite' },
+    priority: 'snapshot',
+    sessionId: invited.sessionId,
+    code: invited.code,
+  });
+  assert.equal(api.noteBoardCancelled({
+    sessionId: invited.sessionId,
+    card: 'invite',
+  }), true);
+  assert.equal(api.getByCode(invited.code), null);
+  assert.equal(archive.listAll()[0].reason, 'invite-cancelled');
+  assert.equal(
+    queued.some((row) => row.sessionId === invited.sessionId),
+    false,
+    'the dead invite must not stay in the queue',
+  );
+});
+
+test('closing an unshown invite drops its waiting board page', () => {
+  const { api, queued } = makeApi();
+  const invited = api.create();
+  queued.push({
+    frame: { source: 'word.scramble', card: 'invite' },
+    priority: 'snapshot',
+    sessionId: invited.sessionId,
+    code: invited.code,
+  });
+  assert.equal(api.end(invited.sessionId).ok, true);
+  assert.equal(
+    queued.some((row) => row.code === invited.code),
+    false,
   );
 });
 

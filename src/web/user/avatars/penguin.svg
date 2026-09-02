@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Penguin avatar">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5FA8F5"/>
+      <stop offset="1" stop-color="#2F7FE0"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="192" height="192" rx="46" fill="url(#tile)"/>
+  <circle cx="100" cy="104" r="70" fill="#FFFFFF" opacity=".22"/>
+  <circle cx="100" cy="104" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity=".4"/>
+  <path d="M 152 40 Q 153.3 44.7 158 46 Q 153.3 47.3 152 52 Q 150.7 47.3 146 46 Q 150.7 44.7 152 40 Z" fill="#FFFFFF" opacity=".75"/>
+  <ellipse cx="100" cy="114" rx="51" ry="48" fill="#4B5468" stroke="#4A3B43" stroke-width="3.5"/>
+  <path d="M 58 120 Q 70 88 100 90 Q 130 88 142 120 Q 136 158 100 162 Q 64 158 58 120 Z" fill="#FFFFFF"/>
+  <circle cx="79" cy="113" r="7.5" fill="#332B31"/>
+  <circle cx="76.75" cy="110.45" r="2.6999999999999997" fill="#FFFFFF"/>
+  <circle cx="81.4" cy="115.4" r="1.2" fill="#FFFFFF" opacity=".9"/>
+  <circle cx="121" cy="113" r="7.5" fill="#332B31"/>
+  <circle cx="118.75" cy="110.45" r="2.6999999999999997" fill="#FFFFFF"/>
+  <circle cx="123.4" cy="115.4" r="1.2" fill="#FFFFFF" opacity=".9"/>
+  <path d="M 100 123 L 91 131 Q 100 140 109 131 Z" fill="#FFA53C" stroke="#4A3B43" stroke-width="2.5" stroke-linejoin="round"/>
+  <ellipse cx="64" cy="129" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+  <ellipse cx="136" cy="129" rx="8.5" ry="6.12" fill="#FFA3B5" opacity=".65"/>
+
+</svg>

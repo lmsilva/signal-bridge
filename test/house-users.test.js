@@ -6,6 +6,9 @@ const path = require('path');
 const {
   createHouseUsers,
   verifyPassword,
+  sanitiseAvatar,
+  AVATAR_TEMPLATES,
+  LEGACY_AVATAR_IDS,
   DEFAULT_ADMIN_USERNAME,
 } = require('../src/house-users');
 
@@ -133,4 +136,63 @@ test('password reset token works once', () => {
   assert.equal(consumed.ok, true);
   assert.equal(users.verifyLogin('maya', 'brandnew99').ok, true);
   assert.equal(users.consumePasswordReset(reset.token, 'anotherone').ok, false);
+});
+
+/*
+ * Nothing lists the avatars directory: the template array is the only list,
+ * and the picker builds `/user/avatars/<id>.svg` straight off it. So a
+ * template with no file is a broken image in every picker, and a file no
+ * template names is dead weight nobody can choose.
+ */
+test('every avatar template has its artwork, and no artwork is orphaned', () => {
+  const dir = path.join(__dirname, '..', 'src', 'web', 'user', 'avatars');
+  const onDisk = fs.readdirSync(dir).filter((name) => name.endsWith('.svg')).sort();
+  const wanted = AVATAR_TEMPLATES.map((row) => `${row.id}.svg`).sort();
+  assert.deepEqual(onDisk, wanted);
+
+  for (const row of AVATAR_TEMPLATES) {
+    const svg = fs.readFileSync(path.join(dir, `${row.id}.svg`), 'utf8');
+    // Self-contained and announced: no external fetch, and a name to read out.
+    assert.match(svg, /role="img"/, `${row.id} needs role="img"`);
+    assert.match(svg, /aria-label="/, `${row.id} needs an aria-label`);
+    assert.doesNotMatch(svg, /<script|xlink:href|<image/i, `${row.id} must be self-contained`);
+  }
+
+  const labels = AVATAR_TEMPLATES.map((row) => row.label);
+  assert.equal(new Set(labels).size, labels.length, 'two templates share a label');
+});
+
+/*
+ * An id the array does not know falls back rather than erroring, so dropping
+ * the old flat icon set would have quietly turned everyone into the first
+ * template. The old ids have to keep pointing at a face.
+ */
+test('an avatar picked from the retired icon set survives as its nearest match', () => {
+  for (const [was, now] of Object.entries(LEGACY_AVATAR_IDS)) {
+    assert.equal(
+      sanitiseAvatar({ kind: 'template', id: was }).id,
+      now,
+      `${was} should carry over to ${now}`,
+    );
+    assert.ok(
+      AVATAR_TEMPLATES.some((row) => row.id === now),
+      `${was} maps to ${now}, which is not a template`,
+    );
+  }
+  assert.equal(sanitiseAvatar({ kind: 'template', id: 'cat-sky' }).id, 'cat-blue');
+  // Anything else still falls back, and an upload is left alone.
+  assert.equal(sanitiseAvatar({ kind: 'template', id: 'wombat' }).id, AVATAR_TEMPLATES[0].id);
+  assert.deepEqual(
+    sanitiseAvatar({ kind: 'upload', id: 'abc123.jpg' }),
+    { kind: 'upload', id: 'abc123.jpg' },
+  );
+});
+
+test('a household member keeps a retired avatar through a save', () => {
+  const users = createHouseUsers(tempConfig(), silentLog);
+  users.ensureBootstrap();
+  const created = users.create({ username: 'maya', password: 'household1' });
+  const saved = users.update(created.user.id, { avatar: { kind: 'template', id: 'owl-night' } });
+  assert.equal(saved.user.avatar.id, 'owl');
+  assert.equal(saved.user.avatar.kind, 'template');
 });

@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal286">
+  <link rel="stylesheet" href="styles.css?v=signal287">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -2870,7 +2870,7 @@
         <div class="section-label" data-settings-group="games">Word Scramble</div>
         <div class="card word-scramble-settings-card" id="word-scramble-settings-card" data-settings-group="games">
           <div class="auth-head">
-            <div class="auth-name">Word Scramble on the board</div>
+            <div class="auth-name">Word Scramble Settings</div>
             <span class="status-pill" id="word-scramble-status-pill">…</span>
           </div>
           <p class="auth-detail" id="word-scramble-status-detail">
@@ -2943,7 +2943,7 @@
                       <input type="checkbox" id="word-scramble-clear-override">
                       <span>Clear override</span>
                     </label>
-                    <p class="hint" id="word-scramble-token-hint">Optional. Uses the global TinyURL token unless you paste one here.</p>
+                    <p class="hint" id="word-scramble-token-hint">Optional. Uses the global TinyURL token unless you paste one here. Every game shares the one <code>/games/</code> link.</p>
                   </div>
                 </div>
                 <p class="hint" id="word-scramble-target-hint">Target —</p>
@@ -2961,7 +2961,7 @@
         <div class="section-label" data-settings-group="games">Party Prompts</div>
         <div class="card party-prompts-settings-card" id="party-prompts-settings-card" data-settings-group="games">
           <div class="auth-head">
-            <div class="auth-name">Party Prompts on the board</div>
+            <div class="auth-name">Party Prompts Settings</div>
             <span class="status-pill" id="party-prompts-status-pill">…</span>
           </div>
           <p class="auth-detail" id="party-prompts-status-detail">
@@ -2993,7 +2993,7 @@
 
               <div class="settings-group">
                 <p class="settings-group-title">Play</p>
-                <div class="field-grid field-grid-4">
+                <div class="field-grid field-grid-3">
                   <div class="field">
                     <label class="field-label" for="party-prompts-rounds">Rounds</label>
                     <input type="number" id="party-prompts-rounds" class="field-input" min="1" max="8" value="3">
@@ -3006,7 +3006,7 @@
                     <label class="field-label" for="party-prompts-max">Maximum players</label>
                     <input type="number" id="party-prompts-max" class="field-input" min="3" max="24" value="12">
                   </div>
-                  <div class="field">
+                  <div class="field field-span-all">
                     <label class="trivia-check">
                       <input type="checkbox" id="party-prompts-late-join" checked>
                       <span>Let phones join mid-game</span>
@@ -3030,8 +3030,16 @@
                     <label class="field-label" for="party-prompts-alias">Preferred alias</label>
                     <input type="text" id="party-prompts-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
                   </div>
+                  <div class="field">
+                    <label class="field-label" for="party-prompts-token">TinyURL token override</label>
+                    <input type="password" id="party-prompts-token" class="field-input" placeholder="Optional — global token" autocomplete="new-password" spellcheck="false">
+                  </div>
                   <div class="field field-span-all">
-                    <p class="hint">Every game shares the one <code>/games/</code> link, so this is the same alias the Word Scramble card shows. The TinyURL token lives on that card too.</p>
+                    <label class="trivia-check">
+                      <input type="checkbox" id="party-prompts-clear-override">
+                      <span>Clear override</span>
+                    </label>
+                    <p class="hint" id="party-prompts-token-hint">Optional. Uses the global TinyURL token unless you paste one here. Every game shares the one <code>/games/</code> link.</p>
                   </div>
                 </div>
                 <p class="hint" id="party-prompts-target-hint">Target —</p>
@@ -3049,7 +3057,7 @@
         <div class="section-label" data-settings-group="games">Wheel of Fortune</div>
         <div class="card wheel-of-fortune-settings-card" id="wheel-of-fortune-settings-card" data-settings-group="games">
           <div class="auth-head">
-            <div class="auth-name">Wheel of Fortune on the board</div>
+            <div class="auth-name">Wheel of Fortune Settings</div>
             <span class="status-pill" id="wheel-of-fortune-status-pill">…</span>
           </div>
           <p class="auth-detail" id="wheel-of-fortune-status-detail">
@@ -3081,7 +3089,7 @@
 
               <div class="settings-group">
                 <p class="settings-group-title">Play</p>
-                <div class="field-grid field-grid-4">
+                <div class="field-grid field-grid-3">
                   <div class="field">
                     <label class="field-label" for="wheel-of-fortune-rounds">Rounds</label>
                     <input type="number" id="wheel-of-fortune-rounds" class="field-input" min="1" max="8" value="3">
@@ -3094,7 +3102,7 @@
                     <label class="field-label" for="wheel-of-fortune-max">Maximum players</label>
                     <input type="number" id="wheel-of-fortune-max" class="field-input" min="2" max="24" value="8">
                   </div>
-                  <div class="field">
+                  <div class="field field-span-all">
                     <label class="trivia-check">
                       <input type="checkbox" id="wheel-of-fortune-late-join" checked>
                       <span>Let phones join mid-game</span>
@@ -3118,8 +3126,16 @@
                     <label class="field-label" for="wheel-of-fortune-alias">Preferred alias</label>
                     <input type="text" id="wheel-of-fortune-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
                   </div>
+                  <div class="field">
+                    <label class="field-label" for="wheel-of-fortune-token">TinyURL token override</label>
+                    <input type="password" id="wheel-of-fortune-token" class="field-input" placeholder="Optional — global token" autocomplete="new-password" spellcheck="false">
+                  </div>
                   <div class="field field-span-all">
-                    <p class="hint">Every game shares the one <code>/games/</code> link, so this is the same alias the Word Scramble card shows. The TinyURL token lives on that card too.</p>
+                    <label class="trivia-check">
+                      <input type="checkbox" id="wheel-of-fortune-clear-override">
+                      <span>Clear override</span>
+                    </label>
+                    <p class="hint" id="wheel-of-fortune-token-hint">Optional. Uses the global TinyURL token unless you paste one here. Every game shares the one <code>/games/</code> link.</p>
                   </div>
                 </div>
                 <p class="hint" id="wheel-of-fortune-target-hint">Target —</p>
@@ -3137,7 +3153,7 @@
         <div class="section-label" data-settings-group="games">Hangman</div>
         <div class="card hangman-settings-card" id="hangman-settings-card" data-settings-group="games">
           <div class="auth-head">
-            <div class="auth-name">Hangman on the board</div>
+            <div class="auth-name">Hangman Settings</div>
             <span class="status-pill" id="hangman-status-pill">…</span>
           </div>
           <p class="auth-detail" id="hangman-status-detail">
@@ -3147,7 +3163,7 @@
             <div class="settings-col">
               <div class="settings-group">
                 <p class="settings-group-title">Round timing</p>
-                <div class="field-grid field-grid-4">
+                <div class="field-grid field-grid-timing">
                   <div class="field">
                     <label class="field-label" for="hangman-lobby">Lobby seconds</label>
                     <input type="number" id="hangman-lobby" class="field-input" min="20" max="300" value="45">
@@ -3192,17 +3208,17 @@
                       <option value="all">Every category</option>
                     </select>
                   </div>
-                  <div class="field">
-                    <label class="trivia-check">
-                      <input type="checkbox" id="hangman-word-setter" checked>
-                      <span>Let a player set the word</span>
-                    </label>
-                  </div>
-                  <div class="field">
-                    <label class="trivia-check">
-                      <input type="checkbox" id="hangman-late-join" checked>
-                      <span>Let phones join mid-game</span>
-                    </label>
+                  <div class="field field-span-all">
+                    <div class="check-grid check-grid-2">
+                      <label class="trivia-check">
+                        <input type="checkbox" id="hangman-word-setter" checked>
+                        <span>Let a player set the word</span>
+                      </label>
+                      <label class="trivia-check">
+                        <input type="checkbox" id="hangman-late-join" checked>
+                        <span>Let phones join mid-game</span>
+                      </label>
+                    </div>
                   </div>
                   <p class="hint field-span-all" id="hangman-corpus-hint">Six lives. A right letter keeps your turn; a miss costs a life and passes it. The setter's seat rotates every round.</p>
                 </div>
@@ -3222,8 +3238,16 @@
                     <label class="field-label" for="hangman-alias">Preferred alias</label>
                     <input type="text" id="hangman-alias" class="field-input" placeholder="WITTYGAME" maxlength="10" spellcheck="false" autocomplete="off" autocapitalize="characters">
                   </div>
+                  <div class="field">
+                    <label class="field-label" for="hangman-token">TinyURL token override</label>
+                    <input type="password" id="hangman-token" class="field-input" placeholder="Optional — global token" autocomplete="new-password" spellcheck="false">
+                  </div>
                   <div class="field field-span-all">
-                    <p class="hint">Every game shares the one <code>/games/</code> link, so this is the same alias the Word Scramble card shows. The TinyURL token lives on that card too.</p>
+                    <label class="trivia-check">
+                      <input type="checkbox" id="hangman-clear-override">
+                      <span>Clear override</span>
+                    </label>
+                    <p class="hint" id="hangman-token-hint">Optional. Uses the global TinyURL token unless you paste one here. Every game shares the one <code>/games/</code> link.</p>
                   </div>
                 </div>
                 <p class="hint" id="hangman-target-hint">Target —</p>
@@ -5095,7 +5119,7 @@
       <div class="house-user-editor">
         <div class="house-user-avatar-col">
           <span class="field-label">Profile picture</span>
-          <img class="house-user-avatar-preview" id="hu-avatar-preview" src="/user/avatars/cat-sky.svg" alt="">
+          <img class="house-user-avatar-preview" id="hu-avatar-preview" src="/user/avatars/cat-blue.svg" alt="">
           <div class="house-user-avatar-grid" id="hu-avatar-grid"></div>
           <label class="btn btn-outline btn-sm house-user-upload">
             Upload
@@ -5181,6 +5205,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal267"></script>
   <script src="settings-filter.js?v=signal283"></script>
-  <script src="app.js?v=signal286"></script>
+  <script src="app.js?v=signal287"></script>
 </body>
 </html>

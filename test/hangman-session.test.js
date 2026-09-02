@@ -358,6 +358,21 @@ test('a turn that runs out of clock costs the turn, not a life', () => {
   assert.equal(view.lastEvent, 'TIMES UP');
 });
 
+test('alone, a quiet clock renews the same turn instead of shouting TIMES UP', () => {
+  const { api, sessionId, players, advance, pushes } = startedGame(['Luis'], { wordSetter: false });
+  advance(16);
+  const live = api.getById(sessionId);
+  assert.equal(live.phase, 'round');
+  const view = api.publicSession(live, players[0].id);
+  assert.equal(view.you.yourTurn, true);
+  assert.equal(view.livesLeft, LIVES);
+  assert.notEqual(view.lastEvent, 'TIMES UP');
+  assert.notEqual(view.lastEvent, 'TIME IS UP');
+  const board = pushes[pushes.length - 1].payload;
+  assert.notEqual(board.lastEvent, 'TIMES UP');
+  assert.ok(view.remainingSeconds > 0, 'the phone still has a turn clock');
+});
+
 test('the whole word has a wall clock, however long the turns take', () => {
   const { api, sessionId, advance } = startedGame(['Luis'], { wordSetter: false, roundSeconds: 40 });
   // Three quiet turns at fifteen seconds outlast a forty-second word.

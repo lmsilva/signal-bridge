@@ -106,7 +106,14 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   function remainingSeconds(session, at = now()) {
-    if (!session.phaseEndsAt) return 0;
+    if (!session.phaseEndsAt) {
+      // Invite is waiting to flip. Show the lobby window phones will get
+      // once it lands, not a zero that looks like the game already died.
+      if (session.phase === 'invited') {
+        return settingsOf(session.gameType).lobbySeconds;
+      }
+      return 0;
+    }
     return Math.max(0, Math.ceil((session.phaseEndsAt - at) / 1000));
   }
 
@@ -206,7 +213,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     if (set.size) session.lastSseAt = now();
   }
 
-  function boardOptions(source, holdSeconds, { takeover = false, card = '' } = {}) {
+  function boardOptions(source, holdSeconds, { takeover = false, card = '', session = null } = {}) {
     return {
       targetId: 'vestaboard',
       explicit: true,
@@ -220,7 +227,30 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       gameSource: source,
       replaceCard: card || null,
       holdSeconds,
+      sessionId: session?.id || null,
+      code: session?.code || null,
     };
+  }
+
+  /**
+   * Drop every waiting page for this session so a dead invite cannot flip
+   * after the session has already closed.
+   */
+  function dropSessionBoardPages(session) {
+    const source = sourceOf(session);
+    const code = String(session.code || '');
+    const sessionId = String(session.id || '');
+    try {
+      dropPendingBoard((frame, item) => {
+        if (item?.sessionId && String(item.sessionId) === sessionId) return true;
+        if (!code) return false;
+        const sameSource = String(frame?.source || '') === source
+          || String(item?.ownerSource || '') === source;
+        return sameSource && String(item?.code || frame?.code || '') === code;
+      });
+    } catch (error) {
+      log?.warn?.('Could not clear game pages from the board queue', error?.message || error);
+    }
   }
 
   /**
@@ -290,7 +320,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       ? Boolean(extra.takeover)
       : card === 'invite' || session.phase === 'invited';
     try {
-      pushBoard(payload, boardOptions(source, hold, { takeover, card }));
+      pushBoard(payload, boardOptions(source, hold, { takeover, card, session }));
     } catch (error) {
       log?.warn?.('Game board push failed', error?.message || error);
     }
@@ -321,6 +351,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const hadAGame = session.hadPlayer || scores.length > 0;
     const settings = settingsOf(session.gameType);
     const short = reason === 'not-enough-players';
+    // Pull any unshown invite / phase cards before we release the lock, or a
+    // dead "JOIN THE NEXT GAME" can still flip with a code nobody can use.
+    dropSessionBoardPages(session);
     session.phase = 'closed';
     session.phaseEndsAt = null;
     if (short) {
@@ -545,18 +578,22 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     }
     const settings = settingsOf(gameType);
     const code = mintCode(random, byCode);
-    // Empty invite uses the lobby window, not the hour-long invite TTL.
-    // A push or schedule that nobody joins must let the board go after
-    // that many seconds; the first join then starts the real lobby.
-    const inviteExpiresAt = now() + settings.lobbySeconds * 1000;
+    // The lobby window starts when the invite actually flips — not when it
+    // was queued behind dwell. Until then only the longer invite TTL is a
+    // safety net so a stuck queue cannot leave a ghost session forever.
+    const pendingCapMs = Math.max(
+      settings.lobbySeconds,
+      (Number(settings.inviteTtlMinutes) || 60) * 60,
+    ) * 1000;
     const session = {
       id: crypto.randomUUID(),
       gameType,
       code,
       phase: 'invited',
       createdAt: now(),
-      inviteExpiresAt,
-      phaseEndsAt: inviteExpiresAt,
+      inviteShownAt: null,
+      inviteExpiresAt: now() + pendingCapMs,
+      phaseEndsAt: null,
       players: [],
       rounds: [],
       usedRounds: [],
@@ -572,6 +609,47 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     byCode.set(code, session.id);
     pushPhase(session, 'invite', { holdSeconds: settings.lobbySeconds, takeover: true });
     return publicSession(session);
+  }
+
+  /**
+   * The invite card just landed on the board. Start the lobby countdown that
+   * phones and the Sessions list use — the one that used to start at Push
+   * and kill the session while the card was still waiting in the queue.
+   */
+  function noteBoardShown(detail = {}) {
+    const card = String(detail.card || detail.frame?.card || '');
+    if (card && card !== 'invite') return false;
+    const session = sessionFromBoardDetail(detail);
+    if (!session || session.phase !== 'invited' || session.inviteShownAt) {
+      return false;
+    }
+    const settings = settingsOf(session.gameType);
+    const shownAt = now();
+    session.inviteShownAt = shownAt;
+    session.inviteExpiresAt = shownAt + settings.lobbySeconds * 1000;
+    session.phaseEndsAt = session.inviteExpiresAt;
+    emit(session, 'invite-shown');
+    return true;
+  }
+
+  /** Someone cancelled the waiting invite from the house queue. */
+  function noteBoardCancelled(detail = {}) {
+    const card = String(detail.card || detail.frame?.card || '');
+    if (card && card !== 'invite') return false;
+    const session = sessionFromBoardDetail(detail);
+    if (!session || session.phase !== 'invited') return false;
+    closeSession(session, 'invite-cancelled');
+    return true;
+  }
+
+  function sessionFromBoardDetail(detail = {}) {
+    const sessionId = String(detail.sessionId || '').trim();
+    if (sessionId) {
+      const byId = getById(sessionId);
+      if (byId) return byId;
+    }
+    const code = String(detail.code || detail.frame?.code || '').trim().toUpperCase();
+    return code ? getByCode(code) : null;
   }
 
   function getByCode(code) {
@@ -795,6 +873,8 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     tick,
     listActive,
     end,
+    noteBoardShown,
+    noteBoardCancelled,
     history: (query) => archive.listPage(query),
     forget: (sessionIds) => archive.remove(sessionIds),
     start,

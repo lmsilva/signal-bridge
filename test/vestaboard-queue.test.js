@@ -924,22 +924,50 @@ test('a held page that is already on the board is dropped instead of parking the
 
 test('cancel drops one waiting page and leaves the rest', () => {
   const h = makeQueue();
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
   h.queue.submit([frame('WEATHER', 1)]);
-  h.queue.submit([frame('CHUCK', 2)]);
+  h.queue.submit([frame('CHUCK', 2)], { sessionId: 's-1', code: 'ABCD' });
   h.queue.submit([frame('CLOCK', 3)]);
   const id = h.queue.pending()[1].id;
   assert.equal(h.queue.cancel(id), true);
   assert.deepEqual(h.queue.pending().map((row) => row.label), ['WEATHER', 'CLOCK']);
   assert.equal(h.queue.cancel('missing'), false);
+  const cancelled = events.filter((row) => row.event === 'cancelled');
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0].detail.sessionId, 's-1');
+  assert.equal(cancelled[0].detail.code, 'ABCD');
 });
 
 test('clear drops every waiting page and leaves an empty queue', () => {
   const h = makeQueue();
-  h.queue.submit([frame('WEATHER', 1)]);
-  h.queue.submit([frame('CHUCK', 2)]);
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
+  h.queue.submit([frame('WEATHER', 1)], { sessionId: 's-a', code: 'AAAA' });
+  h.queue.submit([frame('CHUCK', 2)], { sessionId: 's-b', code: 'BBBB' });
   assert.equal(h.queue.clear(), 2);
   assert.deepEqual(h.queue.pending(), []);
   assert.equal(h.queue.clear(), 0);
+  const cancelled = events.filter((row) => row.event === 'cancelled');
+  assert.equal(cancelled.length, 2);
+  assert.deepEqual(cancelled.map((row) => row.detail.code).sort(), ['AAAA', 'BBBB']);
+});
+
+test('posted events carry the game session id so the lobby clock can start', async () => {
+  const h = makeQueue({ rateWindowSeconds: 0 });
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
+  h.queue.submit([{ ...frame('HANGMAN', 1), card: 'invite' }], {
+    sessionId: 'sess-9',
+    code: 'DLJH',
+    breakHold: true,
+    gameSource: 'hangman.game',
+  });
+  assert.equal(await h.queue.tick(), 'posted');
+  const posted = events.filter((row) => row.event === 'posted').pop();
+  assert.equal(posted.detail.sessionId, 'sess-9');
+  assert.equal(posted.detail.code, 'DLJH');
+  assert.equal(posted.detail.card, 'invite');
 });
 
 test('reorder puts waiting pages in the given order', () => {

@@ -25,9 +25,12 @@
     'gmail.unlink': 'Unlinked Gmail',
   };
 
+  // First of AVATAR_TEMPLATES in house-users.js.
+  const DEFAULT_AVATAR = 'cat-blue';
+
   let users = [];
   let templates = [];
-  let selectedAvatar = { kind: 'template', id: 'cat-sky' };
+  let selectedAvatar = { kind: 'template', id: DEFAULT_AVATAR };
   let auditRows = [];
   let auditPage = 0;
 
@@ -74,7 +77,7 @@
       return user.avatarUrl;
     }
     if (avatar?.kind === 'upload' && avatar.id) return `/user-avatars/${avatar.id}`;
-    return `/user/avatars/${avatar?.id || 'cat-sky'}.svg`;
+    return `/user/avatars/${avatar?.id || DEFAULT_AVATAR}.svg`;
   }
 
   function displayName(user) {
@@ -121,7 +124,7 @@
     $('hu-dates').checked = user?.permissions?.redLetter === true;
     selectedAvatar = user?.avatar
       ? { kind: user.avatar.kind, id: user.avatar.id }
-      : { kind: 'template', id: 'cat-sky' };
+      : { kind: 'template', id: DEFAULT_AVATAR };
     setLocked(user?.bootstrap === true);
     $('hu-editor-title').textContent = user
       ? (user.bootstrap ? 'Edit environment admin' : `Edit ${displayName(user)}`)
@@ -338,7 +341,7 @@
         user.active === false ? 'Inactive' : '',
       ].filter(Boolean);
       card.innerHTML = `
-        <img class="house-user-avatar" src="${esc(user.avatarUrl || '/user/avatars/cat-sky.svg')}" alt="">
+        <img class="house-user-avatar" src="${esc(user.avatarUrl || `/user/avatars/${DEFAULT_AVATAR}.svg`)}" alt="">
         <div class="house-user-card-body">
           <strong>${esc(displayName(user))}</strong>
           <div class="hint">${esc(user.username)}${user.email ? ` · ${esc(user.email)}` : ''}</div>

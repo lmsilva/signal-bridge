@@ -492,10 +492,6 @@
     "puzzle": "KEY WEST"
   },
   {
-    "category": "PLACE",
-    "puzzle": "THE FRENCH QUARTER"
-  },
-  {
     "category": "THING",
     "puzzle": "TOOTHBRUSH"
   },
@@ -566,10 +562,6 @@
   {
     "category": "THING",
     "puzzle": "RUBBER DUCK"
-  },
-  {
-    "category": "THING",
-    "puzzle": "YO YO"
   },
   {
     "category": "THING",
@@ -877,7 +869,7 @@
   },
   {
     "category": "AROUND THE HOUSE",
-    "puzzle": "FIREPLACE MANTLE"
+    "puzzle": "FIREPLACE MANTEL"
   },
   {
     "category": "AROUND THE HOUSE",
@@ -1221,10 +1213,6 @@
   },
   {
     "category": "MOVIE TITLE",
-    "puzzle": "THE WIZARD OF OZ"
-  },
-  {
-    "category": "MOVIE TITLE",
     "puzzle": "TOY STORY"
   },
   {
@@ -1250,10 +1238,6 @@
   {
     "category": "MOVIE TITLE",
     "puzzle": "FROZEN"
-  },
-  {
-    "category": "MOVIE TITLE",
-    "puzzle": "UP"
   },
   {
     "category": "MOVIE TITLE",
@@ -1382,18 +1366,6 @@
   {
     "category": "BEFORE AND AFTER",
     "puzzle": "FISH TANK TOP"
-  },
-  {
-    "category": "BEFORE AND AFTER",
-    "puzzle": "SUN FLOWER POT"
-  },
-  {
-    "category": "BEFORE AND AFTER",
-    "puzzle": "FOOT BALL GAME"
-  },
-  {
-    "category": "BEFORE AND AFTER",
-    "puzzle": "RAIN BOW TIE"
   },
   {
     "category": "EVENT",
@@ -1526,5 +1498,2441 @@
   {
     "category": "PLACE",
     "puzzle": "ZION NATIONAL PARK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CHARITY BEGINS AT HOME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERY MAN HAS HIS PRICE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LET SLEEPING DOGS LIE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MANY HANDS MAKE LIGHT WORK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STILL WATERS RUN DEEP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EMPTY VESSELS MAKE THE MOST NOISE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIKE A FISH OUT OF WATER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PUTTING THE CART BEFORE THE HORSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SILENCE IS GOLDEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "A CAT HAS NINE LIVES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "AS GREEN AS GRASS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BAD NEWS TRAVELS FAST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEAUTY IS BUT SKIN DEEP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BIG FISH EAT LITTLE FISH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERYTHING HAS AN END"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EXPERIENCE IS THE BEST TEACHER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FIRST IN BEST DRESSED"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HUNGER IS THE BEST SAUCE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ITS EITHER ALL OR NOTHING"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LEAST TALK MOST WORK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LEAVE TOMORROW TILL TOMORROW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIFE BEGINS AT FORTY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MANY DROPS MAKE A SHOWER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO NEWS IS GOOD NEWS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NOBODY CAN SERVE TWO MASTERS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ONLY THE GOOD DIE YOUNG"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PRIDE FEELS NO PAIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "READY MONEY IS READY MEDICINE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "THE CUSTOMER IS ALWAYS RIGHT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "THE WISE SHALL UNDERSTAND"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "TOMORROW IS A NEW DAY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "TRUE BEAUTY LIES WITHIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "WISDOM IS BETTER THAN STRENGTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BANG FOR THE BUCK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SAIL UNDER FALSE COLORS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "A BAD PENNY ALWAYS COMES BACK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ACCIDENTS WILL HAPPEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "AFTER THE STORM COMES THE CALM"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BETTER TO HAVE THAN TO WISH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BUSINESS BEFORE PLEASURE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DIAMONDS ARE FOREVER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DO RIGHT AND FEAR NO MAN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EMPTY VESSELS MAKE THE MOST SOUND"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EXPERIENCE IS THE FATHER OF WISDOM"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FALL SEVEN TIMES STAND UP EIGHT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FOUR EYES ARE BETTER THAN TWO"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GIVE CREDIT WHERE CREDIT IS DUE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HE HAS ENOUGH WHO IS CONTENT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HE IS RICH THAT IS SATISFIED"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HOME IS WHERE THE HEART IS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "INNOCENT AS A NEW BORN BABE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ITS ALL IN A DAYS WORK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ITS NOT OVER TILL ITS OVER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LOST TIME IS NEVER FOUND AGAIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RULES ARE MADE TO BE BROKEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STEP BY STEP ONE GOES FAR"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "THE BEST OF FRIENDS MUST PART"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "YOU CANT LIVE ON BREAD ALONE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "A FRESH PAIR OF EYES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "A LITTLE BIRD TOLD ME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ACCIDENT WAITING TO HAPPEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ADD FUEL TO THE FIRE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "AHEAD OF THE CURVE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "AHEAD OF THE PACK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALIKE AS TWO PEAS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL AGES AND STRIPES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL FINGERS AND THUMBS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL OVER THE PLACE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL OVER THE SHOP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL OVER THE SHOW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL ROADS LEAD TO ROME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL SKIN AND BONE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL THE TEA IN CHINA"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ALL THINGS TO ALL PEOPLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "AND ALL THAT JAZZ"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ANSWERS ON A POSTCARD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ANY PORT IN A STORM"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ARMED TO THE TEETH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BABE IN THE WOODS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BACK THE WRONG HORSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BACK TO THE DRAWING BOARD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BACK TO THE SALT MINES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BE OUT IN LEFT FIELD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEAT ABOUT THE BUSH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEAT THE TAR OUT OF"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEAT TO THE PUNCH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEAUTY IS ONLY SKIN DEEP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEFORE THE INK IS DRY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEFORE YOU CAN SAY KNIFE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEHIND THE EIGHT BALL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BENJAMIN OF THE FAMILY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BEST OF A BAD BUNCH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BLIND LEADING THE BLIND"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BLOOD OUT OF A STONE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BLOW HOT AND COLD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BLOW OUT OF PROPORTION"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BLOW OUT OF THE WATER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BOLT FROM THE BLUE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BORN TO THE PURPLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BOYS WILL BE BOYS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BRIGHT AS A BUTTON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BRING HOME THE BACON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BRING THE HOUSE DOWN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BRING TO THE TABLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BRUSH UNDER THE CARPET"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BULL IN A CHINA SHOP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BURN THE MIDNIGHT OIL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "BY THE SAME TOKEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CALL ON THE CARPET"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CALL THE DOGS OFF"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CALM BEFORE THE STORM"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CANT HOLD A CANDLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CAST A LONG SHADOW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CATCH AS CATCH CAN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CHEAP AT HALF THE PRICE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CHEAPER BY THE DOZEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CHIP OFF THE OLD BLOCK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CLEAN BILL OF HEALTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CLOSED BOOK TO ME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CLOUD ON THE HORIZON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COLD LIGHT OF DAY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COME OUT IN THE WASH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COME RAIN OR SHINE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COME TO A PRETTY PASS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COME WITH THE TERRITORY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COMES WITH THE TERRITORY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CONSTITUTION OF AN OX"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COST AN ARM AND A LEG"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COULD EAT A HORSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "COVER ALL THE BASES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CREAM OF THE CROP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CUT A LONG STORY SHORT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "CUT FROM THE SAME CLOTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DEAD FROM THE NECK UP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DEAD IN THE WATER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DEAD TO THE WORLD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DEATH OF A THOUSAND CUTS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DEEP POCKETS BUT SHORT ARMS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DIAMOND IN THE ROUGH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DIG WAY DOWN DEEP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DO THEIR DIRTY WORK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DONT MENTION THE WAR"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DONT SHOOT THE MESSENGER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DOWN FOR THE COUNT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DOWN IN THE MOUTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DRINK LIKE A FISH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DRIVEN BY A MOTOR"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DROP IN THE OCEAN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "DROPPED LIKE A HOT CAKE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EACH TO THEIR OWN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EASIER SAID THAN DONE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ELEPHANT IN THE ROOM"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERY MAN AND HIS DOG"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERY MAN FOR HIMSELF"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERY TRICK IN THE BOOK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERYBODY AND THEIR UNCLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "EVERYTHING BUT THE KITCHEN SINK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FALL AT THE FIRST FENCE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FALL OFF THE WAGON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FAT HITS THE FIRE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FATE WORSE THAN DEATH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FEEL LIKE A MILLION"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FEET ON THE GROUND"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FEW AND FAR BETWEEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FIGHT FIRE WITH FIRE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FIGHT TOOTH AND NAIL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FINGER IN THE PIE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FIRST OUT OF THE GATE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FIRST PORT OF CALL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FLY IN THE FACE OF"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FLY OFF THE HANDLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FOAM AT THE MOUTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FOR THE LOVE OF PETE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FOR THE TIME BEING"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FOREST FOR THE TREES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FOUR CORNERS OF THE EARTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FRESH FROM THE OVEN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FROM A DIFFERENT ANGLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FROM SOUP TO NUTS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "FROM THE HORSES MOUTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GET AWAY WITH MURDER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GET IT IN THE NECK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GET OFF THE GROUND"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GET THE BALL ROLLING"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GET THE GREEN LIGHT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GET THE HANG OF IT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GHOST OF A CHANCE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GIVE AWAY THE STORE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GIVE IT SOME STICK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GIVE UP THE GHOST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO AGAINST THE GRAIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO DOWN WITHOUT A FIGHT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO OUT WITH A BANG"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO PLAY IN TRAFFIC"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO ROUND IN CIRCLES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO TELL IT TO BIRDS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO THROUGH THE MILL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GO UNDER THE HAMMER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GONE FOR A BURTON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "GROW IN THE TELLING"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HAIRY AT THE HEEL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HAND THAT ROCKS THE CRADLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HANG IN THE BALANCE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HARD ACT TO FOLLOW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HAVE NO TRUCK WITH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HAY IS FOR HORSES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HEAD FOR THE HILLS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HEAD IS IN THE CLOUDS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HEAD ON THE BLOCK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HEALTHY AS A HORSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HEART IN THE RIGHT PLACE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HIT BELOW THE BELT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HIT THE GROUND RUNNING"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HIT THE RIGHT NOTE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HORSE OF A DIFFERENT COLOR"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "HOT UNDER THE COLLAR"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IF WORST COMES TO WORST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IN LIKE A DIRTY SHIRT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IN THE DRIVERS SEAT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IN THE FAMILY WAY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IN THE LAP OF LUXURY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IN THE TALL COTTON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "IT COST THE EARTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JOBS FOR THE BOYS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JOHNNY ON THE SPOT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JOINED AT THE HIP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JUMP IN FEET FIRST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JUMP OFF THE PAGE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JUMP TO A CONCLUSION"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JUST FOR THE RECORD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JUST OFF THE BOAT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "JUST WHAT THE DOCTOR ORDERED"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "KEEP A STRAIGHT FACE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "KEEP BODY AND SOUL TOGETHER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "KEEP THE WOLF AT BAY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "KICK AWAY THE LADDER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "KICK IN THE TEETH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "KING OF THE CASTLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LAUGH LIKE A DRAIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LET THE DUST SETTLE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LETS CALL IT A DAY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LETTER OF THE LAW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LICENSE TO PRINT MONEY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIGHT A FIRE UNDER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIKE A DUCK TO WATER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIKE PEAS IN A POD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIKE WHITE ON RICE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIVE AND LET LIVE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LIVING OVER THE BRUSH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LONG IN THE TOOTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LONG TIME NO HEAR"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LOOK OUT FOR NUMBER ONE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LOOSE LIPS SINK SHIPS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "LOVE YOU AND LEAVE YOU"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MAD AS A CUT SNAKE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MADE IN THE SHADE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MAKE A BETTER FIST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MAKE A SONG AND DANCE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MAKE MONEY HAND OVER FIST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MAKE NO BONES ABOUT IT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MAN IN THE STREET"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MATTER OF LIFE AND DEATH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MEMORY LIKE AN ELEPHANT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "METHOD IN HIS MADNESS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MONEY FOR OLD ROPE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MONEY MAKES MANY THINGS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MORE FRONT THAN BRIGHTON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MORE HEAT THAN LIGHT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MORE HOLES THAN SWISS CHEESE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MORE THAN MEETS THE EYE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "MOVE HEAVEN AND EARTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NATURE OF THE BEAST"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NECK OF THE WOODS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NEITHER HERE NOR THERE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NEW KID ON THE BLOCK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NEW LEASE OF LIFE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NEW SHERIFF IN TOWN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO DOG IN THIS FIGHT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO PEACE FOR THE WICKED"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO REST FOR THE WICKED"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO SMOKE WITHOUT FIRE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO TIME LIKE THE PRESENT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NO TWO WAYS ABOUT IT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NOT HAVE THE HEART"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NOT WORTH A RED CENT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "NOTHING TO WRITE HOME ABOUT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "OFF LIKE A DIRTY SHIRT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "OLDER THAN THE HILLS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "OLDEST TRICK IN THE BOOK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ON THE RIGHT FOOT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ON TOP OF THE WORLD"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ONCE IN A BLUE MOON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ONE NAIL DRIVES OUT ANOTHER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "OTHER SIDE OF THE COIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "OUT IN THE STICKS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PAINT THE TOWN RED"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PAINT YOURSELF INTO A CORNER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PAR FOR THE COURSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PART OF THE FURNITURE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PASS THE TIME OF DAY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PAY THROUGH THE NOSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PLAY FAST AND LOOSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PLAYING TO THE GALLERY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "POOR AS A CHURCH MOUSE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PRIDE GOES BEFORE A FALL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PULL OUT ALL THE STOPS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PULL OUT OF THE FIRE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PUSH THE PANIC BUTTON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PUT ON A BRAVE FACE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PUT THE BRAKES ON"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PUT TWO AND TWO TOGETHER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "PUT YOU IN THE PICTURE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "QUICK OFF THE MARK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "QUICK ON THE DRAW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "QUICK ON THE TRIGGER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "QUIET BEFORE THE STORM"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RATHER YOU THAN ME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "READ FROM THE SAME PAGE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RIDE WITH THE TIDE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RIGHT OUT OF THE BLOCKS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RISE THROUGH THE RANKS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ROB PETER TO PAY PAUL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ROLL OUT THE RED CARPET"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ROUGH AROUND THE EDGES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "ROUGH END OF THE STICK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RUN AROUND THE BUSH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RUN BEFORE YOU CAN WALK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "RUNS IN THE FAMILY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SAFE PAIR OF HANDS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SAIL CLOSE TO THE WIND"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SALT OF THE EARTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SELL DOWN THE RIVER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SELL LIKE HOT CAKES"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SET THE WHEELS IN MOTION"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHAPE UP OR SHIP OUT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHOOT FROM THE HIP"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHOOT YOURSELF IN THE FOOT"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHOOTING FISH IN A BARREL"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHORT END OF THE STICK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHOT ACROSS THE BOW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SHOW ME THE MONEY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SLEEP LIKE A BABY"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SLIP OF THE TONGUE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SLIP THROUGH THE NET"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SLOW BOAT TO CHINA"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SLOW OFF THE MARK"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SMOKE THE PEACE PIPE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SNAKE IN THE GRASS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SO ON AND SO FORTH"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SPIRIT OF THE LAW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SPREAD YOURSELF TOO THIN"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STAND THE TEST OF TIME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STEP UP TO THE PLATE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STILL IN THE GAME"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STRAIGHT AS AN ARROW"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "STRAIGHT FROM THE SHOULDER"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SURE AS EGGS IS EGGS"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SWIM AGAINST THE TIDE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "SWIM WITH THE TIDE"
+  },
+  {
+    "category": "PHRASE",
+    "puzzle": "TAKE FOR A TEST DRIVE"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "FLOWER POT LUCK"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "BALL GAME SHOW"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "BOW TIE THE KNOT"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "HIGH SCHOOL OF FISH"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "CREDIT CARD TRICK"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "CHICKEN SOUP KITCHEN"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "BIRTHDAY CAKE WALK"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "MAGIC CARPET CLEANER"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "POLAR BEAR HUG"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "PINEAPPLE JUICE BOX"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "TENNIS SHOE STORE"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "FRENCH FRY COOK"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "CHRISTMAS TREE HOUSE"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "PEANUT BUTTER FINGERS"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "TOOTH FAIRY TALE"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "TRAFFIC JAM SESSION"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "PLAY GROUND BEEF"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "FRONT DOOR PRIZE"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "CROSS WALK OF FAME"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "POP CORN ON THE COB"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "APPLE PIE IN THE SKY"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "ICE CREAM SOCIAL"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "SODA FOUNTAIN PEN"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "SCHOOL BUS STOP"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "HOME WORK OF ART"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "SWIM SUIT CASE"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "BEACH BALL GOWN"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "SAND CASTLE IN THE SKY"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "DOG HOUSE WARMING"
+  },
+  {
+    "category": "BEFORE AND AFTER",
+    "puzzle": "GREEN HOUSE PLANT"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "MOUNT EVEREST"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "TAJ MAHAL"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "SYDNEY OPERA HOUSE"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "BUCKINGHAM PALACE"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "TOWER OF LONDON"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "LOUVRE MUSEUM"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "GRAND CENTRAL STATION"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "YOSEMITE VALLEY"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "LIBERTY BELL"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "CRATER LAKE"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "REDWOOD FOREST"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "THE PANTHEON"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "TOWER BRIDGE"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "LONDON EYE"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "EDINBURGH CASTLE"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "BANFF NATIONAL PARK"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "THE ACROPOLIS"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "PYRAMIDS OF GIZA"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "VICTORIA FALLS"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "TABLE MOUNTAIN"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "THE ALHAMBRA"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "HOLLYWOOD SIGN"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "GRIFFITH OBSERVATORY"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "PIKE PLACE MARKET"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "FREEDOM TRAIL"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "FENWAY PARK"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "WRIGLEY FIELD"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "LAMBEAU FIELD"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "MOUNT RAINIER"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "MONUMENT VALLEY"
+  },
+  {
+    "category": "PLACE",
+    "puzzle": "THE SMITHSONIAN CASTLE"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "ATLANTIC OCEAN"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "GULF OF MEXICO"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "HUDSON RIVER"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "AMAZON RIVER"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "NILE RIVER"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "SAHARA DESERT"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "ANDES MOUNTAINS"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "APPALACHIAN TRAIL"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "ENGLISH CHANNEL"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "MEDITERRANEAN SEA"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "CARIBBEAN SEA"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "THE PACIFIC NORTHWEST"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "THE GREAT PLAINS"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "THE CANADIAN ROCKIES"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "THE SCOTTISH HIGHLANDS"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "YUCATAN PENINSULA"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "WASHINGTON DC"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "SAN FRANCISCO"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "NEW ORLEANS"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "SALT LAKE CITY"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "HONOLULU HAWAII"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "PORTLAND OREGON"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "MIAMI FLORIDA"
+  },
+  {
+    "category": "ON THE MAP",
+    "puzzle": "BOSTON MASSACHUSETTS"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CHICKEN PARMESAN"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "EGGS BENEDICT"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CAESAR SALAD"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CLAM CHOWDER"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "LOBSTER ROLL"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CHICKEN TIKKA MASALA"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "PAD THAI"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "GUACAMOLE AND CHIPS"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "KEY LIME PIE"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "SHEPHERDS PIE"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "BANGERS AND MASH"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "YORKSHIRE PUDDING"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CHICKEN AND WAFFLES"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "BISCUITS AND GRAVY"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "PHILLY CHEESESTEAK"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CHICAGO DEEP DISH PIZZA"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "SHRIMP AND GRITS"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "BEIGNETS AND COFFEE"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "TURKEY CLUB SANDWICH"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "BELGIAN WAFFLES"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "BLUEBERRY PANCAKES"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "BAGEL AND CREAM CHEESE"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "FETTUCCINE ALFREDO"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "LOADED BAKED POTATO"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "COTTON CANDY"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CANDY APPLE"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "SWEET POTATO PIE"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "NEW ENGLAND CLAM CHOWDER"
+  },
+  {
+    "category": "FOOD",
+    "puzzle": "CORNISH PASTY"
+  },
+  {
+    "category": "THING",
+    "puzzle": "FIRST AID KIT"
+  },
+  {
+    "category": "THING",
+    "puzzle": "FIRE EXTINGUISHER"
+  },
+  {
+    "category": "THING",
+    "puzzle": "SMOKE DETECTOR"
+  },
+  {
+    "category": "THING",
+    "puzzle": "PICNIC BASKET"
+  },
+  {
+    "category": "THING",
+    "puzzle": "SPIRAL NOTEBOOK"
+  },
+  {
+    "category": "THING",
+    "puzzle": "PENCIL SHARPENER"
+  },
+  {
+    "category": "THING",
+    "puzzle": "WATERING CAN"
+  },
+  {
+    "category": "THING",
+    "puzzle": "WHEELBARROW"
+  },
+  {
+    "category": "THING",
+    "puzzle": "BIRD FEEDER"
+  },
+  {
+    "category": "THING",
+    "puzzle": "RECORD PLAYER"
+  },
+  {
+    "category": "THING",
+    "puzzle": "EXTENSION CORD"
+  },
+  {
+    "category": "THING",
+    "puzzle": "JUMPER CABLES"
+  },
+  {
+    "category": "THING",
+    "puzzle": "WINDSHIELD WIPER"
+  },
+  {
+    "category": "THING",
+    "puzzle": "LICENSE PLATE"
+  },
+  {
+    "category": "THING",
+    "puzzle": "SWIM GOGGLES"
+  },
+  {
+    "category": "THING",
+    "puzzle": "BEACH TOWEL"
+  },
+  {
+    "category": "THING",
+    "puzzle": "LUNCH BOX"
+  },
+  {
+    "category": "THING",
+    "puzzle": "PAPER CLIP"
+  },
+  {
+    "category": "THING",
+    "puzzle": "STICKY NOTE"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "KITCHEN COUNTER"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "CUTTING BOARD"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "COFFEE MAKER"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "TEA KETTLE"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "OVEN MITT"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "VACUUM CLEANER"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "IRONING BOARD"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "THROW PILLOW"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "MAGAZINE RACK"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "POWER STRIP"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "PORCH LIGHT"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "PATIO CHAIR"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "STORM DOOR"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "GARAGE DOOR"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "WATER HEATER"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "CIRCUIT BREAKER"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "WEATHER VANE"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "SILVERWARE DRAWER"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "COOKIE JAR"
+  },
+  {
+    "category": "AROUND THE HOUSE",
+    "puzzle": "LAUNDRY HAMPER"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "MOTHER NATURE"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "FATHER TIME"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "JACK FROST"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "UNCLE SAM"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "LITTLE BO PEEP"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "THE THREE LITTLE PIGS"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "GOLDILOCKS"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "THE LIGHTHOUSE KEEPER"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "THE CROSSING GUARD"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "THE ICE CREAM MAN"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "AMELIA EARHART"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "HELEN KELLER"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "HARRIET TUBMAN"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "BENJAMIN FRANKLIN"
+  },
+  {
+    "category": "PERSON",
+    "puzzle": "FLORENCE NIGHTINGALE"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "AFRICAN ELEPHANT"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "BENGAL TIGER"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "SNOW LEOPARD"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "GRIZZLY BEAR"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "EMPEROR PENGUIN"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "GREAT HORNED OWL"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "CANADA GOOSE"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "GREAT WHITE SHARK"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "SEA OTTER"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "WHITE TAILED DEER"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "AMERICAN ALLIGATOR"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "PRAYING MANTIS"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "CHERRY BLOSSOM"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "WILLOW TREE"
+  },
+  {
+    "category": "LIVING THING",
+    "puzzle": "REDWOOD TREE"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "HOUSEWARMING PARTY"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "POTLUCK DINNER"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "TAILGATE PARTY"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "HOMECOMING DANCE"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "CLASS REUNION"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "SPELLING BEE"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "FARMERS MARKET"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "FIREWORKS SHOW"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "EASTER EGG HUNT"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "CHRISTMAS MORNING"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "FIRST DAY OF SCHOOL"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "SUMMER VACATION"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "LITTLE LEAGUE GAME"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "DANCE RECITAL"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "CHILI COOK OFF"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "STATE FAIR"
+  },
+  {
+    "category": "EVENT",
+    "puzzle": "SNOW DAY"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "WASHING THE CAR"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "RAKING THE LEAVES"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "SHOVELING SNOW"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "WATERING THE PLANTS"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "WRAPPING A PRESENT"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "CARVING A PUMPKIN"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "BUILDING A SNOWMAN"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "PICKING APPLES"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "ROASTING MARSHMALLOWS"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "SKIPPING STONES"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "LOADING THE DISHWASHER"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "MATCHING THE SOCKS"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "READING A BEDTIME STORY"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "TURNING OUT THE LIGHTS"
+  },
+  {
+    "category": "WHAT ARE YOU DOING",
+    "puzzle": "CROSSING THE FINISH LINE"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "GONE WITH THE WIND"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE PRINCESS BRIDE"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE SECRET GARDEN"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE LORD OF THE RINGS"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE EMPIRE STRIKES BACK"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE KARATE KID"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "A LEAGUE OF THEIR OWN"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "FIELD OF DREAMS"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE SANDLOT"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "SINGIN IN THE RAIN"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "THE JUNGLE BOOK"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "SNOW WHITE AND THE SEVEN DWARFS"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "ALICE IN WONDERLAND"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "HOW TO TRAIN YOUR DRAGON"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "CHARLIE AND THE CHOCOLATE FACTORY"
+  },
+  {
+    "category": "MOVIE TITLE",
+    "puzzle": "MIRACLE ON THIRTY FOURTH STREET"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "AULD LANG SYNE"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "THE STAR SPANGLED BANNER"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "WHEN THE SAINTS GO MARCHING IN"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "AMAZING GRACE"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "THIS LITTLE LIGHT OF MINE"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "LONDON BRIDGE IS FALLING DOWN"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "MARY HAD A LITTLE LAMB"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "JINGLE BELLS"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "SILENT NIGHT"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "DECK THE HALLS"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "WE WISH YOU A MERRY CHRISTMAS"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "THE TWELVE DAYS OF CHRISTMAS"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "FROSTY THE SNOWMAN"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "WINTER WONDERLAND"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "WHAT A WONDERFUL WORLD"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "SHELL BE COMING ROUND THE MOUNTAIN"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "IVE BEEN WORKING ON THE RAILROAD"
+  },
+  {
+    "category": "SONG TITLE",
+    "puzzle": "MY BONNIE LIES OVER THE OCEAN"
   }
 ]

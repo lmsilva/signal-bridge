@@ -2,6 +2,9 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  // First of AVATAR_TEMPLATES in house-users.js -- what a user who has never
+  // picked a face is shown before /api/user/me answers.
+  const DEFAULT_AVATAR = 'cat-blue';
   const PUSH_CATEGORIES = Object.freeze([
     { id: 'home', label: 'Home' },
     { id: 'games', label: 'Games' },
@@ -17,6 +20,7 @@
   let commands = [];
   let displays = [];
   let pushKind = 'all';
+  let dashCategory = 'all';
   let libKind = 'all';
   let libCategory = 'all';
   let tripFilter = 'upcoming';
@@ -307,8 +311,23 @@
     }
   }
 
+  /**
+   * A search or a category filter means the grid holds only some of the tiles,
+   * so what the drag left on screen is not the order to save -- saving it as
+   * it stands would drop every tile the filter had hidden. The hidden ones
+   * keep their slots and the visible ones are dealt back into the slots they
+   * held between them, in their new order.
+   */
+  function mergedDashOrder(visibleIds) {
+    const current = (me?.dashboardTiles || []).map((tile) => tile.id);
+    const dealt = visibleIds.filter((id) => current.includes(id));
+    const moving = new Set(dealt);
+    let next = 0;
+    return current.map((id) => (moving.has(id) ? dealt[next++] : id));
+  }
+
   async function commitDashOrder() {
-    const ids = dashCardNodes().map((node) => node.dataset.id);
+    const ids = mergedDashOrder(dashCardNodes().map((node) => node.dataset.id));
     const current = (me?.dashboardTiles || []).map((tile) => tile.id);
     if (ids.join('\0') === current.join('\0')) return;
     await saveTiles(ids.map((id) => ({ id })));
@@ -466,25 +485,79 @@
     // Pointer drag moves the placeholder directly; no HTML5 drop target needed.
   }
 
+  function countByCategory(list) {
+    const counts = Object.fromEntries(PUSH_CATEGORIES.map((entry) => [entry.id, 0]));
+    list.forEach((command) => {
+      if (counts[command.pushCategory] != null) counts[command.pushCategory] += 1;
+    });
+    return counts;
+  }
+
+  /**
+   * The category chips above a tile list. Counts are taken after the search
+   * and kind filters but before the category one, so they say how much each
+   * category would give you. A category with nothing left in it steps aside
+   * rather than sitting there dead -- except the one in force, which has to
+   * stay for there to be a way back out of it.
+   */
+  function renderCatChips(host, counts, selected, onPick) {
+    if (!host) return;
+    host.innerHTML = '';
+    const buttons = [{ id: 'all', label: 'All' }, ...PUSH_CATEGORIES];
+    buttons.forEach((entry) => {
+      const count = entry.id === 'all'
+        ? PUSH_CATEGORIES.reduce((sum, cat) => sum + (counts[cat.id] || 0), 0)
+        : (counts[entry.id] || 0);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.cat = entry.id;
+      btn.classList.toggle('active', selected === entry.id);
+      btn.setAttribute('aria-pressed', selected === entry.id ? 'true' : 'false');
+      btn.textContent = entry.label;
+      if (count) {
+        const badge = document.createElement('span');
+        badge.className = 'su-cat-count';
+        badge.textContent = ` ${count}`;
+        btn.appendChild(badge);
+      }
+      btn.hidden = entry.id !== 'all' && count === 0 && selected !== entry.id;
+      btn.addEventListener('click', () => onPick(entry.id));
+      host.appendChild(btn);
+    });
+  }
+
   function renderDash() {
     const host = $('push-dash');
     if (!host) return;
     const q = String($('push-search')?.value || '').toLowerCase();
     const ids = (me?.dashboardTiles || []).map((tile) => tile.id);
-    const list = ids
+    const found = ids
       .map(commandById)
       .filter(Boolean)
       .filter((command) => kindMatch(command, pushKind))
       .filter((command) => !q || haystack(command).includes(q));
+    renderCatChips($('push-cats'), countByCategory(found), dashCategory, (id) => {
+      dashCategory = id;
+      renderDash();
+    });
+    const list = dashCategory === 'all'
+      ? found
+      : found.filter((command) => command.pushCategory === dashCategory);
     host.innerHTML = '';
     list.forEach((command) => host.appendChild(makePushCard(command)));
     const empty = $('push-dash-empty');
     if (empty) {
       empty.hidden = list.length > 0;
-      empty.textContent = (me?.dashboardTiles || []).length
-        ? 'Nothing in your tiles matches that search.'
-        : 'Add tiles from the skill library, then tap one to push it.';
+      empty.textContent = dashEmptyText(q);
     }
+  }
+
+  function dashEmptyText(query) {
+    if (!(me?.dashboardTiles || []).length) {
+      return 'Add tiles from the skill library, then tap one to push it.';
+    }
+    if (query) return 'Nothing in your tiles matches that search.';
+    return 'Nothing in your tiles is filed under that category.';
   }
 
   function filteredLibrary() {
@@ -496,52 +569,20 @@
       .filter((command) => libCategory === 'all' || command.pushCategory === libCategory);
   }
 
-  function renderLibCats(counts) {
-    const host = $('lib-cats');
-    if (!host) return;
-    host.innerHTML = '';
-    const buttons = [{ id: 'all', label: 'All' }, ...PUSH_CATEGORIES];
-    buttons.forEach((entry) => {
-      const count = entry.id === 'all'
-        ? PUSH_CATEGORIES.reduce((sum, cat) => sum + (counts[cat.id] || 0), 0)
-        : (counts[entry.id] || 0);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.dataset.cat = entry.id;
-      btn.classList.toggle('active', libCategory === entry.id);
-      btn.textContent = entry.id === 'all' ? 'All' : `${entry.label}`;
-      if (count) {
-        const badge = document.createElement('span');
-        badge.className = 'su-cat-count';
-        badge.textContent = ` ${count}`;
-        btn.appendChild(badge);
-      }
-      btn.hidden = entry.id !== 'all' && count === 0 && libCategory !== entry.id;
-      btn.addEventListener('click', () => {
-        libCategory = entry.id;
-        renderLibrary();
-      });
-      host.appendChild(btn);
-    });
-  }
-
   function renderLibrary() {
     const host = $('push-lib');
     if (!host) return;
     const list = filteredLibrary();
     const onDash = new Set((me?.dashboardTiles || []).map((tile) => tile.id));
-    const counts = Object.fromEntries(PUSH_CATEGORIES.map((entry) => [entry.id, 0]));
-    commands
+    const q = String($('lib-search')?.value || '').toLowerCase();
+    const counts = countByCategory(commands
       .filter((command) => command.pushable)
       .filter((command) => kindMatch(command, libKind))
-      .filter((command) => {
-        const q = String($('lib-search')?.value || '').toLowerCase();
-        return !q || haystack(command).includes(q);
-      })
-      .forEach((command) => {
-        if (counts[command.pushCategory] != null) counts[command.pushCategory] += 1;
-      });
-    renderLibCats(counts);
+      .filter((command) => !q || haystack(command).includes(q)));
+    renderCatChips($('lib-cats'), counts, libCategory, (id) => {
+      libCategory = id;
+      renderLibrary();
+    });
     host.innerHTML = '';
     const groups = libCategory === 'all'
       ? PUSH_CATEGORIES.filter((entry) => counts[entry.id] > 0)
@@ -581,12 +622,12 @@
   }
 
   function currentAvatar() {
-    return pendingAvatar || me?.avatar || { kind: 'template', id: 'cat-sky' };
+    return pendingAvatar || me?.avatar || { kind: 'template', id: DEFAULT_AVATAR };
   }
 
   function avatarPreviewUrl(avatar) {
     if (avatar?.kind === 'upload' && avatar.id) return `/user-avatars/${avatar.id}`;
-    return `/user/avatars/${avatar?.id || 'cat-sky'}.svg`;
+    return `/user/avatars/${avatar?.id || DEFAULT_AVATAR}.svg`;
   }
 
   function renderAvatars() {

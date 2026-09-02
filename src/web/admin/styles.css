@@ -15,6 +15,9 @@
   --danger: #f87171;
   --danger-ink: #450a0a;
   --radius: 16px;
+  /* The template avatars draw their own corners at this ratio; a CSS radius
+     that disagrees clips the artwork twice and thins them out. */
+  --avatar-radius: 23%;
   --tab-h: 62px;
   /* Measured at runtime from .sticky-chrome / .sched-head. */
   --sticky-chrome-h: 0px;
@@ -1235,6 +1238,13 @@ textarea.field-input.filter-search {
 .field-grid + .settings-group,
 .settings-group + .settings-group { margin-top: 18px; }
 .field-grid > .field > .hint { margin-bottom: 0; }
+/* A checkbox in a grid sits where a sibling input would, so the row stays level. */
+.field-grid > .field > .trivia-check {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
 
 /* A caption over a group of fields, so a long card scans in bands. */
 .settings-group-title {
@@ -1274,7 +1284,9 @@ textarea.field-input.filter-search {
 
 @media (min-width: 560px) {
   .field-grid-2,
+  .field-grid-3,
   .field-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .field-grid-timing { grid-template-columns: repeat(auto-fit, minmax(7.25rem, 1fr)); }
   .check-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -5989,7 +6001,7 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .house-user-card .house-user-avatar {
   width: 64px;
   height: 64px;
-  border-radius: 16px;
+  border-radius: var(--avatar-radius);
 }
 .house-user-card-body strong {
   display: block;
@@ -6070,7 +6082,7 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .house-user-avatar-preview {
   width: 96px;
   height: 96px;
-  border-radius: 22px;
+  border-radius: var(--avatar-radius);
   object-fit: cover;
   border: 1px solid var(--line);
 }
@@ -6083,7 +6095,7 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   border: 2px solid transparent;
   background: none;
   padding: 0;
-  border-radius: 10px;
+  border-radius: var(--avatar-radius);
   overflow: hidden;
   cursor: pointer;
 }
@@ -6208,7 +6220,7 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .house-user-avatar {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--avatar-radius);
   object-fit: cover;
 }
 .house-audit-toolbar {

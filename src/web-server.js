@@ -565,10 +565,24 @@ function createWebServer({
       if (!vestaboardHub?.pushEvent) {
         return { boards: [] };
       }
-      return vestaboardHub.pushEvent(payload, options);
+      return vestaboardHub.pushEvent(payload, {
+        ...options,
+        // Same as Guest Book: stamp whoever pressed Push, not "System".
+        actor: options.actor || requestActor,
+      });
     },
     dropPendingBoard: (predicate) => vestaboardHub?.dropPending?.(predicate) || 0,
     setGameLock: (source, active) => vestaboardHub?.setGameLock?.(source, active),
+  });
+  // The lobby clock starts when the invite actually flips, not when it was
+  // queued. Cancelling a waiting invite closes the session so /games/ and
+  // Sessions stay honest.
+  vestaboardHub?.onChange?.((event, detail) => {
+    if (event === 'posted') {
+      gameSessions.noteBoardShown?.(detail);
+    } else if (event === 'cancelled') {
+      gameSessions.noteBoardCancelled?.(detail);
+    }
   });
   const learnJapanese = createLearnJapanese(config, log);
   const learnLanguages = createLearnLanguages(config, log);
@@ -2486,6 +2500,53 @@ function createWebServer({
    * invites ensure it before they post, and the Party Prompts settings card
    * edits the same value the Word Scramble card shows.
    */
+  /**
+   * The games short-link token is one override for `/games/`. Any of the four
+   * settings cards can set or clear it; env still wins.
+   */
+  function applyGamesTinyurlOverride(body, res) {
+    const credPath = tinyurlCredPath();
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'apiToken')
+      || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
+      const token = String(body.apiToken || body.token || '').trim();
+      if (token) {
+        if (String(process.env.TINYURL_API_TOKEN || '').trim()
+          || String(process.env.TINYURL_API_TOKEN_GAMES || '').trim()) {
+          sendJson(res, 409, {
+            ok: false,
+            error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
+            source: 'env',
+          });
+          return false;
+        }
+        try {
+          saveTinyurlToken(credPath, token, { scope: 'games' });
+        } catch (error) {
+          sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+          return false;
+        }
+      }
+    }
+    if (body?.clearOverride || body?.clearToken) {
+      clearTinyurlToken(credPath, { scope: 'games' });
+    }
+    return true;
+  }
+
+  function gamesActiveSession(gameType) {
+    const live = (gameSessions.listActive() || []).filter((row) => row.gameType === gameType);
+    if (!live.length) return null;
+    const session = live[0];
+    return {
+      sessionId: session.sessionId,
+      code: session.code || '',
+      phase: session.phase || '',
+      playerCount: session.playerCount || 0,
+      roundIndex: session.roundIndex || 0,
+      liveCount: live.length,
+    };
+  }
+
   async function ensureGamesShortlink(label = 'Games') {
     const alias = gameSettings.alias();
     if (alias) {
@@ -2508,6 +2569,8 @@ function createWebServer({
       targetPath: GAMES_PATH,
       targetUrl: publicUrl(GAMES_PATH, config),
       shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
+      preferredAlias: gameSettings.alias(),
+      activeSession: gamesActiveSession('scramble'),
       ...publicUrlEnvNote(),
     };
   }
@@ -2517,31 +2580,7 @@ function createWebServer({
   }
 
   async function handleWordScrambleSettingsPut(body, res) {
-    const credPath = tinyurlCredPath();
-    if (Object.prototype.hasOwnProperty.call(body || {}, 'apiToken')
-      || Object.prototype.hasOwnProperty.call(body || {}, 'token')) {
-      const token = String(body.apiToken || body.token || '').trim();
-      if (token) {
-        if (String(process.env.TINYURL_API_TOKEN || '').trim()
-          || String(process.env.TINYURL_API_TOKEN_GAMES || '').trim()) {
-          sendJson(res, 409, {
-            ok: false,
-            error: 'TINYURL_API_TOKEN is set in the environment and cannot be replaced here',
-            source: 'env',
-          });
-          return;
-        }
-        try {
-          saveTinyurlToken(credPath, token, { scope: 'games' });
-        } catch (error) {
-          sendJson(res, 400, { ok: false, error: error?.message || String(error) });
-          return;
-        }
-      }
-    }
-    if (body?.clearOverride || body?.clearToken) {
-      clearTinyurlToken(credPath, { scope: 'games' });
-    }
+    if (!applyGamesTinyurlOverride(body, res)) return;
     const patch = {};
     for (const key of [
       'lobbySeconds', 'roundSeconds', 'intermissionSeconds', 'rounds',
@@ -2584,6 +2623,7 @@ function createWebServer({
       targetUrl: publicUrl(GAMES_PATH, config),
       shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
       preferredAlias: gameSettings.alias(),
+      activeSession: gamesActiveSession('prompts'),
       ...publicUrlEnvNote(),
     };
   }
@@ -2593,6 +2633,7 @@ function createWebServer({
   }
 
   async function handlePartyPromptsSettingsPut(body, res) {
+    if (!applyGamesTinyurlOverride(body, res)) return;
     const patch = {};
     for (const key of [
       'lobbySeconds', 'roundSeconds', 'votingSeconds', 'intermissionSeconds',
@@ -2637,6 +2678,7 @@ function createWebServer({
       targetUrl: publicUrl(GAMES_PATH, config),
       shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
       preferredAlias: gameSettings.alias(),
+      activeSession: gamesActiveSession('wheel'),
       ...publicUrlEnvNote(),
     };
   }
@@ -2646,6 +2688,7 @@ function createWebServer({
   }
 
   async function handleWheelOfFortuneSettingsPut(body, res) {
+    if (!applyGamesTinyurlOverride(body, res)) return;
     const patch = {};
     for (const key of [
       'lobbySeconds', 'turnSeconds', 'roundSeconds', 'intermissionSeconds',
@@ -2695,6 +2738,7 @@ function createWebServer({
       targetUrl: publicUrl(GAMES_PATH, config),
       shortLinkReady: isUsableShortLinkOrigin(publicUrl(GAMES_PATH, config)),
       preferredAlias: gameSettings.alias(),
+      activeSession: gamesActiveSession('hangman'),
       ...publicUrlEnvNote(),
     };
   }
@@ -2704,6 +2748,7 @@ function createWebServer({
   }
 
   async function handleHangmanSettingsPut(body, res) {
+    if (!applyGamesTinyurlOverride(body, res)) return;
     const patch = {};
     for (const key of [
       'lobbySeconds', 'turnSeconds', 'pickSeconds', 'roundSeconds',
