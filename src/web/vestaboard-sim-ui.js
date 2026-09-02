@@ -430,7 +430,8 @@
         row.querySelector('.vb-queue-title').textContent = queueEventTitle(item);
         const source = row.querySelector('.vb-queue-source');
         source.textContent = byline;
-        source.hidden = !byline;
+        source.toggleAttribute('aria-hidden', !byline);
+        source.classList.toggle('is-empty', !byline);
         source.title = byline;
         row.querySelector('.vb-queue-title').title = queueEventTitle(item);
         row.querySelector('.vb-queue-status').textContent = statusOf(item);

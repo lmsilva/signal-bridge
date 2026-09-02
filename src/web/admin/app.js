@@ -19787,7 +19787,8 @@
       source.className = 'vb-queue-source';
       const actorLine = window.VestaboardSimUi?.queueActorLine?.(item.actor) || '';
       source.textContent = actorLine;
-      source.hidden = !actorLine;
+      source.toggleAttribute('aria-hidden', !actorLine);
+      source.classList.toggle('is-empty', !actorLine);
       source.title = actorLine;
 
       const main = document.createElement('span');

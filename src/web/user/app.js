@@ -252,93 +252,59 @@
 
   const GHOST_ANCHOR_Y = 36;
 
-  function rectOverlap(a, b) {
-    const left = Math.max(a.left, b.left);
-    const right = Math.min(a.right, b.right);
-    const top = Math.max(a.top, b.top);
-    const bottom = Math.min(a.bottom, b.bottom);
-    if (right <= left || bottom <= top) return 0;
-    return (right - left) * (bottom - top);
+  /** Live tiles plus the hole — the dragged source is out of the grid. */
+  function dashFlowNodes(host) {
+    return [...(host || $('push-dash'))?.children || []]
+      .filter((node) => node.classList?.contains('push-card-wrap')
+        && !node.classList.contains('is-dragging'));
   }
 
-  function dashDragRect(clientX, clientY, sourceWrap) {
-    const width = sourceWrap?.offsetWidth || 0;
-    const height = sourceWrap?.getBoundingClientRect().height || 0;
-    const left = clientX - width / 2;
-    const top = clientY - GHOST_ANCHOR_Y;
-    return {
-      left,
-      top,
-      right: left + width,
-      bottom: top + height,
-      width,
-      height,
-    };
+  function dashGridMetrics(host) {
+    const style = getComputedStyle(host);
+    const cols = style.gridTemplateColumns.trim().split(/\s+/).filter(Boolean).length || 1;
+    const gapX = Number.parseFloat(style.columnGap) || 0;
+    const gapY = Number.parseFloat(style.rowGap) || 0;
+    const box = host.getBoundingClientRect();
+    const sample = dashFlowNodes(host).find((node) => !node.classList.contains('is-placeholder'))
+      || dashFlowNodes(host)[0];
+    const sampleBox = sample?.getBoundingClientRect();
+    const cellW = sampleBox?.width || Math.max(1, (box.width - gapX * Math.max(0, cols - 1)) / cols);
+    const cellH = sampleBox?.height || 88;
+    return { cols, gapX, gapY, box, cellW, cellH };
   }
 
-  function pointerInRect(clientX, clientY, box) {
-    return clientX >= box.left && clientX <= box.right
-      && clientY >= box.top && clientY <= box.bottom;
+  /**
+   * Which grid cell the pointer is over. Overlap-of-ghost was wrong on a
+   * wrapping row: the last cell's "after" is visually the next row's first
+   * tile, so a drag toward column 5 jumped to row 2 column 1.
+   */
+  function dashCellIndex(host, clientX, clientY) {
+    const nodes = dashFlowNodes(host);
+    if (!nodes.length) return 0;
+    const { cols, gapX, gapY, box, cellW, cellH } = dashGridMetrics(host);
+    const strideX = cellW + gapX;
+    const strideY = cellH + gapY;
+    const col = Math.max(0, Math.min(cols - 1, Math.floor((clientX - box.left) / strideX)));
+    const row = Math.max(0, Math.floor((clientY - box.top) / strideY));
+    const maxIndex = nodes.length - 1;
+    return Math.min(maxIndex, row * cols + col);
   }
 
-  /** Before or after a card in DOM order, using the pointer inside that card. */
-  function insertionSlotForCard(card, clientX, clientY) {
-    const box = card.getBoundingClientRect();
-    const midX = box.left + box.width / 2;
-    const midY = box.top + box.height / 2;
-    if (clientX < midX - 2) return card;
-    if (clientX > midX + 2) return card.nextElementSibling;
-    return clientY < midY ? card : card.nextElementSibling;
-  }
-
-  function nearestDashSlot(host, clientX, clientY, skip, sourceWrap) {
-    const cards = dashCardNodes(host, skip);
-    if (!cards.length) return null;
-    const dragRect = dashDragRect(clientX, clientY, sourceWrap);
-
-    let bestCard = null;
-    let bestArea = 0;
-    for (const card of cards) {
-      const box = card.getBoundingClientRect();
-      const area = rectOverlap(dragRect, box);
-      if (area > bestArea) {
-        bestArea = area;
-        bestCard = card;
-      } else if (area > 0 && area === bestArea && pointerInRect(clientX, clientY, box)) {
-        bestCard = card;
-      }
-    }
-    if (bestCard && bestArea > 0) {
-      return insertionSlotForCard(bestCard, clientX, clientY);
-    }
-
-    for (const card of cards) {
-      const box = card.getBoundingClientRect();
-      if (pointerInRect(clientX, clientY, box)) {
-        return insertionSlotForCard(card, clientX, clientY);
-      }
-    }
-
-    let nearest = cards[0];
-    let bestDist = Infinity;
-    for (const card of cards) {
-      const box = card.getBoundingClientRect();
-      const dx = clientX - (box.left + box.width / 2);
-      const dy = clientY - (box.top + box.height / 2);
-      const dist = dx * dx + dy * dy;
-      if (dist < bestDist) {
-        bestDist = dist;
-        nearest = card;
-      }
-    }
-    return insertionSlotForCard(nearest, clientX, clientY);
-  }
-
-  function placeDashCard(host, placeholder, clientX, clientY, sourceWrap) {
+  function placeDashCard(host, placeholder, clientX, clientY) {
     if (!host || !placeholder) return;
-    const slot = nearestDashSlot(host, clientX, clientY, placeholder, sourceWrap);
-    if (slot && slot !== placeholder) host.insertBefore(placeholder, slot);
-    else if (!slot) host.appendChild(placeholder);
+    const nodes = dashFlowNodes(host);
+    const current = nodes.indexOf(placeholder);
+    const target = dashCellIndex(host, clientX, clientY);
+    if (target === current || target < 0) return;
+    const others = nodes.filter((node) => node !== placeholder);
+    if (target >= others.length) {
+      if (placeholder !== host.lastElementChild) host.appendChild(placeholder);
+      return;
+    }
+    const before = others[target];
+    if (before && placeholder.nextElementSibling !== before) {
+      host.insertBefore(placeholder, before);
+    }
   }
 
   async function commitDashOrder() {
@@ -474,7 +440,7 @@
       if (move.pointerId !== pointerId) return;
       move.preventDefault();
       moveGhost(move.clientX, move.clientY);
-      placeDashCard(host, dashPlaceholder, move.clientX, move.clientY, wrap);
+      placeDashCard(host, dashPlaceholder, move.clientX, move.clientY);
     };
     const finish = async () => {
       ghost.remove();
@@ -724,15 +690,31 @@
     gamesPollTimer = null;
   }
 
+  function formatTripDates(trip = {}) {
+    if (trip.startDate && trip.endDate && trip.endDate !== trip.startDate) {
+      return `${trip.startDate} – ${trip.endDate}`;
+    }
+    return trip.startDate || trip.endDate || '';
+  }
+
+  function closeTripSheet() {
+    if ($('trip-sheet')) $('trip-sheet').hidden = true;
+  }
+
   async function loadTrips() {
     const data = await api(`/api/flightplan/trips?filter=${encodeURIComponent(tripFilter)}`);
     const host = $('trip-list');
+    const trips = data.trips || [];
+    if ($('trip-empty')) $('trip-empty').hidden = trips.length > 0;
     host.innerHTML = '';
-    (data.trips || []).forEach((trip) => {
+    trips.forEach((trip) => {
+      const dates = formatTripDates(trip);
+      const meta = [`${trip.flightCount || 0} flights`, trip.phase || '', dates].filter(Boolean).join(' · ');
       const card = document.createElement('button');
       card.type = 'button';
-      card.className = 'manage-card';
-      card.innerHTML = `<strong>${trip.name}</strong><span>${trip.startDate || ''} ${trip.endDate || ''}</span>`;
+      card.className = 'trip-card';
+      card.innerHTML = `<strong>${escapeHtml(trip.name || 'Trip')}</strong>`
+        + `<span class="trip-card-meta">${escapeHtml(meta)}</span>`;
       card.addEventListener('click', () => openTrip(trip.id));
       host.appendChild(card);
     });
@@ -749,7 +731,8 @@
     $('trip-detail').hidden = false;
     const host = $('flight-list');
     host.innerHTML = (data.flights || []).map((flight) => (
-      `<div class="manage-card"><strong>${flight.airline || ''} ${flight.number || ''}</strong><span>${flight.origin || ''} → ${flight.destination || ''}</span></div>`
+      `<div class="trip-flight-row"><strong>${escapeHtml(`${flight.airline || ''} ${flight.number || ''}`.trim())}</strong>`
+      + `<span>${escapeHtml(`${flight.origin || ''} → ${flight.destination || ''}`)}</span></div>`
     )).join('') || '<p class="hint">No flights yet.</p>';
   }
 
@@ -1188,7 +1171,10 @@
     $('trip-end').value = '';
     $('trip-detail').hidden = true;
   });
-  $('btn-trip-close')?.addEventListener('click', () => { $('trip-sheet').hidden = true; });
+  $('btn-trip-close')?.addEventListener('click', closeTripSheet);
+  $('trip-sheet')?.addEventListener('click', (event) => {
+    if (event.target === $('trip-sheet')) closeTripSheet();
+  });
   $('btn-trip-save')?.addEventListener('click', async () => {
     try {
       const body = {
@@ -1313,6 +1299,7 @@
     if (event.key === 'Escape') {
       if (!$('su-confirm-sheet')?.hidden) closeConfirm(false);
       else if (!$('photo-lightbox')?.hidden) closeLightbox();
+      else if (!$('trip-sheet')?.hidden) closeTripSheet();
       else if (!$('date-sheet')?.hidden) $('date-sheet').hidden = true;
       else if (!$('profile-sheet')?.hidden) closeProfile();
       else if (!$('push-library')?.hidden) $('push-library').hidden = true;

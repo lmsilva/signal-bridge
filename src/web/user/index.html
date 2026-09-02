@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal271">
+  <link rel="stylesheet" href="styles.css?v=signal278">
 </head>
 <body>
   <header class="su-head">
@@ -80,9 +80,11 @@
           <p class="gb-status" id="gb-send-status" role="status"></p>
         </div>
         <div class="gb-main" id="gb-done" hidden>
-          <div class="vb-bezel preview-bezel gb-bezel" aria-hidden="true">
-            <div class="vb-grid gb-preview" id="gb-done-preview"></div>
-            <div class="vb-wordmark">VESTABOARD</div>
+          <div class="gb-board-wrap">
+            <div class="vb-bezel preview-bezel gb-bezel" aria-hidden="true">
+              <div class="vb-grid gb-preview" id="gb-done-preview"></div>
+              <div class="vb-wordmark">VESTABOARD</div>
+            </div>
           </div>
           <p class="gb-status is-good" id="gb-done-message">Sent.</p>
           <p class="gb-hint" id="gb-done-hint" hidden></p>
@@ -174,68 +176,55 @@
     </section>
 
     <section class="tab-panel" id="tab-flight" hidden>
-      <div class="su-toolbar">
-        <h2 class="su-h" style="margin:0">Flight Plan</h2>
+      <div class="su-page-head">
+        <div class="su-page-head-copy">
+          <h2 class="su-h">Flight Plan</h2>
+          <p class="hint">Trips and flights for the house boards.</p>
+        </div>
         <button type="button" class="su-btn su-btn-sm" id="btn-trip-new">New trip</button>
       </div>
-      <div class="su-seg" id="trip-filter">
-        <button type="button" class="active" data-filter="upcoming">Upcoming</button>
-        <button type="button" data-filter="active">Active</button>
-        <button type="button" data-filter="past">Past</button>
-        <button type="button" data-filter="all">All</button>
-      </div>
-      <div id="trip-list"></div>
-      <div class="su-sheet" id="trip-sheet" hidden>
-        <div class="su-sheet-head">
-          <h2 id="trip-sheet-title">New trip</h2>
-          <button type="button" class="su-text" id="btn-trip-close">Close</button>
+      <div class="card trip-board-card">
+        <h3 class="trip-board-title">Your trips</h3>
+        <div class="su-seg" id="trip-filter" role="group" aria-label="Trip filter">
+          <button type="button" class="active" data-filter="upcoming">Upcoming</button>
+          <button type="button" data-filter="active">Active</button>
+          <button type="button" data-filter="past">Past</button>
+          <button type="button" data-filter="all">All</button>
         </div>
-        <label class="su-label" for="trip-name">Name</label>
-        <input id="trip-name" class="su-input" type="text">
-        <label class="su-label" for="trip-start">Start</label>
-        <input id="trip-start" class="su-input" type="date">
-        <label class="su-label" for="trip-end">End</label>
-        <input id="trip-end" class="su-input" type="date">
-        <button type="button" class="su-btn" id="btn-trip-save">Save trip</button>
-        <div id="trip-detail" hidden>
-          <h3 class="su-h">Flights</h3>
-          <div id="flight-list"></div>
-          <label class="su-label" for="flight-airline">Airline code</label>
-          <input id="flight-airline" class="su-input" type="text" placeholder="DL" maxlength="3">
-          <label class="su-label" for="flight-number">Number</label>
-          <input id="flight-number" class="su-input" type="text" placeholder="123">
-          <label class="su-label" for="flight-date">Date</label>
-          <input id="flight-date" class="su-input" type="date">
-          <button type="button" class="su-btn" id="btn-flight-search">Find flight</button>
-          <div id="flight-results"></div>
-        </div>
+        <div class="trip-list" id="trip-list"></div>
+        <p class="hint" id="trip-empty" hidden>No trips in this filter.</p>
       </div>
     </section>
 
     <section class="tab-panel" id="tab-slideshow" hidden>
-      <div class="slideshow-toolbar-card">
-        <div class="slideshow-toolbar">
-          <button type="button" class="su-btn su-btn-sm" id="btn-slideshow-push">Show on display</button>
+      <div class="su-page-head">
+        <div class="su-page-head-copy">
+          <h2 class="su-h">Slideshow</h2>
+          <p class="hint">Photos shared via Guest Snaps land here and stay until you delete them. Delete always asks first.</p>
+        </div>
+        <div class="su-page-head-actions">
           <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-select">Select</button>
           <div class="slideshow-toolbar-selecting" id="slideshow-toolbar-selecting" hidden>
             <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-select-all">Select All</button>
             <button type="button" class="su-btn su-btn-danger su-btn-sm" id="btn-slideshow-delete-selected" disabled>Delete (<span id="slideshow-selected-count">0</span>)</button>
             <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-cancel-select">Cancel</button>
           </div>
-          <button type="button" class="su-btn su-btn-ghost su-btn-sm slideshow-refresh" id="btn-slideshow-refresh" title="Refresh camera roll">Refresh</button>
+          <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-slideshow-refresh" title="Refresh camera roll">Refresh</button>
         </div>
-        <p class="hint">Photos shared via Guest Snaps land here and stay until you delete them. Delete always asks first.</p>
       </div>
+      <button type="button" class="su-btn su-btn-sm slideshow-push" id="btn-slideshow-push">Show on display</button>
       <div class="photo-grid" id="photo-grid"></div>
       <p class="hint photo-grid-empty" id="photo-grid-empty" hidden>No saved photos yet — share one via Guest Snaps first.</p>
     </section>
 
     <section class="tab-panel" id="tab-dates" hidden>
-      <div class="su-toolbar">
-        <h2 class="su-h" style="margin:0">Date Book</h2>
+      <div class="su-page-head">
+        <div class="su-page-head-copy">
+          <h2 class="su-h">Date Book</h2>
+          <p class="hint" id="date-summary">Birthdays, holidays, and the dates you want counted down.</p>
+        </div>
         <button type="button" class="su-btn su-btn-sm" id="btn-date-new">New event</button>
       </div>
-      <p class="hint" id="date-summary">Birthdays, holidays, and the dates you want counted down.</p>
       <div class="date-list" id="date-list"></div>
       <p class="hint" id="date-empty" hidden>Nothing here yet. Add the dates you want on the board.</p>
     </section>
@@ -275,6 +264,50 @@
         <label class="su-label" for="pf-new-confirm">Confirm new password</label>
         <input id="pf-new-confirm" class="su-input" type="password" autocomplete="new-password">
         <button type="button" class="su-btn" id="btn-password">Change password</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="su-backdrop" id="trip-sheet" hidden>
+    <div class="su-dialog trip-dialog" role="dialog" aria-modal="true" aria-labelledby="trip-sheet-title">
+      <div class="su-sheet-head">
+        <h2 id="trip-sheet-title">New trip</h2>
+        <button type="button" class="su-text" id="btn-trip-close">Close</button>
+      </div>
+      <label class="su-label" for="trip-name">Name</label>
+      <input id="trip-name" class="su-input" type="text" name="flightplan-trip-name" autocomplete="off">
+      <div class="date-form-grid">
+        <div>
+          <label class="su-label" for="trip-start">Start date</label>
+          <input id="trip-start" class="su-input" type="date" autocomplete="off">
+        </div>
+        <div>
+          <label class="su-label" for="trip-end">End date</label>
+          <input id="trip-end" class="su-input" type="date" autocomplete="off">
+        </div>
+      </div>
+      <div class="su-dialog-actions">
+        <button type="button" class="su-btn" id="btn-trip-save">Save trip</button>
+      </div>
+      <div id="trip-detail" hidden>
+        <div class="trip-flights-head">
+          <h3 class="su-h">Flights</h3>
+        </div>
+        <div class="trip-flight-list" id="flight-list"></div>
+        <div class="date-form-grid">
+          <div>
+            <label class="su-label" for="flight-airline">Airline</label>
+            <input id="flight-airline" class="su-input" type="text" placeholder="DL" maxlength="3" autocomplete="off">
+          </div>
+          <div>
+            <label class="su-label" for="flight-number">Number</label>
+            <input id="flight-number" class="su-input" type="text" placeholder="123" autocomplete="off">
+          </div>
+        </div>
+        <label class="su-label" for="flight-date">Date</label>
+        <input id="flight-date" class="su-input" type="date" autocomplete="off">
+        <button type="button" class="su-btn su-btn-ghost" id="btn-flight-search">Find flight</button>
+        <div class="trip-flight-results" id="flight-results"></div>
       </div>
     </div>
   </div>
@@ -402,7 +435,7 @@
     </button>
     <button type="button" class="tab-btn" data-tab="games">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="3"/><path d="M7 12h.01M10 12h.01M6.5 15h4"/><circle cx="16.5" cy="12" r="1"/><path d="M15 15h3M9 7V5M15 7V5"/></svg>
-      <span>Games</span>
+      <span class="tab-label"><span class="tab-label-full">Game Sessions</span><span class="tab-label-short">Sessions</span></span>
     </button>
     <button type="button" class="tab-btn" data-tab="board">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
@@ -429,9 +462,9 @@
   <script src="/flap-grid.js"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
   <script src="/push-icons.js?v=signal262"></script>
-  <script src="/vestaboard-sim-ui.js?v=signal269"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal278"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="app.js?v=signal270"></script>
+  <script src="app.js?v=signal273"></script>
 </body>
 </html>

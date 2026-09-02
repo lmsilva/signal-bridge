@@ -595,11 +595,12 @@ test('queueing a frame on the hub reaches the page as sim.queue', async () => {
       label: 'Shopping',
       source: 'shopping-list.snapshot',
       dwellSeconds: 15,
-    }]);
+    }], { commandId: 'alexa.shopping-list' });
 
     const events = await waiting;
     const queued = [...events].reverse().find((e) => e.name === 'sim.queue');
     assert.equal(queued.data.items[0].label, 'Shopping');
+    assert.equal(queued.data.items[0].eventTitle, 'Shopping List');
     assert.ok(queued.data.revision >= 1);
   } finally {
     await harness.stop();
@@ -971,6 +972,7 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(js, /formatClock/);
   assert.match(js, /\/admin\/vb-flip\.wav/);
   assert.match(js, /btn-vb-sound/);
+  assert.match(js, /classList\.toggle\('is-empty'/);
   assert.match(bezel, /vb-tile\.is-flipping/);
   assert.match(userHtml, /id="btn-vb-sound"/);
   assert.match(userHtml, /id="vb-flip-clock"/);
@@ -982,7 +984,7 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(userJs, /PUSH_CATEGORIES/);
   assert.match(userJs, /function removeDashTile/);
   assert.match(userJs, /function startDashDrag/);
-  assert.match(userJs, /function nearestDashSlot/);
+  assert.match(userJs, /function dashCellIndex/);
   assert.match(userJs, /function bindPointerDashDrag/);
   assert.match(userCss, /push-lib-sheet/);
   assert.match(userCss, /push-lib-backdrop/);
