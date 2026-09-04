@@ -166,6 +166,7 @@ const { createAmazingFacts } = require('./amazing-facts');
 const { createWorldGeographyFacts } = require('./world-geography-facts');
 const { createConversationStarters } = require('./conversation-starters');
 const { createStoicQuotes } = require('./stoic-quotes');
+const { createBibleVerse } = require('./bible-verse');
 const { createOnThisDay } = require('./on-this-day');
 const { createBakingInspiration } = require('./baking-inspiration');
 const { createWorldPopulation } = require('./world-population');
@@ -575,16 +576,17 @@ function createWebServer({
     setGameLock: (source, active) => vestaboardHub?.setGameLock?.(source, active),
   });
   // The lobby clock starts when the invite actually flips, not when it was
-  // queued. Cancelling a waiting invite closes the session so /games/ and
-  // Sessions stay honest.
+  // queued. Dropping a game page (Clear queue, the row X, another game
+  // taking the lock) closes that session so Live games cannot keep a
+  // 12-minute empty Party Prompts invite.
   vestaboardHub?.onChange?.((event, detail) => {
     if (event === 'posted') {
       gameSessions.noteBoardShown?.(detail);
     } else if (event === 'cancelled') {
       gameSessions.noteBoardCancelled?.(detail);
     } else if (event === 'lock-preempted' && detail?.source) {
-      // Doorbell (or another higher jumper) took the board — end the game
-      // session so it cannot renew the lock on the next phase card.
+      // Doorbell, Release Holds, or another game took the board — end the
+      // displaced session so it cannot renew the lock on the next card.
       gameSessions.endByBoardSource?.(detail.source, 'preempted');
     }
   });
@@ -608,6 +610,7 @@ function createWebServer({
   const worldGeographyFacts = createWorldGeographyFacts(config, log);
   const conversationStarters = createConversationStarters(config, log);
   const stoicQuotes = createStoicQuotes(config, log);
+  const bibleVerse = createBibleVerse(config, log);
   const onThisDay = createOnThisDay(config, log, {
     getLocaleSettings: () => localeSettings.get(),
   });
@@ -747,6 +750,7 @@ function createWebServer({
     getWorldGeographyFactsStatus: () => worldGeographyFacts.statusSnapshot(),
     getConversationStartersStatus: () => conversationStarters.statusSnapshot(),
     getStoicQuotesStatus: () => stoicQuotes.statusSnapshot(),
+    getBibleVerseStatus: () => bibleVerse.statusSnapshot(),
     getOnThisDayStatus: () => onThisDay.statusSnapshot(),
     getBakingInspirationStatus: () => bakingInspiration.statusSnapshot(),
     getStockMarketStatus: () => stockMarket.statusSnapshot(),
@@ -4719,6 +4723,60 @@ function createWebServer({
     });
   }
 
+  function handleBibleVerseGet(query, res) {
+    sendJson(res, 200, { ok: true, ...bibleVerse.statusSnapshot({
+      query: query?.q || query?.query,
+      page: query?.page,
+      pageSize: query?.pageSize,
+      hidden: query?.hidden === '1' || query?.hidden === 'true',
+    }) });
+  }
+
+  function handleBibleVersePost(body, res) {
+    const result = bibleVerse.addVerse(body?.text, body?.reference);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleBibleVersePut(body, res) {
+    const result = bibleVerse.updateVerse(body?.id, {
+      text: body?.text,
+      reference: body?.reference,
+      hidden: body?.hidden,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleBibleVersePush(body, res) {
+    const payload = bibleVerse.nextPayload();
+    if (!payload) {
+      sendJson(res, 409, {
+        ok: false,
+        error: 'No Bible verses are left — open Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Bible verse', { targetId, id: payload.verse.id, reference: payload.verse.reference });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      verse: payload.verse,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleOnThisDayGet(query, res) {
     sendJson(res, 200, { ok: true, ...onThisDay.statusSnapshot({
       query: query?.q || query?.query,
@@ -5704,6 +5762,8 @@ function createWebServer({
           handleConversationStartersPush(body, res); break;
         case 'stoic.quotes':
           handleStoicQuotesPush(body, res); break;
+        case 'bible.verse':
+          handleBibleVersePush(body, res); break;
         case 'history.day':
           handleOnThisDayPush(body, res); break;
         case 'bake.inspire':
@@ -7705,6 +7765,10 @@ function createWebServer({
     }
     const boardId = String(body?.id || '').trim();
     const outcome = vestaboardHub.releaseHolds(boardId ? { boardId } : {});
+    // Release Holds used to drop the pin and leave every live game session
+    // running (empty invites, a Wheel mid-round, …). Close them so Live
+    // games matches the board.
+    gameSessions.endAll?.('preempted');
     // Sim state for the Board tab pill / queue "held" badges.
     const simState = vestaboardSimulator
       ? vestaboardSimPublicState()
@@ -9697,6 +9761,11 @@ function createWebServer({
           handleStoicQuotesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
+        if (pathname === '/api/bible-verse/verses') {
+          if (!requireAdminSession(req, res)) return;
+          handleBibleVerseGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+          return;
+        }
         if (pathname === '/api/on-this-day/events') {
           if (!requireAdminSession(req, res)) return;
           handleOnThisDayGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
@@ -10735,6 +10804,16 @@ function createWebServer({
               handleStoicQuotePut(body, res);
             } else {
               handleStoicQuotePost(body, res);
+            }
+            return;
+          case '/api/push/bible-verse':
+            handleBibleVersePush(body, res);
+            return;
+          case '/api/bible-verse/verses':
+            if (body?.id) {
+              handleBibleVersePut(body, res);
+            } else {
+              handleBibleVersePost(body, res);
             }
             return;
           case '/api/push/on-this-day':

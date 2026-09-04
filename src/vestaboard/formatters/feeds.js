@@ -1,7 +1,7 @@
 // Feeds family of board frames (03 §D): YouTube, The Upside, Wiki, Overhead,
 // trivia, Flight Plan, Learn Japanese and the European Learn {Language}
 // boards, Quiet Hours Reminder, Chuck Norris,
-// Amazing Facts, Conversation Starters, Stoic Quotes, On This Day, Baking
+// Amazing Facts, Conversation Starters, Stoic Quotes, Bible Verse Of The Day, On This Day, Baking
 // Inspiration, Word Riddles, World Population Tracker, and Calendar Clock.
 //
 // Trivia is the only formatter that refuses work. A question that cannot fit
@@ -68,6 +68,7 @@ const { fillerRows } = require('../../daily-bucket-fillers-layout');
 const { alertRows, cleanChip } = require('../../space-launch-alerts-layout');
 const { elementRows } = require('../../periodic-table-layout');
 const { wordRows } = require('../../word-of-the-day-layout');
+const { versePages } = require('../../bible-verse-layout');
 const { stateRows } = require('../../us-state-facts-layout');
 const { redLetterRows } = require('../../red-letter');
 const { dateParts, daysBetween, houseTimeZone } = require('../clock');
@@ -1255,6 +1256,24 @@ function wordOfTheDayFrames(payload = {}) {
 }
 
 /**
+ * Bible Verse Of The Day: violet VERSE OF THE DAY chips, a single-chip
+ * reference row, then a centred verse. Short verses keep a blank under the
+ * reference; longer KJV lines page in chunks of four.
+ */
+function bibleVerseFrames(payload = {}) {
+  const verse = payload.verse || {};
+  const pages = versePages(verse.reference || payload.reference, verse.text || payload.text);
+  if (!pages.length) {
+    return [];
+  }
+  return pages.map((rows) => snapshotFrame(
+    assertValidLayout(rows, 'bible verse of the day'),
+    'Bible Verse Of The Day',
+    'bible.verse',
+  ));
+}
+
+/**
  * US Weather Map (marketplace channel): the lower 48 in colour chips.
  *
  * No text anywhere — every flap the map claims is a chip and everything else
@@ -1891,6 +1910,7 @@ const FORMATTERS = {
   'periodic.table': periodicTableFrames,
   'state.facts': usStateFactsFrames,
   'word.day': wordOfTheDayFrames,
+  'bible.verse': bibleVerseFrames,
   'dad.jokes': dadJokesFrames,
   'us.weather-map': usWeatherMapFrames,
   'red-letter.card': redLetterFrames,
@@ -1938,6 +1958,7 @@ module.exports = {
   periodicTableFrames,
   usStateFactsFrames,
   wordOfTheDayFrames,
+  bibleVerseFrames,
   dadJokesFrames,
   usWeatherMapFrames,
   redLetterFrames,

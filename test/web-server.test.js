@@ -1619,6 +1619,33 @@ test('stoic quotes push delivers a quote and settings can add one', async () => 
   }
 });
 
+test('bible verse push delivers a verse and settings can add one', async () => {
+  const { webServer, base, sent } = await startTestServer();
+  try {
+    const listed = await getJson(base, '/api/bible-verse/verses?pageSize=5');
+    assert.equal(listed.status, 200);
+    assert.ok(listed.body.available > 0);
+    assert.ok(listed.body.verses.length > 0);
+
+    const pushed = await postJson(base, '/api/push/bible-verse');
+    assert.equal(pushed.status, 200);
+    assert.equal(pushed.body.type, 'bible.verse');
+    assert.match(String(pushed.body.verse?.text || ''), /./);
+    assert.match(String(pushed.body.verse?.reference || ''), /./);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'bible.verse');
+
+    const added = await postJson(base, '/api/bible-verse/verses', {
+      text: 'Jesus wept.',
+      reference: 'John 11:35',
+    });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('on this day push delivers a history fact and settings can add one', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -2267,6 +2294,13 @@ test('games page and a live session join without an admin session', async () => 
     assert.match(scramble, /is-used/);
     assert.match(css, /\.gm-cell\.is-used/);
     assert.match(page.text, /id="btn-gm-clear"/);
+    assert.match(scramble, /leaveKeyboardMode\(\)/,
+      'the X must dismiss the keyboard, not focus the box');
+    assert.doesNotMatch(
+      scramble,
+      /clearBtn\?\.addEventListener\('click'[\s\S]{0,160}input\.focus\(\)/,
+      'clearing a word must not raise the phone keyboard',
+    );
 
     // The keyboard must not bury the board it is there to spell from.
     assert.match(scramble, /visualViewport/);
@@ -3394,9 +3428,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal287/);
-  assert.match(html, /settings-filter\.js\?v=signal283/);
-  assert.match(html, /app\.js\?v=signal287/);
+  assert.match(html, /styles\.css\?v=signal290/);
+  assert.match(html, /settings-filter\.js\?v=signal290/);
+  assert.match(html, /app\.js\?v=signal290/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3658,6 +3692,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="btn-stoic-quotes-manage"/);
   assert.match(html, /id="btn-stoic-quotes-push"/);
   assert.match(html, /id="stoic-quotes-manage-sheet"/);
+  assert.match(html, /id="bible-verse-settings-card"/);
+  assert.match(html, /id="btn-bible-verse-manage"/);
+  assert.match(html, /id="btn-bible-verse-push"/);
+  assert.match(html, /id="bible-verse-manage-sheet"/);
   assert.match(html, /id="on-this-day-settings-card"/);
   assert.match(html, /id="btn-on-this-day-manage"/);
   assert.match(html, /id="btn-on-this-day-push"/);
@@ -3724,6 +3762,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /btn\.hidden = !loading && count === 0 && !on/);
   assert.match(css, /\.display-kind-filter\s*\{[^}]*margin:\s*0/s);
   assert.match(js, /\/api\/stoic-quotes\/quotes/);
+  assert.match(js, /\/api\/bible-verse\/verses/);
+  assert.match(js, /\/api\/push\/bible-verse/);
   assert.match(js, /\/api\/on-this-day\/events/);
   assert.match(js, /\/api\/push\/on-this-day/);
   assert.match(js, /\/api\/baking-inspiration\/ideas/);
@@ -3748,6 +3788,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.amazing-facts-settings-card/);
   assert.match(css, /\.world-geography-facts-settings-card/);
   assert.match(css, /\.stoic-quotes-settings-card/);
+  assert.match(css, /\.bible-verse-settings-card/);
   assert.match(css, /\.on-this-day-settings-card/);
   assert.match(css, /\.baking-inspiration-settings-card/);
   assert.match(css, /\.stock-market-settings-card/);
@@ -5098,7 +5139,7 @@ test('every corpus manage sheet shares one layout, preview column and scrollbar'
 
   const sheets = [
     'chuck-norris', 'roast-me', 'family-quotes', 'warm-fuzzies', 'misheard-lyrics', 'dad-jokes', 'amazing-facts', 'world-geography-facts',
-    'conversation-starters', 'stoic-quotes', 'baking-inspiration',
+    'conversation-starters', 'stoic-quotes', 'bible-verse', 'baking-inspiration',
     'date-book',
   ];
   for (const name of sheets) {
@@ -5705,8 +5746,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal288/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal284/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal289/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
     assert.match(userCss, /\*::-webkit-scrollbar \{/);
@@ -5742,6 +5783,13 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /--vb-chrome/);
     assert.match(userCss, /100dvh - var\(--vb-chrome\)/);
     assert.match(userCss, /1080px, calc\(\(100dvh - var\(--vb-chrome\)\)/);
+    assert.match(userApp.text, /class="vb-board-wrap"/);
+    assert.match(userCss, /body\[data-tab="board"\] \.vb-board-wrap \{/);
+    assert.doesNotMatch(
+      userCss,
+      /body\[data-tab="board"\] \.vb-bezel \{[^}]*1080px/,
+      'bezel padding must not size against a wider grid cell',
+    );
     assert.match(userCss, /\.push-card-top \{\s*display: grid/);
     assert.match(userCss, /"board board"/);
 

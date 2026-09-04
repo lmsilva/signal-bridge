@@ -927,6 +927,7 @@
     'world-geography-facts-settings-card': ['vestaboard'],
     'conversation-starters-settings-card': ['vestaboard'],
     'stoic-quotes-settings-card': ['vestaboard'],
+    'bible-verse-settings-card': ['vestaboard'],
     'on-this-day-settings-card': ['vestaboard'],
     'baking-inspiration-settings-card': ['vestaboard'],
     'stock-market-settings-card': ['vestaboard'],
@@ -6978,10 +6979,12 @@
     }
     const month = String(payload.monthName || '');
     const day = String(payload.day ?? '');
-    const dateGap = textCol + month.length + 2 + day.length <= 22 ? 2 : 1;
+    // Lockstep with dateDayColumn() in calendar-clock.js: two-digit days pin
+    // to the last two columns; a one-digit day sits one flap after the month.
+    const dayCol = day.length >= 2 ? 22 - day.length : textCol + month.length + 1;
     placeCalendarClockText(grid, payload.weekdayName, 1, textCol);
     placeCalendarClockText(grid, month, 2, textCol);
-    placeCalendarClockText(grid, day, 2, textCol + month.length + dateGap);
+    placeCalendarClockText(grid, day, 2, dayCol);
     placeCalendarClockText(grid, payload.timeLabel, 4, textCol);
     const codeRows = grid.map((row) => row.map((cell) => (
       cell.chip ? flapChipCode(cell.chip) : flapCharCode(cell.text)
@@ -11894,6 +11897,259 @@
   });
 
   loadStoicQuotesStatus();
+
+  // -------------------------------- Settings → Bible Verse Of The Day
+
+  const BV_PAGE_SIZE = 12;
+  let bibleVersePage = 1;
+  let bibleVerseTimer = 0;
+
+  function centerBiblePreview(text, width) {
+    const folded = String(text || '');
+    const pad = Math.max(0, width - folded.length);
+    const inset = Math.ceil(pad / 2);
+    return `${' '.repeat(inset)}${folded}`.padEnd(width, ' ').slice(0, width);
+  }
+
+  function renderBibleVersePreview(text, reference) {
+    const host = $('bible-verse-preview');
+    if (!host) {
+      return;
+    }
+    const body = wrapPreview(text, 22);
+    const ref = foldPreview(reference || '');
+    const pages = Math.ceil(body.length / 4);
+    const chunk = body.slice(0, 4);
+    const lines = ['   VERSE OF THE DAY   ', ` ${centerBiblePreview(ref, 20)} `];
+    if (chunk.length && chunk.length < 4) {
+      lines.push('');
+      for (let slot = 0; slot < 3; slot += 1) {
+        lines.push(centerBiblePreview(chunk[slot] || '', 22));
+      }
+    } else {
+      for (let slot = 0; slot < 4; slot += 1) {
+        lines.push(centerBiblePreview(chunk[slot] || '', 22));
+      }
+    }
+    paintPreviewLines(host, lines, (row, col) => {
+      if (row === 0 && (col <= 1 || col >= 20)) return flapChipCode('violet');
+      if (row === 1 && (col === 0 || col === 21)) return flapChipCode('violet');
+      return null;
+    });
+    const hint = $('bible-verse-fit-hint');
+    if (hint) {
+      if (!text) {
+        hint.textContent = '';
+      } else if (!ref || ref.length > 20 || pages > 3) {
+        hint.textContent = 'Too long for the board';
+      } else if (pages <= 1) {
+        hint.textContent = `Fits in ${chunk.length} row${chunk.length === 1 ? '' : 's'}`;
+      } else {
+        hint.textContent = `Fits in ${pages} frames`;
+      }
+    }
+  }
+
+  function bibleVerseCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    return `${data.available || 0} verses ready`
+      + (custom ? ` · ${custom} added here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderBibleVerseCard(data = {}) {
+    const pill = $('bible-verse-status-pill');
+    const detail = $('bible-verse-status-detail');
+    const summary = $('bible-verse-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${bibleVerseCountsLine(data)}. Manage the list in a sheet, or push a random one to test.`
+        : 'Local King James verses for the Vestaboard. Manage the list in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null ? bibleVerseCountsLine(data) : 'Loading…';
+    }
+  }
+
+  function renderBibleVerseSettings(data = {}) {
+    renderBibleVerseCard(data);
+    const list = $('bible-verse-verse-list');
+    if (list) {
+      const verses = data.verses || [];
+      if (!verses.length) {
+        list.innerHTML = '<p class="hint">No verses match that search.</p>';
+      } else {
+        list.innerHTML = verses.map((verse) => `
+          <article class="cn-fact${verse.hidden ? ' is-hidden' : ''}${verse.custom ? ' is-custom' : ''}" data-bv-id="${escapeHtml(verse.id)}">
+            <textarea class="field-input cn-fact-text" rows="2" maxlength="220">${escapeHtml(verse.text)}</textarea>
+            <input type="text" class="field-input cn-fact-author" maxlength="40" value="${escapeHtml(verse.reference || '')}" placeholder="Reference">
+            <div class="cn-fact-meta">
+              <span class="hint">${verse.custom ? 'Yours' : 'Shipped'} · ${verse.rows || 0} rows</span>
+              <div class="cn-fact-actions">
+                ${corpusManageActions({
+                  hidden: verse.hidden,
+                  custom: verse.custom,
+                  saveAttr: 'data-bv-save',
+                  hideAttr: 'data-bv-hide',
+                  removeAttr: 'data-bv-remove',
+                })}
+              </div>
+            </div>
+          </article>
+        `).join('');
+      }
+    }
+    const pageLabel = $('bible-verse-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    bibleVersePage = data.page || 1;
+    const prev = $('btn-bible-verse-prev');
+    const next = $('btn-bible-verse-next');
+    if (prev) prev.disabled = bibleVersePage <= 1;
+    if (next) next.disabled = bibleVersePage >= (data.pages || 1);
+  }
+
+  async function loadBibleVerseStatus() {
+    try {
+      const data = await apiGet('/api/bible-verse/verses?page=1&pageSize=1');
+      renderBibleVerseCard(data);
+    } catch {
+      renderBibleVerseCard({});
+    }
+  }
+
+  async function loadBibleVerses(page = bibleVersePage) {
+    const query = $('bible-verse-search')?.value || '';
+    const hidden = Boolean($('bible-verse-show-hidden')?.checked);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        page: String(page),
+        pageSize: String(BV_PAGE_SIZE),
+      });
+      if (hidden) {
+        params.set('hidden', '1');
+      }
+      const data = await apiGet(`/api/bible-verse/verses?${params}`);
+      renderBibleVerseSettings(data);
+    } catch {
+      renderBibleVerseSettings({});
+    }
+  }
+
+  function refreshBibleVersePreview() {
+    renderBibleVersePreview(
+      $('bible-verse-new')?.value || '',
+      $('bible-verse-reference')?.value || '',
+    );
+  }
+
+  function openBibleVerseManageSheet() {
+    const sheet = $('bible-verse-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    refreshBibleVersePreview();
+    loadBibleVerses(1);
+  }
+
+  function closeBibleVerseManageSheet() {
+    const sheet = $('bible-verse-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadBibleVerseStatus();
+  }
+
+  $('btn-bible-verse-manage')?.addEventListener('click', () => openBibleVerseManageSheet());
+  $('btn-bible-verse-manage-close')?.addEventListener('click', () => closeBibleVerseManageSheet());
+  registerSheetDismiss('bible-verse-manage-sheet', () => closeBibleVerseManageSheet());
+
+  $('btn-bible-verse-add')?.addEventListener('click', async () => {
+    const input = $('bible-verse-new');
+    const reference = $('bible-verse-reference');
+    try {
+      await apiPost('/api/bible-verse/verses', {
+        text: input?.value || '',
+        reference: reference?.value || '',
+      });
+      if (input) input.value = '';
+      if (reference) reference.value = '';
+      refreshBibleVersePreview();
+      toast('Verse added', 'good');
+      await loadBibleVerses(1);
+    } catch (error) {
+      toast(error.message || 'Could not add that verse', 'bad');
+    }
+  });
+
+  $('btn-bible-verse-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/bible-verse', withTarget());
+      const where = result.verse?.reference || 'Scripture';
+      const preview = String(result.verse?.text || 'Bible verse').slice(0, 48);
+      toast(`${where}: ${preview}`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Bible Verse Of The Day', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('bible-verse-new')?.addEventListener('input', refreshBibleVersePreview);
+  $('bible-verse-reference')?.addEventListener('input', refreshBibleVersePreview);
+
+  $('bible-verse-search')?.addEventListener('input', () => {
+    window.clearTimeout(bibleVerseTimer);
+    bibleVerseTimer = window.setTimeout(() => {
+      loadBibleVerses(1);
+    }, 250);
+  });
+
+  $('bible-verse-show-hidden')?.addEventListener('change', () => loadBibleVerses(1));
+  $('btn-bible-verse-prev')?.addEventListener('click', () => loadBibleVerses(bibleVersePage - 1));
+  $('btn-bible-verse-next')?.addEventListener('click', () => loadBibleVerses(bibleVersePage + 1));
+
+  $('bible-verse-verse-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-bv-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-bv-id');
+    const text = article.querySelector('.cn-fact-text')?.value;
+    const reference = article.querySelector('.cn-fact-author')?.value;
+    try {
+      if (event.target.closest('[data-bv-save]')) {
+        await apiPost('/api/bible-verse/verses', { id, text, reference });
+        toast('Verse saved', 'good');
+      } else if (event.target.closest('[data-bv-remove]')) {
+        if (!confirmCorpusRemove('verse', text)) {
+          return;
+        }
+        await apiPost('/api/bible-verse/verses', { id, remove: true });
+        toast('Verse removed', 'good');
+      } else if (event.target.closest('[data-bv-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/bible-verse/verses', { id, hidden: !restore });
+        toast(restore ? 'Verse restored' : 'Verse hidden', 'good');
+      } else {
+        return;
+      }
+      await loadBibleVerses(bibleVersePage);
+    } catch (error) {
+      toast(error.message || 'Could not update that verse', 'bad');
+    }
+  });
+
+  loadBibleVerseStatus();
 
   // ------------------------------------ Settings → Word Riddles
 

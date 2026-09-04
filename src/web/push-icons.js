@@ -43,6 +43,7 @@
     amazing: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="m8.5 4.5 1 1.5M15.5 4.5l-1 1.5M5.5 9l1.5.8M18.5 9l-1.5.8"/>',
     talk: '<path d="M5 6.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H10l-3.5 3v-3H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"/><path d="M14 9.5h5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-1v2l-2.5-2"/>',
     stoic: '<path d="M8 4h8v3.5c0 2.2-1.8 4-4 4s-4-1.8-4-4V4Z"/><path d="M7 20c.8-3.5 2.8-5.5 5-5.5s4.2 2 5 5.5"/><path d="M9.5 9.5h5"/>',
+    'bible-verse': '<path d="M4 5h7a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2V5Z"/><path d="M20 5h-7a2 2 0 0 0-2 2v13h7a2 2 0 0 0 2-2V5Z"/><path d="M12 7v12"/><path d="M11.2 10h1.6M12 9.2v3"/>',
     history: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="M16.5 15.5 18 18"/>',
     bake: '<path d="M7 14h10v5H7z"/><path d="M8 14c0-3 1.5-6 4-6s4 3 4 6"/><path d="M9 9.5c.5-1.5 1.5-2.5 3-2.5s2.5 1 3 2.5"/><path d="M6 19h12"/>',
     stocks: '<path d="M4 18V6M4 18h16"/><path d="m7 14 3-4 3 2 4-6"/>',
