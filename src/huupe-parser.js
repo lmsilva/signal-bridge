@@ -120,19 +120,28 @@ const TAG_UNITY = 'Unity';
 const LOGCAT_TAGS = [TAG_APP, TAG_SENSOR_ERROR, TAG_HAL, TAG_ACTIVITY, TAG_UNITY];
 
 /**
- * What a made shot is worth, keyed by canonical zone.
+ * What a made shot is worth in Family Mode, keyed by canonical zone.
  *
  * Family Mode states these itself: pairing each "{name} scored {N}" with the
  * "Did {name} Score From {zone}" that follows, then reconciling against the
  * end-of-game stats block, gives topOfTheKey 3, highPost 2, lowPost 1 and layup
  * 0.1 — summing to the 17.1 shown on the hoop.
+ */
+const ZONE_POINTS = { layup: 0.1, one: 1, two: 2, three: 3 };
+
+/**
+ * What a made shot is worth everywhere else, where the hardware tracker scores.
  *
  * Free play reports no points, but the HAL's own zone names carry the value
  * (`three_point_shot` and so on), so the same table produces a running session
- * score there rather than one being invented. Layup follows Family Mode's 0.1 so
- * a score means the same thing in both modes.
+ * score rather than one being invented. The rim is the exception: free play's
+ * scoreboard has only 1pt / 2pt / 3pt counters and a drop-in from under the
+ * basket ticks the 1pt one, so a layup is a one-pointer here. Scoring it as
+ * Family Mode's 0.1 left the board 0.9 short of the hoop for every layup.
  */
-const ZONE_POINTS = { layup: 0.1, one: 1, two: 2, three: 3 };
+const HAL_ZONE_POINTS = { ...ZONE_POINTS, layup: 1 };
+
+const POINT_TABLES = { unity: ZONE_POINTS, hal: HAL_ZONE_POINTS };
 
 /** HAL zone names are the proven ones, so they are canonical for stats. */
 const HAL_ZONES = {
@@ -150,9 +159,24 @@ const UNITY_ZONES = {
   topOfTheKey: 'three',
 };
 
-/** Points a made shot from this zone is worth; null for a zone we have not seen. */
-function pointsForZone(zone) {
-  return zone && zone in ZONE_POINTS ? ZONE_POINTS[zone] : null;
+/**
+ * Points a made shot from this zone is worth; null for a zone we have not seen.
+ *
+ * `source` says which scoreboard is doing the counting — `unity` for Family
+ * Mode, `hal` for the hardware tracker that scores every other mode.
+ */
+function pointsForZone(zone, source = 'unity') {
+  const table = POINT_TABLES[source] || ZONE_POINTS;
+  return zone && zone in table ? table[zone] : null;
+}
+
+/**
+ * Family Mode is scored by Unity, which is the only source that knows whose
+ * shot it was. Every other mode — free play included — is scored from the
+ * hardware tracker's zones.
+ */
+function pointsTableForMode(mode) {
+  return String(mode || '') === 'family' ? ZONE_POINTS : HAL_ZONE_POINTS;
 }
 
 const HUUPE_PACKAGES = {
@@ -270,7 +294,7 @@ function parseShotMessage(message) {
     rawZone,
     zone,
     // What the zone is worth if made — callers add it only when `made` is true.
-    points: pointsForZone(zone),
+    points: pointsForZone(zone, 'hal'),
     // -1 is the sentinel the HAL uses when it has no range fix.
     range: Number.isFinite(range) && range >= 0 ? range : null,
   };
@@ -581,9 +605,11 @@ module.exports = {
   SENSITIVE_TAG_RE,
   extractJsonObject,
   pointsForZone,
+  pointsTableForMode,
   LOGCAT_TAGS,
   HAL_ZONES,
   UNITY_ZONES,
   ZONE_POINTS,
+  HAL_ZONE_POINTS,
   HUUPE_PACKAGES,
 };

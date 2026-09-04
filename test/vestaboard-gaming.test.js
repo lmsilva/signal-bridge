@@ -354,6 +354,9 @@ function huupeSession(overrides = {}) {
           name: 'War D', score: 12.9, made: 4, attempts: 11, fgPct: 36, threes: 1,
         },
       ],
+      lastShot: {
+        player: 'trashpanda', zone: 'three', made: true, points: 3, worthLabel: '3PT',
+      },
       ...overrides,
     },
   };
@@ -367,7 +370,7 @@ test('a live Family Mode game is a scoreboard, closest race first', () => {
     'oo HUUPE     FAMILY oo',
     ' TRASHPANDA      17.1',
     ' WAR D           12.9',
-    '',
+    ' LAST SHOT 3PT MADE',
     '',
     'oo SHOOTING NOW     oo',
   ], 'huupe live family');
@@ -400,10 +403,85 @@ test('free play has no names, so the board shows the session score', () => {
     'oo HUUPE  FREE PLAY oo',
     ' 17 POINTS',
     ' FG 9/21 - 43%',
-    ' ON A 4 RUN',
-    '',
+    ' LAST SHOT 3PT MADE',
+    ' 4 MAKES IN A ROW',
     'oo SHOOTING NOW     oo',
   ], 'huupe live free play');
+});
+
+test('the last shot is named on the board, made or missed', () => {
+  // Totals say how the session is going; they never say what just happened,
+  // and the shooter walking back to the line is asking about that shot.
+  const missed = gaming.huupeSessionFrames(huupeSession({
+    mode: 'justhuupe',
+    modeLabel: 'Free Play',
+    players: [],
+    stats: {
+      made: 9, attempts: 22, fgPct: 41, points: 17, streak: 0,
+    },
+    lastShot: { zone: 'three', made: false, points: 0, worthLabel: '3PT' },
+  }));
+
+  // A miss breaks the run, so the streak row goes with it.
+  assertLayout(missed[0].rows, [
+    'oo HUUPE  FREE PLAY oo',
+    ' 17 POINTS',
+    ' FG 9/22 - 41%',
+    ' LAST SHOT 3PT MISS',
+    '',
+    'oo SHOOTING NOW     oo',
+  ], 'huupe live free play miss');
+});
+
+test('the longest last-shot row is the full width of a body row', () => {
+  // "LAST SHOT LAYUP MADE" is twenty characters — exactly the room a body row
+  // has — so it must land whole rather than lose its last letter.
+  const rows = gaming.huupeSessionFrames(huupeSession({
+    lastShot: { player: 'War D', zone: 'layup', made: true, points: 0.1, worthLabel: 'LAYUP' },
+  }))[0].rows;
+
+  assertLayout(rows, [
+    'oo HUUPE     FAMILY oo',
+    ' TRASHPANDA      17.1',
+    ' WAR D           12.9',
+    ' LAST SHOT LAYUP MADE',
+    '',
+    'oo SHOOTING NOW     oo',
+  ], 'huupe live layup');
+});
+
+test('a full scoreboard still leaves the last shot its row', () => {
+  const rows = gaming.huupeSessionFrames(huupeSession({
+    players: [
+      { name: 'trashpanda', score: 17.1 },
+      { name: 'War D', score: 12.9 },
+      { name: 'Bean', score: 9 },
+      { name: 'Nobody', score: 2 },
+    ],
+  }))[0].rows;
+
+  assertLayout(rows, [
+    'oo HUUPE     FAMILY oo',
+    ' TRASHPANDA      17.1',
+    ' WAR D           12.9',
+    ' BEAN               9',
+    ' LAST SHOT 3PT MADE',
+    'oo SHOOTING NOW     oo',
+  ], 'huupe live full scoreboard');
+});
+
+test('a session with no shot on record simply omits the row', () => {
+  // An archived game replayed onto the board carries no last shot.
+  const rows = gaming.huupeSessionFrames(huupeSession({ lastShot: null }))[0].rows;
+
+  assertLayout(rows, [
+    'oo HUUPE     FAMILY oo',
+    ' TRASHPANDA      17.1',
+    ' WAR D           12.9',
+    '',
+    '',
+    'oo SHOOTING NOW     oo',
+  ], 'huupe live no last shot');
 });
 
 test('a finished game flanks the winner and names who they beat', () => {

@@ -131,13 +131,15 @@ test('free play scores the session in front of you, not a career total', () => {
   assert.ok(first > 4, 'the first session had banked more than the second');
 });
 
-test('a layup is worth a tenth of a point, matching Family Mode', () => {
+test('free play scores a layup as the one-pointer the hoop counts it as', () => {
+  // The hoop's free-play scoreboard has no tenths — a drop-in from under the
+  // basket ticks its 1pt counter, so two of them are two points, not 0.2.
   const kit = harness();
-  kit.live.handleEvent(shot({ zone: 'layup', points: 0.1 }));
+  kit.live.handleEvent(shot({ zone: 'layup', points: 1 }));
   kit.advance(MIN_PUSH_INTERVAL_MS);
-  kit.live.handleEvent(shot({ zone: 'layup', points: 0.1 }));
-  assert.equal(kit.latest().session.stats.points, 0.2);
-  assert.equal(kit.latest().session.stats.pointsLabel, '0.2');
+  kit.live.handleEvent(shot({ zone: 'layup', points: 1 }));
+  assert.equal(kit.latest().session.stats.points, 2);
+  assert.equal(kit.latest().session.stats.pointsLabel, '2');
 });
 
 test('missed shots count against accuracy without adding points', () => {
@@ -173,7 +175,7 @@ test('the shot ticker keeps the tail of the session, newest last', () => {
   kit.advance(MIN_PUSH_INTERVAL_MS);
   kit.live.handleEvent(shot({ made: false, zone: 'three', points: 3 }));
   kit.advance(MIN_PUSH_INTERVAL_MS);
-  kit.live.handleEvent(shot({ zone: 'layup', points: 0.1 }));
+  kit.live.handleEvent(shot({ zone: 'layup', points: 1 }));
   const ticker = kit.latest().session.recentShots;
   assert.deepEqual(ticker.at(-1), { made: true, zone: 'layup', short: 'LAY' });
   assert.deepEqual(ticker.at(-2), { made: false, zone: 'three', short: '3PT' });

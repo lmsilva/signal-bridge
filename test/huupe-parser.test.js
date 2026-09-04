@@ -12,6 +12,7 @@ const {
   modeForPackage,
   redactSensitive,
   pointsForZone,
+  pointsTableForMode,
 } = require('../src/huupe-parser');
 
 const FIXTURES = path.join(__dirname, 'fixtures', 'huupe');
@@ -111,17 +112,34 @@ test('free play carries a running session score from the HAL zone names', () => 
   assert.equal(miss.points, 3);
 });
 
-test('a layup scores the same 0.1 in free play as in Family Mode', () => {
+test('the rim is worth a point in free play and a tenth in Family Mode', () => {
+  // Free play's scoreboard has only 1pt / 2pt / 3pt counters, and a drop-in
+  // from under the basket ticks the 1pt one. Scoring it as Family Mode's 0.1
+  // left the running total 0.9 short of the hoop for every layup.
   const halLayup = parseShotMessage(
     'TOF: {"stream_ts": 1, "events": ["make_detected"], "shot_zone": "layup", "shot_range": 0.01 }',
   );
   const unityLayup = parseFamilyMessage('Did trashpanda Score From layup SHOT MADE = True');
-  assert.equal(halLayup.points, 0.1);
+  assert.equal(halLayup.points, 1);
   assert.equal(unityLayup.points, 0.1);
+  // Same zone either way — only what it pays differs.
   assert.equal(halLayup.zone, unityLayup.zone);
+
+  // Everywhere else the two scoreboards agree.
+  for (const [halZone, unityZone] of [['one_point_shot', 'lowPost'], ['two_point_shot', 'highPost'], ['three_point_shot', 'topOfTheKey']]) {
+    const hal = parseShotMessage(
+      `TOF: {"stream_ts": 1, "events": ["make_detected"], "shot_zone": "${halZone}", "shot_range": 3 }`,
+    );
+    const unity = parseFamilyMessage(`Did trashpanda Score From ${unityZone} SHOT MADE = True`);
+    assert.equal(hal.points, unity.points);
+  }
+
+  assert.equal(pointsTableForMode('justhuupe').layup, 1);
+  assert.equal(pointsTableForMode('family').layup, 0.1);
 
   // An unrecognised zone declines to guess a value.
   assert.equal(pointsForZone('halfCourt'), null);
+  assert.equal(pointsForZone('halfCourt', 'hal'), null);
   assert.equal(pointsForZone(null), null);
 });
 
