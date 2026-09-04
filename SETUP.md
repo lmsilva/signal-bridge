@@ -19,13 +19,13 @@ Feature descriptions, the skills catalog, and day-to-day use live in [README.md]
 Typical household: bridge in Docker on a NAS (`network_mode: host`), one Windows poster PC, zero or more real Vestaboards.
 
 ```
-Echo / Alexa  뿯↽  Amazon  뿯↽  Bridge (NAS)
+Echo / Alexa  →  Amazon  →  Bridge (NAS)
                                │
           ┌────────────────────┼─────────────────┬──────────────────┐
-          뿯▽                    뿯▽                 뿯▽                  뿯▽
-   HTTPS :47810          UDP :47832         HTTP :7000        HTTP 뿯↽ board
+          ↓                    ↓                 ↓                  ↓
+   HTTPS :47810          UDP :47832         HTTP :7000        HTTP → board
    Signal (phone)        overlays           simulator         Local API
-                               뿯▽
+                               ↓
                                └── display.announce :47833
 ```
 
@@ -106,7 +106,7 @@ For a NAS, put the NAS LAN IP in `webServer.certHosts` so phones can accept the 
 }
 ```
 
-House city, timezone, units, and the implicit "here" for weather/routes are meant to be set later in **Settings 뿯↽ Global**. Do not copy someone else's coordinates from `config.example.json`.
+House city, timezone, units, and the implicit "here" for weather/routes are meant to be set later in **Settings → Global**. Do not copy someone else's coordinates from `config.example.json`.
 
 Optional but useful on a NAS if LAN broadcast of overlays is flaky — unicast to each display PC:
 
@@ -171,7 +171,7 @@ npm start
 
 Set `ADMIN_PASSWORD` and `LAN_UDP_SECRET` in `.env` before `npm start`.
 
-Open `https://localhost:47810/` and sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`. The Vestaboard simulator listens on `http://localhost:7000` and is already registered, so **Push 뿯↽ any board page** works immediately.
+Open `https://localhost:47810/` and sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`. The Vestaboard simulator listens on `http://localhost:7000` and is already registered, so **Push → any board page** works immediately.
 
 Verbose logs:
 
@@ -233,12 +233,12 @@ QNAP Container Station steps, ZFS build failures, and the `EISDIR` "Docker creat
 ## 5. Sign in to Signal
 
 1. Browse `https://<NAS-or-laptop-IP>:47810/`
-2. Accept the self-signed certificate once (or issue a real one — [DOCKER.md 뿯↽ Let's Encrypt](DOCKER.md#lets-encrypt-certbot-inside-the-container))
+2. Accept the self-signed certificate once (or issue a real one — [DOCKER.md → Let's Encrypt](DOCKER.md#lets-encrypt-certbot-inside-the-container))
 3. Sign in with the bootstrap admin from `.env`
 
 Without `ADMIN_PASSWORD`, `/admin` and `/user` APIs stay locked.
 
-Create other household accounts from **Settings 뿯↽ Accounts**. Gmail for password-reset mail is optional (see [Gmail](#gmail-password-mail)).
+Create other household accounts from **Settings → Accounts**. Gmail for password-reset mail is optional (see [Gmail](#gmail-password-mail)).
 
 ---
 
@@ -276,7 +276,7 @@ No hardware needed to start: the simulator is enabled by default (`vestaboardSim
 **Real board:**
 
 1. Enable the **Local API** on the Vestaboard and give it a static DHCP reservation
-2. Signal 뿯↽ **Settings 뿯↽ Media 뿯↽ Vestaboards** 뿯↽ add name, `http://<board-ip>:7000`, and the Local API key
+2. Signal → **Settings → Media → Vestaboards** → add name, `http://<board-ip>:7000`, and the Local API key
 3. Keys are encrypted into `data/vestaboard-settings.json` with `data/secret.key`. They are **not** env vars unless you set a board's `tokenEnv` and put that variable in `.env`
 4. **Test flip** should walk the flaps. **Key refused** = wrong key. **Not answering** = unreachable from the container (almost always mDNS — use the IP)
 
@@ -323,14 +323,14 @@ Source of truth for names and comments is [`.env.example`](.env.example). This s
 | Variable | Default | What it does |
 |----------|---------|----------------|
 | `ADMIN_PASSWORD` | *(empty — UI locked)* | Password for the first household admin. |
-| `ADMIN_USERNAME` | `admin` | Username for that bootstrap admin. Everyone else is created in Settings 뿯↽ Accounts. |
+| `ADMIN_USERNAME` | `admin` | Username for that bootstrap admin. Everyone else is created in Settings → Accounts. |
 | `ADMIN_SESSION_HOURS` | `12` | Session cookie lifetime. |
 
 ### Strongly recommended
 
 | Variable | Default | What it does |
 |----------|---------|----------------|
-| `TZ` | `UTC` in Compose (`${TZ:-UTC}`) | Container clock. Alarms, reminders, and board clocks also use the house timezone from Settings 뿯↽ Global, with `ALARM_LOCAL_TIMEZONE` as a fallback (`America/Denver` if unset). |
+| `TZ` | `UTC` in Compose (`${TZ:-UTC}`) | Container clock. Alarms, reminders, and board clocks also use the house timezone from Settings → Global, with `ALARM_LOCAL_TIMEZONE` as a fallback (`America/Denver` if unset). |
 | `PROXY_OWN_IP` | `127.0.0.1` | LAN IP of the machine running Amazon auth. **Required** for `./reauth.sh` on a NAS (the auth compose file refuses to start without it). Also used when deriving Guest Snaps / cert host fallbacks. |
 | `AMAZON_PAGE` | `amazon.com` | Amazon site for login (`amazon.co.uk`, `amazon.de`, …). |
 | `ACCEPT_LANGUAGE` | `en-US` | Login / Alexa locale. |
@@ -355,7 +355,7 @@ Needed only for live battery / dashboard. Without them, "show Tesla battery" fal
 | `TESLA_OAUTH_REDIRECT_URI` | Alias; wins over `TESLA_REDIRECT_URI` if both are set. |
 | `TESLA_CALLBACK_LISTEN` | Optional bind override, e.g. `http://0.0.0.0:4381`. |
 
-After filling Tesla vars: `./tesla-register.sh` once per region, then OAuth (`tesla-auth-pc.bat` / `npm run tesla-auth` on a PC, or Settings 뿯↽ Authenticate Tesla). Pair the virtual key on the phone at Tesla's `_ak` URL for *your* domain. Recreate the listener afterwards.
+After filling Tesla vars: `./tesla-register.sh` once per region, then OAuth (`tesla-auth-pc.bat` / `npm run tesla-auth` on a PC, or Settings → Authenticate Tesla). Pair the virtual key on the phone at Tesla's `_ak` URL for *your* domain. Recreate the listener afterwards.
 
 ### Guest Snaps
 
@@ -379,14 +379,14 @@ There is also an optional bind-mounted `data/guest-photobooth.json` fallback wit
 | `TINYURL_API_TOKEN_GUESTSNAPS` | Same, for Guest Snaps. |
 | `TINYURL_API_TOKEN_GAMES` | Same, for games. |
 
-Also set the **Public base URL** (https, not a LAN IP) in Settings 뿯↽ Global.
+Also set the **Public base URL** (https, not a LAN IP) in Settings → Global.
 
 ### Steam Now Playing
 
 | Variable | What it does |
 |----------|----------------|
 | `STEAM_API_KEY` | Long-lived Web API key from [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey). |
-| `STEAM_STEAM_ID` | Optional SteamID64. Otherwise link via Settings 뿯↽ Authenticate Steam. |
+| `STEAM_STEAM_ID` | Optional SteamID64. Otherwise link via Settings → Authenticate Steam. |
 | `STEAM_OPENID_REALM` | Public https origin used as OpenID `return_to`. Must be the URL you actually open in the browser (not `127.0.0.1` from inside Docker). |
 | `STEAM_ENABLED` | `0` disables the feature. |
 | `STEAM_REQUIRE_PRESENCE` | `1` only shows a card when a listed PC reports the game. Default is "in-game on any machine". |
@@ -399,7 +399,7 @@ Also set the **Public base URL** (https, not a LAN IP) in Settings 뿯↽ Global
 
 ### PlayStation Network
 
-NPSSO is pasted in Settings 뿯↽ Games and stored encrypted. These only tune behaviour:
+NPSSO is pasted in Settings → Games and stored encrypted. These only tune behaviour:
 
 | Variable | What it does |
 |----------|----------------|
@@ -425,7 +425,7 @@ NPSSO is pasted in Settings 뿯↽ Games and stored encrypted. These only tune b
 
 ### Ring Doorbell
 
-Prefer **Settings 뿯↽ Ring 뿯↽ Sign in**. Optional override:
+Prefer **Settings → Ring → Sign in**. Optional override:
 
 | Variable | What it does |
 |----------|----------------|
@@ -441,11 +441,11 @@ Prefer **Settings 뿯↽ Ring 뿯↽ Sign in**. Optional override:
 | `YT_DLP_BIN` | `yt-dlp` binary for Roll Credits video ingest. The Docker image already sets this. |
 | `FLIGHTPLAN_RAPIDAPI_KEY` | AeroDataBox key from RapidAPI. A generic `RAPIDAPI_KEY` for some *other* RapidAPI product is not a substitute. |
 
-Stock Market uses Yahoo Finance with no key. An optional Finnhub key is stored from Settings 뿯↽ News, not from `.env`.
+Stock Market uses Yahoo Finance with no key. An optional Finnhub key is stored from Settings → News, not from `.env`.
 
 ### Autodarts
 
-Day-to-day: Settings 뿯↽ Autodarts 뿯↽ **Link** (device code at Autodarts' link page) or email/password. Env still wins and returns 409 if set:
+Day-to-day: Settings → Autodarts → **Link** (device code at Autodarts' link page) or email/password. Env still wins and returns 409 if set:
 
 | Variable | What it does |
 |----------|----------------|
@@ -461,7 +461,7 @@ Voice matchers ("show darts", "darts dashboard") are toggled with `voiceEvents.a
 |----------|----------------|
 | `HUUPE_ADB_PATH` | Path to `adb` if it is not on `PATH`. The Docker image already includes `android-tools`. |
 
-Discovery is an explicit **Settings 뿯↽ Huupe 뿯↽ Discover** action. The bridge does not sweep the LAN on startup. The hoop is tailed read-only (`adb logcat`); nothing is installed on the device.
+Discovery is an explicit **Settings → Huupe → Discover** action. The bridge does not sweep the LAN on startup. The hoop is tailed read-only (`adb logcat`); nothing is installed on the device.
 
 ### Gmail (password mail)
 
@@ -471,7 +471,7 @@ Discovery is an explicit **Settings 뿯↽ Huupe 뿯↽ Discover** action. The b
 | `GMAIL_REDIRECT_URI` | Must match the Cloud client, typically `https://<public-host>/api/gmail/callback`. |
 | `CONTACT_EMAIL` | Address shown on `/privacy` and `/terms`. |
 
-Link the mailbox from Settings 뿯↽ Accounts 뿯↽ Email after the Cloud client exists. Publish the Cloud app to **Production**. Apps left in **Testing** lose the refresh token every 7 days (verification is not required for household-only use).
+Link the mailbox from Settings → Accounts → Email after the Cloud client exists. Publish the Cloud app to **Production**. Apps left in **Testing** lose the refresh token every 7 days (verification is not required for household-only use).
 
 ### Vestaboard simulator bind
 
@@ -489,7 +489,7 @@ Real board keys are not env vars unless a board's `tokenEnv` names one.
 | `WEB_TLS_CERT_FILE` / `WEB_TLS_KEY_FILE` | PEM overrides. Defaults are `data/web-certs/cert.pem` and `key.pem` (self-signed or Let's Encrypt). |
 | `PROXY_PORT` | Amazon auth proxy (default `3456`). |
 | `SIGNAL_SECRET_KEY` | Optional override for the local encryption key. If unset, the bridge uses `data/secret.key` (created on first run). Use this only if you want the key outside the data volume. |
-| `ALARM_LOCAL_TIMEZONE` | IANA zone fallback when Settings 뿯↽ Global has no house pin yet. |
+| `ALARM_LOCAL_TIMEZONE` | IANA zone fallback when Settings → Global has no house pin yet. |
 
 ### Not environment variables
 
@@ -500,9 +500,9 @@ These are linked or stored under `data/` (encrypted where they are secrets). Do 
 | Amazon cookies / tokens | `data/alexa-session.json` |
 | Household users + password hashes | `data/house-users.json` |
 | Board Local API keys | `data/vestaboard-settings.json` |
-| PSN NPSSO | Settings 뿯↽ Games 뿯↽ `data/psn-session.json` |
-| Autodarts device tokens | Settings 뿯↽ Autodarts |
-| Ring session (unless `RING_REFRESH_TOKEN`) | Settings 뿯↽ Ring |
+| PSN NPSSO | Settings → Games → `data/psn-session.json` |
+| Autodarts device tokens | Settings → Autodarts |
+| Ring session (unless `RING_REFRESH_TOKEN`) | Settings → Ring |
 | Gmail refresh token | `data/gmail-session.json` after Link Gmail |
 | Tesla OAuth tokens | `data/tesla-session.json` after Tesla auth |
 | Local encryption key | `data/secret.key` (or `SIGNAL_SECRET_KEY`) |
@@ -512,7 +512,7 @@ These are linked or stored under `data/` (encrypted where they are secrets). Do 
 
 ## Optional integrations (after the core is up)
 
-Do these from Signal 뿯↽ Settings unless you prefer env (env still wins).
+Do these from Signal → Settings unless you prefer env (env still wins).
 
 | Integration | Settings / action | Env if you insist |
 |-------------|-------------------|-------------------|
@@ -564,12 +564,12 @@ Let's Encrypt (DNS-01, manual TXT) is documented in [DOCKER.md](DOCKER.md#lets-e
 | Client never appears | `bridgeHosts` = NAS IP, discovery **47833**, host networking, matching `udpSecret` |
 | Overlays never arrive | Windows firewall **47832**; optional `udpBroadcast.targets`; matching secret |
 | Board **Not answering** | Static IP, not `vestaboard.local` |
-| Nothing flips, queue grows | A game/Huupe hold, or quiet hours. Simulator 뿯↽ Release Holds |
+| Nothing flips, queue grows | A game/Huupe hold, or quiet hours. Simulator → Release Holds |
 | Auth proxy "address already in use" | Stop the listener and `docker rm -f signal-alexa-auth`; `PROXY_PORT=3457` if 3456 is taken |
 | QNAP `docker compose build` ZFS error | `./recreate.sh` without `--build` — `src/` is bind-mounted |
 | Tesla / Gmail / Steam callback fails | Redirect URI must match the developer console **and** the URL in the browser (public hostname, not Docker's `127.0.0.1`) |
 
-More rows: [DOCKER.md 뿯↽ Troubleshooting](DOCKER.md#7-troubleshooting).
+More rows: [DOCKER.md → Troubleshooting](DOCKER.md#7-troubleshooting).
 
 ---
 
