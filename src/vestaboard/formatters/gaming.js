@@ -522,6 +522,7 @@ function huupeSessionFrames(payload = {}) {
         titleRight: mode,
         rows: padRows(rows),
         footerLeft: 'SHOOTING NOW',
+        footerAlign: 'center',
       }),
       'Huupe live',
       'huupe.session',

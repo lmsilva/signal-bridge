@@ -372,7 +372,7 @@ test('a live Family Mode game is a scoreboard, closest race first', () => {
     ' WAR D           12.9',
     ' LAST SHOT 3PT MADE',
     '',
-    'oo SHOOTING NOW     oo',
+    'oo   SHOOTING NOW   oo',
   ], 'huupe live family');
 });
 
@@ -405,7 +405,7 @@ test('free play has no names, so the board shows the session score', () => {
     ' FG 9/21 - 43%',
     ' LAST SHOT 3PT MADE',
     ' 4 MAKES IN A ROW',
-    'oo SHOOTING NOW     oo',
+    'oo   SHOOTING NOW   oo',
   ], 'huupe live free play');
 });
 
@@ -429,7 +429,7 @@ test('the last shot is named on the board, made or missed', () => {
     ' FG 9/22 - 41%',
     ' LAST SHOT 3PT MISS',
     '',
-    'oo SHOOTING NOW     oo',
+    'oo   SHOOTING NOW   oo',
   ], 'huupe live free play miss');
 });
 
@@ -446,7 +446,7 @@ test('the longest last-shot row is the full width of a body row', () => {
     ' WAR D           12.9',
     ' LAST SHOT LAYUP MADE',
     '',
-    'oo SHOOTING NOW     oo',
+    'oo   SHOOTING NOW   oo',
   ], 'huupe live layup');
 });
 
@@ -466,7 +466,7 @@ test('a full scoreboard still leaves the last shot its row', () => {
     ' WAR D           12.9',
     ' BEAN               9',
     ' LAST SHOT 3PT MADE',
-    'oo SHOOTING NOW     oo',
+    'oo   SHOOTING NOW   oo',
   ], 'huupe live full scoreboard');
 });
 
@@ -480,7 +480,7 @@ test('a session with no shot on record simply omits the row', () => {
     ' WAR D           12.9',
     '',
     '',
-    'oo SHOOTING NOW     oo',
+    'oo   SHOOTING NOW   oo',
   ], 'huupe live no last shot');
 });
 

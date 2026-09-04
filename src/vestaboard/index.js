@@ -195,7 +195,9 @@ function createVestaboardHub({
         }
         const attempted = results.filter((row) => !row.skipped);
         if (!attempted.length) {
-          return { ok: true, reason: 'ok' };
+          // Every board sat out (quiet hours). Do not consume the page — the
+          // house line must not think the flaps moved when nothing did.
+          return { ok: false, reason: 'quiet', retryable: true };
         }
         if (attempted.every((row) => row.outcome?.reason === 'busy')) {
           return { ok: false, reason: 'busy', retryable: true };

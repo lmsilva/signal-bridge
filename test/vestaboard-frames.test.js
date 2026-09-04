@@ -82,6 +82,27 @@ test('a badge frame can centre the title between the chip pairs', () => {
   ].join('\n'), 'centred playstation title');
 });
 
+test('a badge frame can centre the footer the same way', () => {
+  // Huupe live's "SHOOTING NOW" sits alone on the footer, so it reads better
+  // centred between the chip pairs than parked against the left ones.
+  const frame = badgeFrame({
+    color: 'orange',
+    title: 'HUUPE',
+    titleRight: 'FREE PLAY',
+    footerLeft: 'SHOOTING NOW',
+    footerAlign: 'center',
+  });
+
+  assertLayout(frame, [
+    'oo HUUPE  FREE PLAY oo',
+    '',
+    '',
+    '',
+    '',
+    'oo   SHOOTING NOW   oo',
+  ].join('\n'), 'centred shooting-now footer');
+});
+
 test('a badge frame right-aligns the header extra, like a category or page', () => {
   const frame = badgeFrame({
     color: 'yellow',
