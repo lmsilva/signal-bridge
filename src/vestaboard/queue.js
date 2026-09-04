@@ -989,6 +989,12 @@ function createQueue({
       return 'busy';
     }
 
+    if (outcome.reason === 'quiet') {
+      // A follower board is in quiet hours. Leave the page waiting; the next
+      // tick (or the end of quiet hours) will try again.
+      return 'quiet';
+    }
+
     if (outcome.reason === 'layout') {
       // Retrying an unshowable frame forever would wedge everything behind it.
       log?.warn?.(`Vestaboard ${config.id} refused a layout: ${outcome.message || 'invalid'}`);

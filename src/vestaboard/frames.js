@@ -172,6 +172,7 @@ function badgeFrame({
   rows = [],
   footerLeft = '',
   footerRight = '',
+  footerAlign = 'left',
 } = {}) {
   const chip = chipCode(color);
 
@@ -214,7 +215,7 @@ function badgeFrame({
   for (let i = 0; i < MAX_BODY_ROWS; i += 1) {
     layout.push(bodyRow(rows[i]));
   }
-  layout.push(cornerRow(footerLeft, footerRight));
+  layout.push(cornerRow(footerLeft, footerRight, { align: footerAlign }));
 
   return assertValidLayout(layout, 'badge frame');
 }

@@ -201,10 +201,19 @@ async function startHarness({ withSimulator = true, withHub = false } = {}) {
     });
     await hub.start();
     // These tests pin the admin stream, not quiet hours. Default 22:00–07:00
-    // would refuse a shopping/weather submit after bedtime.
+    // would refuse a shopping/weather submit after bedtime — both on the house
+    // queue and on the simulator board the fan-out still consults.
     hub.queueFor('sim')?.setConfig({
       quietHours: { start: '22:00', end: '07:00', enabled: false },
+      rateWindowSeconds: 0,
     });
+    const simBoard = hub.settings.get('sim');
+    if (simBoard) {
+      hub.settings.upsert({
+        ...simBoard,
+        quietHours: { start: '22:00', end: '07:00', enabled: false },
+      });
+    }
     // Wired the way the listener wires it, so the picker sees boards.
     registry = createDisplayRegistry(
       config,
