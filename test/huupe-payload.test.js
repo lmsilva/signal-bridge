@@ -9,6 +9,7 @@ const {
   modeLabel,
   zoneLabel,
   zoneRows,
+  shotWorthLabel,
   formatPoints,
   formatDuration,
   relativeDay,
@@ -192,6 +193,7 @@ test('a layup keeps its tenth of a point all the way to the panel', () => {
   assert.equal(payload.session.stats.shotLine, '12/30');
   assert.equal(payload.session.lastShot.pointsLabel, '0.1');
   assert.equal(payload.session.lastShot.zoneLabel, 'Layup');
+  assert.equal(payload.session.lastShot.worthLabel, 'LAYUP');
   // The ticker is oldest-first so the newest dot lands under the shooter's eye
   // at the right-hand end of the strip.
   assert.deepEqual(payload.session.recentShots, [
@@ -248,6 +250,27 @@ test('zone names say where the shot came from and what it was worth', () => {
   // Points contributed, not shots taken: three layups are 0.3, not 3.
   assert.deepEqual(rows.map((row) => row.scored), [0.3, 0, 2, 9]);
   assert.equal(rows.reduce((total, row) => total + row.scored, 0), 11.3);
+});
+
+test('free play prices the rim at a point, the way the hoop counts it', () => {
+  // The hoop's free-play scoreboard has 1pt / 2pt / 3pt counters and nothing
+  // finer, so a drop-in is a one-pointer and three of them are three points.
+  const byZone = { layup: zone(3, 3), one: zone(0, 0), two: zone(1, 1), three: zone(3, 5) };
+  const rows = zoneRows(byZone, 'justhuupe');
+
+  assert.deepEqual(rows.map((row) => row.points), [1, 1, 2, 3]);
+  assert.deepEqual(rows.map((row) => row.pointsLabel), ['1 PT', '1 PT', '2 PT', '3 PT']);
+  assert.deepEqual(rows.map((row) => row.scored), [3, 0, 2, 9]);
+
+  // Family Mode is the one mode that still pays a tenth at the rim.
+  assert.equal(zoneRows(byZone, 'family')[0].points, 0.1);
+
+  // The board row names the value, and a layup that is worth a whole point
+  // is called what it pays rather than kept as a special case.
+  assert.equal(shotWorthLabel('layup', 'justhuupe'), '1PT');
+  assert.equal(shotWorthLabel('layup', 'family'), 'LAYUP');
+  assert.equal(shotWorthLabel('three', 'justhuupe'), '3PT');
+  assert.equal(shotWorthLabel('halfCourt', 'justhuupe'), '');
 });
 
 test('a solo session leads with its own score and a called game leads with the winner', () => {

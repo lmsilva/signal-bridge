@@ -6,7 +6,7 @@
  */
 
 const { ZONES } = require('./huupe-aggregates');
-const { ZONE_POINTS } = require('./huupe-parser');
+const { ZONE_POINTS, pointsTableForMode } = require('./huupe-parser');
 
 /** Layup tenths make every derived total a float; keep them to one place. */
 function round1(value) {
@@ -53,14 +53,6 @@ const ZONE_SHORT = {
   three: '3PT',
 };
 
-/** A made layup is worth 0.1 — that tenth is where scores like 17.1 come from. */
-const ZONE_VALUE_LABELS = {
-  layup: '0.1 PT',
-  one: '1 PT',
-  two: '2 PT',
-  three: '3 PT',
-};
-
 function modeLabel(mode) {
   return MODE_LABELS[String(mode || '').toLowerCase()] || MODE_LABELS.unknown;
 }
@@ -97,25 +89,45 @@ function relativeDay(iso, nowMs = Date.now()) {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-function zoneRows(byZone) {
+/**
+ * The zone strip, priced for the mode that is being played.
+ *
+ * A layup is worth 0.1 in Family Mode and 1 in every mode the hardware tracker
+ * scores, so both the label and the points this zone contributed follow the
+ * session's mode. The dashboard aggregates a mixed history and has no single
+ * mode to price against, so it keeps Family Mode's table.
+ */
+function zoneRows(byZone, mode = 'family') {
+  const table = pointsTableForMode(mode);
   return ZONES.map((zone) => {
     const row = byZone?.[zone] || {};
     const made = Number(row.made) || 0;
+    const points = table[zone] ?? ZONE_POINTS[zone];
     return {
       zone,
       label: ZONE_LABELS[zone],
       note: ZONE_NOTES[zone],
       short: ZONE_SHORT[zone],
-      points: ZONE_POINTS[zone],
-      pointsLabel: ZONE_VALUE_LABELS[zone],
+      points,
+      pointsLabel: `${formatPoints(points)} PT`,
       made,
       attempts: Number(row.attempts) || 0,
       pct: Number(row.pct) || 0,
       // What this zone actually contributed, so the panel can show where a
       // score came from rather than only how often it was hit.
-      scored: round1(made * (ZONE_POINTS[zone] || 0)),
+      scored: round1(made * (points || 0)),
     };
   });
+}
+
+/**
+ * What the last shot was (or would have been) worth, in the terse form a board
+ * row can carry: `3PT`, or `LAYUP` for the tenth Family Mode pays at the rim.
+ */
+function shotWorthLabel(zone, mode) {
+  const points = pointsTableForMode(mode)[zone];
+  if (points === undefined) return '';
+  return points < 1 ? 'LAYUP' : `${formatPoints(points)}PT`;
 }
 
 /**
@@ -142,11 +154,12 @@ function buildSessionPayload(session = {}, {
 } = {}) {
   const nowMs = now();
   const stats = session.stats || {};
+  const mode = session.mode || 'unknown';
   const players = (session.players || []).map((player, index) => ({
     ...player,
     rank: index + 1,
     scoreLabel: formatPoints(player.score),
-    zones: zoneRows(player.byZone),
+    zones: zoneRows(player.byZone, mode),
   }));
 
   return {
@@ -157,7 +170,7 @@ function buildSessionPayload(session = {}, {
     persistent,
     session: {
       sessionId: session.sessionId || null,
-      mode: session.mode || 'unknown',
+      mode,
       modeLabel: modeLabel(session.mode),
       status: session.status || 'live',
       revision: Number(session.revision) || 0,
@@ -172,12 +185,15 @@ function buildSessionPayload(session = {}, {
         pointsLabel: formatPoints(stats.points),
         shotLine: `${Number(stats.made) || 0}/${Number(stats.attempts) || 0}`,
       },
-      zones: zoneRows(stats.byZone),
+      zones: zoneRows(stats.byZone, mode),
       lastShot: session.lastShot
         ? {
           ...session.lastShot,
           zoneLabel: zoneLabel(session.lastShot.zone),
           pointsLabel: formatPoints(session.lastShot.points),
+          // A miss carries no points, so the board still needs to be told what
+          // the attempt was worth.
+          worthLabel: shotWorthLabel(session.lastShot.zone, mode),
         }
         : null,
       recentShots: (session.recentShots || []).map((shot) => ({
@@ -323,6 +339,7 @@ module.exports = {
   modeLabel,
   zoneLabel,
   zoneRows,
+  shotWorthLabel,
   formatPoints,
   formatDuration,
   relativeDay,
@@ -330,5 +347,4 @@ module.exports = {
   ZONE_LABELS,
   ZONE_NOTES,
   ZONE_SHORT,
-  ZONE_VALUE_LABELS,
 };

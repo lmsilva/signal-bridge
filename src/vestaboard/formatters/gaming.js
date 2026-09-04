@@ -436,6 +436,27 @@ function shootingRow(stats) {
 }
 
 /**
+ * `LAST SHOT 3PT MADE` — the running totals say how the session is going, but
+ * not what just happened, and a shooter walking back to the line wants to see
+ * the shot they took. `LAST SHOT LAYUP MADE` is the longest form at exactly
+ * the twenty columns a body row has.
+ */
+function lastShotRow(session = {}) {
+  const shot = session.lastShot;
+  const worth = fold(shot?.worthLabel || '');
+  if (!worth) {
+    return '';
+  }
+  return `LAST SHOT ${worth} ${shot.made ? 'MADE' : 'MISS'}`;
+}
+
+/** "ON A 2 RUN" read as scoreboard code; say what the number counts. */
+function streakRow(count) {
+  const run = toNumber(count);
+  return run > 1 ? `${formatWhole(run)} MAKES IN A ROW` : '';
+}
+
+/**
  * Board-width mode names.
  *
  * The header shares 22 columns with the colour chips and the HUUPE badge, and
@@ -480,12 +501,18 @@ function huupeSessionFrames(payload = {}) {
   const mode = huupeModeText(session);
 
   if (!finished) {
+    // Four body rows either way: a scoreboard keeps one for the last shot, and
+    // free play spends the fourth on the make streak when there is one.
     const rows = players.length
-      ? players.slice(0, 3).map((player) => lr(fitName(player.name), scoreText(player.score)))
+      ? [
+        ...players.slice(0, 3).map((player) => lr(fitName(player.name), scoreText(player.score))),
+        lastShotRow(session),
+      ].filter(Boolean)
       : [
         `${scoreText(stats.points)} POINTS`,
         shootingRow(stats),
-        toNumber(stats.streak) > 1 ? `ON A ${formatWhole(stats.streak)} RUN` : '',
+        lastShotRow(session),
+        streakRow(stats.streak),
       ].filter(Boolean);
 
     return [snapshotFrame(
@@ -514,7 +541,9 @@ function huupeSessionFrames(payload = {}) {
   } else {
     rows.push(`${scoreText(stats.points)} POINTS`);
     rows.push(shootingRow(stats));
-    rows.push(toNumber(stats.bestStreak) > 1 ? `BEST RUN ${formatWhole(stats.bestStreak)}` : '');
+    rows.push(toNumber(stats.bestStreak) > 1
+      ? `BEST RUN ${formatWhole(stats.bestStreak)} MAKES`
+      : '');
   }
   const threes = toNumber(winner?.threes ?? stats.threes);
   rows.push(threes ? `${formatWhole(threes)} FROM DEEP` : '');
