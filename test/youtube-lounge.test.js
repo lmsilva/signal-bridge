@@ -7,6 +7,7 @@ const {
   DEFAULT_CONFIRM_SECONDS,
   STOP_GRACE_MS,
   CONFIRM_RETRY_MS,
+  SESSION_STALL_TIMEOUT_MS,
   createYoutubeLounge,
 } = require('../src/youtube-lounge');
 
@@ -260,10 +261,12 @@ test('a paused video does not confirm, and resuming it does', () => {
   assert.deepEqual(h.events.started, []);
 
   h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 0 });
+  assert.deepEqual(h.events.started, [], 'Playing at a standstill is not a resume');
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 3 });
   assert.equal(h.events.started.length, 1);
 });
 
-test('a zero confirm window starts the session on the first event', () => {
+test('a zero confirm window still needs the scrubber to move', () => {
   const h = harness({ confirmSeconds: 0 });
   h.lounge.start();
 
@@ -271,11 +274,15 @@ test('a zero confirm window starts the session on the first event', () => {
     event: 'now-playing', deviceId: 'tv-1', videoId: 'abc',
     position: 0, durationSeconds: 600, state: 'Playing',
   });
+  assert.deepEqual(h.events.started, [], 'Playing at 0s is not a watch');
 
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 2 });
   assert.equal(h.events.started.length, 1);
 });
 
-test('confirm timer starts a session without a later Lounge tick', () => {
+test('Playing at a standstill does not start a session', () => {
+  // The production bug: an idle Apple TV answers the 45s keep-alive as
+  // Playing at position 0. Confirm used to treat that label as a watch.
   const h = harness({ confirmSeconds: 5 });
   h.lounge.start();
 
@@ -285,8 +292,9 @@ test('confirm timer starts a session without a later Lounge tick', () => {
   });
   assert.deepEqual(h.events.started, []);
 
-  // Apple TV often goes quiet for 60–90s — wall-clock confirm must still fire.
   h.advance(5);
+  assert.deepEqual(h.events.started, [], 'wall-clock plus Playing is not playback');
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 8 });
   assert.equal(h.events.started.length, 1);
   assert.equal(h.events.started[0].videoId, 'abc');
 });
@@ -343,6 +351,21 @@ test('a TV re-announcing a finished video never opens a session', () => {
   assert.equal(h.events.started.length, 0, 'a standstill must never look like playback');
 });
 
+test('Playing keep-alive polls at position 0 never open a session', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+
+  for (let poll = 0; poll < 12; poll += 1) {
+    h.feed({
+      event: 'now-playing', deviceId: 'tv-1', videoId: 'idle',
+      position: 0, durationSeconds: 11177, state: 'Playing',
+    });
+    h.advance(45);
+  }
+  assert.equal(h.events.started.length, 0, 'Playing at 0s is still a standstill');
+  assert.deepEqual(h.lounge.activeSessions(), []);
+});
+
 test('an idle sweep closes a session whose TV went silent', () => {
   const h = harness({ confirmSeconds: 5 });
   h.lounge.start();
@@ -352,6 +375,7 @@ test('an idle sweep closes a session whose TV went silent', () => {
     position: 10, durationSeconds: 600, state: 'Playing',
   });
   h.advance(5);
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 16 });
   assert.equal(h.events.started.length, 1);
 
   assert.deepEqual(h.lounge.sweepIdleSessions(), [], 'a fresh session is not idle');
@@ -360,6 +384,30 @@ test('an idle sweep closes a session whose TV went silent', () => {
   assert.deepEqual(h.lounge.sweepIdleSessions(), ['tv-1']);
   assert.equal(h.events.stopped.length, 1);
   assert.equal(h.events.stopped[0].reason, 'idle');
+  assert.equal(h.lounge.activeSessions().length, 0);
+});
+
+test('a Playing session whose scrubber never moves is closed as stalled', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+  playFor(h, { seconds: 6, videoId: 'frozen' });
+  assert.equal(h.events.started.length, 1);
+
+  // Keep-alive keeps lastSeenAt fresh, so idle sweep would never fire.
+  h.advance((SESSION_STALL_TIMEOUT_MS / 1000) - 10);
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'frozen',
+    position: 6, durationSeconds: 600, state: 'Playing',
+  });
+  assert.deepEqual(h.lounge.sweepIdleSessions(), [], 'still inside the stall window');
+
+  h.advance(20);
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'frozen',
+    position: 6, durationSeconds: 600, state: 'Playing',
+  });
+  assert.deepEqual(h.lounge.sweepIdleSessions(), ['tv-1']);
+  assert.equal(h.events.stopped[0].reason, 'stalled');
   assert.equal(h.lounge.activeSessions().length, 0);
 });
 
@@ -647,6 +695,7 @@ test('an ad contentVideoId seeds provisional before now-playing', () => {
     position: 0, durationSeconds: 600, state: 'Playing',
   });
   h.advance(6);
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position: 6 });
   assert.equal(h.events.started.length, 1);
   assert.equal(h.events.started[0].videoId, 'content-1');
 });
