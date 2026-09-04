@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal288">
+  <link rel="stylesheet" href="styles.css?v=signal289">
 </head>
 <body>
   <header class="su-head">
@@ -163,9 +163,11 @@
           <span class="vb-flip-remain" id="vb-flip-remain">now</span>
           <span class="vb-flip-when" id="vb-flip-when">The board can flip now</span>
         </div>
-        <div class="vb-bezel" id="vb-bezel">
-          <div class="vb-grid" id="vb-grid"></div>
-          <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+        <div class="vb-board-wrap">
+          <div class="vb-bezel" id="vb-bezel">
+            <div class="vb-grid" id="vb-grid"></div>
+            <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+          </div>
         </div>
         <div class="card vb-queue-card">
           <div class="vb-head">
@@ -175,7 +177,7 @@
               <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-vb-queue-clear" hidden>Clear queue</button>
             </div>
           </div>
-          <p class="hint">This is the house queue. Drag to rearrange; cancel drops one page.</p>
+          <p class="hint">This is the house queue. Drag to rearrange; cancel drops one card, including every page of it.</p>
           <div class="vb-list" id="vb-queue"><p class="hint">Nothing queued.</p></div>
         </div>
       </div>
@@ -475,7 +477,7 @@
   <script src="/flap-grid.js"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
   <script src="/push-icons.js?v=signal262"></script>
-  <script src="/vestaboard-sim-ui.js?v=signal284"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="app.js?v=signal288"></script>

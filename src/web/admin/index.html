@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal287">
+  <link rel="stylesheet" href="styles.css?v=signal290">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -171,7 +171,7 @@
         <div class="push-block" data-push-group="news">
           <div class="section-label">Headlines</div>
           <div class="card-row card-row-quad" id="push-row-news" data-push-category="news"
-               data-skeleton-count="21" aria-busy="true"></div>
+               data-skeleton-count="22" aria-busy="true"></div>
         </div>
 
         <div class="push-block" data-push-group="language">
@@ -2110,6 +2110,21 @@
           </div>
         </div>
 
+        <div class="section-label" data-settings-group="news">Bible Verse Of The Day</div>
+        <div class="card bible-verse-settings-card" id="bible-verse-settings-card" data-settings-group="news" data-search-terms="bible verse scripture kjv verse of the day">
+          <div class="auth-head">
+            <div class="auth-name">A familiar scripture on the flaps</div>
+            <span class="status-pill" id="bible-verse-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="bible-verse-status-detail">
+            Local King James verses for the Vestaboard. Manage the list in a sheet, or push a random one to test.
+          </p>
+          <div class="btn-row cn-settings-actions">
+            <button type="button" class="btn btn-outline" id="btn-bible-verse-manage">Manage verses</button>
+            <button type="button" class="btn btn-accent" id="btn-bible-verse-push">Push Random</button>
+          </div>
+        </div>
+
         <div class="section-label" data-settings-group="news">On This Day in History</div>
         <div class="card on-this-day-settings-card" id="on-this-day-settings-card" data-settings-group="news">
           <div class="auth-head">
@@ -3687,7 +3702,7 @@
               <button type="button" class="btn btn-outline btn-sm" id="btn-vb-queue-clear" hidden>Clear queue</button>
             </div>
           </div>
-          <p class="hint">This is the house queue — every enabled Vestaboard follows it. Drag to rearrange; cancel drops one page; Clear queue drops every waiting page. Release Holds drops the house hold. Alarms with Now cut in; Hold events keep the line until they end or you release them; everything else waits its turn.</p>
+          <p class="hint">This is the house queue — every enabled Vestaboard follows it. Drag to rearrange; cancel drops one card, including every page of it; Clear queue drops every waiting page. Release Holds drops the house hold. Alarms with Now cut in; Hold events keep the line until they end or you release them; everything else waits its turn.</p>
           <div class="vb-list" id="vb-queue">
             <p class="hint">Nothing queued.</p>
           </div>
@@ -4335,6 +4350,49 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-stoic-quotes-prev">Previous</button>
         <span class="hint" id="stoic-quotes-page-label"></span>
         <button type="button" class="btn btn-outline btn-sm" id="btn-stoic-quotes-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bible Verse Of The Day manager -->
+  <div class="sheet-backdrop" id="bible-verse-manage-sheet" hidden>
+    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="bible-verse-manage-title">
+      <div class="credits-sheet-head">
+        <div class="sheet-title" id="bible-verse-manage-title">Manage Bible Verses</div>
+        <button type="button" class="credits-sheet-close" id="btn-bible-verse-manage-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="bible-verse-manage-summary">Loading…</p>
+      <div class="cn-compose cn-compose-sheet">
+        <div class="cn-compose-form">
+          <label class="field-label" for="bible-verse-new">New verse</label>
+          <textarea class="field-input cn-fact-input" id="bible-verse-new" rows="3" maxlength="220" placeholder="The Lord is my shepherd; I shall not want."></textarea>
+          <label class="field-label field-label-spaced" for="bible-verse-reference">Reference</label>
+          <input type="text" class="field-input" id="bible-verse-reference" maxlength="40" placeholder="Psalm 23:1" autocomplete="off">
+          <div class="cn-compose-actions">
+            <button type="button" class="btn btn-accent" id="btn-bible-verse-add">Add verse</button>
+            <span class="hint" id="bible-verse-fit-hint"></span>
+          </div>
+        </div>
+        <div class="cn-preview-col">
+          <span class="field-label">Board preview</span>
+          <div class="vb-bezel preview-bezel" aria-hidden="true">
+                <div class="vb-grid" id="bible-verse-preview"></div>
+                <div class="vb-wordmark">VESTABOARD</div>
+              </div>
+        </div>
+      </div>
+      <div class="cn-toolbar">
+        <input type="search" class="field-input" id="bible-verse-search" placeholder="Search verses or references" autocomplete="off">
+        <label class="trivia-check">
+          <input type="checkbox" id="bible-verse-show-hidden">
+          <span>Show hidden</span>
+        </label>
+      </div>
+      <div class="cn-fact-list" id="bible-verse-verse-list"></div>
+      <div class="cn-pager">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-bible-verse-prev">Previous</button>
+        <span class="hint" id="bible-verse-page-label"></span>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-bible-verse-next">Next</button>
       </div>
     </div>
   </div>
@@ -5201,10 +5259,10 @@
     </div>
   </div>
 
-  <script src="/vestaboard-sim-ui.js?v=signal284"></script>
+  <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal267"></script>
-  <script src="settings-filter.js?v=signal283"></script>
-  <script src="app.js?v=signal287"></script>
+  <script src="settings-filter.js?v=signal290"></script>
+  <script src="app.js?v=signal290"></script>
 </body>
 </html>

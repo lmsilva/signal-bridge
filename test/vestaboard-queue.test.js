@@ -327,6 +327,52 @@ test('dropPending clears the pages one feature is taking the board from', async 
   assert.equal(h.transport.posts.length, 0);
 });
 
+test('dropPending tells the session layer each dropped game page died', () => {
+  const h = makeQueue();
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
+  h.queue.submit([frame('PROMPTS', 1, { source: 'party.prompts' })], {
+    sessionId: 's-prompts',
+    code: 'PUMC',
+  });
+  h.queue.dropPending((frame) => frame.source === 'party.prompts');
+  const cancelled = events.filter((row) => row.event === 'cancelled');
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0].detail.sessionId, 's-prompts');
+  assert.equal(cancelled[0].detail.code, 'PUMC');
+});
+
+test('taking a second game lock ends the first and drops its waiting pages', () => {
+  const h = makeQueue();
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
+  h.queue.acquireGameLock('party.prompts');
+  h.queue.submit([frame('PROMPTS', 1, { source: 'party.prompts' })], {
+    sessionId: 's-prompts',
+    code: 'PUMC',
+  });
+  assert.equal(h.queue.pending().length, 1);
+  h.queue.acquireGameLock('word.scramble');
+  assert.equal(h.queue.state().gameLock.source, 'word.scramble');
+  assert.equal(h.queue.pending().length, 0);
+  assert.ok(events.some((row) => row.event === 'lock-preempted'
+    && row.detail.source === 'party.prompts'
+    && row.detail.by === 'word.scramble'));
+  assert.ok(events.some((row) => row.event === 'cancelled'
+    && row.detail.code === 'PUMC'));
+});
+
+test('releasing every hold tells the displaced game to end', () => {
+  const h = makeQueue();
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
+  h.queue.acquireGameLock('word.scramble');
+  assert.equal(h.queue.releaseGameLock(''), true);
+  assert.equal(h.queue.state().gameLock, null);
+  assert.ok(events.some((row) => row.event === 'lock-preempted'
+    && row.detail.source === 'word.scramble'));
+});
+
 test('dropPending without a predicate leaves the queue alone', () => {
   const h = makeQueue();
   h.queue.submit([frame('RIDDLE', 1, { source: 'word.riddles' })]);
@@ -1019,6 +1065,46 @@ test('posted events carry the game session id so the lobby clock can start', asy
   assert.equal(posted.detail.sessionId, 'sess-9');
   assert.equal(posted.detail.code, 'DLJH');
   assert.equal(posted.detail.card, 'invite');
+});
+
+test('a paged card is one queue row, not one row per page', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('VERSE', 1), frame('VERSE', 2)], { commandId: 'bible.verse' });
+  h.queue.submit([frame('CLOCK', 3)]);
+  const rows = h.queue.pending();
+  assert.deepEqual(rows.map((row) => row.label), ['VERSE', 'CLOCK']);
+  assert.equal(rows[0].pages, 2);
+  assert.equal(rows[1].pages, 1);
+  // The board still owes three flips even though the queue reads as two events.
+  assert.equal(h.queue.state().queued, 3);
+});
+
+test('cancelling a paged card takes every page with it', () => {
+  const h = makeQueue();
+  const events = [];
+  h.queue.onChange((event, detail) => events.push({ event, detail }));
+  h.queue.submit([frame('VERSE', 1), frame('VERSE', 2)], { commandId: 'bible.verse' });
+  h.queue.submit([frame('CLOCK', 3)]);
+  assert.equal(h.queue.cancel(h.queue.pending()[0].id), true);
+  assert.deepEqual(h.queue.pending().map((row) => row.label), ['CLOCK']);
+  // No orphan page left to post on its own.
+  assert.equal(h.queue.state().queued, 1);
+  assert.equal(events.filter((row) => row.event === 'cancelled').length, 2);
+});
+
+test('dragging a paged card moves its pages together and in order', () => {
+  const h = makeQueue();
+  h.queue.submit([frame('WEATHER', 1)]);
+  h.queue.submit([frame('VERSE', 2), frame('VERSE', 3)], { commandId: 'bible.verse' });
+  const ids = h.queue.pending().map((row) => row.id);
+  const next = h.queue.reorder([ids[1], ids[0]]);
+  assert.deepEqual(next.map((row) => row.label), ['VERSE', 'WEATHER']);
+  assert.equal(next[0].pages, 2);
+  h.queue.reorder([]);
+  assert.deepEqual(
+    h.queue.pending().map((row) => `${row.label}:${row.pages}`),
+    ['VERSE:2', 'WEATHER:1'],
+  );
 });
 
 test('reorder puts waiting pages in the given order', () => {

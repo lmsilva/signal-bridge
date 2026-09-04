@@ -377,7 +377,10 @@ function createQueue({
     const policy = policyFor(owner);
     const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : policy.ttlMs;
     const storedRank = Number.isFinite(rank) ? rank : policy.rank;
-    const fresh = state.laneLock?.source !== owner;
+    const previous = state.laneLock && state.laneLock.source !== owner
+      ? state.laneLock.source
+      : '';
+    const fresh = !state.laneLock || Boolean(previous);
     state.laneLock = {
       source: owner,
       lane,
@@ -385,6 +388,17 @@ function createQueue({
       expiresAt: now() + ttl,
     };
     syncGameLockAlias();
+    if (previous) {
+      // pushPhase setGameLock used to overwrite the owner with no event, so
+      // Party Prompts stayed invited for an hour after Word Scramble took
+      // the board. Tell the session layer and drop the old game's pages.
+      emit('lock-preempted', {
+        boardId: config.id,
+        source: previous,
+        by: owner,
+      });
+      dropSourcePending(previous);
+    }
     if (fresh) announceQueue();
     return true;
   }
@@ -393,10 +407,18 @@ function createQueue({
     const owner = String(source || '');
     if (!state.laneLock) return false;
     if (owner && state.laneLock.source !== owner) return false;
+    const displaced = state.laneLock.source;
     state.laneLock = null;
     syncGameLockAlias();
     state.phaseUntil = null;
     announceQueue();
+    if (!owner && displaced) {
+      emit('lock-preempted', {
+        boardId: config.id,
+        source: displaced,
+        by: '',
+      });
+    }
     return true;
   }
 
@@ -417,26 +439,73 @@ function createQueue({
     return item.scheduler;
   }
 
+  /**
+   * The queue holds one item per frame, but a paged card is one event to the
+   * person watching: two rows both saying "Bible Verse Of The Day" read like
+   * the push went out twice. Pages of a sequence collapse into a single row
+   * carrying the first waiting page's id and how many pages are left.
+   */
   function pending() {
-    return items.map((item) => ({
-      id: item.id,
-      label: item.frame.label || 'Frame',
-      eventTitle: item.eventTitle || item.frame.label || 'Frame',
-      commandId: item.commandId || null,
-      source: item.frame.source || '',
-      priority: item.priority,
-      scheduler: Boolean(item.scheduler),
-      actor: item.actor || null,
-      notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
-      status: item.notBefore
-        ? null
-        : (itemHeld(item) ? 'held' : (itemCutsIn(item) ? 'cutting-in' : 'waiting')),
-    }));
+    const rows = [];
+    const byCard = new Map();
+    for (const item of items) {
+      const key = cardKeyOf(item);
+      const seen = key ? byCard.get(key) : null;
+      if (seen) {
+        seen.pages += 1;
+        continue;
+      }
+      const row = {
+        id: item.id,
+        label: item.frame.label || 'Frame',
+        eventTitle: item.eventTitle || item.frame.label || 'Frame',
+        commandId: item.commandId || null,
+        source: item.frame.source || '',
+        priority: item.priority,
+        pages: 1,
+        scheduler: Boolean(item.scheduler),
+        actor: item.actor || null,
+        notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
+        status: item.notBefore
+          ? null
+          : (itemHeld(item) ? 'held' : (itemCutsIn(item) ? 'cutting-in' : 'waiting')),
+      };
+      if (key) {
+        byCard.set(key, row);
+      }
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  /**
+   * Pages of one card share a sequence and a label. A batch that submitted
+   * genuinely different frames together shares only the sequence, and those
+   * stay separate rows because they do not look alike on the board.
+   */
+  function cardKeyOf(item) {
+    return item.sequenceId ? `${item.sequenceId}\u0000${item.frame?.label || ''}` : null;
+  }
+
+  /** Every queue item belonging to the same card as `item`, in queue order. */
+  function sequenceOf(item) {
+    const key = cardKeyOf(item);
+    return key ? items.filter((row) => cardKeyOf(row) === key) : [item];
   }
 
   function announceQueue() {
     queueRevision += 1;
     emit('queue', { boardId: config.id, items: pending(), revision: queueRevision });
+  }
+
+  function emitCancelled(item) {
+    emit('cancelled', {
+      boardId: config.id,
+      frame: item.frame,
+      sessionId: item.sessionId || null,
+      code: item.code || null,
+      card: item.frame?.card || null,
+    });
   }
 
   function recoverFromBadKey() {
@@ -523,8 +592,10 @@ function createQueue({
     for (let i = items.length - 1; i >= 0; i -= 1) {
       if (String(items[i].frame?.source || '') === owner
         || String(items[i].ownerSource || '') === owner) {
+        const item = items[i];
         items.splice(i, 1);
         dropped += 1;
+        emitCancelled(item);
       }
     }
     return dropped;
@@ -1106,13 +1177,7 @@ function createQueue({
       const gone = items.splice(0, items.length);
       announceQueue();
       for (const item of gone) {
-        emit('cancelled', {
-          boardId: config.id,
-          frame: item.frame,
-          sessionId: item.sessionId || null,
-          code: item.code || null,
-          card: item.frame?.card || null,
-        });
+        emitCancelled(item);
       }
       return dropped;
     },
@@ -1127,8 +1192,10 @@ function createQueue({
       let dropped = 0;
       for (let i = items.length - 1; i >= 0; i -= 1) {
         if (predicate(items[i].frame, items[i])) {
+          const item = items[i];
           items.splice(i, 1);
           dropped += 1;
+          emitCancelled(item);
         }
       }
       if (dropped) announceQueue();
@@ -1137,21 +1204,24 @@ function createQueue({
     /** Drop one waiting page from the simulator (or any caller that has its id). */
     cancel(id) {
       const key = String(id || '');
-      const index = items.findIndex((item) => item.id === key);
-      if (index < 0) {
+      const target = items.find((item) => item.id === key);
+      if (!target) {
         return false;
       }
-      const item = items[index];
-      items.splice(index, 1);
-      log?.debug?.(`Vestaboard ${config.id} cancelled ${item.frame.label || ''}`.trim());
+      // The row stands for the whole card, so cancelling it takes every page
+      // rather than leaving later pages to post on their own.
+      const doomed = sequenceOf(target);
+      for (const item of doomed) {
+        const index = items.indexOf(item);
+        if (index >= 0) {
+          items.splice(index, 1);
+        }
+        log?.debug?.(`Vestaboard ${config.id} cancelled ${item.frame.label || ''}`.trim());
+      }
       announceQueue();
-      emit('cancelled', {
-        boardId: config.id,
-        frame: item.frame,
-        sessionId: item.sessionId || null,
-        code: item.code || null,
-        card: item.frame?.card || null,
-      });
+      for (const item of doomed) {
+        emitCancelled(item);
+      }
       return true;
     },
     /**
@@ -1170,8 +1240,15 @@ function createQueue({
         if (!item) {
           continue;
         }
-        next.push(item);
-        byId.delete(id);
+        // One dragged row is one card: its pages travel together and stay in
+        // their own order, since page two cannot precede page one.
+        for (const member of sequenceOf(item)) {
+          if (!byId.has(member.id)) {
+            continue;
+          }
+          next.push(member);
+          byId.delete(member.id);
+        }
       }
       for (const item of items) {
         if (byId.has(item.id)) {

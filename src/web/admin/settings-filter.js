@@ -223,6 +223,7 @@ const SETTINGS_CARD_KINDS = Object.freeze({
   'world-geography-facts-settings-card': ['vestaboard'],
   'conversation-starters-settings-card': ['vestaboard'],
   'stoic-quotes-settings-card': ['vestaboard'],
+  'bible-verse-settings-card': ['vestaboard'],
   'on-this-day-settings-card': ['vestaboard'],
   'baking-inspiration-settings-card': ['vestaboard'],
   'stock-market-settings-card': ['vestaboard'],

@@ -98,6 +98,7 @@ const COMMAND_TO_TYPE = {
   'geo.facts': 'geo.facts',
   'talk.starters': 'talk.starters',
   'stoic.quotes': 'stoic.quotes',
+  'bible.verse': 'bible.verse',
   'history.day': 'history.day',
   'bake.inspire': 'bake.inspire',
   'world.population': 'world.population',

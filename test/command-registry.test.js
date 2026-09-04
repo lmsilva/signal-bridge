@@ -254,6 +254,8 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('talk.starters', 'full'), false);
   assert.equal(supportsKind('stoic.quotes', 'vestaboard'), true);
   assert.equal(supportsKind('stoic.quotes', 'full'), false);
+  assert.equal(supportsKind('bible.verse', 'vestaboard'), true);
+  assert.equal(supportsKind('bible.verse', 'full'), false);
   assert.equal(supportsKind('history.day', 'vestaboard'), true);
   assert.equal(supportsKind('history.day', 'full'), false);
   assert.equal(supportsKind('world.population', 'vestaboard'), true);
@@ -893,6 +895,24 @@ test('stoic.quotes is Vestaboard-only and needs a ready quote', () => {
 
   const ready = createCommandRegistry({ getStoicQuotesStatus: () => ({ available: 80 }) });
   assert.equal(ready.hasContent('stoic.quotes'), true);
+});
+
+test('bible.verse is Vestaboard-only and needs a ready verse', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'bible.verse');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/bible-verse');
+  assert.equal(command.defaultDurationSeconds, 30);
+
+  const empty = createCommandRegistry({ getBibleVerseStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('bible.verse'), false);
+
+  const ready = createCommandRegistry({ getBibleVerseStatus: () => ({ available: 80 }) });
+  assert.equal(ready.hasContent('bible.verse'), true);
 });
 
 test('history.day is Vestaboard-only and needs a ready On This Day fact', () => {

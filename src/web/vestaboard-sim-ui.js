@@ -21,7 +21,11 @@
   }
 
   function queueEventTitle(item = {}) {
-    return item.eventTitle || item.label || 'Frame';
+    const title = item.eventTitle || item.label || 'Frame';
+    // A long verse or joke spans several flips. Say so on the one row, so it
+    // does not look like the same push landed twice.
+    const pages = Number(item.pages) || 1;
+    return pages > 1 ? `${title} · ${pages} pages` : title;
   }
 
   function clockOf(iso) {
