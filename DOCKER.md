@@ -1,5 +1,7 @@
 # Docker deployment (QNAP Container Station)
 
+New install from scratch (env vars, Amazon auth, display client, Vestaboard): **[SETUP.md](SETUP.md)**. This page is the NAS/Container Station companion.
+
 ## Overview
 
 | Mode | Command | When |

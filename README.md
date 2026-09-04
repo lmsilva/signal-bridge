@@ -15,10 +15,13 @@ Alexa voice capture uses `alexa-remote2` (unofficial); there is **no supported A
 
 > **Required for any real LAN deploy:** set a shared **LAN UDP secret** (`LAN_UDP_SECRET` on the bridge, matching `udpSecret` on every display). Without it, overlays, remote keyboard/mouse, reboot, and `web.open` travel as **plaintext UDP** — anyone on the LAN can forge them. See [LAN UDP encryption](#lan-udp-encryption). Generate with `openssl rand -base64 32`.
 
+**New machine?** Follow **[SETUP.md](SETUP.md)** — clone, `.env`, Amazon login, Docker/NAS, display client, Vestaboard, and every environment variable the bridge reads (no secrets in that file).
+
 ---
 
 ## Contents
 
+- [**Setup (new install)**](SETUP.md)
 - [Features at a glance](#features-at-a-glance)
 - [What it captures from Alexa](#what-it-captures-from-alexa)
 - [Integrations that watch on their own](#integrations-that-watch-on-their-own)
@@ -363,6 +366,7 @@ Needs the **WebView2 runtime** on the display PC (included on modern Windows 10/
 | `tools/` | Helper scripts (e.g. optional Steam presence reporter) |
 | `tesla-auth-pc.bat` | Windows OAuth helper (use from NAS share; handles UNC via `pushd`) |
 | `scripts/` | NAS-side shell helpers (Tesla, Let's Encrypt, diagnostics) |
+| `SETUP.md` | Step-by-step install + full `.env` catalog |
 | `src/PROJECT.md` | Bridge architecture reference (for developers / agents) |
 | `alexa broadcast client/src/PROJECT.md` | Display client architecture reference |
 
@@ -382,6 +386,8 @@ Needs the **WebView2 runtime** on the display PC (included on modern Windows 10/
 ---
 
 ## Quick start (development)
+
+Full walkthrough (ports, `.env` catalog, NAS, display client, Vestaboard): **[SETUP.md](SETUP.md)**.
 
 ```bash
 npm install
@@ -413,6 +419,8 @@ You can also send an announcement from the Alexa mobile app.
 ## Production deployment (QNAP NAS)
 
 Typical setup: bridge in Docker on the NAS (`network_mode: host`), display client on a Windows poster PC, boards on the LAN.
+
+Reproduce from scratch: **[SETUP.md](SETUP.md)** (env vars, auth, client, boards). Container Station, Let's Encrypt, and NAS-only traps: **[DOCKER.md](DOCKER.md)**.
 
 ```bash
 ./recreate.sh          # restart listener (src/ is bind-mounted; no rebuild needed for code changes)
@@ -480,7 +488,9 @@ Voice routine **"Alexa, show Tesla battery"** fetches live `battery_level` from 
 
 ## API keys and secrets
 
-Everything lives in `.env` (see [`.env.example`](.env.example) for the full annotated list). Most integrations can also be authenticated from the admin UI, in which case the credential is encrypted under `data/` — **an env var always wins, and the admin save returns 409 rather than shadowing it.**
+Step-by-step catalog (what each var does, what is *not* an env var, what wins over Settings): **[SETUP.md → Environment variables](SETUP.md#environment-variables)**. Annotated template: [`.env.example`](.env.example).
+
+Most integrations can also be authenticated from the admin UI, in which case the credential is encrypted under `data/` — **an env var always wins, and the admin save returns 409 rather than shadowing it.**
 
 | Group | Vars | Needed for |
 |-------|------|-----------|
@@ -494,9 +504,10 @@ Everything lives in `.env` (see [`.env.example`](.env.example) for the full anno
 | **PSN** | `PSN_ENABLED`, `PSN_ACCOUNT_ID`, `PSN_RESTORE_AFTER_INTERRUPT_SEC` | PSN Now Playing (NPSSO is linked in the admin, not in `.env`) |
 | **YouTube** | `YOUTUBE_API_KEY`, `YOUTUBE_ENABLED`, `YOUTUBE_LOUNGE_ENABLED`, `YOUTUBE_PYTHON_BIN`, `YOUTUBE_LOUNGE_DEBUG` | YouTube Now Playing |
 | **Plex** | `PLEX_TOKEN` | Feature Presentation and Plex Top 10 |
+| **Ring** | `RING_REFRESH_TOKEN` | Optional; prefer Settings → Sign in |
 | **News / trivia** | `GUARDIAN_API_KEY`, `TRIVIA_API_KEY` | The Upside News, richer trivia pools |
 | **Roll Credits** | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`, `YT_DLP_BIN` | Game metadata and video ingest (Steam fallback works keyless) |
-| **Autodarts** | `AUTODARTS_CLIENT_ID`, `AUTODARTS_EMAIL`, `AUTODARTS_PASSWORD`, `AUTODARTS_QUERIES` | Live match and dashboard |
+| **Autodarts** | `AUTODARTS_CLIENT_ID`, `AUTODARTS_EMAIL`, `AUTODARTS_PASSWORD` | Live match and dashboard (voice matchers: `voiceEvents.autodartsQueries` in config, not an env var) |
 | **Huupe** | `HUUPE_ADB_PATH` | Path to `adb` for the hoop reader |
 | **Flight Plan** | `FLIGHTPLAN_RAPIDAPI_KEY` | AeroDataBox schedules |
 | **Vestaboard** | `VESTABOARD_SIM_PORT`, `VESTABOARD_SIM_HOST`, optional per-board `tokenEnv` | Simulator binding; real board keys are stored encrypted |

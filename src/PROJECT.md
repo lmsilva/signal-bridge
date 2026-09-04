@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-03 (Huupe live SHOOTING NOW centred)
+**Last updated:** 2026-09-03 (SETUP.md install guide)
 
 ---
 
@@ -13,7 +13,7 @@ A **Node.js service (Signal Bridge)** that bridges household services to smart d
 
 There is **no supported Amazon API** for passive broadcast listening. Detection uses Alexa **push events** + **voice history polling** and heuristics in `parser.js`.
 
-User-facing overview: repo root `README.md`. Docker: `DOCKER.md`.
+User-facing overview: repo root `README.md`. Install from scratch: `SETUP.md`. Docker: `DOCKER.md`.
 
 ---
 
@@ -923,6 +923,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-03: **SETUP.md** — new install walkthrough (laptop + NAS Docker + display client + Vestaboard) and a verified catalog of every `.env` key the bridge reads, with placeholders only. README Contents / Quick start / Production / API keys now point at it. Autodarts voice toggle is `voiceEvents.autodartsQueries` in config, not a mythical `AUTODARTS_QUERIES` env var.
 - 2026-09-03: **Huupe live footer is centred** — `SHOOTING NOW` sat flush left under the scoreboard; `badgeFrame` now accepts `footerAlign: 'center'` (same chip-span centering as Steam/PSN titles) and the live Huupe card uses it. Final `GAME OVER` / duration is unchanged. Also: when every follower board sat out quiet hours, the house fan-out used to report a successful flip with no flaps moved, so a weather push after 22:00 never fired `sim.flip` and the sim-api SSE test timed out; it now returns `quiet` and leaves the page waiting. Tests: `vestaboard-frames`, `vestaboard-gaming`, `vestaboard-sim-api`.
 - 2026-09-03: **Free play scores a layup as the one-pointer the hoop counts it as, and the board says what the last shot was** — the bridge priced every layup at Family Mode's 0.1, but free play's scoreboard has only 1pt / 2pt / 3pt counters and a drop-in ticks the 1pt one, so the wall read 84.2 against the hoop's 86. `huupe-parser.js` now keeps a second table (`HAL_ZONE_POINTS`) for the modes the hardware tracker scores; `pointsForZone(zone, source)` and `pointsTableForMode(mode)` pick between them, and `zoneRows(byZone, mode)` prices the zone strip to match (the mixed-history dashboard keeps the Family table). The live board card gained a `LAST SHOT 3PT MADE` row from the new `lastShot.worthLabel`, and `ON A 2 RUN` — which read as scoreboard code — became `2 MAKES IN A ROW` (`BEST RUN 5 MAKES` on the final card). A full three-player scoreboard still leaves the last shot its row. Tests: `huupe-parser`, `huupe-payload`, `huupe-live`, `vestaboard-gaming` (five goldens, incl. the twenty-column `LAST SHOT LAYUP MADE`).
 - 2026-09-02: **Manual Push stamps the signed-in user on voice-style skills** — Indoor Air Quality (and other `/api/push/*` paths that go through `recordVoiceEvent`) lost `requestActor` when the HTTP request finished before Alexa enrich posted the board card, so the queue said `by System`. The actor is now captured on the synthetic voice event and forwarded on fan-out; timers/alarms carry it through their poll hooks the same way. Real Alexa / Autodarts / Huupe / YouTube / Steam / PSN detections still resolve to System; scheduler stays Scheduled. Tests: `web-server`.
