@@ -47,9 +47,11 @@ const MAX_PLAY_DELTA_SECONDS = 180;
  * How far the scrubber must move before a non-Playing state counts as playback.
  *
  * Apple TV keeps announcing whatever is on screen long after a watch ends, and
- * it reports those announcements as Buffering/Starting — which are confirmable.
+ * it reports those announcements as Playing/Buffering/Starting — all confirmable.
  * Position advancing is the only honest evidence that something is running, so
- * a video parked at a standstill can no longer open a session.
+ * a video parked at a standstill can no longer open a session. A `Playing`
+ * label alone is not enough: the keep-alive poll gets that for a finished
+ * video at position 0 forever.
  */
 const PROGRESS_EPSILON_SECONDS = 1;
 /**
@@ -63,6 +65,15 @@ const PROGRESS_EPSILON_SECONDS = 1;
  * means the device is gone rather than slow.
  */
 const SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * Close a session that is still talking but whose scrubber has not moved.
+ *
+ * A TV left on a finished video answers the 45s keep-alive as `Playing` at a
+ * standstill. That refreshes `lastSeenAt`, so the idle sweep never fires, and
+ * the card stays on the wall. Real Apple TV ticks arrive every 30–90s and move
+ * the scrubber; three minutes frozen is the device, not a slow tick.
+ */
+const SESSION_STALL_TIMEOUT_MS = 3 * 60 * 1000;
 
 function createYoutubeLounge({
   config,
@@ -123,6 +134,11 @@ function createYoutubeLounge({
         lastPosition: null,
         durationSeconds: 0,
         watchedSeconds: 0,
+        lastProgressAt: null,
+        // Last video we closed with no evidence of a watch. Re-announcing it
+        // at the same scrubber position is the Apple TV idle loop.
+        parkedVideoId: null,
+        parkedPosition: 0,
         adPlaying: false,
         // Whether the ad was reported outright or only inferred from the
         // player state; only the former may clear itself.
@@ -410,7 +426,11 @@ function createYoutubeLounge({
     }
     device.lastPosition = position;
     device.position = position;
-    device.maxPosition = Math.max(device.maxPosition || 0, position);
+    const previousMax = Number(device.maxPosition) || 0;
+    device.maxPosition = Math.max(previousMax, position);
+    if (device.maxPosition > previousMax + PROGRESS_EPSILON_SECONDS) {
+      device.lastProgressAt = now();
+    }
   }
 
   function finishSession(device, reason) {
@@ -444,6 +464,14 @@ function createYoutubeLounge({
     const wallSeconds = session.startedAt
       ? Math.max(0, (endedAt - session.startedAt) / 1000)
       : 0;
+    if (watched <= 0 && positionSeconds <= PROGRESS_EPSILON_SECONDS) {
+      device.parkedVideoId = session.videoId;
+      device.parkedPosition = positionSeconds;
+    } else {
+      device.parkedVideoId = null;
+      device.parkedPosition = 0;
+    }
+    device.lastProgressAt = null;
     emitter.emit('stopped', {
       deviceId: device.deviceId,
       videoId: session.videoId,
@@ -492,14 +520,13 @@ function createYoutubeLounge({
     // Apple TV also parks in Stopped between sparse Playing ticks — retry soon.
     // Buffering/Starting count as confirmable; only true Stopped/Paused/Ad wait.
     //
-    // Confirmable is not enough on its own. A TV left on a finished video keeps
-    // re-announcing it as Buffering/Starting at a standstill, and every one of
-    // those used to open a session and air a card nobody asked for. Require
-    // either a true Playing tick or a scrubber that has actually moved.
+    // Confirmable is not enough on its own, and neither is a `Playing` label.
+    // A TV left on a finished video answers the 45s keep-alive as Playing at
+    // position 0 (or at the last frame) forever. Trusting Playing used to open
+    // a new NOW PLAYING card every idle cycle. The scrubber has to move.
     const advanced = Number(device.maxPosition || 0)
       > Number(device.provisionalPosition || 0) + PROGRESS_EPSILON_SECONDS;
-    const reallyPlaying = PLAYING_STATES.has(device.state) || advanced;
-    if (device.adPlaying || !CONFIRMABLE_STATES.has(device.state) || !reallyPlaying) {
+    if (device.adPlaying || !CONFIRMABLE_STATES.has(device.state) || !advanced) {
       // Said once per video, not every 2s: a provisional that never confirms is
       // invisible otherwise — no push, no history, no warning, just silence.
       if (device.confirmBlockedFor !== device.provisional) {
@@ -507,7 +534,7 @@ function createYoutubeLounge({
         log?.info?.(
           `YouTube holding ${device.provisional} on ${device.deviceId}`
           + ` — state=${device.state}${device.adPlaying ? ' ad=yes' : ''}`
-          + `${reallyPlaying ? '' : ` parked at ${Math.round(device.position || 0)}s`}`,
+          + `${advanced ? '' : ` parked at ${Math.round(device.position || 0)}s`}`,
         );
       }
       if (!device.confirmTimer) {
@@ -524,9 +551,14 @@ function createYoutubeLounge({
     device.provisionalSince = null;
     device.watchedSeconds = 0;
     device.maxPosition = Math.max(0, device.position || 0);
-    // Null baseline so the first post-confirm tick establishes position without
-    // counting 0→firstSample as watched (timer confirm often fires at position 0).
-    device.lastPosition = null;
+    // Keep the sample that proved progress. Nulling it used to be safe when
+    // confirm fired at position 0; now confirm is that first moving tick, and
+    // wiping it made the next sample a new baseline and lost the watch.
+    const confirmedAt = Number(device.position);
+    device.lastPosition = Number.isFinite(confirmedAt) && confirmedAt >= 0 ? confirmedAt : null;
+    device.lastProgressAt = now();
+    device.parkedVideoId = null;
+    device.parkedPosition = 0;
     device.active = { videoId, startedAt: now() };
     emitter.emit('started', {
       deviceId: device.deviceId,
@@ -750,12 +782,22 @@ function createYoutubeLounge({
         continue;
       }
       const silentFor = now() - (device.lastSeenAt || now());
-      if (silentFor < SESSION_IDLE_TIMEOUT_MS) {
+      const progressAt = device.lastProgressAt
+        || device.active?.startedAt
+        || device.provisionalSince
+        || now();
+      const stalledFor = now() - progressAt;
+      const silent = silentFor >= SESSION_IDLE_TIMEOUT_MS;
+      const stalled = Boolean(device.active) && stalledFor >= SESSION_STALL_TIMEOUT_MS;
+      if (!silent && !stalled) {
         continue;
       }
+      const reason = silent ? 'idle' : 'stalled';
       log?.info?.(
         `YouTube closing ${device.active?.videoId || device.provisional} on ${device.deviceId}`
-        + ` — silent for ${Math.round(silentFor / 1000)}s`,
+        + (silent
+          ? ` — silent for ${Math.round(silentFor / 1000)}s`
+          : ` — scrubber frozen for ${Math.round(stalledFor / 1000)}s`),
       );
       clearConfirmTimer(device);
       clearStopTimer(device);
@@ -764,7 +806,7 @@ function createYoutubeLounge({
       device.adPlaying = false;
       device.adFromEvent = false;
       if (device.active) {
-        finishSession(device, 'idle');
+        finishSession(device, reason);
       }
       closed.push(device.deviceId);
     }
@@ -913,6 +955,8 @@ module.exports = {
   CONFIRM_RETRY_MS,
   AD_CLEAR_POSITION_SECONDS,
   MAX_PLAY_DELTA_SECONDS,
+  SESSION_IDLE_TIMEOUT_MS,
+  SESSION_STALL_TIMEOUT_MS,
   PLAYING_STATES,
   CONFIRMABLE_STATES,
   createYoutubeLounge,
