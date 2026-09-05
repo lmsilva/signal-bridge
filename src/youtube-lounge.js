@@ -55,6 +55,17 @@ const MAX_PLAY_DELTA_SECONDS = 180;
  */
 const PROGRESS_EPSILON_SECONDS = 1;
 /**
+ * How much of the wall clock a scrubber must cover to count as playback.
+ *
+ * A video that is really running advances about a second per second. A TV
+ * parked on a finished one still answers `Playing`, and its position creeps by
+ * a second or two between 45s polls — enough that "the number went up" kept
+ * the stall sweep off the session for good. A quarter of real time is a floor
+ * no genuine playback drops below, while sparse ticks and rebuffering clear it
+ * comfortably.
+ */
+const PROGRESS_RATE_FLOOR = 0.25;
+/**
  * Give up on an active session that has gone entirely silent.
  *
  * Every closer we have needs the device to say something — an explicit Stopped,
@@ -127,11 +138,17 @@ function createYoutubeLounge({
         confirmBlockedFor: null,
         confirmTimer: null,
         stopTimer: null,
+        // Where the scrubber sat when the device said it was done, so a
+        // re-announce at that same spot is not mistaken for a resume.
+        stopPosition: 0,
         active: null,
         state: 'Stopped',
         position: 0,
         maxPosition: 0,
         lastPosition: null,
+        // When that sample landed, so progress can be read against the wall
+        // clock instead of "the number went up at some point".
+        lastSampleAt: null,
         durationSeconds: 0,
         watchedSeconds: 0,
         lastProgressAt: null,
@@ -174,6 +191,33 @@ function createYoutubeLounge({
     if (device.stopTimer) {
       clearTimer(device.stopTimer);
       device.stopTimer = null;
+    }
+  }
+
+  /**
+   * Call a pending stop off only when the device proves the video came back.
+   *
+   * The keep-alive poll asks every screen to re-announce every 45s, and a TV
+   * parked on a finished video answers with the same id at the same position.
+   * Cancelling on any announcement meant the poll always beat the two-minute
+   * grace, so an explicit Stopped could never land and the card stayed on the
+   * wall. Movement past where the device stopped — or a different video — is
+   * the only honest evidence of a resume.
+   */
+  function clearStopIfResumed(device, rawPosition, videoId = null) {
+    if (!device.stopTimer) {
+      return;
+    }
+    if (videoId && videoId !== (device.active?.videoId || device.provisional)) {
+      clearStopTimer(device);
+      return;
+    }
+    const position = Number(rawPosition);
+    if (
+      Number.isFinite(position)
+      && position > Number(device.stopPosition || 0) + PROGRESS_EPSILON_SECONDS
+    ) {
+      clearStopTimer(device);
     }
   }
 
@@ -424,12 +468,26 @@ function createYoutubeLounge({
         device.watchedSeconds += delta;
       }
     }
+    const sampledAt = now();
+    const movedBy = device.lastPosition == null ? null : position - device.lastPosition;
+    const sinceLastSample = device.lastSampleAt ? (sampledAt - device.lastSampleAt) / 1000 : 0;
     device.lastPosition = position;
+    device.lastSampleAt = sampledAt;
     device.position = position;
-    const previousMax = Number(device.maxPosition) || 0;
-    device.maxPosition = Math.max(previousMax, position);
-    if (device.maxPosition > previousMax + PROGRESS_EPSILON_SECONDS) {
-      device.lastProgressAt = now();
+    device.maxPosition = Math.max(Number(device.maxPosition) || 0, position);
+    // Liveness — what holds the stall sweep off — rather than watch time.
+    //
+    // A running video keeps up with the wall clock. A TV parked on a finished
+    // one answers every keep-alive claiming `Playing` while its scrubber creeps
+    // a second or two per poll, and treating any movement at all as progress
+    // let that keep the card on the wall for good. A jump backwards is a hand
+    // on the remote, which is better evidence of a viewer than either.
+    const playing = PLAYING_STATES.has(previousState) || CONFIRMABLE_STATES.has(device.state);
+    const keepingUp = movedBy > PROGRESS_EPSILON_SECONDS
+      && movedBy >= sinceLastSample * PROGRESS_RATE_FLOOR;
+    const seeked = movedBy < -PROGRESS_EPSILON_SECONDS;
+    if (playing && (movedBy == null || keepingUp || seeked)) {
+      device.lastProgressAt = sampledAt;
     }
   }
 
@@ -457,6 +515,7 @@ function createYoutubeLounge({
     }
     device.watchedSeconds = 0;
     device.lastPosition = null;
+    device.lastSampleAt = null;
     device.maxPosition = 0;
     const completed = durationSeconds > 0
       && (watched >= durationSeconds * 0.9 || positionSeconds >= durationSeconds * 0.9);
@@ -489,6 +548,7 @@ function createYoutubeLounge({
 
   function scheduleStop(device, reason) {
     clearStopTimer(device);
+    device.stopPosition = Number(device.position) || 0;
     device.stopTimer = setTimer(() => {
       device.stopTimer = null;
       if (device.state === 'Stopped' || !CURRENT_STATES.has(device.state)) {
@@ -556,6 +616,7 @@ function createYoutubeLounge({
     // wiping it made the next sample a new baseline and lost the watch.
     const confirmedAt = Number(device.position);
     device.lastPosition = Number.isFinite(confirmedAt) && confirmedAt >= 0 ? confirmedAt : null;
+    device.lastSampleAt = now();
     device.lastProgressAt = now();
     device.parkedVideoId = null;
     device.parkedPosition = 0;
@@ -614,7 +675,7 @@ function createYoutubeLounge({
     if (message.videoId) {
       device.lastSeenAt = now();
     }
-    clearStopTimer(device);
+    clearStopIfResumed(device, message.position, message.videoId);
     if (Number.isFinite(Number(message.durationSeconds)) && Number(message.durationSeconds) > 0) {
       device.durationSeconds = Number(message.durationSeconds);
     }
@@ -630,6 +691,12 @@ function createYoutubeLounge({
       }
       applyPosition(device, message.position, previousState);
       maybeClearStuckAd(device);
+      // Only `onState` used to be able to start the countdown, so a screen that
+      // answers the poll with a Stopped now-playing and nothing else kept the
+      // session open until the stall sweep gave up minutes later.
+      if (device.state === 'Stopped' && !device.stopTimer) {
+        scheduleStop(device, 'stopped');
+      }
       if (device.active) {
         emitter.emit('progress', progressFor(device));
       }
@@ -676,11 +743,16 @@ function createYoutubeLounge({
 
     if (device.state === 'Stopped') {
       // Debounce — Apple TV often flickers Stopped between sparse Playing ticks.
-      scheduleStop(device, 'stopped');
+      // Never re-arm a countdown that is already running: the keep-alive poll
+      // makes the screen re-announce Stopped every 45s, and pushing the
+      // deadline out by two minutes on each of those meant it never arrived.
+      if (!device.stopTimer) {
+        scheduleStop(device, 'stopped');
+      }
       observeIfDue(device);
       return;
     }
-    clearStopTimer(device);
+    clearStopIfResumed(device, message.position);
     if (device.state === 'Advertisement') {
       // Hold the current card rather than swapping in ad metadata (§12.9).
       device.adPlaying = true;
