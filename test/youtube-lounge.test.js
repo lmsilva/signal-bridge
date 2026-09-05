@@ -411,6 +411,92 @@ test('a Playing session whose scrubber never moves is closed as stalled', () => 
   assert.equal(h.lounge.activeSessions().length, 0);
 });
 
+test('the keep-alive poll cannot talk a stopped session out of closing', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+  playFor(h, { seconds: 30, videoId: 'left-it' });
+  assert.equal(h.events.started.length, 1);
+
+  // The viewer walks off and the TV says so once. From then on it only answers
+  // the 45s keep-alive, re-announcing the same video parked at the same spot.
+  h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 30 });
+  for (let poll = 0; poll < 2; poll += 1) {
+    h.advance(45);
+    h.feed({
+      event: 'now-playing', deviceId: 'tv-1', videoId: 'left-it',
+      position: 30, durationSeconds: 600, state: 'Stopped',
+    });
+    h.feed({ event: 'state', deviceId: 'tv-1', state: 'Stopped', position: 30 });
+  }
+
+  h.advance((STOP_GRACE_MS / 1000) - 90 + 0.1);
+  assert.equal(h.events.stopped.length, 1, 'the grace runs from the first Stopped, not the last poll');
+  assert.equal(h.events.stopped[0].reason, 'stopped');
+  assert.equal(h.lounge.activeSessions().length, 0);
+});
+
+test('a now-playing announce that reports Stopped starts the countdown', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+  playFor(h, { seconds: 30, videoId: 'quiet' });
+
+  // Some screens answer the poll with now-playing alone and never send state.
+  h.feed({
+    event: 'now-playing', deviceId: 'tv-1', videoId: 'quiet',
+    position: 30, durationSeconds: 600, state: 'Stopped',
+  });
+  h.advance((STOP_GRACE_MS / 1000) + 0.1);
+
+  assert.equal(h.events.stopped.length, 1);
+  assert.equal(h.events.stopped[0].reason, 'stopped');
+});
+
+test('a screen creeping along while it claims to be Playing is not a watch', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+  playFor(h, { seconds: 30, videoId: 'parked' });
+  assert.equal(h.events.started.length, 1);
+
+  // A finished video left on screen answers `Playing`, and its scrubber creeps
+  // a couple of seconds per poll — nowhere near the wall clock it claims.
+  let position = 30;
+  for (let poll = 0; poll < 5; poll += 1) {
+    h.advance(45);
+    position += 2;
+    h.feed({
+      event: 'now-playing', deviceId: 'tv-1', videoId: 'parked',
+      position, durationSeconds: 6000, state: 'Playing',
+    });
+  }
+
+  assert.deepEqual(h.lounge.sweepIdleSessions(), ['tv-1']);
+  assert.equal(h.events.stopped[0].reason, 'stalled');
+});
+
+test('seeking backwards mid-watch does not look like a stall', () => {
+  const h = harness({ confirmSeconds: 5 });
+  h.lounge.start();
+  playFor(h, { seconds: 30, videoId: 'rewound', duration: 3600 });
+
+  // Watch on to 10 minutes, then jump back five and carry on. The furthest
+  // point reached does not move again for five minutes, which used to trip
+  // the stall sweep and close a session somebody was sitting in front of.
+  let position = 30;
+  for (let tick = 0; tick < 13; tick += 1) {
+    h.advance(45);
+    position += 45;
+    h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position, durationSeconds: 3600 });
+  }
+  position -= 300;
+  for (let tick = 0; tick < 8; tick += 1) {
+    h.advance(45);
+    position += 45;
+    h.feed({ event: 'state', deviceId: 'tv-1', state: 'Playing', position, durationSeconds: 3600 });
+    assert.deepEqual(h.lounge.sweepIdleSessions(), [], 'a rewatch is still a watch');
+  }
+  assert.equal(h.lounge.activeSessions().length, 1);
+});
+
 // -------------------------------------------------------- ad suppression
 
 test('an ad before the video restarts the confirm window', () => {
