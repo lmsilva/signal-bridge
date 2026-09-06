@@ -1152,17 +1152,18 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
     min-height: 0;
     width: 100%;
     display: flex;
-    align-items: center;
+    /* Sit on the controls. Centering a height-capped board in a tall flex
+       slot left a dead band under the title (especially when Safari collapsed
+       size-containment units and the slab shrank). */
+    align-items: flex-end;
     justify-content: center;
-    container-type: size;
   }
+  /* Do not size-contain this flex wrap. Safari often reports the block
+     container unit as content height (circular), so a bezel width based on
+     that unit collapses while the wrap still grows — empty chrome above a
+     tiny preview. Vestaboard Simulator sizes with dvh instead and is fine. */
   #tab-main .gb-board-wrap .gb-bezel {
     width: min(100%, calc((100dvh - var(--gb-chrome)) * 1.87));
-  }
-  @supports (width: 1cqb) {
-    #tab-main .gb-board-wrap .gb-bezel {
-      width: min(100cqi, calc(100cqb * 1.87));
-    }
   }
   #tab-main .gb-controls { gap: 8px; }
   /* `.gb-chip-btn` is `flex: 1` so Undo/Clear split their row evenly. In the

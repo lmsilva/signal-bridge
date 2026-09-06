@@ -42,7 +42,7 @@ test('admin and user portals load ui-dialog ahead of week-grid', () => {
     assert.ok(dialog >= 0 && grid > dialog, 'ui-dialog.js must load before week-grid.js');
   }
   assert.match(admin, /ui-dialog\.js\?v=signal307/);
-  assert.match(user, /ui-dialog\.js\?v=signal308/);
+  assert.match(user, /ui-dialog\.js\?v=signal309/);
 });
 
 test('product UI must not call window.confirm or window.prompt', () => {
