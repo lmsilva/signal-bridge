@@ -5780,9 +5780,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
       );
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal309/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal309/);
-    assert.match(userApp.text, /week-grid\.js\?v=signal309/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal310/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal310/);
+    assert.match(userApp.text, /week-grid\.js\?v=signal310/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
@@ -5843,8 +5843,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Updating…/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Could not load status/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /AbortController/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal309/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal309/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal310/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal310/);
     assert.match(userJs, /SignalSchedulerUi/);
     assert.match(userJs, /getDisplays: \(\) => displays/);
     assert.match(
@@ -5942,7 +5942,19 @@ test('household login, /user/ gate, and permission 403s', async () => {
       /#tab-main \.gb-board-wrap \{[^}]*container-type: size/,
       'stacked Message board wrap must not use container-type: size',
     );
-    assert.match(userCss, /#tab-main \.gb-board-wrap \{[^}]*align-items: flex-end/);
+    // `.vb-bezel` padding is a percentage of its containing block, so the
+    // height budget has to cap the wrap. Capping the bezel instead leaves it
+    // framed for the full-width wrap and the flaps collapse to the remainder.
+    assert.match(
+      userCss,
+      /#tab-main \.gb-board-wrap \{[^}]*width: min\(100%, max\(520px, calc\(\(100dvh - var\(--gb-chrome\)\) \* 1\.87\)\)\)/,
+      'stacked Message board must size the wrap from the height budget, with a legible floor',
+    );
+    assert.doesNotMatch(
+      userCss,
+      /\.gb-board-wrap \.gb-bezel \{[^}]*width:/,
+      'Message board must never set a width on the bezel — its padding is a % of the wrap',
+    );
     assert.match(userCss, /body\[data-tab="board"\] main/);
     assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(0, 1fr\)/);
     assert.match(userCss, /push-card-grip/);
@@ -5961,19 +5973,22 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal309/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal310/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
     assert.match(userCss, /\*::-webkit-scrollbar \{/);
     assert.match(userCss, /@container vb-queue \(max-width: 520px\)/);
     assert.match(userCss, /\.vb-queue-row \{[^}]*grid-template-areas: "handle title source status cancel"/);
-    // Two columns on a large desktop, and the board box must measure only its
-    // inline size there: `container-type: size` in a content-sized grid row
-    // collapses the board to nothing.
+    // Two columns on a large desktop, where the board sits in a grid column
+    // much wider than itself — the wrap must carry the cap there too.
     assert.match(userCss, /@media \(min-width: 1600px\) and \(min-height: 720px\)/);
     assert.match(userCss, /#tab-main \.gb-name-hidden #gb-compose\.gb-main/);
-    assert.match(userCss, /#tab-main #gb-compose \.gb-board-wrap \{[^}]*container-type: inline-size/);
+    assert.match(
+      userCss,
+      /#tab-main #gb-compose \.gb-board-wrap \{[^}]*width: min\(100%, calc\(\(100dvh - var\(--gb-chrome\)\) \* 1\.87\)\)/,
+      'two-column Message board must size the wrap, not the bezel',
+    );
     // Erase is `flex: 1` by default and would eat the whole chip row.
     assert.match(userCss, /#tab-main \.gb-chips \.gb-chip-btn \{[^}]*flex: 0 0 auto/);
     assert.match(userApp.text, /class="su-page-head"/);

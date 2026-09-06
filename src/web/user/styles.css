@@ -1109,23 +1109,26 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 
 @media (min-width: 600px) {
   body[data-tab="main"] {
+    /* Site header + page heading + the whole control stack under the board.
+       Measured, and deliberately a touch generous: overshooting costs a few
+       pixels of board, undershooting costs a scrollbar. */
     --gb-chrome: calc(
       var(--tab-h)
       + env(safe-area-inset-top, 0px)
       + env(safe-area-inset-bottom, 0px)
-      + 28rem
+      + 30rem
     );
   }
   body[data-tab="main"] main {
-    overflow: hidden;
     max-width: 1400px;
   }
+  /* `min-height`, not `height`, and no clipping: `--gb-chrome` is an estimate
+     of everything that is not the board, and when it reads low the overflow
+     has to become a scrollbar rather than a hidden Send button. */
   body[data-tab="main"] #tab-main.tab-panel.active {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
+    min-height: 100%;
     padding-top: 4px;
     padding-bottom: 8px;
   }
@@ -1141,29 +1144,26 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   }
   #tab-main .gb-name-hidden > .gb-header h2 { font-size: 1.35rem; }
   #tab-main .gb-name-hidden .gb-main {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
     max-width: min(100%, 1040px);
     gap: 8px;
   }
-  #tab-main .gb-main > :not(.gb-board-wrap) { flex: 0 0 auto; }
+  /*
+   * Size the wrap, never the bezel — same rule as the Board tab. `.vb-bezel`
+   * padding is a percentage of its containing block, so a bezel narrower than
+   * its wrap draws a 7%-of-the-wrap frame and the flaps collapse into what is
+   * left: a full-size slab with a postage-stamp grid in the middle.
+   */
   #tab-main .gb-board-wrap {
-    flex: 1 1 auto;
-    min-height: 0;
-    width: 100%;
-    display: flex;
-    /* Sit on the controls. Centering a height-capped board in a tall flex
-       slot left a dead band under the title (especially when Safari collapsed
-       size-containment units and the slab shrank). */
-    align-items: flex-end;
-    justify-content: center;
-  }
-  /* Do not size-contain this flex wrap. Safari often reports the block
-     container unit as content height (circular), so a bezel width based on
-     that unit collapses while the wrap still grows — empty chrome above a
-     tiny preview. Vestaboard Simulator sizes with dvh instead and is fine. */
-  #tab-main .gb-board-wrap .gb-bezel {
-    width: min(100%, calc((100dvh - var(--gb-chrome)) * 1.87));
+    flex: 0 0 auto;
+    /* The floor matters as much as the budget: a laptop window with a toolbar
+       and a bookmarks bar leaves so little height that the fitted board would
+       be a couple of hundred pixels wide. Below that, keep it legible and let
+       the panel scroll instead. */
+    width: min(100%, max(520px, calc((100dvh - var(--gb-chrome)) * 1.87)));
+    max-width: 100%;
+    margin-inline: auto;
   }
   #tab-main .gb-controls { gap: 8px; }
   /* `.gb-chip-btn` is `flex: 1` so Undo/Clear split their row evenly. In the
@@ -1214,14 +1214,11 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   #tab-main #gb-compose .gb-board-wrap {
     grid-column: 1;
     grid-row: 1;
-    /* `inline-size`, not `size`: the box takes its height from the board.
-       Size containment here would leave the board measuring itself against a
-       box that is only as tall as the board, and it would collapse. */
-    container-type: inline-size;
-    align-items: flex-start;
-  }
-  #tab-main #gb-compose .gb-board-wrap .gb-bezel {
-    width: min(100cqi, calc((100dvh - var(--gb-chrome)) * 1.87));
+    /* Sized here rather than on the bezel, for the percentage-padding reason
+       above: `100%` is this grid column, and the bezel fills whatever is left
+       after the height budget caps it. */
+    width: min(100%, calc((100dvh - var(--gb-chrome)) * 1.87));
+    justify-self: start;
   }
   #tab-main #gb-compose .gb-controls {
     grid-column: 2;
