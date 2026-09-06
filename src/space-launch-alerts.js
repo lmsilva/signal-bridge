@@ -204,9 +204,23 @@ function buildSpaceLaunchAlertPayload(launch, { chipColor, asOf } = {}) {
   };
 }
 
-async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, fetchImpl = fetch } = {}) {
+async function fetchJson(url, {
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  fetchImpl = fetch,
+  signal: externalSignal,
+} = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      clearTimeout(timer);
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
+    externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
   try {
     const response = await fetchImpl(url, {
       signal: controller.signal,
@@ -221,6 +235,7 @@ async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, fetchImpl = fetc
     return response.json();
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener?.('abort', onExternalAbort);
   }
 }
 
@@ -236,6 +251,7 @@ function createSpaceLaunchAlerts(config = {}, log = console) {
   let lastError = null;
   let refreshTimer = null;
   let refreshInFlight = null;
+  let refreshAbort = null;
 
   function loadDiskCache() {
     try {
@@ -299,6 +315,10 @@ function createSpaceLaunchAlerts(config = {}, log = console) {
       return { ok: true, cached: true, count: cache.launches.length };
     }
 
+    refreshAbort?.abort();
+    refreshAbort = new AbortController();
+    const signal = refreshAbort.signal;
+
     refreshInFlight = (async () => {
       const params = new URLSearchParams({
         limit: String(FETCH_LIMIT),
@@ -312,6 +332,7 @@ function createSpaceLaunchAlerts(config = {}, log = console) {
         const payload = await fetchJson(url, {
           fetchImpl: fetchImpl || defaultFetch,
           timeoutMs,
+          signal,
         });
         const launches = (payload?.results || [])
           .map((row) => normalizeLaunch(row, now))
@@ -326,6 +347,9 @@ function createSpaceLaunchAlerts(config = {}, log = console) {
         lastError = null;
         return { ok: true, cached: false, count: launches.length };
       } catch (error) {
+        if (signal.aborted) {
+          return { ok: false, aborted: true, count: cache?.launches?.length || 0 };
+        }
         lastError = error?.message || String(error);
         if (cache) {
           log?.warn?.('Space Launch Alerts refresh failed — using cached launches', lastError);
@@ -386,6 +410,12 @@ function createSpaceLaunchAlerts(config = {}, log = console) {
         clearInterval(refreshTimer);
         refreshTimer = null;
       }
+      refreshAbort?.abort();
+      const pending = refreshInFlight;
+      refreshAbort = null;
+      // Let the aborted fetch settle so Windows --test-force-exit does not
+      // race a live TLSSocket to ll.thespacedevs.com (UV_HANDLE_CLOSING).
+      return pending ? pending.then(() => {}, () => {}) : undefined;
     },
     statusSnapshot(now = Date.now()) {
       const settings = settingsApi.get();

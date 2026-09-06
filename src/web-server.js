@@ -644,7 +644,10 @@ function createWebServer({
   const issTracker = createIssTracker(config, log);
   const starlinkTracker = createStarlinkTracker(config, log);
   const spaceLaunchAlerts = createSpaceLaunchAlerts(config, log);
-  spaceLaunchAlerts.ensureWarm();
+  // Do not ensureWarm() here — an eager fetch to ll.thespacedevs.com leaves a
+  // TLSSocket that races Windows --test-force-exit (UV_HANDLE_CLOSING) when
+  // many short-lived test servers start/stop. Cache still loads from disk;
+  // refresh runs on settings/push/nextPayload.
   const ringDoorbellInstance = typeof ringDoorbell === 'function'
     ? ringDoorbell()
     : (ringDoorbell || createRingDoorbellService({
@@ -3777,7 +3780,13 @@ function createWebServer({
     });
   }
 
-  function handleSpaceLaunchAlertsSettingsGet(res) {
+  async function handleSpaceLaunchAlertsSettingsGet(res) {
+    try {
+      await spaceLaunchAlerts.refreshCache();
+    } catch {
+      /* Disk/empty snapshot is still useful when Launch Library is down. */
+    }
+    spaceLaunchAlerts.ensureWarm();
     sendJson(res, 200, {
       ok: true,
       ...spaceLaunchAlerts.statusSnapshot(),
@@ -3787,7 +3796,7 @@ function createWebServer({
   async function handleSpaceLaunchAlertsSettingsPut(body, res) {
     if (body?.reset) {
       spaceLaunchAlerts.resetSettings();
-      handleSpaceLaunchAlertsSettingsGet(res);
+      await handleSpaceLaunchAlertsSettingsGet(res);
       return;
     }
     if (body?.refresh) {
@@ -3805,7 +3814,7 @@ function createWebServer({
         includeSuborbital: body?.includeSuborbital,
       });
     }
-    handleSpaceLaunchAlertsSettingsGet(res);
+    await handleSpaceLaunchAlertsSettingsGet(res);
   }
 
   async function handleSpaceLaunchAlertsPush(body, res) {
@@ -9709,7 +9718,7 @@ function createWebServer({
         }
         if (pathname === '/api/space-launch-alerts/settings') {
           if (!requireAdminSession(req, res)) return;
-          handleSpaceLaunchAlertsSettingsGet(res);
+          await handleSpaceLaunchAlertsSettingsGet(res);
           return;
         }
         if (pathname === '/api/learn-japanese/settings') {
@@ -11125,6 +11134,7 @@ function createWebServer({
     gameSessions.stop?.();
     shortlinks.stop?.();
     scheduler.stop();
+    const spaceLaunchStop = spaceLaunchAlerts.stop?.();
     rollCreditsInstance.close?.();
     if (!autodarts) {
       autodartsInstance.close?.();
@@ -11137,15 +11147,27 @@ function createWebServer({
     server = null;
     redirectServer = null;
     // Await close so Windows test workers do not hit UV_HANDLE_CLOSING under
-    // --test-force-exit while sockets are still tearing down.
-    return Promise.all(targets.map((target) => new Promise((resolve) => {
-      try {
-        target.closeAllConnections?.();
-        target.close(() => resolve());
-      } catch {
-        resolve();
-      }
-    })));
+    // --test-force-exit while sockets are still tearing down. Abort outbound
+    // Space Launch warm-fetch first (ll.thespacedevs.com) or force-exit races
+    // a live TLSSocket. close() then closeAllConnections().
+    return Promise.all([
+      spaceLaunchStop,
+      ...targets.map((target) => new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        try {
+          target.close(finish);
+          target.closeAllConnections?.();
+        } catch {
+          finish();
+        }
+        setTimeout(finish, 2000);
+      })),
+    ]);
   }
 
   return {
