@@ -53,12 +53,12 @@ test('the tesla dashboard matches the spec drawing', () => {
   assert.equal(frames.length, 1);
   assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
-    'rr TESLA MODEL Y    rr',
+    'rr  TESLA MODEL Y   rr',
     'BATT 73%  RANGE 201MI',
     'PARKED - NOT PLUGGED',
     `IN 88${DEG}  OUT 91${DEG}`,
     'LOCKED - SENTRY ON',
-    'rr 2:38PM           rr',
+    'rr      2:38PM      rr',
   ], 'tesla dashboard');
 });
 
@@ -109,12 +109,12 @@ test('the battery gauge fills 13 of 18 slots at 73 percent', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'gg TESLA BATTERY    gg',
+    'gg  TESLA BATTERY   gg',
     '',
     ' 73% - 201 MI RANGE',
     ' (ggggggggggggg     )',
     ' NOT PLUGGED IN',
-    'gg AS OF 2:38PM     gg',
+    'gg   AS OF 2:38PM   gg',
   ], 'tesla battery');
 });
 

@@ -37,7 +37,7 @@ test('youtube wraps the title and abbreviates the view count', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'rr YOUTUBE          rr',
+    'rr     YOUTUBE      rr',
     ' SHOULD YOU BUILD',
     ' A GAMING SERVER?',
     ' JAKE SIMMONS',
@@ -86,7 +86,7 @@ test('the upside intro then pages each headline, wrapping at the full 22', () =>
   });
 
   assertLayout(frames[0].rows, [
-    'yy THE UPSIDE       yy',
+    'yy    THE UPSIDE    yy',
     '',
     '  GOOD NEWS ONLY',
     '  5 STORIES TODAY',
@@ -95,7 +95,7 @@ test('the upside intro then pages each headline, wrapping at the full 22', () =>
   ], 'upside intro');
 
   assertLayout(frames[1].rows, [
-    'yy THE UPSIDE   1/5 yy',
+    'yy  THE UPSIDE  1/5 yy',
     'FIRST RIVER OTTER',
     'SPOTTED IN THE BRONX',
     'IN 100 YEARS ALONG',
@@ -123,7 +123,7 @@ test('wiki puts a leftover teaser line in the footer rather than dropping it', (
   });
 
   assertLayout(frames[0].rows, [
-    'ww WIKIPEDIA        ww',
+    'ww    WIKIPEDIA     ww',
     '',
     '  COMMON KNOWLEDGE',
     '  TOP READS TODAY',
@@ -132,7 +132,7 @@ test('wiki puts a leftover teaser line in the footer rather than dropping it', (
   ], 'wiki intro');
 
   assertLayout(frames[2].rows, [
-    'ww WIKI READS   2/5 ww',
+    'ww  WIKI READS  2/5 ww',
     ' THE ANTIKYTHERA',
     ' MECHANISM',
     '',
@@ -162,12 +162,12 @@ test('overhead looks up routes by hex and prints two flights per frame', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'bb OVERHEAD         bb',
+    'bb     OVERHEAD     bb',
     ' UA1642  SFO-DEN',
     '  34000FT  2MI NE',
     ' DL889   LAX-JFK',
     '  38000FT  9MI SW',
-    'bb 2 OVERHEAD NOW   bb',
+    'bb  2 OVERHEAD NOW  bb',
   ], 'overhead');
 });
 
@@ -204,21 +204,21 @@ test('a two-column trivia question and its reveal match the spec drawings', () =
   assert.equal(frames.length, 2);
   assert.equal(frames[0].dwellSeconds, 30);
   assertLayout(frames[0].rows, [
-    'yy TRIVIA   GENERAL yy',
+    'yy  TRIVIA  GENERAL yy',
     ' WHAT IS THE ZODIAC',
     ' SYMBOL FOR GEMINI?',
     ' A TWINS    B FISH',
     ' C SCALES   D MAIDEN',
-    'yy ANSWER IN 30S    yy',
+    'yy  ANSWER IN 30S   yy',
   ], 'trivia question');
 
   assertLayout(frames[1].rows, [
-    'yy TRIVIA   GENERAL yy',
+    'yy  TRIVIA  GENERAL yy',
     ' WHAT IS THE ZODIAC',
     ' SYMBOL FOR GEMINI?',
     'g A TWINS   B rrrr',
     ' C rrrrrr   D rrrrrr',
-    'yy A - TWINS!       yy',
+    'yy    A - TWINS!    yy',
   ], 'trivia reveal');
 });
 
@@ -298,7 +298,7 @@ test('guest snaps types the wifi and the booth host, never the QR payload', () =
   assert.equal(frames.length, 6);
   assert.equal(frames[0].dwellSeconds, 30);
   assertLayout(frames[0].rows, [
-    'bb GUEST SNAPS      bb',
+    'bb   GUEST SNAPS    bb',
     ' WIFI CASA-GUEST',
     ' PASS SUNNY-TRAILS24',
     '',
@@ -327,7 +327,7 @@ test('guest snaps keeps a long password and host by wrapping, never cutting', ()
   assert.doesNotMatch(drawn, /WITTYDIGITA[^L]/);
 
   assertLayout(frames[0].rows, [
-    'bb GUEST SNAPS      bb',
+    'bb   GUEST SNAPS    bb',
     ' WIFI PANDAMONIUM',
     ' PASS',
     ' THOSEPORTUGUESEPIGS2',
@@ -347,7 +347,7 @@ test('guest snaps prefers a TinyURL flap label that fits one footer row', () => 
   }, { password: 'thoseportuguesepigs2' });
 
   assertLayout(frames[0].rows, [
-    'bb GUEST SNAPS      bb',
+    'bb   GUEST SNAPS    bb',
     ' WIFI PANDAMONIUM',
     ' PASS',
     ' THOSEPORTUGUESEPIGS2',
@@ -407,12 +407,12 @@ test('next flight is a Flight Tracker card: trip name, route, both clocks, statu
 
   assert.equal(frames.length, 1);
   assertLayout(frames[0].rows, [
-    'gg JAPAN 2027       gg',
+    'gg    JAPAN 2027    gg',
     ' DL 167         TODAY',
     ' SEA -            HND',
     ' 1:45P          4:40P',
     ' ON TIME     GATE B14',
-    'gg AS OF      12:00 gg',
+    'gg   AS OF    12:00 gg',
   ], 'next flight tracker');
 });
 
@@ -443,12 +443,12 @@ test('a delayed flight uses estimated time, orange chips, and DELAYED 25 MIN', (
   }, FLIGHT_PLAN_CTX);
 
   assertLayout(frames[0].rows, [
-    'oo NEXT FLIGHT      oo',
+    'oo   NEXT FLIGHT    oo',
     ' UA 1234        TODAY',
     ' SLC -            NRT',
     ' 10:25A         1:20P',
     ' DELAYED 25 MIN',
-    'oo AS OF      12:00 oo',
+    'oo   AS OF    12:00 oo',
   ], 'delayed flight tracker');
 });
 
@@ -472,12 +472,12 @@ test('an airborne flight reads IN FLIGHT with blue chips', () => {
   }, FLIGHT_PLAN_CTX);
 
   assertLayout(frames[0].rows, [
-    'bb NEXT FLIGHT      bb',
+    'bb   NEXT FLIGHT    bb',
     ' DL 167           NOW',
     ' SEA -            HND',
     ' 10:00A         2:00P',
     ' IN FLIGHT',
-    'bb AS OF      12:00 bb',
+    'bb   AS OF    12:00 bb',
   ], 'airborne flight tracker');
 });
 
@@ -512,19 +512,19 @@ test('a trip board pages one tracker card per flight', () => {
 
   assert.equal(frames.length, 2);
   assertLayout(frames[0].rows, [
-    'gg JAPAN 2027       gg',
+    'gg    JAPAN 2027    gg',
     ' DL 167     TODAY 1/2',
     ' SEA -            HND',
     ' 1:45P          4:40P',
     ' ON TIME',
-    'gg AS OF      12:00 gg',
+    'gg   AS OF    12:00 gg',
   ], 'trip board page 1');
   assertLayout(frames[1].rows, [
-    'gg JAPAN 2027       gg',
+    'gg    JAPAN 2027    gg',
     ' DL 168       D-3 2/2',
     ' HND -            SEA',
     ' 11:00A         5:30A',
     ' ON TIME',
-    'gg AS OF      12:00 gg',
+    'gg   AS OF    12:00 gg',
   ], 'trip board page 2');
 });

@@ -331,11 +331,16 @@ function smartHomeFrames(payload = {}, ctx = {}) {
 
 function timerFiredFrame(timer = {}) {
   const name = fold(timer.label);
-  const headline = name ? `${name} TIMER DONE` : 'TIMER DONE';
+  // Prefer the full "NAME TIMER DONE" when it fits the 18-flap border band;
+  // otherwise drop TIMER so DONE still lands (a long name used to eat the E).
+  let headline = 'TIMER DONE';
+  if (name) {
+    const full = `${name} TIMER DONE`;
+    headline = full.length <= BORDER_TEXT_WIDTH ? full : `${name} DONE`;
+  }
   const rows = borderFrame({
     color: 'orange',
-    indent: 1,
-    lines: ['', truncate(headline, BORDER_TEXT_WIDTH - 1), "TIME'S UP!", ''],
+    lines: ['', truncate(headline, BORDER_TEXT_WIDTH), "TIME'S UP!", ''],
   });
   return alertFrame(rows, 'Timer fired', 'timer.fired');
 }
@@ -392,8 +397,7 @@ function alarmFiredFrame(alarm = {}, ctx = {}) {
   const headline = time ? `${name} - ${time}` : name;
   const rows = borderFrame({
     color: 'red',
-    indent: 1,
-    lines: ['', truncate(headline, BORDER_TEXT_WIDTH - 1), 'RISE AND SHINE!', ''],
+    lines: ['', truncate(headline, BORDER_TEXT_WIDTH), 'RISE AND SHINE!', ''],
   });
   return alertFrame(rows, 'Alarm fired', 'alarm.fired');
 }

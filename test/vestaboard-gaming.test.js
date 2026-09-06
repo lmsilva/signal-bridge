@@ -37,7 +37,7 @@ test('a steam launch is a snapshot with a game-on footer', () => {
     ' HOTSHOT RACING',
     '',
     ' LAUNCHED 7:42PM',
-    'bb GAME ON!         bb',
+    'bb     GAME ON!     bb',
   ], 'steam playing');
 });
 
@@ -145,12 +145,12 @@ test('an autodarts start names the mode, the pairing and the race', () => {
 
   assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
-    'gg AUTODARTS        gg',
+    'gg    AUTODARTS     gg',
     ' GAME ON - 501',
     ' LUIS VS SAM',
     ' FIRST TO 3 LEGS',
     '',
-    'gg THROW SHARP      gg',
+    'gg   THROW SHARP    gg',
   ], 'autodarts start');
 });
 
@@ -172,12 +172,12 @@ test('an autodarts finish flanks the winner and reads isWinner, not match.winner
   });
 
   assertLayout(frames[0].rows, [
-    'gg AUTODARTS        gg',
+    'gg    AUTODARTS     gg',
     ' y TRASHPANDA WINS y',
     ' VS WAR D - 2-1 LEGS',
     ' AVG 26.4  HIGH 60',
     ' CHECKOUT 51',
-    'gg NICE DARTS       gg',
+    'gg    NICE DARTS    gg',
   ], 'autodarts finish');
 });
 
@@ -196,7 +196,7 @@ test('the autodarts dashboard reads record objects, not the objects themselves',
   });
 
   assertLayout(frames[0].rows, [
-    'gg AUTODARTS        gg',
+    'gg    AUTODARTS     gg',
     ' 42 MATCHES  57 LEGS',
     ' TRASHPANDA AVG 68.3',
     ' HIGH OUT 51  180S 1',
@@ -257,12 +257,12 @@ test('roll credits picks the highest induction and the system label, not the id'
   });
 
   assertLayout(frames[0].rows, [
-    'ww ROLL CREDITS     ww',
+    'ww   ROLL CREDITS   ww',
     ' 29 GAMES BEATEN',
     ' LAST - AUG 22 ON PC',
     ' CONTRA: OPERATION',
     ' GALUGA',
-    'ww 18 ON ARCADE     ww',
+    'ww   18 ON ARCADE   ww',
   ], 'roll credits');
 });
 
@@ -287,12 +287,12 @@ test('the live roll-credits.tour payload formats from stats, not a missing games
   });
 
   assertLayout(frames[0].rows, [
-    'ww ROLL CREDITS     ww',
+    'ww   ROLL CREDITS   ww',
     ' 29 GAMES BEATEN',
     ' LAST - AUG 22 ON PC',
     ' CONTRA: OPERATION',
     ' GALUGA',
-    'ww 18 ON ARCADE     ww',
+    'ww   18 ON ARCADE   ww',
   ], 'roll credits tour');
 });
 
@@ -327,12 +327,12 @@ test('a scheduled tour subset still prints the library total from stats', () => 
   });
 
   assertLayout(frames[0].rows, [
-    'ww ROLL CREDITS     ww',
+    'ww   ROLL CREDITS   ww',
     ' 29 GAMES BEATEN',
     ' LAST - AUG 22 ON PC',
     ' CONTRA: OPERATION',
     ' GALUGA',
-    'ww 18 ON ARCADE     ww',
+    'ww   18 ON ARCADE   ww',
   ], 'roll credits scheduled subset');
 });
 
@@ -367,7 +367,7 @@ test('a live Family Mode game is a scoreboard, closest race first', () => {
 
   assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
-    'oo HUUPE     FAMILY oo',
+    'oo   HUUPE   FAMILY oo',
     ' TRASHPANDA      17.1',
     ' WAR D           12.9',
     ' LAST SHOT 3PT MADE',
@@ -379,14 +379,14 @@ test('a live Family Mode game is a scoreboard, closest race first', () => {
 test('the mode never eats into the HUUPE badge', () => {
   // "Family Mode" is 11 characters and used to clip the header down to "HUUP".
   const rows = gaming.huupeSessionFrames(huupeSession())[0].rows;
-  assert.match(formatLayout(rows).split('\n')[0], /^oo HUUPE/);
+  assert.match(formatLayout(rows).split('\n')[0], /^oo\s+HUUPE\b/);
 });
 
 test('an unknown mode name is shortened rather than allowed to clip the badge', () => {
   const rows = gaming.huupeSessionFrames(
     huupeSession({ mode: 'somethingnew', modeLabel: 'Tournament Bracket' }),
   )[0].rows;
-  assert.match(formatLayout(rows).split('\n')[0], /^oo HUUPE {2,}TOURNAMEN oo$/);
+  assert.match(formatLayout(rows).split('\n')[0], /^oo\s+HUUPE\s+TOURNAMEN oo$/);
 });
 
 test('free play has no names, so the board shows the session score', () => {
@@ -441,7 +441,7 @@ test('the longest last-shot row is the full width of a body row', () => {
   }))[0].rows;
 
   assertLayout(rows, [
-    'oo HUUPE     FAMILY oo',
+    'oo   HUUPE   FAMILY oo',
     ' TRASHPANDA      17.1',
     ' WAR D           12.9',
     ' LAST SHOT LAYUP MADE',
@@ -461,7 +461,7 @@ test('a full scoreboard still leaves the last shot its row', () => {
   }))[0].rows;
 
   assertLayout(rows, [
-    'oo HUUPE     FAMILY oo',
+    'oo   HUUPE   FAMILY oo',
     ' TRASHPANDA      17.1',
     ' WAR D           12.9',
     ' BEAN               9',
@@ -475,7 +475,7 @@ test('a session with no shot on record simply omits the row', () => {
   const rows = gaming.huupeSessionFrames(huupeSession({ lastShot: null }))[0].rows;
 
   assertLayout(rows, [
-    'oo HUUPE     FAMILY oo',
+    'oo   HUUPE   FAMILY oo',
     ' TRASHPANDA      17.1',
     ' WAR D           12.9',
     '',
@@ -499,7 +499,7 @@ test('a finished game flanks the winner and names who they beat', () => {
   }));
 
   assertLayout(frames[0].rows, [
-    'oo HUUPE     FAMILY oo',
+    'oo   HUUPE   FAMILY oo',
     ' y TRASHPANDA WINS y',
     ' OVER WAR D 17.1-12.9',
     ' FG 6/12 - 50%',
@@ -543,7 +543,7 @@ test('the huupe dashboard fits a four-digit shot count', () => {
 
   assert.equal(frames[0].priority, 'snapshot');
   assertLayout(frames[0].rows, [
-    'oo HUUPE            oo',
+    'oo      HUUPE       oo',
     ' 48 PLAYS  3371 SHOTS',
     ' TRASHPANDA   11 WINS',
     ' FG 44%  RUN 11',

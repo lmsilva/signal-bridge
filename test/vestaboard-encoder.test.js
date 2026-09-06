@@ -260,12 +260,12 @@ test('content length counts only the flaps that are not blank', () => {
 
 test('notation parses chips as chips and everything else literally', () => {
   const rows = parseLayout([
-    'gg SHOPPING LIST    gg',
+    'gg  SHOPPING LIST   gg',
     ' COMPANY Q. TEN',
     ' EGGS',
     '',
     '',
-    'gg 2 ITEMS          gg',
+    'gg     2 ITEMS      gg',
   ].join('\n'));
 
   assert.equal(rows.length, 6);
@@ -304,12 +304,12 @@ test('notation refuses a character the board cannot show', () => {
 
 test('every layout the notation produces passes validation', () => {
   const rows = parseLayout([
-    'rr TESLA MODEL Y    rr',
+    'rr  TESLA MODEL Y   rr',
     'BATT 73%  RANGE 201MI',
     'PARKED - NOT PLUGGED',
     'IN 88\u00b0  OUT 91\u00b0',
     'LOCKED - SENTRY ON',
-    'rr 2:38PM           rr',
+    'rr      2:38PM      rr',
   ].join('\n'));
 
   assert.equal(validate(rows).ok, true);

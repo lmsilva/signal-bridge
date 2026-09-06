@@ -163,16 +163,22 @@ function bodyRow(entry) {
  * Title and footer text is cut to fit rather than allowed to run into the
  * chips — these are labels, and a label that pushes a chip off the board would
  * change what the frame means.
+ *
+ * Both bands centre by default (titles and summary footers read that way on
+ * the physical board). Pass `titleAlign: 'left'` / `footerAlign: 'left'` only
+ * when a layout deliberately pins to the chip pair. A right-hand label
+ * (`titleRight` / `footerRight`, usually a page counter) stays flush-right;
+ * the left label still centres in whatever room is left.
  */
 function badgeFrame({
   color,
   title = '',
   titleRight = '',
-  titleAlign = 'left',
+  titleAlign = 'center',
   rows = [],
   footerLeft = '',
   footerRight = '',
-  footerAlign = 'left',
+  footerAlign = 'center',
 } = {}) {
   const chip = chipCode(color);
 
@@ -180,7 +186,7 @@ function badgeFrame({
     throw new Error(`badge frame takes at most ${MAX_BODY_ROWS} rows, got ${rows.length}`);
   }
 
-  const cornerRow = (left, right, { align = 'left' } = {}) => {
+  const cornerRow = (left, right, { align = 'center' } = {}) => {
     const row = blankRow(COLS);
     row[0] = chip;
     row[1] = chip;
@@ -189,9 +195,24 @@ function badgeFrame({
 
     const rightText = truncate(right, BADGE_TEXT_WIDTH);
     const rightCodes = encodeText(rightText);
-    // Steam / PSN centre the brand between the chip pairs. Extra leftover
-    // column sits on the right so a short word is a hair left of true centre.
-    if (align === 'center' && !rightCodes.length) {
+
+    if (align === 'center') {
+      if (rightCodes.length) {
+        // Same seats as left-align (cols 3..18, one blank beside each chip
+        // pair), but the left label centres in the room the right label
+        // leaves rather than parking against the left chips.
+        placeCodes(row, rightCodes, BADGE_TEXT_TO - rightCodes.length + 1);
+        const leftTo = BADGE_TEXT_TO - rightCodes.length - 1;
+        const room = Math.max(0, leftTo - BADGE_TEXT_FROM + 1);
+        centered(truncate(left, room), {
+          row,
+          from: BADGE_TEXT_FROM,
+          width: room,
+          lean: 'left',
+        });
+        return row;
+      }
+      // Alone: centre in the full band between the chip pairs (cols 2..19).
       centered(truncate(left, 18), {
         row,
         from: 2,
@@ -200,14 +221,16 @@ function badgeFrame({
       });
       return row;
     }
-    // The left label yields whatever the right-hand text needs, plus a gap.
+
+    // Left-aligned: the left label yields whatever the right-hand text needs,
+    // plus a gap. Starts one flap in from the chips (col 3).
+    if (rightCodes.length) {
+      placeCodes(row, rightCodes, BADGE_TEXT_TO - rightCodes.length + 1);
+    }
     const leftRoom = rightCodes.length
       ? BADGE_TEXT_WIDTH - rightCodes.length - 1
       : BADGE_TEXT_WIDTH;
     placeText(row, truncate(left, Math.max(0, leftRoom)), BADGE_TEXT_FROM);
-    if (rightCodes.length) {
-      placeCodes(row, rightCodes, BADGE_TEXT_TO - rightCodes.length + 1);
-    }
     return row;
   };
 
