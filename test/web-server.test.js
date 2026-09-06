@@ -5780,9 +5780,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
       );
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal308/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal308/);
-    assert.match(userApp.text, /week-grid\.js\?v=signal308/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal309/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal309/);
+    assert.match(userApp.text, /week-grid\.js\?v=signal309/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
@@ -5843,8 +5843,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Updating…/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Could not load status/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /AbortController/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal308/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal308/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal309/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal309/);
     assert.match(userJs, /SignalSchedulerUi/);
     assert.match(userJs, /getDisplays: \(\) => displays/);
     assert.match(
@@ -5931,7 +5931,18 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userCss, /a\.su-btn/);
     assert.match(userCss, /#tab-main \.gb-name-hidden \.gb-main/);
     assert.match(userCss, /--gb-chrome/);
-    assert.match(userCss, /100cqb \* 1\.87/);
+    assert.match(userCss, /100dvh - var\(--gb-chrome\)/);
+    assert.doesNotMatch(
+      userCss,
+      /width:\s*min\([^;]*100cqb\s*\*\s*1\.87/,
+      'Message board must not size with cqb — Safari collapses size containment on flex wraps',
+    );
+    assert.doesNotMatch(
+      userCss,
+      /#tab-main \.gb-board-wrap \{[^}]*container-type: size/,
+      'stacked Message board wrap must not use container-type: size',
+    );
+    assert.match(userCss, /#tab-main \.gb-board-wrap \{[^}]*align-items: flex-end/);
     assert.match(userCss, /body\[data-tab="board"\] main/);
     assert.match(userCss, /\.vb-queue-row \{[^}]*1\.35rem minmax\(0, 1fr\)/);
     assert.match(userCss, /push-card-grip/);
@@ -5950,7 +5961,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal308/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal309/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
