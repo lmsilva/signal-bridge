@@ -928,7 +928,7 @@ test('rules and settings survive a restart', async () => {
   assert.ok(restored.lastAiredAt, 'runtime state persists across a restart');
 });
 
-test('simulate forecasts without touching the real rules or activity log', () => {
+test('simulate forecasts without touching the real rules or activity log', async () => {
   const { scheduler } = build({
     rules: [
       { id: 'a', commandId: 'alexa.weather', intervalSeconds: 1800, probability: 100 },
@@ -937,7 +937,7 @@ test('simulate forecasts without touching the real rules or activity log', () =>
     settings: { globalMinGapSeconds: 60 },
   });
   const before = JSON.stringify(scheduler.rules.all());
-  const result = scheduler.simulate({ hours: 24, runs: 20, seed: 3 });
+  const result = await scheduler.simulate({ hours: 24, runs: 20, seed: 3 });
 
   assert.equal(result.forecast, true);
   assert.equal(result.perRule.length, 2);
@@ -947,13 +947,28 @@ test('simulate forecasts without touching the real rules or activity log', () =>
   assert.equal(scheduler.activity.query({ limit: 10 }).length, 0);
 });
 
-test('simulate is deterministic for a given seed', () => {
+test('simulate is deterministic for a given seed', async () => {
   const { scheduler } = build({
     rules: [{ id: 'a', commandId: 'alexa.weather', intervalSeconds: 1800, probability: 70 }],
   });
-  const a = scheduler.simulate({ hours: 12, runs: 5, seed: 11 });
-  const b = scheduler.simulate({ hours: 12, runs: 5, seed: 11 });
+  const a = await scheduler.simulate({ hours: 12, runs: 5, seed: 11 });
+  const b = await scheduler.simulate({ hours: 12, runs: 5, seed: 11 });
   assert.deepEqual(a.representative, b.representative);
+});
+
+test('simulate yields so the event loop stays responsive', async () => {
+  const { scheduler } = build({
+    rules: [{ id: 'a', commandId: 'alexa.weather', intervalSeconds: 900, probability: 100 }],
+    settings: { tickSeconds: 30, globalMinGapSeconds: 60 },
+  });
+  let pumped = 0;
+  const pump = setInterval(() => { pumped += 1; }, 5);
+  try {
+    await scheduler.simulate({ hours: 24, runs: 40, seed: 2 });
+  } finally {
+    clearInterval(pump);
+  }
+  assert.ok(pumped > 0, 'timers must fire while simulate is running');
 });
 
 test('a paused scheduler evaluates nothing at all', async () => {

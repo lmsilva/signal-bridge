@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-05 (Scheduler activity loading UX)
+**Last updated:** 2026-09-05 (Event routing sheet polish)
 
 ---
 
@@ -936,6 +936,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-05: **Event routing sheet polish** — close × uses `credits-sheet-head` (was stacked under the title); legend says "Open an event"; sheet steals focus on open so Space cannot re-click Configure and wipe the draft; hour grid drops day-fill; settings save throws on write failure and returns the in-memory snapshot. Cache-bust `signal304`. Tests: `event-routing`, `week-grid`, `web-server`.
+- 2026-09-05: **Scheduler simulate stays responsive** — `simulate()` is async and yields via `setImmediate` between Monte Carlo runs (and every ~400 ticks) so `/api/status` keeps answering during "Rolling 200 simulated days…"; admin skips the offline flash while a sim is in flight. Cache-bust `signal303`. Tests: `display-scheduler`.
 - 2026-09-05: **Scheduler activity loading UX** — Activity tab shows spinners for stats/timeline/per-rule/heatmap while fetching; timeline header (Timeline / Show skips / range) vertically aligned; Show skips re-paints from cache (no refetch) with a busy overlay; timeline build groups events once instead of filter-per-lane. Cache-bust `signal302`. Tests: `web-server`.
 - 2026-09-05: **Event routing multi-route sheet** — compact family list; Configure opens a sheet with multiple routes per event (each with destinations + week-grid allowed hours). Matching routes union targets. Cache-bust `signal301`. Tests: `event-routing`, `web-server`.
 - 2026-09-05: **Event routing** — Settings → Global (House) **Event routing** card (after Public address, before TinyURL) controls where automatic Alexa/media/guest/game events may go: all displays (default), software, Vestaboards, or specific displays, with optional house-timezone time windows. Enforced in `listener.sendUdpPayload` / `deliverTargetedPayload`; web Push and scheduler airings bypass. Modules `event-routing` + `event-routing-settings`; API `GET/POST/PUT /api/event-routing/settings`. Cache-bust `signal300`. Tests: `event-routing`, `web-server`.

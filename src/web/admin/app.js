@@ -8,6 +8,8 @@
   // the bootstrap below without tripping over a temporal dead zone.
   const POLL_MS = 5000;
   let statusTimer = null;
+  /** True while POST /api/display-scheduler/simulate is in flight — skip offline flash. */
+  let schedSimulating = false;
   let lastStatus = null;
 
   // ------------------------------------------- Modal / sheet dismiss (Escape + backdrop)
@@ -1632,6 +1634,9 @@
     try {
       renderStatus(await apiGet('/api/status', { timeoutMs: 8000 }));
     } catch {
+      // Heavy simulate used to block the event loop; even with yielding, skip the
+      // scary "bridge unreachable" flash while a forecast is in flight.
+      if (schedSimulating) return;
       renderOffline();
     }
   }
@@ -4858,6 +4863,7 @@
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
       button.textContent = 'Simulating…';
+      schedSimulating = true;
       showSchedSimulationWorking();
       let statusIndex = 0;
       const statusTimer = setInterval(() => {
@@ -4879,9 +4885,11 @@
         }
         toast(error.message || 'Could not run the simulation', 'bad');
       } finally {
+        schedSimulating = false;
         clearInterval(statusTimer);
         button.disabled = false;
         button.removeAttribute('aria-busy');
+        pollStatus();
         button.textContent = label;
       }
     });
@@ -6318,7 +6326,7 @@
     }
     if (detail) {
       const tz = eventRoutingState.timeZone ? (' House timezone: ' + eventRoutingState.timeZone + '.') : '';
-      detail.textContent = 'Where automatic events may go. Open a family to add routes for different displays and hours. Manual Push and the Scheduler keep their own targets.' + tz;
+      detail.textContent = 'Where automatic events may go. Open an event to add routes for different displays and hours. Manual Push and the Scheduler keep their own targets.' + tz;
     }
 
     const root = $('event-routing-families');
@@ -6341,7 +6349,8 @@
     if (eventRoutingGrid) return eventRoutingGrid;
     eventRoutingGrid = window.createWeekGrid(host, {
       mode: 'fires',
-      dayToggle: true,
+      // Hour painting only — day-fill + Space on a day label was wiping schedules.
+      dayToggle: false,
       cellHeight: 28,
       globalMinute: 0,
       onChange() {
@@ -6443,7 +6452,9 @@
     if (title) title.textContent = meta.label;
     const blurb = $('event-routing-sheet-blurb');
     if (blurb) {
-      blurb.textContent = (meta.blurb || '') + ' Add routes to send different displays at different times.';
+      const lead = String(meta.blurb || '').trim().replace(/\.+$/, '');
+      blurb.textContent = (lead ? (lead + '. ') : '')
+        + 'Add routes to send different displays at different times.';
     }
     const tz = $('event-routing-sheet-tz');
     if (tz) {
@@ -6455,6 +6466,9 @@
     paintEventRoutingEditor();
     const sheet = $('event-routing-sheet');
     if (sheet) sheet.hidden = false;
+    // Pull focus into the sheet so Space cannot re-click Configure behind it
+    // and wipe the draft by re-opening from unsaved server state.
+    queueMicrotask(() => $('btn-event-routing-sheet-close')?.focus());
   }
 
   function closeEventRoutingSheet() {
@@ -6503,7 +6517,12 @@
     if (!btn) return;
     const row = btn.closest('[data-er-family]');
     if (!row) return;
-    openEventRoutingSheet(row.getAttribute('data-er-family'));
+    const familyId = row.getAttribute('data-er-family');
+    if (eventRoutingDraft && eventRoutingDraft.familyId === familyId
+      && !$('event-routing-sheet')?.hidden) {
+      return;
+    }
+    openEventRoutingSheet(familyId);
   });
 
   $('event-routing-routes')?.addEventListener('click', (event) => {

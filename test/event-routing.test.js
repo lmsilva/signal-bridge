@@ -1,5 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { createEventRoutingSettings } = require('../src/event-routing-settings');
 const {
   sanitiseSettings,
   sanitiseDestinations,
@@ -148,4 +152,29 @@ test('legacy v1 settings migrate and resolveRoute unions multi-route targets', (
   );
   assert.equal(bypass.bypassed, true);
   assert.equal(bypass.skip, false);
+});
+
+test('event routing settings persist painted slots across update + get', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'er-settings-'));
+  const settingsPath = path.join(dir, 'event-routing-settings.json');
+  const store = createEventRoutingSettings({ eventRoutingSettingsPath: settingsPath });
+  const slots = [
+    { day: 2, hour: 7, minute: 0 },
+    { day: 2, hour: 8, minute: 0 },
+    { day: 2, hour: 9, minute: 0 },
+  ];
+  const saved = store.update({
+    families: {
+      'alexa.alarms': {
+        routes: [{ destinations: 'all', slots }],
+      },
+    },
+  });
+  assert.deepEqual(saved.families['alexa.alarms'].routes[0].slots, slots);
+  assert.equal(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).version, 2);
+  assert.deepEqual(
+    store.get().families['alexa.alarms'].routes[0].slots,
+    slots,
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
 });
