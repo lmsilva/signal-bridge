@@ -138,21 +138,25 @@ function buildWordOfTheDayPayload(entry, { asOf } = {}) {
 
 function listWords(settings = {}, { query = '', limit = 80 } = {}) {
   const needle = String(query || '').trim().toLowerCase();
-  let pool = resolveWords(settings);
-  if (needle) {
-    pool = pool.filter((entry) => entry.word.includes(needle)
-      || String(entry.definition || '').toLowerCase().includes(needle));
-  } else {
-    const featured = ['oracy', 'sympatric', 'panglossian'];
-    const picks = featured.map((word) => findWord({ word })).filter(Boolean);
-    const seen = new Set(picks.map((entry) => entry.id));
-    pool = [
-      ...picks,
-      ...pool.filter((entry) => !seen.has(entry.id)),
-    ];
-  }
   const cap = Math.max(1, Math.min(Number(limit) || 80, 200));
-  return pool.slice(0, cap);
+  const pool = resolveWords(settings);
+  if (needle) {
+    return pool
+      .filter((entry) => entry.word.includes(needle)
+        || String(entry.definition || '').toLowerCase().includes(needle))
+      .slice(0, cap);
+  }
+  // Featured picks first — stop once we have `cap` rows (never copy the full 160k list).
+  const featured = ['oracy', 'sympatric', 'panglossian'];
+  const picks = featured.map((word) => findWord({ word })).filter(Boolean);
+  const seen = new Set(picks.map((entry) => entry.id));
+  const out = [...picks];
+  for (const entry of pool) {
+    if (out.length >= cap) break;
+    if (seen.has(entry.id)) continue;
+    out.push(entry);
+  }
+  return out;
 }
 
 function createWordOfTheDay(config, log) {
@@ -177,7 +181,7 @@ function createWordOfTheDay(config, log) {
     });
     return {
       available: countAvailable(settings),
-      total: loadShipped().length,
+      total: Number(SHIPPED?.wordCount) || loadShipped().length,
       partsOfSpeech: loadPartsOfSpeech(),
       settings,
       words,

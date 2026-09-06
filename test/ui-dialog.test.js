@@ -41,8 +41,8 @@ test('admin and user portals load ui-dialog ahead of week-grid', () => {
     const grid = html.indexOf('week-grid.js');
     assert.ok(dialog >= 0 && grid > dialog, 'ui-dialog.js must load before week-grid.js');
   }
-  assert.match(admin, /ui-dialog\.js\?v=signal304/);
-  assert.match(user, /ui-dialog\.js\?v=signal304/);
+  assert.match(admin, /ui-dialog\.js\?v=signal305/);
+  assert.match(user, /ui-dialog\.js\?v=signal305/);
 });
 
 test('product UI must not call window.confirm or window.prompt', () => {
@@ -67,7 +67,7 @@ test('schedule type and target buttons use short labels with title tooltips', ()
     assert.match(html, /data-sched-target="specific"[^>]*title="[^"]+"[^>]*>Specific</);
     assert.ok(!html.includes('Cadence — roughly every N minutes'));
     assert.ok(!html.includes('Specific display'));
-    assert.match(html, /sched-fixed-head-aside/);
+    assert.match(html, /sched-fixed-head-copy/);
     assert.match(html, /Right-click a cell to override its minute/);
   }
 });

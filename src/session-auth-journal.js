@@ -14,6 +14,14 @@ const AUTH_ERROR_PATTERNS = [
   { category: 'amazon_api_change', pattern: /no body|unexpected|parse|html/i },
 ];
 
+/** Keep enough history for auth-status / health without unbounded RAM. */
+const DEFAULT_RECENT_CAP = 40;
+/** Soft cap before rewrite — a multi-year keepalive log used to hit tens of MB. */
+const DEFAULT_MAX_FILE_BYTES = 1.5 * 1024 * 1024;
+const DEFAULT_MAX_KEEP_LINES = 3000;
+/** First-pass tail window; grow if we still need more lines. */
+const DEFAULT_TAIL_CHUNK = 256 * 1024;
+
 function classifyAuthFailure(message, context = {}) {
   const text = String(message || '');
   for (const { category, pattern } of AUTH_ERROR_PATTERNS) {
@@ -72,24 +80,150 @@ function defaultJournalPath(config) {
   return path.join(path.dirname(config.sessionPath), 'session-auth-journal.jsonl');
 }
 
-function createSessionAuthJournal({ config, log }) {
+/**
+ * Read the last `maxLines` of a JSONL file without loading the whole file.
+ * Used for seed + rotation — never use a full-file read for recent summaries.
+ */
+function readLastLines(filePath, maxLines, {
+  chunkBytes = DEFAULT_TAIL_CHUNK,
+} = {}) {
+  const want = Math.max(1, Number(maxLines) || 1);
+  if (!filePath || !fs.existsSync(filePath)) {
+    return [];
+  }
+
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const size = fs.fstatSync(fd).size;
+    if (size <= 0) {
+      return [];
+    }
+
+    let pos = size;
+    let collected = '';
+
+    while (pos > 0) {
+      const start = Math.max(0, pos - chunkBytes);
+      const len = pos - start;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, start);
+      collected = buf.toString('utf8') + collected;
+      pos = start;
+
+      // When we have not reached BOF, the leading fragment may be a partial line.
+      const usableText = pos > 0
+        ? (collected.includes('\n') ? collected.slice(collected.indexOf('\n') + 1) : '')
+        : collected;
+      const lines = usableText.split('\n').filter(Boolean);
+      if (lines.length >= want || pos === 0) {
+        return lines.slice(-want);
+      }
+    }
+
+    return [];
+  } catch {
+    return [];
+  } finally {
+    if (fd != null) {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+function createSessionAuthJournal({
+  config,
+  log,
+  recentCap = DEFAULT_RECENT_CAP,
+  maxFileBytes = DEFAULT_MAX_FILE_BYTES,
+  maxKeepLines = DEFAULT_MAX_KEEP_LINES,
+} = {}) {
   const filePath = config.sessionAuthJournalPath || defaultJournalPath(config);
+  const cap = Math.max(10, Number(recentCap) || DEFAULT_RECENT_CAP);
+  const keepLines = Math.max(cap, Number(maxKeepLines) || DEFAULT_MAX_KEEP_LINES);
+  const sizeCap = Math.max(64 * 1024, Number(maxFileBytes) || DEFAULT_MAX_FILE_BYTES);
+
+  /** @type {object[]} */
+  const recent = [];
   let lastEvent = null;
+  let rotateInFlight = false;
 
   function ensureParentDir() {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
   }
+
+  function pushRecent(entry) {
+    recent.push(entry);
+    while (recent.length > cap) {
+      recent.shift();
+    }
+    lastEvent = entry;
+  }
+
+  function parseLine(line) {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return null;
+    }
+  }
+
+  function seedFromDisk() {
+    const lines = readLastLines(filePath, cap);
+    for (const line of lines) {
+      const entry = parseLine(line);
+      if (entry) {
+        pushRecent(entry);
+      }
+    }
+  }
+
+  function rotateIfNeeded() {
+    if (rotateInFlight || !fs.existsSync(filePath)) {
+      return;
+    }
+    let size = 0;
+    try {
+      size = fs.statSync(filePath).size;
+    } catch {
+      return;
+    }
+    if (size < sizeCap) {
+      return;
+    }
+
+    rotateInFlight = true;
+    try {
+      const lines = readLastLines(filePath, keepLines);
+      ensureParentDir();
+      const body = lines.length ? `${lines.join('\n')}\n` : '';
+      fs.writeFileSync(filePath, body, 'utf8');
+      log?.warn?.('Session auth journal rotated', {
+        path: filePath,
+        previousBytes: size,
+        keptLines: lines.length,
+      });
+    } catch (err) {
+      log?.error?.('Failed to rotate session auth journal', err.message || err);
+    } finally {
+      rotateInFlight = false;
+    }
+  }
+
+  seedFromDisk();
+  rotateIfNeeded();
 
   function append(event) {
     const entry = {
       ts: new Date().toISOString(),
       ...event,
     };
-    lastEvent = entry;
+    pushRecent(entry);
 
     try {
       ensureParentDir();
       fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`, 'utf8');
+      rotateIfNeeded();
     } catch (err) {
       log?.error?.('Failed to write session auth journal', err.message || err);
     }
@@ -148,24 +282,17 @@ function createSessionAuthJournal({ config, log }) {
   }
 
   function readRecent(limit = 20) {
-    if (!fs.existsSync(filePath)) {
-      return [];
+    const n = Math.max(1, Number(limit) || 20);
+    if (recent.length) {
+      return recent.slice(-n);
     }
-
-    try {
-      const lines = fs.readFileSync(filePath, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .slice(-limit);
-      return lines.map((line) => JSON.parse(line));
-    } catch {
-      return [];
-    }
+    // Cold path if memory was empty (e.g. tests that wipe state) — still O(tail).
+    return readLastLines(filePath, n).map(parseLine).filter(Boolean);
   }
 
   function getSummary() {
-    const recent = readRecent(10);
-    const failures = recent.filter((e) => e.level === 'warn' || e.level === 'error');
+    const slice = readRecent(10);
+    const failures = slice.filter((e) => e.level === 'warn' || e.level === 'error');
     return {
       path: filePath,
       lastEvent,
@@ -182,6 +309,8 @@ function createSessionAuthJournal({ config, log }) {
     readRecent,
     getSummary,
     classifyAuthFailure,
+    /** @internal test/ops */
+    rotateIfNeeded,
   };
 }
 
@@ -189,4 +318,8 @@ module.exports = {
   createSessionAuthJournal,
   classifyAuthFailure,
   describeLikelyCause,
+  readLastLines,
+  DEFAULT_RECENT_CAP,
+  DEFAULT_MAX_FILE_BYTES,
+  DEFAULT_MAX_KEEP_LINES,
 };

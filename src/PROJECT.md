@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-05 (Event routing sheet polish)
+**Last updated:** 2026-09-06 (Auth journal no longer stalls the event loop)
 
 ---
 
@@ -51,7 +51,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/session-keepalive.js` | Auth ping, token refresh (via ping cycle), liveness probe, proactive refresh |
 | `src/auth-refresh-patch.js` | Replaces broken `alexa-cookie2` refresh with vendored skip-register version |
 | `src/vendor/alexa-cookie-refresh.js` | Patched cookie refresh: no `/auth/register` during refresh (fixes 24h auth loss) |
-| `src/session-auth-journal.js` | Append-only JSONL auth event log with failure classification |
+| `src/session-auth-journal.js` | Append-only JSONL auth event log with failure classification; in-memory recent ring + tail reads (never full-file scan); rotates when the file grows past ~1.5 MB |
 | `src/session-meta.js` | Token age / session metadata helpers |
 | `src/error-format.js` | Unwrap AggregateError and nested causes for clearer logs |
 | `src/auth.js` | One-off Amazon login via local proxy (`npm run auth`) |
@@ -471,7 +471,7 @@ Every **15 minutes** the bridge runs a single **ping cycle** (no separate refres
 
 **Refresh failure handling:** `No tokens in Register response` is logged as `token_refresh_noop` (benign). When `tokenDate` does not advance after refresh/cookie save, the bridge tracks **token rotation stalled** and writes `reauth_recommended` to `auth-status.json` at **16h** (before APIs die). At **22h** with repeated noops it escalates to `reauth_required`. `Cookie invalid, Renew unsuccessful` is classified and no longer spams false `session_degraded` via `refresh already in flight`.
 
-**Auth journal:** `data/session-auth-journal.jsonl` — one JSON object per line with `type`, `category`, `likelyCause`, `sessionMeta`. Includes `token_refresh_noop`, `token_refresh_failed_but_live`, ping failures, history auth errors, push disconnects, and `reauth_required`.
+**Auth journal:** `data/session-auth-journal.jsonl` — one JSON object per line with `type`, `category`, `likelyCause`, `sessionMeta`. Includes `token_refresh_noop`, `token_refresh_failed_but_live`, ping failures, history auth errors, push disconnects, and `reauth_required`. `readRecent` / `getSummary` use an in-memory ring (seeded from a tail read); the file rotates when it exceeds ~1.5 MB so a years-long keepalive log cannot sync-stall the event loop (Cloudflare **524**).
 
 **Re-auth signal:** `data/auth-status.json` includes `likelyCause` + last journal entries when threshold hit (5 consecutive failures).
 
@@ -936,6 +936,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-06: **Auth journal no longer stalls HTTPS** — `session-auth-journal` had grown to ~33 MB and `readRecent`/`getSummary` sync-read the whole file (health + reauth paths), which can freeze the Node event loop long enough for Cloudflare to return **524** when Settings loads many APIs. Now: in-memory recent ring, O(tail) seed/rotate, auto-trim past ~1.5 MB; live journal truncated to the last 3k lines. WOD empty search no longer copies the full 160k word list. `webServer.stop()` awaits socket close (Windows UV_HANDLE_CLOSING flake under `--test-force-exit`). Tests: `session-auth-journal`, `roll-credits-api`, `autodarts-api`.
+- 2026-09-05: **Week schedule UX polish** — drop phantom scroll on the event-routing editor; Space no longer clears the first painted hour after a mouse drag; Allowed hours gains a Clear control; fixed-time schedule keeps Fires/Idle on the right and At a fixed time on one line. Cache-bust `signal305`. Tests: `week-grid`, `web-server`.
 - 2026-09-05: **Event routing sheet polish** — close × uses `credits-sheet-head` (was stacked under the title); legend says "Open an event"; sheet steals focus on open so Space cannot re-click Configure and wipe the draft; hour grid drops day-fill; settings save throws on write failure and returns the in-memory snapshot. Cache-bust `signal304`. Tests: `event-routing`, `week-grid`, `web-server`.
 - 2026-09-05: **Scheduler simulate stays responsive** — `simulate()` is async and yields via `setImmediate` between Monte Carlo runs (and every ~400 ticks) so `/api/status` keeps answering during "Rolling 200 simulated days…"; admin skips the offline flash while a sim is in flight. Cache-bust `signal303`. Tests: `display-scheduler`.
 - 2026-09-05: **Scheduler activity loading UX** — Activity tab shows spinners for stats/timeline/per-rule/heatmap while fetching; timeline header (Timeline / Show skips / range) vertically aligned; Show skips re-paints from cache (no refetch) with a busy overlay; timeline build groups events once instead of filter-per-lane. Cache-bust `signal302`. Tests: `web-server`.
@@ -1600,3 +1602,4 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 - 2026-06-26: Fix liveness probe parsing (`getDevices` returns `{ devices: [] }`); stop false session_degraded/recovered churn.
 - 2026-06-24: Added this PROJECT.md; documented vendored auth proxy, session keep-alive, QNAP Docker patterns, UDP protocol.
 - 2026-06-24: Reauth port cleanup, `src` volume mount, `--no-build` workflows, `port-utils.js`.
+

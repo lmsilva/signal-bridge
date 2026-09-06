@@ -129,8 +129,8 @@ test('Autodarts admin routes are gated; no public media routes', async (t) => {
     getAutodartsStatus: () => autodarts.statusSnapshot(),
   });
   const server = await webServer.start();
-  t.after(() => {
-    webServer.stop();
+  t.after(async () => {
+    await webServer.stop();
     autodarts.close();
   });
   const base = `http://127.0.0.1:${server.address().port}`;

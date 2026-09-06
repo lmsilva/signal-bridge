@@ -11133,19 +11133,19 @@ function createWebServer({
       huupeInstance.close?.();
     }
     closeTeslaCallbackServer({ force: true });
-    for (const target of [server, redirectServer]) {
-      if (!target) {
-        continue;
-      }
-      try {
-        target.closeAllConnections?.();
-        target.close();
-      } catch {
-        // already closed
-      }
-    }
+    const targets = [server, redirectServer].filter(Boolean);
     server = null;
     redirectServer = null;
+    // Await close so Windows test workers do not hit UV_HANDLE_CLOSING under
+    // --test-force-exit while sockets are still tearing down.
+    return Promise.all(targets.map((target) => new Promise((resolve) => {
+      try {
+        target.closeAllConnections?.();
+        target.close(() => resolve());
+      } catch {
+        resolve();
+      }
+    })));
   }
 
   return {
