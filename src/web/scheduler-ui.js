@@ -67,23 +67,37 @@
     });
   }
 
-  async function apiFetch(route, { method = 'GET', body = null } = {}) {
+  async function apiFetch(route, { method = 'GET', body = null, timeoutMs = 20000 } = {}) {
     const options = { method, credentials: 'same-origin', headers: {} };
     if (body != null) {
       options.headers['Content-Type'] = 'application/json';
       options.body = JSON.stringify(body);
     }
-    const response = await fetch(route, options);
-    let data = null;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    if (controller) options.signal = controller.signal;
+    const timer = controller && timeoutMs > 0
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : 0;
     try {
-      data = await response.json();
-    } catch {
-      data = null;
+      const response = await fetch(route, options);
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || `Request failed (${response.status})`);
+      }
+      return data;
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Request timed out — try again');
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    if (!response.ok || data?.ok === false) {
-      throw new Error(data?.error || `Request failed (${response.status})`);
-    }
-    return data;
   }
 
   function mount(options = {}) {
@@ -771,7 +785,11 @@
         }
         if (typeof options.onStatus === 'function') options.onStatus(status);
         return status;
-      } catch {
+      } catch (error) {
+        const nextUp = $('sched-nextup');
+        if (nextUp) {
+          nextUp.textContent = error?.message || 'Could not load status';
+        }
         return null;
       }
     }
@@ -1152,6 +1170,8 @@
 
     async function refresh() {
       bindEvents();
+      const nextUp = $('sched-nextup');
+      if (nextUp) nextUp.textContent = 'Updating…';
       paintSchedRulesLoading();
       try {
         // Paint rules as soon as /rules returns — do not wait on /api/commands
@@ -1167,8 +1187,16 @@
         renderSchedCommandPicker();
         await statusPromise;
       } catch (error) {
-        const nextUp = $('sched-nextup');
         if (nextUp) nextUp.textContent = error.message || 'Could not load scheduler';
+        const host = $('sched-rule-list');
+        if (host && host.querySelector('.list-loading')) {
+          host.innerHTML = '';
+        }
+        const empty = $('sched-rule-empty');
+        if (empty) {
+          empty.hidden = false;
+          empty.textContent = error.message || 'Could not load scheduler';
+        }
         toast(error.message || 'Could not load scheduler', 'bad');
       }
     }

@@ -3342,6 +3342,10 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'learn-japanese-settings-card',
     'learn-language-settings-card',
     'space-launch-alerts-settings-card',
+    'family-quotes-settings-card',
+    'warm-fuzzies-settings-card',
+    'daily-bucket-fillers-settings-card',
+    'misheard-lyrics-settings-card',
     'email-sender-card',
   ]) {
     assert.match(
@@ -3515,9 +3519,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal305/);
-  assert.match(html, /settings-filter\.js\?v=signal305/);
-  assert.match(html, /app\.js\?v=signal305/);
+  assert.match(html, /styles\.css\?v=signal307/);
+  assert.match(html, /settings-filter\.js\?v=signal307/);
+  assert.match(html, /app\.js\?v=signal307/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -5776,9 +5780,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
       );
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal305/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal305/);
-    assert.match(userApp.text, /week-grid\.js\?v=signal305/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal307/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal307/);
+    assert.match(userApp.text, /week-grid\.js\?v=signal307/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
@@ -5836,8 +5840,34 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /paintSchedRulesLoading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /rulesPromise/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal299/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal305/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Updating…/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Could not load status/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /AbortController/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal307/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal307/);
+    assert.match(userJs, /SignalSchedulerUi/);
+    assert.match(userJs, /getDisplays: \(\) => displays/);
+    assert.match(
+      userJs,
+      /Mount after displays load[\s\S]{0,400}SignalSchedulerUi\?\.mount/,
+      'scheduler mounts after displays so Specific picker is ready',
+    );
+    {
+      const schedCss = fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8');
+      assert.match(
+        schedCss,
+        /#sched-rule-sheet\.sheet-backdrop[\s\S]*?position:\s*fixed/,
+        'user sheet backdrop must be position:fixed on the element itself',
+      );
+      assert.match(schedCss, /@media \(max-width: 719px\)[\s\S]*sched-sheet-actions/);
+      assert.match(schedCss, /min-height:\s*44px/);
+    }
+    {
+      const adminCss = fs.readFileSync(path.join(realWebRoot, 'admin', 'styles.css'), 'utf8');
+      assert.match(adminCss, /warm-fuzzies-settings-card/);
+      assert.match(adminCss, /daily-bucket-fillers-settings-card/);
+      assert.match(adminCss, /@media \(max-width: 719px\)[\s\S]*#btn-sched-sheet-save/);
+    }
     assert.match(userJs, /armProfileSecrets/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
@@ -5901,7 +5931,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal299/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal307/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);

@@ -3179,6 +3179,31 @@ textarea.field-input.filter-search {
 }
 
 @media (max-width: 719px) {
+  .sched-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sched-toolbar .sched-search { flex: 1 1 auto; width: 100%; }
+  .sched-toolbar .segmented {
+    width: 100%;
+    display: flex;
+  }
+  .sched-toolbar .segmented-btn {
+    flex: 1 1 0;
+    text-align: center;
+    min-height: 40px;
+    padding: 10px 8px;
+  }
+  .sched-toolbar #btn-sched-add-open {
+    width: 100%;
+    min-height: 44px;
+  }
+  .sched-add-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sched-add-row .btn { width: 100%; min-height: 44px; }
+
   .sched-sheet-form {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -3188,6 +3213,73 @@ textarea.field-input.filter-search {
     margin: 0 -4px;
     padding: 0 4px;
   }
+  .sched-sheet-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .sched-sheet-head .sched-dot { display: none; }
+  .sched-sheet-label {
+    flex: 1 1 auto;
+    width: 100%;
+    font-size: 18px;
+  }
+  .sched-sheet-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 8px;
+  }
+  .sched-sheet-actions .btn {
+    min-height: 44px;
+    justify-content: center;
+  }
+  .sched-sheet-actions #btn-sched-sheet-air { grid-column: 1; grid-row: 1; }
+  .sched-sheet-actions #btn-sched-sheet-delete { grid-column: 2; grid-row: 1; }
+  .sched-sheet-actions #btn-sched-sheet-save {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+  .sched-sheet-actions .credits-sheet-close {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .sched-sheet-form .segmented {
+    width: 100%;
+    display: flex;
+  }
+  .sched-sheet-form .segmented-btn {
+    flex: 1 1 0;
+    text-align: center;
+    min-height: 40px;
+    white-space: normal;
+    line-height: 1.2;
+    padding: 8px 6px;
+  }
+  #sched-sheet-type {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .sched-hold-row { flex-wrap: wrap; }
+  .sched-hold-row .hint { flex: 1 1 100%; }
+  .sched-minute-row { flex-wrap: wrap; }
+  .sched-minute-row .segmented {
+    width: 100%;
+    display: flex;
+  }
+  .sched-minute-row .segmented-btn {
+    flex: 1 1 0;
+    min-height: 40px;
+  }
+  .sched-fixed-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .sched-fixed-legend { white-space: normal; }
 }
 
 /* Stat strip: tabular figures so live updates don't make numbers jitter. */
@@ -3969,6 +4061,8 @@ textarea.field-input.filter-search {
   #tab-settings .chuck-norris-settings-card,
   #tab-settings .roast-me-settings-card,
   #tab-settings .family-quotes-settings-card,
+  #tab-settings .warm-fuzzies-settings-card,
+  #tab-settings .daily-bucket-fillers-settings-card,
   #tab-settings .misheard-lyrics-settings-card,
   #tab-settings .periodic-table-settings-card,
   #tab-settings .us-state-facts-settings-card,
