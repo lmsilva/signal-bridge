@@ -233,6 +233,9 @@
       if (!cell || !host.contains(cell)) return;
       if (event.button != null && event.button !== 0) return;
       event.preventDefault();
+      // Keep keyboard focus on the cell so Space toggles it instead of
+      // activating a control behind an open sheet (e.g. Configure).
+      if (typeof cell.focus === 'function') cell.focus();
       const day = Number(cell.dataset.wgDay);
       const hour = Number(cell.dataset.wgHour);
       painting = matrix[day][hour] == null;
@@ -310,9 +313,20 @@
     }
 
     function onKeyDown(event) {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      const dayBtn = event.target.closest && event.target.closest('.wg-day.is-toggle');
+      if (dayBtn && host.contains(dayBtn) && options.dayToggle) {
+        // Prevent the native button "click" so Space does not double-fire.
+        event.preventDefault();
+        const day = Number(dayBtn.dataset.wgDay);
+        const anyOff = matrix[day].some((cell) => cell == null);
+        for (let hour = 0; hour < 24; hour += 1) setCell(day, hour, anyOff);
+        paint();
+        emit();
+        return;
+      }
       const cell = event.target.closest && event.target.closest('.wg-cell');
       if (!cell || !host.contains(cell)) return;
-      if (event.key !== ' ' && event.key !== 'Enter') return;
       event.preventDefault();
       const day = Number(cell.dataset.wgDay);
       const hour = Number(cell.dataset.wgHour);

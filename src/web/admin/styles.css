@@ -7118,6 +7118,18 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.event-routing-sheet > .credits-sheet-head {
+  flex: 0 0 auto;
+}
+.event-routing-sheet > .credits-sheet-head .sheet-title {
+  margin-bottom: 0;
+}
+.event-routing-sheet .event-routing-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .event-routing-sheet .event-routing-sheet-toolbar {
   display: flex;
   flex-wrap: wrap;

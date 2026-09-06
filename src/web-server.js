@@ -6017,7 +6017,7 @@ function createWebServer({
       return;
     }
     if (tail === 'simulate' && method === 'POST') {
-      handleSchedulerSimulate(body, res);
+      await handleSchedulerSimulate(body, res);
       return;
     }
 
@@ -6032,14 +6032,15 @@ function createWebServer({
     sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
   }
 
-  function handleSchedulerSimulate(body, res) {
+  async function handleSchedulerSimulate(body, res) {
+    const result = await scheduler.simulate({
+      hours: Math.min(168, Math.max(1, Number(body?.hours) || 24)),
+      runs: Math.min(1000, Math.max(1, Number(body?.runs) || 200)),
+      seed: Number(body?.seed) || 1,
+    });
     sendJson(res, 200, {
       ok: true,
-      ...scheduler.simulate({
-        hours: Math.min(168, Math.max(1, Number(body?.hours) || 24)),
-        runs: Math.min(1000, Math.max(1, Number(body?.runs) || 200)),
-        seed: Number(body?.seed) || 1,
-      }),
+      ...result,
     });
   }
 

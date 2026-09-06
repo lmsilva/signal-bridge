@@ -837,18 +837,27 @@ function createDisplayScheduler(deps = {}) {
 
   // ---------------------------------------------------------- simulation
 
+  function yieldToEventLoop() {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
   /**
-   * Run the engine forward in memory with no side effects (§9).
+   * Run the engine forward in memory with no side effects.
    *
    * Stochastic, so the caller asks for many runs: we return one representative
    * timeline plus per-rule expected counts across all of them.
+   *
+   * Async on purpose: a sync 200x24h sweep can starve /api/status for seconds
+   * and the admin chrome flashes "bridge unreachable". Yielding between runs
+   * (and periodically inside a run) keeps the HTTP server responsive.
    */
-  function simulate({ hours = 24, runs = 200, seed = 1 } = {}) {
+  async function simulate({ hours = 24, runs = 200, seed = 1 } = {}) {
     const startMs = now();
     const horizon = hours * 3600 * 1000;
     const tickMs = settings.tickSeconds * 1000;
     const totals = new Map();
     let representative = [];
+    let stepsSinceYield = 0;
 
     for (let run = 0; run < Math.max(1, runs); run += 1) {
       const rng = seededRandom(seed + run);
@@ -872,6 +881,11 @@ function createDisplayScheduler(deps = {}) {
       let simLastAiring = lastAiringAt;
 
       for (let t = startMs; t < startMs + horizon; t += tickMs) {
+        stepsSinceYield += 1;
+        if (stepsSinceYield >= 400) {
+          stepsSinceYield = 0;
+          await yieldToEventLoop();
+        }
         if (inQuietHours(t)) continue;
         if (simLastAiring && t - simLastAiring < settings.globalMinGapSeconds * 1000) continue;
 
@@ -925,6 +939,8 @@ function createDisplayScheduler(deps = {}) {
       if (run === 0) {
         representative = airings;
       }
+      // Always yield between Monte Carlo runs so status polls can land.
+      await yieldToEventLoop();
     }
 
     const effectiveRuns = Math.max(1, runs);

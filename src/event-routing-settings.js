@@ -33,12 +33,16 @@ function createEventRoutingSettings(config = {}, log = console) {
   }
 
   function save() {
-    try {
-      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-      fs.writeFileSync(settingsPath, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
-    } catch (error) {
-      log?.warn?.('Could not save event routing settings', error?.message || error);
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    fs.writeFileSync(settingsPath, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
+  }
+
+  function snapshot() {
+    const families = {};
+    for (const [id, rule] of Object.entries(current.families || {})) {
+      families[id] = cloneFamilyRule(rule);
     }
+    return { version: current.version || 2, families };
   }
 
   load();
@@ -46,11 +50,7 @@ function createEventRoutingSettings(config = {}, log = console) {
   return {
     get() {
       load();
-      const families = {};
-      for (const [id, rule] of Object.entries(current.families || {})) {
-        families[id] = cloneFamilyRule(rule);
-      }
-      return { version: current.version || 2, families };
+      return snapshot();
     },
     catalog() {
       return FAMILIES.map((row) => ({ ...row }));
@@ -66,7 +66,9 @@ function createEventRoutingSettings(config = {}, log = console) {
       };
       current = sanitiseSettings(merged);
       save();
-      return this.get();
+      // Return the in-memory snapshot — re-reading the file here used to
+      // silently resurrect the previous document when write failed.
+      return snapshot();
     },
     reload: load,
     path: settingsPath,
