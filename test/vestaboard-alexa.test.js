@@ -244,7 +244,7 @@ test('the text time style falls back to a plain badge frame', () => {
   );
 
   const drawn = formatLayout(frames[0].rows).split('\n');
-  assert.match(drawn[0], /^ww TIME/);
+  assert.match(drawn[0], /^ww\s+TIME/);
   assert.match(drawn[2], /9:05PM/);
   assert.match(drawn[5], /SUNDAY AUG 23/);
 });
@@ -268,12 +268,12 @@ test('a smart home ON carries a green chip beside the state', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'ww SMART HOME       ww',
+    'ww    SMART HOME    ww',
     '',
     ' KYLIE BEDROOM',
     ' LIGHTS: ON g',
     '',
-    'ww 9:56PM           ww',
+    'ww      9:56PM      ww',
   ], 'smart home on');
 });
 
@@ -286,12 +286,12 @@ test('a smart home OFF has no chip and credits the room that heard it', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'ww SMART HOME       ww',
+    'ww    SMART HOME    ww',
     '',
     ' MOVIE POSTER: OFF',
     ' VIA OFFICE ECHO',
     '',
-    'ww 9:46AM           ww',
+    'ww      9:46AM      ww',
   ], 'smart home off');
 });
 
@@ -322,12 +322,12 @@ test('running timers list soonest first with right aligned countdowns', () => {
 
   assert.equal(frames.length, 1);
   assertLayout(frames[0].rows, [
-    'oo TIMERS           oo',
+    'oo      TIMERS      oo',
     ' PIZZA          12:34',
     ' LAUNDRY        48:10',
     ' SOUS VIDE    1:22:05',
     '',
-    'oo 3 RUNNING        oo',
+    'oo    3 RUNNING     oo',
   ], 'timers');
 });
 
@@ -346,11 +346,43 @@ test('a fired timer is an orange alert that quiet hours let through', () => {
   assertLayout(frames[0].rows, [
     'oooooooooooooooooooooo',
     'o                    o',
-    'o  PIZZA TIMER DONE  o',
-    "o  TIME'S UP!        o",
+    'o PIZZA TIMER DONE   o',
+    "o TIME'S UP!         o",
     'o                    o',
     'oooooooooooooooooooooo',
   ], 'timer fired');
+});
+
+test('a timer name that fills the border still keeps DONE', () => {
+  const frames = alexa.timerFrames(timerPayload(
+    [],
+    { kind: 'fired', amazonId: 't1', timer: { label: 'Chicken', status: 'OFF', remainingSec: 0 } },
+  ));
+
+  assertLayout(frames[0].rows, [
+    'oooooooooooooooooooooo',
+    'o                    o',
+    'o CHICKEN TIMER DONE o',
+    "o TIME'S UP!         o",
+    'o                    o',
+    'oooooooooooooooooooooo',
+  ], 'chicken timer fired');
+});
+
+test('a longer timer name drops TIMER rather than eating DONE', () => {
+  const frames = alexa.timerFrames(timerPayload(
+    [],
+    { kind: 'fired', amazonId: 't1', timer: { label: 'Sous Vide', status: 'OFF', remainingSec: 0 } },
+  ));
+
+  assertLayout(frames[0].rows, [
+    'oooooooooooooooooooooo',
+    'o                    o',
+    'o SOUS VIDE DONE     o',
+    "o TIME'S UP!         o",
+    'o                    o',
+    'oooooooooooooooooooooo',
+  ], 'sous vide timer fired');
 });
 
 test('no timers says so when asked and says nothing when rotating', () => {
@@ -360,12 +392,12 @@ test('no timers says so when asked and says nothing when rotating', () => {
 
   const frames = alexa.timerFrames(empty, { explicit: true });
   assertLayout(frames[0].rows, [
-    'oo TIMERS           oo',
+    'oo      TIMERS      oo',
     '',
     '  NO TIMERS RUNNING',
     '',
     '',
-    'oo ALL QUIET        oo',
+    'oo    ALL QUIET     oo',
   ], 'timers empty');
 });
 
@@ -409,7 +441,7 @@ test('a single alarm shows the day it lands on and the wait in the footer', () =
   });
 
   assertLayout(frames[0].rows, [
-    'yy ALARMS           yy',
+    'yy      ALARMS      yy',
     ' 7:00AM  BEDROOM ECHO',
     ' TOMORROW',
     '',
@@ -431,8 +463,8 @@ test('a fired alarm is a red alert that quiet hours let through', () => {
   assertLayout(frames[0].rows, [
     'rrrrrrrrrrrrrrrrrrrrrr',
     'r                    r',
-    'r  WAKE UP - 6:30AM  r',
-    'r  RISE AND SHINE!   r',
+    'r WAKE UP - 6:30AM   r',
+    'r RISE AND SHINE!    r',
     'r                    r',
     'rrrrrrrrrrrrrrrrrrrrrr',
   ], 'alarm fired');
@@ -532,12 +564,12 @@ test('the shopping list renders voice artefacts exactly as they were heard', () 
   });
 
   assertLayout(frames[0].rows, [
-    'gg SHOPPING LIST    gg',
+    'gg  SHOPPING LIST   gg',
     ' COMPANY Q. TEN',
     ' EGGS',
     '',
     '',
-    'gg 2 ITEMS          gg',
+    'gg     2 ITEMS      gg',
   ], 'shopping list');
 });
 
@@ -591,7 +623,7 @@ test('weather leaves a blank row under the title and above the footer', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'bb WEATHER          bb',
+    'bb     WEATHER      bb',
     '',
     ` NOW 93${DEG} SUNNY`,
     ` HIGH 96${DEG} LOW 66${DEG}`,
@@ -636,12 +668,12 @@ test('indoor temperature gives every named sensor its own row', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'bb INDOOR TEMP      bb',
+    'bb   INDOOR TEMP    bb',
     ` TOP FLOOR        75${DEG}`,
     ` MAIN FLOOR       76${DEG}`,
     ` MACHINE ROOM     71${DEG}`,
     '',
-    'bb HUMIDITY 34%     bb',
+    'bb   HUMIDITY 34%   bb',
   ], 'indoor temperature');
 });
 
@@ -688,7 +720,7 @@ test('air quality pairs each score with a band chip and a temperature', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'gg AIR QUALITY      gg',
+    'gg   AIR QUALITY    gg',
     ` MAIN FLOOR   99g 76${DEG}`,
     ` MACHINE ROOM 99g 71${DEG}`,
     ` DOME        66y 114${DEG}`,
@@ -752,12 +784,12 @@ test('now playing reads artist, album, track, room', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'vv NOW PLAYING      vv',
+    'vv   NOW PLAYING    vv',
     ' KHRUANGBIN',
     ' A LA SALA',
     " 'MAY NINTH'",
     '',
-    'vv SONOS KITCHEN    vv',
+    'vv  SONOS KITCHEN   vv',
   ], 'music');
 });
 
@@ -803,7 +835,7 @@ test('notifications count first, then wrap the newest one', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'yy NOTIFICATIONS    yy',
+    'yy  NOTIFICATIONS   yy',
     ' 2 NEW',
     ' AMAZON: PACKAGE',
     ' DELIVERED TODAY',
@@ -861,12 +893,12 @@ test('an armed system shows a green chip at the edge of the row', () => {
   });
 
   assertLayout(frames[0].rows, [
-    'ww VIVINT           ww',
+    'ww      VIVINT      ww',
     '',
     ' SYSTEM: ARMED STAY g',
     '',
     '',
-    'ww 10:37PM          ww',
+    'ww     10:37PM      ww',
   ], 'vivint armed');
 });
 
@@ -878,12 +910,12 @@ test('a disarmed system is orange, because that is the state worth catching', ()
   });
 
   assertLayout(frames[0].rows, [
-    'ww VIVINT           ww',
+    'ww      VIVINT      ww',
     '',
     ' SYSTEM: DISARMED   o',
     '',
     '',
-    'ww 10:37PM          ww',
+    'ww     10:37PM      ww',
   ], 'vivint disarmed');
 });
 

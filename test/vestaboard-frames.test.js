@@ -51,27 +51,44 @@ test('the shopping list badge frame matches the spec drawing', () => {
   });
 
   assertLayout(frame, [
-    'gg SHOPPING LIST    gg',
+    'gg  SHOPPING LIST   gg',
     ' COMPANY Q. TEN',
     ' EGGS',
     '',
     '',
-    'gg 2 ITEMS          gg',
+    'gg     2 ITEMS      gg',
   ].join('\n'), 'shopping list');
 });
 
-test('a badge frame can centre the title between the chip pairs', () => {
-  const steam = badgeFrame({ color: 'blue', title: 'STEAM', titleAlign: 'center' });
+test('a badge frame centres the title and footer by default', () => {
+  const frame = badgeFrame({
+    color: 'orange',
+    title: 'TIMERS',
+    footerLeft: '3 RUNNING',
+  });
+
+  assertLayout(frame, [
+    'oo      TIMERS      oo',
+    '',
+    '',
+    '',
+    '',
+    'oo    3 RUNNING     oo',
+  ].join('\n'), 'default centred title and footer');
+});
+
+test('a badge frame can still pin the title left when asked', () => {
+  const steam = badgeFrame({ color: 'blue', title: 'STEAM', titleAlign: 'left' });
   const psn = badgeFrame({ color: 'blue', title: 'PLAYSTATION', titleAlign: 'center' });
 
   assertLayout(steam, [
-    'bb      STEAM       bb',
+    'bb STEAM            bb',
     '',
     '',
     '',
     '',
     'bb                  bb',
-  ].join('\n'), 'centred steam title');
+  ].join('\n'), 'left-pinned steam title');
   assertLayout(psn, [
     'bb   PLAYSTATION    bb',
     '',
@@ -112,7 +129,7 @@ test('a badge frame right-aligns the header extra, like a category or page', () 
   });
 
   assertLayout(frame, [
-    'yy THE UPSIDE   1/5 yy',
+    'yy  THE UPSIDE  1/5 yy',
     '',
     '',
     '',
@@ -135,12 +152,12 @@ test('the tesla dashboard composes label-and-value rows against flush ones', () 
   });
 
   assertLayout(frame, [
-    'rr TESLA MODEL Y    rr',
+    'rr  TESLA MODEL Y   rr',
     'BATT 73%  RANGE 201MI',
     'PARKED - NOT PLUGGED',
     'IN 88\u00b0  OUT 91\u00b0',
     'LOCKED - SENTRY ON',
-    'rr 2:38PM           rr',
+    'rr      2:38PM      rr',
   ].join('\n'), 'tesla dashboard');
 });
 
@@ -157,12 +174,12 @@ test('the timer list right-aligns countdowns into a clean column', () => {
   });
 
   assertLayout(frame, [
-    'oo TIMERS           oo',
+    'oo      TIMERS      oo',
     ' PIZZA          12:34',
     ' LAUNDRY        48:10',
     ' SOUS VIDE    1:22:05',
     '',
-    'oo 3 RUNNING        oo',
+    'oo    3 RUNNING     oo',
   ].join('\n'), 'timer list');
 });
 
@@ -205,7 +222,7 @@ test('air quality places a band chip inline with the reading', () => {
   });
 
   assertLayout(frame, [
-    'gg AIR QUALITY      gg',
+    'gg   AIR QUALITY    gg',
     ' MAIN FLOOR   99g 76\u00b0',
     ' MACHINE ROOM 99g 71\u00b0',
     ' DOME        66y 114\u00b0',

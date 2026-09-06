@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-06 (Message board sizes the wrap)
+**Last updated:** 2026-09-06 (Centred badges + timer DONE)
 
 ---
 
@@ -936,6 +936,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-06: **Centred badges + timer DONE** — `badgeFrame` centres top title and bottom summary by default (page counters stay flush-right). Timer/alarm fired alerts stop double-taxing the border row (`indent: 1` + `BORDER_TEXT_WIDTH - 1`), so `CHICKEN TIMER DONE` keeps its E; longer names drop `TIMER` before eating `DONE`. Guest Book / Message painted grids and Red Letter layouts untouched. Tests: `vestaboard-frames`, `vestaboard-alexa`, `vestaboard-tesla`, `vestaboard-gaming`, `vestaboard-feeds`, `vestaboard-encoder`.
 - 2026-09-06: **Message board sizes the wrap, not the bezel** — the real cause of the broken household Message layout (worst in Safari, latent everywhere on a short window): `.vb-bezel` padding is `7%` of its *containing block*, so capping the **bezel** with the height budget drew a frame sized for the full-width wrap and squeezed the flaps into the remainder — a full slab with a postage-stamp grid. The cap now lives on `.gb-board-wrap` (same rule as the Board tab) in both the stacked and 1600px two-column layouts, with a 520px floor, and the panel scrolls instead of clipping when `--gb-chrome` reads low. Cache-bust `signal310`. Tests: `web-server`, `ui-dialog`.
 - 2026-09-06: **Safari Message board sizing** — household Message used `container-type: size` + `100cqb` on a flex-grown wrap; Safari collapses those units so the Vestaboard preview shrank and floated in empty space. Size with `dvh` like the Simulator, cache-bust `signal309`. Tests: `web-server`.
 - 2026-09-06: **User Scheduler pinned chrome** — household Scheduler scrolled the whole tab (title, next-up, filters) so the scrollbar ran from under the site header; now title/next-up/filters stay put and only `#sched-rule-scroll` scrolls. Drop eager Space Launch Alerts warm-fetch from `createWebServer()` (was leaving `ll.thespacedevs.com` TLS sockets that tripped Windows `UV_HANDLE_CLOSING` under `--test-force-exit`); warm on Settings GET / push instead, and `stop()` aborts in-flight refresh. Cache-bust `signal308`. Tests: `web-server`, `ui-dialog`, `space-launch-alerts`.
