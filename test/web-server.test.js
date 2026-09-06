@@ -5780,9 +5780,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
       );
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal307/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal307/);
-    assert.match(userApp.text, /week-grid\.js\?v=signal307/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal308/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal308/);
+    assert.match(userApp.text, /week-grid\.js\?v=signal308/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
@@ -5843,8 +5843,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Updating…/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Could not load status/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /AbortController/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal307/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal307/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal308/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal308/);
     assert.match(userJs, /SignalSchedulerUi/);
     assert.match(userJs, /getDisplays: \(\) => displays/);
     assert.match(
@@ -5852,6 +5852,25 @@ test('household login, /user/ gate, and permission 403s', async () => {
       /Mount after displays load[\s\S]{0,400}SignalSchedulerUi\?\.mount/,
       'scheduler mounts after displays so Specific picker is ready',
     );
+    {
+      const userHtml = fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8');
+      assert.match(
+        userHtml,
+        /id="sched-sticky-top"[\s\S]*?id="sched-setup-card"[\s\S]*?id="sched-rule-scroll"[\s\S]*?id="sched-rule-list"/,
+        'user scheduler pins chrome above a dedicated rule-list scroller',
+      );
+      const userSchedCss = fs.readFileSync(path.join(realWebRoot, 'user', 'styles.css'), 'utf8');
+      assert.match(
+        userSchedCss,
+        /body\[data-tab="scheduler"\][\s\S]*?#tab-scheduler\.tab-panel\.active[\s\S]*?display:\s*flex/,
+        'user scheduler tab fills main as a flex column',
+      );
+      assert.match(
+        userSchedCss,
+        /#tab-scheduler \.sched-rule-scroll[\s\S]*?overflow-y:\s*auto/,
+        'user scheduler scrollbar lives on the rule list only',
+      );
+    }
     {
       const schedCss = fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8');
       assert.match(
@@ -5931,7 +5950,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal307/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal308/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);

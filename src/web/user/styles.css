@@ -127,6 +127,44 @@ main {
 }
 .tab-panel { display: none; padding: 8px 16px 24px; }
 .tab-panel.active { display: block; }
+
+/*
+ * Scheduler: pin title / next-up / filters; only the rule list scrolls so the
+ * scrollbar starts under that chrome (admin sticky head + setup card parity).
+ */
+body[data-tab="scheduler"] main {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body[data-tab="scheduler"] #tab-scheduler.tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+#tab-scheduler .sched-sticky-top {
+  flex: 0 0 auto;
+  background: var(--bg);
+  z-index: 2;
+}
+#tab-scheduler .sched-sticky-top .su-page-head {
+  margin-bottom: 12px;
+}
+#tab-scheduler .sched-sticky-top .sched-setup-card {
+  margin-bottom: 10px;
+}
+#tab-scheduler .sched-rule-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+}
 .su-h { margin: 18px 0 10px; font-size: 1.05rem; }
 .su-display-field { margin: 4px 0 12px; }
 .su-display-field .su-label { margin-top: 0; }

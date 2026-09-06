@@ -10,8 +10,8 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal307">
-  <link rel="stylesheet" href="/scheduler.css?v=signal307">
+  <link rel="stylesheet" href="styles.css?v=signal308">
+  <link rel="stylesheet" href="/scheduler.css?v=signal308">
 </head>
 <body>
   <header class="su-head">
@@ -239,68 +239,73 @@
     </section>
 
     <section class="tab-panel su-sched-root" id="tab-scheduler" hidden>
-      <div class="su-page-head">
-        <div class="su-page-head-copy">
-          <h2 class="su-h">Scheduler</h2>
-          <p class="hint">Same rule list and editor as admin — cadence, fixed times, hold and priority.</p>
-        </div>
-      </div>
-      <div class="card sched-nextup-card" id="sched-nextup-card">
-        <div class="sched-nextup" id="sched-nextup">Loading…</div>
-        <p class="hint" id="sched-nextup-hint">Automatically shows pages when the display is idle.</p>
-      </div>
-      <div class="card sched-setup-card" id="sched-setup-card">
-        <div class="sched-toolbar">
-          <div class="sched-search">
-            <input class="field-input" type="search" id="sched-rule-search"
-              placeholder="Find a rule…" autocomplete="off" spellcheck="false"
-              aria-label="Find a rule">
+      <!-- Chrome stays put; only .sched-rule-scroll scrolls (scrollbar under the menu). -->
+      <div class="sched-sticky-top" id="sched-sticky-top">
+        <div class="su-page-head">
+          <div class="su-page-head-copy">
+            <h2 class="su-h">Scheduler</h2>
+            <p class="hint">Same rule list and editor as admin — cadence, fixed times, hold and priority.</p>
           </div>
-          <div class="segmented" id="sched-display-filter" role="group" aria-label="Display filter">
-            <button type="button" class="segmented-btn active" data-sched-display-filter="all">All</button>
-            <button type="button" class="segmented-btn" data-sched-display-filter="full">Software</button>
-            <button type="button" class="segmented-btn" data-sched-display-filter="vestaboard">Vestaboards</button>
-          </div>
-          <div class="segmented" id="sched-kind-filter" role="group" aria-label="Schedule kind filter">
-            <button type="button" class="segmented-btn active" data-sched-kind-filter="any">Any</button>
-            <button type="button" class="segmented-btn" data-sched-kind-filter="cadence">Cadence</button>
-            <button type="button" class="segmented-btn" data-sched-kind-filter="fixed">Fixed time</button>
-          </div>
-          <button type="button" class="btn btn-accent" id="btn-sched-add-open">+ Add</button>
         </div>
-        <div class="sched-meta-row">
-          <p class="hint" id="sched-rule-meta"></p>
-          <span class="sched-sort-hint">Sort: Group · Name</span>
+        <div class="card sched-nextup-card" id="sched-nextup-card">
+          <div class="sched-nextup" id="sched-nextup">Loading…</div>
+          <p class="hint" id="sched-nextup-hint">Automatically shows pages when the display is idle.</p>
         </div>
-        <div class="sched-add-row" id="sched-add-row" hidden>
-          <div class="sched-add-command-wrap">
-            <label class="field-label" for="sched-add-command-search">Pick an event</label>
-            <div class="sched-command-picker">
-              <input
-                class="field-input"
-                type="search"
-                id="sched-add-command-search"
-                placeholder="Type to find an event…"
-                autocomplete="off"
-                spellcheck="false"
-                role="combobox"
-                aria-expanded="false"
-                aria-controls="sched-add-command-list"
-                aria-autocomplete="list"
-              >
-              <input type="hidden" id="sched-add-command" value="">
-              <div class="typeahead-list sched-command-list" id="sched-add-command-list" role="listbox" hidden></div>
+        <div class="card sched-setup-card" id="sched-setup-card">
+          <div class="sched-toolbar">
+            <div class="sched-search">
+              <input class="field-input" type="search" id="sched-rule-search"
+                placeholder="Find a rule…" autocomplete="off" spellcheck="false"
+                aria-label="Find a rule">
             </div>
+            <div class="segmented" id="sched-display-filter" role="group" aria-label="Display filter">
+              <button type="button" class="segmented-btn active" data-sched-display-filter="all">All</button>
+              <button type="button" class="segmented-btn" data-sched-display-filter="full">Software</button>
+              <button type="button" class="segmented-btn" data-sched-display-filter="vestaboard">Vestaboards</button>
+            </div>
+            <div class="segmented" id="sched-kind-filter" role="group" aria-label="Schedule kind filter">
+              <button type="button" class="segmented-btn active" data-sched-kind-filter="any">Any</button>
+              <button type="button" class="segmented-btn" data-sched-kind-filter="cadence">Cadence</button>
+              <button type="button" class="segmented-btn" data-sched-kind-filter="fixed">Fixed time</button>
+            </div>
+            <button type="button" class="btn btn-accent" id="btn-sched-add-open">+ Add</button>
           </div>
-          <button class="btn btn-accent" id="btn-sched-add">Add rule</button>
-          <button type="button" class="btn btn-outline" id="btn-sched-add-cancel">Cancel</button>
+          <div class="sched-meta-row">
+            <p class="hint" id="sched-rule-meta"></p>
+            <span class="sched-sort-hint">Sort: Group · Name</span>
+          </div>
+          <div class="sched-add-row" id="sched-add-row" hidden>
+            <div class="sched-add-command-wrap">
+              <label class="field-label" for="sched-add-command-search">Pick an event</label>
+              <div class="sched-command-picker">
+                <input
+                  class="field-input"
+                  type="search"
+                  id="sched-add-command-search"
+                  placeholder="Type to find an event…"
+                  autocomplete="off"
+                  spellcheck="false"
+                  role="combobox"
+                  aria-expanded="false"
+                  aria-controls="sched-add-command-list"
+                  aria-autocomplete="list"
+                >
+                <input type="hidden" id="sched-add-command" value="">
+                <div class="typeahead-list sched-command-list" id="sched-add-command-list" role="listbox" hidden></div>
+              </div>
+            </div>
+            <button class="btn btn-accent" id="btn-sched-add">Add rule</button>
+            <button type="button" class="btn btn-outline" id="btn-sched-add-cancel">Cancel</button>
+          </div>
         </div>
       </div>
-      <div class="sched-col-head" id="sched-col-head" hidden>
-        <span></span><span>Rule</span><span>Show on</span><span>Schedule</span><span>Hold</span><span>Priority</span><span>On</span><span></span>
+      <div class="sched-rule-scroll" id="sched-rule-scroll">
+        <div class="sched-col-head" id="sched-col-head" hidden>
+          <span></span><span>Rule</span><span>Show on</span><span>Schedule</span><span>Hold</span><span>Priority</span><span>On</span><span></span>
+        </div>
+        <div id="sched-rule-list"></div>
+        <p class="hint settings-search-empty" id="sched-rule-empty" hidden></p>
       </div>
-      <div id="sched-rule-list"></div>
-      <p class="hint settings-search-empty" id="sched-rule-empty" hidden></p>
     </section>
   </main>
 
@@ -670,9 +675,9 @@
   <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="/ui-dialog.js?v=signal307"></script>
-  <script src="/week-grid.js?v=signal307"></script>
-  <script src="/scheduler-ui.js?v=signal307"></script>
-  <script src="app.js?v=signal307"></script>
+  <script src="/ui-dialog.js?v=signal308"></script>
+  <script src="/week-grid.js?v=signal308"></script>
+  <script src="/scheduler-ui.js?v=signal308"></script>
+  <script src="app.js?v=signal308"></script>
 </body>
 </html>
