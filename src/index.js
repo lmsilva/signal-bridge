@@ -11,6 +11,7 @@ const { createWebServer } = require('./web-server');
 const { createGuestSnapsAuth } = require('./guest-snaps-auth');
 const { createLocaleSettings } = require('./locale-settings');
 const { createPublicUrlSettings } = require('./public-url');
+const { createEventRoutingSettings } = require('./event-routing-settings');
 const { createShortlinks } = require('./shortlinks');
 const { installRefreshPatch } = require('./auth-refresh-patch');
 const { createVestaboardSimulator } = require('./vestaboard/simulator');
@@ -57,6 +58,7 @@ async function main() {
   const guestSnapsAuth = createGuestSnapsAuth(config, log);
   const localeSettings = createLocaleSettings(config, log);
   const publicUrlSettings = createPublicUrlSettings(config, log);
+  const eventRoutingSettings = createEventRoutingSettings(config, log);
   const shortlinks = createShortlinks(config, log);
 
   // The stand-in board comes up first so the hub can adopt it, and the hub
@@ -83,6 +85,7 @@ async function main() {
 
   const listener = createListener({
     config, log, guestSnapsAuth, vestaboardHub, localeSettings, shortlinks,
+    eventRoutingSettings,
   });
 
   registerShutdown(log);
@@ -138,6 +141,7 @@ async function main() {
       guestSnapsAuth,
       localeSettings,
       publicUrlSettings,
+      eventRoutingSettings,
       shortlinks,
     });
     webServer.start().catch((error) => {

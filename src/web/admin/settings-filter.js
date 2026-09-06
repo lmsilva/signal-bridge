@@ -191,6 +191,7 @@ function parseKindList(value) {
 const SETTINGS_CARD_KINDS = Object.freeze({
   'locale-settings-card': ['full', 'vestaboard'],
   'public-url-settings-card': ['full', 'vestaboard'],
+  'event-routing-settings-card': ['full', 'vestaboard'],
   'tinyurl-settings-card': ['full', 'vestaboard'],
   'guest-snaps-settings-card': ['full', 'vestaboard'],
   'guest-book-settings-card': ['vestaboard'],

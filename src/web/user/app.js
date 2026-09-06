@@ -2,6 +2,22 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+
+  function listLoadingHtml(label = 'Loading…') {
+    return `<div class="list-loading" role="status" aria-live="polite">`
+      + `<span class="list-loading-spinner" aria-hidden="true"></span>`
+      + `<span>${escapeHtml(label)}</span></div>`;
+  }
+
+  function paintListLoading(host, emptyEl, label) {
+    if (emptyEl) emptyEl.hidden = true;
+    if (!host) return;
+    // Soft polls keep existing rows; only first paint (or a cleared host) shows
+    // the spinner so refreshes do not flash.
+    if (host.children.length && !host.querySelector('.list-loading')) return;
+    host.innerHTML = listLoadingHtml(label);
+  }
+
   // First of AVATAR_TEMPLATES in house-users.js -- what a user who has never
   // picked a face is shown before /api/user/me answers.
   const DEFAULT_AVATAR = 'cat-blue';
@@ -38,6 +54,7 @@
   let lightboxIndex = -1;
   let confirmResolver = null;
   let schedulerUi = null;
+  let schedulerNeedsRefresh = false;
   const DATE_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DATE_MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -73,8 +90,33 @@
     }
   }
 
-  function showTab(name) {
+  function tabIdFromHash() {
+    return String(location.hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim();
+  }
+
+  function isRestorableUserTab(name) {
+    if (!name) return false;
+    const btn = document.querySelector(`#su-tabs [data-tab="${name}"]`);
+    if (!btn || btn.hidden) return false;
+    const panel = $(`tab-${name}`);
+    if (!panel) return false;
+    return true;
+  }
+
+  function syncUserTabHash(name) {
+    try {
+      if (typeof history === 'undefined' || typeof history.replaceState !== 'function') return;
+      const next = name ? `#${name}` : '';
+      if ((location.hash || '') === next) return;
+      history.replaceState(null, '', `${location.pathname}${location.search}${next}`);
+    } catch {
+      /* private mode / non-browser harness */
+    }
+  }
+
+  function showTab(name, { syncHash = true } = {}) {
     document.body.dataset.tab = name;
+    if (syncHash) syncUserTabHash(name);
     document.querySelectorAll('.tab-panel').forEach((panel) => {
       panel.classList.toggle('active', panel.id === `tab-${name}`);
     });
@@ -95,7 +137,10 @@
     }
     if (name === 'flight') loadTrips();
     if (name === 'dates') loadDates();
-    if (name === 'scheduler') schedulerUi?.refresh?.();
+    if (name === 'scheduler') {
+      if (schedulerUi?.refresh) schedulerUi.refresh();
+      else schedulerNeedsRefresh = true;
+    }
   }
 
   function escapeHtml(value) {
@@ -699,6 +744,8 @@
     $('tab-slideshow').hidden = !canSlides;
     $('tab-dates').hidden = !canDates;
     $('tab-scheduler').hidden = !canSched;
+    const active = document.body.dataset.tab;
+    if (active && !isRestorableUserTab(active)) showTab('main');
     renderAvatars();
     renderDash();
   }
@@ -708,30 +755,45 @@
     window.open(`/games/?code=${encodeURIComponent(session.code)}&name=${name}`, '_blank', 'noopener');
   }
 
-  async function loadGames() {
-    const data = await api('/api/user/games');
+  async function loadGames({ soft = false } = {}) {
     const host = $('games-list');
-    const rows = data.sessions || [];
-    $('games-empty').hidden = rows.length > 0;
-    host.innerHTML = '';
-    rows.forEach((session) => {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'game-card';
-      const mins = Math.floor((session.startedAgoSeconds || 0) / 60);
-      card.innerHTML = `<strong>${escapeHtml(session.game || session.gameType || 'Game')}</strong>
+    const empty = $('games-empty');
+    if (!soft) paintListLoading(host, empty, 'Looking for live games…');
+    try {
+      const data = await api('/api/user/games');
+      const rows = data.sessions || [];
+      if (empty) {
+        empty.hidden = rows.length > 0;
+        if (!rows.length) empty.textContent = 'No games are running right now.';
+      }
+      if (host) host.innerHTML = '';
+      rows.forEach((session) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'game-card';
+        const mins = Math.floor((session.startedAgoSeconds || 0) / 60);
+        card.innerHTML = `<strong>${escapeHtml(session.game || session.gameType || 'Game')}</strong>
         <span>Code ${escapeHtml(session.code)} · ${escapeHtml(session.phase || '')}${session.lobby ? ' · lobby' : ''} · ${session.playerCount || 0} players · ${mins}m</span>
         <span class="su-btn su-btn-sm">Join now</span>`;
-      card.addEventListener('click', () => openGameSession(session));
-      host.appendChild(card);
-    });
+        card.addEventListener('click', () => openGameSession(session));
+        host.appendChild(card);
+      });
+    } catch (error) {
+      if (soft) return;
+      if (host) host.innerHTML = '';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message || 'Could not load games.';
+      }
+      throw error;
+    }
   }
 
   function startGamesPoll() {
     stopGamesPoll();
     gamesPollTimer = window.setInterval(() => {
       if (document.body.dataset.tab !== 'games') return;
-      loadGames().catch(() => {});
+      loadGames({ soft: true }).catch(() => {});
     }, GAMES_POLL_MS);
   }
 
@@ -753,22 +815,33 @@
   }
 
   async function loadTrips() {
-    const data = await api(`/api/flightplan/trips?filter=${encodeURIComponent(tripFilter)}`);
     const host = $('trip-list');
-    const trips = data.trips || [];
-    if ($('trip-empty')) $('trip-empty').hidden = trips.length > 0;
-    host.innerHTML = '';
-    trips.forEach((trip) => {
-      const dates = formatTripDates(trip);
-      const meta = [`${trip.flightCount || 0} flights`, trip.phase || '', dates].filter(Boolean).join(' · ');
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'trip-card';
-      card.innerHTML = `<strong>${escapeHtml(trip.name || 'Trip')}</strong>`
-        + `<span class="trip-card-meta">${escapeHtml(meta)}</span>`;
-      card.addEventListener('click', () => openTrip(trip.id));
-      host.appendChild(card);
-    });
+    const empty = $('trip-empty');
+    paintListLoading(host, empty, 'Loading trips…');
+    try {
+      const data = await api(`/api/flightplan/trips?filter=${encodeURIComponent(tripFilter)}`);
+      const trips = data.trips || [];
+      if (empty) empty.hidden = trips.length > 0;
+      if (host) host.innerHTML = '';
+      trips.forEach((trip) => {
+        const dates = formatTripDates(trip);
+        const meta = [`${trip.flightCount || 0} flights`, trip.phase || '', dates].filter(Boolean).join(' · ');
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'trip-card';
+        card.innerHTML = `<strong>${escapeHtml(trip.name || 'Trip')}</strong>`
+          + `<span class="trip-card-meta">${escapeHtml(meta)}</span>`;
+        card.addEventListener('click', () => openTrip(trip.id));
+        host.appendChild(card);
+      });
+    } catch (error) {
+      if (host) host.innerHTML = '';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message || 'Could not load trips.';
+      }
+      throw error;
+    }
   }
 
   async function openTrip(id) {
@@ -926,8 +999,20 @@
   }
 
   async function loadPhotos() {
-    const data = await api('/api/photos');
-    applyPhotos(data.photos || []);
+    const host = $('photo-grid');
+    const empty = $('photo-grid-empty');
+    paintListLoading(host, empty, 'Loading photos…');
+    try {
+      const data = await api('/api/photos');
+      applyPhotos(data.photos || []);
+    } catch (error) {
+      if (host) host.innerHTML = '';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message || 'Could not load photos.';
+      }
+      throw error;
+    }
   }
 
   function startSlideshowEvents() {
@@ -964,40 +1049,53 @@
   }
 
   async function loadDates() {
-    const data = await api('/api/date-book/events');
     const host = $('date-list');
-    const events = data.events || [];
-    if ($('date-empty')) $('date-empty').hidden = events.length > 0;
-    if ($('date-summary')) {
-      $('date-summary').textContent = events.length
-        ? `${events.length} event${events.length === 1 ? '' : 's'}. Yearly dates roll forward; one-offs drop off once they pass.`
-        : 'Birthdays, holidays, and the dates you want counted down.';
-    }
-    host.innerHTML = '';
-    events.forEach((event) => {
-      const next = event.next || {};
-      const when = formatYmd(next.date || event.date);
-      const away = daysLabel(next);
-      const schedule = dateScheduleLabel(event);
-      const badges = [
-        next.isToday ? '<span class="date-badge is-today">Today</span>' : '',
-        event.recurring ? '<span class="date-badge is-yearly">Yearly</span>' : '',
-        event.schedule === 'weekday' ? '<span class="date-badge is-yearly">Weekday</span>' : '',
-        next.expired ? '<span class="date-badge">Passed</span>' : '',
-      ].filter(Boolean).join('');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'date-card';
-      btn.innerHTML = `
+    const empty = $('date-empty');
+    paintListLoading(host, empty, 'Loading dates…');
+    if ($('date-summary')) $('date-summary').textContent = 'Loading dates…';
+    try {
+      const data = await api('/api/date-book/events');
+      const events = data.events || [];
+      if (empty) empty.hidden = events.length > 0;
+      if ($('date-summary')) {
+        $('date-summary').textContent = events.length
+          ? `${events.length} event${events.length === 1 ? '' : 's'}. Yearly dates roll forward; one-offs drop off once they pass.`
+          : 'Birthdays, holidays, and the dates you want counted down.';
+      }
+      if (host) host.innerHTML = '';
+      events.forEach((event) => {
+        const next = event.next || {};
+        const when = formatYmd(next.date || event.date);
+        const away = daysLabel(next);
+        const schedule = dateScheduleLabel(event);
+        const badges = [
+          next.isToday ? '<span class="date-badge is-today">Today</span>' : '',
+          event.recurring ? '<span class="date-badge is-yearly">Yearly</span>' : '',
+          event.schedule === 'weekday' ? '<span class="date-badge is-yearly">Weekday</span>' : '',
+          next.expired ? '<span class="date-badge">Passed</span>' : '',
+        ].filter(Boolean).join('');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'date-card';
+        btn.innerHTML = `
         <div class="date-card-top">
           <strong class="date-card-name">${escapeHtml(event.name || 'Event')}</strong>
           <span class="date-card-badges">${badges}</span>
         </div>
         <span class="date-card-when">${escapeHtml(when)}${away ? ` · ${escapeHtml(away)}` : ''}</span>
         <span class="date-card-meta">${escapeHtml([schedule, event.time && event.time !== '00:00' ? event.time : '', event.message].filter(Boolean).join(' · '))}</span>`;
-      btn.addEventListener('click', () => openDate(event));
-      host.appendChild(btn);
-    });
+        btn.addEventListener('click', () => openDate(event));
+        host.appendChild(btn);
+      });
+    } catch (error) {
+      if (host) host.innerHTML = '';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message || 'Could not load dates.';
+      }
+      if ($('date-summary')) $('date-summary').textContent = 'Could not load dates.';
+      throw error;
+    }
   }
 
   /**
@@ -1092,7 +1190,6 @@
   }
 
   async function boot() {
-    document.body.dataset.tab = 'main';
     applyPointerMode();
     window.matchMedia('(pointer: coarse)').addEventListener('change', applyPointerMode);
     bindDashHost();
@@ -1100,6 +1197,30 @@
     me = session.user;
     window.SIGNAL_AVATARS = session.templates || [];
     applyMe();
+    {
+      const fromHash = tabIdFromHash();
+      const initial = isRestorableUserTab(fromHash) ? fromHash : 'main';
+      showTab(initial);
+    }
+    window.addEventListener('hashchange', () => {
+      const fromHash = tabIdFromHash();
+      if (!fromHash || fromHash === document.body.dataset.tab) return;
+      if (!isRestorableUserTab(fromHash)) {
+        syncUserTabHash(document.body.dataset.tab || 'main');
+        return;
+      }
+      showTab(fromHash, { syncHash: false });
+    });
+    if (window.SignalSchedulerUi?.mount) {
+      schedulerUi = window.SignalSchedulerUi.mount({
+        toast,
+        getDisplays: () => displays,
+      });
+      if (schedulerNeedsRefresh || document.body.dataset.tab === 'scheduler') {
+        schedulerNeedsRefresh = false;
+        schedulerUi.refresh?.();
+      }
+    }
     const [catalog, displayData] = await Promise.all([
       api('/api/user/commands'),
       api('/api/displays').catch(() => ({ displays: [] })),
@@ -1114,11 +1235,20 @@
       watching: () => Boolean($('tab-board')?.classList.contains('active')) && !document.hidden,
     });
     window.userBoard.mount();
-    if (window.SignalSchedulerUi?.mount) {
-      schedulerUi = window.SignalSchedulerUi.mount({
-        toast,
-        getDisplays: () => displays,
-      });
+    if (document.body.dataset.tab === 'board') window.userBoard.enter?.();
+    if (document.body.dataset.tab === 'games') {
+      loadGames();
+      startGamesPoll();
+    }
+    if (document.body.dataset.tab === 'slideshow') {
+      loadPhotos();
+      startSlideshowEvents();
+    }
+    if (document.body.dataset.tab === 'flight') loadTrips();
+    if (document.body.dataset.tab === 'dates') loadDates();
+    if (schedulerNeedsRefresh || document.body.dataset.tab === 'scheduler') {
+      schedulerNeedsRefresh = false;
+      schedulerUi?.refresh?.();
     }
     renderLibrary();
   }

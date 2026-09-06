@@ -206,7 +206,7 @@
       for (let hour = 0; hour < 24; hour += 1) {
         parts.push('<div class="wg-hour" aria-hidden="true">' + hour + '</div>');
       }
-      host.innerHTML = parts.join(' | ');
+      host.innerHTML = parts.join('');
     }
 
     function setCell(day, hour, on) {
@@ -284,14 +284,29 @@
         });
         return;
       }
-      const raw = window.prompt(
-        'Minute for ' + DAY_LABELS[day] + ' ' + String(hour).padStart(2, '0') + ':xx (0-59)',
-        String(current)
-      );
-      if (raw == null) return;
-      matrix[day][hour] = clampInt(raw, 0, 59, current);
-      paint();
-      emit();
+      const dialog = (typeof globalThis !== 'undefined' ? globalThis : window).SignalUiDialog;
+      if (!dialog || typeof dialog.prompt !== 'function') return;
+      dialog.prompt({
+        title: 'Override minute',
+        body: 'Minute for ' + DAY_LABELS[day] + ' ' + String(hour).padStart(2, '0') + ':xx',
+        inputLabel: 'Minute (0-59)',
+        value: String(current),
+        inputType: 'number',
+        min: 0,
+        max: 59,
+        step: 1,
+        confirmLabel: 'Set minute',
+        validate(value) {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0 || n > 59) return false;
+          return String(Math.round(n));
+        },
+      }).then(function (raw) {
+        if (raw == null || destroyed) return;
+        matrix[day][hour] = clampInt(raw, 0, 59, current);
+        paint();
+        emit();
+      });
     }
 
     function onKeyDown(event) {

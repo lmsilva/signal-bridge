@@ -581,6 +581,35 @@ body.is-coarse .push-card-top .push-card-remove {
   grid-template-columns: 1fr;
   gap: 10px;
 }
+
+/* Shared list loading affordance — spinner + label while a tab's first fetch
+   is in flight. Soft refreshes (polls) keep existing rows and skip this. */
+.list-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 88px;
+  padding: 18px 14px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius, 14px);
+  color: var(--text-dim, #8fa3c4);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.list-loading-spinner {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 2px solid rgba(56, 189, 248, 0.22);
+  border-top-color: var(--accent, #5ec8f0);
+  border-radius: 50%;
+  animation: list-loading-spin 700ms linear infinite;
+}
+@keyframes list-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
 .game-card { display: flex; flex-direction: column; gap: 6px; }
 .game-card .su-btn {
   width: auto;
@@ -753,7 +782,13 @@ body.is-coarse .push-card-top .push-card-remove {
 body[data-tab="board"] {
   --vb-chrome: calc(var(--tab-h) + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + 300px);
 }
-body[data-tab="board"] .vb-bezel {
+/*
+ * Size the wrap, not the bezel. `.vb-bezel` padding is a % of its containing
+ * block — if the slab is a centered grid item in a wider cell, 7% is 7% of
+ * the cell and the frame looks twice as thick as Message / admin. The wrap
+ * is the cell; the bezel is width 100% of it, same as `.gb-board-wrap`.
+ */
+body[data-tab="board"] .vb-board-wrap {
   width: min(100%, 1080px, calc((100dvh - var(--vb-chrome)) * 1.87));
   max-width: 100%;
   justify-self: center;
@@ -1232,7 +1267,7 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   }
   .vb-head-card { grid-area: head; }
   .vb-flip-clock { grid-area: clock; }
-  .vb-bezel { grid-area: board; min-width: 0; }
+  .vb-board-wrap { grid-area: board; min-width: 0; }
   .vb-queue-card { grid-area: queue; }
   body[data-tab="board"] {
     --vb-chrome: calc(var(--tab-h) + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + 320px);

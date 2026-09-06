@@ -127,6 +127,7 @@ const { createFlightplanService } = require('./flightplan-service');
 const { filterLegsByAirport } = require('./flightplan-api');
 const { createLocaleSettings } = require('./locale-settings');
 const { createPublicUrlSettings, publicUrl, isUsableShortLinkOrigin } = require('./public-url');
+const { createEventRoutingSettings } = require('./event-routing-settings');
 const { createGuestBookSettings, sanitiseAlias, publicSettings } = require('./guest-book-settings');
 const { createGuestBook, guestClientIp } = require('./guest-book');
 const { createShortlinks, GUESTBOOK_NAME, GUESTBOOK_PATH, GUESTSNAPS_NAME, GUESTSNAPS_PATH, GAMES_NAME, GAMES_PATH } = require('./shortlinks');
@@ -457,6 +458,7 @@ function createWebServer({
   webRoot,
   localeSettings: localeSettingsInjected = null,
   publicUrlSettings: publicUrlSettingsInjected = null,
+  eventRoutingSettings: eventRoutingSettingsInjected = null,
   guestBookSettings: guestBookSettingsInjected = null,
   guestBook: guestBookInjected = null,
   guestSnapsSettings: guestSnapsSettingsInjected = null,
@@ -472,10 +474,13 @@ function createWebServer({
     if (typeof sendUdpPayloadIn !== 'function') {
       return undefined;
     }
+    // Admin Push, guest APIs, and scheduler airings pick their own targets —
+    // never re-route them through Event routing rules.
     return sendUdpPayloadIn(payload, {
       ...options,
       actor: options.actor || requestActor || undefined,
       ...(schedulerAir || {}),
+      bypassEventRouting: true,
     });
   }
 
@@ -484,6 +489,7 @@ function createWebServer({
       ...extraSendOptions,
       actor: extraSendOptions.actor || requestActor || undefined,
       ...(schedulerAir || {}),
+      bypassEventRouting: true,
     };
     if (typeof deliverTargetedPayloadIn !== 'function') {
       return sendUdpPayload(payload, sendOptions);
@@ -525,6 +531,7 @@ function createWebServer({
   const slideshowSettings = createSlideshowSettings(config, log);
   const localeSettings = localeSettingsInjected || createLocaleSettings(config, log);
   const publicUrlSettings = publicUrlSettingsInjected || createPublicUrlSettings(config, log);
+  const eventRoutingSettings = eventRoutingSettingsInjected || createEventRoutingSettings(config, log);
   const guestBookSettings = guestBookSettingsInjected || createGuestBookSettings(config, log);
   const guestSnapsSettings = guestSnapsSettingsInjected || createGuestSnapsSettings(config, log);
   const shortlinks = shortlinksInjected || createShortlinks(config, log, {
@@ -2203,6 +2210,31 @@ function createWebServer({
       shortLinkReady: isUsableShortLinkOrigin(publicUrl('/guestbook/', config)),
       ...publicUrlEnvNote(),
     });
+  }
+
+  function handleEventRoutingSettingsGet(res) {
+    sendJson(res, 200, {
+      ok: true,
+      settings: eventRoutingSettings.get(),
+      catalog: eventRoutingSettings.catalog(),
+      timeZone: localeSettings.get()?.timeZone || houseTimeZone(config),
+    });
+  }
+
+  function handleEventRoutingSettingsPut(body, res) {
+    try {
+      const settings = eventRoutingSettings.update({
+        families: body?.families || body?.settings?.families || {},
+      });
+      sendJson(res, 200, {
+        ok: true,
+        settings,
+        catalog: eventRoutingSettings.catalog(),
+        timeZone: localeSettings.get()?.timeZone || houseTimeZone(config),
+      });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error?.message || String(error) });
+    }
   }
 
   async function handlePublicUrlSettingsPut(body, res) {
@@ -9589,6 +9621,11 @@ function createWebServer({
           handlePublicUrlSettingsGet(res);
           return;
         }
+        if (pathname === '/api/event-routing/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleEventRoutingSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/tinyurl/settings') {
           if (!requireAdminSession(req, res)) return;
           handleTinyurlSettingsGet(res);
@@ -10014,6 +10051,12 @@ function createWebServer({
           if (!requireAdminSession(req, res)) return;
           const body = await readJsonBody(req, MAX_BODY_BYTES);
           await handlePublicUrlSettingsPut(body, res);
+          return;
+        }
+        if (pathname === '/api/event-routing/settings' && req.method === 'PUT') {
+          if (!requireAdminSession(req, res)) return;
+          const body = await readJsonBody(req, MAX_BODY_BYTES);
+          handleEventRoutingSettingsPut(body, res);
           return;
         }
         if (pathname === '/api/tinyurl/settings' && req.method === 'PUT') {
@@ -10531,6 +10574,9 @@ function createWebServer({
             return;
           case '/api/public-url/settings':
             await handlePublicUrlSettingsPut(body, res);
+            return;
+          case '/api/event-routing/settings':
+            handleEventRoutingSettingsPut(body, res);
             return;
           case '/api/tinyurl/settings':
             handleTinyurlSettingsPut(body, res);

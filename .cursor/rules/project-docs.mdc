@@ -24,6 +24,14 @@ Do not duplicate `README.md` or `DOCKER.md` — those are user guides; `PROJECT.
 
 If unsure whether a change warrants an update, update anyway when behavior or file roles changed.
 
+## Web UI dialogs (hard rule)
+
+**Never** use `window.confirm`, `window.prompt`, or `window.alert` for product UI (deletes, discard-unsaved, minute overrides, clear-board, etc.). Use `SignalUiDialog.confirm` / `SignalUiDialog.prompt` from `src/web/ui-dialog.js` (load it before callers such as `week-grid.js`). Existing specialised sheets (`sheet-confirm`, credits/photo delete) are fine; do not invent a third pattern.
+
+## Tab restore on refresh (hard rule)
+
+While signed in, admin `/admin/` and household `/user/` keep the active tab in the URL hash (`#settings`, `#board`, …). Refresh (and admin re-login via `?next=`) must reopen that tab. Do not drop this for a localStorage-only approach; hash is shareable and survives reload. Hidden or permission-gated tabs fall back to the default.
+
 ## Testing (required)
 
 | Suite | Command | Location |

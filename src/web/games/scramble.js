@@ -215,9 +215,12 @@
   });
 
   input?.addEventListener('input', syncFromInput);
-  clearBtn?.addEventListener('click', () => {
+  clearBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
     reset();
-    input.focus();
+    // Do not focus the box — on a phone that raises the keyboard after
+    // someone only meant to wipe the tiles.
+    leaveKeyboardMode();
   });
 
   /**

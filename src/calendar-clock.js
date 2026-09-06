@@ -65,6 +65,20 @@ const CAL_COL0 = 1;
 const TEXT_GAP = 2;
 const TEXT_COL = CAL_COL0 + CAL_COLS + TEXT_GAP;
 
+/**
+ * Column where the day number starts. Two digits use the last two flaps so
+ * `DECEMBER  31` and `MARCH    14` share an edge; one digit sits one flap
+ * after the month (`SEPTEMBER 4`) instead of stretching to column 22.
+ */
+function dateDayColumn(monthName, dayText) {
+  const month = fold(String(monthName || ''));
+  const day = fold(String(dayText ?? ''));
+  if (day.length >= 2) {
+    return COLS - day.length;
+  }
+  return TEXT_COL + month.length + 1;
+}
+
 function weekStartIndex(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (raw === 'monday' || raw === 'mon' || raw === '1') {
@@ -210,9 +224,10 @@ function calendarClockRows(model) {
 
   // Weekday / date / time sit on the same rows whether or not the header
   // is showing, so a 6-week month does not shove the clock down.
-  // `fold()` collapses spaces, so month/day and clock/meridiem are placed
-  // as two pieces with a two-flap gap — the marketplace samples use that
-  // extra air (`DECEMBER  31`, `11:59  PM`).
+  // `fold()` collapses spaces, so clock/meridiem stay two pieces with a
+  // two-flap gap (`11:59  PM`). The date is tighter: a two-digit day pins
+  // to the last two columns; a one-digit day sits one flap after the month
+  // (`SEPTEMBER 4`, not a stretch to the right edge).
   const weekday = fold(model.weekdayName || '');
   const month = fold(model.monthName || '');
   const day = fold(String(model.day ?? ''));
@@ -221,11 +236,7 @@ function calendarClockRows(model) {
   const meridiem = fold(timeBits[1] || '');
   if (weekday) placeText(rows[1], weekday, TEXT_COL);
   if (month) placeText(rows[2], month, TEXT_COL);
-  if (day) {
-    // SEPTEMBER + a two-digit day is one flap too wide for a two-flap gap.
-    const dateGap = TEXT_COL + month.length + 2 + day.length <= COLS ? 2 : 1;
-    placeText(rows[2], day, TEXT_COL + month.length + dateGap);
-  }
+  if (day) placeText(rows[2], day, dateDayColumn(month, day));
   if (clock) placeText(rows[4], clock, TEXT_COL);
   if (meridiem) placeText(rows[4], meridiem, TEXT_COL + clock.length + 2);
   return rows;
@@ -347,6 +358,7 @@ module.exports = {
   HEADER_MONDAY,
   CAL_COL0,
   TEXT_COL,
+  dateDayColumn,
   DEFAULT_SETTINGS,
   sanitiseSettings,
   weekStartIndex,

@@ -6,6 +6,18 @@
   --accent-ink: #082f49;
 }
 
+.su-sched-root .sched-nextup {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.su-sched-root .sched-nextup-card.is-paused .sched-nextup {
+  color: var(--warn, #f5c453);
+}
+.su-sched-root .sched-nextup-card {
+  margin-bottom: 12px;
+}
+
 .su-sched-root .card {
   background: var(--bg-elev);
   border: 1px solid var(--line);
@@ -174,6 +186,13 @@
   line-height: 1.2;
   padding-top: 2px;
 }
+/* The grid needs elbow room: below ~560px the 24 hour columns squeeze into
+   slivers, so scroll the wrapper instead of shrinking the cells. */
+.week-grid-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.week-grid-scroll > .week-grid { min-width: 560px; }
 
 .su-sched-root .sched-toolbar {
   display: flex;
@@ -541,6 +560,14 @@
   flex-wrap: wrap;
 }
 .sched-fixed-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+.sched-fixed-head-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: none;
+  text-align: right;
+}
 .sched-fixed-legend {
   display: flex;
   gap: 14px;
@@ -560,22 +587,46 @@
 .sched-minute-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   margin-top: 16px;
   flex-wrap: wrap;
 }
-.sched-minute-or { font-size: 13px; color: var(--muted, var(--text-dim, #8fa3c4)); }
+.sched-minute-row > .field-label {
+  flex: none;
+  line-height: 1;
+}
+.sched-minute-row .segmented {
+  margin-bottom: 0;
+  flex: none;
+  align-items: stretch;
+}
+.sched-minute-row .segmented-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sched-minute-or {
+  font-size: 13px;
+  color: var(--muted, var(--text-dim, #8fa3c4));
+  line-height: 1;
+  flex: none;
+}
 .sched-minute-free {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 6px 10px;
+  padding: 0 12px;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 .sched-minute-free .field-input {
   width: 40px;
+  height: 28px;
   background: transparent;
   border: 0;
   padding: 0;
@@ -583,9 +634,11 @@
   font-weight: 700;
 }
 .sched-minute-hint {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted, var(--text-dim, #8fa3c4));
-  margin-left: auto;
+  margin: 0;
+  line-height: 1.35;
+  max-width: 220px;
 }
 .sched-fixed-summary {
   margin-top: 14px;
@@ -653,13 +706,34 @@
     gap: 8px;
   }
   .sched-sheet-sub { margin-left: 0; }
-  .week-grid {
-    overflow-x: auto;
-    min-width: 560px;
-  }
   .sched-sheet .week-grid-scroll {
-    overflow-x: auto;
     margin: 0 -4px;
     padding: 0 4px;
   }
+}
+/* Shared list loading affordance (rule list while /rules is in flight). */
+.list-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 88px;
+  padding: 18px 14px;
+  border: 1px dashed var(--line, #2a3a5c);
+  border-radius: var(--radius, 14px);
+  color: var(--muted, var(--text-dim, #8fa3c4));
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.list-loading-spinner {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 2px solid rgba(56, 189, 248, 0.22);
+  border-top-color: var(--accent, #5ec8f0);
+  border-radius: 50%;
+  animation: list-loading-spin 700ms linear infinite;
+}
+@keyframes list-loading-spin {
+  to { transform: rotate(360deg); }
 }

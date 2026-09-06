@@ -21,6 +21,7 @@ const {
   calendarClockRows,
   buildCalendarClockPayload,
   createCalendarClock,
+  dateDayColumn,
 } = require('../src/calendar-clock');
 
 function assertLayout(actual, drawing, label) {
@@ -121,7 +122,7 @@ test('March 14 drops the header so a Saturday-start 31-day month fits', () => {
   assertLayout(calendarClockRows(payload), [
     '       b',
     ' bbbbbbb  FRIDAY',
-    ' bbbbbwb  MARCH  14',
+    ' bbbbbwb  MARCH     14',
     ' bbbbbbb',
     ' bbbbbbb  2:30  PM',
     ' bb',
@@ -157,12 +158,36 @@ test('September still shows a two-digit day after the inset and gutter', () => {
   const rows = calendarClockRows(payload);
   assert.equal(validate(rows).ok, true);
   const dateRow = rows[2];
-  // SEPTEMBER is one flap too long for the usual two-flap date gap, so the
-  // day sits one flap closer — both digits must still land on the board.
+  // Two-digit days pin to the last two columns, even when SEPTEMBER is long.
   assert.equal(dateRow[10], 19); // S
   assert.equal(dateRow[18], 18); // R
   assert.equal(dateRow[20], 29); // 3
   assert.equal(dateRow[21], 36); // 0
+});
+
+test('a one-digit day sits one flap after the month', () => {
+  assert.equal(dateDayColumn('SEPTEMBER', '4'), 20);
+  assert.equal(dateDayColumn('MAY', '4'), 14);
+  assert.equal(dateDayColumn('DECEMBER', '31'), 20);
+  assert.equal(dateDayColumn('MARCH', '14'), 20);
+
+  const payload = buildCalendarClockPayload(DEFAULT_SETTINGS, {
+    asOf: new Date('2026-09-04T08:34:00-06:00'),
+    timeZone: 'America/Denver',
+  });
+  assert.equal(payload.monthName, 'SEPTEMBER');
+  assert.equal(payload.day, 4);
+  assert.equal(payload.weekdayName, 'FRIDAY');
+  assert.equal(payload.timeLabel, '8:34  AM');
+
+  assertLayout(calendarClockRows(payload), [
+    ' SMTWTFS',
+    '   ooowo  FRIDAY',
+    ' ooooooo  SEPTEMBER 4',
+    ' ooooooo',
+    ' ooooooo  8:34  AM',
+    ' oooo',
+  ], 'September 4 2026 one-digit date');
 });
 
 test('calendarClockFrames refuse an empty payload', () => {

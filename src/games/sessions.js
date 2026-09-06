@@ -132,6 +132,16 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   /**
+   * Points banked in *this* session only. Never reads the archive — a second
+   * game with the same names starts at zero, and RUNNING TOTAL is this game.
+   */
+  function sessionScores(session) {
+    return session.players
+      .map((p) => ({ id: p.id, name: p.name, score: p.score || 0 }))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  }
+
+  /**
    * Everyone who has joined, banked score plus whatever the open round has
    * already earned them. Built fresh on every read so a phone sees its points
    * the moment they land rather than waiting for the round to close.
@@ -344,7 +354,8 @@ function createGameSessions(config = {}, log = console, deps = {}) {
   }
 
   function closeSession(session, reason = 'closed') {
-    if (session.phase === 'closed') return;
+    if (session.phase === 'closed' || session.closing) return;
+    session.closing = true;
     const abandoned = reason !== 'finished';
     const alreadyFinal = session.phase === 'final';
     const scores = session.scores?.length ? session.scores : standings(session);
@@ -476,9 +487,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     for (const player of session.players) {
       player.score = (player.score || 0) + (byId.get(player.id) || 0);
     }
-    session.scores = session.players
-      .map((p) => ({ id: p.id, name: p.name, score: p.score || 0 }))
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    session.scores = sessionScores(session);
     session.best = result.best || session.best || null;
     session.lastRound = { index: session.roundIndex, ...(result.reveal || {}) };
 
@@ -572,11 +581,26 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     }
   }
 
+  /**
+   * The house plays one game at a time. A second Push used to steal the
+   * board lock and leave the first session invited for the full invite TTL
+   * (an hour of Party Prompts with nobody in it).
+   */
+  function endAll(reason = 'ended') {
+    let ended = 0;
+    for (const session of [...sessions.values()]) {
+      closeSession(session, reason);
+      ended += 1;
+    }
+    return { ended };
+  }
+
   function create({ gameType = 'scramble' } = {}) {
     const mode = gameOf(gameType);
     if (!mode) {
       throw new Error(`Unknown game: ${gameType}`);
     }
+    endAll('preempted');
     const settings = settingsOf(gameType);
     const code = mintCode(random, byCode);
     // The lobby window starts when the invite actually flips — not when it
@@ -633,12 +657,14 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     return true;
   }
 
-  /** Someone cancelled the waiting invite from the house queue. */
+  /**
+   * A queued game page was dropped — Clear queue, the row X, or another
+   * feature taking the board. Any phase, not only an unshown invite: a
+   * held Wheel of Fortune card is still that session.
+   */
   function noteBoardCancelled(detail = {}) {
-    const card = String(detail.card || detail.frame?.card || '');
-    if (card && card !== 'invite') return false;
     const session = sessionFromBoardDetail(detail);
-    if (!session || session.phase !== 'invited') return false;
+    if (!session || session.phase === 'closed' || session.closing) return false;
     closeSession(session, 'invite-cancelled');
     return true;
   }
@@ -899,6 +925,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     tick,
     listActive,
     end,
+    endAll,
     endByBoardSource,
     noteBoardShown,
     noteBoardCancelled,

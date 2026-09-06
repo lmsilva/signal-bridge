@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal294">
+  <link rel="stylesheet" href="styles.css?v=signal302">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -526,10 +526,10 @@
 
           <div class="card sched-timeline-card">
             <div class="sched-timeline-head">
-              <div class="section-label" style="margin:0">Timeline</div>
+              <div class="section-label sched-timeline-title">Timeline</div>
               <div class="sched-timeline-controls">
-                <label class="trivia-check"><input type="checkbox" id="sched-show-skips" checked><span>Show skips</span></label>
-                <div class="segmented" id="sched-range-tabs">
+                <label class="trivia-check sched-show-skips"><input type="checkbox" id="sched-show-skips" checked><span>Show skips</span></label>
+                <div class="segmented" id="sched-range-tabs" role="group" aria-label="Timeline range">
                   <button type="button" class="segmented-btn" data-range="6h">6h</button>
                   <button type="button" class="segmented-btn" data-range="12h">12h</button>
                   <button type="button" class="segmented-btn active" data-range="24h">24h</button>
@@ -537,7 +537,11 @@
                 </div>
               </div>
             </div>
-            <div class="sched-timeline-scroll">
+            <div class="sched-timeline-scroll" id="sched-timeline-scroll">
+              <div class="sched-timeline-busy" id="sched-timeline-busy" hidden role="status" aria-live="polite">
+                <span class="list-loading-spinner" aria-hidden="true"></span>
+                <span id="sched-timeline-busy-label">Loading timeline…</span>
+              </div>
               <svg class="sched-timeline" id="sched-timeline" role="img" aria-label="Scheduler activity timeline"></svg>
             </div>
             <div class="sched-legend">
@@ -557,7 +561,7 @@
           <div id="sched-rule-stats"></div>
 
           <div class="section-label">Patterns (last 14 days)</div>
-          <div class="card">
+          <div class="card sched-heatmap-card">
             <div class="sched-heatmap" id="sched-heatmap"></div>
           </div>
         </div>
@@ -894,6 +898,17 @@
               <p class="hint" id="public-url-resolved">Save an https:// hostname guests can reach from outside the house.</p>
             </div>
           </div>
+        </div>
+
+        <div class="card event-routing-settings-card" id="event-routing-settings-card" data-settings-group="global">
+          <div class="auth-head">
+            <div class="auth-name">Event routing</div>
+            <span class="status-pill" id="event-routing-status-pill">…</span>
+          </div>
+          <p class="auth-detail" id="event-routing-status-detail">
+            Where automatic events may go. Add multiple routes per event to send different displays at different hours. Manual Push and the Scheduler keep their own targets.
+          </p>
+          <div id="event-routing-families" class="event-routing-list" role="list"></div>
         </div>
 
         <div class="section-label" data-settings-group="global">TinyURL</div>
@@ -3667,10 +3682,12 @@
               <input type="checkbox" id="vb-quiet-remind" checked>
               <span>Post a Quiet Hours Reminder card when quiet begins</span>
             </label>
-            <button type="button" class="btn btn-accent btn-block" id="btn-vb-quiet-save">Save quiet hours</button>
+            <div class="vb-quiet-footer">
+              <button type="button" class="btn btn-outline" id="btn-vb-quiet-hours-push">Push Quiet Hours Reminder</button>
+              <button type="button" class="btn btn-accent" id="btn-vb-quiet-save">Save quiet hours</button>
+            </div>
           </div>
 
-          <button type="button" class="btn btn-outline btn-block" id="btn-vb-quiet-hours-push">Push Quiet Hours Reminder</button>
           <button type="button" class="btn btn-outline btn-block" id="btn-vb-add">Add a board</button>
 
           <form class="vb-board-form" id="vb-board-form" hidden>
@@ -3762,10 +3779,6 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/><circle cx="9" cy="11" r="1.2"/><path d="M14 9.5h3M14 12.5h2"/></svg>
       <span>Control</span>
     </button>
-    <button class="tab-btn" data-tab="scheduler">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-      <span class="tab-label"><span class="tab-label-full">Scheduler</span><span class="tab-label-short">Sched</span></span>
-    </button>
     <button class="tab-btn" data-tab="slideshow">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" stroke="none"/><path d="m3 15 4-4 3 3 4-5 4 4"/><rect x="7" y="3" width="14" height="14" rx="2" opacity="0.45"/></svg>
       <span class="tab-label"><span class="tab-label-full">Slideshow</span><span class="tab-label-short">Slides</span></span>
@@ -3774,13 +3787,17 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a4 4 0 0 0 4 4M16 6h3v1a4 4 0 0 1-4 4M12 12v4M8 20h8M9 16h6v4H9z"/></svg>
       <span class="tab-label"><span class="tab-label-full">Roll Credits</span><span class="tab-label-short">Credits</span></span>
     </button>
-    <button class="tab-btn" data-tab="board">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
-      <span class="tab-label"><span class="tab-label-full">Vestaboard Simulator</span><span class="tab-label-short">Board</span></span>
-    </button>
     <button class="tab-btn" data-tab="flightplan">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l20-5-5 5 5 5-20-5 5-5-5-5Z"/><path d="M12 12v9"/></svg>
       <span class="tab-label"><span class="tab-label-full">Flight Plan</span><span class="tab-label-short">Flights</span></span>
+    </button>
+    <button class="tab-btn" data-tab="scheduler">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Scheduler</span><span class="tab-label-short">Sched</span></span>
+    </button>
+    <button class="tab-btn" data-tab="board">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Vestaboard Simulator</span><span class="tab-label-short">Board</span></span>
     </button>
     <button class="tab-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9.4a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>
@@ -5095,6 +5112,53 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="event-routing-sheet" hidden>
+    <div class="sheet cn-manage-sheet event-routing-sheet" role="dialog" aria-modal="true" aria-labelledby="event-routing-sheet-title">
+      <div class="cn-manage-head">
+        <div class="sheet-title" id="event-routing-sheet-title">Event routes</div>
+        <button type="button" class="credits-sheet-close" id="btn-event-routing-sheet-close" aria-label="Close">×</button>
+      </div>
+      <p class="hint" id="event-routing-sheet-blurb"></p>
+      <div class="event-routing-sheet-toolbar">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-event-routing-add-route">Add route</button>
+        <span class="hint" id="event-routing-sheet-tz"></span>
+      </div>
+      <div id="event-routing-routes" class="event-routing-routes"></div>
+      <div class="event-routing-editor" id="event-routing-editor" hidden>
+        <div class="event-routing-editor-head">
+          <strong id="event-routing-editor-label">Route</strong>
+          <button type="button" class="btn btn-outline btn-sm btn-danger-text" id="btn-event-routing-remove-route">Remove route</button>
+        </div>
+        <span class="field-label">Send to</span>
+        <div class="segmented" id="event-routing-dest" role="group" aria-label="Send to">
+          <button type="button" class="segmented-btn" data-er-dest="all">All displays</button>
+          <button type="button" class="segmented-btn" data-er-dest="full">Software</button>
+          <button type="button" class="segmented-btn" data-er-dest="vestaboard">Vestaboards</button>
+          <button type="button" class="segmented-btn" data-er-dest="specific">Specific…</button>
+        </div>
+        <div class="event-routing-displays" id="event-routing-displays" hidden></div>
+        <div class="sched-fixed-head" style="margin-top:16px">
+          <div>
+            <h3>Allowed hours</h3>
+            <p class="hint" style="margin:4px 0 0">Paint cells when this route may fire. Leave empty for any hour (house timezone).</p>
+          </div>
+          <div class="sched-fixed-legend">
+            <span><i class="is-fires" aria-hidden="true"></i>Allowed</span>
+            <span><i class="is-idle" aria-hidden="true"></i>Blocked</span>
+          </div>
+        </div>
+        <div class="week-grid-scroll">
+          <div id="event-routing-week-grid" aria-label="Allowed hours week grid"></div>
+        </div>
+        <p class="sched-fixed-summary" id="event-routing-week-summary">Any hour</p>
+      </div>
+      <div class="sheet-actions" style="margin-top:18px">
+        <button type="button" class="btn btn-outline" id="btn-event-routing-sheet-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="btn-event-routing-sheet-save">Save routes</button>
+      </div>
+    </div>
+  </div>
+
   <div class="sheet-backdrop" id="sched-rule-sheet" hidden>
     <div class="sheet sched-sheet" role="dialog" aria-modal="true" aria-labelledby="sched-sheet-label">
       <div class="sched-sheet-head">
@@ -5116,7 +5180,7 @@
             <button type="button" class="segmented-btn" data-sched-target="all">All displays</button>
             <button type="button" class="segmented-btn" data-sched-target="full">Software</button>
             <button type="button" class="segmented-btn" data-sched-target="vestaboard">Vestaboards</button>
-            <button type="button" class="segmented-btn" data-sched-target="specific">Specific display…</button>
+            <button type="button" class="segmented-btn" data-sched-target="specific" title="Pick one display by name">Specific</button>
           </div>
           <div class="sched-sheet-specific" id="sched-sheet-specific-wrap" hidden>
             <label class="field-label" for="sched-sheet-specific">Display</label>
@@ -5126,8 +5190,8 @@
 
         <span class="field-label">Schedule type</span>
         <div class="segmented" id="sched-sheet-type" role="group" aria-label="Schedule type">
-          <button type="button" class="segmented-btn" data-sched-type="cadence">Cadence — roughly every N minutes</button>
-          <button type="button" class="segmented-btn" data-sched-type="fixed">Fixed time — exactly at these times</button>
+          <button type="button" class="segmented-btn" data-sched-type="cadence" title="Roughly every N minutes, with a chance of skipping">At a cadence</button>
+          <button type="button" class="segmented-btn" data-sched-type="fixed" title="Exactly at the times you pick on the week grid">At a fixed time</button>
         </div>
       </div>
 
@@ -5150,9 +5214,12 @@
             <h3>Week schedule</h3>
             <p class="hint" style="margin:4px 0 0">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below.</p>
           </div>
-          <div class="sched-fixed-legend">
-            <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
-            <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
+          <div class="sched-fixed-head-aside">
+            <span class="sched-minute-hint">Right-click a cell to override its minute</span>
+            <div class="sched-fixed-legend">
+              <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
+              <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
+            </div>
           </div>
         </div>
         <div class="week-grid-scroll">
@@ -5168,11 +5235,10 @@
           </div>
           <span class="sched-minute-or">or</span>
           <div class="sched-minute-free">
-            <span class="hint" style="margin:0">HH:</span>
+            <span class="hint" style="margin:0">:</span>
             <input class="field-input" type="number" id="sched-sheet-minute" min="0" max="59" value="0" aria-label="Minute past the hour">
             <span class="hint" style="margin:0">past the hour</span>
           </div>
-          <span class="sched-minute-hint">Right-click a cell to override its minute</span>
         </div>
         <div class="sched-fixed-summary" id="sched-sheet-fixed-summary">No times selected</div>
       </div>
@@ -5415,11 +5481,12 @@
     </div>
   </div>
 
-  <script src="/week-grid.js?v=signal294"></script>
+  <script src="/ui-dialog.js?v=signal299"></script>
+  <script src="/week-grid.js?v=signal299"></script>
   <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="house-users.js?v=signal294"></script>
-  <script src="settings-filter.js?v=signal294"></script>
-  <script src="app.js?v=signal294"></script>
+  <script src="house-users.js?v=signal299"></script>
+  <script src="settings-filter.js?v=signal302"></script>
+  <script src="app.js?v=signal302"></script>
 </body>
 </html>

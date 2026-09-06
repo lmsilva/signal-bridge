@@ -78,7 +78,9 @@
   }
 
   function redirectToAdminLogin() {
-    const next = encodeURIComponent(location.pathname + location.search);
+    // Keep the active tab hash so a re-login (or expired session mid-refresh)
+    // lands back on the same page.
+    const next = encodeURIComponent(location.pathname + location.search + location.hash);
     location.href = `/admin/login.html?next=${next}`;
   }
 
@@ -485,6 +487,13 @@
     const previousIds = new Set(knownDisplays.map((d) => d.id));
     const previousCount = knownDisplays.length;
     knownDisplays = next;
+    if (typeof eventRoutingDraft !== 'undefined' && eventRoutingDraft && !$('event-routing-sheet')?.hidden) {
+      const displays = $('event-routing-displays');
+      if (displays && !displays.hidden) {
+        const selected = [...displays.querySelectorAll('[data-er-display]:checked')].map((el) => el.value);
+        displays.innerHTML = eventRoutingDisplayOptionsHtml(selected);
+      }
+    }
     lastDisplaysFingerprint = fingerprint;
 
     // Keep the in-session choice if it is still valid; otherwise land on All
@@ -657,7 +666,32 @@
     requestAnimationFrame(apply);
   }
 
-  function activateTab(tabId, { scroll = 'restore' } = {}) {
+  function tabIdFromHash() {
+    return String(location.hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim();
+  }
+
+  function isRestorableAdminTab(tabId) {
+    if (!tabId) return false;
+    const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+    if (!btn) return false;
+    // Remote/Control stay hidden until a display is unlocked — do not restore
+    // them from a stale hash or the page looks empty.
+    if (btn.hidden) return false;
+    return true;
+  }
+
+  function syncAdminTabHash(tabId) {
+    try {
+      if (typeof history === 'undefined' || typeof history.replaceState !== 'function') return;
+      const next = tabId ? `#${tabId}` : '';
+      if ((location.hash || '') === next) return;
+      history.replaceState(null, '', `${location.pathname}${location.search}${next}`);
+    } catch {
+      /* private mode / non-browser harness */
+    }
+  }
+
+  function activateTab(tabId, { scroll = 'restore', syncHash = true } = {}) {
     // Lets a tab widen the content column — the Vestaboard needs more room
     // than a stack of settings cards.
     const previousTab = document.body.dataset.tab || '';
@@ -674,6 +708,7 @@
       }
     }
     document.body.dataset.tab = tabId;
+    if (syncHash) syncAdminTabHash(tabId);
     document.querySelectorAll('.tab-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.tab === tabId);
     });
@@ -817,6 +852,8 @@
   });
 
   // Initial state: only the default active panel should be un-hidden.
+  // Hash restore runs at end-of-file (after let bindings like lightboxToken)
+  // so activateTab cannot hit a TDZ on first paint.
   document.querySelectorAll('.tab-panel').forEach((panel) => {
     panel.hidden = !panel.classList.contains('active');
   });
@@ -895,6 +932,7 @@
   const SETTINGS_CARD_KINDS = Object.freeze({
     'locale-settings-card': ['full', 'vestaboard'],
     'public-url-settings-card': ['full', 'vestaboard'],
+    'event-routing-settings-card': ['full', 'vestaboard'],
     'tinyurl-settings-card': ['full', 'vestaboard'],
     'guest-snaps-settings-card': ['full', 'vestaboard'],
     'guest-book-settings-card': ['vestaboard'],
@@ -1629,6 +1667,10 @@
     return String(value == null ? '' : value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value);
   }
 
   function pushCardElementId(commandId) {
@@ -2617,10 +2659,21 @@
   }
 
   async function loadSlideshowPhotos({ force = false } = {}) {
+    const host = $('photo-grid');
+    const empty = $('photo-grid-empty');
+    if (host && (!host.children.length || host.querySelector('.list-loading'))) {
+      if (empty) empty.hidden = true;
+      host.innerHTML = listLoadingHtml('Loading photos…');
+    }
     try {
       const { photos } = await apiGet('/api/photos');
       applySlideshowPhotos(photos, { force });
     } catch (error) {
+      if (host) host.innerHTML = '';
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message || 'Could not load saved photos';
+      }
       toast(error.message || 'Could not load saved photos', 'bad');
     }
   }
@@ -3106,6 +3159,8 @@
   let schedCommands = [];
   let schedRange = '24h';
   let schedEvents = [];
+  let schedActivityWindow = null; // { fromMs, toMs } for client-side timeline repaints
+  let schedActivityLoading = false;
 
   function formatDuration(seconds) {
     const total = Math.max(0, Math.round(Number(seconds) || 0));
@@ -3712,11 +3767,19 @@
     label?.focus();
   }
 
-  function closeSchedEditor({ force = false } = {}) {
+  async function closeSchedEditor({ force = false } = {}) {
     const sheet = $('sched-rule-sheet');
     if (!sheet || sheet.hidden) return true;
     if (!force && schedEditorDirty) {
-      const ok = window.confirm('Discard unsaved changes to this rule?');
+      const dialog = window.SignalUiDialog;
+      const ok = dialog && typeof dialog.confirm === 'function'
+        ? await dialog.confirm({
+          title: 'Discard unsaved changes?',
+          body: 'Your edits to this rule will be lost.',
+          confirmLabel: 'Discard',
+          danger: true,
+        })
+        : false;
       if (!ok) return false;
     }
     sheet.hidden = true;
@@ -3796,7 +3859,27 @@
     return data;
   }
 
+  function listLoadingHtml(label) {
+    return '<div class="list-loading" role="status" aria-live="polite">'
+      + '<span class="list-loading-spinner" aria-hidden="true"></span>'
+      + '<span>' + escapeHtml(label || 'Loading…') + '</span></div>';
+  }
+
+  function paintSchedRulesLoading() {
+    const host = $('sched-rule-list');
+    const empty = $('sched-rule-empty');
+    const colHead = $('sched-col-head');
+    const meta = $('sched-rule-meta');
+    if (empty) empty.hidden = true;
+    if (colHead) colHead.hidden = true;
+    if (meta) meta.textContent = 'Loading…';
+    if (!host) return;
+    if (host.querySelector('.sched-rule-row, .sched-rule-group')) return;
+    host.innerHTML = listLoadingHtml('Loading rules…');
+  }
+
   async function loadSchedRules() {
+    paintSchedRulesLoading();
     const result = await apiFetch(`${SCHED_ROUTE}/rules`);
     schedRules = result.rules || [];
     renderSchedRules();
@@ -4056,6 +4139,32 @@
    * charting library is bundled and forcing this into a scatter plot would cost
    * more than the ~60 lines below.
    */
+  function setSchedTimelineBusy(busy, label) {
+    const overlay = $('sched-timeline-busy');
+    const text = $('sched-timeline-busy-label');
+    if (text && label) text.textContent = label;
+    if (overlay) overlay.hidden = !busy;
+  }
+
+  function paintSchedActivityLoading() {
+    const stats = $('sched-stats');
+    if (stats) stats.innerHTML = listLoadingHtml('Loading activity…');
+    setSchedTimelineBusy(true, 'Loading timeline…');
+    const empty = $('sched-timeline-empty');
+    if (empty) empty.hidden = true;
+    const ruleStats = $('sched-rule-stats');
+    if (ruleStats) ruleStats.innerHTML = listLoadingHtml('Loading per-rule stats…');
+    const heat = $('sched-heatmap');
+    if (heat) heat.innerHTML = listLoadingHtml('Loading patterns…');
+    const inspector = $('sched-inspector');
+    if (inspector) inspector.hidden = true;
+  }
+
+  function waitForPaint() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+  }
   function renderSchedTimeline(events, rules, { fromMs, toMs, showSkips }) {
     const svg = $('sched-timeline');
     const empty = $('sched-timeline-empty');
@@ -4086,6 +4195,22 @@
       }
     }
 
+    // One pass over events instead of filter-per-lane (skips can be thousands).
+    const byRule = new Map();
+    let visibleCount = 0;
+    for (const event of events) {
+      if (!showSkips && event.outcome !== 'aired') continue;
+      const at = Date.parse(event.at);
+      if (!Number.isFinite(at) || at < fromMs || at > toMs) continue;
+      let list = byRule.get(event.ruleId);
+      if (!list) {
+        list = [];
+        byRule.set(event.ruleId, list);
+      }
+      list.push(event);
+      visibleCount += 1;
+    }
+
     lanes.forEach((rule, index) => {
       const top = index * (SCHED_LANE_H + SCHED_LANE_GAP);
       const cy = top + SCHED_LANE_H / 2;
@@ -4094,11 +4219,9 @@
       parts.push(`<text x="0" y="${cy + 4}" fill="#A4ACC0" font-size="11">`
         + `${escapeHtml(truncate(rule.label, 18))}</text>`);
 
-      for (const event of events.filter((entry) => entry.ruleId === rule.id)) {
+      for (const event of byRule.get(rule.id) || []) {
         const at = Date.parse(event.at);
-        if (at < fromMs || at > toMs) continue;
         const blocked = event.outcome.startsWith('blocked-');
-        if (!showSkips && event.outcome !== 'aired') continue;
         const px = x(at);
         const attrs = `data-event-id="${escapeHtml(event.id)}" class="sched-mark" style="cursor:pointer"`;
         if (event.outcome === 'aired' && event.durationSeconds > 60) {
@@ -4140,8 +4263,8 @@
     svg.setAttribute('height', String(height));
     svg.innerHTML = parts.join('');
     if (empty) {
-      empty.hidden = events.length > 0;
-      empty.textContent = events.length
+      empty.hidden = visibleCount > 0;
+      empty.textContent = visibleCount
         ? ''
         : 'No activity in this window yet. Tap a rule on the Schedule tab to see when it is next due.';
     }
@@ -4311,35 +4434,72 @@
     host.innerHTML = `<table>${header}${body}</table>`;
   }
 
-  async function loadSchedActivity() {
-    const status = await refreshSchedStatus();
+  async function repaintSchedTimeline() {
+    if (!schedActivityWindow) {
+      await loadSchedActivity();
+      return;
+    }
+    setSchedTimelineBusy(true, 'Updating timeline…');
+    await waitForPaint();
     try {
-      const [activity, stats, heatmap] = await Promise.all([
+      renderSchedTimeline(schedEvents, schedRules, {
+        fromMs: schedActivityWindow.fromMs,
+        toMs: schedActivityWindow.toMs,
+        showSkips: $('sched-show-skips')?.checked !== false,
+      });
+    } finally {
+      setSchedTimelineBusy(false);
+    }
+  }
+
+  async function loadSchedActivity() {
+    if (schedActivityLoading) return;
+    schedActivityLoading = true;
+    paintSchedActivityLoading();
+    await waitForPaint();
+    try {
+      const [status, activity, stats, heatmap] = await Promise.all([
+        refreshSchedStatus(),
         apiFetch(`${SCHED_ROUTE}/activity?window=${schedRange}`),
         apiFetch(`${SCHED_ROUTE}/stats?window=${schedRange}`),
         apiFetch(`${SCHED_ROUTE}/heatmap?days=14`),
       ]);
       schedEvents = activity.events || [];
       schedRules = activity.rules || schedRules;
+      const fromMs = Date.parse(activity.from);
+      const toMs = Date.parse(activity.to);
+      schedActivityWindow = { fromMs, toMs };
       renderSchedStats(status, stats.stats);
+      setSchedTimelineBusy(true, 'Drawing timeline…');
+      await waitForPaint();
       renderSchedTimeline(schedEvents, schedRules, {
-        fromMs: Date.parse(activity.from),
-        toMs: Date.parse(activity.to),
+        fromMs,
+        toMs,
         showSkips: $('sched-show-skips')?.checked !== false,
       });
       renderSchedRuleStats(stats.stats || [], stats.daily || {});
       renderSchedHeatmap(heatmap.rows || []);
     } catch (error) {
+      const statsHost = $('sched-stats');
+      if (statsHost) {
+        statsHost.innerHTML = '<div class="card"><p class="hint">Could not load activity.</p></div>';
+      }
+      const ruleStats = $('sched-rule-stats');
+      if (ruleStats) ruleStats.innerHTML = '';
+      const heat = $('sched-heatmap');
+      if (heat) heat.innerHTML = '';
       toast(error.message || 'Could not load scheduler activity', 'bad');
+    } finally {
+      setSchedTimelineBusy(false);
+      schedActivityLoading = false;
     }
   }
-
   // ------------------------------------------------------------ wiring
 
   const schedPanel = $('tab-scheduler');
   if (schedPanel) {
     registerSheetDismiss('sched-rule-sheet', () => {
-      closeSchedEditor();
+      void closeSchedEditor();
     });
 
     const schedSheet = $('sched-rule-sheet');
@@ -4374,7 +4534,7 @@
         if (!(target instanceof HTMLElement)) return;
 
         if (target.closest('#btn-sched-sheet-close')) {
-          closeSchedEditor();
+          await closeSchedEditor();
           return;
         }
         if (target.closest('#btn-sched-sheet-save')) {
@@ -4399,7 +4559,18 @@
         if (target.closest('#btn-sched-sheet-delete') && schedEditorRuleId) {
           const ruleId = schedEditorRuleId;
           const rule = schedRules.find((entry) => entry.id === ruleId);
-          if (!window.confirm(`Delete “${rule?.label || 'this rule'}”?`)) return;
+          {
+            const dialog = window.SignalUiDialog;
+            const ok = dialog && typeof dialog.confirm === 'function'
+              ? await dialog.confirm({
+                title: 'Delete this rule?',
+                body: `Delete "${rule?.label || 'this rule'}"? This cannot be undone.`,
+                confirmLabel: 'Delete',
+                danger: true,
+              })
+              : false;
+            if (!ok) return;
+          }
           try {
             await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
             closeSchedEditor({ force: true });
@@ -4460,7 +4631,7 @@
         return;
       }
       if (target.id === 'sched-show-skips') {
-        await loadSchedActivity();
+        await repaintSchedTimeline();
       }
     });
 
@@ -4724,16 +4895,21 @@
 
     (async () => {
       try {
-        const [settings, commands] = await Promise.all([
-          apiFetch(`${SCHED_ROUTE}/settings`),
-          apiFetch('/api/commands'),
-        ]);
+        paintSchedRulesLoading();
+        const settingsPromise = apiFetch(`${SCHED_ROUTE}/settings`);
+        const rulesPromise = apiFetch(`${SCHED_ROUTE}/rules`);
+        const commandsPromise = apiFetch('/api/commands').catch(() => ({ commands: [] }));
+        const settings = await settingsPromise;
         renderSchedSettings(settings.settings);
+        const rules = await rulesPromise;
+        schedRules = rules.rules || [];
+        renderSchedRules();
+        const statusPromise = refreshSchedStatus();
+        const commands = await commandsPromise;
         schedCommands = commands.commands || [];
         renderSchedCommandPicker();
         bindSchedCommandPicker();
-        await loadSchedRules();
-        await refreshSchedStatus();
+        await statusPromise;
         updateStickyOffsets();
         updatePageJump();
         updateSchedSetupCompact();
@@ -6025,6 +6201,392 @@
     }
   });
 
+
+  // ------------------------------------------- Settings → Global / Event routing
+
+  let eventRoutingState = {
+    catalog: [],
+    families: {},
+    timeZone: '',
+  };
+  let eventRoutingDraft = null; // { familyId, routes, selectedIndex }
+  let eventRoutingGrid = null;
+
+  function eventRoutingDefaultRoute() {
+    return { destinations: 'all', slots: [] };
+  }
+
+  function eventRoutingCloneRoutes(rule) {
+    const routes = Array.isArray(rule?.routes) && rule.routes.length
+      ? rule.routes
+      : [eventRoutingDefaultRoute()];
+    return routes.map((route) => ({
+      destinations: Array.isArray(route.destinations)
+        ? [...route.destinations]
+        : (route.destinations || 'all'),
+      slots: Array.isArray(route.slots)
+        ? route.slots.map((slot) => ({ ...slot }))
+        : [],
+    }));
+  }
+
+  function eventRoutingDestLabel(destinations) {
+    if (destinations == null || destinations === '' || destinations === 'all') return 'All displays';
+    if (destinations === 'full' || destinations === 'software') return 'Software';
+    if (destinations === 'vestaboard' || destinations === 'vestaboards') return 'Vestaboards';
+    if (Array.isArray(destinations)) {
+      if (!destinations.length) return 'All displays';
+      const labels = destinations.map((id) => {
+        const entry = (knownDisplays || []).find((d) => d.id === id);
+        return entry?.label || entry?.name || id;
+      });
+      return labels.join(', ');
+    }
+    return 'All displays';
+  }
+
+  function eventRoutingSlotsLabel(slots) {
+    if (!slots || !slots.length) return 'any hour';
+    if (typeof window.WeekGrid?.summarizeSlots === 'function') {
+      const text = window.WeekGrid.summarizeSlots(slots).replace(/^Fires\s+/i, '');
+      return text || (slots.length + ' hours');
+    }
+    return slots.length + ' hour' + (slots.length === 1 ? '' : 's');
+  }
+
+  function eventRoutingRouteSummary(route) {
+    return eventRoutingDestLabel(route.destinations) + ' · ' + eventRoutingSlotsLabel(route.slots);
+  }
+
+  function eventRoutingFamilySummary(rule) {
+    const routes = eventRoutingCloneRoutes(rule);
+    if (routes.length === 1) return eventRoutingRouteSummary(routes[0]);
+    return routes.length + ' routes — ' + routes.map((r) => eventRoutingDestLabel(r.destinations)).join('; ');
+  }
+
+  function eventRoutingIsCustom(rule) {
+    const routes = eventRoutingCloneRoutes(rule);
+    if (routes.length !== 1) return true;
+    const route = routes[0];
+    if (route.destinations !== 'all') return true;
+    return (route.slots || []).length > 0;
+  }
+
+  function eventRoutingModeOf(destinations) {
+    if (destinations == null || destinations === '' || destinations === 'all') return 'all';
+    if (destinations === 'full' || destinations === 'software') return 'full';
+    if (destinations === 'vestaboard' || destinations === 'vestaboards') return 'vestaboard';
+    if (Array.isArray(destinations)) return 'specific';
+    return 'all';
+  }
+
+  function eventRoutingDisplayOptionsHtml(selectedIds) {
+    const selected = new Set((selectedIds || []).map(String));
+    const entries = sortDisplayPickerEntries(knownDisplays || []);
+    if (!entries.length) {
+      return '<p class="hint">No displays online yet — refresh the display bar, then pick targets.</p>';
+    }
+    return entries.map((d) => {
+      const id = String(d.id || '');
+      const label = d.label || d.name || id;
+      const kind = d.kind === 'vestaboard' ? 'Vestaboard' : 'Software';
+      const checked = selected.has(id) ? ' checked' : '';
+      return '<label class="trivia-check"><input type="checkbox" data-er-display value="'
+        + escapeAttr(id) + '"' + checked + '><span>' + escapeHtml(label)
+        + ' <em>(' + escapeHtml(kind) + ')</em></span></label>';
+    }).join('');
+  }
+
+  function renderEventRoutingSettings(data = {}) {
+    const catalog = Array.isArray(data.catalog) && data.catalog.length
+      ? data.catalog
+      : (eventRoutingState.catalog || []);
+    const settings = data.settings || {};
+    const families = settings.families || eventRoutingState.families || {};
+    eventRoutingState = {
+      catalog,
+      families,
+      timeZone: data.timeZone || eventRoutingState.timeZone || '',
+    };
+
+    const pill = $('event-routing-status-pill');
+    const detail = $('event-routing-status-detail');
+    const custom = catalog.filter((row) => eventRoutingIsCustom(families[row.id])).length;
+    if (pill) {
+      pill.textContent = custom ? (custom + ' custom') : 'All open';
+      pill.className = 'status-pill ' + (custom ? 'is-warn' : 'is-ok');
+    }
+    if (detail) {
+      const tz = eventRoutingState.timeZone ? (' House timezone: ' + eventRoutingState.timeZone + '.') : '';
+      detail.textContent = 'Where automatic events may go. Open a family to add routes for different displays and hours. Manual Push and the Scheduler keep their own targets.' + tz;
+    }
+
+    const root = $('event-routing-families');
+    if (!root) return;
+    root.innerHTML = catalog.map((row) => {
+      const summary = eventRoutingFamilySummary(families[row.id]);
+      return '<div class="event-routing-item" role="listitem" data-er-family="' + escapeAttr(row.id) + '">'
+        + '<div class="event-routing-item-main">'
+        + '<strong title="' + escapeAttr(row.blurb || '') + '">' + escapeHtml(row.label) + '</strong>'
+        + '<span title="' + escapeAttr(summary) + '">' + escapeHtml(summary) + '</span>'
+        + '</div>'
+        + '<button type="button" class="btn btn-outline btn-sm" data-er-configure>Configure</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  function ensureEventRoutingGrid() {
+    const host = $('event-routing-week-grid');
+    if (!host || typeof window.createWeekGrid !== 'function') return null;
+    if (eventRoutingGrid) return eventRoutingGrid;
+    eventRoutingGrid = window.createWeekGrid(host, {
+      mode: 'fires',
+      dayToggle: true,
+      cellHeight: 28,
+      globalMinute: 0,
+      onChange() {
+        syncEventRoutingEditorFromUi();
+        updateEventRoutingWeekSummary();
+        renderEventRoutingRouteChips();
+      },
+    });
+    return eventRoutingGrid;
+  }
+
+  function updateEventRoutingWeekSummary() {
+    const el = $('event-routing-week-summary');
+    if (!el) return;
+    const grid = eventRoutingGrid;
+    if (!grid) {
+      el.textContent = 'Any hour';
+      return;
+    }
+    const slots = grid.getSlots() || [];
+    el.textContent = slots.length
+      ? (grid.summarize() || eventRoutingSlotsLabel(slots))
+      : 'Any hour';
+  }
+
+  function syncEventRoutingEditorFromUi() {
+    if (!eventRoutingDraft) return;
+    const idx = eventRoutingDraft.selectedIndex;
+    const route = eventRoutingDraft.routes[idx];
+    if (!route) return;
+    const mode = document.querySelector('#event-routing-dest .segmented-btn.active')?.dataset.erDest || 'all';
+    if (mode === 'specific') {
+      route.destinations = [...document.querySelectorAll('#event-routing-displays [data-er-display]:checked')]
+        .map((el) => el.value)
+        .filter(Boolean);
+      if (!route.destinations.length) route.destinations = 'all';
+    } else {
+      route.destinations = mode;
+    }
+    if (eventRoutingGrid) {
+      route.slots = eventRoutingGrid.getSlots() || [];
+    }
+  }
+
+  function renderEventRoutingRouteChips() {
+    const root = $('event-routing-routes');
+    if (!root || !eventRoutingDraft) return;
+    root.innerHTML = eventRoutingDraft.routes.map((route, index) => {
+      const active = index === eventRoutingDraft.selectedIndex ? ' is-active' : '';
+      return '<button type="button" class="event-routing-route-chip' + active + '" data-er-route="' + index + '">'
+        + '<span><strong>Route ' + (index + 1) + '</strong>'
+        + '<span>' + escapeHtml(eventRoutingRouteSummary(route)) + '</span></span>'
+        + '</button>';
+    }).join('');
+  }
+
+  function paintEventRoutingEditor() {
+    const editor = $('event-routing-editor');
+    if (!editor || !eventRoutingDraft) return;
+    const route = eventRoutingDraft.routes[eventRoutingDraft.selectedIndex];
+    if (!route) {
+      editor.hidden = true;
+      return;
+    }
+    editor.hidden = false;
+    const label = $('event-routing-editor-label');
+    if (label) label.textContent = 'Route ' + (eventRoutingDraft.selectedIndex + 1);
+
+    const mode = eventRoutingModeOf(route.destinations);
+    for (const btn of document.querySelectorAll('#event-routing-dest .segmented-btn')) {
+      const on = btn.dataset.erDest === mode;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    const displays = $('event-routing-displays');
+    if (displays) {
+      displays.hidden = mode !== 'specific';
+      displays.innerHTML = eventRoutingDisplayOptionsHtml(
+        Array.isArray(route.destinations) ? route.destinations : [],
+      );
+    }
+
+    const grid = ensureEventRoutingGrid();
+    if (grid) {
+      grid.setSlots(route.slots || []);
+      updateEventRoutingWeekSummary();
+    }
+  }
+
+  function openEventRoutingSheet(familyId) {
+    const meta = (eventRoutingState.catalog || []).find((row) => row.id === familyId);
+    if (!meta) return;
+    eventRoutingDraft = {
+      familyId,
+      routes: eventRoutingCloneRoutes(eventRoutingState.families[familyId]),
+      selectedIndex: 0,
+    };
+    const title = $('event-routing-sheet-title');
+    if (title) title.textContent = meta.label;
+    const blurb = $('event-routing-sheet-blurb');
+    if (blurb) {
+      blurb.textContent = (meta.blurb || '') + ' Add routes to send different displays at different times.';
+    }
+    const tz = $('event-routing-sheet-tz');
+    if (tz) {
+      tz.textContent = eventRoutingState.timeZone
+        ? ('Timezone: ' + eventRoutingState.timeZone)
+        : '';
+    }
+    renderEventRoutingRouteChips();
+    paintEventRoutingEditor();
+    const sheet = $('event-routing-sheet');
+    if (sheet) sheet.hidden = false;
+  }
+
+  function closeEventRoutingSheet() {
+    const sheet = $('event-routing-sheet');
+    if (sheet) sheet.hidden = true;
+    eventRoutingDraft = null;
+  }
+
+  async function saveEventRoutingSheet() {
+    if (!eventRoutingDraft) return;
+    syncEventRoutingEditorFromUi();
+    const families = { ...eventRoutingState.families };
+    families[eventRoutingDraft.familyId] = {
+      routes: eventRoutingDraft.routes.map((route) => ({
+        destinations: Array.isArray(route.destinations)
+          ? [...route.destinations]
+          : route.destinations,
+        slots: (route.slots || []).map((slot) => ({ ...slot })),
+      })),
+    };
+    const button = $('btn-event-routing-sheet-save');
+    if (button) button.disabled = true;
+    try {
+      const result = await apiPost('/api/event-routing/settings', { families });
+      renderEventRoutingSettings(result);
+      closeEventRoutingSheet();
+      toast('Event routing saved', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not save event routing', 'bad');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function loadEventRoutingSettings() {
+    try {
+      const data = await apiGet('/api/event-routing/settings');
+      renderEventRoutingSettings(data);
+    } catch {
+      renderEventRoutingSettings({ catalog: eventRoutingState.catalog, settings: { families: {} } });
+    }
+  }
+
+  $('event-routing-families')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-er-configure]');
+    if (!btn) return;
+    const row = btn.closest('[data-er-family]');
+    if (!row) return;
+    openEventRoutingSheet(row.getAttribute('data-er-family'));
+  });
+
+  $('event-routing-routes')?.addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-er-route]');
+    if (!chip || !eventRoutingDraft) return;
+    syncEventRoutingEditorFromUi();
+    eventRoutingDraft.selectedIndex = Number(chip.getAttribute('data-er-route')) || 0;
+    renderEventRoutingRouteChips();
+    paintEventRoutingEditor();
+  });
+
+  $('btn-event-routing-add-route')?.addEventListener('click', () => {
+    if (!eventRoutingDraft) return;
+    syncEventRoutingEditorFromUi();
+    if (eventRoutingDraft.routes.length >= 12) {
+      toast('At most 12 routes per event', 'bad');
+      return;
+    }
+    eventRoutingDraft.routes.push(eventRoutingDefaultRoute());
+    eventRoutingDraft.selectedIndex = eventRoutingDraft.routes.length - 1;
+    renderEventRoutingRouteChips();
+    paintEventRoutingEditor();
+  });
+
+  $('btn-event-routing-remove-route')?.addEventListener('click', async () => {
+    if (!eventRoutingDraft) return;
+    if (eventRoutingDraft.routes.length <= 1) {
+      toast('Keep at least one route', 'bad');
+      return;
+    }
+    const ok = window.SignalUiDialog && typeof window.SignalUiDialog.confirm === 'function'
+      ? await window.SignalUiDialog.confirm({
+        title: 'Remove this route?',
+        body: 'The other routes for this event stay as they are.',
+        confirmLabel: 'Remove',
+        danger: true,
+      })
+      : true;
+    if (!ok) return;
+    eventRoutingDraft.routes.splice(eventRoutingDraft.selectedIndex, 1);
+    eventRoutingDraft.selectedIndex = Math.min(
+      eventRoutingDraft.selectedIndex,
+      eventRoutingDraft.routes.length - 1,
+    );
+    renderEventRoutingRouteChips();
+    paintEventRoutingEditor();
+  });
+
+  $('event-routing-dest')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-er-dest]');
+    if (!btn || !eventRoutingDraft) return;
+    for (const el of document.querySelectorAll('#event-routing-dest .segmented-btn')) {
+      const on = el === btn;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    const displays = $('event-routing-displays');
+    if (displays) {
+      displays.hidden = btn.dataset.erDest !== 'specific';
+      if (btn.dataset.erDest === 'specific' && !displays.querySelector('[data-er-display]')) {
+        const route = eventRoutingDraft.routes[eventRoutingDraft.selectedIndex];
+        displays.innerHTML = eventRoutingDisplayOptionsHtml(
+          Array.isArray(route?.destinations) ? route.destinations : [],
+        );
+      }
+    }
+    syncEventRoutingEditorFromUi();
+    renderEventRoutingRouteChips();
+  });
+
+  $('event-routing-displays')?.addEventListener('change', () => {
+    syncEventRoutingEditorFromUi();
+    renderEventRoutingRouteChips();
+  });
+
+  $('btn-event-routing-sheet-save')?.addEventListener('click', () => {
+    saveEventRoutingSheet();
+  });
+  $('btn-event-routing-sheet-cancel')?.addEventListener('click', () => closeEventRoutingSheet());
+  $('btn-event-routing-sheet-close')?.addEventListener('click', () => closeEventRoutingSheet());
+  registerSheetDismiss('event-routing-sheet', () => closeEventRoutingSheet());
+
+  loadEventRoutingSettings();
   loadPublicUrlSettings();
 
   // ------------------------------------------- Settings → TinyURL
@@ -7890,9 +8452,14 @@
   }
 
   async function loadRedLetter() {
+    const list = $('date-book-list');
+    if (list && (!list.children.length || list.querySelector('.list-loading'))) {
+      list.innerHTML = listLoadingHtml('Loading dates…');
+    }
     try {
       applyRedLetterState(await apiGet('/api/red-letter/settings'));
     } catch {
+      if (list) list.innerHTML = '';
       renderRedLetterCard({});
     }
   }
@@ -8681,9 +9248,16 @@
     });
   });
 
-  $('btn-red-letter-designer-blank')?.addEventListener('click', () => {
+  $('btn-red-letter-designer-blank')?.addEventListener('click', async () => {
     if (!designerBoardIsClear()) {
-      const ok = window.confirm('Clear the whole board? This only wipes the editor — Save to keep it, or cancel to leave the flaps as they are.');
+      const ok = window.SignalUiDialog && typeof window.SignalUiDialog.confirm === 'function'
+        ? await window.SignalUiDialog.confirm({
+          title: 'Clear the whole board?',
+          body: 'This only wipes the editor — Save to keep it, or cancel to leave the flaps as they are.',
+          confirmLabel: 'Clear board',
+          danger: true,
+        })
+        : false;
       if (!ok) return;
     }
     pushDesignerUndo();
@@ -9063,14 +9637,19 @@
     return lines;
   }
 
-  function confirmCorpusRemove(kind, preview) {
+  async function confirmCorpusRemove(kind, preview) {
     const snippet = String(preview || '').replace(/\s+/g, ' ').trim().slice(0, 90);
     const label = kind || 'item';
-    return window.confirm(
-      snippet
-        ? `Remove this ${label}?\n\n${snippet}\n\nThis cannot be undone.`
-        : `Remove this ${label}? This cannot be undone.`,
-    );
+    const dialog = window.SignalUiDialog;
+    if (!dialog || typeof dialog.confirm !== 'function') return false;
+    return dialog.confirm({
+      title: `Remove this ${label}?`,
+      body: snippet
+        ? `${snippet}\n\nThis cannot be undone.`
+        : 'This cannot be undone.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
   }
 
   function corpusManageActions({ hidden, custom, saveAttr, hideAttr, removeAttr }) {
@@ -9269,7 +9848,7 @@
         await apiPost('/api/chuck-norris/facts', { id, text });
         toast('Fact saved', 'good');
       } else if (event.target.closest('[data-cn-remove]')) {
-        if (!confirmCorpusRemove('fact', text)) {
+        if (!(await confirmCorpusRemove('fact', text))) {
           return;
         }
         await apiPost('/api/chuck-norris/facts', { id, remove: true });
@@ -9485,7 +10064,7 @@
         await apiPost('/api/roast-me/roasts', { id, text });
         toast('Roast saved', 'good');
       } else if (event.target.closest('[data-roast-remove]')) {
-        if (!confirmCorpusRemove('roast', text)) {
+        if (!(await confirmCorpusRemove('roast', text))) {
           return;
         }
         await apiPost('/api/roast-me/roasts', { id, remove: true });
@@ -9736,7 +10315,7 @@
         await apiPost('/api/family-quotes/quotes', { id, text, author });
         toast('Quote saved', 'good');
       } else if (event.target.closest('[data-fq-remove]')) {
-        if (!confirmCorpusRemove('quote', text)) {
+        if (!(await confirmCorpusRemove('quote', text))) {
           return;
         }
         await apiPost('/api/family-quotes/quotes', { id, remove: true });
@@ -9993,7 +10572,7 @@
         await apiPost('/api/warm-fuzzies/fuzzies', { id, text });
         toast('Fuzzy saved', 'good');
       } else if (event.target.closest('[data-wf-remove]')) {
-        if (!confirmCorpusRemove('fuzzy', text)) {
+        if (!(await confirmCorpusRemove('fuzzy', text))) {
           return;
         }
         await apiPost('/api/warm-fuzzies/fuzzies', { id, remove: true });
@@ -10231,7 +10810,7 @@
         await apiPost('/api/daily-bucket-fillers/fillers', { id, text });
         toast('Filler saved', 'good');
       } else if (event.target.closest('[data-bf-remove]')) {
-        if (!confirmCorpusRemove('filler', text)) {
+        if (!(await confirmCorpusRemove('filler', text))) {
           return;
         }
         await apiPost('/api/daily-bucket-fillers/fillers', { id, remove: true });
@@ -10475,7 +11054,7 @@
         await apiPost('/api/misheard-lyrics/lyrics', { id, text, artist });
         toast('Lyric saved', 'good');
       } else if (event.target.closest('[data-ml-remove]')) {
-        if (!confirmCorpusRemove('lyric', text)) {
+        if (!(await confirmCorpusRemove('lyric', text))) {
           return;
         }
         await apiPost('/api/misheard-lyrics/lyrics', { id, remove: true });
@@ -11263,7 +11842,7 @@
         await apiPost('/api/dad-jokes/jokes', { id, setup, punchline });
         toast('Joke saved', 'good');
       } else if (event.target.closest('[data-dj-remove]')) {
-        if (!confirmCorpusRemove('joke', setup)) {
+        if (!(await confirmCorpusRemove('joke', setup))) {
           return;
         }
         await apiPost('/api/dad-jokes/jokes', { id, remove: true });
@@ -11631,7 +12210,7 @@
         await apiPost('/api/amazing-facts/facts', { id, text });
         toast('Fact saved', 'good');
       } else if (event.target.closest('[data-af-remove]')) {
-        if (!confirmCorpusRemove('fact', text)) {
+        if (!(await confirmCorpusRemove('fact', text))) {
           return;
         }
         await apiPost('/api/amazing-facts/facts', { id, remove: true });
@@ -11904,7 +12483,7 @@
         await apiPost('/api/world-geography-facts/facts', { id, text });
         toast('Fact saved', 'good');
       } else if (event.target.closest('[data-wg-remove]')) {
-        if (!confirmCorpusRemove('fact', text)) {
+        if (!(await confirmCorpusRemove('fact', text))) {
           return;
         }
         await apiPost('/api/world-geography-facts/facts', { id, remove: true });
@@ -12119,7 +12698,7 @@
         await apiPost('/api/conversation-starters/prompts', { id, text });
         toast('Prompt saved', 'good');
       } else if (event.target.closest('[data-cs-remove]')) {
-        if (!confirmCorpusRemove('prompt', text)) {
+        if (!(await confirmCorpusRemove('prompt', text))) {
           return;
         }
         await apiPost('/api/conversation-starters/prompts', { id, remove: true });
@@ -12352,7 +12931,7 @@
         await apiPost('/api/stoic-quotes/quotes', { id, text, author });
         toast('Quote saved', 'good');
       } else if (event.target.closest('[data-sq-remove]')) {
-        if (!confirmCorpusRemove('quote', text)) {
+        if (!(await confirmCorpusRemove('quote', text))) {
           return;
         }
         await apiPost('/api/stoic-quotes/quotes', { id, remove: true });
@@ -12605,7 +13184,7 @@
         await apiPost('/api/bible-verse/verses', { id, text, reference });
         toast('Verse saved', 'good');
       } else if (event.target.closest('[data-bv-remove]')) {
-        if (!confirmCorpusRemove('verse', text)) {
+        if (!(await confirmCorpusRemove('verse', text))) {
           return;
         }
         await apiPost('/api/bible-verse/verses', { id, remove: true });
@@ -12924,7 +13503,7 @@
         await apiPost('/api/word-riddles/riddles', { id, riddle, answer });
         toast('Riddle saved', 'good');
       } else if (event.target.closest('[data-wr-remove]')) {
-        if (!confirmCorpusRemove('riddle', riddle)) return;
+        if (!(await confirmCorpusRemove('riddle', riddle))) return;
         await apiPost('/api/word-riddles/riddles', { id, remove: true });
         toast('Riddle removed', 'good');
       } else if (event.target.closest('[data-wr-hide]')) {
@@ -13894,7 +14473,7 @@
         await apiPost('/api/on-this-day/events', { id, text, year });
         toast('Fact saved', 'good');
       } else if (event.target.closest('[data-otd-remove]')) {
-        if (!confirmCorpusRemove('fact', text)) {
+        if (!(await confirmCorpusRemove('fact', text))) {
           return;
         }
         await apiPost('/api/on-this-day/events', { id, remove: true });
@@ -14132,7 +14711,7 @@
         await apiPost('/api/baking-inspiration/ideas', { id, title, ingredients });
         toast('Idea saved', 'good');
       } else if (event.target.closest('[data-bake-remove]')) {
-        if (!confirmCorpusRemove('idea', title || ingredients)) {
+        if (!(await confirmCorpusRemove('idea', title || ingredients))) {
           return;
         }
         await apiPost('/api/baking-inspiration/ideas', { id, remove: true });
@@ -19247,7 +19826,8 @@
       }
       params.delete('steam');
       const qs = params.toString();
-      history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash || ''}`);
+      // Steam return always owns the tab; pin #settings after clearing ?steam=.
+      history.replaceState(null, '', `${location.pathname}${qs ? `?${qs}` : ''}#settings`);
     } catch (error) {
       console.warn('Steam return tab handling failed', error);
     }
@@ -21190,6 +21770,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
     loadFlightplanSettings();
     loadLocaleSettings();
     loadPublicUrlSettings();
+    loadEventRoutingSettings();
     loadGuestBookSettings();
     loadRingSettings();
     loadGuestSnapsSettings();
@@ -21402,7 +21983,18 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
       });
       body.querySelector('[data-action="delete-trip"]')?.addEventListener('click', async () => {
         const count = (data.flights || []).length;
-        if (!confirm(`Delete "${trip.name}" and ${count} flight(s)?`)) return;
+        {
+          const dialog = window.SignalUiDialog;
+          const ok = dialog && typeof dialog.confirm === 'function'
+            ? await dialog.confirm({
+              title: 'Delete this trip?',
+              body: `Delete "${trip.name}" and ${count} flight(s)? This cannot be undone.`,
+              confirmLabel: 'Delete trip',
+              danger: true,
+            })
+            : false;
+          if (!ok) return;
+        }
         await fetch(`/api/flightplan/trips/${tripId}`, { method: 'DELETE', credentials: 'same-origin' });
         flightplanLoadedTrips.delete(tripId);
         if (flightplanTripId === tripId) flightplanTripId = null;
@@ -21453,17 +22045,24 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   }
 
   async function loadFlightplanTrips({ force = false } = {}) {
+    const list = $('flightplan-trip-list');
+    if (list && (!list.children.length || list.querySelector('.list-loading'))) {
+      list.innerHTML = listLoadingHtml('Loading trips…');
+    }
+    const filterBtn = document.querySelector('#flightplan-filter-tabs .segmented-btn.active');
+    const filter = filterBtn?.dataset.filter || 'upcoming';
+    const statusPromise = apiGet('/api/flightplan/status').catch(() => null);
+    const tripsPromise = apiGet(`/api/flightplan/trips?filter=${encodeURIComponent(filter)}&sort=date&dir=asc`);
     try {
-      const status = await apiGet('/api/flightplan/status');
-      flightplanHomeAirport = status?.settings?.homeAirport || 'SLC';
+      const status = await statusPromise;
+      if (status?.settings?.homeAirport) {
+        flightplanHomeAirport = status.settings.homeAirport || 'SLC';
+      }
     } catch {
       /* home-airport shortcut still works with last known value */
     }
     try {
-      const filterBtn = document.querySelector('#flightplan-filter-tabs .segmented-btn.active');
-      const filter = filterBtn?.dataset.filter || 'upcoming';
-      const result = await apiGet(`/api/flightplan/trips?filter=${encodeURIComponent(filter)}&sort=date&dir=asc`);
-      const list = $('flightplan-trip-list');
+      const result = await tripsPromise;
       if (!list) return;
       const trips = result.trips || [];
       const existing = new Map(
@@ -21551,7 +22150,18 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
         }
       });
       row.querySelector('[data-delete]')?.addEventListener('click', async () => {
-        if (!confirm(`Remove flight ${flight.airline} ${flight.number}?`)) return;
+        {
+          const dialog = window.SignalUiDialog;
+          const ok = dialog && typeof dialog.confirm === 'function'
+            ? await dialog.confirm({
+              title: 'Remove this flight?',
+              body: `Remove flight ${flight.airline} ${flight.number}? This cannot be undone.`,
+              confirmLabel: 'Remove flight',
+              danger: true,
+            })
+            : false;
+          if (!ok) return;
+        }
         await fetch(`/api/flightplan/flights/${flight.id}`, { method: 'DELETE', credentials: 'same-origin' });
         const card = document.querySelector(`.flightplan-trip-card[data-trip-id="${tripId}"]`);
         flightplanLoadedTrips.delete(tripId);
@@ -21882,6 +22492,25 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   // of this file so it does not depend on any of the wiring in between.
   refreshDisplays({ quiet: true });
   startDisplayEvents();
+  // Restore the tab from #hash after every top-level binding exists. Steam
+  // return (below) still wins when ?steam= is present.
+  {
+    const fromHash = tabIdFromHash();
+    if (isRestorableAdminTab(fromHash) && fromHash !== document.body.dataset.tab) {
+      activateTab(fromHash, { scroll: 'top' });
+    } else {
+      syncAdminTabHash(document.body.dataset.tab || 'push');
+    }
+    window.addEventListener('hashchange', () => {
+      const next = tabIdFromHash();
+      if (!next || next === document.body.dataset.tab) return;
+      if (!isRestorableAdminTab(next)) {
+        syncAdminTabHash(document.body.dataset.tab || 'push');
+        return;
+      }
+      activateTab(next, { syncHash: false });
+    });
+  }
   applySteamReturnTab();
   loadVestaboardSim().then(() => startVestaboardSimEvents());
   // Fallback poll if EventSource is blocked or drops (SSE is primary).
