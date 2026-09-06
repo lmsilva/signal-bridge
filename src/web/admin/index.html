@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal304">
+  <link rel="stylesheet" href="styles.css?v=signal305">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -5150,7 +5150,10 @@
         <div class="week-grid-scroll">
           <div id="event-routing-week-grid" aria-label="Allowed hours week grid"></div>
         </div>
-        <p class="sched-fixed-summary" id="event-routing-week-summary">Any hour</p>
+        <div class="sched-fixed-foot">
+          <p class="sched-fixed-summary" id="event-routing-week-summary">Any hour</p>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-event-routing-clear-hours">Clear</button>
+        </div>
       </div>
       <div class="sheet-actions" style="margin-top:18px">
         <button type="button" class="btn btn-outline" id="btn-event-routing-sheet-cancel">Cancel</button>
@@ -5210,16 +5213,13 @@
 
       <div id="sched-sheet-fixed" class="sched-sheet-span sched-fixed-pane" hidden style="margin-top:22px">
         <div class="sched-fixed-head">
-          <div>
+          <div class="sched-fixed-head-copy">
             <h3>Week schedule</h3>
-            <p class="hint" style="margin:4px 0 0">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below.</p>
+            <p class="hint" style="margin:4px 0 0">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below. Right-click a cell to override its minute.</p>
           </div>
-          <div class="sched-fixed-head-aside">
-            <span class="sched-minute-hint">Right-click a cell to override its minute</span>
-            <div class="sched-fixed-legend">
-              <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
-              <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
-            </div>
+          <div class="sched-fixed-legend" aria-hidden="true">
+            <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
+            <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
           </div>
         </div>
         <div class="week-grid-scroll">
@@ -5481,12 +5481,12 @@
     </div>
   </div>
 
-  <script src="/ui-dialog.js?v=signal304"></script>
-  <script src="/week-grid.js?v=signal304"></script>
+  <script src="/ui-dialog.js?v=signal305"></script>
+  <script src="/week-grid.js?v=signal305"></script>
   <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal299"></script>
-  <script src="settings-filter.js?v=signal304"></script>
-  <script src="app.js?v=signal304"></script>
+  <script src="settings-filter.js?v=signal305"></script>
+  <script src="app.js?v=signal305"></script>
 </body>
 </html>

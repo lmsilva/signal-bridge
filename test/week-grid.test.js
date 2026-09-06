@@ -49,6 +49,18 @@ test('week-grid exports createWeekGrid and WeekGrid on globalThis', () => {
   jsonEqual(root.WeekGrid.DAY_LABELS, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 });
 
+test('clear empties every painted hour', () => {
+  const root = loadWeekGrid();
+  const grid = root.createWeekGrid(fakeHost(), { mode: 'fires', globalMinute: 0 });
+  grid.setSlots([
+    { day: 2, hour: 7, minute: 0 },
+    { day: 2, hour: 8, minute: 0 },
+  ]);
+  assert.equal(grid.getSlots().length, 2);
+  grid.clear();
+  jsonEqual(grid.getSlots(), []);
+});
+
 test('getSlots / setSlots round-trip Monday-first fixedTimes', () => {
   const root = loadWeekGrid();
   const grid = root.createWeekGrid(fakeHost(), { mode: 'fires', globalMinute: 0 });

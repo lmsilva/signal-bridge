@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
   <link rel="stylesheet" href="styles.css?v=signal299">
-  <link rel="stylesheet" href="/scheduler.css?v=signal299">
+  <link rel="stylesheet" href="/scheduler.css?v=signal305">
 </head>
 <body>
   <header class="su-head">
@@ -595,16 +595,13 @@
 
       <div id="sched-sheet-fixed" class="sched-sheet-span sched-fixed-pane" hidden style="margin-top:22px">
         <div class="sched-fixed-head">
-          <div>
+          <div class="sched-fixed-head-copy">
             <h3>Week schedule</h3>
-            <p class="hint" style="margin:4px 0 0">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below.</p>
+            <p class="hint" style="margin:4px 0 0">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below. Right-click a cell to override its minute.</p>
           </div>
-          <div class="sched-fixed-head-aside">
-            <span class="sched-minute-hint">Right-click a cell to override its minute</span>
-            <div class="sched-fixed-legend">
-              <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
-              <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
-            </div>
+          <div class="sched-fixed-legend" aria-hidden="true">
+            <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
+            <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
           </div>
         </div>
         <div class="week-grid-scroll">
@@ -673,9 +670,9 @@
   <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="/ui-dialog.js?v=signal304"></script>
-  <script src="/week-grid.js?v=signal304"></script>
-  <script src="/scheduler-ui.js?v=signal299"></script>
+  <script src="/ui-dialog.js?v=signal305"></script>
+  <script src="/week-grid.js?v=signal305"></script>
+  <script src="/scheduler-ui.js?v=signal305"></script>
   <script src="app.js?v=signal299"></script>
 </body>
 </html>

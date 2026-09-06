@@ -131,7 +131,7 @@ function readSseHello(base, cookie) {
 
 test('Roll Credits admin APIs create, list, configure, stream, and bulk delete', async (t) => {
   const app = await startServer();
-  t.after(() => app.webServer.stop());
+  t.after(async () => { await app.webServer.stop(); });
 
   const unauthorised = await request(app.base, '/api/roll-credits/games', {
     method: 'POST',
@@ -270,7 +270,7 @@ test('Roll Credits credentials endpoint returns 409 when environment owns creden
       IGDB_CLIENT_SECRET: 'environment-secret',
     },
   });
-  t.after(() => app.webServer.stop());
+  t.after(async () => { await app.webServer.stop(); });
 
   const status = await request(app.base, '/api/roll-credits/settings', {
     cookie: app.cookie,

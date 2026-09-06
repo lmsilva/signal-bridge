@@ -233,9 +233,8 @@
       if (!cell || !host.contains(cell)) return;
       if (event.button != null && event.button !== 0) return;
       event.preventDefault();
-      // Keep keyboard focus on the cell so Space toggles it instead of
-      // activating a control behind an open sheet (e.g. Configure).
-      if (typeof cell.focus === 'function') cell.focus();
+      // Do not focus the cell — Space would immediately toggle the first
+      // painted hour off. Keyboard users can still Tab to a cell then Space.
       const day = Number(cell.dataset.wgDay);
       const hour = Number(cell.dataset.wgHour);
       painting = matrix[day][hour] == null;
@@ -351,6 +350,11 @@
       setSlots: function (slots) {
         matrix = matrixFromSlots(slots, globalMinute);
         paint();
+      },
+      clear: function () {
+        matrix = emptyMatrix();
+        paint();
+        emit();
       },
       getWeekStrings: function () { return weekStringsFromMatrix(matrix); },
       setWeekStrings: function (week) {

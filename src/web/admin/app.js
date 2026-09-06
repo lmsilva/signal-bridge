@@ -6466,9 +6466,14 @@
     paintEventRoutingEditor();
     const sheet = $('event-routing-sheet');
     if (sheet) sheet.hidden = false;
-    // Pull focus into the sheet so Space cannot re-click Configure behind it
-    // and wipe the draft by re-opening from unsaved server state.
-    queueMicrotask(() => $('btn-event-routing-sheet-close')?.focus());
+    // Focus the dialog panel (not a button) so Space does nothing until the
+    // user Tabs to a real control — avoids wiping the first painted hour.
+    queueMicrotask(() => {
+      const panel = $('event-routing-sheet')?.querySelector('.event-routing-sheet');
+      if (!panel) return;
+      if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1');
+      panel.focus({ preventScroll: true });
+    });
   }
 
   function closeEventRoutingSheet() {
@@ -6598,6 +6603,17 @@
     renderEventRoutingRouteChips();
   });
 
+  $('btn-event-routing-clear-hours')?.addEventListener('click', () => {
+    if (!eventRoutingDraft) return;
+    const grid = ensureEventRoutingGrid();
+    if (grid && typeof grid.clear === 'function') grid.clear();
+    else if (grid) {
+      grid.setSlots([]);
+      syncEventRoutingEditorFromUi();
+      updateEventRoutingWeekSummary();
+      renderEventRoutingRouteChips();
+    }
+  });
   $('btn-event-routing-sheet-save')?.addEventListener('click', () => {
     saveEventRoutingSheet();
   });

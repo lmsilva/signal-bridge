@@ -3004,7 +3004,11 @@ textarea.field-input.filter-search {
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 14px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+.sched-fixed-head-copy {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .sched-fixed-head h3 {
   margin: 0;
@@ -3024,6 +3028,20 @@ textarea.field-input.filter-search {
   gap: 14px;
   font-size: 13px;
   color: var(--muted);
+  flex: none;
+  align-items: center;
+  padding-top: 2px;
+  white-space: nowrap;
+}
+#sched-sheet-type {
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
+#sched-sheet-type .segmented-btn {
+  white-space: nowrap;
+  flex: 1 1 auto;
+  padding-left: 12px;
+  padding-right: 12px;
 }
 .sched-fixed-legend i {
   width: 14px;
@@ -7124,11 +7142,28 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .event-routing-sheet > .credits-sheet-head .sheet-title {
   margin-bottom: 0;
 }
-.event-routing-sheet .event-routing-editor {
-  flex: 1 1 auto;
-  min-height: 0;
+.cn-manage-sheet.event-routing-sheet {
+  overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+}
+.event-routing-sheet .event-routing-editor {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.sched-fixed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.sched-fixed-foot .sched-fixed-summary {
+  margin-top: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sched-fixed-foot .btn {
+  flex: none;
 }
 .event-routing-sheet .event-routing-sheet-toolbar {
   display: flex;
