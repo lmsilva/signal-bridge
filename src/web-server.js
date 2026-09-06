@@ -5599,6 +5599,8 @@ function createWebServer({
     device = 'Scheduler',
     targetId = 'full',
     manual = false,
+    holdSeconds = null,
+    quietHoursExempt = false,
   } = {}) {
     const command = commandRegistry.get(commandId);
     if (!command) {
@@ -5637,12 +5639,15 @@ function createWebServer({
       triggeredBy: manual ? 'manual' : 'scheduler',
     };
 
+    const hold = Number(holdSeconds);
     schedulerAir = {
       source: manual ? 'manual' : 'scheduler',
       scheduler: !manual,
       explicit: Boolean(manual),
       breakHold: false,
       targetId: deliveryId,
+      quietHoursExempt: Boolean(quietHoursExempt),
+      ...(Number.isFinite(hold) && hold > 0 ? { holdSeconds: hold } : {}),
       ...(manual && requestActor ? { actor: requestActor } : {}),
     };
     try {
@@ -5821,6 +5826,8 @@ function createWebServer({
       device: options.manual ? 'Air now' : 'Scheduler',
       targetId: rule.target,
       manual: Boolean(options.manual),
+      holdSeconds: options.holdSeconds,
+      quietHoursExempt: Boolean(options.quietHoursExempt || rule.quietHoursExempt),
     }),
   });
 
@@ -6103,6 +6110,7 @@ function createWebServer({
     if (pathname === '/api/vestaboards/release-holds') return true;
     if (pathname.startsWith('/api/photos')) return true;
     if (pathname.startsWith('/api/date-book/')) return true;
+    if (pathname.startsWith('/api/display-scheduler/')) return true;
     if (pathname.startsWith('/api/flightplan/trips')) return true;
     if (pathname.startsWith('/api/flightplan/flights')) return true;
     if (pathname === '/api/flightplan/search') return true;
@@ -6119,6 +6127,9 @@ function createWebServer({
     }
     if (pathname.startsWith('/api/date-book/')) {
       return requirePermission(req, res, 'redLetter');
+    }
+    if (pathname.startsWith('/api/display-scheduler/')) {
+      return requirePermission(req, res, 'scheduler');
     }
     if (pathname.startsWith('/api/flightplan/')) {
       return requirePermission(req, res, 'flightPlan');
@@ -9483,7 +9494,7 @@ function createWebServer({
           return;
         }
         if (pathname.startsWith('/api/display-scheduler/')) {
-          if (!requireAdminSession(req, res)) return;
+          if (!requirePermission(req, res, 'scheduler')) return;
           const tail = pathname.slice('/api/display-scheduler/'.length);
           const query = reqUrl.searchParams;
           if (tail === 'settings') {
@@ -10075,8 +10086,8 @@ function createWebServer({
           res.end('Method not allowed');
           return;
         }
-        if (isFlightplan && isUserAccessiblePath(pathname)) {
-          if (!requirePermission(req, res, 'flightPlan')) return;
+        if ((isFlightplan || isScheduler) && isUserAccessiblePath(pathname)) {
+          if (!requirePermission(req, res, isScheduler ? 'scheduler' : 'flightPlan')) return;
         } else if (!requireAdminSession(req, res)) {
           return;
         }

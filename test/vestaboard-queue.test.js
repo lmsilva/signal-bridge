@@ -586,6 +586,25 @@ test('quiet hours read as a window on the clock, including across midnight', () 
   assert.equal(inQuietHours(at(23), { start: 'nope', end: '07:00' }), false);
 });
 
+test('quiet hours week strings treat 0 as quiet and 1 as active', () => {
+  const { defaultQuietWeek } = require('../src/vestaboard/quiet-hours');
+  const quiet = { enabled: true, week: defaultQuietWeek() };
+  const at = (hours, minutes = 0) => new Date(2026, 7, 24, hours, minutes); // Monday
+
+  assert.equal(inQuietHours(at(23), quiet), true);
+  assert.equal(inQuietHours(at(2), quiet), true);
+  assert.equal(inQuietHours(at(6, 59), quiet), true);
+  assert.equal(inQuietHours(at(7), quiet), false);
+  assert.equal(inQuietHours(at(21, 59), quiet), false);
+  assert.equal(inQuietHours(at(22), quiet), true);
+
+  const weekendOn = defaultQuietWeek();
+  weekendOn[5] = '1'.repeat(24); // Saturday always active
+  const sat = new Date(2026, 7, 29, 23, 0); // Saturday
+  assert.equal(inQuietHours(sat, { enabled: true, week: weekendOn }), false);
+  assert.equal(inQuietHours(sat, { enabled: true, week: defaultQuietWeek() }), true);
+});
+
 test('quiet hours follow the household timezone, not the process clock', () => {
   // 8:25pm MDT is 02:25 UTC. A UTC Docker host would treat that as 2am quiet.
   const eveningUtah = new Date('2026-08-25T02:25:00.000Z');

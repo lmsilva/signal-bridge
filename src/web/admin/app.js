@@ -3106,7 +3106,6 @@
   let schedCommands = [];
   let schedRange = '24h';
   let schedEvents = [];
-  let schedSaveTimers = new Map();
 
   function formatDuration(seconds) {
     const total = Math.max(0, Math.round(Number(seconds) || 0));
@@ -3129,7 +3128,32 @@
   // ------------------------------------------------------- rules view
 
   const SCHED_RULE_SEARCH_KEY = 'signal.schedRuleSearch';
+  const SCHED_DISPLAY_FILTER_KEY = 'signal.schedDisplayFilter';
+  const SCHED_KIND_FILTER_KEY = 'signal.schedKindFilter';
+  const SCHED_COLLAPSED_GROUPS_KEY = 'signal.schedCollapsedGroups';
+  const DEFAULT_HOLD_MINUTES = 15;
   let schedFocusRuleId = null;
+  let schedDisplayFilter = 'all';
+  let schedKindFilter = 'any';
+  let schedCollapsedGroups = new Set();
+  let schedEditorRuleId = null;
+  let schedEditorBaseline = null;
+  let schedEditorDirty = false;
+  let schedWeekGrid = null;
+  let schedEditorSaving = false;
+
+  try {
+    const savedDisplay = localStorage.getItem(SCHED_DISPLAY_FILTER_KEY);
+    if (savedDisplay === 'all' || savedDisplay === 'full' || savedDisplay === 'vestaboard') {
+      schedDisplayFilter = savedDisplay;
+    }
+    const savedKind = localStorage.getItem(SCHED_KIND_FILTER_KEY);
+    if (savedKind === 'any' || savedKind === 'cadence' || savedKind === 'fixed') {
+      schedKindFilter = savedKind;
+    }
+    const collapsed = JSON.parse(localStorage.getItem(SCHED_COLLAPSED_GROUPS_KEY) || '[]');
+    if (Array.isArray(collapsed)) schedCollapsedGroups = new Set(collapsed.map(String));
+  } catch { /* ignore */ }
 
   function normalizeSchedQuery(value) {
     return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -3151,6 +3175,30 @@
     return query.split(' ').every((term) => term && haystack.includes(term));
   }
 
+  function schedRuleMatchesDisplay(rule, filter) {
+    if (!filter || filter === 'all') return true;
+    const target = rule.target || 'full';
+    if (filter === 'full') {
+      if (target === 'full' || target === 'all') return true;
+      if (target === 'vestaboard') return false;
+      const display = knownDisplays.find((entry) => entry.id === target);
+      return !display || display.kind !== 'vestaboard';
+    }
+    if (filter === 'vestaboard') {
+      if (target === 'vestaboard' || target === 'all') return true;
+      if (target === 'full') return false;
+      const display = knownDisplays.find((entry) => entry.id === target);
+      return display?.kind === 'vestaboard';
+    }
+    return true;
+  }
+
+  function schedRuleMatchesKind(rule, filter) {
+    if (!filter || filter === 'any') return true;
+    const kind = rule.scheduleType === 'fixed' ? 'fixed' : 'cadence';
+    return kind === filter;
+  }
+
   function schedRuleGroupLabel(rule) {
     return String(rule.commandGroup || '').trim() || (rule.broken ? 'Broken' : 'Other');
   }
@@ -3159,6 +3207,75 @@
     return Number(b.enabled) - Number(a.enabled)
       || String(a.label || '').localeCompare(String(b.label || ''), undefined, { sensitivity: 'base' })
       || String(a.id || '').localeCompare(String(b.id || ''));
+  }
+
+  function persistSchedCollapsedGroups() {
+    try {
+      localStorage.setItem(SCHED_COLLAPSED_GROUPS_KEY, JSON.stringify([...schedCollapsedGroups]));
+    } catch { /* ignore */ }
+  }
+
+  function schedHoldMinutes(rule) {
+    const seconds = Number(rule?.holdSeconds);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.max(1, Math.min(240, Math.round(seconds / 60)));
+    }
+    return DEFAULT_HOLD_MINUTES;
+  }
+
+  function schedHoldLabel(rule) {
+    return `${schedHoldMinutes(rule)}m`;
+  }
+
+  function schedTargetPill(rule) {
+    const target = rule.target || 'full';
+    if (target === 'all') {
+      return { label: 'All displays', cls: '' };
+    }
+    if (target === 'full') {
+      return { label: 'Software', cls: 'is-full' };
+    }
+    if (target === 'vestaboard') {
+      return { label: 'Vestaboards', cls: 'is-vestaboard' };
+    }
+    const display = knownDisplays.find((entry) => entry.id === target);
+    if (display?.kind === 'vestaboard') {
+      return { label: display.label || display.name || target, cls: 'is-vestaboard' };
+    }
+    return { label: display?.label || display?.name || target, cls: 'is-full' };
+  }
+
+  function schedCadenceSummary(rule) {
+    const interval = INTERVAL_CHOICES.find(([value]) => value === rule.intervalSeconds)?.[1]
+      || formatDuration(rule.intervalSeconds);
+    let text = `Every ${interval} · ${rule.probability}%`;
+    if (rule.activeWindow?.start && rule.activeWindow?.end) {
+      text += ` · ${rule.activeWindow.start}–${rule.activeWindow.end}`;
+    }
+    return text;
+  }
+
+  function schedFixedSummary(rule) {
+    const slots = Array.isArray(rule.fixedTimes) ? rule.fixedTimes : [];
+    if (!slots.length) return 'No times set';
+    if (typeof window.WeekGrid?.summarizeSlots === 'function') {
+      return window.WeekGrid.summarizeSlots(slots)
+        .replace(/^Fires \d+x\/week -- /, '')
+        .replace(/^Fires \d+×\/week — /, '')
+        .replace(/^Fires \d+x\/week — /, '');
+    }
+    return `${slots.length}×/week`;
+  }
+
+  function schedScheduleSummary(rule) {
+    return rule.scheduleType === 'fixed' ? schedFixedSummary(rule) : schedCadenceSummary(rule);
+  }
+
+  function schedRowMetaLine(rule) {
+    const kind = rule.scheduleType === 'fixed' ? 'Fixed' : 'Cadence';
+    const when = schedScheduleSummary(rule);
+    const target = schedTargetPill(rule).label;
+    return `${kind} · ${when} · hold ${schedHoldLabel(rule)} · ${target}`;
   }
 
   function focusSchedRule(ruleId) {
@@ -3170,50 +3287,65 @@
     setTimeout(() => card.classList.remove('is-new'), 2200);
   }
 
+  function syncSchedFilterButtons() {
+    document.querySelectorAll('#sched-display-filter .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.schedDisplayFilter === schedDisplayFilter);
+    });
+    document.querySelectorAll('#sched-kind-filter .segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.schedKindFilter === schedKindFilter);
+    });
+  }
+
   function renderSchedRules() {
     const host = $('sched-rule-list');
     const meta = $('sched-rule-meta');
     const empty = $('sched-rule-empty');
-    const clearBtn = $('sched-rule-search-clear');
+    const colHead = $('sched-col-head');
     const searchInput = $('sched-rule-search');
     if (!host) return;
 
-    // Display refreshes and saves rebuild this list; keep the window where
-    // the admin left it so a filter + scroll is not yanked back to the top.
     const scroller = pageScrollEl();
     const savedY = window.scrollY || scroller.scrollTop || 0;
 
     const rawSearch = searchInput?.value || '';
     const query = normalizeSchedQuery(rawSearch);
-    if (clearBtn) clearBtn.hidden = !String(rawSearch).trim();
+    syncSchedFilterButtons();
 
     if (!schedRules.length) {
       host.innerHTML = '';
+      if (colHead) colHead.hidden = true;
       if (meta) meta.textContent = 'No rules yet';
       if (empty) {
         empty.hidden = false;
-        empty.textContent = 'Pick a command above and click Add rule. New rules land in their group, sorted by name.';
+        empty.textContent = 'Click + Add rule, pick an event, then save. New rules land in their group, sorted by name.';
       }
       return;
     }
 
-    const matched = schedRules.filter((rule) => schedRuleMatches(rule, query));
+    const matched = schedRules.filter((rule) => (
+      schedRuleMatches(rule, query)
+      && schedRuleMatchesDisplay(rule, schedDisplayFilter)
+      && schedRuleMatchesKind(rule, schedKindFilter)
+    ));
     if (meta) {
-      meta.textContent = query
-        ? `${matched.length} of ${schedRules.length} rules`
-        : `${schedRules.length} rule${schedRules.length === 1 ? '' : 's'} · grouped by type`;
+      meta.textContent = `${matched.length} of ${schedRules.length} rules`
+        + (query || schedDisplayFilter !== 'all' || schedKindFilter !== 'any' ? '' : ' · grouped by type');
     }
 
     if (!matched.length) {
       host.innerHTML = '';
+      if (colHead) colHead.hidden = true;
       if (empty) {
         empty.hidden = false;
-        empty.textContent = `No rules match “${rawSearch.trim()}”.`;
+        empty.textContent = query
+          ? `No rules match “${rawSearch.trim()}”.`
+          : 'No rules match these filters.';
       }
       restoreSchedScroll(savedY);
       return;
     }
     if (empty) empty.hidden = true;
+    if (colHead) colHead.hidden = false;
 
     const groups = new Map();
     for (const rule of matched) {
@@ -3225,10 +3357,13 @@
     const groupNames = [...groups.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     host.innerHTML = groupNames.map((group) => {
       const rules = groups.get(group).sort(compareSchedRules);
-      return `<section class="sched-rule-group" data-sched-group="${escapeHtml(group)}">`
-        + `<h3 class="sched-rule-group-title">${escapeHtml(group)}`
-        + `<span class="sched-rule-group-count">${rules.length}</span></h3>`
-        + rules.map(schedRuleCardHtml).join('')
+      const collapsed = schedCollapsedGroups.has(group);
+      return `<section class="sched-rule-group${collapsed ? ' is-collapsed' : ''}" data-sched-group="${escapeHtml(group)}">`
+        + `<button type="button" class="sched-rule-group-head" data-sched-group-toggle="${escapeHtml(group)}" aria-expanded="${collapsed ? 'false' : 'true'}">`
+        + `<span class="sched-group-chevron" aria-hidden="true">${collapsed ? '▸' : '▾'}</span>`
+        + `<span>${escapeHtml(group)}</span>`
+        + `<span class="sched-rule-group-count">${rules.length}</span></button>`
+        + `<div class="sched-row-wrap">${rules.map(schedRuleRowHtml).join('')}</div>`
         + `</section>`;
     }).join('');
 
@@ -3266,7 +3401,7 @@
     const current = rule.target || (boardOnly ? 'vestaboard' : 'full');
     const options = [];
     if (!boardOnly) {
-      options.push(['full', 'Full displays'], ['all', 'All displays']);
+      options.push(['full', 'Software'], ['all', 'All displays']);
     }
     if (boardCapable) {
       options.push(['vestaboard', 'Vestaboards']);
@@ -3275,20 +3410,16 @@
       }
     }
     for (const display of knownDisplays.filter((entry) => entry.kind !== 'vestaboard')) {
-      if (boardOnly) {
-        continue;
-      }
+      if (boardOnly) continue;
       options.push([display.id, display.label || display.name]);
     }
     if (current && !options.some(([value]) => value === current)) {
       options.push([current, current]);
     }
-    return options.map(([value, label]) => (
-      `<option value="${escapeHtml(value)}"${value === current ? ' selected' : ''}>${escapeHtml(label)}</option>`
-    )).join('');
+    return options;
   }
 
-  function schedRuleParamsHtml(rule) {
+  function schedRuleParamsHtml(rule, prefix = 'data-sched-param') {
     const command = schedCommandById(rule.commandId);
     const defs = Array.isArray(command?.params) ? command.params : [];
     if (!defs.length) return '';
@@ -3301,96 +3432,59 @@
           `<option value="${escapeHtml(entry)}"${entry === value ? ' selected' : ''}>${escapeHtml(entry)}</option>`
         )).join('');
         return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
-          + `<select class="field-input" data-sched-param="${escapeHtml(key)}">`
+          + `<select class="field-input" ${prefix}="${escapeHtml(key)}">`
           + `<option value="">default</option>${options}</select>`;
       }
       const min = def.min != null ? ` min="${def.min}"` : '';
       const max = def.max != null ? ` max="${def.max}"` : '';
       return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
-        + `<input class="field-input" type="number"${min}${max} data-sched-param="${escapeHtml(key)}"`
+        + `<input class="field-input" type="number"${min}${max} ${prefix}="${escapeHtml(key)}"`
         + ` value="${escapeHtml(value === '' || value == null ? '' : String(value))}" placeholder="default">`;
     }).join('');
     return `<div class="sched-field-row" style="margin-top:8px">${fields}</div>`;
   }
 
-  function schedRuleCardHtml(rule) {
-    const gap = rule.gapProfile || {};
-    const gapText = gap.typicalSeconds
-      ? `typical gap ${formatDuration(gap.typicalSeconds)}`
-        + (gap.occasionalSeconds > gap.typicalSeconds
-          ? `, occasionally ${formatDuration(gap.occasionalSeconds)}+` : '')
-      : 'never airs at 0%';
-    const intervalOptions = INTERVAL_CHOICES.map(([value, label]) => (
-      `<option value="${value}"${value === rule.intervalSeconds ? ' selected' : ''}>${label}</option>`
+  function schedRuleRowHtml(rule) {
+    const pill = schedTargetPill(rule);
+    const fixed = rule.scheduleType === 'fixed';
+    const importance = Math.max(1, Math.min(5, Number(rule.importance) || 3));
+    const pips = Array.from({ length: 5 }, (_, i) => (
+      `<span class="${i < importance ? 'is-on' : ''}"></span>`
     )).join('');
-    const importanceOptions = IMPORTANCE_OPTIONS.map(([value, label]) => (
-      `<option value="${value}"${value === rule.importance ? ' selected' : ''}>${escapeHtml(label)}</option>`
-    )).join('');
-
-    return `<div class="card sched-rule" data-rule-id="${escapeHtml(rule.id)}">
-      <div class="sched-rule-head">
-        <i class="sched-dot" style="background:${escapeHtml(rule.color)}"></i>
-        <span class="sched-rule-name${rule.broken ? ' is-broken' : ''}">${escapeHtml(rule.label)}${
-      rule.broken ? ' — command no longer exists' : ''}</span>
-        <div class="sched-rule-controls">
-          <input type="checkbox" data-sched-field="enabled"${rule.enabled ? ' checked' : ''} aria-label="Enable rule">
-          <button type="button" class="btn btn-outline btn-sm" data-sched-action="air">Air now</button>
-          <button type="button" class="btn btn-outline btn-sm" data-sched-action="delete" aria-label="Delete rule">✕</button>
-        </div>
+    return `<div class="sched-row" data-rule-id="${escapeHtml(rule.id)}" role="button" tabindex="0">
+      <i class="sched-dot" style="background:${escapeHtml(rule.color)}" aria-hidden="true"></i>
+      <div class="sched-row-name" data-meta="${escapeHtml(schedRowMetaLine(rule))}">
+        <div class="sched-row-title${rule.broken ? ' is-broken' : ''}">${escapeHtml(rule.label)}${
+      rule.broken ? ' — command no longer exists' : ''}</div>
+        <div class="sched-row-sub">${escapeHtml(rule.commandId || '')}</div>
       </div>
-      <div class="sched-field-row">
-        <label class="field-label" for="int-${escapeHtml(rule.id)}">Every</label>
-        <select class="field-input" id="int-${escapeHtml(rule.id)}" data-sched-field="intervalSeconds">${intervalOptions}</select>
-        <label class="field-label" for="tgt-${escapeHtml(rule.id)}">Show on</label>
-        <select class="field-input" id="tgt-${escapeHtml(rule.id)}" data-sched-field="target">${schedTargetOptions(rule)}</select>
+      <span class="sched-target-pill ${pill.cls}">${escapeHtml(pill.label)}</span>
+      <div class="sched-row-when">
+        <span class="sched-kind-chip${fixed ? ' is-fixed' : ''}">${fixed ? 'Fixed' : 'Cadence'}</span>
+        <span class="sched-row-summary">${escapeHtml(schedScheduleSummary(rule))}</span>
       </div>
-      ${schedRuleParamsHtml(rule)}
-      <div class="slider-row">
-        <input type="range" min="0" max="100" step="5" value="${rule.probability}"
-               data-sched-field="probability" aria-label="Probability">
-        <span class="slider-value" data-sched-readout="probability">${rule.probability}%</span>
-      </div>
-      <div class="sched-readout">
-        <strong>≈ ${rule.expectedPerDay}×/day</strong> · ${escapeHtml(gapText)}${
-      rule.estimatedDurationSeconds
-        ? ` · runs ${formatDuration(rule.estimatedDurationSeconds)}` : ''}
-      </div>
-      ${rule.durationWarning ? `<div class="sched-warning">⚠ ${escapeHtml(rule.durationWarning)}</div>` : ''}
-      ${rule.guard === 'requires-content' ? '<div class="sched-readout">Only when there is something to show</div>' : ''}
-      <details class="sched-advanced">
-        <summary>Advanced</summary>
-        <div class="sched-field-row" style="margin-top:8px">
-          <label class="field-label">Importance</label>
-          <select class="field-input" data-sched-field="importance">${importanceOptions}</select>
-          <label class="field-label">Max per day</label>
-          <input class="field-input" type="number" min="1" max="200" data-sched-field="maxPerDay"
-                 value="${rule.maxPerDay ?? ''}" placeholder="no limit">
-          <label class="field-label">Cooldown (min)</label>
-          <input class="field-input" type="number" min="0" max="1440" data-sched-field="cooldownMinutes"
-                 value="${rule.cooldownSeconds ? Math.round(rule.cooldownSeconds / 60) : ''}" placeholder="none">
-          <label class="field-label">Jitter (%)</label>
-          <input class="field-input" type="number" min="0" max="50" data-sched-field="jitterPercent"
-                 value="${rule.jitterPercent ?? ''}" placeholder="0">
-        </div>
-        ${rule.commandSupportsContentCheck === false ? '' : `<label class="trivia-check" style="margin-top:8px">
-          <input type="checkbox" data-sched-field="guard"${rule.guard === 'requires-content' ? ' checked' : ''}>
-          <span>Only air when there is content</span></label>`}
-        <p class="hint">Importance biases contests; it cannot starve another rule.
-          For "always this one first", raise its probability or shorten its interval instead.</p>
-      </details>
+      <span class="sched-row-hold">${escapeHtml(schedHoldLabel(rule))}</span>
+      <div class="sched-row-pips" title="Importance ${importance}">${pips}</div>
+      <label class="sched-switch" title="Enable rule">
+        <input type="checkbox" data-sched-field="enabled"${rule.enabled ? ' checked' : ''} aria-label="Enable ${escapeHtml(rule.label)}">
+      </label>
+      <button type="button" class="sched-row-open" data-sched-action="edit" aria-label="Edit ${escapeHtml(rule.label)}">›</button>
     </div>`;
   }
 
-  function schedRulePatchFrom(card) {
-    const value = (field) => card.querySelector(`[data-sched-field="${field}"]`);
-    const num = (field) => {
-      const input = value(field);
-      const raw = input ? String(input.value).trim() : '';
-      return raw === '' ? null : Number(raw);
-    };
-    const cooldownMinutes = num('cooldownMinutes');
+  function schedEditorSnapshot() {
+    const type = document.querySelector('#sched-sheet-type .segmented-btn.active')?.dataset.schedType || 'cadence';
+    const targetBtn = document.querySelector('#sched-sheet-target .segmented-btn.active')?.dataset.schedTarget || 'full';
+    let target = targetBtn;
+    if (targetBtn === 'specific') {
+      target = $('sched-sheet-specific')?.value || 'full';
+    }
+    const holdMinutes = Math.max(1, Math.min(240, Number($('sched-sheet-hold')?.value) || DEFAULT_HOLD_MINUTES));
+    const cooldownMinutes = String($('sched-sheet-cooldown')?.value || '').trim();
+    const maxPerDay = String($('sched-sheet-maxPerDay')?.value || '').trim();
+    const jitter = String($('sched-sheet-jitter')?.value || '').trim();
     const params = {};
-    card.querySelectorAll('[data-sched-param]').forEach((input) => {
+    $('sched-sheet-params')?.querySelectorAll('[data-sched-param]').forEach((input) => {
       const key = input.dataset.schedParam;
       if (!key) return;
       const raw = String(input.value ?? '').trim();
@@ -3402,39 +3496,285 @@
       const asNum = Number(raw);
       params[key] = Number.isFinite(asNum) ? asNum : raw;
     });
+    const fixedTimes = schedWeekGrid
+      ? schedWeekGrid.getSlots()
+      : (schedEditorBaseline?.fixedTimes || []);
+    const importance = Number(
+      document.querySelector('#sched-sheet-importance .segmented-btn.active')?.dataset.schedImportance
+    ) || 3;
     return {
-      enabled: value('enabled')?.checked !== false,
-      intervalSeconds: Number(value('intervalSeconds')?.value) || 2700,
-      probability: Number(value('probability')?.value) || 0,
-      importance: Number(value('importance')?.value) || 3,
-      target: value('target')?.value || 'full',
-      maxPerDay: num('maxPerDay'),
-      cooldownSeconds: cooldownMinutes == null ? null : cooldownMinutes * 60,
-      jitterPercent: num('jitterPercent'),
-      guard: value('guard') ? (value('guard').checked ? 'requires-content' : null) : undefined,
+      enabled: schedEditorBaseline?.enabled !== false,
+      label: String($('sched-sheet-label')?.value || '').trim() || schedEditorBaseline?.label || '',
+      intervalSeconds: Number($('sched-sheet-interval')?.value) || 2700,
+      probability: Number($('sched-sheet-probability')?.value) || 0,
+      importance,
+      target,
       params,
+      maxPerDay: maxPerDay === '' ? null : Number(maxPerDay),
+      cooldownSeconds: cooldownMinutes === '' ? null : Number(cooldownMinutes) * 60,
+      jitterPercent: jitter === '' ? null : Number(jitter),
+      guard: $('sched-sheet-guard-wrap')?.hidden
+        ? schedEditorBaseline?.guard
+        : ($('sched-sheet-guard')?.checked ? 'requires-content' : null),
+      scheduleType: type === 'fixed' ? 'fixed' : 'cadence',
+      fixedTimes,
+      holdSeconds: holdMinutes * 60,
+      quietHoursExempt: $('sched-sheet-quiet-exempt')?.checked === true,
     };
   }
 
-  async function saveSchedRule(ruleId, card) {
-    try {
-      const result = await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, {
-        method: 'PUT', body: schedRulePatchFrom(card),
-      });
-      const index = schedRules.findIndex((rule) => rule.id === ruleId);
-      if (index >= 0) {
-        schedRules[index] = result.rule;
-      }
-      renderSchedRules();
-    } catch (error) {
-      toast(error.message || 'Could not save rule', 'bad');
-      await loadSchedRules();
+  function markSchedEditorDirty() {
+    if (!schedEditorRuleId || schedEditorSaving) return;
+    schedEditorDirty = true;
+    updateSchedEditorSaveState();
+  }
+
+  function updateSchedEditorSaveState() {
+    const saveBtn = $('btn-sched-sheet-save');
+    if (!saveBtn) return;
+    const snap = schedEditorSnapshot();
+    const fixedOk = snap.scheduleType !== 'fixed' || (Array.isArray(snap.fixedTimes) && snap.fixedTimes.length > 0);
+    const holdOk = Number.isFinite(snap.holdSeconds) && snap.holdSeconds >= 60 && snap.holdSeconds <= 240 * 60;
+    saveBtn.disabled = !fixedOk || !holdOk;
+  }
+
+  function setSegmentedActive(rootId, dataAttr, value) {
+    document.querySelectorAll(`#${rootId} .segmented-btn`).forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset[dataAttr] === String(value));
+    });
+  }
+
+  function updateSchedEditorPanes() {
+    const type = document.querySelector('#sched-sheet-type .segmented-btn.active')?.dataset.schedType || 'cadence';
+    const cadence = $('sched-sheet-cadence');
+    const fixed = $('sched-sheet-fixed');
+    if (cadence) cadence.hidden = type === 'fixed';
+    if (fixed) fixed.hidden = type !== 'fixed';
+    updateSchedCadenceReadout();
+    updateSchedFixedSummary();
+    updateSchedEditorSaveState();
+  }
+
+  function updateSchedCadenceReadout() {
+    const el = $('sched-sheet-cadence-readout');
+    if (!el) return;
+    const intervalSeconds = Number($('sched-sheet-interval')?.value) || 2700;
+    const probability = Number($('sched-sheet-probability')?.value) || 0;
+    const fake = { intervalSeconds, probability, scheduleType: 'cadence' };
+    const expected = Math.round(((86400 / Math.max(1, intervalSeconds)) * (probability / 100)) * 10) / 10;
+    const gap = (() => {
+      const p = Math.max(0, Math.min(100, probability)) / 100;
+      if (p <= 0) return 'never airs at 0%';
+      const typical = intervalSeconds / p;
+      const occasional = p >= 1
+        ? intervalSeconds
+        : intervalSeconds * (1 + Math.max(1, Math.ceil(Math.log(0.1) / Math.log(1 - p))));
+      return `typical gap ${formatDuration(typical)}`
+        + (occasional > typical ? `, occasionally ${formatDuration(occasional)}+` : '');
+    })();
+    el.innerHTML = `<strong>≈ ${expected}×/day</strong> · ${escapeHtml(gap)}`;
+  }
+
+  function updateSchedFixedSummary() {
+    const el = $('sched-sheet-fixed-summary');
+    if (!el) return;
+    if (!schedWeekGrid) {
+      el.textContent = 'No times selected';
+      return;
+    }
+    el.textContent = schedWeekGrid.summarize();
+  }
+
+  function ensureSchedWeekGrid() {
+    const host = $('sched-week-grid');
+    if (!host || typeof window.createWeekGrid !== 'function') return null;
+    if (schedWeekGrid) return schedWeekGrid;
+    schedWeekGrid = window.createWeekGrid(host, {
+      mode: 'fires',
+      globalMinute: 0,
+      onChange: () => {
+        updateSchedFixedSummary();
+        markSchedEditorDirty();
+        updateSchedEditorSaveState();
+      },
+    });
+    return schedWeekGrid;
+  }
+
+  function fillSchedSheetSpecific(rule) {
+    const select = $('sched-sheet-specific');
+    if (!select) return;
+    const options = schedTargetOptions(rule).filter(([value]) => (
+      value !== 'all' && value !== 'full' && value !== 'vestaboard'
+    ));
+    select.innerHTML = options.map(([value, label]) => (
+      `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`
+    )).join('') || '<option value="">No specific displays</option>';
+    const current = rule.target || '';
+    if (current && current !== 'all' && current !== 'full' && current !== 'vestaboard') {
+      select.value = current;
     }
   }
 
-  function queueSchedRuleSave(ruleId, card) {
-    clearTimeout(schedSaveTimers.get(ruleId));
-    schedSaveTimers.set(ruleId, setTimeout(() => saveSchedRule(ruleId, card), 400));
+  function openSchedEditor(ruleId) {
+    const rule = schedRules.find((entry) => entry.id === ruleId);
+    const sheet = $('sched-rule-sheet');
+    if (!rule || !sheet) return;
+
+    schedEditorRuleId = ruleId;
+    schedEditorBaseline = { ...rule, fixedTimes: Array.isArray(rule.fixedTimes) ? rule.fixedTimes.slice() : [] };
+    schedEditorDirty = false;
+    schedEditorSaving = true;
+
+    const dot = $('sched-sheet-dot');
+    if (dot) dot.style.background = rule.color || '#38bdf8';
+    const label = $('sched-sheet-label');
+    if (label) label.value = rule.label || '';
+    const sub = $('sched-sheet-sub');
+    if (sub) {
+      const group = schedRuleGroupLabel(rule);
+      sub.textContent = `${rule.commandId || ''} · ${group} group`;
+    }
+
+    const target = rule.target || 'full';
+    const targetKey = (target === 'all' || target === 'full' || target === 'vestaboard')
+      ? target
+      : 'specific';
+    setSegmentedActive('sched-sheet-target', 'schedTarget', targetKey);
+    fillSchedSheetSpecific(rule);
+    const specificWrap = $('sched-sheet-specific-wrap');
+    if (specificWrap) specificWrap.hidden = targetKey !== 'specific';
+
+    setSegmentedActive('sched-sheet-type', 'schedType', rule.scheduleType === 'fixed' ? 'fixed' : 'cadence');
+
+    const interval = $('sched-sheet-interval');
+    if (interval) {
+      interval.innerHTML = INTERVAL_CHOICES.map(([value, text]) => (
+        `<option value="${value}"${value === rule.intervalSeconds ? ' selected' : ''}>${text}</option>`
+      )).join('');
+    }
+    const probability = $('sched-sheet-probability');
+    if (probability) probability.value = String(rule.probability ?? 90);
+    const probValue = $('sched-sheet-probability-value');
+    if (probValue) probValue.textContent = `${probability?.value || 90}%`;
+
+    const paramsHost = $('sched-sheet-params');
+    if (paramsHost) paramsHost.innerHTML = schedRuleParamsHtml(rule);
+
+    const hold = $('sched-sheet-hold');
+    if (hold) hold.value = String(schedHoldMinutes(rule));
+
+    const importanceHost = $('sched-sheet-importance');
+    if (importanceHost) {
+      const current = Math.max(1, Math.min(5, Number(rule.importance) || 3));
+      importanceHost.innerHTML = IMPORTANCE_OPTIONS.map(([value, text]) => {
+        const short = String(text).split(' — ')[0];
+        return `<button type="button" class="segmented-btn${value === current ? ' active' : ''}" data-sched-importance="${value}">${escapeHtml(short)}</button>`;
+      }).join('');
+    }
+
+    const quiet = $('sched-sheet-quiet-exempt');
+    if (quiet) quiet.checked = rule.quietHoursExempt === true;
+
+    const maxPerDay = $('sched-sheet-maxPerDay');
+    if (maxPerDay) maxPerDay.value = rule.maxPerDay != null ? String(rule.maxPerDay) : '';
+    const cooldown = $('sched-sheet-cooldown');
+    if (cooldown) {
+      cooldown.value = rule.cooldownSeconds ? String(Math.round(rule.cooldownSeconds / 60)) : '';
+    }
+    const jitter = $('sched-sheet-jitter');
+    if (jitter) jitter.value = rule.jitterPercent != null ? String(rule.jitterPercent) : '';
+
+    const guardWrap = $('sched-sheet-guard-wrap');
+    const guard = $('sched-sheet-guard');
+    if (rule.commandSupportsContentCheck === false) {
+      if (guardWrap) guardWrap.hidden = true;
+    } else {
+      if (guardWrap) guardWrap.hidden = false;
+      if (guard) guard.checked = rule.guard === 'requires-content';
+    }
+
+    const grid = ensureSchedWeekGrid();
+    const slots = Array.isArray(rule.fixedTimes) ? rule.fixedTimes : [];
+    const minute = slots.length ? Number(slots[0].minute) || 0 : 0;
+    if (grid) {
+      grid.setGlobalMinute(minute);
+      grid.setSlots(slots);
+    }
+    setSegmentedActive('sched-sheet-minute-presets', 'schedMinute', String([0, 15, 30, 45].includes(minute) ? minute : ''));
+    const minuteInput = $('sched-sheet-minute');
+    if (minuteInput) minuteInput.value = String(minute);
+
+    updateSchedEditorPanes();
+    sheet.hidden = false;
+    schedEditorSaving = false;
+    updateSchedEditorSaveState();
+    label?.focus();
+  }
+
+  function closeSchedEditor({ force = false } = {}) {
+    const sheet = $('sched-rule-sheet');
+    if (!sheet || sheet.hidden) return true;
+    if (!force && schedEditorDirty) {
+      const ok = window.confirm('Discard unsaved changes to this rule?');
+      if (!ok) return false;
+    }
+    sheet.hidden = true;
+    schedEditorRuleId = null;
+    schedEditorBaseline = null;
+    schedEditorDirty = false;
+    return true;
+  }
+
+  async function saveSchedEditor() {
+    if (!schedEditorRuleId) return;
+    const patch = schedEditorSnapshot();
+    if (patch.scheduleType === 'fixed' && !(patch.fixedTimes && patch.fixedTimes.length)) {
+      toast('Pick at least one time on the week grid', 'bad');
+      return;
+    }
+    // Keep painted slots when switching back to cadence so the editor can
+    // flip types without wiping the week grid.
+    if (patch.scheduleType === 'cadence' && !(patch.fixedTimes && patch.fixedTimes.length)) {
+      if (Array.isArray(schedEditorBaseline?.fixedTimes) && schedEditorBaseline.fixedTimes.length) {
+        patch.fixedTimes = schedEditorBaseline.fixedTimes;
+      } else {
+        delete patch.fixedTimes;
+      }
+    }
+    try {
+      schedEditorSaving = true;
+      const result = await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(schedEditorRuleId)}`, {
+        method: 'PUT',
+        body: patch,
+      });
+      const index = schedRules.findIndex((rule) => rule.id === schedEditorRuleId);
+      if (index >= 0) schedRules[index] = result.rule;
+      schedEditorDirty = false;
+      closeSchedEditor({ force: true });
+      renderSchedRules();
+      toast('Rule saved', 'good');
+    } catch (error) {
+      toast(error.message || 'Could not save rule', 'bad');
+      await loadSchedRules();
+    } finally {
+      schedEditorSaving = false;
+    }
+  }
+
+  async function patchSchedRuleEnabled(ruleId, enabled) {
+    try {
+      const result = await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, {
+        method: 'PUT',
+        body: { enabled: Boolean(enabled) },
+      });
+      const index = schedRules.findIndex((rule) => rule.id === ruleId);
+      if (index >= 0) schedRules[index] = result.rule;
+      renderSchedRules();
+    } catch (error) {
+      toast(error.message || 'Could not update rule', 'bad');
+      await loadSchedRules();
+    }
   }
 
   async function apiFetch(route, { method = 'GET', body = null } = {}) {
@@ -3998,12 +4338,120 @@
 
   const schedPanel = $('tab-scheduler');
   if (schedPanel) {
+    registerSheetDismiss('sched-rule-sheet', () => {
+      closeSchedEditor();
+    });
+
+    const schedSheet = $('sched-rule-sheet');
+    if (schedSheet) {
+      schedSheet.addEventListener('change', () => {
+        markSchedEditorDirty();
+        updateSchedCadenceReadout();
+        updateSchedEditorSaveState();
+      });
+      schedSheet.addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (target.id === 'sched-sheet-probability') {
+          const readout = $('sched-sheet-probability-value');
+          if (readout) readout.textContent = `${target.value}%`;
+          updateSchedCadenceReadout();
+        }
+        if (target.id === 'sched-sheet-minute') {
+          const minute = Math.max(0, Math.min(59, Number(target.value) || 0));
+          ensureSchedWeekGrid()?.setGlobalMinute(minute);
+          setSegmentedActive(
+            'sched-sheet-minute-presets',
+            'schedMinute',
+            String([0, 15, 30, 45].includes(minute) ? minute : ''),
+          );
+        }
+        markSchedEditorDirty();
+        updateSchedEditorSaveState();
+      });
+      schedSheet.addEventListener('click', async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        if (target.closest('#btn-sched-sheet-close')) {
+          closeSchedEditor();
+          return;
+        }
+        if (target.closest('#btn-sched-sheet-save')) {
+          await saveSchedEditor();
+          return;
+        }
+        if (target.closest('#btn-sched-sheet-air') && schedEditorRuleId) {
+          const ruleId = schedEditorRuleId;
+          const rule = schedRules.find((entry) => entry.id === ruleId);
+          const button = $('btn-sched-sheet-air');
+          if (button instanceof HTMLButtonElement) button.disabled = true;
+          try {
+            await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}/air`, { method: 'POST' });
+            toast(`${rule?.label || 'Rule'} aired`, 'good');
+          } catch (error) {
+            toast(error.message || 'Action failed', 'bad');
+          } finally {
+            if (button instanceof HTMLButtonElement) button.disabled = false;
+          }
+          return;
+        }
+        if (target.closest('#btn-sched-sheet-delete') && schedEditorRuleId) {
+          const ruleId = schedEditorRuleId;
+          const rule = schedRules.find((entry) => entry.id === ruleId);
+          if (!window.confirm(`Delete “${rule?.label || 'this rule'}”?`)) return;
+          try {
+            await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
+            closeSchedEditor({ force: true });
+            await loadSchedRules();
+            await refreshSchedStatus();
+            toast('Rule deleted', 'good');
+          } catch (error) {
+            toast(error.message || 'Could not delete rule', 'bad');
+          }
+          return;
+        }
+
+        const targetSeg = target.closest('#sched-sheet-target [data-sched-target]');
+        if (targetSeg) {
+          setSegmentedActive('sched-sheet-target', 'schedTarget', targetSeg.dataset.schedTarget);
+          const wrap = $('sched-sheet-specific-wrap');
+          if (wrap) wrap.hidden = targetSeg.dataset.schedTarget !== 'specific';
+          markSchedEditorDirty();
+          return;
+        }
+        const typeSeg = target.closest('#sched-sheet-type [data-sched-type]');
+        if (typeSeg) {
+          setSegmentedActive('sched-sheet-type', 'schedType', typeSeg.dataset.schedType);
+          updateSchedEditorPanes();
+          markSchedEditorDirty();
+          return;
+        }
+        const importanceSeg = target.closest('#sched-sheet-importance [data-sched-importance]');
+        if (importanceSeg) {
+          setSegmentedActive('sched-sheet-importance', 'schedImportance', importanceSeg.dataset.schedImportance);
+          markSchedEditorDirty();
+          return;
+        }
+        const minuteSeg = target.closest('#sched-sheet-minute-presets [data-sched-minute]');
+        if (minuteSeg) {
+          const minute = Number(minuteSeg.dataset.schedMinute) || 0;
+          setSegmentedActive('sched-sheet-minute-presets', 'schedMinute', String(minute));
+          const minuteInput = $('sched-sheet-minute');
+          if (minuteInput) minuteInput.value = String(minute);
+          ensureSchedWeekGrid()?.setGlobalMinute(minute);
+          markSchedEditorDirty();
+        }
+      });
+    }
+
     schedPanel.addEventListener('change', async (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
-      const card = target.closest('[data-rule-id]');
-      if (card && (target.dataset.schedField || target.dataset.schedParam)) {
-        queueSchedRuleSave(card.dataset.ruleId, card);
+
+      const row = target.closest('#sched-rule-list [data-rule-id]');
+      if (row && target.dataset.schedField === 'enabled' && target instanceof HTMLInputElement) {
+        await patchSchedRuleEnabled(row.dataset.ruleId, target.checked);
         return;
       }
       if (target.closest('#sched-view-settings') || target.id === 'sched-active') {
@@ -4021,9 +4469,7 @@
       if (!(target instanceof HTMLInputElement) || target.type !== 'range') return;
       const readout = target.parentElement?.querySelector('[data-sched-readout], .slider-value');
       if (!readout) return;
-      if (target.dataset.schedField === 'probability') {
-        readout.textContent = `${target.value}%`;
-      } else if (target.id === 'sched-min-gap') {
+      if (target.id === 'sched-min-gap') {
         readout.textContent = `${target.value}m`;
       } else if (target.id === 'sched-tick') {
         readout.textContent = `${target.value}s`;
@@ -4072,30 +4518,57 @@
         return;
       }
 
-      const action = target.closest('[data-sched-action]')?.dataset.schedAction;
-      const card = target.closest('[data-rule-id]');
-      if (action && card) {
-        const ruleId = card.dataset.ruleId;
-        try {
-          if (action === 'air') {
-            const rule = schedRules.find((entry) => entry.id === ruleId);
-            const button = target.closest('[data-sched-action="air"]');
-            if (button instanceof HTMLButtonElement) button.disabled = true;
-            try {
-              await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}/air`, { method: 'POST' });
-              toast(`${rule?.label || 'Rule'} aired`, 'good');
-            } finally {
-              if (button instanceof HTMLButtonElement) button.disabled = false;
-            }
-          } else if (action === 'delete') {
-            await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
-          }
-          await loadSchedRules();
-          await refreshSchedStatus();
-        } catch (error) {
-          toast(error.message || 'Action failed', 'bad');
-        }
+      const displayFilterBtn = target.closest('[data-sched-display-filter]');
+      if (displayFilterBtn) {
+        schedDisplayFilter = displayFilterBtn.dataset.schedDisplayFilter || 'all';
+        try { localStorage.setItem(SCHED_DISPLAY_FILTER_KEY, schedDisplayFilter); } catch { /* ignore */ }
+        renderSchedRules();
+        return;
       }
+
+      const kindFilterBtn = target.closest('[data-sched-kind-filter]');
+      if (kindFilterBtn) {
+        schedKindFilter = kindFilterBtn.dataset.schedKindFilter || 'any';
+        try { localStorage.setItem(SCHED_KIND_FILTER_KEY, schedKindFilter); } catch { /* ignore */ }
+        renderSchedRules();
+        return;
+      }
+
+      const groupToggle = target.closest('[data-sched-group-toggle]');
+      if (groupToggle) {
+        const group = groupToggle.dataset.schedGroupToggle;
+        if (schedCollapsedGroups.has(group)) schedCollapsedGroups.delete(group);
+        else schedCollapsedGroups.add(group);
+        persistSchedCollapsedGroups();
+        renderSchedRules();
+        return;
+      }
+
+      if (target.closest('#btn-sched-add-open')) {
+        const row = $('sched-add-row');
+        if (row) row.hidden = false;
+        $('sched-add-command-search')?.focus();
+        return;
+      }
+      if (target.closest('#btn-sched-add-cancel')) {
+        const row = $('sched-add-row');
+        if (row) row.hidden = true;
+        return;
+      }
+
+      const row = target.closest('#sched-rule-list [data-rule-id]');
+      if (row) {
+        if (target.closest('.sched-switch') || target.dataset.schedField === 'enabled') return;
+        openSchedEditor(row.dataset.ruleId);
+      }
+    });
+
+    $('sched-rule-list')?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const row = event.target?.closest?.('[data-rule-id].sched-row');
+      if (!row) return;
+      event.preventDefault();
+      openSchedEditor(row.dataset.ruleId);
     });
 
     $('btn-sched-add')?.addEventListener('click', async () => {
@@ -4111,18 +4584,24 @@
           body: { commandId, intervalSeconds: 2700, probability: 90 },
         });
         const newId = result?.rule?.id || null;
-        // Clear search so the new card is always visible in its group.
         const search = $('sched-rule-search');
         if (search && search.value) {
           search.value = '';
           try { localStorage.removeItem(SCHED_RULE_SEARCH_KEY); } catch { /* ignore */ }
         }
+        const addRow = $('sched-add-row');
+        if (addRow) addRow.hidden = true;
+        const cmdSearch = $('sched-add-command-search');
+        if (cmdSearch) cmdSearch.value = '';
+        const cmdHidden = $('sched-add-command');
+        if (cmdHidden) cmdHidden.value = '';
         schedFocusRuleId = newId;
         await loadSchedRules();
         await refreshSchedStatus();
         if (result?.rule?.label) {
           toast(`Added ${result.rule.label}`, 'good');
         }
+        if (newId) openSchedEditor(newId);
       } catch (error) {
         toast(error.message || 'Could not add rule', 'bad');
       }
@@ -4143,13 +4622,8 @@
         renderSchedRules();
       });
     }
-    $('sched-rule-search-clear')?.addEventListener('click', () => {
-      const input = $('sched-rule-search');
-      if (input) input.value = '';
-      try { localStorage.removeItem(SCHED_RULE_SEARCH_KEY); } catch { /* ignore */ }
-      renderSchedRules();
-      input?.focus();
-    });
+
+    syncSchedFilterButtons();
 
     const SCHED_SIMULATE_STATUS = [
       {
@@ -18789,6 +19263,139 @@
   };
 
   let vbBoards = [];
+
+  let vbQuietBoardId = null;
+  let vbQuietGrid = null;
+  let vbQuietSaving = false;
+  const VB_DEFAULT_QUIET_WEEK = Array.from({ length: 7 }, () => '000000011111111111111100');
+
+  function vbQuietWeekFromBoard(board) {
+    const week = board?.quietHours?.week;
+    if (Array.isArray(week) && week.length === 7) {
+      return week.map((row) => String(row || '').padEnd(24, '1').slice(0, 24));
+    }
+    return VB_DEFAULT_QUIET_WEEK.slice();
+  }
+
+  function ensureVbQuietGrid() {
+    const host = $('vb-quiet-week-grid');
+    if (!host || typeof window.createWeekGrid !== 'function') return null;
+    if (vbQuietGrid) return vbQuietGrid;
+    vbQuietGrid = window.createWeekGrid(host, {
+      mode: 'quiet',
+      dayToggle: true,
+      cellHeight: 34,
+      onChange() {
+        vbUpdateQuietSummary();
+      },
+    });
+    return vbQuietGrid;
+  }
+
+  function vbUpdateQuietSummary() {
+    const el = $('vb-quiet-summary');
+    if (!el || !vbQuietGrid) return;
+    el.textContent = vbQuietGrid.summarize() || '';
+  }
+
+  function vbSelectedQuietBoard() {
+    if (!vbBoards.length) return null;
+    return vbBoards.find((b) => b.id === vbQuietBoardId) || vbBoards[0];
+  }
+
+  function vbRenderQuietTabs() {
+    const host = $('vb-quiet-board-tabs');
+    if (!host) return;
+    host.innerHTML = '';
+    if (!vbBoards.length) {
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    if (!vbQuietBoardId || !vbBoards.some((b) => b.id === vbQuietBoardId)) {
+      vbQuietBoardId = vbBoards[0].id;
+    }
+    for (const board of vbBoards) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'segmented-btn';
+      btn.setAttribute('aria-pressed', board.id === vbQuietBoardId ? 'true' : 'false');
+      btn.textContent = board.name || board.id;
+      btn.addEventListener('click', () => {
+        if (vbQuietBoardId === board.id) return;
+        vbQuietBoardId = board.id;
+        vbLoadQuietPanel();
+        vbRenderQuietTabs();
+      });
+      host.appendChild(btn);
+    }
+  }
+
+  function vbLoadQuietPanel() {
+    const panel = $('vb-quiet-panel');
+    if (!panel) return;
+    const board = vbSelectedQuietBoard();
+    if (!board) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    const hint = $('vb-quiet-hint');
+    if (hint) {
+      hint.innerHTML = 'While quiet, <b>' + (board.name || board.id) + '</b> shows nothing new; queued events wait until the board wakes. Exempt rules and the Quiet Hours Reminder still post.';
+    }
+    const enabled = $('vb-quiet-enabled');
+    if (enabled) enabled.checked = board.quietHours?.enabled !== false;
+    const remind = $('vb-quiet-remind');
+    if (remind) remind.checked = board.quietHours?.remindOnStart !== false;
+    const grid = ensureVbQuietGrid();
+    if (grid) {
+      grid.setWeekStrings(vbQuietWeekFromBoard(board));
+      vbUpdateQuietSummary();
+    }
+  }
+
+  function vbQuietPayloadFromPanel() {
+    const board = vbSelectedQuietBoard();
+    if (!board) return null;
+    const grid = ensureVbQuietGrid();
+    return {
+      id: board.id,
+      name: board.name,
+      baseUrl: board.baseUrl || '',
+      enabled: board.enabled,
+      simulator: board.simulator,
+      quietHours: {
+        enabled: $('vb-quiet-enabled')?.checked !== false,
+        remindOnStart: $('vb-quiet-remind')?.checked !== false,
+        week: grid ? grid.getWeekStrings() : vbQuietWeekFromBoard(board),
+      },
+    };
+  }
+
+  async function vbSaveQuietHours(toastOk = 'Quiet hours saved') {
+    const payload = vbQuietPayloadFromPanel();
+    if (!payload || vbQuietSaving) return;
+    vbQuietSaving = true;
+    const button = $('btn-vb-quiet-save');
+    if (button) button.disabled = true;
+    try {
+      const data = await apiPost('/api/vestaboards', payload);
+      vbBoards = data.boards || [];
+      vbApplyHouse(data);
+      vbRenderBoards();
+      vbRenderQuietTabs();
+      vbLoadQuietPanel();
+      toast(toastOk, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not save quiet hours', 'bad');
+      await loadVestaboards();
+    } finally {
+      vbQuietSaving = false;
+      if (button) button.disabled = false;
+    }
+  }
+
   let vbHouse = { dwellSeconds: 15, priorities: null };
   let vbPriorityCatalog = null;
   let vbPriorityDraft = [];
@@ -18877,12 +19484,16 @@
     }
     if (!vbBoards.length) {
       host.innerHTML = '<p class="hint">No boards yet.</p>';
+      const panel = $('vb-quiet-panel');
+      if (panel) panel.hidden = true;
       return;
     }
     host.innerHTML = '';
     for (const board of vbBoards) {
       host.appendChild(vbBoardRow(board));
     }
+    vbRenderQuietTabs();
+    vbLoadQuietPanel();
   }
 
   function vbApplyHouse(data) {
@@ -19231,10 +19842,6 @@
     $('vb-form-name').value = board?.name || '';
     $('vb-form-url').value = board?.baseUrl || '';
     $('vb-form-key').value = '';
-    $('vb-form-quiet-start').value = board?.quietHours?.start || '22:00';
-    $('vb-form-quiet-end').value = board?.quietHours?.end || '07:00';
-    $('vb-form-quiet-enabled').checked = board?.quietHours?.enabled !== false;
-    $('vb-form-quiet-remind').checked = board?.quietHours?.remindOnStart !== false;
     $('vb-form-url').disabled = isSim;
     $('vb-form-key').disabled = isSim;
     const urlHint = $('vb-form-url-hint');
@@ -19303,10 +19910,9 @@
         enabled: board.enabled,
         simulator: board.simulator,
         quietHours: {
-          start: board.quietHours?.start || '22:00',
-          end: board.quietHours?.end || '07:00',
           enabled: board.quietHours?.enabled !== false,
           remindOnStart: Boolean(remindOnStart),
+          week: vbQuietWeekFromBoard(board),
         },
       });
       vbBoards = data.boards || [];
@@ -19358,7 +19964,44 @@
     return button;
   }
 
-  $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
+    $('btn-vb-quiet-save')?.addEventListener('click', () => vbSaveQuietHours());
+  $('btn-vb-quiet-reset')?.addEventListener('click', () => {
+    const grid = ensureVbQuietGrid();
+    if (grid) {
+      grid.setWeekStrings(VB_DEFAULT_QUIET_WEEK.slice());
+      vbUpdateQuietSummary();
+    }
+  });
+  $('btn-vb-quiet-copy')?.addEventListener('click', async () => {
+    const source = vbQuietPayloadFromPanel();
+    if (!source || vbBoards.length < 2) {
+      toast('Need at least two boards to copy', 'bad');
+      return;
+    }
+    const week = source.quietHours.week;
+    const enabled = source.quietHours.enabled;
+    const remindOnStart = source.quietHours.remindOnStart;
+    try {
+      for (const board of vbBoards) {
+        if (board.id === source.id) continue;
+        const data = await apiPost('/api/vestaboards', {
+          id: board.id,
+          name: board.name,
+          baseUrl: board.baseUrl || '',
+          enabled: board.enabled,
+          simulator: board.simulator,
+          quietHours: { enabled, remindOnStart, week },
+        });
+        vbBoards = data.boards || vbBoards;
+      }
+      vbRenderBoards();
+      toast('Quiet hours copied to other boards', 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not copy quiet hours', 'bad');
+      await loadVestaboards();
+    }
+  });
+$('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   $('btn-vb-cancel')?.addEventListener('click', () => vbCloseForm());
   $('btn-vb-priority-close')?.addEventListener('click', () => vbClosePriorities());
   registerSheetDismiss('vb-priority-sheet', () => vbClosePriorities());
@@ -19448,12 +20091,14 @@
       id: $('vb-form-id').value.trim() || name,
       name,
       baseUrl: $('vb-form-url').value.trim(),
-      quietHours: {
-        start: $('vb-form-quiet-start').value || '22:00',
-        end: $('vb-form-quiet-end').value || '07:00',
-        enabled: $('vb-form-quiet-enabled').checked,
-        remindOnStart: $('vb-form-quiet-remind').checked,
-      },
+      quietHours: (() => {
+        const existing = vbBoards.find((entry) => entry.id === ($('vb-form-id').value.trim() || '').toLowerCase());
+        return {
+          enabled: existing?.quietHours?.enabled !== false,
+          remindOnStart: existing?.quietHours?.remindOnStart !== false,
+          week: vbQuietWeekFromBoard(existing),
+        };
+      })(),
     };
     const key = $('vb-form-key').value.trim();
     if (key) {

@@ -66,6 +66,7 @@ test('create user stores a scrypt hash and never returns it', () => {
   assert.equal(created.user.username, 'luis');
   assert.equal(created.user.permissions.flightPlan, true);
   assert.equal(created.user.permissions.slideshow, false);
+  assert.equal(created.user.permissions.scheduler, false);
   assert.equal(created.user.passwordHash, undefined);
   const stored = users.getByUsername('luis');
   assert.ok(verifyPassword('household1', stored.passwordHash));
@@ -122,7 +123,26 @@ test('isAdmin grants every feature permission', () => {
   });
   assert.equal(created.user.permissions.flightPlan, true);
   assert.equal(created.user.permissions.redLetter, true);
+  assert.equal(created.user.permissions.scheduler, true);
   assert.equal(users.canAccess(users.getById(created.user.id), 'slideshow'), true);
+  assert.equal(users.canAccess(users.getById(created.user.id), 'scheduler'), true);
+});
+
+test('scheduler permission defaults off and can be granted', () => {
+  const users = createHouseUsers(tempConfig(), silentLog);
+  users.ensureBootstrap();
+  const created = users.create({
+    username: 'sched-user',
+    password: 'household1',
+    permissions: { scheduler: true },
+  });
+  assert.equal(created.ok, true);
+  assert.equal(created.user.permissions.scheduler, true);
+  assert.equal(created.user.permissions.flightPlan, false);
+  assert.equal(users.canAccess(users.getById(created.user.id), 'scheduler'), true);
+  const plain = users.create({ username: 'plain', password: 'household1' });
+  assert.equal(plain.user.permissions.scheduler, false);
+  assert.equal(users.canAccess(users.getById(plain.user.id), 'scheduler'), false);
 });
 
 test('password reset token works once', () => {

@@ -367,6 +367,7 @@ function createListener({
       ),
       breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
+      holdSeconds: options.holdSeconds,
       actor: options.actor,
       ctx: options.ctx,
     });

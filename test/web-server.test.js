@@ -3334,7 +3334,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="hu-pw-done"/);
   assert.match(html, /id="btn-hu-pw-done"/);
   assert.match(html, /id="user-audit-body"/);
-  assert.match(html, /house-users\.js\?v=signal267/);
+  assert.match(html, /house-users\.js\?v=signal294/);
   assert.match(html, /avatar-crop\.js\?v=signal266/);
   assert.doesNotMatch(html, /id="hu-env-hint"/);
   assert.doesNotMatch(html, /The environment admin follows ADMIN_USERNAME/);
@@ -3349,9 +3349,16 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.house-pw-field \{/);
   assert.match(css, /\.house-pw-reveal \{/);
   assert.match(css, /\.house-pw-done-msg \{/);
+  assert.match(html, /id="hu-flight"/);
+  assert.match(html, /id="hu-slides"/);
+  assert.match(html, /id="hu-dates"/);
+  assert.match(html, /id="hu-sched"/);
+  assert.match(html, /Shows the Scheduler tab on the user site/);
   const houseUsersJs = fs.readFileSync(path.join(__dirname, '../src/web/admin/house-users.js'), 'utf8');
   assert.match(houseUsersJs, /function openEditor/);
   assert.match(houseUsersJs, /function openPasswordSheet/);
+  assert.match(houseUsersJs, /scheduler: \$\('hu-sched'\)/);
+  assert.match(houseUsersJs, /permissions\?\.scheduler/);
   assert.match(houseUsersJs, /function setPasswordVisible/);
   assert.match(houseUsersJs, /function showPasswordSuccess/);
   assert.match(houseUsersJs, /function generateHousePassword/);
@@ -3428,9 +3435,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal290/);
-  assert.match(html, /settings-filter\.js\?v=signal290/);
-  assert.match(html, /app\.js\?v=signal290/);
+  assert.match(html, /styles\.css\?v=signal294/);
+  assert.match(html, /settings-filter\.js\?v=signal294/);
+  assert.match(html, /app\.js\?v=signal294/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3602,7 +3609,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function confirmCorpusRemove\(/);
   assert.match(js, /data-cn-remove/);
   assert.match(js, /tabId === 'settings'[\s\S]*applySettingsFilter\(currentSettingsView\(\)\)/);
-  assert.match(html, /id="vb-form-quiet-remind"/);
+  assert.match(html, /id="vb-quiet-remind"/);
   assert.match(html, /id="btn-vb-quiet-hours-push"/);
   assert.match(js, /vbSetRemindOnStart/);
   assert.match(js, /\/api\/push\/quiet-hours-reminder/);
@@ -3922,7 +3929,8 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   for (const id of [
     'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'sched-add-command-search',
     'sched-add-command-list', 'btn-sched-add',
-    'sched-setup-card', 'sched-rule-search', 'sched-rule-search-clear', 'sched-rule-meta', 'sched-rule-empty',
+    'sched-setup-card', 'sched-rule-search', 'sched-rule-meta', 'sched-rule-empty',
+    'sched-display-filter', 'sched-kind-filter', 'sched-rule-sheet', 'sched-week-grid',
     'sched-view-schedule', 'sched-view-activity', 'sched-view-simulation', 'sched-view-settings',
     'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
     'sched-simulation', 'sched-simulation-working', 'sched-simulation-status', 'sched-simulation-results',
@@ -5637,6 +5645,10 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /push-lib-sheet/);
     assert.match(userApp.text, /id="btn-vb-sound"/);
     assert.match(userApp.text, /class="tab-bar"/);
+    assert.match(userApp.text, /id="tab-scheduler"/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal294/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal294/);
+    assert.match(userApp.text, /week-grid\.js\?v=signal294/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
@@ -5682,7 +5694,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal288/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal294/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal294/);
     assert.match(userJs, /armProfileSecrets/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
@@ -5746,7 +5759,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal289/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal294/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
@@ -5816,6 +5829,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
     const dates = await request(`${base}/api/date-book/events`, { cookie: userCookie });
     assert.equal(dates.status, 403);
 
+    const schedDenied = await request(`${base}/api/display-scheduler/rules`, { cookie: userCookie });
+    assert.equal(schedDenied.status, 403);
+
     const status = await request(`${base}/api/status`, { cookie: userCookie });
     assert.equal(status.status, 403);
 
@@ -5825,10 +5841,13 @@ test('household login, /user/ gate, and permission 403s', async () => {
     await request(`${base}/api/house-users/${created.body.user.id}`, {
       method: 'PUT',
       cookie: adminCookie,
-      body: { permissions: { slideshow: true } },
+      body: { permissions: { slideshow: true, scheduler: true } },
     });
     const photosOk = await request(`${base}/api/photos`, { cookie: userCookie });
     assert.equal(photosOk.status, 200);
+
+    const schedOk = await request(`${base}/api/display-scheduler/rules`, { cookie: userCookie });
+    assert.equal(schedOk.status, 200, schedOk.text);
 
     const listed = await request(`${base}/api/house-users`, { cookie: adminCookie });
     const envAdmin = (listed.body.users || []).find((row) => row.bootstrap);

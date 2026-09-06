@@ -536,7 +536,7 @@ test('simulate returns a labelled forecast without touching real state', async (
   }
 });
 
-test('every scheduler route needs an admin session', async () => {
+test('every scheduler route needs a signed-in session', async () => {
   const { webServer, base } = await startServer();
   try {
     for (const [method, route] of [
@@ -551,6 +551,72 @@ test('every scheduler route needs an admin session', async () => {
       const res = await request(`${base}${route}`, { method, body: method === 'GET' ? null : {} });
       assert.equal(res.status, 401, `${method} ${route} must require a session`);
     }
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a household user with scheduler permission can manage rules', async () => {
+  const { webServer, base, cookie: adminCookie, api } = await startServer();
+  try {
+    const created = await request(`${base}/api/house-users`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        username: 'schedmaya',
+        password: 'maya-pass-1',
+        firstName: 'Maya',
+        permissions: { scheduler: true },
+      },
+    });
+    assert.equal(created.status, 200, created.text);
+
+    const login = await request(`${base}/api/user/login`, {
+      method: 'POST',
+      body: { username: 'schedmaya', password: 'maya-pass-1' },
+    });
+    assert.equal(login.status, 200, login.text);
+    const setCookie = login.headers['set-cookie'];
+    const userCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie || '').split(';')[0];
+
+    const list = await request(`${base}${ROUTE}/rules`, { cookie: userCookie });
+    assert.equal(list.status, 200, list.text);
+
+    const denied = await request(`${base}/api/house-users`, {
+      method: 'POST',
+      cookie: userCookie,
+      body: { username: 'other', password: 'x' },
+    });
+    assert.ok(denied.status === 401 || denied.status === 403);
+
+    const createdRule = await request(`${base}${ROUTE}/rules`, {
+      method: 'POST',
+      cookie: userCookie,
+      body: { commandId: 'alexa.weather', intervalSeconds: 1800, probability: 80 },
+    });
+    assert.equal(createdRule.status, 201, createdRule.text);
+    assert.equal(createdRule.body.rule.commandId, 'alexa.weather');
+
+    const plain = await request(`${base}/api/house-users`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: { username: 'nosched', password: 'maya-pass-1', firstName: 'No' },
+    });
+    assert.equal(plain.status, 200, plain.text);
+    const plainLogin = await request(`${base}/api/user/login`, {
+      method: 'POST',
+      body: { username: 'nosched', password: 'maya-pass-1' },
+    });
+    const plainCookie = String(
+      Array.isArray(plainLogin.headers['set-cookie'])
+        ? plainLogin.headers['set-cookie'][0]
+        : plainLogin.headers['set-cookie'] || '',
+    ).split(';')[0];
+    const blocked = await request(`${base}${ROUTE}/rules`, { cookie: plainCookie });
+    assert.equal(blocked.status, 403);
+
+    // Admin still has full access.
+    assert.equal((await api(`${ROUTE}/rules`)).status, 200);
   } finally {
     webServer.stop();
   }

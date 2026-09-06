@@ -439,6 +439,7 @@ function createVestaboardHub({
       scheduler: Boolean(options.scheduler),
       breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
+      holdSeconds: options.holdSeconds,
       replaceSource: options.replaceSource,
       replaceCard: options.replaceCard,
       gameSource: options.gameSource,

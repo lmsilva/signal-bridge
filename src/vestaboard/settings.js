@@ -14,6 +14,12 @@ const path = require('path');
 
 const { createSecretBox } = require('../secret-box');
 const { normalisePriorities } = require('./priorities');
+const {
+  defaultQuietWeek,
+  normaliseQuietWeek,
+  weekFromStartEnd,
+  DEFAULT_QUIET_WEEK_ROW,
+} = require('./quiet-hours');
 
 const SIMULATOR_ID = 'sim';
 
@@ -25,7 +31,7 @@ const DEFAULTS = {
   rateWindowSeconds: 15,
   minRotationGapSeconds: 600,
   transitionStrategy: null,
-  quietHours: { start: '22:00', end: '07:00', enabled: true, remindOnStart: true },
+  quietHours: { enabled: true, remindOnStart: true },
   events: 'all',
   tokenEnv: '',
 };
@@ -60,17 +66,21 @@ function positive(value, fallback) {
 }
 
 function normaliseQuietHours(value) {
+  const baseWeek = defaultQuietWeek();
   if (value === null) {
-    return { ...DEFAULTS.quietHours, enabled: false };
+    return { enabled: false, remindOnStart: true, week: baseWeek };
   }
   if (!value || typeof value !== 'object') {
-    return { ...DEFAULTS.quietHours };
+    return { enabled: true, remindOnStart: true, week: baseWeek };
   }
+  const hasWeek = Array.isArray(value.week) && value.week.length;
+  const week = hasWeek
+    ? normaliseQuietWeek(value.week, value.start || '22:00', value.end || '07:00')
+    : weekFromStartEnd(value.start || '22:00', value.end || '07:00');
   return {
-    start: String(value.start || DEFAULTS.quietHours.start),
-    end: String(value.end || DEFAULTS.quietHours.end),
     enabled: value.enabled !== false,
     remindOnStart: value.remindOnStart !== false,
+    week,
   };
 }
 
@@ -353,4 +363,6 @@ module.exports = {
   cleanId,
   SIMULATOR_ID,
   DEFAULTS,
+  DEFAULT_QUIET_WEEK_ROW,
+  defaultQuietWeek,
 };

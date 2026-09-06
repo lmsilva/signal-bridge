@@ -64,6 +64,67 @@ function normaliseDays(value) {
   return days.length && days.length < 7 ? days : undefined;
 }
 
+/** Default hold on screen for any rule (15 minutes). */
+const DEFAULT_HOLD_SECONDS = 15 * 60;
+const MIN_HOLD_SECONDS = 60;
+const MAX_HOLD_SECONDS = 240 * 60;
+
+/**
+ * Brief / UI weekdays are Monday-first (Mon=0 … Sun=6).
+ * Engine `localParts().weekday` and `daysOfWeek` are Sunday-first (Sun=0 … Sat=6).
+ * Convert at the boundary — never inline the arithmetic at call sites.
+ */
+function mondayIndexToSunday(day) {
+  const d = Number(day);
+  if (!Number.isInteger(d) || d < 0 || d > 6) return null;
+  return (d + 1) % 7;
+}
+
+function sundayIndexToMonday(day) {
+  const d = Number(day);
+  if (!Number.isInteger(d) || d < 0 || d > 6) return null;
+  return (d + 6) % 7;
+}
+
+/**
+ * Fixed fire slots: `{ day: 0-6 Mon=0, hour: 0-23, minute: 0-59 }`.
+ * Dedupes identical slots and sorts by day → hour → minute.
+ */
+function normaliseFixedTimes(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const day = Number(raw.day);
+    const hour = Number(raw.hour);
+    const minute = Number(raw.minute);
+    if (!Number.isInteger(day) || day < 0 || day > 6) continue;
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) continue;
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) continue;
+    const key = `${day}:${hour}:${minute}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ day, hour, minute });
+  }
+  out.sort((a, b) => (a.day - b.day) || (a.hour - b.hour) || (a.minute - b.minute));
+  return out;
+}
+
+function normaliseScheduleType(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'fixed' || raw === 'fixed-time' || raw === 'fixed_time') {
+    return 'fixed';
+  }
+  return 'cadence';
+}
+
+function normaliseHoldSeconds(value, fallback = DEFAULT_HOLD_SECONDS) {
+  return clampInt(value, MIN_HOLD_SECONDS, MAX_HOLD_SECONDS, fallback);
+}
+
 const TARGET_CLASSES = new Set(['all', 'full', 'vestaboard']);
 
 /** Retired command ids that still appear in saved rules. */
@@ -174,9 +235,42 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
   if (base.jitterPercent != null) {
     rule.jitterPercent = clampInt(base.jitterPercent, 0, 50, 0) || undefined;
   }
-  if (base.displayDurationSeconds != null) {
-    rule.displayDurationSeconds = clampInt(base.displayDurationSeconds, 5, 3600, undefined);
+  // Hold on screen (both overlay and Vestaboard). Legacy
+  // `displayDurationSeconds` is accepted as an alias on read. Absent means
+  // "use the command's own duration" — do not force the 15-minute UI default
+  // onto every pre-existing cadence rule.
+  const holdRaw = base.holdSeconds != null ? base.holdSeconds : base.displayDurationSeconds;
+  if (holdRaw != null && holdRaw !== '') {
+    rule.holdSeconds = normaliseHoldSeconds(holdRaw, DEFAULT_HOLD_SECONDS);
+    rule.displayDurationSeconds = rule.holdSeconds;
   }
+
+  rule.scheduleType = normaliseScheduleType(base.scheduleType || base.mode);
+  const fixedTimes = normaliseFixedTimes(base.fixedTimes || base.fixedSlots);
+  if (rule.scheduleType === 'fixed') {
+    rule.fixedTimes = fixedTimes;
+    // Fixed rules ignore cadence dice; keep interval as a long backstop so
+    // anything that still reads it does not fire every minute.
+    if (!Number.isFinite(Number(base.intervalSeconds))) {
+      rule.intervalSeconds = MAX_INTERVAL_SECONDS;
+    }
+    rule.probability = 100;
+    // Fixed slots need an on-screen hold (and a lateness drop window). The
+    // UI default of 15 minutes applies whenever the body omitted one.
+    if (rule.holdSeconds == null) {
+      rule.holdSeconds = DEFAULT_HOLD_SECONDS;
+      rule.displayDurationSeconds = DEFAULT_HOLD_SECONDS;
+    }
+  } else if (fixedTimes.length) {
+    // Preserve painted slots even while the rule is in cadence mode, so the
+    // editor can flip types without wiping the week grid.
+    rule.fixedTimes = fixedTimes;
+  }
+
+  if (base.quietHoursExempt === true) {
+    rule.quietHoursExempt = true;
+  }
+
   // Existing rules have no target; prefer the command's natural home so
   // Vestaboard-only skills do not quietly air into the Windows overlay void.
   rule.target = normaliseTarget(base.target, { command: resolvedCommand });
@@ -204,6 +298,11 @@ function scoreRule(rule, nowMs) {
 
 /** §4.5. Interval and probability interact unintuitively; the UI shows this. */
 function expectedPerDay(rule) {
+  if (rule?.scheduleType === 'fixed') {
+    const slots = Array.isArray(rule.fixedTimes) ? rule.fixedTimes.length : 0;
+    // Seven Monday-first days; average slots per civil day.
+    return slots / 7;
+  }
   const interval = Math.max(1, Number(rule.intervalSeconds) || 1);
   return (86400 / interval) * (Math.max(0, Math.min(100, Number(rule.probability) || 0)) / 100);
 }
@@ -327,10 +426,18 @@ module.exports = {
   RULE_PALETTE,
   MIN_INTERVAL_SECONDS,
   MAX_INTERVAL_SECONDS,
+  DEFAULT_HOLD_SECONDS,
+  MIN_HOLD_SECONDS,
+  MAX_HOLD_SECONDS,
   TARGET_CLASSES,
   resolveCommandId,
   normaliseRule,
   normaliseTarget,
+  normaliseFixedTimes,
+  normaliseScheduleType,
+  normaliseHoldSeconds,
+  mondayIndexToSunday,
+  sundayIndexToMonday,
   scoreRule,
   expectedPerDay,
   gapProfile,

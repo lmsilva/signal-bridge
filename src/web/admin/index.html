@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal290">
+  <link rel="stylesheet" href="styles.css?v=signal294">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -407,17 +407,31 @@
           </div>
 
           <div class="card sched-setup-card" id="sched-setup-card">
-            <label class="field-label sched-search-label" for="sched-rule-search">Find a rule</label>
-            <div class="sched-search-row">
+            <div class="sched-toolbar">
               <div class="sched-search">
                 <input class="field-input" type="search" id="sched-rule-search"
-                  placeholder="Search by name or group…" autocomplete="off" spellcheck="false">
+                  placeholder="Find a rule by name, group or command…" autocomplete="off" spellcheck="false"
+                  aria-label="Find a rule">
               </div>
-              <button type="button" class="btn btn-outline btn-sm" id="sched-rule-search-clear" hidden>Clear</button>
+              <div class="segmented" id="sched-display-filter" role="group" aria-label="Display filter">
+                <button type="button" class="segmented-btn active" data-sched-display-filter="all">All displays</button>
+                <button type="button" class="segmented-btn" data-sched-display-filter="full">Software</button>
+                <button type="button" class="segmented-btn" data-sched-display-filter="vestaboard">Vestaboards</button>
+              </div>
+              <div class="segmented" id="sched-kind-filter" role="group" aria-label="Schedule kind filter">
+                <button type="button" class="segmented-btn active" data-sched-kind-filter="any">Any</button>
+                <button type="button" class="segmented-btn" data-sched-kind-filter="cadence">Cadence</button>
+                <button type="button" class="segmented-btn" data-sched-kind-filter="fixed">Fixed time</button>
+              </div>
+              <button type="button" class="btn btn-accent" id="btn-sched-add-open">+ Add rule</button>
             </div>
-            <div class="sched-add-row" id="sched-add-row">
+            <div class="sched-meta-row">
+              <p class="hint" id="sched-rule-meta"></p>
+              <span class="sched-sort-hint">Sort: Group · Name</span>
+            </div>
+            <div class="sched-add-row" id="sched-add-row" hidden>
               <div class="sched-add-command-wrap">
-                <label class="field-label" for="sched-add-command-search">Add a rule</label>
+                <label class="field-label" for="sched-add-command-search">Pick an event</label>
                 <div class="sched-command-picker">
                   <input
                     class="field-input"
@@ -436,10 +450,13 @@
                 </div>
               </div>
               <button class="btn btn-accent" id="btn-sched-add">Add rule</button>
+              <button type="button" class="btn btn-outline" id="btn-sched-add-cancel">Cancel</button>
             </div>
-            <p class="hint" id="sched-rule-meta"></p>
           </div>
 
+          <div class="sched-col-head" id="sched-col-head" hidden>
+            <span></span><span>Rule</span><span>Show on</span><span>Schedule</span><span>Hold</span><span>Priority</span><span>On</span><span></span>
+          </div>
           <div id="sched-rule-list"></div>
           <p class="hint settings-search-empty" id="sched-rule-empty" hidden></p>
         </div>
@@ -3623,6 +3640,36 @@
             <p class="hint">Loading…</p>
           </div>
 
+          <div class="vb-quiet-panel" id="vb-quiet-panel">
+            <div class="vb-quiet-head">
+              <p class="settings-group-title">Quiet hours</p>
+              <div class="segmented vb-quiet-board-tabs" id="vb-quiet-board-tabs" role="tablist" aria-label="Board"></div>
+              <div class="vb-quiet-actions">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-vb-quiet-copy">Copy to other boards</button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-vb-quiet-reset">Reset to 22:00-07:00</button>
+              </div>
+            </div>
+            <p class="hint" id="vb-quiet-hint">While quiet, the selected board shows nothing new; queued events wait until it wakes. Exempt rules and the Quiet Hours Reminder still post.</p>
+            <div class="vb-quiet-legend">
+              <span><i class="vb-quiet-swatch is-active" aria-hidden="true"></i> Active</span>
+              <span><i class="vb-quiet-swatch is-quiet" aria-hidden="true"></i> Quiet</span>
+              <span class="hint">Drag to paint · click a day label to toggle the whole day</span>
+            </div>
+            <div class="week-grid-scroll">
+              <div id="vb-quiet-week-grid" aria-label="Quiet hours week grid"></div>
+            </div>
+            <p class="vb-quiet-summary" id="vb-quiet-summary"></p>
+            <label class="trivia-check">
+              <input type="checkbox" id="vb-quiet-enabled" checked>
+              <span>Go quiet on the hours above (alarm and timer fires still come through)</span>
+            </label>
+            <label class="trivia-check">
+              <input type="checkbox" id="vb-quiet-remind" checked>
+              <span>Post a Quiet Hours Reminder card when quiet begins</span>
+            </label>
+            <button type="button" class="btn btn-accent btn-block" id="btn-vb-quiet-save">Save quiet hours</button>
+          </div>
+
           <button type="button" class="btn btn-outline btn-block" id="btn-vb-quiet-hours-push">Push Quiet Hours Reminder</button>
           <button type="button" class="btn btn-outline btn-block" id="btn-vb-add">Add a board</button>
 
@@ -3638,25 +3685,6 @@
             <label class="field-label field-label-spaced" for="vb-form-key">Local API key</label>
             <input type="password" class="field-input" id="vb-form-key" placeholder="Leave blank to keep the saved key" autocomplete="new-password" spellcheck="false">
             <p class="hint" id="vb-form-key-hint">Request one from Vestaboard, then paste the key they email you.</p>
-
-            <div class="vb-form-row">
-              <label class="vb-form-field">
-                <span class="field-label">Quiet from</span>
-                <input type="time" class="field-input" id="vb-form-quiet-start" value="22:00">
-              </label>
-              <label class="vb-form-field">
-                <span class="field-label">Quiet until</span>
-                <input type="time" class="field-input" id="vb-form-quiet-end" value="07:00">
-              </label>
-            </div>
-            <label class="trivia-check">
-              <input type="checkbox" id="vb-form-quiet-enabled" checked>
-              <span>Go quiet overnight (alarm and timer fires still come through)</span>
-            </label>
-            <label class="trivia-check">
-              <input type="checkbox" id="vb-form-quiet-remind" checked>
-              <span>Flip a Quiet Hours Reminder when quiet hours start</span>
-            </label>
 
             <div class="vb-form-actions">
               <button type="submit" class="btn btn-accent">Save board</button>
@@ -5067,6 +5095,127 @@
     </div>
   </div>
 
+  <div class="sheet-backdrop" id="sched-rule-sheet" hidden>
+    <div class="sheet sched-sheet" role="dialog" aria-modal="true" aria-labelledby="sched-sheet-label">
+      <div class="sched-sheet-head">
+        <i class="sched-dot" id="sched-sheet-dot" aria-hidden="true"></i>
+        <input class="sched-sheet-label field-input" type="text" id="sched-sheet-label" autocomplete="off" spellcheck="false">
+        <div class="sched-sheet-actions">
+          <button type="button" class="btn btn-outline" id="btn-sched-sheet-air">Air now</button>
+          <button type="button" class="btn btn-outline btn-danger-text" id="btn-sched-sheet-delete">Delete</button>
+          <button type="button" class="btn btn-accent" id="btn-sched-sheet-save">Save</button>
+          <button type="button" class="credits-sheet-close" id="btn-sched-sheet-close" aria-label="Close">×</button>
+        </div>
+      </div>
+      <div class="sched-sheet-sub" id="sched-sheet-sub"></div>
+
+      <div class="sched-sheet-form">
+        <span class="field-label">Show on</span>
+        <div>
+          <div class="segmented" id="sched-sheet-target" role="group" aria-label="Show on">
+            <button type="button" class="segmented-btn" data-sched-target="all">All displays</button>
+            <button type="button" class="segmented-btn" data-sched-target="full">Software</button>
+            <button type="button" class="segmented-btn" data-sched-target="vestaboard">Vestaboards</button>
+            <button type="button" class="segmented-btn" data-sched-target="specific">Specific display…</button>
+          </div>
+          <div class="sched-sheet-specific" id="sched-sheet-specific-wrap" hidden>
+            <label class="field-label" for="sched-sheet-specific">Display</label>
+            <select class="field-input" id="sched-sheet-specific"></select>
+          </div>
+        </div>
+
+        <span class="field-label">Schedule type</span>
+        <div class="segmented" id="sched-sheet-type" role="group" aria-label="Schedule type">
+          <button type="button" class="segmented-btn" data-sched-type="cadence">Cadence — roughly every N minutes</button>
+          <button type="button" class="segmented-btn" data-sched-type="fixed">Fixed time — exactly at these times</button>
+        </div>
+      </div>
+
+      <div id="sched-sheet-cadence" class="sched-sheet-form" style="margin-top:14px">
+        <span class="field-label" for="sched-sheet-interval">Every</span>
+        <select class="field-input" id="sched-sheet-interval"></select>
+        <span class="field-label" for="sched-sheet-probability">Chance</span>
+        <div class="slider-row">
+          <input type="range" id="sched-sheet-probability" min="0" max="100" step="5" value="90" aria-label="Probability">
+          <span class="slider-value" id="sched-sheet-probability-value">90%</span>
+        </div>
+        <span></span>
+        <div class="sched-readout" id="sched-sheet-cadence-readout"></div>
+        <div class="sched-sheet-span" id="sched-sheet-params"></div>
+      </div>
+
+      <div id="sched-sheet-fixed" class="sched-sheet-span sched-fixed-pane" hidden style="margin-top:22px">
+        <div class="sched-fixed-head">
+          <div>
+            <h3>Week schedule</h3>
+            <p class="hint" style="margin:4px 0 0">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below.</p>
+          </div>
+          <div class="sched-fixed-legend">
+            <span><i class="is-fires" aria-hidden="true"></i>Fires</span>
+            <span><i class="is-idle" aria-hidden="true"></i>Idle</span>
+          </div>
+        </div>
+        <div class="week-grid-scroll">
+          <div id="sched-week-grid" aria-label="Week schedule grid"></div>
+        </div>
+        <div class="sched-minute-row">
+          <span class="field-label" style="margin:0">Fire at minute</span>
+          <div class="segmented" id="sched-sheet-minute-presets" role="group" aria-label="Fire at minute">
+            <button type="button" class="segmented-btn" data-sched-minute="0">:00</button>
+            <button type="button" class="segmented-btn" data-sched-minute="15">:15</button>
+            <button type="button" class="segmented-btn" data-sched-minute="30">:30</button>
+            <button type="button" class="segmented-btn" data-sched-minute="45">:45</button>
+          </div>
+          <span class="sched-minute-or">or</span>
+          <div class="sched-minute-free">
+            <span class="hint" style="margin:0">HH:</span>
+            <input class="field-input" type="number" id="sched-sheet-minute" min="0" max="59" value="0" aria-label="Minute past the hour">
+            <span class="hint" style="margin:0">past the hour</span>
+          </div>
+          <span class="sched-minute-hint">Right-click a cell to override its minute</span>
+        </div>
+        <div class="sched-fixed-summary" id="sched-sheet-fixed-summary">No times selected</div>
+      </div>
+
+      <div class="sched-sheet-form" style="margin-top:22px">
+        <span class="field-label" for="sched-sheet-hold">Hold on screen</span>
+        <div class="sched-hold-row">
+          <div class="sched-hold-input">
+            <input class="field-input" type="number" id="sched-sheet-hold" min="1" max="240" value="15" aria-label="Hold minutes">
+            <span class="hint" style="margin:0">min</span>
+          </div>
+          <span class="hint" style="margin:0">Default 15 min. Vestaboards keep it until this expires <strong>and</strong> another event is queued; a higher-priority event always interrupts.</span>
+        </div>
+
+        <span class="field-label">Priority</span>
+        <div class="segmented" id="sched-sheet-importance" role="group" aria-label="Priority"></div>
+
+        <span class="field-label">Quiet hours</span>
+        <label class="trivia-check">
+          <input type="checkbox" id="sched-sheet-quiet-exempt">
+          <span>Exempt — may fire during a board's quiet hours</span>
+        </label>
+      </div>
+
+      <details class="sched-sheet-advanced" id="sched-sheet-advanced">
+        <summary>Advanced — cooldown, max per day, jitter, requires-content guard</summary>
+        <div class="sched-field-row" style="margin-top:12px">
+          <label class="field-label" for="sched-sheet-maxPerDay">Max per day</label>
+          <input class="field-input" type="number" id="sched-sheet-maxPerDay" min="1" max="200" placeholder="no limit">
+          <label class="field-label" for="sched-sheet-cooldown">Cooldown (min)</label>
+          <input class="field-input" type="number" id="sched-sheet-cooldown" min="0" max="1440" placeholder="none">
+          <label class="field-label" for="sched-sheet-jitter">Jitter (%)</label>
+          <input class="field-input" type="number" id="sched-sheet-jitter" min="0" max="50" placeholder="0">
+        </div>
+        <label class="trivia-check" id="sched-sheet-guard-wrap" style="margin-top:10px">
+          <input type="checkbox" id="sched-sheet-guard">
+          <span>Only air when there is content</span>
+        </label>
+        <p class="hint">Importance biases contests; it cannot starve another rule. For "always this one first", raise its probability or shorten its interval instead.</p>
+      </details>
+    </div>
+  </div>
+
   <div class="sheet-backdrop" id="vb-priority-sheet" hidden>
     <div class="sheet cn-manage-sheet vb-priority-sheet" role="dialog" aria-modal="true" aria-labelledby="vb-priority-title">
       <div class="credits-sheet-head">
@@ -5208,6 +5357,13 @@
             <label class="house-user-perm"><input type="checkbox" id="hu-flight"> Flight Plan</label>
             <label class="house-user-perm"><input type="checkbox" id="hu-slides"> Slideshow</label>
             <label class="house-user-perm"><input type="checkbox" id="hu-dates"> Date Book</label>
+            <label class="house-user-perm house-user-perm-sched" for="hu-sched">
+              <input type="checkbox" id="hu-sched">
+              <span class="house-user-perm-body">
+                <span class="house-user-perm-title">Scheduler <span class="house-user-perm-new">NEW</span></span>
+                <span class="house-user-perm-hint">Shows the Scheduler tab on the user site with the same rule editor as admin — filters, fixed-time week grid, hold and priority.</span>
+              </span>
+            </label>
           </div>
         </div>
         <div class="btn-row house-user-editor-actions">
@@ -5259,10 +5415,11 @@
     </div>
   </div>
 
+  <script src="/week-grid.js?v=signal294"></script>
   <script src="/vestaboard-sim-ui.js?v=signal291"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
-  <script src="house-users.js?v=signal267"></script>
-  <script src="settings-filter.js?v=signal290"></script>
-  <script src="app.js?v=signal290"></script>
+  <script src="house-users.js?v=signal294"></script>
+  <script src="settings-filter.js?v=signal294"></script>
+  <script src="app.js?v=signal294"></script>
 </body>
 </html>

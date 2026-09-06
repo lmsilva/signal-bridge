@@ -191,6 +191,7 @@ function routeEvent({
   scheduler = false,
   breakHold = null,
   quietHoursExempt = null,
+  holdSeconds = null,
   replaceSource: replaceSourceOpt = undefined,
   replaceCard: replaceCardOpt = undefined,
   gameSource: gameSourceOpt = undefined,
@@ -319,6 +320,18 @@ function routeEvent({
 
   if (!frames.length) {
     return spread(null, { skipped: true, reason: 'empty' });
+  }
+
+  // Scheduler (and any caller) can park the board for a fixed hold. Stamp
+  // onto every page so the queue's guest-hold path keeps later rotation
+  // items off until the hold expires — higher-priority jumpers still cut in.
+  const hold = Number(holdSeconds);
+  if (Number.isFinite(hold) && hold > 0) {
+    frames = frames.map((frame) => (
+      frame && frame.holdSeconds == null
+        ? { ...frame, holdSeconds: hold }
+        : frame
+    ));
   }
 
   // One house submit. The hub fans the posted page out to every board.
