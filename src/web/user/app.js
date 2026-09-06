@@ -1211,16 +1211,6 @@
       }
       showTab(fromHash, { syncHash: false });
     });
-    if (window.SignalSchedulerUi?.mount) {
-      schedulerUi = window.SignalSchedulerUi.mount({
-        toast,
-        getDisplays: () => displays,
-      });
-      if (schedulerNeedsRefresh || document.body.dataset.tab === 'scheduler') {
-        schedulerNeedsRefresh = false;
-        schedulerUi.refresh?.();
-      }
-    }
     const [catalog, displayData] = await Promise.all([
       api('/api/user/commands'),
       api('/api/displays').catch(() => ({ displays: [] })),
@@ -1229,6 +1219,18 @@
     displays = displayData.displays || [];
     fillTargets();
     renderDash();
+    // Mount after displays load so the rule editor's Specific picker is populated
+    // on first open; honor any Scheduler tab click that happened during boot.
+    if (window.SignalSchedulerUi?.mount) {
+      schedulerUi = window.SignalSchedulerUi.mount({
+        toast,
+        getDisplays: () => displays,
+      });
+    }
+    if (schedulerNeedsRefresh || document.body.dataset.tab === 'scheduler') {
+      schedulerNeedsRefresh = false;
+      schedulerUi?.refresh?.();
+    }
     window.userBoard = window.VestaboardSimUi.createVestaboardSimUi({
       fetchJson: api,
       toast,
@@ -1246,10 +1248,6 @@
     }
     if (document.body.dataset.tab === 'flight') loadTrips();
     if (document.body.dataset.tab === 'dates') loadDates();
-    if (schedulerNeedsRefresh || document.body.dataset.tab === 'scheduler') {
-      schedulerNeedsRefresh = false;
-      schedulerUi?.refresh?.();
-    }
     renderLibrary();
   }
 

@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-06 (Auth journal no longer stalls the event loop)
+**Last updated:** 2026-09-06 (User scheduler load + mobile sheet)
 
 ---
 
@@ -936,6 +936,8 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-06: **User Scheduler loads + mobile sheet** — household Scheduler stayed on "Loading…" when status failed silently and `app.js` was stuck on a stale `signal299` cache-bust; mount now waits for displays, refresh clears next-up/errors, and API calls time out at 20s. Sheet backdrop is fixed on the element itself (was a broken descendant selector). Mobile: toolbar + editor actions stack with 44px targets (admin + user). Warm Fuzzies / Daily Bucket Fillers span full width. Cache-bust `signal307`. Tests: `web-server`.
+- 2026-09-06: **Warm Fuzzies + Daily Bucket Fillers span Settings** — both News cards were missing from the wide-card `grid-column: 1 / -1` list, so they sat half-width beside empty space. Cache-bust `signal306`. Tests: `web-server`.
 - 2026-09-06: **Auth journal no longer stalls HTTPS** — `session-auth-journal` had grown to ~33 MB and `readRecent`/`getSummary` sync-read the whole file (health + reauth paths), which can freeze the Node event loop long enough for Cloudflare to return **524** when Settings loads many APIs. Now: in-memory recent ring, O(tail) seed/rotate, auto-trim past ~1.5 MB; live journal truncated to the last 3k lines. WOD empty search no longer copies the full 160k word list. `webServer.stop()` awaits socket close (Windows UV_HANDLE_CLOSING flake under `--test-force-exit`). Tests: `session-auth-journal`, `roll-credits-api`, `autodarts-api`.
 - 2026-09-05: **Week schedule UX polish** — drop phantom scroll on the event-routing editor; Space no longer clears the first painted hour after a mouse drag; Allowed hours gains a Clear control; fixed-time schedule keeps Fires/Idle on the right and At a fixed time on one line. Cache-bust `signal305`. Tests: `week-grid`, `web-server`.
 - 2026-09-05: **Event routing sheet polish** — close × uses `credits-sheet-head` (was stacked under the title); legend says "Open an event"; sheet steals focus on open so Space cannot re-click Configure and wipe the draft; hour grid drops day-fill; settings save throws on write failure and returns the in-memory snapshot. Cache-bust `signal304`. Tests: `event-routing`, `week-grid`, `web-server`.
