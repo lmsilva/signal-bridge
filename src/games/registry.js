@@ -9,9 +9,10 @@
  * `source` here and route its cards through `games/sessions.js`, which takes
  * a board lock (`hub.setGameLock`) on the first card and releases it only
  * when the session ends — finished, stopped by an admin, abandoned by the
- * last player, or preempted by a higher-listed board jumper that does not
- * hold (doorbell / alarm). While that lock is held, lower-rank pages wait;
- * a non-holding jumper ends the lock so the queue can continue.
+ * last player, or preempted (another game Push, Release Holds, or a
+ * higher-listed jumper that does not hold). Only one live game session at
+ * a time: `create()` ends the others. While that lock is held, lower-rank
+ * pages wait; a non-holding jumper ends the lock so the queue can continue.
  */
 
 const scramble = require('./modes/scramble');

@@ -21,6 +21,8 @@ const { createVoiceEventDedup } = require('./voice-event-dedup');
 const { needsSpokenResponseUpgrade, shouldMarkActivityProcessed } = require('./voice-event-gate');
 const { createVoiceQueryParser } = require('./voice-query-parser');
 const { createLocaleSettings } = require('./locale-settings');
+const { createEventRoutingSettings } = require('./event-routing-settings');
+const { resolveRoute } = require('./event-routing');
 const { fetchWeatherForecast, geocodeLocation } = require('./weather-fetch');
 const { extractWeatherLocation } = require('./weather-location');
 const { extractRouteLocations } = require('./route-query');
@@ -171,11 +173,12 @@ const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
 function createListener({
   config, log, guestSnapsAuth = null, vestaboardHub = null, localeSettings = null,
-  shortlinks = null,
+  shortlinks = null, eventRoutingSettings = null,
 } = {}) {
   const alexa = new Alexa();
   // Shared with the web server when index.js injects one; otherwise local.
   const houseLocale = localeSettings || createLocaleSettings(config, log);
+  const eventRouting = eventRoutingSettings || createEventRoutingSettings(config, log);
   const snapsAuth = guestSnapsAuth || createGuestSnapsAuth(config, log);
   const legacyBroadcastLogPaths = [
     path.join(config.ROOT, 'broadcast.txt'),
@@ -373,7 +376,51 @@ function createListener({
     });
   }
 
+  function applyEventRouting(payload, options = {}) {
+    const route = resolveRoute(payload, options, eventRouting.get(), {
+      timeZone: houseLocale.get()?.timeZone || config.voiceEvents?.localTimeZone,
+    });
+    if (route.bypassed) {
+      return { options, skip: false };
+    }
+    if (route.skip) {
+      log.info?.(
+        'event routing skipped',
+        route.reason || route.family || payload?.type || 'event',
+      );
+      return { skip: true, reason: route.reason || 'event-routing' };
+    }
+    if (!route.targets) {
+      return { options, skip: false };
+    }
+    if (route.targets.length === 1) {
+      return {
+        options: {
+          ...options,
+          targetId: route.targets[0],
+          _eventRoutingApplied: true,
+        },
+        skip: false,
+      };
+    }
+    return { multi: route.targets, skip: false };
+  }
+
   function sendUdpPayload(payload, options = {}) {
+    const routed = applyEventRouting(payload, options);
+    if (routed.skip) {
+      return { ok: true, skipped: true, reason: routed.reason };
+    }
+    if (routed.multi) {
+      const results = routed.multi.map((targetId) => sendUdpPayload(payload, {
+        ...options,
+        targetId,
+        _eventRoutingApplied: true,
+      }));
+      return { ok: true, multi: results };
+    }
+    options = routed.options || options;
+
     const vestaboard = fanOutToBoards(payload, options);
     // A push aimed at one board is HTTP-only. Marking the Windows overlay
     // busy would lock the scheduler out of a display that never showed this.
@@ -408,6 +455,30 @@ function createListener({
   }
 
   function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
+    const routed = applyEventRouting(payload, {
+      ...(extraSendOptions || {}),
+      targetId,
+    });
+    if (routed.skip) {
+      return { ok: true, skipped: true, reason: routed.reason };
+    }
+    if (routed.multi) {
+      return {
+        ok: true,
+        multi: routed.multi.map((id) => deliverTargetedPayload(
+          payload,
+          id,
+          { ...(extraSendOptions || {}), _eventRoutingApplied: true },
+        )),
+      };
+    }
+    if (routed.options?.targetId) {
+      targetId = routed.options.targetId;
+      extraSendOptions = {
+        ...(extraSendOptions || {}),
+        _eventRoutingApplied: true,
+      };
+    }
     const delivery = displayRegistry.resolveDelivery(targetId);
     if ((delivery.kind === 'vestaboard' || delivery.entry?.static) && !delivery.isAll) {
       const vestaboard = fanOutToBoards(payload, {

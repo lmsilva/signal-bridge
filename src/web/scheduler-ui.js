@@ -648,11 +648,19 @@
       label?.focus();
     }
 
-    function closeSchedEditor({ force = false } = {}) {
+    async function closeSchedEditor({ force = false } = {}) {
       const sheet = $('sched-rule-sheet');
       if (!sheet || sheet.hidden) return true;
       if (!force && schedEditorDirty) {
-        const ok = window.confirm('Discard unsaved changes to this rule?');
+        const dialog = root.SignalUiDialog;
+        const ok = dialog && typeof dialog.confirm === 'function'
+          ? await dialog.confirm({
+            title: 'Discard unsaved changes?',
+            body: 'Your edits to this rule will be lost.',
+            confirmLabel: 'Discard',
+            danger: true,
+          })
+          : false;
         if (!ok) return false;
       }
       sheet.hidden = true;
@@ -711,7 +719,27 @@
       }
     }
 
+    function listLoadingHtml(label) {
+      return '<div class="list-loading" role="status" aria-live="polite">'
+        + '<span class="list-loading-spinner" aria-hidden="true"></span>'
+        + '<span>' + escapeHtml(label || 'Loading…') + '</span></div>';
+    }
+
+    function paintSchedRulesLoading() {
+      const host = $('sched-rule-list');
+      const empty = $('sched-rule-empty');
+      const colHead = $('sched-col-head');
+      const meta = $('sched-rule-meta');
+      if (empty) empty.hidden = true;
+      if (colHead) colHead.hidden = true;
+      if (meta) meta.textContent = 'Loading…';
+      if (!host) return;
+      if (host.querySelector('.sched-rule-row, .sched-rule-group')) return;
+      host.innerHTML = listLoadingHtml('Loading rules…');
+    }
+
     async function loadSchedRules() {
+      paintSchedRulesLoading();
       const result = await apiFetch(`${SCHED_ROUTE}/rules`);
       schedRules = result.rules || [];
       renderSchedRules();
@@ -919,7 +947,7 @@
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         if (target.closest('#btn-sched-sheet-close')) {
-          closeSchedEditor();
+          await closeSchedEditor();
           return;
         }
         if (target.closest('#btn-sched-sheet-save')) {
@@ -944,7 +972,16 @@
         if (target.closest('#btn-sched-sheet-delete') && schedEditorRuleId) {
           const ruleId = schedEditorRuleId;
           const rule = schedRules.find((entry) => entry.id === ruleId);
-          if (!window.confirm(`Delete "${rule?.label || 'this rule'}"?`)) return;
+          const dialog = root.SignalUiDialog;
+          const ok = dialog && typeof dialog.confirm === 'function'
+            ? await dialog.confirm({
+              title: 'Delete this rule?',
+              body: `Delete "${rule?.label || 'this rule'}"? This cannot be undone.`,
+              confirmLabel: 'Delete',
+              danger: true,
+            })
+            : false;
+          if (!ok) return;
           try {
             await apiFetch(`${SCHED_ROUTE}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
             closeSchedEditor({ force: true });
@@ -989,11 +1026,11 @@
       });
 
       sheet?.addEventListener('click', (event) => {
-        if (event.target === sheet) closeSchedEditor();
+        if (event.target === sheet) void closeSchedEditor();
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && sheet && !sheet.hidden) {
-          closeSchedEditor();
+          void closeSchedEditor();
         }
       });
 
@@ -1115,17 +1152,23 @@
 
     async function refresh() {
       bindEvents();
+      paintSchedRulesLoading();
       try {
-        const [commands, rules] = await Promise.all([
-          apiFetch('/api/commands'),
-          apiFetch(`${SCHED_ROUTE}/rules`),
-        ]);
-        schedCommands = commands.commands || [];
+        // Paint rules as soon as /rules returns — do not wait on /api/commands
+        // (that endpoint probes every provider and is often the slowest hop).
+        const rulesPromise = apiFetch(`${SCHED_ROUTE}/rules`);
+        const commandsPromise = apiFetch('/api/commands').catch(() => ({ commands: [] }));
+        const rules = await rulesPromise;
         schedRules = rules.rules || [];
-        renderSchedCommandPicker();
         renderSchedRules();
-        await refreshSchedStatus();
+        const statusPromise = refreshSchedStatus();
+        const commands = await commandsPromise;
+        schedCommands = commands.commands || [];
+        renderSchedCommandPicker();
+        await statusPromise;
       } catch (error) {
+        const nextUp = $('sched-nextup');
+        if (nextUp) nextUp.textContent = error.message || 'Could not load scheduler';
         toast(error.message || 'Could not load scheduler', 'bad');
       }
     }

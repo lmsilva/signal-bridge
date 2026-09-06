@@ -113,6 +113,16 @@ function makeApi(overrides = {}) {
   };
 }
 
+test('pushing a second game ends the first so sessions cannot stack', () => {
+  const { api, archive } = makeApi();
+  const prompts = api.create({ gameType: 'scramble' });
+  const wheel = api.create({ gameType: 'scramble' });
+  assert.equal(api.getByCode(prompts.code), null);
+  assert.ok(api.getByCode(wheel.code));
+  assert.equal(api.listActive().length, 1);
+  assert.equal(archive.listAll()[0].reason, 'preempted');
+});
+
 test('codes are unique 4-letter pins from the unambiguous alphabet', () => {
   const { api } = makeApi();
   const first = api.create();
@@ -193,6 +203,52 @@ test('the phase machine walks lobby, three rounds, intermission, final, then arc
   assert.equal(row.abandoned, false);
   assert.equal(row.reason, 'finished');
   assert.equal(row.rounds, 3);
+});
+
+test('a new game starts running totals at zero even when the same names already have an archive', () => {
+  const { api, archive, advance, pushes } = makeApi();
+  const first = api.create();
+  const luis = api.join({ code: first.code, name: 'Luis' });
+  const ada = api.join({ code: first.code, name: 'Ada' });
+  api.subscribe(first.sessionId, { write() {}, end() {} }, luis.player.id);
+  advance(11);
+  let live = api.getByCode(first.code);
+  api.submit({ sessionId: live.id, playerId: luis.player.id, payload: { word: 'cat' } });
+  api.submit({ sessionId: live.id, playerId: luis.player.id, payload: { word: 'wind' } });
+  api.submit({ sessionId: live.id, playerId: ada.player.id, payload: { word: 'leap' } });
+  advance(21);
+  advance(6);
+  advance(21);
+  advance(6);
+  advance(21);
+  // Best-word plus scores holds the final for two intermission windows.
+  advance(11);
+  assert.equal(archive.count(), 1);
+  const archived = archive.listAll()[0];
+  const archiveLuis = archived.players.find((p) => p.name === 'Luis').score;
+  const archiveAda = archived.players.find((p) => p.name === 'Ada').score;
+  assert.ok(archiveLuis > 0, 'first game must bank Luis some points');
+  assert.ok(archiveAda > 0, 'first game must bank Ada some points');
+
+  const second = api.create();
+  const luis2 = api.join({ code: second.code, name: 'Luis' });
+  const ada2 = api.join({ code: second.code, name: 'Ada' });
+  assert.equal(luis2.player.score, 0);
+  assert.equal(ada2.player.score, 0);
+  api.subscribe(second.sessionId, { write() {}, end() {} }, luis2.player.id);
+  advance(11);
+  live = api.getByCode(second.code);
+  api.submit({ sessionId: live.id, playerId: luis2.player.id, payload: { word: 'cat' } });
+  advance(21);
+  const intermission = [...pushes].reverse().find((row) => row.payload.card === 'intermission');
+  assert.ok(intermission, 'second game must post a running-total card');
+  const scores = intermission.payload.scores || [];
+  const luisScore = scores.find((row) => row.name === 'Luis')?.score;
+  const adaScore = scores.find((row) => row.name === 'Ada')?.score;
+  assert.equal(luisScore, scoreWord('cat'));
+  assert.equal(adaScore, 0);
+  assert.ok(luisScore < archiveLuis, 'running total is this session, not the archive');
+  assert.ok(adaScore < archiveAda, 'Ada must not carry the first game into this one');
 });
 
 test('idle timeout closes a started game and archives it as abandoned', () => {
@@ -296,6 +352,21 @@ test('a queued invite keeps the session alive past the lobby window until it fli
   waiting.api.noteBoardShown({ sessionId: ghost.sessionId, card: 'invite' });
   waiting.advance(11);
   assert.equal(waiting.api.getByCode(ghost.code), null);
+});
+
+test('cancelling a queued round card closes the live session', () => {
+  const { api, archive, advance } = makeApi();
+  const invited = api.create();
+  api.join({ code: invited.code, name: 'Luis' });
+  api.subscribe(invited.sessionId, { write() {}, end() {} });
+  advance(11);
+  assert.equal(api.getByCode(invited.code).phase, 'round');
+  assert.equal(api.noteBoardCancelled({
+    sessionId: invited.sessionId,
+    card: 'round',
+  }), true);
+  assert.equal(api.getByCode(invited.code), null);
+  assert.equal(archive.listAll()[0].reason, 'invite-cancelled');
 });
 
 test('cancelling a waiting invite closes the session and clears its queue page', () => {

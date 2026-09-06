@@ -2092,6 +2092,64 @@ test('quiet hours reminder push delivers a random night card to the Vestaboard',
   }
 });
 
+
+test('event routing settings default to all displays and round-trip restrictions', async () => {
+  const { webServer, base } = await startTestServer();
+  try {
+    const empty = await getJson(base, '/api/event-routing/settings');
+    assert.equal(empty.status, 200);
+    assert.ok(Array.isArray(empty.body.catalog));
+    assert.ok(empty.body.catalog.length > 5);
+    assert.equal(empty.body.settings.version, 2);
+    assert.deepEqual(empty.body.settings.families['media.plex'], {
+      routes: [{ destinations: 'all', slots: [] }],
+    });
+
+    const saved = await postJson(base, '/api/event-routing/settings', {
+      families: {
+        'media.plex': {
+          routes: [{
+            destinations: 'vestaboard',
+            slots: [{ day: 5, hour: 20, minute: 0 }, { day: 5, hour: 21, minute: 0 }],
+          }],
+        },
+        'alexa.alarms': {
+          routes: [
+            { destinations: ['board-a'], slots: [{ day: 0, hour: 6, minute: 0 }] },
+            { destinations: ['board-b'], slots: [] },
+          ],
+        },
+      },
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.families['media.plex'].routes[0].destinations, 'vestaboard');
+    assert.equal(saved.body.settings.families['media.plex'].routes[0].slots.length, 2);
+    assert.deepEqual(
+      saved.body.settings.families['alexa.alarms'].routes.map((r) => r.destinations),
+      [['board-a'], ['board-b']],
+    );
+    assert.deepEqual(saved.body.settings.families['media.youtube'].routes, [
+      { destinations: 'all', slots: [] },
+    ]);
+
+    const put = await request(`${base}/api/event-routing/settings`, {
+      method: 'PUT',
+      body: {
+        families: {
+          'media.plex': {
+            routes: [{ destinations: 'full', slots: [] }],
+          },
+        },
+      },
+      cookie: baseCookies.get(base),
+    });
+    assert.equal(put.status, 200);
+    assert.equal(put.body.settings.families['media.plex'].routes[0].destinations, 'full');
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('public base URL settings live-reload and reject http', async () => {
   const { webServer, base } = await startTestServer();
   try {
@@ -3277,6 +3335,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
     'plex-settings-card',
     'locale-settings-card',
     'public-url-settings-card',
+    'event-routing-settings-card',
     'guest-snaps-settings-card',
     'guest-book-settings-card',
     'ring-doorbell-settings-card',
@@ -3334,7 +3393,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="hu-pw-done"/);
   assert.match(html, /id="btn-hu-pw-done"/);
   assert.match(html, /id="user-audit-body"/);
-  assert.match(html, /house-users\.js\?v=signal294/);
+  assert.match(html, /house-users\.js\?v=signal299/);
   assert.match(html, /avatar-crop\.js\?v=signal266/);
   assert.doesNotMatch(html, /id="hu-env-hint"/);
   assert.doesNotMatch(html, /The environment admin follows ADMIN_USERNAME/);
@@ -3385,6 +3444,23 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="public-url-settings-card"/);
   assert.match(html, /id="btn-public-url-save"/);
   assert.match(js, /\/api\/public-url\/settings/);
+  assert.match(html, /id="event-routing-settings-card"/);
+  assert.match(html, /id="event-routing-sheet"/);
+  assert.match(html, /id="event-routing-week-grid"/);
+  assert.match(html, /id="btn-event-routing-add-route"/);
+  assert.match(js, /\/api\/event-routing\/settings/);
+  assert.match(js, /openEventRoutingSheet/);
+  assert.match(html, /Event routing/);
+  assert.ok(
+    html.indexOf('id="public-url-settings-card"')
+      < html.indexOf('id="event-routing-settings-card"'),
+    'Event routing follows Public address',
+  );
+  assert.ok(
+    html.indexOf('id="event-routing-settings-card"')
+      < html.indexOf('id="tinyurl-settings-card"'),
+    'Event routing precedes TinyURL',
+  );
   assert.match(html, /id="guest-snaps-settings-card"/);
   assert.match(html, /id="guest-snaps-alias"/);
   assert.match(html, /id="btn-guest-snaps-save"/);
@@ -3435,9 +3511,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal294/);
-  assert.match(html, /settings-filter\.js\?v=signal294/);
-  assert.match(html, /app\.js\?v=signal294/);
+  assert.match(html, /styles\.css\?v=signal302/);
+  assert.match(html, /settings-filter\.js\?v=signal302/);
+  assert.match(html, /app\.js\?v=signal302/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3990,7 +4066,13 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   assert.match(js, /'\/api\/commands'/);
   // Timeline is hand-rolled SVG — no charting library is bundled.
   assert.match(js, /function renderSchedTimeline/);
+  assert.match(js, /function paintSchedActivityLoading/);
+  assert.match(js, /function repaintSchedTimeline/);
+  assert.match(js, /sched-timeline-busy/);
   assert.match(js, /quietBands/);
+  assert.match(css, /\.sched-timeline-title/);
+  assert.match(css, /\.sched-timeline-busy/);
+  assert.match(html, /id="sched-timeline-busy"/);
   assert.match(css, /\.sched-timeline\b/);
   assert.match(css, /\.sched-heat-0/);
   // Simulate must show a spinner + status, not only disable the button.
@@ -5324,12 +5406,14 @@ function stubDom() {
     location: {
       pathname: '/admin/',
       search: '',
+      hash: '',
       href: 'https://bridge.test/admin/',
       origin: 'https://bridge.test',
       protocol: 'https:',
       hostname: 'bridge.test',
       reload: noop,
     },
+    history: { replaceState: noop, pushState: noop },
     navigator: { userAgent: 'node', maxTouchPoints: 0, clipboard: { writeText: async () => {} } },
     // Never resolves: this test is about binding, not about request handling.
     fetch: () => new Promise(() => {}),
@@ -5476,7 +5560,7 @@ test('the games page modules bind and paint every phase without throwing', () =>
   assert.doesNotThrow(() => hangman.teardown());
 });
 
-test('admin app.js parses and tab bar keeps remote/control between push and scheduler', () => {
+test('admin app.js parses and tab bar order is Push → Slideshow → Credits → Flight → Scheduler → Board → Settings', () => {
   const { Script } = require('node:vm');
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
@@ -5486,14 +5570,40 @@ test('admin app.js parses and tab bar keeps remote/control between push and sche
   const push = html.indexOf('data-tab="push"');
   const remote = html.indexOf('id="tab-btn-remote"');
   const control = html.indexOf('id="tab-btn-control"');
+  const slideshow = html.indexOf('data-tab="slideshow"');
+  const credits = html.indexOf('data-tab="credits"');
+  const flightplan = html.indexOf('data-tab="flightplan"');
   const scheduler = html.indexOf('data-tab="scheduler"');
-  assert.ok(push >= 0 && remote > push && control > remote && scheduler > control,
-    'tab order must be Push → Remote → Control → Scheduler');
+  const board = html.indexOf('data-tab="board"');
+  const settings = html.indexOf('data-tab="settings"');
+  assert.ok(
+    push >= 0
+      && remote > push
+      && control > remote
+      && slideshow > control
+      && credits > slideshow
+      && flightplan > credits
+      && scheduler > flightplan
+      && board > scheduler
+      && settings > board,
+    'tab order must be Push → Remote → Control → Slideshow → Roll Credits → Flight Plan → Scheduler → Vestaboard Simulator → Settings',
+  );
   assert.match(html, /id="tab-btn-remote"[^>]*\bhidden\b/);
   assert.match(html, /id="tab-btn-control"[^>]*\bhidden\b/);
   assert.match(js, /function updateControlTabVisibility/);
   assert.match(js, /remoteBtn\.hidden\s*=\s*!single/);
   assert.match(js, /controlBtn\.hidden\s*=\s*!single/);
+  // Refresh must reopen the same tab (URL hash); login redirect keeps the hash.
+  assert.match(js, /function syncAdminTabHash/);
+  assert.match(js, /function tabIdFromHash/);
+  assert.match(js, /isRestorableAdminTab/);
+  assert.match(js, /location\.pathname \+ location\.search \+ location\.hash/);
+  assert.match(js, /isRestorableAdminTab\(fromHash\)/);
+  assert.match(js, /hashchange/);
+  assert.match(js, /paintSchedRulesLoading/);
+  assert.match(js, /listLoadingHtml/);
+  assert.match(js, /Loading trips/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../src/web/admin/styles.css'), 'utf8'), /\.list-loading/);
 });
 
 test('Roll Credits edit media can reorder video across kinds and supports drag-and-drop', () => {
@@ -5645,10 +5755,26 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /push-lib-sheet/);
     assert.match(userApp.text, /id="btn-vb-sound"/);
     assert.match(userApp.text, /class="tab-bar"/);
+    {
+      const tabs = [
+        'data-tab="main"',
+        'data-tab="push"',
+        'data-tab="games"',
+        'data-tab="slideshow"',
+        'data-tab="flight"',
+        'data-tab="dates"',
+        'data-tab="scheduler"',
+        'data-tab="board"',
+      ].map((needle) => userApp.text.indexOf(needle));
+      assert.ok(
+        tabs.every((pos, i) => pos >= 0 && (i === 0 || pos > tabs[i - 1])),
+        'user tab order must be Message → Skills → Game Sessions → Slideshow → Flight Plan → Date Book → Scheduler → Vestaboard Simulator',
+      );
+    }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal294/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal294/);
-    assert.match(userApp.text, /week-grid\.js\?v=signal294/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal299/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal299/);
+    assert.match(userApp.text, /week-grid\.js\?v=signal299/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
     assert.match(userApp.text, /tab-label-full">Slideshow/);
@@ -5694,8 +5820,20 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /pendingAvatar/);
     assert.match(userJs, /toastTimer/);
     assert.match(userJs, /dataset\.tab/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal294/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal294/);
+    assert.match(userJs, /function syncUserTabHash/);
+    assert.match(userJs, /function isRestorableUserTab/);
+    assert.match(userJs, /tabIdFromHash/);
+    assert.match(userJs, /showTab\(initial/);
+    assert.match(userJs, /paintListLoading/);
+    assert.match(userJs, /listLoadingHtml/);
+    assert.match(userJs, /Looking for live games/);
+    assert.match(userApp.text, /id="games-empty"[^>]*\bhidden\b/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'styles.css'), 'utf8'), /\.list-loading/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.list-loading/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /paintSchedRulesLoading/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /rulesPromise/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal299/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal299/);
     assert.match(userJs, /armProfileSecrets/);
     assert.match(userJs, /else if \(slideshowSelecting\) \{\s*event\.preventDefault\(\);\s*setSelectingMode\(false\);/);
 
@@ -5759,7 +5897,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal294/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal299/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);

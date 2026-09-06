@@ -107,3 +107,16 @@ test('quiet mode week strings round-trip', () => {
   jsonEqual(grid.getWeekStrings(), week);
   assert.match(grid.summarize(), /Mon quiet/);
 });
+
+test('paint emits cells back-to-back with no separator text between them', () => {
+  const root = loadWeekGrid();
+  const host = fakeHost();
+  root.createWeekGrid(host, { mode: 'fires', globalMinute: 0 });
+  const html = host.innerHTML;
+  // A join(' | ') here once leaked a pipe between every element; the grid then
+  // wrapped each day onto two rows because the text nodes became grid items.
+  assert.ok(!html.includes('|'), 'grid markup must not carry separator text between cells');
+  assert.equal((html.match(/class="wg-cell/g) || []).length, 168);
+  assert.equal((html.match(/class="wg-hour"/g) || []).length, 24);
+  assert.equal((html.match(/data-wg-day="/g) || []).length, 175);
+});

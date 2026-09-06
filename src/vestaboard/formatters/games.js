@@ -153,7 +153,8 @@ function scoresRows({
 }
 
 /**
- * Between rounds: who won the round just played, then the running total.
+ * Between rounds: who won the round just played, then this session's
+ * running total (banked rounds of *this* game — never career / archive).
  */
 function intermissionRows({
   roundIndex = 0,
